@@ -35,37 +35,110 @@ class Migrator:
         self.connection = connection
 
     def initialize(self) -> None:
-        """Create confiture_migrations tracking table if it doesn't exist.
+        """Create confiture_migrations tracking table with modern identity trinity.
+
+        Identity pattern:
+        - id: Auto-incrementing BIGINT (internal, sequential)
+        - pk_migration: UUID (stable identifier, external APIs)
+        - slug: Human-readable (migration_name + timestamp)
 
         This method is idempotent - safe to call multiple times.
+        Handles migration from old table structure.
 
         Raises:
             MigrationError: If table creation fails
         """
         try:
             with self.connection.cursor() as cursor:
+                # Enable UUID extension
+                cursor.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+
+                # Check if table exists
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS confiture_migrations (
-                        id SERIAL PRIMARY KEY,
-                        version VARCHAR(255) NOT NULL UNIQUE,
-                        name VARCHAR(255) NOT NULL,
-                        applied_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                        execution_time_ms INTEGER,
-                        checksum VARCHAR(64),
-                        CONSTRAINT confiture_migrations_version_unique UNIQUE (version)
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_name = 'confiture_migrations'
                     )
                 """)
+                table_exists = cursor.fetchone()[0]
 
-                # Create indexes
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_confiture_migrations_version
-                        ON confiture_migrations(version)
-                """)
+                if table_exists:
+                    # Check if we need to migrate old table structure
+                    cursor.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.columns
+                            WHERE table_name = 'confiture_migrations'
+                            AND column_name = 'pk_migration'
+                        )
+                    """)
+                    has_new_structure = cursor.fetchone()[0]
 
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_confiture_migrations_applied_at
-                        ON confiture_migrations(applied_at DESC)
-                """)
+                    if not has_new_structure:
+                        # Migrate old table structure to new trinity pattern
+                        cursor.execute("""
+                            ALTER TABLE confiture_migrations
+                            ADD COLUMN pk_migration UUID DEFAULT uuid_generate_v4() UNIQUE,
+                            ADD COLUMN slug TEXT,
+                            ALTER COLUMN id SET DATA TYPE BIGINT,
+                            ALTER COLUMN applied_at SET DATA TYPE TIMESTAMPTZ
+                        """)
+
+                        # Generate slugs for existing migrations
+                        cursor.execute("""
+                            UPDATE confiture_migrations
+                            SET slug = name || '_' || to_char(applied_at, 'YYYYMMDD_HH24MISS')
+                            WHERE slug IS NULL
+                        """)
+
+                        # Make slug NOT NULL and UNIQUE
+                        cursor.execute("""
+                            ALTER TABLE confiture_migrations
+                            ALTER COLUMN slug SET NOT NULL,
+                            ADD CONSTRAINT confiture_migrations_slug_unique UNIQUE (slug)
+                        """)
+
+                        # Create new indexes
+                        cursor.execute("""
+                            CREATE INDEX IF NOT EXISTS idx_confiture_migrations_pk_migration
+                                ON confiture_migrations(pk_migration)
+                        """)
+                        cursor.execute("""
+                            CREATE INDEX IF NOT EXISTS idx_confiture_migrations_slug
+                                ON confiture_migrations(slug)
+                        """)
+
+                else:
+                    # Create new table with trinity pattern
+                    cursor.execute("""
+                        CREATE TABLE confiture_migrations (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                            pk_migration UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
+                            slug TEXT NOT NULL UNIQUE,
+                            version VARCHAR(255) NOT NULL UNIQUE,
+                            name VARCHAR(255) NOT NULL,
+                            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            execution_time_ms INTEGER,
+                            checksum VARCHAR(64)
+                        )
+                    """)
+
+                    # Create indexes
+                    cursor.execute("""
+                        CREATE INDEX idx_confiture_migrations_pk_migration
+                            ON confiture_migrations(pk_migration)
+                    """)
+                    cursor.execute("""
+                        CREATE INDEX idx_confiture_migrations_slug
+                            ON confiture_migrations(slug)
+                    """)
+                    cursor.execute("""
+                        CREATE INDEX idx_confiture_migrations_version
+                            ON confiture_migrations(version)
+                    """)
+                    cursor.execute("""
+                        CREATE INDEX idx_confiture_migrations_applied_at
+                            ON confiture_migrations(applied_at DESC)
+                    """)
 
             self.connection.commit()
         except psycopg.Error as e:
@@ -104,15 +177,20 @@ class Migrator:
             # Calculate execution time
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
 
-            # Record in tracking table
+            # Record in tracking table with human-readable slug
+            # Format: migration-name_YYYYMMDD_HHMMSS
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            slug = f"{migration.name}_{timestamp}"
+
             with self.connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO confiture_migrations
-                        (version, name, execution_time_ms)
-                    VALUES (%s, %s, %s)
+                        (slug, version, name, execution_time_ms)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (migration.version, migration.name, execution_time_ms),
+                    (slug, migration.version, migration.name, execution_time_ms),
                 )
 
             # Commit transaction
