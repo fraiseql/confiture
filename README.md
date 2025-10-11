@@ -179,9 +179,19 @@ uv run pytest
 
 ---
 
+## Author
+
+**Vibe-engineered by [Lionel Hamayon](https://github.com/LionelHamayon)** 🍓
+
+Confiture was crafted with care as the migration tool for the FraiseQL ecosystem, combining the elegance of Python with the performance of Rust, and the sweetness of strawberry jam.
+
+---
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+Copyright (c) 2025 Lionel Hamayon
 
 ---
 
@@ -190,6 +200,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Inspired by printoptim_backend's build-from-scratch approach
 - Built for [FraiseQL](https://github.com/fraiseql/fraiseql) GraphQL framework
 - Influenced by pgroll, Alembic, and Reshape
+- Developed with AI-assisted vibe engineering ✨
 
 ---
 
@@ -203,5 +214,7 @@ Confiture is part of the FraiseQL family:
 ---
 
 *Making jam from strawberries, one migration at a time.* 🍓→🍯
+
+*Vibe-engineered with ❤️ by Lionel Hamayon*
 
 **[Documentation](https://github.com/fraiseql/confiture)** • **[GitHub](https://github.com/fraiseql/confiture)** • **[PyPI](https://pypi.org/project/confiture/)**

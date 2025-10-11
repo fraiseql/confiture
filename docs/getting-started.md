@@ -486,3 +486,5 @@ While Confiture works standalone for any PostgreSQL project, it's designed to in
 ---
 
 **Part of the FraiseQL family** 🍓
+
+*Vibe-engineered with ❤️ by [Lionel Hamayon](https://github.com/LionelHamayon)*
