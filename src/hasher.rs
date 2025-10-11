@@ -3,6 +3,8 @@
 //! This module provides 30-60x faster hashing compared to Python
 //! by using parallel processing and native crypto libraries.
 
+#![allow(clippy::useless_conversion)]
+
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};

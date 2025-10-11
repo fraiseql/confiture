@@ -3,6 +3,8 @@
 //! This module provides 10-50x faster schema building compared to Python
 //! by using parallel file I/O and pre-allocated string buffers.
 
+#![allow(clippy::useless_conversion)]
+
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::fs;
@@ -22,7 +24,7 @@ use std::path::PathBuf;
 /// - Native string operations
 /// - No GIL contention
 #[pyfunction]
-#[allow(clippy::useless_conversion)]
+#[allow(clippy::useless_conversion, clippy::needless_return)]
 pub fn build_schema(files: Vec<String>) -> PyResult<String> {
     // Pre-allocate for ~10MB typical schema
     let mut output = String::with_capacity(10_000_000);
