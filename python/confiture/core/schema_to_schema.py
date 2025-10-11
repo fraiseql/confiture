@@ -218,21 +218,78 @@ class SchemaToSchemaMigrator:
 
     def migrate_table(
         self,
-        table_name: str,
-        column_mapping: dict[str, str] | None = None,
-    ) -> None:
+        source_table: str,
+        target_table: str,
+        column_mapping: dict[str, str],
+    ) -> int:
         """Migrate data from source table to target table with column mapping.
 
-        This method will be implemented in Milestone 3.2.
+        Uses the FDW foreign schema to read from source and INSERT into target.
+        Applies column name mappings during the SELECT.
 
         Args:
-            table_name: Name of table to migrate
-            column_mapping: Mapping of old column names to new column names
+            source_table: Name of source table in foreign schema
+            target_table: Name of target table in current database
+            column_mapping: Mapping of source column names to target column names
+                           e.g., {"old_name": "new_name", "id": "id"}
+
+        Returns:
+            Number of rows migrated
 
         Raises:
-            NotImplementedError: Not yet implemented (Milestone 3.2)
+            MigrationError: If migration fails
+
+        Example:
+            >>> migrator.migrate_table(
+            ...     source_table="users",
+            ...     target_table="users",
+            ...     column_mapping={"full_name": "display_name", "id": "id"}
+            ... )
+            1000
         """
-        raise NotImplementedError("migrate_table will be implemented in Milestone 3.2")
+        if not column_mapping:
+            raise MigrationError("column_mapping cannot be empty")
+
+        try:
+            with self.target_connection.cursor() as cursor:
+                # Build SELECT clause with column mapping
+                # Maps: old_col AS new_col, old_col AS new_col, ...
+                select_items = []
+                for source_col, target_col in column_mapping.items():
+                    select_items.append(
+                        sql.SQL("{source} AS {target}").format(
+                            source=sql.Identifier(source_col),
+                            target=sql.Identifier(target_col),
+                        )
+                    )
+
+                # Build target column list
+                target_cols = [sql.Identifier(col) for col in column_mapping.values()]
+
+                # Build INSERT ... SELECT statement
+                insert_query = sql.SQL("""
+                    INSERT INTO {target_table} ({target_cols})
+                    SELECT {select_items}
+                    FROM {foreign_schema}.{source_table}
+                """).format(
+                    target_table=sql.Identifier(target_table),
+                    target_cols=sql.SQL(", ").join(target_cols),
+                    select_items=sql.SQL(", ").join(select_items),
+                    foreign_schema=sql.Identifier(self.foreign_schema_name),
+                    source_table=sql.Identifier(source_table),
+                )
+
+                cursor.execute(insert_query)
+                rows_migrated = cursor.rowcount
+
+            self.target_connection.commit()
+            return rows_migrated
+
+        except psycopg.Error as e:
+            self.target_connection.rollback()
+            raise MigrationError(
+                f"Failed to migrate table {source_table} → {target_table}: {e}"
+            ) from e
 
     def analyze_tables(self) -> dict[str, dict[str, Any]]:
         """Analyze table sizes and recommend optimal migration strategy.
