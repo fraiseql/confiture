@@ -38,14 +38,57 @@ class SchemaBuilder:
         """
         self.env_config = Environment.load(env, project_dir=project_dir)
 
-        # Schema directory is the first include_dir
+        # Validate include_dirs
         if not self.env_config.include_dirs:
             raise SchemaError("No include_dirs specified in environment config")
 
-        self.schema_dir = Path(self.env_config.include_dirs[0])
+        # Store include dirs for file discovery
+        self.include_dirs = [Path(d) for d in self.env_config.include_dirs]
+
+        # Base directory for relative path calculation
+        # Find the common parent of all include directories
+        self.base_dir = self._find_common_parent(self.include_dirs)
+
+    def _find_common_parent(self, paths: list[Path]) -> Path:
+        """Find common parent directory of all paths.
+
+        Args:
+            paths: List of paths to find common parent
+
+        Returns:
+            Common parent directory
+
+        Example:
+            >>> paths = [Path("db/schema/00_common"), Path("db/seeds/common")]
+            >>> _find_common_parent(paths)
+            Path("db")
+        """
+        if len(paths) == 1:
+            return paths[0]
+
+        # Convert to absolute paths for comparison
+        abs_paths = [p.resolve() for p in paths]
+
+        # Get all parent parts for each path (including the path itself)
+        all_parts = [p.parts for p in abs_paths]
+
+        # Find common prefix
+        common_parts = []
+        for parts_at_level in zip(*all_parts):
+            if len(set(parts_at_level)) == 1:
+                common_parts.append(parts_at_level[0])
+            else:
+                break
+
+        if not common_parts:
+            # No common parent, use current directory
+            return Path(".")
+
+        # Reconstruct path from common parts
+        return Path(*common_parts)
 
     def find_sql_files(self) -> list[Path]:
-        """Discover SQL files in schema directory
+        """Discover SQL files in all include directories
 
         Files are returned in deterministic alphabetical order. Use numbered
         directories (00_common/, 10_tables/, 20_views/) to control ordering.
@@ -54,7 +97,7 @@ class SchemaBuilder:
             Sorted list of SQL file paths
 
         Raises:
-            SchemaError: If schema directory doesn't exist or is empty
+            SchemaError: If include directories don't exist or no SQL files found
 
         Example:
             >>> builder = SchemaBuilder(env="local")
@@ -62,17 +105,22 @@ class SchemaBuilder:
             >>> print(files[0])
             /path/to/db/schema/00_common/extensions.sql
         """
-        if not self.schema_dir.exists():
-            raise SchemaError(f"Schema directory does not exist: {self.schema_dir}")
+        all_sql_files = []
 
-        # Find all SQL files recursively
-        sql_files = list(self.schema_dir.rglob("*.sql"))
+        # Collect SQL files from all include directories
+        for include_dir in self.include_dirs:
+            if not include_dir.exists():
+                raise SchemaError(f"Include directory does not exist: {include_dir}")
+
+            # Find all SQL files recursively in this directory
+            sql_files = list(include_dir.rglob("*.sql"))
+            all_sql_files.extend(sql_files)
 
         # Filter out excluded directories
         filtered_files = []
         exclude_paths = [Path(d) for d in self.env_config.exclude_dirs]
 
-        for file in sql_files:
+        for file in all_sql_files:
             # Check if file is in any excluded directory
             is_excluded = any(
                 file.is_relative_to(exclude_dir) for exclude_dir in exclude_paths
@@ -81,8 +129,9 @@ class SchemaBuilder:
                 filtered_files.append(file)
 
         if not filtered_files:
+            include_dirs_str = ", ".join(str(d) for d in self.include_dirs)
             raise SchemaError(
-                f"No SQL files found in {self.schema_dir}\n"
+                f"No SQL files found in include directories: {include_dirs_str}\n"
                 f"Expected files in subdirectories like 00_common/, 10_tables/, etc."
             )
 
@@ -119,7 +168,7 @@ class SchemaBuilder:
         for file in files:
             try:
                 # Relative path for header
-                rel_path = file.relative_to(self.schema_dir)
+                rel_path = file.relative_to(self.base_dir)
 
                 # Add file separator
                 parts.append("\n-- ============================================\n")
@@ -171,7 +220,7 @@ class SchemaBuilder:
 
         for file in files:
             # Include relative path in hash (detects file renames)
-            rel_path = file.relative_to(self.schema_dir)
+            rel_path = file.relative_to(self.base_dir)
             hasher.update(str(rel_path).encode("utf-8"))
             hasher.update(b"\x00")  # Separator
 

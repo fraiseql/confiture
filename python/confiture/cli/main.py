@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 
@@ -62,6 +63,7 @@ def init(
         # Create directory structure
         db_dir = path / "db"
         schema_dir = db_dir / "schema"
+        seeds_dir = db_dir / "seeds"
         migrations_dir = db_dir / "migrations"
         environments_dir = db_dir / "environments"
 
@@ -75,6 +77,9 @@ def init(
 
         # Create directories
         schema_dir.mkdir(parents=True, exist_ok=True)
+        (seeds_dir / "common").mkdir(parents=True, exist_ok=True)
+        (seeds_dir / "development").mkdir(parents=True, exist_ok=True)
+        (seeds_dir / "test").mkdir(parents=True, exist_ok=True)
         migrations_dir.mkdir(parents=True, exist_ok=True)
         environments_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,6 +111,20 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+"""
+        )
+
+        # Create example seed file
+        example_seed = seeds_dir / "common" / "00_example.sql"
+        example_seed.write_text(
+            """-- Common seed data
+-- These records are included in all non-production environments
+
+-- Example: Test users
+-- INSERT INTO users (username, email) VALUES
+--     ('admin', 'admin@example.com'),
+--     ('editor', 'editor@example.com'),
+--     ('reader', 'reader@example.com');
 """
         )
 
@@ -165,6 +184,114 @@ Documentation: https://github.com/evoludigit/confiture
 
     except Exception as e:
         console.print(f"[red]❌ Error initializing project: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def build(
+    env: str = typer.Option(
+        "local",
+        "--env",
+        "-e",
+        help="Environment to build (references db/environments/{env}.yaml)",
+    ),
+    output: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output file path (default: db/generated/schema_{env}.sql)",
+    ),
+    project_dir: Path = typer.Option(
+        Path("."),
+        "--project-dir",
+        help="Project directory (default: current directory)",
+    ),
+    show_hash: bool = typer.Option(
+        False,
+        "--show-hash",
+        help="Display schema hash after build",
+    ),
+    schema_only: bool = typer.Option(
+        False,
+        "--schema-only",
+        help="Build schema only, exclude seed data",
+    ),
+) -> None:
+    """Build complete schema from DDL files.
+
+    This command builds a complete schema by concatenating all SQL files
+    from the db/schema/ directory in deterministic order. This is the
+    fastest way to create or recreate a database from scratch.
+
+    The build process:
+    1. Reads environment configuration (db/environments/{env}.yaml)
+    2. Discovers all .sql files in configured include_dirs
+    3. Concatenates files in alphabetical order
+    4. Adds metadata headers (environment, file count, timestamp)
+    5. Writes to output file (default: db/generated/schema_{env}.sql)
+
+    Examples:
+        # Build local environment schema
+        confiture build
+
+        # Build for specific environment
+        confiture build --env production
+
+        # Custom output location
+        confiture build --output /tmp/schema.sql
+
+        # Show hash for change detection
+        confiture build --show-hash
+    """
+    try:
+        # Create schema builder
+        builder = SchemaBuilder(env=env, project_dir=project_dir)
+
+        # Override to exclude seeds if --schema-only is specified
+        if schema_only:
+            builder.include_dirs = [
+                d for d in builder.include_dirs
+                if "seed" not in str(d).lower()
+            ]
+            # Recalculate base_dir after filtering
+            if builder.include_dirs:
+                builder.base_dir = builder._find_common_parent(builder.include_dirs)
+
+        # Set default output path if not specified
+        if output is None:
+            output_dir = project_dir / "db" / "generated"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output = output_dir / f"schema_{env}.sql"
+
+        # Build schema
+        console.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
+
+        sql_files = builder.find_sql_files()
+        console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+
+        schema = builder.build(output_path=output)
+
+        # Success message
+        console.print(f"[green]✅ Schema built successfully![/green]")
+        console.print(f"\n📁 Output: {output.absolute()}")
+        console.print(f"📏 Size: {len(schema):,} bytes")
+        console.print(f"📊 Files: {len(sql_files)}")
+
+        # Show hash if requested
+        if show_hash:
+            schema_hash = builder.compute_hash()
+            console.print(f"🔐 Hash: {schema_hash}")
+
+        console.print("\n💡 Next steps:")
+        console.print(f"  • Apply schema: psql -f {output}")
+        console.print("  • Or use: confiture migrate up")
+
+    except FileNotFoundError as e:
+        console.print(f"[red]❌ File not found: {e}[/red]")
+        console.print("\n💡 Tip: Run 'confiture init' to create project structure")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]❌ Error building schema: {e}[/red]")
         raise typer.Exit(1) from e
 
 
