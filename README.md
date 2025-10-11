@@ -2,12 +2,14 @@
 
 **PostgreSQL migrations, sweetly done**
 
-Confiture is a modern PostgreSQL migration tool for Python with a **build-from-scratch philosophy** and **4 migration strategies** to handle every scenario from local development to zero-downtime production deployments.
+Confiture is the official migration tool for [FraiseQL](https://github.com/fraiseql/fraiseql), designed with a **build-from-scratch philosophy** and **4 migration strategies** to handle every scenario from local development to zero-downtime production deployments.
+
+> **Part of the FraiseQL ecosystem** - While Confiture works standalone for any PostgreSQL project, it's designed to integrate seamlessly with FraiseQL's GraphQL-first approach.
 
 [![PyPI version](https://badge.fury.io/py/confiture.svg)](https://pypi.org/project/confiture/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://github.com/evoludigit/confiture/workflows/tests/badge.svg)](https://github.com/evoludigit/confiture/actions)
+[![Tests](https://github.com/fraiseql/confiture/workflows/tests/badge.svg)](https://github.com/fraiseql/confiture/actions)
 
 ---
 
@@ -165,7 +167,7 @@ Contributions welcome! See [CLAUDE.md](CLAUDE.md) for development guide.
 
 ```bash
 # Clone repository
-git clone https://github.com/evoludigit/confiture.git
+git clone https://github.com/fraiseql/confiture.git
 cd confiture
 
 # Install dependencies
@@ -186,11 +188,20 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - Inspired by printoptim_backend's build-from-scratch approach
-- Built for [FraiseQL](https://github.com/evoludigit/fraiseql) GraphQL framework
+- Built for [FraiseQL](https://github.com/fraiseql/fraiseql) GraphQL framework
 - Influenced by pgroll, Alembic, and Reshape
+
+---
+
+## FraiseQL Ecosystem
+
+Confiture is part of the FraiseQL family:
+
+- **[FraiseQL](https://github.com/fraiseql/fraiseql)** - Modern GraphQL framework for Python
+- **[Confiture](https://github.com/fraiseql/confiture)** - PostgreSQL migration tool (you are here)
 
 ---
 
 *Making jam from strawberries, one migration at a time.* 🍓→🍯
 
-**[Documentation](https://confiture.readthedocs.io)** • **[GitHub](https://github.com/evoludigit/confiture)** • **[PyPI](https://pypi.org/project/confiture/)**
+**[Documentation](https://github.com/fraiseql/confiture)** • **[GitHub](https://github.com/fraiseql/confiture)** • **[PyPI](https://pypi.org/project/confiture/)**

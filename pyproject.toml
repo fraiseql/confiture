@@ -48,10 +48,11 @@ fraiseql = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/evoludigit/confiture"
-Documentation = "https://confiture.readthedocs.io"
-Repository = "https://github.com/evoludigit/confiture"
-Issues = "https://github.com/evoludigit/confiture/issues"
+Homepage = "https://github.com/fraiseql/confiture"
+Documentation = "https://github.com/fraiseql/confiture"
+Repository = "https://github.com/fraiseql/confiture"
+Issues = "https://github.com/fraiseql/confiture/issues"
+FraiseQL = "https://github.com/fraiseql/fraiseql"
 
 [project.scripts]
 confiture = "confiture.cli.main:app"
