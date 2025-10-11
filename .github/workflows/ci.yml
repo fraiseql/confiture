@@ -94,10 +94,11 @@ jobs:
       - name: Install dependencies manually
         run: |
           uv pip install --system typer rich pydantic pyyaml 'psycopg[binary]' sqlparse pytest pytest-cov
+          uv pip install --system -e . --no-build-isolation
 
       - name: Run tests (Python fallback)
         run: |
-          python -c "from confiture.core.builder import HAS_RUST; assert not HAS_RUST, 'Rust should not be available'; print('✓ Testing pure Python fallback')"
+          uv run python -c "from confiture.core.builder import HAS_RUST; assert not HAS_RUST, 'Rust should not be available'; print('✓ Testing pure Python fallback')"
           uv run pytest tests/unit/ -v
 
   cargo-test:
