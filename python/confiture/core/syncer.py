@@ -4,7 +4,9 @@ This module provides functionality to sync data from production databases to
 local/staging environments with PII anonymization support.
 """
 
+import hashlib
 import json
+import random
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -153,11 +155,63 @@ class ProductionSyncer:
 
         return tables
 
+    def _anonymize_value(
+        self, value: Any, strategy: str, seed: int | None = None
+    ) -> Any:
+        """Anonymize a single value based on strategy.
+
+        Args:
+            value: Original value to anonymize
+            strategy: Anonymization strategy ('email', 'phone', 'name', 'redact', 'hash')
+            seed: Optional seed for deterministic anonymization
+
+        Returns:
+            Anonymized value
+        """
+        if value is None:
+            return None
+
+        # Set random seed for deterministic anonymization
+        if seed is not None:
+            random.seed(f"{seed}:{value}")
+
+        if strategy == "email":
+            # Generate deterministic fake email
+            hash_value = hashlib.sha256(str(value).encode()).hexdigest()[:8]
+            return f"user_{hash_value}@example.com"
+
+        elif strategy == "phone":
+            # Generate fake phone number
+            if seed is not None:
+                # Deterministic based on seed
+                hash_int = int(hashlib.sha256(str(value).encode()).hexdigest()[:8], 16)
+                number = (hash_int % 10000)
+            else:
+                number = random.randint(1000, 9999)
+            return f"+1-555-{number}"
+
+        elif strategy == "name":
+            # Generate fake name
+            hash_str = hashlib.sha256(str(value).encode()).hexdigest()[:8]
+            return f"User {hash_str[:4].upper()}"
+
+        elif strategy == "redact":
+            # Simply redact the value
+            return "[REDACTED]"
+
+        elif strategy == "hash":
+            # One-way hash (preserves uniqueness)
+            return hashlib.sha256(str(value).encode()).hexdigest()[:16]
+
+        else:
+            # Unknown strategy, redact by default
+            return "[REDACTED]"
+
     def sync_table(
         self,
         table_name: str,
-        anonymization_rules: list[AnonymizationRule] | None = None,  # noqa: ARG002
-        batch_size: int = 10000,  # noqa: ARG002
+        anonymization_rules: list[AnonymizationRule] | None = None,
+        batch_size: int = 10000,
         progress_task: Any = None,
         progress: Progress | None = None,
     ) -> int:
@@ -165,25 +219,19 @@ class ProductionSyncer:
 
         Args:
             table_name: Name of table to sync
-            anonymization_rules: Optional anonymization rules (not yet implemented)
-            batch_size: Number of rows per batch (not yet implemented)
+            anonymization_rules: Optional anonymization rules for PII
+            batch_size: Number of rows per batch
             progress_task: Rich progress task ID for updating progress
             progress: Rich progress instance
 
         Returns:
             Number of rows synced
-
-        Note:
-            anonymization_rules and batch_size parameters are reserved for
-            Milestone 3.7 and 3.8 implementations.
         """
         if not self._source_conn or not self._target_conn:
             raise RuntimeError("Not connected. Use context manager.")
 
         start_time = time.time()
 
-        # For now, implement simple COPY without anonymization
-        # Will add anonymization in Milestone 3.8
         with self._source_conn.cursor() as src_cursor, \
              self._target_conn.cursor() as dst_cursor:
 
@@ -199,19 +247,30 @@ class ProductionSyncer:
             if progress and progress_task is not None:
                 progress.update(progress_task, total=expected_count)
 
-            # Temporarily disable triggers to allow FK constraint violations during COPY
+            # Temporarily disable triggers to allow FK constraint violations
             dst_cursor.execute(f"ALTER TABLE {table_name} DISABLE TRIGGER ALL")
 
             try:
-                # Use COPY for efficient data transfer
-                with (
-                    src_cursor.copy(f"COPY {table_name} TO STDOUT") as copy_out,
-                    dst_cursor.copy(f"COPY {table_name} FROM STDIN") as copy_in,
-                ):
-                    for data in copy_out:
-                        copy_in.write(data)
-                        if progress and progress_task is not None:
-                            progress.update(progress_task, advance=1)
+                if anonymization_rules:
+                    # Anonymization path: fetch, anonymize, insert
+                    actual_count = self._sync_with_anonymization(
+                        src_cursor,
+                        dst_cursor,
+                        table_name,
+                        anonymization_rules,
+                        batch_size,
+                        progress_task,
+                        progress,
+                    )
+                else:
+                    # Fast path: direct COPY
+                    actual_count = self._sync_with_copy(
+                        src_cursor,
+                        dst_cursor,
+                        table_name,
+                        progress_task,
+                        progress,
+                    )
             finally:
                 # Re-enable triggers
                 dst_cursor.execute(f"ALTER TABLE {table_name} ENABLE TRIGGER ALL")
@@ -220,10 +279,6 @@ class ProductionSyncer:
             self._target_conn.commit()
 
             # Verify row count
-            dst_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-            actual_row = dst_cursor.fetchone()
-            actual_count: int = actual_row[0] if actual_row else 0
-
             if actual_count != expected_count:
                 raise RuntimeError(
                     f"Row count mismatch for {table_name}: "
@@ -242,6 +297,133 @@ class ProductionSyncer:
             self._completed_tables.add(table_name)
 
             return actual_count
+
+    def _sync_with_copy(
+        self,
+        src_cursor: Any,
+        dst_cursor: Any,
+        table_name: str,
+        progress_task: Any = None,
+        progress: Progress | None = None,
+    ) -> int:
+        """Fast sync using COPY (no anonymization).
+
+        Args:
+            src_cursor: Source database cursor
+            dst_cursor: Target database cursor
+            table_name: Name of table to sync
+            progress_task: Progress task ID
+            progress: Progress instance
+
+        Returns:
+            Number of rows synced
+        """
+        with (
+            src_cursor.copy(f"COPY {table_name} TO STDOUT") as copy_out,
+            dst_cursor.copy(f"COPY {table_name} FROM STDIN") as copy_in,
+        ):
+            for data in copy_out:
+                copy_in.write(data)
+                if progress and progress_task is not None:
+                    progress.update(progress_task, advance=1)
+
+        # Get final count
+        dst_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        result = dst_cursor.fetchone()
+        return result[0] if result else 0
+
+    def _sync_with_anonymization(
+        self,
+        src_cursor: Any,
+        dst_cursor: Any,
+        table_name: str,
+        anonymization_rules: list[AnonymizationRule],
+        batch_size: int,
+        progress_task: Any = None,
+        progress: Progress | None = None,
+    ) -> int:
+        """Sync with anonymization (slower, row-by-row).
+
+        Args:
+            src_cursor: Source database cursor
+            dst_cursor: Target database cursor
+            table_name: Name of table to sync
+            anonymization_rules: List of anonymization rules
+            batch_size: Batch size for inserts
+            progress_task: Progress task ID
+            progress: Progress instance
+
+        Returns:
+            Number of rows synced
+        """
+        # Get column names
+        src_cursor.execute(f"SELECT * FROM {table_name} LIMIT 0")
+        column_names = [desc[0] for desc in src_cursor.description]
+
+        # Build column index map for anonymization
+        anonymize_map: dict[int, AnonymizationRule] = {}
+        for rule in anonymization_rules:
+            if rule.column in column_names:
+                col_idx = column_names.index(rule.column)
+                anonymize_map[col_idx] = rule
+
+        # Fetch all rows
+        src_cursor.execute(f"SELECT * FROM {table_name}")
+
+        # Process in batches
+        rows_synced = 0
+        batch = []
+
+        for row in src_cursor:
+            # Anonymize specified columns
+            anonymized_row = list(row)
+            for col_idx, rule in anonymize_map.items():
+                anonymized_row[col_idx] = self._anonymize_value(
+                    row[col_idx], rule.strategy, rule.seed
+                )
+
+            batch.append(tuple(anonymized_row))
+
+            # Insert batch when full
+            if len(batch) >= batch_size:
+                self._insert_batch(dst_cursor, table_name, column_names, batch)
+                rows_synced += len(batch)
+                if progress and progress_task is not None:
+                    progress.update(progress_task, advance=len(batch))
+                batch = []
+
+        # Insert remaining rows
+        if batch:
+            self._insert_batch(dst_cursor, table_name, column_names, batch)
+            rows_synced += len(batch)
+            if progress and progress_task is not None:
+                progress.update(progress_task, advance=len(batch))
+
+        return rows_synced
+
+    def _insert_batch(
+        self,
+        cursor: Any,
+        table_name: str,
+        column_names: list[str],
+        rows: list[tuple[Any, ...]],
+    ) -> None:
+        """Insert a batch of rows into target table.
+
+        Args:
+            cursor: Database cursor
+            table_name: Name of table
+            column_names: List of column names
+            rows: List of row tuples to insert
+        """
+        if not rows:
+            return
+
+        columns_str = ", ".join(column_names)
+        placeholders = ", ".join(["%s"] * len(column_names))
+        query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
+
+        cursor.executemany(query, rows)
 
     def sync(self, config: SyncConfig) -> dict[str, int]:
         """Sync multiple tables based on configuration.
