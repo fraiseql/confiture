@@ -7,12 +7,13 @@ Tests:
 4. Incremental sync after interruption
 """
 
-import pytest
-from pathlib import Path
-from confiture.core.syncer import ProductionSyncer, SyncConfig, TableSelection
-from confiture.config.environment import DatabaseConfig
-from unittest.mock import MagicMock, patch
 import time
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from confiture.core.syncer import ProductionSyncer, SyncConfig, TableSelection
 
 
 @pytest.fixture
@@ -128,8 +129,8 @@ async def test_progress_metrics_calculation(
 
     with ProductionSyncer(source_config, target_config) as syncer:
         start_time = time.time()
-        results = syncer.sync(config)
-        elapsed = time.time() - start_time
+        syncer.sync(config)
+        time.time() - start_time
 
         # Get metrics
         metrics = syncer.get_metrics()
@@ -161,7 +162,7 @@ async def test_resume_from_checkpoint(
     """Test resuming sync from checkpoint after interruption."""
     checkpoint_file = tmp_path / "sync_checkpoint.json"
 
-    config = SyncConfig(
+    SyncConfig(
         tables=TableSelection(include=["users", "posts"]),
         checkpoint_file=checkpoint_file,
     )

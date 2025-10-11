@@ -82,6 +82,7 @@ markers = [
     "integration: Integration tests (require database)",
     "e2e: End-to-end tests (full workflows)",
     "slow: Slow tests (skip in fast CI)",
+    "benchmark: Performance benchmark tests",
 ]
 
 [tool.coverage.run]

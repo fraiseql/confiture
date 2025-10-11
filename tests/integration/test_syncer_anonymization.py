@@ -9,11 +9,12 @@ Tests:
 """
 
 import pytest
+
 from confiture.core.syncer import (
+    AnonymizationRule,
     ProductionSyncer,
     SyncConfig,
     TableSelection,
-    AnonymizationRule,
 )
 
 
@@ -74,7 +75,6 @@ async def test_anonymize_email_addresses(
     assert results["users"] == 3
 
     # Verify emails are anonymized
-    import psycopg
     from confiture.core.connection import create_connection
 
     target_conn = create_connection(target_config)

@@ -43,7 +43,7 @@ class SyncConfig:
 
     tables: TableSelection
     anonymization: dict[str, list[AnonymizationRule]] | None = None  # table -> rules
-    batch_size: int = 10000
+    batch_size: int = 5000  # Optimized based on benchmarks
     resume: bool = False
     show_progress: bool = False
     checkpoint_file: Path | None = None
@@ -211,7 +211,7 @@ class ProductionSyncer:
         self,
         table_name: str,
         anonymization_rules: list[AnonymizationRule] | None = None,
-        batch_size: int = 10000,
+        batch_size: int = 5000,  # Optimized based on benchmarks
         progress_task: Any = None,
         progress: Progress | None = None,
     ) -> int:
@@ -220,9 +220,9 @@ class ProductionSyncer:
         Args:
             table_name: Name of table to sync
             anonymization_rules: Optional anonymization rules for PII
-            batch_size: Number of rows per batch
+            batch_size: Number of rows per batch (default 5000, optimized via benchmarks)
             progress_task: Rich progress task ID for updating progress
-            progress: Rich progress instance
+            progress: Progress instance
 
         Returns:
             Number of rows synced
