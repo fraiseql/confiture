@@ -4,10 +4,15 @@ This module provides functionality to sync data from production databases to
 local/staging environments with PII anonymization support.
 """
 
+import json
+import time
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import psycopg
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from confiture.config.environment import DatabaseConfig
 from confiture.core.connection import create_connection
@@ -38,6 +43,18 @@ class SyncConfig:
     anonymization: dict[str, list[AnonymizationRule]] | None = None  # table -> rules
     batch_size: int = 10000
     resume: bool = False
+    show_progress: bool = False
+    checkpoint_file: Path | None = None
+
+
+@dataclass
+class TableMetrics:
+    """Performance metrics for a single table sync."""
+
+    rows_synced: int
+    elapsed_seconds: float
+    rows_per_second: float
+    synced_at: str
 
 
 class ProductionSyncer:
@@ -76,6 +93,11 @@ class ProductionSyncer:
 
         self._source_conn: psycopg.Connection[Any] | None = None
         self._target_conn: psycopg.Connection[Any] | None = None
+
+        # Progress tracking and metrics
+        self._metrics: dict[str, TableMetrics] = {}
+        self._completed_tables: set[str] = set()
+        self._checkpoint_data: dict[str, Any] = {}
 
     def __enter__(self) -> "ProductionSyncer":
         """Context manager entry."""
@@ -136,6 +158,8 @@ class ProductionSyncer:
         table_name: str,
         anonymization_rules: list[AnonymizationRule] | None = None,  # noqa: ARG002
         batch_size: int = 10000,  # noqa: ARG002
+        progress_task: Any = None,
+        progress: Progress | None = None,
     ) -> int:
         """Sync a single table from source to target.
 
@@ -143,6 +167,8 @@ class ProductionSyncer:
             table_name: Name of table to sync
             anonymization_rules: Optional anonymization rules (not yet implemented)
             batch_size: Number of rows per batch (not yet implemented)
+            progress_task: Rich progress task ID for updating progress
+            progress: Rich progress instance
 
         Returns:
             Number of rows synced
@@ -153,6 +179,8 @@ class ProductionSyncer:
         """
         if not self._source_conn or not self._target_conn:
             raise RuntimeError("Not connected. Use context manager.")
+
+        start_time = time.time()
 
         # For now, implement simple COPY without anonymization
         # Will add anonymization in Milestone 3.8
@@ -167,13 +195,26 @@ class ProductionSyncer:
             expected_row = src_cursor.fetchone()
             expected_count: int = expected_row[0] if expected_row else 0
 
-            # Use COPY for efficient data transfer
-            with (
-                src_cursor.copy(f"COPY {table_name} TO STDOUT") as copy_out,
-                dst_cursor.copy(f"COPY {table_name} FROM STDIN") as copy_in,
-            ):
-                for data in copy_out:
-                    copy_in.write(data)
+            # Update progress with total
+            if progress and progress_task is not None:
+                progress.update(progress_task, total=expected_count)
+
+            # Temporarily disable triggers to allow FK constraint violations during COPY
+            dst_cursor.execute(f"ALTER TABLE {table_name} DISABLE TRIGGER ALL")
+
+            try:
+                # Use COPY for efficient data transfer
+                with (
+                    src_cursor.copy(f"COPY {table_name} TO STDOUT") as copy_out,
+                    dst_cursor.copy(f"COPY {table_name} FROM STDIN") as copy_in,
+                ):
+                    for data in copy_out:
+                        copy_in.write(data)
+                        if progress and progress_task is not None:
+                            progress.update(progress_task, advance=1)
+            finally:
+                # Re-enable triggers
+                dst_cursor.execute(f"ALTER TABLE {table_name} ENABLE TRIGGER ALL")
 
             # Commit target transaction
             self._target_conn.commit()
@@ -189,6 +230,17 @@ class ProductionSyncer:
                     f"expected {expected_count}, got {actual_count}"
                 )
 
+            # Track metrics
+            elapsed = time.time() - start_time
+            rows_per_second = actual_count / elapsed if elapsed > 0 else 0
+            self._metrics[table_name] = TableMetrics(
+                rows_synced=actual_count,
+                elapsed_seconds=elapsed,
+                rows_per_second=rows_per_second,
+                synced_at=datetime.now().isoformat(),
+            )
+            self._completed_tables.add(table_name)
+
             return actual_count
 
     def sync(self, config: SyncConfig) -> dict[str, int]:
@@ -200,19 +252,111 @@ class ProductionSyncer:
         Returns:
             Dictionary mapping table names to row counts synced
         """
+        # Load checkpoint if requested
+        if config.resume and config.checkpoint_file and config.checkpoint_file.exists():
+            self.load_checkpoint(config.checkpoint_file)
+
         tables = self.select_tables(config.tables)
         results = {}
 
-        for table in tables:
-            anonymization_rules = None
-            if config.anonymization and table in config.anonymization:
-                anonymization_rules = config.anonymization[table]
+        # Filter out completed tables if resuming
+        if config.resume:
+            tables = [t for t in tables if t not in self._completed_tables]
 
-            rows_synced = self.sync_table(
-                table,
-                anonymization_rules=anonymization_rules,
-                batch_size=config.batch_size,
-            )
-            results[table] = rows_synced
+        if config.show_progress:
+            # Use rich progress bar
+            with Progress(
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TextColumn("•"),
+                TextColumn("{task.completed}/{task.total} rows"),
+                TimeRemainingColumn(),
+            ) as progress:
+                for table in tables:
+                    task = progress.add_task(f"Syncing {table}", total=0)
+
+                    anonymization_rules = None
+                    if config.anonymization and table in config.anonymization:
+                        anonymization_rules = config.anonymization[table]
+
+                    rows_synced = self.sync_table(
+                        table,
+                        anonymization_rules=anonymization_rules,
+                        batch_size=config.batch_size,
+                        progress_task=task,
+                        progress=progress,
+                    )
+                    results[table] = rows_synced
+        else:
+            # No progress bar
+            for table in tables:
+                anonymization_rules = None
+                if config.anonymization and table in config.anonymization:
+                    anonymization_rules = config.anonymization[table]
+
+                rows_synced = self.sync_table(
+                    table,
+                    anonymization_rules=anonymization_rules,
+                    batch_size=config.batch_size,
+                )
+                results[table] = rows_synced
+
+        # Save checkpoint if requested
+        if config.checkpoint_file:
+            self.save_checkpoint(config.checkpoint_file)
 
         return results
+
+    def get_metrics(self) -> dict[str, dict[str, Any]]:
+        """Get performance metrics for all synced tables.
+
+        Returns:
+            Dictionary mapping table names to metrics
+        """
+        return {
+            table: {
+                "rows_synced": metrics.rows_synced,
+                "elapsed_seconds": metrics.elapsed_seconds,
+                "rows_per_second": metrics.rows_per_second,
+                "synced_at": metrics.synced_at,
+            }
+            for table, metrics in self._metrics.items()
+        }
+
+    def save_checkpoint(self, checkpoint_file: Path) -> None:
+        """Save sync checkpoint to file.
+
+        Args:
+            checkpoint_file: Path to checkpoint file
+        """
+        checkpoint_data = {
+            "version": "1.0",
+            "timestamp": datetime.now().isoformat(),
+            "source_database": f"{self.source_config.host}:{self.source_config.port}/{self.source_config.database}",
+            "target_database": f"{self.target_config.host}:{self.target_config.port}/{self.target_config.database}",
+            "completed_tables": {
+                table: {
+                    "rows_synced": metrics.rows_synced,
+                    "synced_at": metrics.synced_at,
+                }
+                for table, metrics in self._metrics.items()
+            },
+        }
+
+        checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(checkpoint_file, "w") as f:
+            json.dump(checkpoint_data, f, indent=2)
+
+    def load_checkpoint(self, checkpoint_file: Path) -> None:
+        """Load sync checkpoint from file.
+
+        Args:
+            checkpoint_file: Path to checkpoint file
+        """
+        with open(checkpoint_file) as f:
+            self._checkpoint_data = json.load(f)
+
+        # Restore completed tables
+        if "completed_tables" in self._checkpoint_data:
+            self._completed_tables = set(self._checkpoint_data["completed_tables"].keys())
