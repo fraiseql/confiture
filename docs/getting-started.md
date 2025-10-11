@@ -37,14 +37,20 @@ This creates the following structure:
 ```
 myapp/
 ├── db/
-│   ├── schema/
+│   ├── schema/           # DDL: CREATE TABLE, CREATE VIEW, etc.
 │   │   ├── 00_common/
 │   │   │   └── extensions.sql
 │   │   └── 10_tables/
 │   │       └── example.sql
-│   ├── migrations/
-│   └── environments/
-│       └── local.yaml
+│   ├── seeds/            # Seed data: INSERT statements
+│   │   ├── common/       # All non-production environments
+│   │   ├── development/  # Development-specific
+│   │   └── test/         # Test-specific
+│   ├── migrations/       # Generated migration files
+│   └── environments/     # Environment configurations
+│       ├── local.yaml
+│       ├── test.yaml
+│       └── production.yaml
 ```
 
 ### 2. Configure Your Database
@@ -53,10 +59,12 @@ Edit `db/environments/local.yaml`:
 
 ```yaml
 name: local
-include_dirs:
-  - db/schema/00_common
-  - db/schema/10_tables
-exclude_dirs: []
+
+# Include schema DDL and seed data
+includes:
+  - ../schema           # All schema files
+  - ../seeds/common     # Common seed data
+  - ../seeds/development  # Development-specific seeds
 
 database:
   host: localhost
@@ -64,6 +72,23 @@ database:
   database: myapp_local
   user: postgres
   password: postgres
+```
+
+**Production configuration** (`db/environments/production.yaml`) typically excludes seeds:
+
+```yaml
+name: production
+
+# Only schema, no seed data!
+includes:
+  - ../schema
+
+database:
+  host: ${DB_HOST}
+  port: ${DB_PORT}
+  database: ${DB_NAME}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
 ```
 
 ### 3. Create Your Schema
@@ -337,24 +362,36 @@ database:
 
 ### Directory Organization
 
-Organize schema files by category:
+Organize schema files by category using **numbered prefixes**:
 
 ```
-db/schema/
-├── 00_common/          # Extensions, types, functions
-│   ├── extensions.sql
-│   └── types.sql
-├── 10_tables/          # Core tables
-│   ├── users.sql
-│   ├── posts.sql
-│   └── comments.sql
-├── 20_views/           # Views
-│   └── user_stats.sql
-└── 30_functions/       # Stored procedures
-    └── calculate_score.sql
+db/
+├── schema/             # DDL (single source of truth)
+│   ├── 00_common/      # Extensions, types (load first)
+│   │   ├── extensions.sql
+│   │   └── types.sql
+│   ├── 10_tables/      # Core tables
+│   │   ├── users.sql
+│   │   ├── posts.sql
+│   │   └── comments.sql
+│   ├── 20_views/       # Views (depend on tables)
+│   │   └── user_stats.sql
+│   └── 30_functions/   # Stored procedures (load last)
+│       └── calculate_score.sql
+│
+└── seeds/              # INSERT statements
+    ├── common/         # All non-prod environments
+    │   └── 00_users.sql
+    ├── development/    # Dev-specific
+    │   ├── 00_posts.sql
+    │   └── 01_comments.sql
+    └── test/           # Test-specific
+        └── 00_posts.sql
 ```
 
-Files are processed in alphabetical order, so use numbered prefixes to control execution order.
+**Key principle**: Files are processed in **alphabetical order**. Use numbered prefixes (00_, 10_, 20_) to control execution order.
+
+**See [organizing-sql-files.md](./organizing-sql-files.md)** for detailed patterns and best practices.
 
 ## Best Practices
 
@@ -465,11 +502,56 @@ The migration was partially applied. Either:
 1. Manually fix the database state
 2. Rollback and retry: `confiture migrate down && confiture migrate up`
 
+## Working with Seed Data
+
+Confiture supports **environment-specific seed data** for development and testing.
+
+### Creating Seed Files
+
+Create `db/seeds/common/00_users.sql`:
+
+```sql
+-- Common seed data: test users for all non-production environments
+INSERT INTO users (id, username, email) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'admin', 'admin@example.com'),
+    ('00000000-0000-0000-0000-000000000002', 'editor', 'editor@example.com'),
+    ('00000000-0000-0000-0000-000000000003', 'reader', 'reader@example.com');
+```
+
+Create `db/seeds/development/00_posts.sql`:
+
+```sql
+-- Development seed data: sample posts for local work
+INSERT INTO posts (id, author_id, title, content) VALUES
+    (1, '00000000-0000-0000-0000-000000000001', 'Welcome Post', 'Welcome to the blog!'),
+    (2, '00000000-0000-0000-0000-000000000002', 'Getting Started', 'Here is how to get started...');
+```
+
+### Building with Seeds
+
+```bash
+# Local: includes schema + common seeds + development seeds
+confiture build --env local
+
+# Test: includes schema + common seeds + test seeds
+confiture build --env test
+
+# Production: schema only, no seeds
+confiture build --env production
+
+# Override: build without seeds on any environment
+confiture build --env local --schema-only
+```
+
+**Result**: Fresh databases come with data ready for immediate development!
+
 ## Next Steps
 
-- [CLI Reference](./cli-reference.md) - Complete command documentation
-- [Migration Strategies](./migration-strategies.md) - When to use each approach
-- [Examples](../examples/) - Sample projects
+- **[Organizing SQL Files](./organizing-sql-files.md)** - Patterns for complex schemas
+- **[Meaningful Test UUIDs](./meaningful-test-uuids.md)** - Generate debuggable UUIDs for seed data
+- **[CLI Reference](./cli-reference.md)** - Complete command documentation
+- **[Migration Strategies](./migration-strategies.md)** - When to use each approach
+- **[Examples](../examples/)** - Sample projects
 
 ## Getting Help
 

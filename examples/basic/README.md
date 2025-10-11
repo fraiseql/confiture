@@ -1,15 +1,13 @@
-# Basic Example: Blog Application
+# Basic Example: Simple Blog Application
 
-This example demonstrates a simple blog application with users, posts, and comments.
+**A complete example showing Confiture organization patterns for a small project**
 
-## Overview
-
-This example shows:
-- ✅ Project initialization
-- ✅ Schema organization
-- ✅ Migration generation
-- ✅ Applying migrations
-- ✅ Rolling back changes
+This example demonstrates:
+- ✅ Numbered directory prefixes for execution order
+- ✅ Environment-specific configurations
+- ✅ Seed data management (development/test/production)
+- ✅ Clean schema organization
+- ✅ Migration generation and application
 
 ## Schema
 
@@ -324,19 +322,66 @@ confiture migrate up --config db/environments/local.yaml
 examples/basic/
 ├── README.md                           # This file
 ├── db/
-│   ├── schema/
+│   ├── schema/                         # DDL: Single source of truth
 │   │   ├── 00_common/
-│   │   │   └── extensions.sql          # PostgreSQL extensions
+│   │   │   └── extensions.sql          # Load first: PostgreSQL extensions
 │   │   └── 10_tables/
-│   │       ├── users.sql               # Users table
-│   │       ├── posts.sql               # Posts table
-│   │       └── comments.sql            # Comments table
-│   ├── migrations/
-│   │   └── 001_create_initial_schema.py # Initial migration
-│   └── environments/
-│       └── local.yaml                  # Local config
+│   │       ├── users.sql               # Core tables
+│   │       ├── posts.sql               # Posts depend on users
+│   │       └── comments.sql            # Comments depend on posts
+│   │
+│   ├── seeds/                          # INSERT statements
+│   │   ├── common/                     # All non-prod environments
+│   │   │   └── 00_users.sql            # 3 test users (admin, editor, reader)
+│   │   ├── development/                # Dev-specific seeds
+│   │   │   ├── 00_posts.sql            # 6 sample blog posts
+│   │   │   └── 01_comments.sql         # 7 comments on posts
+│   │   └── test/                       # Test-specific seeds
+│   │       └── 00_posts.sql            # 3 minimal test posts
+│   │
+│   ├── environments/                   # Environment configurations
+│   │   ├── local.yaml                  # Local: schema + common + dev seeds
+│   │   ├── test.yaml                   # Test: schema + common + test seeds
+│   │   └── production.yaml             # Production: schema only, no seeds!
+│   │
+│   ├── migrations/                     # Generated migrations
+│   │   └── 001_create_initial_schema.py
+│   └── generated/                      # Built schema files (git-ignored)
+│       ├── schema_local.sql
+│       ├── schema_test.sql
+│       └── schema_production.sql
+│
 └── .gitignore
 ```
+
+### File Numbering Pattern
+
+**Top-Level Directories:**
+```
+00_common/     Extensions, types (load first)
+10_tables/     Core tables
+20_views/      Views (if we had them)
+30_functions/  Functions (if we had them)
+```
+
+**Why numbered?**
+- Deterministic execution order (00 before 10 before 20)
+- Leave gaps (00, 10, 20) to insert new categories later
+- Clear intent: numbers show dependency order
+
+**Seed Files:**
+```
+seeds/
+├── common/
+│   └── 00_users.sql          # Load users first
+├── development/
+│   ├── 00_posts.sql          # Then posts (reference users)
+│   └── 01_comments.sql       # Then comments (reference posts)
+└── test/
+    └── 00_posts.sql          # Minimal posts for tests
+```
+
+**See [docs/organizing-sql-files.md](../../docs/organizing-sql-files.md)** for detailed patterns.
 
 ## Configuration
 
@@ -357,34 +402,58 @@ database:
   password: postgres
 ```
 
-### For Production
+### Environment Configurations
 
-Create `db/environments/production.yaml`:
+#### Local Development (`local.yaml`)
+
+```yaml
+name: local
+
+# Include schema + common seeds + development seeds
+includes:
+  - ../schema
+  - ../seeds/common
+  - ../seeds/development
+
+database_url: postgresql://postgres:postgres@localhost:5432/blog_app_local
+```
+
+**Result**: Full database with realistic test data for development.
+
+#### Test Environment (`test.yaml`)
+
+```yaml
+name: test
+
+# Include schema + common seeds + minimal test seeds
+includes:
+  - ../schema
+  - ../seeds/common
+  - ../seeds/test
+
+database_url: postgresql://postgres:postgres@localhost:5432/blog_app_test
+```
+
+**Result**: Minimal data optimized for fast test execution.
+
+#### Production (`production.yaml`)
 
 ```yaml
 name: production
-include_dirs:
-  - db/schema/00_common
-  - db/schema/10_tables
-exclude_dirs: []
 
-database:
-  host: ${DB_HOST}
-  port: ${DB_PORT}
-  database: ${DB_NAME}
-  user: ${DB_USER}
-  password: ${DB_PASSWORD}
+# Schema ONLY - no seed data!
+includes:
+  - ../schema
+
+database_url: ${DATABASE_URL}
 ```
 
-Then:
-```bash
-export DB_HOST=prod-db.example.com
-export DB_PORT=5432
-export DB_NAME=blog_app_production
-export DB_USER=blog_app_user
-export DB_PASSWORD=secret
+**Result**: Clean schema, no test data accidentally in production.
 
-confiture migrate up --config db/environments/production.yaml
+**Usage**:
+```bash
+export DATABASE_URL=postgresql://user:pass@prod-db.example.com:5432/blog_app_production
+confiture build --env production
 ```
 
 ## Troubleshooting
@@ -433,11 +502,96 @@ Then re-apply:
 confiture migrate up --config db/environments/local.yaml
 ```
 
+## Understanding Seed Data
+
+### Common Seeds (`seeds/common/00_users.sql`)
+
+```sql
+-- Test users for all non-production environments
+-- Fixed UUIDs for referential integrity in seed data
+
+INSERT INTO users (id, username, email, password_hash, bio) VALUES
+    (
+        '00000000-0000-0000-0000-000000000001',
+        'admin',
+        'admin@example.com',
+        '$2b$12$...',  -- bcrypt hash
+        'System administrator'
+    ),
+    ('00000000-0000-0000-0000-000000000002', 'editor', 'editor@example.com', '$2b$12$...', 'Content editor'),
+    ('00000000-0000-0000-0000-000000000003', 'reader', 'reader@example.com', '$2b$12$...', 'Regular user');
+```
+
+**Why fixed UUIDs?**
+- Allows seed files to reference specific users
+- Deterministic: Same UUIDs every build
+- Easy to test: `author_id = '00000000-0000-0000-0000-000000000001'`
+
+**See [Meaningful Test UUIDs](../../docs/meaningful-test-uuids.md)** for advanced patterns to encode table, scenario, and context information directly into UUIDs for better debuggability.
+
+### Development Seeds
+
+**`seeds/development/00_posts.sql`**: 6 sample blog posts
+**`seeds/development/01_comments.sql`**: 7 comments across posts
+
+These reference common seed UUIDs for foreign keys.
+
+### Test Seeds
+
+**`seeds/test/00_posts.sql`**: 3 minimal posts only
+
+Minimal data for fast test execution.
+
+## Working with Seeds
+
+### Build with Seeds
+
+```bash
+# Local: includes schema + common + development seeds
+confiture build --env local
+
+# Test: includes schema + common + test seeds
+confiture build --env test
+
+# Production: schema only, no seeds
+confiture build --env production
+```
+
+### Override: Build Without Seeds
+
+```bash
+# Skip seeds on any environment
+confiture build --env local --schema-only
+```
+
+### Verify Build Plan
+
+```bash
+confiture build --env local --dry-run
+```
+
+**Output**:
+```
+📋 Build Plan for environment: local
+
+📂 Files to process (7 total):
+  ✓ db/schema/00_common/extensions.sql
+  ✓ db/schema/10_tables/users.sql
+  ✓ db/schema/10_tables/posts.sql
+  ✓ db/schema/10_tables/comments.sql
+  ✓ db/seeds/common/00_users.sql
+  ✓ db/seeds/development/00_posts.sql
+  ✓ db/seeds/development/01_comments.sql
+
+📊 Output: 8,262 bytes (7 files)
+```
+
 ## Next Steps
 
-- [Advanced Example](../advanced/README.md) - Complex migrations, FraiseQL integration
-- [CLI Reference](../../docs/cli-reference.md) - Complete command documentation
-- [Migration Strategies](../../docs/migration-strategies.md) - When to use each approach
+- **[Organizing SQL Files](../../docs/organizing-sql-files.md)** - Patterns for complex schemas
+- **[Getting Started Guide](../../docs/getting-started.md)** - Complete walkthrough
+- **[CLI Reference](../../docs/cli-reference.md)** - All commands documented
+- **[Migration Strategies](../../docs/migration-strategies.md)** - When to use each approach
 
 ## Resources
 

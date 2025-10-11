@@ -1,0 +1,8 @@
+name: production
+include_dirs:
+  - db/schema/00_common
+  - db/schema/10_tables
+exclude_dirs:
+  - db/seeds  # Explicitly exclude ALL seed data from production
+
+database_url: postgresql://prod-host:5432/blog_app_production

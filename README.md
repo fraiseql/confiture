@@ -75,13 +75,18 @@ confiture init
 Creates:
 ```
 db/
-├── schema/
+├── schema/           # DDL: CREATE TABLE, views, functions
 │   ├── 00_common/
 │   ├── 10_tables/
 │   └── 20_views/
-├── migrations/
-└── environments/
+├── seeds/            # INSERT: Environment-specific test data
+│   ├── common/
+│   ├── development/
+│   └── test/
+├── migrations/       # Generated migration files
+└── environments/     # Environment configurations
     ├── local.yaml
+    ├── test.yaml
     └── production.yaml
 ```
 
@@ -113,6 +118,8 @@ confiture migrate up
 ## Documentation
 
 - **[Getting Started Guide](docs/getting-started.md)** - Installation and first steps
+- **[Organizing SQL Files](docs/organizing-sql-files.md)** - Patterns for complex schemas
+- **[Meaningful Test UUIDs](docs/meaningful-test-uuids.md)** - Generate debuggable UUIDs for seed data
 - **[Migration Strategies](docs/migration-strategies.md)** - When to use each medium
 - **[CLI Reference](docs/cli-reference.md)** - All commands documented
 - **[FraiseQL Integration](docs/fraiseql-integration.md)** - GraphQL schema sync
@@ -123,6 +130,7 @@ confiture migrate up
 
 ### ✅ Available Now (Phase 1)
 - Build from DDL (Medium 1)
+- Environment-specific seed data (development/test/production)
 - Incremental migrations (Medium 2)
 - Schema diff detection
 - CLI with rich terminal output

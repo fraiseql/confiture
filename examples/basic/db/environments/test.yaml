@@ -1,0 +1,9 @@
+name: test
+include_dirs:
+  - db/schema/00_common
+  - db/schema/10_tables
+  - db/seeds/common
+  - db/seeds/test
+exclude_dirs: []
+
+database_url: postgresql://postgres:postgres@localhost:5432/blog_app_test
