@@ -9,17 +9,22 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 import hashlib
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
 from confiture.exceptions import SchemaError
 
 # Try to import Rust extension for 10-50x performance boost
-try:
-    from confiture import _core  # type: ignore
+_core: Any = None
+HAS_RUST = False
 
-    HAS_RUST = True
-except ImportError:
-    HAS_RUST = False
+if not TYPE_CHECKING:
+    try:
+        from confiture import _core  # type: ignore
+
+        HAS_RUST = True
+    except ImportError:
+        pass
 
 
 class SchemaBuilder:
@@ -179,7 +184,7 @@ class SchemaBuilder:
             try:
                 # Build file content using Rust
                 file_paths = [str(f) for f in files]
-                content = _core.build_schema(file_paths)
+                content: str = _core.build_schema(file_paths)
 
                 # Add headers and separators (Python side for flexibility)
                 schema = self._add_headers_and_separators(header, files, content)
@@ -277,7 +282,8 @@ class SchemaBuilder:
         if HAS_RUST:
             try:
                 file_paths = [str(f) for f in files]
-                return _core.hash_files(file_paths)
+                hash_result: str = _core.hash_files(file_paths)
+                return hash_result
             except Exception:
                 # Fallback to Python if Rust fails
                 pass
