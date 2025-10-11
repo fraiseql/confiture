@@ -60,7 +60,8 @@ class Migrator:
                         WHERE table_name = 'confiture_migrations'
                     )
                 """)
-                table_exists = cursor.fetchone()[0]
+                result = cursor.fetchone()
+                table_exists = result[0] if result else False
 
                 if table_exists:
                     # Check if we need to migrate old table structure
@@ -71,7 +72,8 @@ class Migrator:
                             AND column_name = 'pk_migration'
                         )
                     """)
-                    has_new_structure = cursor.fetchone()[0]
+                    result = cursor.fetchone()
+                    has_new_structure = result[0] if result else False
 
                     if not has_new_structure:
                         # Migrate old table structure to new trinity pattern
