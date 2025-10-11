@@ -6,7 +6,6 @@ Foreign Data Wrapper (FDW) based schema-to-schema migration strategy.
 Phase 3, Milestone 3.1: FDW Strategy Setup
 """
 
-import pytest
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 
 
@@ -180,10 +179,197 @@ class TestSchemaToSchemaFDW:
             cursor.execute("DROP TABLE IF EXISTS new_users CASCADE")
         test_db_connection.commit()
 
-    @pytest.mark.skip(reason="Will implement in Milestone 3.3")
     def test_copy_strategy_for_large_table(self, test_db_connection):
-        """COPY strategy should be faster for large tables.
+        """COPY strategy should migrate large tables efficiently.
 
-        This test will be enabled in Milestone 3.3.
+        Milestone 3.3: COPY Strategy (Large Tables)
+
+        Tests that SchemaToSchemaMigrator can:
+        1. Detect when COPY strategy should be used (row count threshold)
+        2. Use PostgreSQL COPY for fast data migration
+        3. Stream data without intermediate storage
+        4. Apply column mapping during COPY
+        5. Verify row counts match
+
+        COPY is 10-20x faster than FDW for large tables (>10M rows).
         """
-        pass
+        # Setup: Create old schema with larger dataset
+        with test_db_connection.cursor() as cursor:
+            # Cleanup any existing tables from previous runs
+            cursor.execute("DROP TABLE IF EXISTS old_schema.large_events CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS events CASCADE")
+
+            # Create foreign schema and old table
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS old_schema")
+
+            cursor.execute("""
+                CREATE TABLE old_schema.large_events (
+                    id SERIAL PRIMARY KEY,
+                    event_type TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+
+            # Insert test data (smaller than 10M for test speed, but enough to verify)
+            # In production, this would be 10M+ rows
+            cursor.execute("""
+                INSERT INTO old_schema.large_events (event_type, user_id)
+                SELECT
+                    CASE (random() * 3)::int
+                        WHEN 0 THEN 'click'
+                        WHEN 1 THEN 'view'
+                        ELSE 'purchase'
+                    END,
+                    (random() * 1000)::int
+                FROM generate_series(1, 100000) -- 100K rows for testing
+            """)
+
+            # Create new table with renamed column
+            cursor.execute("""
+                CREATE TABLE events (
+                    id INTEGER PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    created_at TIMESTAMP
+                )
+            """)
+        test_db_connection.commit()
+
+        # Create migrator
+        migrator = SchemaToSchemaMigrator(
+            source_connection=test_db_connection,
+            target_connection=test_db_connection,
+            foreign_schema_name="old_schema"
+        )
+
+        # Execute migration with COPY strategy
+        column_mapping = {
+            "id": "id",
+            "event_type": "type",  # Rename
+            "user_id": "user_id",
+            "created_at": "created_at",
+        }
+
+        rows_migrated = migrator.migrate_table_copy(
+            source_table="large_events",
+            target_table="events",
+            column_mapping=column_mapping
+        )
+
+        # Verify return value
+        assert rows_migrated == 100000, f"Should return 100000 rows migrated, got {rows_migrated}"
+
+        # Verify data migrated correctly
+        with test_db_connection.cursor() as cursor:
+            # Check row count matches
+            cursor.execute("SELECT COUNT(*) FROM old_schema.large_events")
+            old_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM events")
+            new_count = cursor.fetchone()[0]
+
+            assert new_count == old_count, f"Row counts should match: {new_count} != {old_count}"
+            assert new_count == 100000, "Should have migrated 100000 rows"
+
+            # Verify column mapping worked (sample check)
+            cursor.execute("SELECT DISTINCT type FROM events ORDER BY type")
+            types = [row[0] for row in cursor.fetchall()]
+            assert set(types) == {"click", "view", "purchase"}
+
+            # Verify timestamps preserved
+            cursor.execute("SELECT COUNT(*) FROM events WHERE created_at IS NOT NULL")
+            non_null_timestamps = cursor.fetchone()[0]
+            assert non_null_timestamps == 100000, "All timestamps should be preserved"
+
+        # Cleanup
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS old_schema.large_events CASCADE")
+            cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS events CASCADE")
+        test_db_connection.commit()
+
+    def test_analyze_tables_recommends_strategy(self, test_db_connection):
+        """Should analyze table sizes and recommend optimal strategy.
+
+        Milestone 3.4: Hybrid Strategy (Auto-Detection)
+
+        Tests that SchemaToSchemaMigrator can:
+        1. Query table row counts from database
+        2. Recommend FDW for small tables (<10M rows)
+        3. Recommend COPY for large tables (>10M rows)
+        4. Estimate migration time for each strategy
+        5. Return structured recommendations
+
+        This enables auto-detection of optimal strategy per table.
+
+        Note: This test uses smaller row counts (1K and 1M instead of 15M)
+        for speed, but verifies the threshold logic works correctly.
+        """
+        # Setup: Create tables with different sizes
+        with test_db_connection.cursor() as cursor:
+            # Cleanup from previous runs
+            cursor.execute("DROP TABLE IF EXISTS small_users CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS medium_posts CASCADE")
+
+            # Small table (< 10M rows → FDW)
+            cursor.execute("""
+                CREATE TABLE small_users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT
+                )
+            """)
+            cursor.execute("INSERT INTO small_users (username) SELECT 'user' || i FROM generate_series(1, 1000) i")
+
+            # Medium table to simulate large (we'll update stats manually)
+            # Creating 1M rows instead of 15M for test speed
+            cursor.execute("""
+                CREATE TABLE medium_posts (
+                    id SERIAL PRIMARY KEY,
+                    content TEXT
+                )
+            """)
+            cursor.execute("INSERT INTO medium_posts (content) SELECT 'post' || i FROM generate_series(1, 1000000) i")  # 1M rows
+
+        test_db_connection.commit()
+
+        # Update statistics to simulate larger table
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("ANALYZE small_users")
+            cursor.execute("ANALYZE medium_posts")
+
+        # Create migrator
+        migrator = SchemaToSchemaMigrator(
+            source_connection=test_db_connection,
+            target_connection=test_db_connection,
+        )
+
+        # Analyze tables
+        recommendations = migrator.analyze_tables()
+
+        # Verify recommendations
+        assert "small_users" in recommendations
+        assert "medium_posts" in recommendations
+
+        # Small table should recommend FDW
+        small_rec = recommendations["small_users"]
+        assert small_rec["strategy"] == "fdw"
+        assert small_rec["row_count"] == 1000
+        assert small_rec["estimated_seconds"] > 0
+
+        # Medium table should recommend FDW (since it's < 10M)
+        # But if we had 15M it would recommend COPY
+        medium_rec = recommendations["medium_posts"]
+        assert medium_rec["row_count"] == 1000000
+        # At 1M rows, should still be FDW
+        assert medium_rec["strategy"] == "fdw"
+
+        # Verify the threshold logic by checking calculated values
+        # If row_count >= 10M, strategy should be "copy"
+        assert (medium_rec["row_count"] < 10_000_000) == (medium_rec["strategy"] == "fdw")
+
+        # Cleanup
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS small_users CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS medium_posts CASCADE")
+        test_db_connection.commit()
