@@ -146,12 +146,12 @@ database_url: postgresql://localhost/test
         assert "PostgreSQL Schema for Confiture" in schema
         assert "Environment: test" in schema
 
-        # Should contain file separators
-        assert "File: 00_common/ext.sql" in schema
-        assert "File: 10_tables/users.sql" in schema
-
         # Should contain content in order
         assert schema.index("pgcrypto") < schema.index("CREATE TABLE users")
+
+        # Should include file separators
+        assert "File: 00_common/ext.sql" in schema
+        assert "File: 10_tables/users.sql" in schema
 
     def test_build_writes_to_file(self, tmp_path):
         """Should write schema to output file."""
@@ -451,6 +451,7 @@ database_url: postgresql://localhost/test
 
         # Should handle empty files gracefully
         assert "PostgreSQL Schema" in schema
+        # Should include file separators even for empty files
         assert "File: empty.sql" in schema
 
     def test_build_with_unicode_content(self, tmp_path):

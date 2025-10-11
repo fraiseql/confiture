@@ -28,6 +28,9 @@ pub fn hash_files(files: Vec<String>) -> PyResult<String> {
     // Convert to PathBuf
     let paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
 
+    // Find common base directory for relative paths (same as Python)
+    let base_dir = find_common_parent(&paths);
+
     // Read all files in parallel and compute individual hashes
     let file_hashes: Vec<(usize, Vec<u8>)> = paths
         .par_iter()
@@ -37,9 +40,21 @@ pub fn hash_files(files: Vec<String>) -> PyResult<String> {
             let mut buffer = Vec::new();
             file.read_to_end(&mut buffer).expect("Failed to read file");
 
-            // Hash file content
+            // Calculate relative path
+            let rel_path = path
+                .strip_prefix(&base_dir)
+                .unwrap_or(path)
+                .to_string_lossy();
+
+            // Hash both path AND content (matches Python behavior)
             let mut hasher = Sha256::new();
+            // Include relative path in hash (detects file renames)
+            hasher.update(rel_path.as_bytes());
+            hasher.update(b"\x00"); // Separator
+            // Include file content
             hasher.update(&buffer);
+            hasher.update(b"\x00"); // Separator
+
             let hash = hasher.finalize().to_vec();
 
             (i, hash)
@@ -58,6 +73,53 @@ pub fn hash_files(files: Vec<String>) -> PyResult<String> {
 
     // Return hex-encoded hash
     Ok(format!("{:x}", final_hasher.finalize()))
+}
+
+/// Find common parent directory of all paths (same logic as builder)
+fn find_common_parent(paths: &[PathBuf]) -> PathBuf {
+    if paths.is_empty() {
+        return PathBuf::from(".");
+    }
+
+    if paths.len() == 1 {
+        return paths[0]
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+    }
+
+    // Get absolute paths
+    let abs_paths: Vec<PathBuf> = paths
+        .iter()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
+        .collect();
+
+    // Get all parent parts
+    let all_parts: Vec<Vec<&str>> = abs_paths
+        .iter()
+        .map(|p| p.iter().map(|s| s.to_str().unwrap_or("")).collect())
+        .collect();
+
+    // Find common prefix
+    let mut common_parts = Vec::new();
+    let min_len = all_parts.iter().map(|parts| parts.len()).min().unwrap_or(0);
+
+    for i in 0..min_len {
+        let part_at_level: Vec<&str> = all_parts.iter().map(|parts| parts[i]).collect();
+        let first = part_at_level[0];
+
+        if part_at_level.iter().all(|&p| p == first) {
+            common_parts.push(first);
+        } else {
+            break;
+        }
+    }
+
+    if common_parts.is_empty() {
+        return PathBuf::from(".");
+    }
+
+    common_parts.iter().collect()
 }
 
 #[cfg(test)]

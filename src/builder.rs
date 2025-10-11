@@ -29,36 +29,94 @@ pub fn build_schema(files: Vec<String>) -> PyResult<String> {
     // Convert strings to PathBuf
     let paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
 
+    // Find common base directory for relative paths
+    let base_dir = find_common_parent(&paths);
+
     // Read all files in parallel
-    let contents: Vec<(usize, String)> = paths
+    let contents: Vec<(usize, PathBuf, String)> = paths
         .par_iter()
         .enumerate()
         .map(|(i, path)| {
             let content = fs::read_to_string(path)
                 .unwrap_or_else(|e| format!("-- Error reading {}: {}\n", path.display(), e));
-            (i, content)
+            (i, path.clone(), content)
         })
         .collect();
 
     // Sort by original index (maintain order)
     let mut sorted_contents = contents;
-    sorted_contents.sort_by_key(|(i, _)| *i);
+    sorted_contents.sort_by_key(|(i, _, _)| *i);
 
-    // Concatenate in order
-    for (_, content) in sorted_contents {
+    // Concatenate in order with file headers
+    for (_, path, content) in sorted_contents {
+        // Calculate relative path for header
+        let rel_path = path
+            .strip_prefix(&base_dir)
+            .unwrap_or(&path)
+            .to_string_lossy();
+
+        // Add file separator (matches Python behavior)
+        output.push_str("\n-- ============================================\n");
+        output.push_str(&format!("-- File: {}\n", rel_path));
+        output.push_str("-- ============================================\n\n");
+
+        // Add file content
         output.push_str(&content);
 
-        // Add double newline between files if not already present
-        if !content.ends_with("\n\n") {
-            if content.ends_with('\n') {
-                output.push('\n');
-            } else {
-                output.push_str("\n\n");
-            }
+        // Ensure newline at end
+        if !content.ends_with('\n') {
+            output.push('\n');
         }
     }
 
     Ok(output)
+}
+
+/// Find common parent directory of all paths
+fn find_common_parent(paths: &[PathBuf]) -> PathBuf {
+    if paths.is_empty() {
+        return PathBuf::from(".");
+    }
+
+    if paths.len() == 1 {
+        return paths[0]
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+    }
+
+    // Get absolute paths
+    let abs_paths: Vec<PathBuf> = paths
+        .iter()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
+        .collect();
+
+    // Get all parent parts
+    let all_parts: Vec<Vec<&str>> = abs_paths
+        .iter()
+        .map(|p| p.iter().map(|s| s.to_str().unwrap_or("")).collect())
+        .collect();
+
+    // Find common prefix
+    let mut common_parts = Vec::new();
+    let min_len = all_parts.iter().map(|parts| parts.len()).min().unwrap_or(0);
+
+    for i in 0..min_len {
+        let part_at_level: Vec<&str> = all_parts.iter().map(|parts| parts[i]).collect();
+        let first = part_at_level[0];
+
+        if part_at_level.iter().all(|&p| p == first) {
+            common_parts.push(first);
+        } else {
+            break;
+        }
+    }
+
+    if common_parts.is_empty() {
+        return PathBuf::from(".");
+    }
+
+    common_parts.iter().collect()
 }
 
 #[cfg(test)]

@@ -241,18 +241,20 @@ class SchemaBuilder:
     def _add_headers_and_separators(
         self, header: str, files: list[Path], content: str
     ) -> str:
-        """Add file headers and separators to Rust-built content
+        """Add main header to Rust-built content
+
+        The Rust layer now includes file separators, so this function
+        only needs to prepend the main schema header.
 
         Args:
             header: Schema header
-            files: List of SQL files
-            content: Raw concatenated content from Rust
+            files: List of SQL files (unused, kept for API compatibility)
+            content: Concatenated content from Rust (includes file separators)
 
         Returns:
-            Content with headers and separators
+            Content with main header
         """
-        # For now, just prepend the header
-        # TODO: Add individual file separators in future iteration
+        # Rust layer now includes file separators, just prepend main header
         return header + content
 
     def compute_hash(self) -> str:

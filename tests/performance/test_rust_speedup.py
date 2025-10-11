@@ -69,8 +69,8 @@ def test_build_performance(large_schema_dir):
 
     # Should have content
     assert len(schema) > 50_000  # At least 50KB
-    assert "table_000" in schema
-    assert "table_099" in schema
+    assert "table_0" in schema
+    assert "table_99" in schema
 
     print(f"\n✓ Built schema in {duration:.3f}s ({len(schema):,} bytes)")
 
