@@ -1,6 +1,6 @@
 [project]
 name = "confiture"
-version = "0.1.0-alpha"
+version = "0.2.0-alpha"
 description = "PostgreSQL migrations, sweetly done 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,6 +40,7 @@ dev = [
     "mypy>=1.11.0",
     "pre-commit>=3.5.0",
     "types-pyyaml>=6.0.0",
+    "maturin>=1.7.0",
 ]
 
 fraiseql = [
@@ -58,14 +59,13 @@ FraiseQL = "https://github.com/fraiseql/fraiseql"
 confiture = "confiture.cli.main:app"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
 
-[tool.hatch.build.targets.wheel]
-packages = ["python/confiture"]
-
-[tool.hatch.build.targets.sdist]
-packages = ["python/confiture"]
+[tool.maturin]
+python-source = "python"
+module-name = "confiture._core"
+features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -149,3 +149,8 @@ ignore_missing_imports = false
 [[tool.mypy.overrides]]
 module = "sqlparse.*"
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "maturin>=1.9.6",
+]

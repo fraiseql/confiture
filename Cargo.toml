@@ -1,0 +1,28 @@
+[package]
+name = "confiture-core"
+version = "0.2.0"
+edition = "2021"
+authors = ["Lionel Hamayon <lionel.hamayon@evolution-digitale.fr>"]
+license = "MIT"
+repository = "https://github.com/fraiseql/confiture"
+homepage = "https://github.com/fraiseql/confiture"
+description = "PostgreSQL Migrations, Sweetly Done 🍓 - Rust performance layer"
+
+[lib]
+name = "confiture_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+sha2 = "0.10"
+rayon = "1.10"
+walkdir = "2.5"
+
+[dev-dependencies]
+tempfile = "3.12"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
