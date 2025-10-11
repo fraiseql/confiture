@@ -444,7 +444,8 @@ class {class_name}(Migration):
         filepath.write_text(template)
 
         console.print("[green]✅ Migration generated successfully![/green]")
-        console.print(f"\n📄 File: {str(filepath.absolute())}", soft_wrap=False)
+        # Use plain print to avoid Rich wrapping long paths
+        print(f"\n📄 File: {filepath.absolute()}")
         console.print("\n✏️  Edit the migration file to add your SQL statements.")
 
     except Exception as e:
