@@ -14,12 +14,8 @@ permissions:
 
 jobs:
   build-wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
-        python-version: ['3.11', '3.12', '3.13']
+    name: Build wheels on Linux
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +23,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -36,12 +32,12 @@ jobs:
         run: pip install maturin
 
       - name: Build wheels
-        run: maturin build --release --out dist --interpreter python${{ matrix.python-version }}
+        run: maturin build --release --out dist
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: wheels-linux-py311
           path: dist/*.whl
 
   build-sdist:
@@ -70,11 +66,7 @@ jobs:
   test-wheels:
     name: Test wheels
     needs: [build-wheels]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-13, windows-latest]
-        python-version: ['3.11', '3.12', '3.13']
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -82,14 +74,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
 
       - name: Download wheels
         uses: actions/download-artifact@v4
         with:
-          pattern: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: wheels-linux-py311
           path: dist
-          merge-multiple: true
 
       - name: Install wheel
         run: pip install --find-links dist confiture
