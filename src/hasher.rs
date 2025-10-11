@@ -54,7 +54,7 @@ pub fn hash_files(files: Vec<String>) -> PyResult<String> {
             // Include relative path in hash (detects file renames)
             hasher.update(rel_path.as_bytes());
             hasher.update(b"\x00"); // Separator
-            // Include file content
+                                    // Include file content
             hasher.update(&buffer);
             hasher.update(b"\x00"); // Separator
 
@@ -158,7 +158,8 @@ mod tests {
         let hash = hash_files(vec![
             file1.to_str().unwrap().to_string(),
             file2.to_str().unwrap().to_string(),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         assert_eq!(hash.len(), 64);
     }
@@ -193,12 +194,14 @@ mod tests {
         let hash1 = hash_files(vec![
             file1.to_str().unwrap().to_string(),
             file2.to_str().unwrap().to_string(),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         let hash2 = hash_files(vec![
             file2.to_str().unwrap().to_string(),
             file1.to_str().unwrap().to_string(),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         // Order should affect hash
         assert_ne!(hash1, hash2);

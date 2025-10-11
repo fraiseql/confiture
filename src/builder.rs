@@ -154,7 +154,8 @@ mod tests {
         let result = build_schema(vec![
             file1.to_str().unwrap().to_string(),
             file2.to_str().unwrap().to_string(),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         assert!(result.contains("CREATE TABLE users"));
         assert!(result.contains("CREATE TABLE posts"));
