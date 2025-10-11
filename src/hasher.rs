@@ -24,6 +24,7 @@ use std::path::PathBuf;
 /// - Efficient I/O buffering
 /// - No GIL contention
 #[pyfunction]
+#[allow(clippy::useless_conversion)]
 pub fn hash_files(files: Vec<String>) -> PyResult<String> {
     // Convert to PathBuf
     let paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();

@@ -22,6 +22,7 @@ use std::path::PathBuf;
 /// - Native string operations
 /// - No GIL contention
 #[pyfunction]
+#[allow(clippy::useless_conversion)]
 pub fn build_schema(files: Vec<String>) -> PyResult<String> {
     // Pre-allocate for ~10MB typical schema
     let mut output = String::with_capacity(10_000_000);
