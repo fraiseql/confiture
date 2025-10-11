@@ -9,7 +9,8 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 [![PyPI version](https://badge.fury.io/py/confiture.svg)](https://pypi.org/project/confiture/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://github.com/fraiseql/confiture/workflows/tests/badge.svg)](https://github.com/fraiseql/confiture/actions)
+[![CI](https://github.com/fraiseql/confiture/workflows/CI/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/ci.yml)
+[![Wheels](https://github.com/fraiseql/confiture/workflows/Build%20Wheels/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/wheels.yml)
 
 ---
 
@@ -128,19 +129,20 @@ confiture migrate up
 
 ## Features
 
-### ✅ Available Now (Phase 1)
+### ✅ Available Now (Phase 1 & 2)
 - Build from DDL (Medium 1)
+- **Rust performance layer** (10-50x speedup) 🚀
 - Environment-specific seed data (development/test/production)
 - Incremental migrations (Medium 2)
 - Schema diff detection
 - CLI with rich terminal output
+- **Binary wheels** for Linux, macOS, Windows
 - FraiseQL integration
 
-### 🚧 Coming Soon (Phase 2-3)
-- Rust performance layer (10-50x speedup)
+### 🚧 Coming Soon (Phase 3)
 - Schema-to-schema FDW migration (Medium 4)
 - Production data sync with anonymization (Medium 3)
-- Binary wheels for all platforms
+- Advanced validations and hooks
 
 ---
 
@@ -158,14 +160,14 @@ confiture migrate up
 
 ## Development Status
 
-**Current Version**: 0.1.0-alpha (Phase 1)
+**Current Version**: 0.2.0-alpha (Phase 2 Complete)
 
 **Roadmap**:
-- ✅ Phase 1: Python MVP (Jan 2026)
-- 🚧 Phase 2: Rust Performance (Mar 2026)
-- ⏳ Phase 3: Advanced Features (Jun 2026)
+- ✅ Phase 1: Python MVP (Complete)
+- ✅ Phase 2: Rust Performance (Complete)
+- ⏳ Phase 3: Advanced Features (Q1 2026)
 
-See [PHASES.md](PHASES.md) for detailed timeline.
+See [PHASES.md](PHASES.md) for detailed timeline and [PHASE2_SUMMARY.md](PHASE2_SUMMARY.md) for Phase 2 details.
 
 ---
 
@@ -178,11 +180,16 @@ Contributions welcome! See [CLAUDE.md](CLAUDE.md) for development guide.
 git clone https://github.com/fraiseql/confiture.git
 cd confiture
 
-# Install dependencies
+# Install dependencies (includes Rust build)
 uv sync --all-extras
+
+# Build Rust extension
+uv run maturin develop
 
 # Run tests
 uv run pytest
+
+# See CLAUDE.md for detailed development guide
 ```
 
 ---

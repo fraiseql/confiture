@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Build Rust extension
+        run: uv run maturin develop
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --cov=confiture --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff check
+        run: uv run ruff check .
+
+      - name: Run ruff format check
+        run: uv run ruff format --check .
+
+      - name: Run mypy
+        run: uv run mypy python/confiture/
+
+  test-pure-python:
+    name: Test pure Python fallback
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (without Rust)
+        run: |
+          uv pip install -e . --no-build-isolation
+        continue-on-error: true
+
+      - name: Install dependencies manually
+        run: |
+          uv pip install typer rich pydantic pyyaml 'psycopg[binary]' sqlparse pytest pytest-cov
+
+      - name: Run tests (Python fallback)
+        run: |
+          python -c "from confiture.core.builder import HAS_RUST; assert not HAS_RUST, 'Rust should not be available'; print('✓ Testing pure Python fallback')"
+          uv run pytest tests/unit/ -v
+
+  cargo-test:
+    name: Cargo test (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run cargo test
+        run: cargo test --verbose
+
+      - name: Run cargo clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run cargo fmt check
+        run: cargo fmt --check
