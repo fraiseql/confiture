@@ -1,6 +1,5 @@
 """Unit tests for Migration Generator (Milestone 1.11)."""
 
-from pathlib import Path
 
 import pytest
 

@@ -1,8 +1,6 @@
 """End-to-end tests for CLI commands (Milestone 1.12)."""
 
-from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -268,6 +266,188 @@ class TestMigrateDiffCommand:
         migration_files = list(migrations_dir.glob("*.py"))
         assert len(migration_files) == 1
         assert "add_name_column" in migration_files[0].name
+
+
+class TestMigrateUpCommand:
+    """Test 'confiture migrate up' command (Milestone 1.13)."""
+
+    def test_up_applies_pending_migrations(self, tmp_path, test_db_connection):
+        """Should apply all pending migrations."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir(parents=True)
+
+        # Create migration file
+        migration_file = migrations_dir / "001_create_test_table.py"
+        migration_file.write_text('''
+from confiture.models.migration import Migration
+
+class CreateTestTable(Migration):
+    version = "001"
+    name = "create_test_table"
+
+    def up(self) -> None:
+        self.execute("CREATE TABLE cli_test_table (id SERIAL PRIMARY KEY)")
+
+    def down(self) -> None:
+        self.execute("DROP TABLE cli_test_table")
+''')
+
+        # Create temp config file
+        config_dir = tmp_path / "environments"
+        config_dir.mkdir()
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f'''
+name: test
+database:
+  host: {test_db_connection.info.host}
+  port: {test_db_connection.info.port}
+  database: {test_db_connection.info.dbname}
+  user: {test_db_connection.info.user}
+  password: ""
+''')
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "up",
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_file),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "applied" in result.stdout.lower() or "success" in result.stdout.lower()
+
+        # Verify table was created
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM pg_tables
+                    WHERE tablename = 'cli_test_table'
+                )
+            """)
+            exists = cursor.fetchone()[0]
+            assert exists is True
+
+        # Cleanup
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS cli_test_table")
+            cursor.execute("DELETE FROM confiture_migrations WHERE version = '001'")
+        test_db_connection.commit()
+
+    def test_up_with_no_pending_migrations(self, tmp_path, test_db_connection):
+        """Should report when no migrations need to be applied."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir(parents=True)
+
+        config_dir = tmp_path / "environments"
+        config_dir.mkdir()
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f'''
+name: test
+database:
+  host: {test_db_connection.info.host}
+  port: {test_db_connection.info.port}
+  database: {test_db_connection.info.dbname}
+  user: {test_db_connection.info.user}
+  password: ""
+''')
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "up",
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_file),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "no pending" in result.stdout.lower() or "up to date" in result.stdout.lower()
+
+
+class TestMigrateDownCommand:
+    """Test 'confiture migrate down' command (Milestone 1.13)."""
+
+    def test_down_rolls_back_last_migration(self, tmp_path, test_db_connection):
+        """Should rollback the last applied migration."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir(parents=True)
+
+        # Create and apply a migration first
+        migration_file = migrations_dir / "001_create_rollback_test.py"
+        migration_file.write_text('''
+from confiture.models.migration import Migration
+
+class CreateRollbackTest(Migration):
+    version = "001"
+    name = "create_rollback_test"
+
+    def up(self) -> None:
+        self.execute("CREATE TABLE rollback_test_table (id SERIAL PRIMARY KEY)")
+
+    def down(self) -> None:
+        self.execute("DROP TABLE rollback_test_table")
+''')
+
+        config_dir = tmp_path / "environments"
+        config_dir.mkdir()
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f'''
+name: test
+database:
+  host: {test_db_connection.info.host}
+  port: {test_db_connection.info.port}
+  database: {test_db_connection.info.dbname}
+  user: {test_db_connection.info.user}
+  password: ""
+''')
+
+        # Apply migration first
+        runner.invoke(
+            app,
+            [
+                "migrate",
+                "up",
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_file),
+            ],
+        )
+
+        # Now rollback
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "down",
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_file),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "rolled back" in result.stdout.lower() or "rollback" in result.stdout.lower()
+
+        # Verify table was dropped
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM pg_tables
+                    WHERE tablename = 'rollback_test_table'
+                )
+            """)
+            exists = cursor.fetchone()[0]
+            assert exists is False
 
 
 class TestCLIErrorHandling:

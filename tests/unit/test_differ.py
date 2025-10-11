@@ -1,7 +1,7 @@
 """Unit tests for SchemaDiffer (Milestone 1.9-1.10)."""
 
 from confiture.core.differ import SchemaDiffer
-from confiture.models.schema import Column, ColumnType, Table
+from confiture.models.schema import ColumnType
 
 
 class TestSQLParser:
