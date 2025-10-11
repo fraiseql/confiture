@@ -373,3 +373,158 @@ class TestSchemaToSchemaFDW:
             cursor.execute("DROP TABLE IF EXISTS small_users CASCADE")
             cursor.execute("DROP TABLE IF EXISTS medium_posts CASCADE")
         test_db_connection.commit()
+
+    def test_verify_migration_counts(self, test_db_connection):
+        """Should verify row counts match between source and target.
+
+        Milestone 3.5: Verification & Cutover
+
+        Tests that SchemaToSchemaMigrator can:
+        1. Count rows in source tables (via foreign schema)
+        2. Count rows in target tables
+        3. Compare counts and detect mismatches
+        4. Return verification results with pass/fail status
+
+        This is critical for ensuring data migration completeness.
+        """
+        # Setup: Create source and target tables with data
+        with test_db_connection.cursor() as cursor:
+            # Cleanup
+            cursor.execute("DROP TABLE IF EXISTS old_schema.products CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS products CASCADE")
+
+            # Create foreign schema
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS old_schema")
+
+            # Create source table with data
+            cursor.execute("""
+                CREATE TABLE old_schema.products (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    price DECIMAL(10, 2)
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO old_schema.products (name, price)
+                SELECT 'Product ' || i, (i * 10.99)::DECIMAL
+                FROM generate_series(1, 5000) i
+            """)
+
+            # Create target table (empty initially)
+            cursor.execute("""
+                CREATE TABLE products (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    price DECIMAL(10, 2)
+                )
+            """)
+        test_db_connection.commit()
+
+        # Create migrator
+        migrator = SchemaToSchemaMigrator(
+            source_connection=test_db_connection,
+            target_connection=test_db_connection,
+            foreign_schema_name="old_schema"
+        )
+
+        # Migrate data
+        column_mapping = {"id": "id", "name": "name", "price": "price"}
+        migrator.migrate_table("products", "products", column_mapping)
+
+        # Verify counts
+        verification_results = migrator.verify_migration(
+            tables=["products"],
+            source_schema="old_schema",
+            target_schema="public"
+        )
+
+        # Check verification results
+        assert "products" in verification_results
+        products_result = verification_results["products"]
+
+        assert products_result["source_count"] == 5000
+        assert products_result["target_count"] == 5000
+        assert products_result["match"] is True
+        assert products_result["difference"] == 0
+
+        # Cleanup
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS old_schema.products CASCADE")
+            cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS products CASCADE")
+        test_db_connection.commit()
+
+    def test_verify_migration_detects_mismatch(self, test_db_connection):
+        """Should detect count mismatches between source and target.
+
+        Milestone 3.5: Verification & Cutover
+
+        Tests that verification correctly identifies when row counts don't match,
+        which would indicate incomplete or failed migration.
+        """
+        # Setup: Create tables with intentional mismatch
+        with test_db_connection.cursor() as cursor:
+            # Cleanup
+            cursor.execute("DROP TABLE IF EXISTS old_schema.orders CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS orders CASCADE")
+
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS old_schema")
+
+            # Source: 1000 rows
+            cursor.execute("""
+                CREATE TABLE old_schema.orders (
+                    id SERIAL PRIMARY KEY,
+                    total DECIMAL(10, 2)
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO old_schema.orders (total)
+                SELECT (i * 99.99)::DECIMAL
+                FROM generate_series(1, 1000) i
+            """)
+
+            # Target: Only 900 rows (incomplete migration)
+            cursor.execute("""
+                CREATE TABLE orders (
+                    id INTEGER PRIMARY KEY,
+                    total DECIMAL(10, 2)
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO orders (id, total)
+                SELECT id, total
+                FROM old_schema.orders
+                WHERE id <= 900
+            """)
+        test_db_connection.commit()
+
+        # Create migrator
+        migrator = SchemaToSchemaMigrator(
+            source_connection=test_db_connection,
+            target_connection=test_db_connection,
+            foreign_schema_name="old_schema"
+        )
+
+        # Verify counts (should detect mismatch)
+        verification_results = migrator.verify_migration(
+            tables=["orders"],
+            source_schema="old_schema",
+            target_schema="public"
+        )
+
+        # Check verification detected the mismatch
+        assert "orders" in verification_results
+        orders_result = verification_results["orders"]
+
+        assert orders_result["source_count"] == 1000
+        assert orders_result["target_count"] == 900
+        assert orders_result["match"] is False
+        # Negative difference means target has fewer rows (missing data)
+        assert orders_result["difference"] == -100
+
+        # Cleanup
+        with test_db_connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS old_schema.orders CASCADE")
+            cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS orders CASCADE")
+        test_db_connection.commit()

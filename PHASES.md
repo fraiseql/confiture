@@ -1606,28 +1606,39 @@ uv publish
   - 10M row threshold (FDW vs COPY)
   - Performance estimation (throughput-based)
 
+- ✅ **Milestone 3.5: Verification & Cutover** (COMPLETE)
+  - Row count verification (source vs target)
+  - Mismatch detection with detailed reporting
+  - Structured verification results
+  - Transaction-safe verification queries
+  - Per-table verification status
+
+**Schema-to-Schema Migration (Medium 4): COMPLETE** ✅
+
 **Test Status:**
-- ✅ 221 tests passing (88.33% coverage)
+- ✅ 223 tests passing (88.35% coverage)
+- ✅ 6 schema-to-schema integration tests
 - ✅ All integration tests passing
 - ✅ Type checking passing (mypy)
 - ✅ Linting passing (ruff)
 
 **Next Steps:**
-1. **Milestone 3.5: Verification & Cutover** (Remaining)
-   - Count verification
-   - Foreign key integrity checks
-   - Custom validation SQL
-   - Atomic database rename
-   - Rollback procedure
+1. **Week 23-26: Production Data Sync** (Medium 3)
+   - Table selection (include/exclude)
+   - Schema-aware copy
+   - Progress reporting
+   - PII anonymization
 
-2. **Week 23-26: Production Data Sync** (Medium 3)
-3. **Week 27-30: Polish & v1.0 Release**
+2. **Week 27-30: Polish & v1.0 Release**
+   - Performance optimization
+   - Documentation & examples
+   - v1.0 release preparation
 
 ---
 
 **Last Updated**: October 11, 2025
-**Current Status**: Phase 3 - Milestones 3.1-3.4 Complete (80% of schema-to-schema)
-**Next Milestone**: 3.5 - Verification & Cutover
+**Current Status**: Phase 3 - Schema-to-Schema Migration COMPLETE (Milestones 3.1-3.5) ✅
+**Next Milestone**: Production Data Sync (Medium 3)
 
 ---
 

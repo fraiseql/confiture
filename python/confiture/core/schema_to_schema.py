@@ -507,3 +507,86 @@ class SchemaToSchemaMigrator:
 
         except psycopg.Error as e:
             raise MigrationError(f"Failed to analyze tables in schema '{schema}': {e}") from e
+
+    def verify_migration(
+        self,
+        tables: list[str],
+        source_schema: str = "old_schema",
+        target_schema: str = "public",
+    ) -> dict[str, dict[str, Any]]:
+        """Verify migration completeness by comparing row counts.
+
+        This method compares row counts between source and target tables to ensure
+        data migration completed successfully. It's a critical verification step
+        before cutover to ensure no data loss.
+
+        Args:
+            tables: List of table names to verify
+            source_schema: Schema name containing source tables (default: "old_schema")
+            target_schema: Schema name containing target tables (default: "public")
+
+        Returns:
+            Dictionary mapping table names to verification results:
+            {
+                "table_name": {
+                    "source_count": int,
+                    "target_count": int,
+                    "match": bool,
+                    "difference": int (target - source, negative means missing rows)
+                }
+            }
+
+        Raises:
+            MigrationError: If verification queries fail
+
+        Example:
+            >>> migrator = SchemaToSchemaMigrator(...)
+            >>> results = migrator.verify_migration(["users", "posts"])
+            >>> for table, result in results.items():
+            ...     if not result["match"]:
+            ...         print(f"❌ {table}: {result['difference']} rows missing!")
+            ...     else:
+            ...         print(f"✅ {table}: {result['source_count']} rows verified")
+        """
+        try:
+            verification_results = {}
+
+            with self.target_connection.cursor() as cursor:
+                for table_name in tables:
+                    # Count rows in source table (via foreign schema)
+                    cursor.execute(
+                        sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
+                            schema=sql.Identifier(source_schema),
+                            table=sql.Identifier(table_name),
+                        )
+                    )
+                    source_result = cursor.fetchone()
+                    source_count = int(source_result[0]) if source_result else 0
+
+                    # Count rows in target table
+                    cursor.execute(
+                        sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
+                            schema=sql.Identifier(target_schema),
+                            table=sql.Identifier(table_name),
+                        )
+                    )
+                    target_result = cursor.fetchone()
+                    target_count = int(target_result[0]) if target_result else 0
+
+                    # Calculate difference and match status
+                    difference = target_count - source_count
+                    match = source_count == target_count
+
+                    verification_results[table_name] = {
+                        "source_count": source_count,
+                        "target_count": target_count,
+                        "match": match,
+                        "difference": difference,
+                    }
+
+            return verification_results
+
+        except psycopg.Error as e:
+            raise MigrationError(
+                f"Failed to verify migration for tables {tables}: {e}"
+            ) from e
