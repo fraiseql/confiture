@@ -62,3 +62,9 @@ Cargo.lock
 # Documentation
 docs/_build/
 site/
+
+# Internal development notes (do not commit)
+*ANALYSIS*.md
+*_ANALYSIS.md
+RUST_BINDINGS.md
+SEED_DATA_ANALYSIS.md
