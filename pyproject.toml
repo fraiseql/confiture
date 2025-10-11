@@ -43,7 +43,8 @@ dev = [
 ]
 
 fraiseql = [
-    "fraiseql>=0.11.0",
+    # FraiseQL integration (requires Python 3.13+)
+    # Will be enabled in Phase 1 Milestone 1.14
 ]
 
 [project.urls]
@@ -62,16 +63,18 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["python/confiture"]
 
+[tool.hatch.build.targets.sdist]
+packages = ["python/confiture"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+pythonpath = ["python"]
 addopts = [
     "--strict-markers",
     "--tb=short",
-    "--cov=confiture",
-    "--cov-report=term-missing:skip-covered",
 ]
 markers = [
     "unit: Unit tests (no database required)",
