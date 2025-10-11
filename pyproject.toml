@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Lionel Hamayon", email = "lionel@fraiseql.com"}
+    {name = "evoludigit", email = "lionel@fraiseql.com"}
 ]
 keywords = ["postgresql", "migration", "database", "schema", "ddl"]
 classifiers = [
