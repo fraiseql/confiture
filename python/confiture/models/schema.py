@@ -145,3 +145,59 @@ class Schema:
     def table_names(self) -> list[str]:
         """Get list of all table names."""
         return [table.name for table in self.tables]
+
+
+@dataclass
+class SchemaChange:
+    """Represents a single change between two schemas."""
+
+    type: str  # ADD_TABLE, DROP_TABLE, ADD_COLUMN, etc.
+    table: str | None = None
+    column: str | None = None
+    old_value: str | None = None
+    new_value: str | None = None
+    details: dict[str, str] | None = None
+
+    def __str__(self) -> str:
+        """String representation of change."""
+        if self.type == "ADD_TABLE":
+            return f"ADD TABLE {self.table}"
+        elif self.type == "DROP_TABLE":
+            return f"DROP TABLE {self.table}"
+        elif self.type == "RENAME_TABLE":
+            return f"RENAME TABLE {self.old_value} TO {self.new_value}"
+        elif self.type == "ADD_COLUMN":
+            return f"ADD COLUMN {self.table}.{self.column}"
+        elif self.type == "DROP_COLUMN":
+            return f"DROP COLUMN {self.table}.{self.column}"
+        elif self.type == "RENAME_COLUMN":
+            return f"RENAME COLUMN {self.table}.{self.old_value} TO {self.new_value}"
+        elif self.type == "CHANGE_COLUMN_TYPE":
+            return f"CHANGE COLUMN TYPE {self.table}.{self.column} FROM {self.old_value} TO {self.new_value}"
+        elif self.type == "CHANGE_COLUMN_NULLABLE":
+            return f"CHANGE COLUMN NULLABLE {self.table}.{self.column} FROM {self.old_value} TO {self.new_value}"
+        elif self.type == "CHANGE_COLUMN_DEFAULT":
+            return f"CHANGE COLUMN DEFAULT {self.table}.{self.column}"
+        else:
+            return f"{self.type}: {self.table}.{self.column if self.column else ''}"
+
+
+@dataclass
+class SchemaDiff:
+    """Represents the difference between two schemas."""
+
+    changes: list[SchemaChange] = field(default_factory=list)
+
+    def has_changes(self) -> bool:
+        """Check if there are any changes."""
+        return len(self.changes) > 0
+
+    def count_by_type(self, change_type: str) -> int:
+        """Count changes of a specific type."""
+        return sum(1 for c in self.changes if c.type == change_type)
+
+    def __str__(self) -> str:
+        """String representation of diff."""
+        if not self.has_changes():
+            return "No changes detected"
+        return "\n".join(str(c) for c in self.changes)

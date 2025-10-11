@@ -12,7 +12,7 @@ import sqlparse
 from sqlparse.sql import Identifier, Parenthesis, Statement
 from sqlparse.tokens import Keyword, Name
 
-from confiture.models.schema import Column, ColumnType, Table
+from confiture.models.schema import Column, ColumnType, SchemaChange, SchemaDiff, Table
 
 
 class SchemaDiffer:
@@ -55,6 +55,272 @@ class SchemaDiffer:
                     tables.append(table)
 
         return tables
+
+    def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
+        """Compare two schemas and detect changes.
+
+        Args:
+            old_sql: SQL DDL for the old schema
+            new_sql: SQL DDL for the new schema
+
+        Returns:
+            SchemaDiff object containing list of changes
+
+        Example:
+            >>> differ = SchemaDiffer()
+            >>> old = "CREATE TABLE users (id INT);"
+            >>> new = "CREATE TABLE users (id INT, name TEXT);"
+            >>> diff = differ.compare(old, new)
+            >>> print(len(diff.changes))
+            1
+        """
+        old_tables = self.parse_sql(old_sql)
+        new_tables = self.parse_sql(new_sql)
+
+        changes: list[SchemaChange] = []
+
+        # Build name-to-table maps for efficient lookup
+        old_table_map = {t.name: t for t in old_tables}
+        new_table_map = {t.name: t for t in new_tables}
+
+        # Detect table-level changes
+        old_table_names = set(old_table_map.keys())
+        new_table_names = set(new_table_map.keys())
+
+        # Check for renamed tables (fuzzy match before drop/add)
+        renamed_tables = self._detect_table_renames(
+            old_table_names - new_table_names, new_table_names - old_table_names
+        )
+
+        # Process renamed tables
+        for old_name, new_name in renamed_tables.items():
+            changes.append(
+                SchemaChange(type="RENAME_TABLE", old_value=old_name, new_value=new_name)
+            )
+            # Mark as processed
+            old_table_names.discard(old_name)
+            new_table_names.discard(new_name)
+
+        # Dropped tables (in old but not in new, and not renamed)
+        for table_name in old_table_names - new_table_names:
+            changes.append(SchemaChange(type="DROP_TABLE", table=table_name))
+
+        # New tables (in new but not in old, and not renamed)
+        for table_name in new_table_names - old_table_names:
+            changes.append(SchemaChange(type="ADD_TABLE", table=table_name))
+
+        # Compare columns in tables that exist in both schemas
+        for table_name in old_table_names & new_table_names:
+            old_table = old_table_map[table_name]
+            new_table = new_table_map[table_name]
+            table_changes = self._compare_table_columns(old_table, new_table)
+            changes.extend(table_changes)
+
+        return SchemaDiff(changes=changes)
+
+    def _detect_table_renames(
+        self, old_names: set[str], new_names: set[str]
+    ) -> dict[str, str]:
+        """Detect renamed tables using fuzzy matching.
+
+        Args:
+            old_names: Set of table names that exist in old schema only
+            new_names: Set of table names that exist in new schema only
+
+        Returns:
+            Dictionary mapping old_name -> new_name for detected renames
+        """
+        renames: dict[str, str] = {}
+
+        for old_name in old_names:
+            # Look for similar names in new_names
+            best_match = self._find_best_match(old_name, new_names)
+            if best_match and self._similarity_score(old_name, best_match) > 0.5:
+                renames[old_name] = best_match
+
+        return renames
+
+    def _compare_table_columns(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
+        """Compare columns between two versions of the same table.
+
+        Args:
+            old_table: Old version of table
+            new_table: New version of table
+
+        Returns:
+            List of SchemaChange objects for column-level changes
+        """
+        changes: list[SchemaChange] = []
+
+        old_col_map = {c.name: c for c in old_table.columns}
+        new_col_map = {c.name: c for c in new_table.columns}
+
+        old_col_names = set(old_col_map.keys())
+        new_col_names = set(new_col_map.keys())
+
+        # Detect renamed columns
+        renamed_columns = self._detect_column_renames(
+            old_col_names - new_col_names, new_col_names - old_col_names
+        )
+
+        # Process renamed columns
+        for old_name, new_name in renamed_columns.items():
+            changes.append(
+                SchemaChange(
+                    type="RENAME_COLUMN",
+                    table=old_table.name,
+                    old_value=old_name,
+                    new_value=new_name,
+                )
+            )
+            # Mark as processed
+            old_col_names.discard(old_name)
+            new_col_names.discard(new_name)
+
+        # Dropped columns
+        for col_name in old_col_names - new_col_names:
+            changes.append(
+                SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name)
+            )
+
+        # New columns
+        for col_name in new_col_names - old_col_names:
+            changes.append(
+                SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name)
+            )
+
+        # Compare columns that exist in both
+        for col_name in old_col_names & new_col_names:
+            old_col = old_col_map[col_name]
+            new_col = new_col_map[col_name]
+            col_changes = self._compare_column_properties(old_table.name, old_col, new_col)
+            changes.extend(col_changes)
+
+        return changes
+
+    def _detect_column_renames(
+        self, old_names: set[str], new_names: set[str]
+    ) -> dict[str, str]:
+        """Detect renamed columns using fuzzy matching."""
+        renames: dict[str, str] = {}
+
+        for old_name in old_names:
+            best_match = self._find_best_match(old_name, new_names)
+            if best_match and self._similarity_score(old_name, best_match) > 0.5:
+                renames[old_name] = best_match
+
+        return renames
+
+    def _compare_column_properties(
+        self, table_name: str, old_col: Column, new_col: Column
+    ) -> list[SchemaChange]:
+        """Compare properties of a column."""
+        changes: list[SchemaChange] = []
+
+        # Type change
+        if old_col.type != new_col.type:
+            changes.append(
+                SchemaChange(
+                    type="CHANGE_COLUMN_TYPE",
+                    table=table_name,
+                    column=old_col.name,
+                    old_value=old_col.type.value,
+                    new_value=new_col.type.value,
+                )
+            )
+
+        # Nullable change
+        if old_col.nullable != new_col.nullable:
+            changes.append(
+                SchemaChange(
+                    type="CHANGE_COLUMN_NULLABLE",
+                    table=table_name,
+                    column=old_col.name,
+                    old_value="true" if old_col.nullable else "false",
+                    new_value="true" if new_col.nullable else "false",
+                )
+            )
+
+        # Default change
+        if old_col.default != new_col.default:
+            changes.append(
+                SchemaChange(
+                    type="CHANGE_COLUMN_DEFAULT",
+                    table=table_name,
+                    column=old_col.name,
+                    old_value=str(old_col.default) if old_col.default else None,
+                    new_value=str(new_col.default) if new_col.default else None,
+                )
+            )
+
+        return changes
+
+    def _find_best_match(self, name: str, candidates: set[str]) -> str | None:
+        """Find best matching name from candidates."""
+        if not candidates:
+            return None
+
+        best_match = None
+        best_score = 0.0
+
+        for candidate in candidates:
+            score = self._similarity_score(name, candidate)
+            if score > best_score:
+                best_score = score
+                best_match = candidate
+
+        return best_match
+
+    def _similarity_score(self, name1: str, name2: str) -> float:
+        """Calculate similarity score between two names (0.0 to 1.0).
+
+        Uses multiple heuristics to detect renames:
+        1. Common suffix/prefix patterns (e.g., "full_name" -> "display_name" = 0.5)
+        2. Word-based similarity (e.g., "user_accounts" -> "user_profiles" = 0.5)
+        3. Character-based Jaccard similarity
+        """
+        name1 = name1.lower()
+        name2 = name2.lower()
+
+        # Exact match
+        if name1 == name2:
+            return 1.0
+
+        # Split on underscores to get word parts
+        name1_parts = name1.split("_")
+        name2_parts = name2.split("_")
+
+        # Check for common suffix/prefix patterns
+        # e.g., "full_name" and "display_name" share "_name" suffix
+        if len(name1_parts) > 1 or len(name2_parts) > 1:
+            # Check suffix
+            if name1_parts[-1] == name2_parts[-1]:
+                # Same suffix, different prefix -> likely rename
+                return 0.6
+
+            # Check prefix
+            if name1_parts[0] == name2_parts[0]:
+                # Same prefix, different suffix -> likely rename
+                return 0.6
+
+        # Word-level similarity
+        name1_words = set(name1_parts)
+        name2_words = set(name2_parts)
+        common_words = name1_words & name2_words
+
+        if common_words:
+            # Jaccard similarity for words
+            return len(common_words) / len(name1_words | name2_words)
+
+        # Character-level Jaccard similarity
+        name1_chars = set(name1)
+        name2_chars = set(name2)
+        common_chars = name1_chars & name2_chars
+
+        if common_chars:
+            return len(common_chars) / len(name1_chars | name2_chars)
+
+        return 0.0
 
     def _is_create_table(self, stmt: Statement) -> bool:
         """Check if statement is a CREATE TABLE statement."""
