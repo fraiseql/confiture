@@ -1,9 +1,6 @@
 """Unit tests for CLI error handling paths."""
 
-import pytest
-from pathlib import Path
 from typer.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
 from confiture.cli.main import app
 

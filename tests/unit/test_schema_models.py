@@ -1,6 +1,5 @@
 """Tests for schema data models."""
 
-import pytest
 
 from confiture.models.schema import (
     Column,
@@ -58,7 +57,7 @@ class TestColumn:
         col = Column(name="id", type=ColumnType.INTEGER)
         assert col != "not a column"
         assert col != 123
-        assert col != None
+        assert col is not None
 
     def test_column_hash(self):
         """Test column hashing for use in sets."""
@@ -164,7 +163,7 @@ class TestTable:
         table = Table(name="users")
         assert table != "not a table"
         assert table != 123
-        assert table != None
+        assert table is not None
 
 
 class TestSchema:

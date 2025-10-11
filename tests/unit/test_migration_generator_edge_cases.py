@@ -1,7 +1,5 @@
 """Edge case tests for MigrationGenerator to improve coverage."""
 
-import pytest
-from pathlib import Path
 
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.models.schema import SchemaChange, SchemaDiff

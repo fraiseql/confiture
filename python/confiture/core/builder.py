@@ -84,7 +84,7 @@ class SchemaBuilder:
 
         # Find common prefix
         common_parts = []
-        for parts_at_level in zip(*all_parts):
+        for parts_at_level in zip(*all_parts, strict=False):
             if len(set(parts_at_level)) == 1:
                 common_parts.append(parts_at_level[0])
             else:
@@ -185,7 +185,7 @@ class SchemaBuilder:
 
                 # Add headers and separators (Python side for flexibility)
                 schema = self._add_headers_and_separators(header, files, content)
-            except Exception as e:
+            except Exception:
                 # Fallback to Python if Rust fails
                 schema = self._build_python(header, files)
         else:
@@ -239,7 +239,7 @@ class SchemaBuilder:
         return "".join(parts)
 
     def _add_headers_and_separators(
-        self, header: str, files: list[Path], content: str
+        self, header: str, _files: list[Path], content: str
     ) -> str:
         """Add main header to Rust-built content
 
@@ -248,7 +248,7 @@ class SchemaBuilder:
 
         Args:
             header: Schema header
-            files: List of SQL files (unused, kept for API compatibility)
+            _files: List of SQL files (unused, kept for API compatibility)
             content: Concatenated content from Rust (includes file separators)
 
         Returns:

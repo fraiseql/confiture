@@ -272,7 +272,7 @@ def build(
         schema = builder.build(output_path=output)
 
         # Success message
-        console.print(f"[green]✅ Schema built successfully![/green]")
+        console.print("[green]✅ Schema built successfully![/green]")
         console.print(f"\n📁 Output: {output.absolute()}")
         console.print(f"📏 Size: {len(schema):,} bytes")
         console.print(f"📊 Files: {len(sql_files)}")

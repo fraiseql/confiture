@@ -1,11 +1,10 @@
 """Unit tests for SchemaBuilder (Milestone 1.3-1.5)."""
 
-from pathlib import Path
 
 import pytest
 
 from confiture.core.builder import SchemaBuilder
-from confiture.exceptions import SchemaError, ConfigurationError
+from confiture.exceptions import ConfigurationError, SchemaError
 
 
 class TestSchemaBuilderFileDiscovery:
@@ -92,7 +91,7 @@ database_url: postgresql://localhost/test
 
         # Error is caught during Environment.load()
         with pytest.raises((SchemaError, ConfigurationError), match="does not exist"):
-            builder = SchemaBuilder(env="test", project_dir=tmp_path)
+            SchemaBuilder(env="test", project_dir=tmp_path)
 
     def test_find_sql_files_fails_if_empty(self, tmp_path):
         """Should raise error if no SQL files found."""

@@ -5,7 +5,6 @@ speedup over pure Python for file operations and hashing.
 """
 
 import time
-from pathlib import Path
 
 import pytest
 
@@ -110,9 +109,9 @@ def test_repeated_operations_performance(large_schema_dir):
 
     # Measure 10 iterations
     durations = []
-    for i in range(10):
+    for _ in range(10):
         start = time.perf_counter()
-        hash_value = builder.compute_hash()
+        _ = builder.compute_hash()
         duration = time.perf_counter() - start
         durations.append(duration)
 
@@ -151,12 +150,12 @@ def test_build_vs_hash_ratio(large_schema_dir):
 
     # Measure build time
     start = time.perf_counter()
-    schema = builder.build()
+    _ = builder.build()
     build_duration = time.perf_counter() - start
 
     # Measure hash time
     start = time.perf_counter()
-    hash_value = builder.compute_hash()
+    _ = builder.compute_hash()
     hash_duration = time.perf_counter() - start
 
     # Build should be slower than hash (more work)

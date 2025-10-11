@@ -69,9 +69,10 @@ class TestLazyImports:
 
     def test_lazy_import_preserves_functionality(self):
         """Test that lazy-loaded classes work correctly."""
-        from confiture import Environment
         import tempfile
         from pathlib import Path
+
+        from confiture import Environment
 
         # Create temporary config
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -114,7 +115,7 @@ class TestPackageAll:
 
     def test_can_import_from_all(self):
         """Test that items in __all__ can be imported."""
-        from confiture import __version__, __author__, __email__
+        from confiture import __author__, __email__, __version__
 
         assert __version__ is not None
         assert __author__ is not None

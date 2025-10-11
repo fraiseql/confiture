@@ -1,10 +1,11 @@
 """Edge case tests for Migration base class."""
 
-import pytest
 from unittest.mock import MagicMock
 
-from confiture.models.migration import Migration
+import pytest
+
 from confiture.exceptions import MigrationError
+from confiture.models.migration import Migration
 
 
 class TestMigrationEdgeCases:

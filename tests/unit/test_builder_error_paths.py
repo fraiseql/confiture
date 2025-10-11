@@ -1,10 +1,10 @@
 """Test error paths for SchemaBuilder to improve coverage."""
 
+
 import pytest
-from pathlib import Path
 
 from confiture.core.builder import SchemaBuilder
-from confiture.exceptions import SchemaError, ConfigurationError
+from confiture.exceptions import ConfigurationError
 
 
 class TestBuilderErrorPaths:
@@ -39,7 +39,7 @@ database_url: postgresql://localhost/test
         output_file = tmp_path / "nonexistent_dir" / "output.sql"
 
         builder = SchemaBuilder(env="test", project_dir=tmp_path)
-        schema = builder.build(output_path=output_file)
+        builder.build(output_path=output_file)
 
         # Directory should be created
         assert output_file.parent.exists()

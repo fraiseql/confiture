@@ -1,12 +1,13 @@
 """Edge case tests for Migrator to improve coverage."""
 
-import pytest
+from unittest.mock import MagicMock
+
 import psycopg
-from unittest.mock import MagicMock, patch
+import pytest
 
 from confiture.core.migrator import Migrator
-from confiture.models.migration import Migration
 from confiture.exceptions import MigrationError
+from confiture.models.migration import Migration
 
 
 class TestMigratorInitializeEdgeCases:

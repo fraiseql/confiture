@@ -1,7 +1,8 @@
 """Comprehensive tests for SchemaBuilder to reach 90%+ coverage."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from confiture.core.builder import SchemaBuilder
 from confiture.exceptions import SchemaError
@@ -71,7 +72,6 @@ database_url: postgresql://localhost/test
         """Test _find_common_parent when paths have no common prefix."""
         # Test the method directly
         from confiture.core.builder import SchemaBuilder
-        from confiture.config.environment import Environment
 
         # Create structure to get a builder instance
         schema_dir = tmp_path / "db" / "schema"
