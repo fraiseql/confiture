@@ -1147,7 +1147,12 @@ jobs:
 
 ### Week 19-22: Schema-to-Schema Migration (Medium 4)
 
-**Milestone 3.1: FDW Setup**
+**NOTE**: Medium 4 supports **two strategies**:
+- **FDW**: Best for small-medium tables (<10M rows), complex transformations
+- **COPY**: Best for large fact tables (>10M rows), 10-20x faster, simple mapping
+- **Hybrid**: Auto-detect and use optimal strategy per table
+
+**Milestone 3.1: FDW Strategy**
 
 **RED Phase**:
 ```python
@@ -1258,7 +1263,104 @@ def migrate_table(self, table_name: str, config: dict) -> None:
 
 ---
 
-**Milestone 3.3: Verification & Cutover**
+**Milestone 3.3: COPY Strategy (Large Tables)**
+
+**RED Phase**:
+```python
+def test_copy_strategy_for_large_table():
+    """COPY strategy should be faster for 100M+ row tables"""
+    migrator = SchemaToSchemaMigrator(source="prod", target="prod_new")
+
+    # Use COPY for large table
+    start = time.time()
+    migrator.migrate_table("events", strategy="copy")
+    duration = time.time() - start
+
+    # Should be 10-20x faster than FDW
+    assert duration < 60  # <1 min for 100M rows
+```
+
+**GREEN Phase**:
+```python
+def migrate_table_copy(self, table_name: str, config: dict) -> None:
+    """Migrate using COPY (binary format, streaming)"""
+    column_mapping = config.get("columns", {})
+
+    # Build SELECT with column mapping
+    select_cols = []
+    for old_col, new_col in column_mapping.items():
+        select_cols.append(f"{old_col} AS {new_col}")
+
+    # Stream from old DB to new DB (no intermediate file)
+    export_sql = f"COPY ({self._build_select(table_name, select_cols)}) TO STDOUT WITH (FORMAT binary)"
+    import_sql = f"COPY {table_name} FROM STDIN WITH (FORMAT binary)"
+
+    # Stream data
+    with self.source_conn.cursor() as src_cursor, \
+         self.target_conn.cursor() as dst_cursor:
+        src_cursor.copy_expert(export_sql, dst_cursor)
+```
+
+**Deliverables**:
+- ✅ COPY strategy working
+- ✅ 10-20x faster than FDW for large tables
+- ✅ Streaming (no disk space needed)
+
+---
+
+**Milestone 3.4: Hybrid Strategy (Auto-Detection)**
+
+**RED Phase**:
+```python
+def test_auto_strategy_selection():
+    """Should auto-select FDW for small tables, COPY for large"""
+    migrator = SchemaToSchemaMigrator(source="prod", target="prod_new")
+
+    plan = migrator.analyze_tables()
+
+    # Small tables should use FDW
+    assert plan["users"]["strategy"] == "fdw"
+    assert plan["posts"]["strategy"] == "fdw"
+
+    # Large tables should use COPY
+    assert plan["events"]["strategy"] == "copy"
+    assert plan["page_views"]["strategy"] == "copy"
+```
+
+**GREEN Phase**:
+```python
+def analyze_tables(self) -> dict:
+    """Analyze table sizes and recommend strategy"""
+    tables = {}
+
+    for table in self.get_all_tables():
+        row_count = self.get_row_count(table)
+
+        # Threshold: 10M rows
+        if row_count > 10_000_000:
+            strategy = "copy"  # Large table
+            estimated_time = row_count / 6_000_000  # 6M rows/sec
+        else:
+            strategy = "fdw"   # Small-medium table
+            estimated_time = row_count / 500_000    # 500K rows/sec
+
+        tables[table] = {
+            "strategy": strategy,
+            "row_count": row_count,
+            "estimated_seconds": estimated_time
+        }
+
+    return tables
+```
+
+**Deliverables**:
+- ✅ Auto-detect optimal strategy per table
+- ✅ Performance estimates
+- ✅ User can override strategy
+
+---
+
+**Milestone 3.5: Verification & Cutover**
 
 **Tasks**:
 1. Count verification (old == new)
