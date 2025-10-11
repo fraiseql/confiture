@@ -234,3 +234,147 @@ def mock_git_repo(temp_project_dir: Path) -> Path:
     (git_dir / "refs" / "heads" / "main").write_text("abc123def456789012345678901234567890abcd\n")
 
     return temp_project_dir
+
+
+# Fixtures for syncer tests (source and target databases)
+
+
+@pytest.fixture
+def source_db_url() -> str:
+    """Get source test database URL from environment.
+
+    Returns:
+        Database connection URL for source database
+    """
+    return os.getenv(
+        "CONFITURE_SOURCE_DB_URL",
+        "postgresql://localhost/confiture_source_test",
+    )
+
+
+@pytest.fixture
+def target_db_url() -> str:
+    """Get target test database URL from environment.
+
+    Returns:
+        Database connection URL for target database
+    """
+    return os.getenv(
+        "CONFITURE_TARGET_DB_URL",
+        "postgresql://localhost/confiture_target_test",
+    )
+
+
+@pytest.fixture
+def source_db(source_db_url: str) -> Generator[psycopg.Connection, None, None]:
+    """Create source database connection.
+
+    Yields:
+        psycopg Connection to source database
+    """
+    try:
+        conn = psycopg.connect(source_db_url, autocommit=True)
+
+        # Clean before test
+        _sync_clean_database(conn)
+
+        yield conn
+
+        # Clean after test
+        _sync_clean_database(conn)
+        conn.close()
+    except psycopg.OperationalError as e:
+        pytest.skip(f"PostgreSQL not available for source database: {e}")
+
+
+@pytest.fixture
+def target_db(target_db_url: str) -> Generator[psycopg.Connection, None, None]:
+    """Create target database connection.
+
+    Yields:
+        psycopg Connection to target database
+    """
+    try:
+        conn = psycopg.connect(target_db_url, autocommit=True)
+
+        # Clean before test
+        _sync_clean_database(conn)
+
+        yield conn
+
+        # Clean after test
+        _sync_clean_database(conn)
+        conn.close()
+    except psycopg.OperationalError as e:
+        pytest.skip(f"PostgreSQL not available for target database: {e}")
+
+
+@pytest.fixture
+def source_config(source_db_url: str):
+    """Create source database configuration.
+
+    Returns:
+        DatabaseConfig instance
+    """
+    from confiture.config.environment import DatabaseConfig
+
+    return DatabaseConfig.from_url(source_db_url)
+
+
+@pytest.fixture
+def target_config(target_db_url: str):
+    """Create target database configuration.
+
+    Returns:
+        DatabaseConfig instance
+    """
+    from confiture.config.environment import DatabaseConfig
+
+    return DatabaseConfig.from_url(target_db_url)
+
+
+def _sync_clean_database(conn: psycopg.Connection) -> None:
+    """Drop all objects in public schema synchronously."""
+    with conn.cursor() as cur:
+        # Drop all views
+        cur.execute("""
+            SELECT viewname FROM pg_views
+            WHERE schemaname = 'public'
+        """)
+        views = cur.fetchall()
+        for (view_name,) in views:
+            cur.execute(f'DROP VIEW IF EXISTS "{view_name}" CASCADE')
+
+        # Drop all tables
+        cur.execute("""
+            SELECT tablename FROM pg_tables
+            WHERE schemaname = 'public'
+        """)
+        tables = cur.fetchall()
+        for (table_name,) in tables:
+            cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
+
+        # Drop all foreign schemas (for FDW tests)
+        cur.execute("""
+            SELECT schema_name FROM information_schema.schemata
+            WHERE schema_name NOT IN ('public', 'pg_catalog', 'information_schema')
+              AND schema_name !~ '^pg_'
+        """)
+        schemas = cur.fetchall()
+        for (schema_name,) in schemas:
+            cur.execute(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE')
+
+        # Drop all foreign servers (for FDW tests)
+        cur.execute("SELECT srvname FROM pg_foreign_server")
+        servers = cur.fetchall()
+        for (server_name,) in servers:
+            cur.execute(f'DROP SERVER IF EXISTS "{server_name}" CASCADE')
+
+        # Drop all extensions (except defaults)
+        cur.execute("""
+            SELECT extname FROM pg_extension
+            WHERE extname NOT IN ('plpgsql')
+        """)
+        extensions = cur.fetchall()
+        for (ext_name,) in extensions:
+            cur.execute(f'DROP EXTENSION IF EXISTS "{ext_name}" CASCADE')

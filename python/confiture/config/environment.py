@@ -4,11 +4,71 @@ Handles loading and validation of environment-specific configuration from YAML f
 """
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from confiture.exceptions import ConfigurationError
+
+
+class DatabaseConfig(BaseModel):
+    """Database connection configuration.
+
+    Can be initialized from a connection URL or individual parameters.
+    """
+
+    host: str = "localhost"
+    port: int = 5432
+    database: str = "postgres"
+    user: str = "postgres"
+    password: str = ""
+
+    @classmethod
+    def from_url(cls, url: str) -> "DatabaseConfig":
+        """Parse database configuration from PostgreSQL URL.
+
+        Args:
+            url: PostgreSQL connection URL (postgresql://user:pass@host:port/dbname)
+
+        Returns:
+            DatabaseConfig instance
+
+        Example:
+            >>> config = DatabaseConfig.from_url("postgresql://user:pass@localhost:5432/mydb")
+            >>> config.host
+            'localhost'
+        """
+        import re
+
+        # Parse URL: postgresql://user:pass@host:port/dbname
+        pattern = r"(?:postgresql|postgres)://(?:([^:]+):([^@]+)@)?([^:/]+)(?::(\d+))?/(.+)"
+        match = re.match(pattern, url)
+
+        if not match:
+            raise ValueError(f"Invalid PostgreSQL URL: {url}")
+
+        user, password, host, port, database = match.groups()
+
+        return cls(
+            host=host or "localhost",
+            port=int(port) if port else 5432,
+            database=database,
+            user=user or "postgres",
+            password=password or "",
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for use with create_connection."""
+        return {
+            "database": {
+                "host": self.host,
+                "port": self.port,
+                "database": self.database,
+                "user": self.user,
+                "password": self.password,
+            }
+        }
 
 
 class Environment(BaseModel):
@@ -33,6 +93,15 @@ class Environment(BaseModel):
     migration_table: str = "confiture_migrations"
     auto_backup: bool = True
     require_confirmation: bool = True
+
+    @property
+    def database(self) -> DatabaseConfig:
+        """Get database configuration from database_url.
+
+        Returns:
+            DatabaseConfig instance
+        """
+        return DatabaseConfig.from_url(self.database_url)
 
     @field_validator("database_url")
     @classmethod

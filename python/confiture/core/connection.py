@@ -35,11 +35,11 @@ def load_config(config_file: Path) -> dict[str, Any]:
         raise MigrationError(f"Invalid YAML configuration: {e}") from e
 
 
-def create_connection(config: dict[str, Any]) -> psycopg.Connection:
+def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
     """Create database connection from configuration.
 
     Args:
-        config: Configuration dictionary with 'database' section
+        config: Configuration dictionary with 'database' section or DatabaseConfig instance
 
     Returns:
         PostgreSQL connection
@@ -47,7 +47,14 @@ def create_connection(config: dict[str, Any]) -> psycopg.Connection:
     Raises:
         MigrationError: If connection fails
     """
-    db_config = config.get("database", {})
+    from confiture.config.environment import DatabaseConfig
+
+    # Handle DatabaseConfig instance
+    if isinstance(config, DatabaseConfig):
+        config_dict = config.to_dict()
+        db_config = config_dict.get("database", {})
+    else:
+        db_config = config.get("database", {})
 
     try:
         conn = psycopg.connect(
