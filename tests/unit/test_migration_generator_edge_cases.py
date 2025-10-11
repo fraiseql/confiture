@@ -1,6 +1,5 @@
 """Edge case tests for MigrationGenerator to improve coverage."""
 
-
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.models.schema import SchemaChange, SchemaDiff
 
@@ -15,9 +14,7 @@ class TestMigrationGeneratorEdgeCases:
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        diff = SchemaDiff(
-            changes=[SchemaChange(type="ADD_TABLE", table="users")]
-        )
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
 
         migration_file = generator.generate(diff=diff, name="add_users")
 

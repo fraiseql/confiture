@@ -163,8 +163,7 @@ class Migrator:
         # Check if already applied
         if self._is_applied(migration.version):
             raise MigrationError(
-                f"Migration {migration.version} ({migration.name}) "
-                "has already been applied"
+                f"Migration {migration.version} ({migration.name}) has already been applied"
             )
 
         try:
@@ -180,6 +179,7 @@ class Migrator:
             # Record in tracking table with human-readable slug
             # Format: migration-name_YYYYMMDD_HHMMSS
             from datetime import datetime
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             slug = f"{migration.name}_{timestamp}"
 
@@ -199,8 +199,7 @@ class Migrator:
         except Exception as e:
             self.connection.rollback()
             raise MigrationError(
-                f"Failed to apply migration {migration.version} "
-                f"({migration.name}): {e}"
+                f"Failed to apply migration {migration.version} ({migration.name}): {e}"
             ) from e
 
     def rollback(self, migration: Migration) -> None:
@@ -245,8 +244,7 @@ class Migrator:
         except Exception as e:
             self.connection.rollback()
             raise MigrationError(
-                f"Failed to rollback migration {migration.version} "
-                f"({migration.name}): {e}"
+                f"Failed to rollback migration {migration.version} ({migration.name}): {e}"
             ) from e
 
     def _is_applied(self, version: str) -> bool:

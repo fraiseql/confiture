@@ -126,9 +126,7 @@ class TestCreateConnection:
     @patch("confiture.core.connection.psycopg.connect")
     def test_create_connection_error(self, mock_connect):
         """Test connection failure."""
-        mock_connect.side_effect = psycopg.OperationalError(
-            "Connection refused"
-        )
+        mock_connect.side_effect = psycopg.OperationalError("Connection refused")
 
         config = {"database": {"host": "invalid-host"}}
 
@@ -186,7 +184,7 @@ class TestGetMigrationClass:
     def test_get_migration_class_success(self, tmp_path):
         """Test extracting Migration class from module."""
         migration_file = tmp_path / "001_test.py"
-        migration_content = '''
+        migration_content = """
 from confiture.models.migration import Migration
 
 class TestMigration(Migration):
@@ -194,7 +192,7 @@ class TestMigration(Migration):
         pass
     def down(self):
         pass
-'''
+"""
         migration_file.write_text(migration_content)
 
         module = load_migration_module(migration_file)
@@ -207,11 +205,11 @@ class TestMigration(Migration):
     def test_get_migration_class_no_migration(self, tmp_path):
         """Test module without Migration subclass."""
         migration_file = tmp_path / "002_no_migration.py"
-        migration_content = '''
+        migration_content = """
 # Just a regular class, not a Migration
 class SomeOtherClass:
     pass
-'''
+"""
         migration_file.write_text(migration_content)
 
         module = load_migration_module(migration_file)
@@ -222,7 +220,7 @@ class SomeOtherClass:
     def test_get_migration_class_multiple_migrations(self, tmp_path):
         """Test module with multiple Migration subclasses (returns first)."""
         migration_file = tmp_path / "003_multiple.py"
-        migration_content = '''
+        migration_content = """
 from confiture.models.migration import Migration
 
 class FirstMigration(Migration):
@@ -236,7 +234,7 @@ class SecondMigration(Migration):
         pass
     def down(self):
         pass
-'''
+"""
         migration_file.write_text(migration_content)
 
         module = load_migration_module(migration_file)

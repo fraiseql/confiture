@@ -1,6 +1,5 @@
 """End-to-end tests for CLI commands (Milestone 1.12)."""
 
-
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -99,7 +98,7 @@ class TestMigrateStatusCommand:
 
         # Create a migration file
         migration_file = migrations_dir / "001_add_users.py"
-        migration_file.write_text('''
+        migration_file.write_text("""
 from confiture.models.migration import Migration
 
 class AddUsers(Migration):
@@ -111,7 +110,7 @@ class AddUsers(Migration):
 
     def down(self) -> None:
         self.execute("DROP TABLE users")
-''')
+""")
 
         result = runner.invoke(app, ["migrate", "status", "--migrations-dir", str(migrations_dir)])
 
@@ -278,7 +277,7 @@ class TestMigrateUpCommand:
 
         # Create migration file
         migration_file = migrations_dir / "001_create_test_table.py"
-        migration_file.write_text('''
+        migration_file.write_text("""
 from confiture.models.migration import Migration
 
 class CreateTestTable(Migration):
@@ -290,13 +289,13 @@ class CreateTestTable(Migration):
 
     def down(self) -> None:
         self.execute("DROP TABLE cli_test_table")
-''')
+""")
 
         # Create temp config file
         config_dir = tmp_path / "environments"
         config_dir.mkdir()
         config_file = config_dir / "test.yaml"
-        config_file.write_text(f'''
+        config_file.write_text(f"""
 name: test
 database:
   host: {test_db_connection.info.host}
@@ -304,7 +303,7 @@ database:
   database: {test_db_connection.info.dbname}
   user: {test_db_connection.info.user}
   password: ""
-''')
+""")
 
         result = runner.invoke(
             app,
@@ -346,7 +345,7 @@ database:
         config_dir = tmp_path / "environments"
         config_dir.mkdir()
         config_file = config_dir / "test.yaml"
-        config_file.write_text(f'''
+        config_file.write_text(f"""
 name: test
 database:
   host: {test_db_connection.info.host}
@@ -354,7 +353,7 @@ database:
   database: {test_db_connection.info.dbname}
   user: {test_db_connection.info.user}
   password: ""
-''')
+""")
 
         result = runner.invoke(
             app,
@@ -382,7 +381,7 @@ class TestMigrateDownCommand:
 
         # Create and apply a migration first
         migration_file = migrations_dir / "001_create_rollback_test.py"
-        migration_file.write_text('''
+        migration_file.write_text("""
 from confiture.models.migration import Migration
 
 class CreateRollbackTest(Migration):
@@ -394,12 +393,12 @@ class CreateRollbackTest(Migration):
 
     def down(self) -> None:
         self.execute("DROP TABLE rollback_test_table")
-''')
+""")
 
         config_dir = tmp_path / "environments"
         config_dir.mkdir()
         config_file = config_dir / "test.yaml"
-        config_file.write_text(f'''
+        config_file.write_text(f"""
 name: test
 database:
   host: {test_db_connection.info.host}
@@ -407,7 +406,7 @@ database:
   database: {test_db_connection.info.dbname}
   user: {test_db_connection.info.user}
   password: ""
-''')
+""")
 
         # Apply migration first
         runner.invoke(

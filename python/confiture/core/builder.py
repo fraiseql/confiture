@@ -132,9 +132,7 @@ class SchemaBuilder:
 
         for file in all_sql_files:
             # Check if file is in any excluded directory
-            is_excluded = any(
-                file.is_relative_to(exclude_dir) for exclude_dir in exclude_paths
-            )
+            is_excluded = any(file.is_relative_to(exclude_dir) for exclude_dir in exclude_paths)
             if not is_excluded:
                 filtered_files.append(file)
 
@@ -238,9 +236,7 @@ class SchemaBuilder:
 
         return "".join(parts)
 
-    def _add_headers_and_separators(
-        self, header: str, _files: list[Path], content: str
-    ) -> str:
+    def _add_headers_and_separators(self, header: str, _files: list[Path], content: str) -> str:
         """Add main header to Rust-built content
 
         The Rust layer now includes file separators, so this function

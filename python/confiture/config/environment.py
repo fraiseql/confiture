@@ -89,14 +89,10 @@ class Environment(BaseModel):
 
         # Validate required fields
         if "database_url" not in data:
-            raise ConfigurationError(
-                f"Missing required field 'database_url' in {config_path}"
-            )
+            raise ConfigurationError(f"Missing required field 'database_url' in {config_path}")
 
         if "include_dirs" not in data:
-            raise ConfigurationError(
-                f"Missing required field 'include_dirs' in {config_path}"
-            )
+            raise ConfigurationError(f"Missing required field 'include_dirs' in {config_path}")
 
         # Resolve paths to absolute
         include_dirs = []
@@ -104,8 +100,7 @@ class Environment(BaseModel):
             abs_path = (project_dir / dir_path).resolve()
             if not abs_path.exists():
                 raise ConfigurationError(
-                    f"Include directory does not exist: {abs_path}\n"
-                    f"Specified in {config_path}"
+                    f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
                 )
             include_dirs.append(str(abs_path))
 

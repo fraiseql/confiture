@@ -185,9 +185,7 @@ class TestMigratorVersionExtraction:
         assert migrator._version_from_filename("001_create_users.py") == "001"
 
         # Multiple underscores
-        assert (
-            migrator._version_from_filename("042_add_user_email_column.py") == "042"
-        )
+        assert migrator._version_from_filename("042_add_user_email_column.py") == "042"
 
         # Different length version
         assert migrator._version_from_filename("00123_long_version.py") == "00123"

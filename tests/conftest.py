@@ -231,8 +231,6 @@ def mock_git_repo(temp_project_dir: Path) -> Path:
     git_dir.mkdir()
     (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
     (git_dir / "refs" / "heads").mkdir(parents=True)
-    (git_dir / "refs" / "heads" / "main").write_text(
-        "abc123def456789012345678901234567890abcd\n"
-    )
+    (git_dir / "refs" / "heads" / "main").write_text("abc123def456789012345678901234567890abcd\n")
 
     return temp_project_dir

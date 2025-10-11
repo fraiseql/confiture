@@ -75,7 +75,9 @@ class CreateInitialSchema(Migration):
         self.execute("CREATE INDEX idx_posts_pk_post ON posts(pk_post)")
         self.execute("CREATE INDEX idx_posts_slug ON posts(slug)")
         self.execute("CREATE INDEX idx_posts_user_id ON posts(user_id)")
-        self.execute("CREATE INDEX idx_posts_published_at ON posts(published_at DESC) WHERE published_at IS NOT NULL")
+        self.execute(
+            "CREATE INDEX idx_posts_published_at ON posts(published_at DESC) WHERE published_at IS NOT NULL"
+        )
         self.execute("CREATE INDEX idx_posts_created_at ON posts(created_at DESC)")
 
         # Create indexes for comments

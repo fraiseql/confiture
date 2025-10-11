@@ -49,13 +49,9 @@ class Migration(ABC):
 
         # Ensure subclass defined version and name
         if not hasattr(self.__class__, "version") or self.__class__.version is None:
-            raise TypeError(
-                f"{self.__class__.__name__} must define a 'version' class attribute"
-            )
+            raise TypeError(f"{self.__class__.__name__} must define a 'version' class attribute")
         if not hasattr(self.__class__, "name") or self.__class__.name is None:
-            raise TypeError(
-                f"{self.__class__.__name__} must define a 'name' class attribute"
-            )
+            raise TypeError(f"{self.__class__.__name__} must define a 'name' class attribute")
 
     @abstractmethod
     def up(self) -> None:
@@ -67,9 +63,7 @@ class Migration(ABC):
         Raises:
             NotImplementedError: If not implemented by subclass
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.up() must be implemented"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__}.up() must be implemented")
 
     @abstractmethod
     def down(self) -> None:
@@ -81,9 +75,7 @@ class Migration(ABC):
         Raises:
             NotImplementedError: If not implemented by subclass
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.down() must be implemented"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__}.down() must be implemented")
 
     def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         """Execute a SQL statement.

@@ -217,10 +217,14 @@ class {class_name}(Migration):
             return f"ALTER TABLE {change.table} DROP COLUMN {change.column}"
 
         elif change.type == "RENAME_COLUMN":
-            return f"ALTER TABLE {change.table} RENAME COLUMN {change.old_value} TO {change.new_value}"
+            return (
+                f"ALTER TABLE {change.table} RENAME COLUMN {change.old_value} TO {change.new_value}"
+            )
 
         elif change.type == "CHANGE_COLUMN_TYPE":
-            return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.new_value}"
+            return (
+                f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.new_value}"
+            )
 
         elif change.type == "CHANGE_COLUMN_NULLABLE":
             if change.new_value == "false":
@@ -267,11 +271,15 @@ class {class_name}(Migration):
 
         elif change.type == "RENAME_COLUMN":
             # Reverse the rename
-            return f"ALTER TABLE {change.table} RENAME COLUMN {change.new_value} TO {change.old_value}"
+            return (
+                f"ALTER TABLE {change.table} RENAME COLUMN {change.new_value} TO {change.old_value}"
+            )
 
         elif change.type == "CHANGE_COLUMN_TYPE":
             # Reverse the type change
-            return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.old_value}"
+            return (
+                f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.old_value}"
+            )
 
         elif change.type == "CHANGE_COLUMN_NULLABLE":
             # Reverse the nullable change

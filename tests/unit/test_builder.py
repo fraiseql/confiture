@@ -1,6 +1,5 @@
 """Unit tests for SchemaBuilder (Milestone 1.3-1.5)."""
 
-
 import pytest
 
 from confiture.core.builder import SchemaBuilder
@@ -124,8 +123,12 @@ class TestSchemaBuilderBuild:
         (schema_dir / "00_common").mkdir(parents=True)
         (schema_dir / "10_tables").mkdir(parents=True)
 
-        (schema_dir / "00_common" / "ext.sql").write_text("-- extensions\nCREATE EXTENSION pgcrypto;")
-        (schema_dir / "10_tables" / "users.sql").write_text("-- users\nCREATE TABLE users (id BIGINT);")
+        (schema_dir / "00_common" / "ext.sql").write_text(
+            "-- extensions\nCREATE EXTENSION pgcrypto;"
+        )
+        (schema_dir / "10_tables" / "users.sql").write_text(
+            "-- users\nCREATE TABLE users (id BIGINT);"
+        )
 
         config_dir = tmp_path / "db" / "environments"
         config_dir.mkdir(parents=True)
@@ -357,6 +360,7 @@ database_url: postgresql://localhost/test
 
         # Build should complete quickly
         import time
+
         start = time.perf_counter()
         schema = builder.build()
         duration = time.perf_counter() - start
@@ -394,6 +398,7 @@ database_url: postgresql://localhost/test
         builder = SchemaBuilder(env="test", project_dir=tmp_path)
 
         import time
+
         start = time.perf_counter()
         hash_value = builder.compute_hash()
         duration = time.perf_counter() - start
@@ -457,9 +462,7 @@ database_url: postgresql://localhost/test
         """Test building with unicode characters."""
         schema_dir = tmp_path / "db" / "schema"
         schema_dir.mkdir(parents=True)
-        (schema_dir / "unicode.sql").write_text(
-            "-- French: Café, Japanese: 日本語, Emoji: 🍓"
-        )
+        (schema_dir / "unicode.sql").write_text("-- French: Café, Japanese: 日本語, Emoji: 🍓")
 
         config_dir = tmp_path / "db" / "environments"
         config_dir.mkdir(parents=True)

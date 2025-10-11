@@ -1,6 +1,5 @@
 """Tests for schema data models."""
 
-
 from confiture.models.schema import (
     Column,
     ColumnType,
@@ -150,12 +149,8 @@ class TestTable:
 
     def test_table_equality_different_columns(self):
         """Test table inequality with different columns."""
-        table1 = Table(
-            name="users", columns=[Column(name="id", type=ColumnType.INTEGER)]
-        )
-        table2 = Table(
-            name="users", columns=[Column(name="email", type=ColumnType.VARCHAR)]
-        )
+        table1 = Table(name="users", columns=[Column(name="id", type=ColumnType.INTEGER)])
+        table2 = Table(name="users", columns=[Column(name="email", type=ColumnType.VARCHAR)])
         assert table1 != table2
 
     def test_table_equality_not_table(self):
@@ -289,22 +284,16 @@ class TestSchemaChange:
             old_value="TRUE",
             new_value="FALSE",
         )
-        assert (
-            str(change) == "CHANGE COLUMN NULLABLE users.email FROM TRUE TO FALSE"
-        )
+        assert str(change) == "CHANGE COLUMN NULLABLE users.email FROM TRUE TO FALSE"
 
     def test_str_change_column_default(self):
         """Test string representation for CHANGE_COLUMN_DEFAULT."""
-        change = SchemaChange(
-            type="CHANGE_COLUMN_DEFAULT", table="users", column="created_at"
-        )
+        change = SchemaChange(type="CHANGE_COLUMN_DEFAULT", table="users", column="created_at")
         assert str(change) == "CHANGE COLUMN DEFAULT users.created_at"
 
     def test_str_unknown_type(self):
         """Test string representation for unknown change type."""
-        change = SchemaChange(
-            type="UNKNOWN_CHANGE", table="users", column="some_field"
-        )
+        change = SchemaChange(type="UNKNOWN_CHANGE", table="users", column="some_field")
         result = str(change)
         assert "UNKNOWN_CHANGE" in result
         assert "users" in result

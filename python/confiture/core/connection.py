@@ -76,9 +76,7 @@ def load_migration_module(migration_file: Path) -> ModuleType:
     """
     try:
         # Create module spec
-        spec = importlib.util.spec_from_file_location(
-            migration_file.stem, migration_file
-        )
+        spec = importlib.util.spec_from_file_location(migration_file.stem, migration_file)
         if spec is None or spec.loader is None:
             raise MigrationError(f"Cannot load migration: {migration_file}")
 
@@ -109,11 +107,7 @@ def get_migration_class(module: ModuleType) -> type:
     # Find Migration subclass in module
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
-        if (
-            isinstance(attr, type)
-            and issubclass(attr, Migration)
-            and attr is not Migration
-        ):
+        if isinstance(attr, type) and issubclass(attr, Migration) and attr is not Migration:
             return attr
 
     raise MigrationError(f"No Migration subclass found in {module}")

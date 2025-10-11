@@ -33,12 +33,9 @@ exclude_dirs: []
 database_url: postgresql://localhost/test
 """)
 
-        result = runner.invoke(app, [
-            "build",
-            "--env", "local",
-            "--project-dir", str(tmp_path),
-            "--schema-only"
-        ])
+        result = runner.invoke(
+            app, ["build", "--env", "local", "--project-dir", str(tmp_path), "--schema-only"]
+        )
 
         # Should succeed and exclude seeds
         assert result.exit_code == 0
@@ -61,23 +58,18 @@ exclude_dirs: []
 database_url: postgresql://localhost/test
 """)
 
-        result = runner.invoke(app, [
-            "build",
-            "--env", "local",
-            "--project-dir", str(tmp_path),
-            "--show-hash"
-        ])
+        result = runner.invoke(
+            app, ["build", "--env", "local", "--project-dir", str(tmp_path), "--show-hash"]
+        )
 
         assert result.exit_code == 0
         assert "Hash:" in result.output
 
     def test_build_with_file_not_found_error(self, tmp_path):
         """Test build with missing configuration."""
-        result = runner.invoke(app, [
-            "build",
-            "--env", "nonexistent",
-            "--project-dir", str(tmp_path)
-        ])
+        result = runner.invoke(
+            app, ["build", "--env", "nonexistent", "--project-dir", str(tmp_path)]
+        )
 
         assert result.exit_code == 1
         assert "File not found" in result.output or "Error" in result.output
@@ -101,12 +93,18 @@ database_url: postgresql://localhost/test
 
         output_path = tmp_path / "custom_output.sql"
 
-        result = runner.invoke(app, [
-            "build",
-            "--env", "local",
-            "--project-dir", str(tmp_path),
-            "--output", str(output_path)
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "build",
+                "--env",
+                "local",
+                "--project-dir",
+                str(tmp_path),
+                "--output",
+                str(output_path),
+            ],
+        )
 
         assert result.exit_code == 0
         assert output_path.exists()
@@ -117,10 +115,9 @@ class TestMigrateStatusCommand:
 
     def test_migrate_status_no_migrations_dir(self, tmp_path):
         """Test status when migrations directory doesn't exist."""
-        result = runner.invoke(app, [
-            "migrate", "status",
-            "--migrations-dir", str(tmp_path / "nonexistent")
-        ])
+        result = runner.invoke(
+            app, ["migrate", "status", "--migrations-dir", str(tmp_path / "nonexistent")]
+        )
 
         assert result.exit_code == 0
         assert "No migrations directory found" in result.output
@@ -130,10 +127,7 @@ class TestMigrateStatusCommand:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        result = runner.invoke(app, [
-            "migrate", "status",
-            "--migrations-dir", str(migrations_dir)
-        ])
+        result = runner.invoke(app, ["migrate", "status", "--migrations-dir", str(migrations_dir)])
 
         assert result.exit_code == 0
         assert "No migrations found" in result.output
@@ -163,10 +157,7 @@ class SecondMigration(Migration):
     def down(self): pass
 """)
 
-        result = runner.invoke(app, [
-            "migrate", "status",
-            "--migrations-dir", str(migrations_dir)
-        ])
+        result = runner.invoke(app, ["migrate", "status", "--migrations-dir", str(migrations_dir)])
 
         assert result.exit_code == 0
         assert "001" in result.output
@@ -181,11 +172,9 @@ class TestMigrateGenerateCommand:
         """Test that generate creates migration file."""
         migrations_dir = tmp_path / "migrations"
 
-        result = runner.invoke(app, [
-            "migrate", "generate",
-            "add_users_table",
-            "--migrations-dir", str(migrations_dir)
-        ])
+        result = runner.invoke(
+            app, ["migrate", "generate", "add_users_table", "--migrations-dir", str(migrations_dir)]
+        )
 
         assert result.exit_code == 0
         assert "Migration generated successfully" in result.output
@@ -204,11 +193,9 @@ class TestMigrateDiffCommand:
         new_file = tmp_path / "new.sql"
         new_file.write_text("CREATE TABLE test (id INT);")
 
-        result = runner.invoke(app, [
-            "migrate", "diff",
-            str(tmp_path / "nonexistent.sql"),
-            str(new_file)
-        ])
+        result = runner.invoke(
+            app, ["migrate", "diff", str(tmp_path / "nonexistent.sql"), str(new_file)]
+        )
 
         assert result.exit_code == 1
         assert "not found" in result.output
@@ -218,11 +205,9 @@ class TestMigrateDiffCommand:
         old_file = tmp_path / "old.sql"
         old_file.write_text("CREATE TABLE test (id INT);")
 
-        result = runner.invoke(app, [
-            "migrate", "diff",
-            str(old_file),
-            str(tmp_path / "nonexistent.sql")
-        ])
+        result = runner.invoke(
+            app, ["migrate", "diff", str(old_file), str(tmp_path / "nonexistent.sql")]
+        )
 
         assert result.exit_code == 1
         assert "not found" in result.output
@@ -235,11 +220,7 @@ class TestMigrateDiffCommand:
         old_file.write_text("CREATE TABLE test (id INT);")
         new_file.write_text("CREATE TABLE test (id INT);")
 
-        result = runner.invoke(app, [
-            "migrate", "diff",
-            str(old_file),
-            str(new_file)
-        ])
+        result = runner.invoke(app, ["migrate", "diff", str(old_file), str(new_file)])
 
         assert result.exit_code == 0
         assert "No changes detected" in result.output
@@ -252,11 +233,7 @@ class TestMigrateDiffCommand:
         old_file.write_text("CREATE TABLE users (id INT);")
         new_file.write_text("CREATE TABLE users (id INT, email TEXT);")
 
-        result = runner.invoke(app, [
-            "migrate", "diff",
-            str(old_file),
-            str(new_file)
-        ])
+        result = runner.invoke(app, ["migrate", "diff", str(old_file), str(new_file)])
 
         assert result.exit_code == 0
         assert "differences detected" in result.output.lower()
@@ -267,10 +244,7 @@ class TestInitCommand:
 
     def test_init_creates_structure(self, tmp_path):
         """Test that init creates directory structure."""
-        result = runner.invoke(app, [
-            "init",
-            str(tmp_path / "new_project")
-        ])
+        result = runner.invoke(app, ["init", str(tmp_path / "new_project")])
 
         assert result.exit_code == 0
         assert "initialized successfully" in result.output
@@ -291,10 +265,7 @@ class TestInitCommand:
         # Mock user input to cancel
         monkeypatch.setattr("typer.confirm", lambda *args, **kwargs: False)
 
-        result = runner.invoke(app, [
-            "init",
-            str(tmp_path)
-        ], input="n\n")
+        result = runner.invoke(app, ["init", str(tmp_path)], input="n\n")
 
         # Should exit without error (user cancelled)
         assert result.exit_code in [0, 1]  # May exit with 0 or 1 depending on flow

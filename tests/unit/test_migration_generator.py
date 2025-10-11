@@ -1,6 +1,5 @@
 """Unit tests for Migration Generator (Milestone 1.11)."""
 
-
 import pytest
 
 from confiture.core.migration_generator import MigrationGenerator
@@ -15,9 +14,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(
-            changes=[SchemaChange(type="ADD_TABLE", table="users")]
-        )
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")
@@ -48,9 +45,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(
-            changes=[SchemaChange(type="ADD_TABLE", table="users")]
-        )
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")
@@ -76,9 +71,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(
-            changes=[SchemaChange(type="DROP_TABLE", table="old_table")]
-        )
+        diff = SchemaDiff(changes=[SchemaChange(type="DROP_TABLE", table="old_table")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="drop_old_table")
@@ -89,7 +82,10 @@ class TestMigrationGenerator:
         assert "DROP TABLE old_table" in content
 
         # Down would need to recreate it (but we don't have the schema)
-        assert "# WARNING: Cannot auto-generate down migration" in content or "CREATE TABLE old_table" in content
+        assert (
+            "# WARNING: Cannot auto-generate down migration" in content
+            or "CREATE TABLE old_table" in content
+        )
 
     def test_generate_migration_for_add_column(self, tmp_path):
         """Should generate correct SQL for ADD_COLUMN."""
@@ -144,7 +140,10 @@ class TestMigrationGenerator:
         assert "DROP COLUMN old_field" in content
 
         # Down would need to recreate it (but we don't have the schema)
-        assert "# WARNING: Cannot auto-generate down migration" in content or "ADD COLUMN old_field" in content
+        assert (
+            "# WARNING: Cannot auto-generate down migration" in content
+            or "ADD COLUMN old_field" in content
+        )
 
     def test_generate_migration_for_rename_column(self, tmp_path):
         """Should generate correct SQL for RENAME_COLUMN."""
@@ -357,9 +356,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(
-            changes=[SchemaChange(type="ADD_TABLE", table="users")]
-        )
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")

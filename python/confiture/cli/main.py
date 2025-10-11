@@ -249,10 +249,7 @@ def build(
 
         # Override to exclude seeds if --schema-only is specified
         if schema_only:
-            builder.include_dirs = [
-                d for d in builder.include_dirs
-                if "seed" not in str(d).lower()
-            ]
+            builder.include_dirs = [d for d in builder.include_dirs if "seed" not in str(d).lower()]
             # Recalculate base_dir after filtering
             if builder.include_dirs:
                 builder.base_dir = builder._find_common_parent(builder.include_dirs)
@@ -518,10 +515,10 @@ def migrate_diff(
         # Generate migration if requested
         if generate:
             if not name:
+                console.print("[red]❌ Migration name is required when using --generate[/red]")
                 console.print(
-                    "[red]❌ Migration name is required when using --generate[/red]"
+                    "Usage: confiture migrate diff old.sql new.sql --generate --name migration_name"
                 )
-                console.print("Usage: confiture migrate diff old.sql new.sql --generate --name migration_name")
                 raise typer.Exit(1)
 
             # Ensure migrations directory exists
@@ -607,7 +604,9 @@ def migrate_up(
                 break
 
             # Apply migration
-            console.print(f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" ")
+            console.print(
+                f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+            )
             migrator.apply(migration)
             console.print("[green]✅[/green]")
             applied_count += 1
@@ -699,12 +698,16 @@ def migrate_down(
             migration = migration_class(connection=conn)
 
             # Rollback migration
-            console.print(f"[cyan]⚡ Rolling back {migration.version}_{migration.name}...[/cyan]", end=" ")
+            console.print(
+                f"[cyan]⚡ Rolling back {migration.version}_{migration.name}...[/cyan]", end=" "
+            )
             migrator.rollback(migration)
             console.print("[green]✅[/green]")
             rolled_back_count += 1
 
-        console.print(f"\n[green]✅ Successfully rolled back {rolled_back_count} migration(s)![/green]")
+        console.print(
+            f"\n[green]✅ Successfully rolled back {rolled_back_count} migration(s)![/green]"
+        )
         conn.close()
 
     except Exception as e:

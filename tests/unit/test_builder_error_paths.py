@@ -1,6 +1,5 @@
 """Test error paths for SchemaBuilder to improve coverage."""
 
-
 import pytest
 
 from confiture.core.builder import SchemaBuilder

@@ -118,9 +118,7 @@ class SchemaDiffer:
 
         return SchemaDiff(changes=changes)
 
-    def _detect_table_renames(
-        self, old_names: set[str], new_names: set[str]
-    ) -> dict[str, str]:
+    def _detect_table_renames(self, old_names: set[str], new_names: set[str]) -> dict[str, str]:
         """Detect renamed tables using fuzzy matching.
 
         Args:
@@ -179,15 +177,11 @@ class SchemaDiffer:
 
         # Dropped columns
         for col_name in old_col_names - new_col_names:
-            changes.append(
-                SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name)
-            )
+            changes.append(SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name))
 
         # New columns
         for col_name in new_col_names - old_col_names:
-            changes.append(
-                SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name)
-            )
+            changes.append(SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name))
 
         # Compare columns that exist in both
         for col_name in old_col_names & new_col_names:
@@ -198,9 +192,7 @@ class SchemaDiffer:
 
         return changes
 
-    def _detect_column_renames(
-        self, old_names: set[str], new_names: set[str]
-    ) -> dict[str, str]:
+    def _detect_column_renames(self, old_names: set[str], new_names: set[str]) -> dict[str, str]:
         """Detect renamed columns using fuzzy matching."""
         renames: dict[str, str] = {}
 
@@ -431,7 +423,7 @@ class SchemaDiffer:
             if len(parts) < 2:
                 return None
 
-            col_name = parts[0].strip('"\'')
+            col_name = parts[0].strip("\"'")
             col_type_str = parts[1].upper()
 
             # Extract column type and length

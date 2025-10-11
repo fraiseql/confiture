@@ -134,10 +134,7 @@ def test_rust_extension_availability():
     if HAS_RUST:
         print("\n✓ Rust extension is AVAILABLE - using 10-50x faster implementation")
     else:
-        print(
-            "\n⚠ Rust extension is NOT available - using Python fallback "
-            "(slower but functional)"
-        )
+        print("\n⚠ Rust extension is NOT available - using Python fallback (slower but functional)")
 
 
 @pytest.mark.slow
