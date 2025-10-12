@@ -16,6 +16,21 @@ jobs:
     name: Test Python 3.11 on Linux
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: confiture_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +51,23 @@ jobs:
       - name: Build Rust extension
         run: uv run maturin develop
 
-      - name: Run unit tests
-        run: uv run pytest tests/unit/ -v --cov=confiture --cov-report=xml --cov-report=term
+      - name: Create test databases
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE confiture_test;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE confiture_source_test;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE confiture_target_test;"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/confiture_test
+          SOURCE_DB_URL: postgresql://postgres:postgres@localhost:5432/confiture_source_test
+          TARGET_DB_URL: postgresql://postgres:postgres@localhost:5432/confiture_target_test
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: confiture_test
+        run: uv run pytest tests/ -v --cov=confiture --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
