@@ -176,11 +176,22 @@ confiture/
 │   └── conftest.py              # Pytest config
 │
 ├── docs/
+│   ├── index.md                 # Documentation homepage
 │   ├── getting-started.md
-│   ├── cli-reference.md
-│   ├── migration-strategies.md
-│   ├── zero-downtime.md
-│   └── fraiseql-integration.md
+│   ├── guides/                 # User guides
+│   │   ├── medium-1-build-from-ddl.md
+│   │   ├── medium-2-incremental-migrations.md
+│   │   ├── medium-3-production-sync.md
+│   │   ├── medium-4-schema-to-schema.md
+│   │   └── migration-decision-tree.md
+│   ├── reference/              # API/CLI reference
+│   │   ├── cli.md
+│   │   └── configuration.md
+│   └── api/                    # API documentation
+│       ├── builder.md
+│       ├── migrator.md
+│       ├── syncer.md
+│       └── schema-to-schema.md
 │
 ├── examples/
 │   ├── basic/                   # Simple example

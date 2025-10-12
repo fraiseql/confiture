@@ -590,7 +590,7 @@ confiture build --env local --dry-run
 
 - **[Organizing SQL Files](../../docs/organizing-sql-files.md)** - Patterns for complex schemas
 - **[Getting Started Guide](../../docs/getting-started.md)** - Complete walkthrough
-- **[CLI Reference](../../docs/cli-reference.md)** - All commands documented
+- **[CLI Reference](../../docs/reference/cli.md)** - All commands documented
 - **[Migration Strategies](../../docs/migration-strategies.md)** - When to use each approach
 
 ## Resources

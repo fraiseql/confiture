@@ -722,7 +722,7 @@ confiture migrate up -c production.yaml
 ## See Also
 
 - [Getting Started](./getting-started.md) - Tutorials and examples
-- [CLI Reference](./cli-reference.md) - Complete command documentation
+- [CLI Reference](./reference/cli.md) - Complete command documentation
 - [Examples](../examples/) - Sample projects
 
 ---

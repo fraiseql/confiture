@@ -1289,7 +1289,7 @@ You've learned:
 
 ### Documentation
 
-- [Confiture CLI Reference](../../docs/cli-reference.md)
+- [Confiture CLI Reference](../../docs/reference/cli.md)
 - [Migration Best Practices](../../docs/guides/migration-best-practices.md)
 - [Environment Configuration](../../docs/guides/environment-configuration.md)
 

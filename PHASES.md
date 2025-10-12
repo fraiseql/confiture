@@ -807,7 +807,7 @@ Write comprehensive documentation:
    - Quick start
    - First migration
 
-2. **CLI Reference** (`docs/cli-reference.md`)
+2. **CLI Reference** (`docs/reference/cli.md`)
    - All commands documented
    - Examples for each
 

@@ -520,7 +520,7 @@ You've learned:
 ## Further Reading
 
 - [Confiture Documentation](../../README.md)
-- [CLI Reference](../../docs/cli-reference.md)
+- [CLI Reference](../../docs/reference/cli.md)
 - [Organizing SQL Files](../../docs/organizing-sql-files.md)
 
 ---

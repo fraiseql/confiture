@@ -549,7 +549,7 @@ confiture build --env local --schema-only
 
 - **[Organizing SQL Files](./organizing-sql-files.md)** - Patterns for complex schemas
 - **[Meaningful Test UUIDs](./meaningful-test-uuids.md)** - Generate debuggable UUIDs for seed data
-- **[CLI Reference](./cli-reference.md)** - Complete command documentation
+- **[CLI Reference](./reference/cli.md)** - Complete command documentation
 - **[Migration Strategies](./migration-strategies.md)** - When to use each approach
 - **[Examples](../examples/)** - Sample projects
 

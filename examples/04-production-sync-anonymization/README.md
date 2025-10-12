@@ -1210,7 +1210,7 @@ tables:
 
 ### Documentation
 
-- [Confiture Sync Command Reference](../../docs/cli-reference.md#sync)
+- [Confiture Sync Command Reference](../../docs/reference/cli.md#confiture-sync)
 - [Anonymization Strategies Guide](../../docs/anonymization-strategies.md)
 - [GDPR Compliance Checklist](../../docs/gdpr-compliance.md)
 
