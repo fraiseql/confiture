@@ -24,14 +24,13 @@ Usage:
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
 
 import strawberry
-
 
 # ============================================================================
 # Type Definitions
 # ============================================================================
+
 
 @strawberry.type
 class User:
@@ -56,8 +55,8 @@ class User:
     email: str
     username: str
     full_name: str = strawberry.field(name="fullName")
-    bio: Optional[str] = None
-    avatar_url: Optional[str] = strawberry.field(name="avatarUrl", default=None)
+    bio: str | None = None
+    avatar_url: str | None = strawberry.field(name="avatarUrl", default=None)
     is_active: bool = strawberry.field(name="isActive")
 
     # Computed fields (from query-side denormalization)
@@ -79,7 +78,7 @@ class Author:
     id: str
     username: str
     full_name: str = strawberry.field(name="fullName")
-    avatar_url: Optional[str] = strawberry.field(name="avatarUrl", default=None)
+    avatar_url: str | None = strawberry.field(name="avatarUrl", default=None)
 
 
 @strawberry.type
@@ -98,10 +97,7 @@ class Comment:
 
     # Embedded relations
     author: Author
-    parent_comment: Optional["Comment"] = strawberry.field(
-        name="parentComment",
-        default=None
-    )
+    parent_comment: Optional["Comment"] = strawberry.field(name="parentComment", default=None)
 
     # Metadata
     depth: int = 0  # Comment nesting level
@@ -129,12 +125,12 @@ class Post:
     title: str
     slug: str
     content: str
-    excerpt: Optional[str] = None
+    excerpt: str | None = None
 
     # Metadata
     tags: list[str] = strawberry.field(default_factory=list)
     is_published: bool = strawberry.field(name="isPublished")
-    published_at: Optional[datetime] = strawberry.field(name="publishedAt", default=None)
+    published_at: datetime | None = strawberry.field(name="publishedAt", default=None)
     view_count: int = strawberry.field(name="viewCount", default=0)
 
     # Embedded relations
@@ -151,6 +147,7 @@ class Post:
 # Input Types for Mutations
 # ============================================================================
 
+
 @strawberry.input
 class CreateUserInput:
     """Input for creating a new user."""
@@ -158,17 +155,17 @@ class CreateUserInput:
     email: str
     username: str
     full_name: str = strawberry.field(name="fullName")
-    bio: Optional[str] = None
-    avatar_url: Optional[str] = strawberry.field(name="avatarUrl", default=None)
+    bio: str | None = None
+    avatar_url: str | None = strawberry.field(name="avatarUrl", default=None)
 
 
 @strawberry.input
 class UpdateUserInput:
     """Input for updating user profile."""
 
-    full_name: Optional[str] = strawberry.field(name="fullName", default=None)
-    bio: Optional[str] = None
-    avatar_url: Optional[str] = strawberry.field(name="avatarUrl", default=None)
+    full_name: str | None = strawberry.field(name="fullName", default=None)
+    bio: str | None = None
+    avatar_url: str | None = strawberry.field(name="avatarUrl", default=None)
 
 
 @strawberry.input
@@ -177,7 +174,7 @@ class CreatePostInput:
 
     title: str
     content: str
-    excerpt: Optional[str] = None
+    excerpt: str | None = None
     tags: list[str] = strawberry.field(default_factory=list)
     is_published: bool = strawberry.field(name="isPublished", default=False)
 
@@ -186,11 +183,11 @@ class CreatePostInput:
 class UpdatePostInput:
     """Input for updating a post."""
 
-    title: Optional[str] = None
-    content: Optional[str] = None
-    excerpt: Optional[str] = None
-    tags: Optional[list[str]] = None
-    is_published: Optional[bool] = strawberry.field(name="isPublished", default=None)
+    title: str | None = None
+    content: str | None = None
+    excerpt: str | None = None
+    tags: list[str] | None = None
+    is_published: bool | None = strawberry.field(name="isPublished", default=None)
 
 
 @strawberry.input
@@ -198,27 +195,20 @@ class CreateCommentInput:
     """Input for creating a comment."""
 
     content: str
-    parent_comment_id: Optional[str] = strawberry.field(
-        name="parentCommentId",
-        default=None
-    )
+    parent_comment_id: str | None = strawberry.field(name="parentCommentId", default=None)
 
 
 # ============================================================================
 # Queries
 # ============================================================================
 
+
 @strawberry.type
 class Query:
     """GraphQL queries - all read from tv_* tables (query side)."""
 
     @strawberry.field
-    async def users(
-        self,
-        info,
-        limit: int = 10,
-        offset: int = 0
-    ) -> list[User]:
+    async def users(self, info, limit: int = 10, offset: int = 0) -> list[User]:
         """Get users with their post/comment counts.
 
         Example:
@@ -246,7 +236,7 @@ class Query:
         return [User(**row["data"]) for row in rows]
 
     @strawberry.field
-    async def user(self, info, id: str) -> Optional[User]:
+    async def user(self, info, id: str) -> User | None:
         """Get a specific user by ID.
 
         Example:
@@ -261,20 +251,13 @@ class Query:
         pool = info.context["db_pool"]
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT data FROM tv_user WHERE id = $1",
-                id
-            )
+            row = await conn.fetchrow("SELECT data FROM tv_user WHERE id = $1", id)
 
         return User(**row["data"]) if row else None
 
     @strawberry.field
     async def posts(
-        self,
-        info,
-        published_only: bool = True,
-        limit: int = 10,
-        offset: int = 0
+        self, info, published_only: bool = True, limit: int = 10, offset: int = 0
     ) -> list[Post]:
         """Get posts with embedded author and comments.
 
@@ -318,7 +301,7 @@ class Query:
         return [Post(**row["data"]) for row in rows]
 
     @strawberry.field
-    async def post(self, info, id: str) -> Optional[Post]:
+    async def post(self, info, id: str) -> Post | None:
         """Get a specific post by ID.
 
         Example:
@@ -339,19 +322,12 @@ class Query:
         pool = info.context["db_pool"]
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT data FROM tv_post WHERE id = $1",
-                id
-            )
+            row = await conn.fetchrow("SELECT data FROM tv_post WHERE id = $1", id)
 
         return Post(**row["data"]) if row else None
 
     @strawberry.field
-    async def post_by_slug(
-        self,
-        info,
-        slug: str
-    ) -> Optional[Post]:
+    async def post_by_slug(self, info, slug: str) -> Post | None:
         """Get a post by its slug.
 
         Example:
@@ -366,10 +342,7 @@ class Query:
         pool = info.context["db_pool"]
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT data FROM tv_post WHERE data->>'slug' = $1",
-                slug
-            )
+            row = await conn.fetchrow("SELECT data FROM tv_post WHERE data->>'slug' = $1", slug)
 
         return Post(**row["data"]) if row else None
 
@@ -378,16 +351,13 @@ class Query:
 # Mutations
 # ============================================================================
 
+
 @strawberry.type
 class Mutation:
     """GraphQL mutations - write to tb_* then explicitly sync to tv_*."""
 
     @strawberry.mutation
-    async def create_user(
-        self,
-        info,
-        input: CreateUserInput
-    ) -> User:
+    async def create_user(self, info, input: CreateUserInput) -> User:
         """Create a new user.
 
         EXPLICIT SYNC PATTERN:
@@ -407,7 +377,6 @@ class Mutation:
                 }
             }
         """
-        from uuid import UUID
 
         pool = info.context["db_pool"]
 
@@ -455,20 +424,12 @@ class Mutation:
             )
 
             # Step 3: Read from query side
-            row = await conn.fetchrow(
-                "SELECT data FROM tv_user WHERE id = $1",
-                user_id
-            )
+            row = await conn.fetchrow("SELECT data FROM tv_user WHERE id = $1", user_id)
 
         return User(**row["data"])
 
     @strawberry.mutation
-    async def create_post(
-        self,
-        info,
-        author_id: str,
-        input: CreatePostInput
-    ) -> Post:
+    async def create_post(self, info, author_id: str, input: CreatePostInput) -> Post:
         """Create a new post.
 
         Example:
@@ -487,13 +448,13 @@ class Mutation:
                 }
             }
         """
-        from uuid import UUID
         import re
+        from uuid import UUID
 
         pool = info.context["db_pool"]
 
         # Generate slug from title
-        slug = re.sub(r'[^a-z0-9]+', '-', input.title.lower()).strip('-')
+        slug = re.sub(r"[^a-z0-9]+", "-", input.title.lower()).strip("-")
 
         async with pool.acquire() as conn:
             # Write to command side
@@ -553,10 +514,7 @@ class Mutation:
             )
 
             # Read from query side
-            row = await conn.fetchrow(
-                "SELECT data FROM tv_post WHERE id = $1",
-                post_id
-            )
+            row = await conn.fetchrow("SELECT data FROM tv_post WHERE id = $1", post_id)
 
         return Post(**row["data"])
 

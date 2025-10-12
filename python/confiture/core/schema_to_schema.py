@@ -206,9 +206,9 @@ class SchemaToSchemaMigrator:
                     )
                 )
                 cursor.execute(
-                    sql.SQL(
-                        "DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER {server}"
-                    ).format(server=sql.Identifier(self.server_name))
+                    sql.SQL("DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER {server}").format(
+                        server=sql.Identifier(self.server_name)
+                    )
                 )
                 cursor.execute(
                     sql.SQL("DROP SERVER IF EXISTS {server} CASCADE").format(
@@ -350,11 +350,11 @@ class SchemaToSchemaMigrator:
             # We select from the foreign schema with source column names
             select_items = []
             for source_col in column_mapping:
-                select_items.append(
-                    sql.SQL("{source}").format(source=sql.Identifier(source_col))
-                )
+                select_items.append(sql.SQL("{source}").format(source=sql.Identifier(source_col)))
 
-            select_query = sql.SQL("SELECT {select_items} FROM {foreign_schema}.{source_table}").format(
+            select_query = sql.SQL(
+                "SELECT {select_items} FROM {foreign_schema}.{source_table}"
+            ).format(
                 select_items=sql.SQL(", ").join(select_items),
                 foreign_schema=sql.Identifier(self.foreign_schema_name),
                 source_table=sql.Identifier(source_table),
@@ -379,7 +379,9 @@ class SchemaToSchemaMigrator:
 
             # Step 2: COPY data from buffer to target table
             with self.target_connection.cursor() as cursor:
-                copy_from_query = sql.SQL("COPY {target_table} ({target_cols}) FROM STDIN WITH (FORMAT csv)").format(
+                copy_from_query = sql.SQL(
+                    "COPY {target_table} ({target_cols}) FROM STDIN WITH (FORMAT csv)"
+                ).format(
                     target_table=sql.Identifier(target_table),
                     target_cols=sql.SQL(", ").join(target_cols),
                 )
@@ -466,7 +468,7 @@ class SchemaToSchemaMigrator:
                         WHERE schemaname = %s
                         ORDER BY relname
                     """),
-                    (schema,)
+                    (schema,),
                 )
 
                 for table_name, estimated_rows in cursor.fetchall():
@@ -587,6 +589,4 @@ class SchemaToSchemaMigrator:
             return verification_results
 
         except psycopg.Error as e:
-            raise MigrationError(
-                f"Failed to verify migration for tables {tables}: {e}"
-            ) from e
+            raise MigrationError(f"Failed to verify migration for tables {tables}: {e}") from e

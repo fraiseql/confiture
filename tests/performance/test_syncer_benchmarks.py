@@ -125,8 +125,9 @@ def test_baseline_copy_performance(benchmark_databases):
         print(f"  Throughput: {rows_per_second:,.0f} rows/sec")
 
         # We expect at least 10K rows/sec even in worst case
-        assert rows_per_second > 10_000, \
+        assert rows_per_second > 10_000, (
             f"COPY performance too low: {rows_per_second:.0f} rows/sec (expected >10K)"
+        )
 
         # Get metrics
         metrics = syncer.get_metrics()
@@ -171,8 +172,9 @@ def test_baseline_anonymization_performance(benchmark_databases):
         print("  Columns anonymized: 3 (email, phone, name)")
 
         # We expect at least 2K rows/sec even in worst case
-        assert rows_per_second > 2_000, \
+        assert rows_per_second > 2_000, (
             f"Anonymization performance too low: {rows_per_second:.0f} rows/sec (expected >2K)"
+        )
 
         # Get metrics
         metrics = syncer.get_metrics()
@@ -217,7 +219,9 @@ def test_batch_size_impact(benchmark_databases):
     # Print results
     print("\n📊 Batch Size Impact:")
     for batch_size, result in sorted(results.items()):
-        print(f"  {batch_size:>6,} rows/batch: {result['rows_per_second']:>8,.0f} rows/sec ({result['duration']:.3f}s)")
+        print(
+            f"  {batch_size:>6,} rows/batch: {result['rows_per_second']:>8,.0f} rows/sec ({result['duration']:.3f}s)"
+        )
 
     # Find optimal batch size
     optimal_size = max(results.items(), key=lambda x: x[1]["rows_per_second"])[0]
@@ -253,13 +257,14 @@ def test_connection_overhead(benchmark_databases):
     max_connection_time = max(durations)
 
     print("\n📊 Connection Overhead:")
-    print(f"  Average: {avg_connection_time*1000:.1f}ms")
-    print(f"  Min: {min_connection_time*1000:.1f}ms")
-    print(f"  Max: {max_connection_time*1000:.1f}ms")
+    print(f"  Average: {avg_connection_time * 1000:.1f}ms")
+    print(f"  Min: {min_connection_time * 1000:.1f}ms")
+    print(f"  Max: {max_connection_time * 1000:.1f}ms")
 
     # Connection should be fast (<100ms)
-    assert avg_connection_time < 0.1, \
-        f"Connection overhead too high: {avg_connection_time*1000:.0f}ms"
+    assert avg_connection_time < 0.1, (
+        f"Connection overhead too high: {avg_connection_time * 1000:.0f}ms"
+    )
 
 
 @pytest.mark.benchmark

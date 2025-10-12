@@ -4,6 +4,7 @@ Provides test fixtures for database testing.
 """
 
 import os
+
 import pytest
 
 
@@ -24,11 +25,11 @@ def test_db():
     Returns:
         str: PostgreSQL connection string
     """
-    host = os.getenv('PGHOST', 'localhost')
-    port = os.getenv('PGPORT', '5432')
-    database = os.getenv('PGDATABASE', 'confiture_ci')
-    user = os.getenv('PGUSER', 'postgres')
-    password = os.getenv('PGPASSWORD', 'postgres')
+    host = os.getenv("PGHOST", "localhost")
+    port = os.getenv("PGPORT", "5432")
+    database = os.getenv("PGDATABASE", "confiture_ci")
+    user = os.getenv("PGUSER", "postgres")
+    password = os.getenv("PGPASSWORD", "postgres")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
@@ -40,18 +41,17 @@ def test_env():
     Returns:
         str: Environment name (default: ci)
     """
-    return os.getenv('TEST_ENV', 'ci')
+    return os.getenv("TEST_ENV", "ci")
 
 
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests (deselect with '-m \"not integration\"')"
+        "markers",
+        "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
     )
-    config.addinivalue_line(
-        "markers", "unit: marks tests as unit tests"
-    )
+    config.addinivalue_line("markers", "unit: marks tests as unit tests")
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )

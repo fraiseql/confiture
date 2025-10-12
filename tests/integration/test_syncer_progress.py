@@ -107,10 +107,11 @@ async def test_progress_reporting_single_table(
         # Verify progress was updated (should have total set)
         assert mock_progress_instance.update.called
         # Find the update call that set the total
-        update_calls = [call for call in mock_progress_instance.update.call_args_list
-                       if 'total' in call[1]]
+        update_calls = [
+            call for call in mock_progress_instance.update.call_args_list if "total" in call[1]
+        ]
         assert len(update_calls) > 0
-        assert update_calls[0][1]['total'] == 1000
+        assert update_calls[0][1]["total"] == 1000
 
         assert results["users"] == 1000
 
@@ -333,9 +334,7 @@ async def test_progress_multiple_tables(
 
         # Track task IDs for each table
         task_ids = {}
-        mock_progress_instance.add_task.side_effect = (
-            lambda desc, **kwargs: len(task_ids)
-        )
+        mock_progress_instance.add_task.side_effect = lambda desc, **kwargs: len(task_ids)
 
         with ProductionSyncer(source_config, target_config) as syncer:
             results = syncer.sync(config)

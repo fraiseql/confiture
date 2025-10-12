@@ -320,9 +320,7 @@ async def test_null_values_not_anonymized(
     target_conn = create_connection(target_config)
     with target_conn.cursor() as cur:
         # Bob Jones has NULL address and SSN
-        cur.execute(
-            "SELECT address, ssn FROM users WHERE username = 'bob_jones'"
-        )
+        cur.execute("SELECT address, ssn FROM users WHERE username = 'bob_jones'")
         row = cur.fetchone()
     target_conn.close()
 
@@ -362,9 +360,7 @@ async def test_auto_detect_pii_columns(
 
     target_conn = create_connection(target_config)
     with target_conn.cursor() as cur:
-        cur.execute(
-            "SELECT email, phone, ssn FROM users WHERE ssn IS NOT NULL ORDER BY id"
-        )
+        cur.execute("SELECT email, phone, ssn FROM users WHERE ssn IS NOT NULL ORDER BY id")
         rows = cur.fetchall()
     target_conn.close()
 

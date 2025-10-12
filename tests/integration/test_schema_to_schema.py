@@ -31,7 +31,7 @@ class TestSchemaToSchemaFDW:
         migrator = SchemaToSchemaMigrator(
             source_connection=test_db_connection,
             target_connection=test_db_connection,
-            foreign_schema_name="old_schema"
+            foreign_schema_name="old_schema",
         )
 
         # Setup FDW (without importing schema)
@@ -79,7 +79,9 @@ class TestSchemaToSchemaFDW:
         # Cleanup
         with test_db_connection.cursor() as cursor:
             cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
-            cursor.execute("DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER confiture_source_server")
+            cursor.execute(
+                "DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER confiture_source_server"
+            )
             cursor.execute("DROP SERVER IF EXISTS confiture_source_server CASCADE")
         test_db_connection.commit()
 
@@ -133,7 +135,7 @@ class TestSchemaToSchemaFDW:
         migrator = SchemaToSchemaMigrator(
             source_connection=test_db_connection,
             target_connection=test_db_connection,
-            foreign_schema_name="old_schema"
+            foreign_schema_name="old_schema",
         )
 
         # Execute migration with column mapping
@@ -144,9 +146,7 @@ class TestSchemaToSchemaFDW:
         }
 
         rows_migrated = migrator.migrate_table(
-            source_table="old_users",
-            target_table="new_users",
-            column_mapping=column_mapping
+            source_table="old_users", target_table="new_users", column_mapping=column_mapping
         )
 
         # Verify return value
@@ -240,7 +240,7 @@ class TestSchemaToSchemaFDW:
         migrator = SchemaToSchemaMigrator(
             source_connection=test_db_connection,
             target_connection=test_db_connection,
-            foreign_schema_name="old_schema"
+            foreign_schema_name="old_schema",
         )
 
         # Execute migration with COPY strategy
@@ -252,9 +252,7 @@ class TestSchemaToSchemaFDW:
         }
 
         rows_migrated = migrator.migrate_table_copy(
-            source_table="large_events",
-            target_table="events",
-            column_mapping=column_mapping
+            source_table="large_events", target_table="events", column_mapping=column_mapping
         )
 
         # Verify return value
@@ -319,7 +317,9 @@ class TestSchemaToSchemaFDW:
                     username TEXT
                 )
             """)
-            cursor.execute("INSERT INTO small_users (username) SELECT 'user' || i FROM generate_series(1, 1000) i")
+            cursor.execute(
+                "INSERT INTO small_users (username) SELECT 'user' || i FROM generate_series(1, 1000) i"
+            )
 
             # Medium table to simulate large (we'll update stats manually)
             # Creating 1M rows instead of 15M for test speed
@@ -329,7 +329,9 @@ class TestSchemaToSchemaFDW:
                     content TEXT
                 )
             """)
-            cursor.execute("INSERT INTO medium_posts (content) SELECT 'post' || i FROM generate_series(1, 1000000) i")  # 1M rows
+            cursor.execute(
+                "INSERT INTO medium_posts (content) SELECT 'post' || i FROM generate_series(1, 1000000) i"
+            )  # 1M rows
 
         test_db_connection.commit()
 
@@ -424,7 +426,7 @@ class TestSchemaToSchemaFDW:
         migrator = SchemaToSchemaMigrator(
             source_connection=test_db_connection,
             target_connection=test_db_connection,
-            foreign_schema_name="old_schema"
+            foreign_schema_name="old_schema",
         )
 
         # Migrate data
@@ -433,9 +435,7 @@ class TestSchemaToSchemaFDW:
 
         # Verify counts
         verification_results = migrator.verify_migration(
-            tables=["products"],
-            source_schema="old_schema",
-            target_schema="public"
+            tables=["products"], source_schema="old_schema", target_schema="public"
         )
 
         # Check verification results
@@ -502,14 +502,12 @@ class TestSchemaToSchemaFDW:
         migrator = SchemaToSchemaMigrator(
             source_connection=test_db_connection,
             target_connection=test_db_connection,
-            foreign_schema_name="old_schema"
+            foreign_schema_name="old_schema",
         )
 
         # Verify counts (should detect mismatch)
         verification_results = migrator.verify_migration(
-            tables=["orders"],
-            source_schema="old_schema",
-            target_schema="public"
+            tables=["orders"], source_schema="old_schema", target_schema="public"
         )
 
         # Check verification detected the mismatch

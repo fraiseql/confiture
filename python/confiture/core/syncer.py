@@ -155,9 +155,7 @@ class ProductionSyncer:
 
         return tables
 
-    def _anonymize_value(
-        self, value: Any, strategy: str, seed: int | None = None
-    ) -> Any:
+    def _anonymize_value(self, value: Any, strategy: str, seed: int | None = None) -> Any:
         """Anonymize a single value based on strategy.
 
         Args:
@@ -185,7 +183,7 @@ class ProductionSyncer:
             if seed is not None:
                 # Deterministic based on seed
                 hash_int = int(hashlib.sha256(str(value).encode()).hexdigest()[:8], 16)
-                number = (hash_int % 10000)
+                number = hash_int % 10000
             else:
                 number = random.randint(1000, 9999)
             return f"+1-555-{number}"
@@ -232,9 +230,7 @@ class ProductionSyncer:
 
         start_time = time.time()
 
-        with self._source_conn.cursor() as src_cursor, \
-             self._target_conn.cursor() as dst_cursor:
-
+        with self._source_conn.cursor() as src_cursor, self._target_conn.cursor() as dst_cursor:
             # Truncate target table first
             dst_cursor.execute(f"TRUNCATE TABLE {table_name} CASCADE")
 
