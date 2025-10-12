@@ -149,17 +149,19 @@ confiture migrate up
 ## Documentation
 
 ### 📖 User Guides
-- **[Getting Started](docs/guides/getting-started.md)** - Installation and first steps
-- **[Migration Strategies](docs/guides/migration-strategies.md)** - When to use each medium
-- **[Zero-Downtime Migrations](docs/guides/zero-downtime.md)** - Production deployments with FDW
-- **[Production Data Sync](docs/guides/production-sync.md)** - Copy and anonymize production data
-- **[FraiseQL Integration](docs/guides/fraiseql-integration.md)** - GraphQL schema sync
+- **[Medium 1: Build from DDL](docs/guides/medium-1-build-from-ddl.md)** - Fresh databases in <1 second
+- **[Medium 2: Incremental Migrations](docs/guides/medium-2-incremental-migrations.md)** - ALTER-based changes
+- **[Medium 3: Production Data Sync](docs/guides/medium-3-production-sync.md)** - Copy and anonymize data
+- **[Medium 4: Zero-Downtime Migrations](docs/guides/medium-4-schema-to-schema.md)** - Schema-to-schema via FDW
+- **[Migration Decision Tree](docs/guides/migration-decision-tree.md)** - Choose the right strategy
 
-### 📚 Reference
+### 📚 API Reference
 - **[CLI Reference](docs/reference/cli.md)** - All commands documented
 - **[Configuration Reference](docs/reference/configuration.md)** - Environment configuration
-- **[API Reference](docs/reference/api.md)** - Python API documentation
-- **[Schema Differ](docs/reference/differ.md)** - Schema comparison engine
+- **[Schema Builder API](docs/api/builder.md)** - Building schemas programmatically
+- **[Migrator API](docs/api/migrator.md)** - Migration execution
+- **[Syncer API](docs/api/syncer.md)** - Production data sync
+- **[Schema-to-Schema API](docs/api/schema-to-schema.md)** - Zero-downtime migrations
 
 ### 💡 Examples
 - **[Examples Overview](examples/)** - 5 complete production examples

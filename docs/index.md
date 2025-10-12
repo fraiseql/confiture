@@ -165,15 +165,15 @@ Explore complete, production-ready examples:
 - **[User Guides](guides/migration-decision-tree.md)** - Complete guides for all 4 mediums
 - **[CLI Reference](reference/cli.md)** - All commands documented
 - **[API Reference](api/builder.md)** - Python API documentation
-- **[Examples](examples.md)** - Production-ready examples
+- **[Examples](../examples/)** - Production-ready examples
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development guide.
+Contributions welcome! See [../CONTRIBUTING.md](../CONTRIBUTING.md) for development guide.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE.md) for details.
+MIT License - see [../LICENSE](../LICENSE) for details.
 
 Copyright (c) 2025 Lionel Hamayon
 
