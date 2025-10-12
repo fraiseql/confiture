@@ -17,9 +17,9 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 
 ### 🔨 Build & Quality
 
-[![CI](https://img.shields.io/github/actions/workflow/status/evoludigit/confiture/ci.yml?branch=main&logo=github&label=CI)](https://github.com/evoludigit/confiture/actions/workflows/ci.yml)
-[![Build Wheels](https://img.shields.io/github/actions/workflow/status/evoludigit/confiture/wheels.yml?branch=main&logo=github&label=Wheels)](https://github.com/evoludigit/confiture/actions/workflows/wheels.yml)
-[![codecov](https://img.shields.io/codecov/c/github/evoludigit/confiture?logo=codecov&logoColor=white)](https://codecov.io/gh/evoludigit/confiture)
+[![CI](https://img.shields.io/github/actions/workflow/status/fraiseql/confiture/ci.yml?branch=main&logo=github&label=CI)](https://github.com/fraiseql/confiture/actions/workflows/ci.yml)
+[![Build Wheels](https://img.shields.io/github/actions/workflow/status/fraiseql/confiture/wheels.yml?branch=main&logo=github&label=Wheels)](https://github.com/fraiseql/confiture/actions/workflows/wheels.yml)
+[![codecov](https://img.shields.io/codecov/c/github/fraiseql/confiture?logo=codecov&logoColor=white)](https://codecov.io/gh/fraiseql/confiture)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://github.com/python/mypy)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
@@ -34,11 +34,11 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 ### 📖 Project Info
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/evoludigit/confiture?style=social)](https://github.com/evoludigit/confiture/stargazers)
-[![GitHub last commit](https://img.shields.io/github/last-commit/evoludigit/confiture?logo=github)](https://github.com/evoludigit/confiture/commits/main)
-[![GitHub issues](https://img.shields.io/github/issues/evoludigit/confiture?logo=github)](https://github.com/evoludigit/confiture/issues)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/evoludigit/confiture/graphs/commit-activity)
-[![Development Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/evoludigit/confiture)
+[![GitHub stars](https://img.shields.io/github/stars/fraiseql/confiture?style=social)](https://github.com/fraiseql/confiture/stargazers)
+[![GitHub last commit](https://img.shields.io/github/last-commit/fraiseql/confiture?logo=github)](https://github.com/fraiseql/confiture/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/fraiseql/confiture?logo=github)](https://github.com/fraiseql/confiture/issues)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/fraiseql/confiture/graphs/commit-activity)
+[![Development Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/fraiseql/confiture)
 
 </div>
 
@@ -256,7 +256,7 @@ Contributions welcome! We'd love your help making Confiture even better.
 **Quick Start**:
 ```bash
 # Clone repository
-git clone https://github.com/evoludigit/confiture.git
+git clone https://github.com/fraiseql/confiture.git
 cd confiture
 
 # Install dependencies (includes Rust build)

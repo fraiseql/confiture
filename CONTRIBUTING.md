@@ -708,9 +708,9 @@ Thank you for contributing to Confiture! 🍓
 
 ## 📞 Questions?
 
-- **General questions**: [GitHub Discussions](https://github.com/evoludigit/confiture/discussions)
-- **Bug reports**: [GitHub Issues](https://github.com/evoludigit/confiture/issues)
-- **Security issues**: Email security@evoludigit.com
+- **General questions**: [GitHub Discussions](https://github.com/fraiseql/confiture/discussions)
+- **Bug reports**: [GitHub Issues](https://github.com/fraiseql/confiture/issues)
+- **Security issues**: Email lionel.hamayon@evolution-digitale.fr
 
 ---
 
