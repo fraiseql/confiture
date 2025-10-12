@@ -6,41 +6,10 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 
 > **Part of the FraiseQL ecosystem** - While Confiture works standalone for any PostgreSQL project, it's designed to integrate seamlessly with FraiseQL's GraphQL-first approach.
 
-<div align="center">
-
-### 📦 Package Status
-
-[![PyPI version](https://img.shields.io/pypi/v/confiture?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/confiture/)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/confiture?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/confiture?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/confiture/)
-[![PyPI - Wheel](https://img.shields.io/pypi/wheel/confiture?logo=pypi&logoColor=white)](https://pypi.org/project/confiture/)
-
-### 🔨 Build & Quality
-
-[![CI](https://img.shields.io/github/actions/workflow/status/fraiseql/confiture/ci.yml?branch=main&logo=github&label=CI)](https://github.com/fraiseql/confiture/actions/workflows/ci.yml)
-[![Build Wheels](https://img.shields.io/github/actions/workflow/status/fraiseql/confiture/wheels.yml?branch=main&logo=github&label=Wheels)](https://github.com/fraiseql/confiture/actions/workflows/wheels.yml)
-[![codecov](https://img.shields.io/codecov/c/github/fraiseql/confiture?logo=codecov&logoColor=white)](https://codecov.io/gh/fraiseql/confiture)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://github.com/python/mypy)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-
-### 🖥️ Platform Support
-
-[![Platform: Linux](https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white)](https://pypi.org/project/confiture/)
-[![Platform: macOS](https://img.shields.io/badge/platform-macOS-blue?logo=apple&logoColor=white)](https://pypi.org/project/confiture/)
-[![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue?logo=windows&logoColor=white)](https://pypi.org/project/confiture/)
-[![PostgreSQL: 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-
-### 📖 Project Info
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/fraiseql/confiture?style=social)](https://github.com/fraiseql/confiture/stargazers)
-[![GitHub last commit](https://img.shields.io/github/last-commit/fraiseql/confiture?logo=github)](https://github.com/fraiseql/confiture/commits/main)
-[![GitHub issues](https://img.shields.io/github/issues/fraiseql/confiture?logo=github)](https://github.com/fraiseql/confiture/issues)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/fraiseql/confiture/graphs/commit-activity)
-[![Development Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/fraiseql/confiture)
-
-</div>
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![PostgreSQL 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 ---
 

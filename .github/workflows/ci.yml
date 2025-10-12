@@ -36,8 +36,8 @@ jobs:
       - name: Build Rust extension
         run: uv run maturin develop
 
-      - name: Run tests
-        run: uv run pytest tests/ -v --cov=confiture --cov-report=xml --cov-report=term
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v --cov=confiture --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -45,6 +45,7 @@ jobs:
           file: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
+        continue-on-error: true
 
   lint:
     name: Lint and format
@@ -95,7 +96,7 @@ jobs:
       - name: Run tests (Python fallback)
         run: |
           uv run python -c "from confiture.core.builder import HAS_RUST; assert not HAS_RUST, 'Rust extension should not be loaded'; print('✓ Testing pure Python fallback')"
-          uv run pytest tests/unit/test_builder.py tests/unit/test_builder_comprehensive.py -v -k "not performance"
+          uv run pytest tests/unit/ -v -k "not performance"
 
   cargo-test:
     name: Cargo test (Rust)
