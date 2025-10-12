@@ -1,0 +1,52 @@
+name: production
+
+database:
+  host: ${PRODUCTION_DB_HOST}
+  port: ${PRODUCTION_DB_PORT}
+  database: ${PRODUCTION_DB_NAME}
+  user: ${PRODUCTION_DB_USER}
+  password: ${PRODUCTION_DB_PASSWORD}
+
+  # SSL required for production
+  sslmode: require
+
+  # Longer connection timeout for production network
+  connect_timeout: 15
+
+  # Connection pooling settings
+  pool_size: 10
+  max_overflow: 20
+
+# Include all schema files
+include_dirs:
+  - db/schema
+
+# No exclusions in production
+exclude_dirs: []
+
+# Production deployment options
+options:
+  # Generous timeout for large migrations
+  migration_timeout: 600  # 10 minutes
+
+  # Detailed logging for audit trail
+  verbose: true
+
+  # Mandatory dry-run
+  require_dry_run: true
+
+  # Mandatory backup
+  require_backup: true
+
+  # Manual approval required
+  require_approval: true
+
+  # Prevent accidental data loss
+  allow_drop_tables: false
+  allow_drop_columns: false
+
+  # Lock timeout to prevent long-running locks
+  lock_timeout: 30000  # 30 seconds
+
+  # Statement timeout for safety
+  statement_timeout: 300000  # 5 minutes

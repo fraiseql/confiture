@@ -1,0 +1,151 @@
+# Confiture Configuration for FraiseQL Integration Example
+#
+# This configuration demonstrates how to use Confiture with FraiseQL-generated DDL.
+#
+# Usage:
+#   confiture build --env local
+#   confiture migrate up --env local
+#   confiture migrate status --env local
+
+project:
+  name: fraiseql-blog
+  description: Blog API with FraiseQL GraphQL schema and Confiture migrations
+  version: 1.0.0
+
+# Environment configurations
+environments:
+  # Local development environment
+  local:
+    database:
+      host: localhost
+      port: 5432
+      database: fraiseql_blog
+      user: postgres
+      password: postgres
+      # Connection pool settings
+      pool_size: 10
+      max_overflow: 20
+
+    # Schema directories (processed in order)
+    schema_dirs:
+      - db/schema/00_extensions   # PostgreSQL extensions (uuid, btree_gist)
+      - db/schema/10_tables        # Generated from schema.py via fraiseql
+      - db/schema/20_indexes       # Additional indexes and optimizations
+
+    # Migration settings
+    migrations_dir: db/migrations
+    migration_table: confiture_migrations
+
+    # Logging
+    verbose: true
+    log_queries: false
+
+  # CI/CD testing environment
+  ci:
+    database:
+      host: localhost
+      port: 5432
+      database: fraiseql_blog_test
+      user: postgres
+      password: postgres
+      pool_size: 5
+      max_overflow: 10
+
+    schema_dirs:
+      - db/schema/00_extensions
+      - db/schema/10_tables
+      - db/schema/20_indexes
+
+    migrations_dir: db/migrations
+    migration_table: confiture_migrations
+
+    verbose: true
+    log_queries: true
+
+  # Production environment (uses environment variables)
+  production:
+    database:
+      # Read from environment variables for security
+      host: ${DB_HOST}
+      port: ${DB_PORT:5432}
+      database: ${DB_NAME}
+      user: ${DB_USER}
+      password: ${DB_PASSWORD}
+      # Production connection pool
+      pool_size: 20
+      max_overflow: 50
+      # SSL connection
+      sslmode: require
+
+    schema_dirs:
+      - db/schema/00_extensions
+      - db/schema/10_tables
+      - db/schema/20_indexes
+
+    migrations_dir: db/migrations
+    migration_table: confiture_migrations
+
+    # Production settings
+    verbose: false
+    log_queries: false
+
+    # Backup before migrations
+    backup_before_migrate: true
+    backup_dir: db/backups
+
+# Medium selection rules (optional)
+# Confiture automatically chooses the best migration medium based on context
+medium_selection:
+  # Use Medium 1 (Build from DDL) when:
+  build_from_ddl:
+    - Fresh database (no existing data)
+    - CI/CD test databases
+    - Local development reset
+
+  # Use Medium 2 (Incremental Migrations) when:
+  incremental_migrations:
+    - Production database with data
+    - Adding columns/indexes
+    - Simple ALTER TABLE changes
+
+  # Use Medium 3 (Production Sync) when:
+  production_sync:
+    - Copying production to staging
+    - Data anonymization required
+    - Testing with real data
+
+  # Use Medium 4 (Schema-to-Schema FDW) when:
+  schema_to_schema:
+    - Zero-downtime deployments
+    - Large production databases
+    - Complex schema changes
+
+# Hooks (optional)
+# Run custom commands before/after operations
+hooks:
+  pre_build:
+    - echo "Building database from FraiseQL-generated DDL..."
+
+  post_build:
+    - echo "Database built successfully!"
+    # Optional: Run database seeding
+    # - python scripts/seed_data.py
+
+  pre_migrate:
+    - echo "Applying migrations..."
+
+  post_migrate:
+    - echo "Migrations applied successfully!"
+    # Optional: Invalidate caches
+    # - python scripts/invalidate_cache.py
+
+# Migration metadata
+migration_metadata:
+  # Track who created migrations
+  author: true
+
+  # Track migration execution time
+  execution_time: true
+
+  # Store migration output
+  store_output: true

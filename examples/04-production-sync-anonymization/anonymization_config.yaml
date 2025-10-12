@@ -1,0 +1,521 @@
+# Confiture Anonymization Configuration
+# Production Data Sync with PII Protection
+#
+# This configuration defines anonymization strategies for sensitive data
+# during production-to-staging/local sync operations.
+#
+# See README.md for detailed documentation on each strategy.
+
+# Global Settings
+global:
+  # Seed for deterministic anonymization (same input → same output)
+  # Change this value to generate different anonymized data
+  seed: 12345
+
+  # Automatically run verification queries after sync
+  verify_after_sync: true
+
+  # Exit with error if PII is detected after sync
+  fail_on_pii_leak: true
+
+  # Default domain for email anonymization
+  default_email_domain: "anon.local"
+
+  # Audit log path (optional)
+  audit_log: "sync-audit.log"
+
+# Table-Specific Anonymization Rules
+tables:
+
+  # ============================================================================
+  # Users Table - Core user data with multiple PII fields
+  # ============================================================================
+  users:
+    # Anonymization rules (applied in order)
+    anonymization:
+
+      # Email addresses - deterministic anonymization
+      - column: email
+        strategy: email
+        seed: 12345                    # Use global seed
+        domain: anon.local             # Anonymized emails: user_XXXXX@anon.local
+        preserve_domain: false         # Don't keep original domain
+
+      # Alternative email (if exists)
+      - column: backup_email
+        strategy: email
+        seed: 12345                    # Same seed as email for consistency
+        domain: anon.local
+
+      # Phone numbers - format preserved, digits anonymized
+      - column: phone
+        strategy: phone
+        format: national               # +1-555-000-0000
+        redact_digits: 7               # Redact last 7 digits
+
+      # Mobile phone (if separate column)
+      - column: mobile_phone
+        strategy: phone
+        format: national
+
+      # Social Security Numbers - full redaction
+      - column: ssn
+        strategy: redact
+        replacement: "***-**-****"     # Format preserved for validation logic
+
+      # First name - deterministic anonymization
+      - column: first_name
+        strategy: name
+        seed: 12345
+        preserve_initial: false        # Don't preserve first letter
+
+      # Last name - deterministic anonymization
+      - column: last_name
+        strategy: name
+        seed: 12345
+        preserve_initial: false
+
+      # Date of birth - partial anonymization (preserve year for age calculations)
+      - column: date_of_birth
+        strategy: date
+        preserve: year                 # Keep year, randomize month/day
+        range_days: 180                # Randomize within +/- 180 days
+
+    # Optional: Filter rows (only copy recent users)
+    filter: "created_at > NOW() - INTERVAL '2 years'"
+
+    # Optional: Sample data (1.0 = 100%, 0.1 = 10%)
+    sample_rate: 1.0
+
+    # Optional: Sampling method
+    sampling_method: random            # Options: random, stratified, time-based
+
+  # ============================================================================
+  # Orders Table - Transaction data with billing/shipping addresses
+  # ============================================================================
+  orders:
+    anonymization:
+
+      # Billing address - partial preservation for analytics
+      - column: billing_address
+        strategy: address
+        preserve_fields: [city, state, zip]  # Keep geographic data
+        redact_street: true                   # Remove street address
+
+      # Shipping address - same as billing
+      - column: shipping_address
+        strategy: address
+        preserve_fields: [city, state, zip]
+        redact_street: true
+
+      # Billing email (if different from user email)
+      - column: billing_email
+        strategy: email
+        seed: 12345                    # Same seed as users.email
+        domain: anon.local
+
+      # Customer notes - may contain PII
+      - column: customer_notes
+        strategy: text_redaction
+        patterns:                      # Regex patterns to redact
+          - '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'  # Emails
+          - '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'                        # Phones
+          - '\b\d{3}-\d{2}-\d{4}\b'                                # SSNs
+        replacement: "[REDACTED]"
+
+    # No filtering - preserve all orders
+    filter: null
+
+    # No sampling - copy all orders
+    sample_rate: 1.0
+
+  # ============================================================================
+  # Payments Table - Financial data (requires special care)
+  # ============================================================================
+  payments:
+    anonymization:
+
+      # Credit card last 4 digits - full redaction
+      - column: card_last4
+        strategy: redact
+        replacement: "****"
+
+      # Cardholder name
+      - column: cardholder_name
+        strategy: name
+        seed: 12345
+
+      # Billing zip code - preserve for fraud detection testing
+      - column: billing_zip
+        strategy: preserve             # Don't anonymize (no PII, useful for analytics)
+
+      # Payment processor customer ID - anonymize but preserve format
+      - column: stripe_customer_id
+        strategy: custom
+        function: |
+          -- Custom SQL function for Stripe customer ID anonymization
+          CREATE OR REPLACE FUNCTION anonymize_stripe_id(id TEXT, seed INTEGER)
+          RETURNS TEXT AS $$
+          BEGIN
+            RETURN 'cus_' || SUBSTRING(MD5(id || seed::TEXT), 1, 14);
+          END;
+          $$ LANGUAGE plpgsql;
+
+    # Copy all payment records
+    filter: null
+    sample_rate: 1.0
+
+  # ============================================================================
+  # User Sessions Table - May contain IP addresses and user agents
+  # ============================================================================
+  user_sessions:
+    anonymization:
+
+      # IP addresses - anonymize while preserving subnet for analytics
+      - column: ip_address
+        strategy: ip
+        preserve_octets: 2             # Keep first 2 octets (e.g., 192.168.X.X)
+
+      # User agent - full preservation (no PII)
+      - column: user_agent
+        strategy: preserve             # Not PII, useful for debugging
+
+    # Only copy recent sessions (old sessions not useful)
+    filter: "created_at > NOW() - INTERVAL '30 days'"
+
+    # Sample 10% of sessions (sufficient for debugging)
+    sample_rate: 0.1
+    sampling_method: time-based        # Evenly distributed across time range
+
+  # ============================================================================
+  # Support Tickets Table - May contain customer communications
+  # ============================================================================
+  support_tickets:
+    anonymization:
+
+      # Ticket subject - may contain names/emails
+      - column: subject
+        strategy: text_redaction
+        patterns:
+          - '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+          - '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+        replacement: "[REDACTED]"
+
+      # Ticket body - same as subject
+      - column: body
+        strategy: text_redaction
+        patterns:
+          - '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+          - '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+          - '\b\d{3}-\d{2}-\d{4}\b'
+        replacement: "[REDACTED]"
+
+      # Customer email - anonymize
+      - column: customer_email
+        strategy: email
+        seed: 12345
+        domain: anon.local
+
+    # Copy all tickets
+    filter: null
+    sample_rate: 1.0
+
+  # ============================================================================
+  # Marketing Subscriptions Table - Email list
+  # ============================================================================
+  marketing_subscriptions:
+    anonymization:
+
+      # Subscriber email
+      - column: email
+        strategy: email
+        seed: 12345
+        domain: anon.local
+
+      # Name (optional field)
+      - column: name
+        strategy: name
+        seed: 12345
+        allow_null: true               # Handle NULL values
+
+    # Only copy active subscriptions
+    filter: "unsubscribed_at IS NULL"
+
+    # Sample 20% (sufficient for email campaign testing)
+    sample_rate: 0.2
+
+  # ============================================================================
+  # Employee Table - Internal user data (highest sensitivity)
+  # ============================================================================
+  employees:
+    anonymization:
+
+      # Employee email - use different domain
+      - column: email
+        strategy: email
+        seed: 54321                    # Different seed from customers
+        domain: employee.anon.local    # Distinct domain
+
+      # Personal phone
+      - column: phone
+        strategy: phone
+        format: national
+
+      # SSN (required for payroll)
+      - column: ssn
+        strategy: redact
+        replacement: "***-**-****"
+
+      # Home address - full redaction
+      - column: home_address
+        strategy: address
+        preserve_fields: []            # Don't preserve anything
+        redact_street: true
+
+      # Emergency contact name
+      - column: emergency_contact_name
+        strategy: name
+        seed: 54321
+
+      # Emergency contact phone
+      - column: emergency_contact_phone
+        strategy: phone
+        format: national
+
+      # Bank account number (direct deposit)
+      - column: bank_account_number
+        strategy: redact
+        replacement: "****"
+
+    # Copy all employees (small table)
+    filter: null
+    sample_rate: 1.0
+
+  # ============================================================================
+  # Tables WITHOUT PII - No anonymization needed
+  # ============================================================================
+
+  # Products table - no PII, copy directly
+  products:
+    # No anonymization block = direct copy (faster)
+
+  # Categories table - no PII
+  categories:
+    # No anonymization
+
+  # Order items - no PII (references orders and products)
+  order_items:
+    # No anonymization
+
+  # Inventory - no PII
+  inventory:
+    # No anonymization
+
+  # Product reviews - may contain names in review text
+  product_reviews:
+    anonymization:
+
+      # Reviewer name
+      - column: reviewer_name
+        strategy: name
+        seed: 12345
+
+      # Review text - redact emails/phones if present
+      - column: review_text
+        strategy: text_redaction
+        patterns:
+          - '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+          - '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+        replacement: "[REDACTED]"
+
+    # Copy all reviews
+    filter: null
+    sample_rate: 1.0
+
+# ============================================================================
+# Excluded Tables - Skip entirely
+# ============================================================================
+exclude_tables:
+
+  # Audit logs - too sensitive, should never leave production
+  - audit_logs
+  - security_events
+
+  # Session data - transient, not useful in staging
+  - session_data
+  - cache_entries
+
+  # Temporary tables
+  - temp_*
+  - staging_*
+
+# ============================================================================
+# Performance Tuning
+# ============================================================================
+performance:
+
+  # Number of tables to copy in parallel
+  parallel_workers: 4
+
+  # Number of rows to copy per batch
+  batch_size: 10000
+
+  # Disable triggers during sync (re-enable after)
+  disable_triggers: true
+
+  # Disable indexes during sync (recreate after)
+  disable_indexes: true
+
+  # Analyze tables after sync (update statistics)
+  analyze_after_sync: true
+
+  # Vacuum tables after sync (reclaim space)
+  vacuum_after_sync: false             # Usually not needed for new data
+
+# ============================================================================
+# Post-Sync Actions
+# ============================================================================
+post_sync:
+
+  # Run custom SQL after sync completes
+  custom_sql:
+    - |
+      -- Reset auto-incrementing sequences
+      SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
+      SELECT setval('orders_id_seq', (SELECT MAX(id) FROM orders));
+
+    - |
+      -- Create test users for development
+      INSERT INTO users (email, first_name, last_name, password_hash)
+      VALUES
+        ('admin@anon.local', 'Admin', 'User', '$2b$12$...')
+        ON CONFLICT (email) DO NOTHING;
+
+  # Send notification when sync completes
+  notifications:
+    - type: slack
+      webhook_url: ${SLACK_WEBHOOK_URL}
+      message: "Staging database refreshed with anonymized production data"
+
+    - type: email
+      to: dev-team@example.com
+      subject: "Staging DB Refresh Complete"
+      body: "Production data synced to staging with PII anonymization"
+
+# ============================================================================
+# Verification Rules - Ensure anonymization worked
+# ============================================================================
+verification:
+
+  # Custom verification queries (should return 0 rows)
+  queries:
+
+    # Check for leaked emails
+    - name: "Email Domain Check"
+      sql: |
+        SELECT COUNT(*) AS violations
+        FROM users
+        WHERE email NOT LIKE '%@anon.local'
+          AND email NOT LIKE '%@employee.anon.local';
+
+    # Check for real phone numbers
+    - name: "Phone Format Check"
+      sql: |
+        SELECT COUNT(*) AS violations
+        FROM users
+        WHERE phone ~ '^[0-9]{3}-[0-9]{3}-[0-9]{4}$'
+          AND phone NOT LIKE '555-%';
+
+    # Check for unredacted SSNs
+    - name: "SSN Redaction Check"
+      sql: |
+        SELECT COUNT(*) AS violations
+        FROM users
+        WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$';
+
+    # Check referential integrity
+    - name: "Foreign Key Integrity"
+      sql: |
+        SELECT COUNT(*) AS violations
+        FROM orders o
+        LEFT JOIN users u ON o.user_id = u.id
+        WHERE u.id IS NULL;
+
+  # Fail sync if any verification query returns > 0
+  fail_on_violations: true
+
+# ============================================================================
+# Logging and Auditing
+# ============================================================================
+logging:
+
+  # Log level (DEBUG, INFO, WARNING, ERROR)
+  level: INFO
+
+  # Log format
+  format: json                         # Options: json, text
+
+  # Log destination
+  output: sync-audit.log
+
+  # Log retention (days)
+  retention_days: 90
+
+  # Fields to log
+  fields:
+    - timestamp
+    - operation
+    - source_env
+    - target_env
+    - user
+    - tables_synced
+    - rows_copied
+    - pii_columns_anonymized
+    - verification_passed
+    - duration_seconds
+    - errors
+
+# ============================================================================
+# GDPR Compliance Metadata
+# ============================================================================
+gdpr:
+
+  # Data Protection Impact Assessment reference
+  dpia_reference: "DPIA-2024-001"
+
+  # Legal basis for processing
+  legal_basis: "Legitimate interest (Art. 6(1)(f)) - business continuity"
+
+  # Data retention policy
+  retention_policy: "Staging data refreshed weekly, old data purged"
+
+  # Data controller
+  controller: "Engineering Team <engineering@example.com>"
+
+  # Data protection officer
+  dpo: "dpo@example.com"
+
+  # Data categories processed
+  data_categories:
+    - "Customer personal data"
+    - "Transaction data"
+    - "Financial data"
+    - "Employee data"
+
+  # Purpose of processing
+  purpose: "Debugging production issues with realistic data patterns"
+
+  # Recipients of data
+  recipients:
+    - "Engineering team (staging environment)"
+    - "QA team (local environments)"
+
+# ============================================================================
+# Notes
+# ============================================================================
+# - Review this configuration with your Data Protection Officer
+# - Test with --dry-run before production sync
+# - Update anonymization rules when schema changes
+# - Audit staging access logs monthly
+# - Refresh staging weekly, purge old data
+# - Document DPIA before first production sync

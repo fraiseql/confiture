@@ -1,0 +1,27 @@
+# Core dependencies
+fraiseql>=0.5.0
+confiture>=0.1.0
+
+# GraphQL server
+strawberry-graphql[fastapi]>=0.236.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Database
+asyncpg>=0.29.0
+psycopg[binary]>=3.2.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.9.0
+pyyaml>=6.0.0
+
+# Development dependencies (optional)
+pytest>=8.3.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+ruff>=0.6.0
+mypy>=1.11.0
+
+# Type stubs
+types-pyyaml>=6.0.0

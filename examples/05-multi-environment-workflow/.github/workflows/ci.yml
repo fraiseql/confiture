@@ -1,0 +1,156 @@
+name: CI - Test Schema and Migrations
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test Schema Build and Migrations
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: confiture_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install confiture pytest pytest-cov psycopg[binary]
+
+      - name: Build schema from DDL
+        run: |
+          confiture build --env ci
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: confiture_ci
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
+      - name: Verify schema build
+        run: |
+          psql -h localhost -U postgres -d confiture_ci -c "\dt"
+          psql -h localhost -U postgres -d confiture_ci -c "\di"
+          psql -h localhost -U postgres -d confiture_ci -c "\dv"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Load test fixtures
+        run: |
+          psql -h localhost -U postgres -d confiture_ci < db/seeds/ci/test_fixtures.sql
+        env:
+          PGPASSWORD: postgres
+
+      - name: Run migration tests
+        run: |
+          pytest tests/ -v --tb=short
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: confiture_ci
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
+      - name: Test migration up
+        run: |
+          confiture migrate up --env ci
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: confiture_ci
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
+      - name: Verify migrations applied
+        run: |
+          psql -h localhost -U postgres -d confiture_ci -c "SELECT * FROM confiture_migrations ORDER BY applied_at DESC"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Test migration rollback
+        run: |
+          confiture migrate down --env ci
+          confiture migrate up --env ci
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: confiture_ci
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
+      - name: Run integration tests
+        run: |
+          pytest tests/ -v --cov=db --cov-report=term-missing
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: confiture_ci
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
+      - name: Test fresh rebuild
+        run: |
+          dropdb -h localhost -U postgres confiture_ci
+          createdb -h localhost -U postgres confiture_ci
+          confiture build --env ci
+          psql -h localhost -U postgres -d confiture_ci -c "\d users"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  lint:
+    name: Lint SQL and Python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install linting tools
+        run: |
+          pip install sqlfluff ruff
+
+      - name: Lint SQL files
+        run: |
+          sqlfluff lint db/schema/ --dialect postgres
+
+      - name: Lint Python migrations
+        run: |
+          ruff check db/migrations/
+
+      - name: Check SQL formatting
+        run: |
+          sqlfluff format db/schema/ --dialect postgres --check

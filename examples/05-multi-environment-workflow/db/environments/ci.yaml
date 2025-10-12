@@ -1,0 +1,34 @@
+name: ci
+
+database:
+  host: localhost
+  port: 5432
+  database: confiture_ci
+  user: postgres
+  password: postgres  # GitHub Actions default
+
+# Which directories to include when building schema
+include_dirs:
+  - db/schema
+
+# Exclude production-only files in CI
+exclude_dirs:
+  - db/schema/00_common/roles.sql
+
+# CI-specific options
+options:
+  # Keep indexes for realistic tests
+  skip_slow_indexes: false
+
+  # Detailed logging for debugging CI failures
+  verbose: true
+
+  # Fail fast on any error
+  strict_mode: true
+
+  # Parallel execution for speed
+  parallel_build: true
+
+  # Allow test cleanup
+  allow_drop_tables: true
+  allow_drop_columns: true

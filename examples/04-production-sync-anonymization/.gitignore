@@ -1,0 +1,159 @@
+# Confiture Production Sync Example - .gitignore
+
+# ============================================================================
+# Sensitive Files - NEVER COMMIT
+# ============================================================================
+
+# Environment files with credentials
+.env
+.env.local
+.env.production
+.env.staging
+*.local.yaml
+
+# Database dumps and backups
+*.sql
+*.sql.gz
+*.dump
+*.backup
+staging-backup-*
+prod-backup-*
+
+# Log files
+*.log
+sync-*.log
+audit-*.log
+
+# Temporary sync files
+.confiture/
+.sync-checkpoint
+.sync-progress
+
+# ============================================================================
+# Database Connection Strings (if accidentally created)
+# ============================================================================
+
+database-urls.txt
+connection-strings.txt
+credentials.txt
+passwords.txt
+
+# ============================================================================
+# Operating System Files
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================================================
+# Editor and IDE Files
+# ============================================================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs (PyCharm, IntelliJ, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+.*.sw?
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# Python (if using Python scripts)
+# ============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# ============================================================================
+# Node.js (if using Node scripts)
+# ============================================================================
+
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# ============================================================================
+# Temporary and Cache Files
+# ============================================================================
+
+tmp/
+temp/
+.cache/
+.pytest_cache/
+
+# ============================================================================
+# Allowed Files (explicitly include these in version control)
+# ============================================================================
+
+# Configuration templates (with ${ENV_VAR} placeholders)
+!db/environments/production.yaml
+!db/environments/staging.yaml
+!anonymization_config.yaml
+
+# Documentation
+!README.md
+!*.md
+
+# Scripts (without credentials)
+!sync_script.sh
+!*.sh
+
+# SQL verification scripts (no credentials)
+!verify_anonymization.sql
+!*.sql.template
+
+# ============================================================================
+# Notes
+# ============================================================================
+#
+# Security Reminders:
+# 1. NEVER commit database passwords
+# 2. NEVER commit production data dumps
+# 3. NEVER commit log files (may contain PII)
+# 4. Use environment variables for credentials
+# 5. Review diffs before committing (git diff)
+#
+# To check for leaked credentials:
+#   git log -p | grep -i password
+#   git log -p | grep -i "password.*="
+#
+# To remove accidentally committed sensitive file:
+#   git filter-branch --force --index-filter \
+#     'git rm --cached --ignore-unmatch path/to/sensitive-file' \
+#     --prune-empty --tag-name-filter cat -- --all

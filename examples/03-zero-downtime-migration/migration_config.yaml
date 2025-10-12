@@ -1,0 +1,348 @@
+# Zero-Downtime Migration Configuration
+# Migration: Split users.full_name into first_name and last_name
+
+version: "1.0"
+migration_id: "users_name_split_20251012"
+migration_type: "schema_to_schema"
+
+# Source and target schemas
+source:
+  schema: "public"
+  table: "users"
+  columns:
+    - id
+    - email
+    - full_name
+    - bio
+    - created_at
+    - updated_at
+
+target:
+  schema: "new_users"
+  table: "users"
+  columns:
+    - id
+    - email
+    - first_name
+    - last_name
+    - bio
+    - created_at
+    - updated_at
+
+# Foreign Data Wrapper configuration
+fdw:
+  extension: "postgres_fdw"
+  server_name: "migration_fdw_server"
+  connection:
+    # FDW connects to same database
+    use_local_connection: true
+    # Fallback connection parameters (override with env vars)
+    host: "localhost"
+    port: 5432
+    dbname: "myapp_production"
+    # Credentials from environment
+    user_env_var: "DB_USER"
+    password_env_var: "DB_PASSWORD"
+
+# Column transformations
+transformations:
+  # Transform from old schema to new schema
+  old_to_new:
+    # Simple 1:1 mappings
+    id: id
+    email: email
+    bio: bio
+    created_at: created_at
+    updated_at: updated_at
+
+    # Complex transformation: full_name → first_name, last_name
+    full_name:
+      type: "split"
+      target_columns:
+        - first_name
+        - last_name
+      function: "split_full_name"
+      function_sql: |
+        CREATE OR REPLACE FUNCTION split_full_name(full_name TEXT, OUT first_name TEXT, OUT last_name TEXT)
+        RETURNS RECORD AS $$
+        BEGIN
+            IF full_name IS NULL OR TRIM(full_name) = '' THEN
+                first_name := '';
+                last_name := '';
+                RETURN;
+            END IF;
+
+            full_name := TRIM(full_name);
+
+            -- Find last space (everything before = first_name, after = last_name)
+            IF POSITION(' ' IN full_name) > 0 THEN
+                -- Use regexp to find last space
+                first_name := SUBSTRING(full_name FROM '^(.+) [^ ]+$');
+                last_name := SUBSTRING(full_name FROM '[^ ]+$');
+
+                -- Handle NULL from regex (e.g., single name)
+                IF first_name IS NULL THEN
+                    first_name := full_name;
+                    last_name := '';
+                END IF;
+            ELSE
+                -- No space found - single name
+                first_name := full_name;
+                last_name := '';
+            END IF;
+
+            -- Ensure not null
+            first_name := COALESCE(TRIM(first_name), '');
+            last_name := COALESCE(TRIM(last_name), '');
+        END;
+        $$ LANGUAGE plpgsql IMMUTABLE;
+
+  # Transform from new schema to old schema
+  new_to_old:
+    # Simple 1:1 mappings
+    id: id
+    email: email
+    bio: bio
+    created_at: created_at
+    updated_at: updated_at
+
+    # Complex transformation: first_name, last_name → full_name
+    first_name:
+      type: "concat"
+      target_column: "full_name"
+      depends_on:
+        - last_name
+      function: "concat_names"
+      function_sql: |
+        CREATE OR REPLACE FUNCTION concat_names(first_name TEXT, last_name TEXT)
+        RETURNS TEXT AS $$
+        BEGIN
+            RETURN TRIM(CONCAT(
+                COALESCE(TRIM(first_name), ''),
+                ' ',
+                COALESCE(TRIM(last_name), '')
+            ));
+        END;
+        $$ LANGUAGE plpgsql IMMUTABLE;
+
+# Bidirectional sync triggers
+triggers:
+  # Trigger: Old → New
+  sync_to_new:
+    enabled: true
+    trigger_name: "trigger_sync_to_new_users"
+    function_name: "sync_to_new_users"
+    on_table: "public.users"
+    events:
+      - INSERT
+      - UPDATE
+      - DELETE
+    timing: AFTER
+    for_each: ROW
+    function_sql: |
+      CREATE OR REPLACE FUNCTION sync_to_new_users()
+      RETURNS TRIGGER AS $$
+      DECLARE
+          name_parts RECORD;
+      BEGIN
+          -- Guard against infinite loops
+          IF current_setting('migration.syncing', true) = 'true' THEN
+              RETURN NEW;
+          END IF;
+
+          PERFORM set_config('migration.syncing', 'true', true);
+
+          IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+              -- Split full_name
+              name_parts := split_full_name(NEW.full_name);
+
+              -- Upsert into new schema
+              INSERT INTO new_users.users (id, email, first_name, last_name, bio, created_at, updated_at)
+              VALUES (
+                  NEW.id,
+                  NEW.email,
+                  name_parts.first_name,
+                  name_parts.last_name,
+                  NEW.bio,
+                  NEW.created_at,
+                  NEW.updated_at
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                  email = EXCLUDED.email,
+                  first_name = EXCLUDED.first_name,
+                  last_name = EXCLUDED.last_name,
+                  bio = EXCLUDED.bio,
+                  updated_at = EXCLUDED.updated_at;
+
+          ELSIF TG_OP = 'DELETE' THEN
+              DELETE FROM new_users.users WHERE id = OLD.id;
+              PERFORM set_config('migration.syncing', 'false', true);
+              RETURN OLD;
+          END IF;
+
+          PERFORM set_config('migration.syncing', 'false', true);
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+  # Trigger: New → Old
+  sync_to_old:
+    enabled: true
+    trigger_name: "trigger_sync_to_old_users"
+    function_name: "sync_to_old_users"
+    on_table: "new_users.users"
+    events:
+      - INSERT
+      - UPDATE
+      - DELETE
+    timing: AFTER
+    for_each: ROW
+    function_sql: |
+      CREATE OR REPLACE FUNCTION sync_to_old_users()
+      RETURNS TRIGGER AS $$
+      DECLARE
+          full_name_value TEXT;
+      BEGIN
+          -- Guard against infinite loops
+          IF current_setting('migration.syncing', true) = 'true' THEN
+              RETURN NEW;
+          END IF;
+
+          PERFORM set_config('migration.syncing', 'true', true);
+
+          IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+              -- Concatenate names
+              full_name_value := concat_names(NEW.first_name, NEW.last_name);
+
+              -- Upsert into old schema
+              INSERT INTO public.users (id, email, full_name, bio, created_at, updated_at)
+              VALUES (
+                  NEW.id,
+                  NEW.email,
+                  full_name_value,
+                  NEW.bio,
+                  NEW.created_at,
+                  NEW.updated_at
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                  email = EXCLUDED.email,
+                  full_name = EXCLUDED.full_name,
+                  bio = EXCLUDED.bio,
+                  updated_at = EXCLUDED.updated_at;
+
+          ELSIF TG_OP = 'DELETE' THEN
+              DELETE FROM public.users WHERE id = OLD.id;
+              PERFORM set_config('migration.syncing', 'false', true);
+              RETURN OLD;
+          END IF;
+
+          PERFORM set_config('migration.syncing', 'false', true);
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+# Data migration settings
+data_migration:
+  # Batch settings
+  batch_size: 10000
+  throttle_ms: 100  # Delay between batches
+  parallel_workers: 1  # Start with 1, can increase if safe
+
+  # Progress tracking
+  checkpoint_interval: 1000  # Save progress every N batches
+  checkpoint_table: "migration_checkpoint"
+
+  # Verification settings
+  verify_batch: true
+  verify_sample_size: 100  # Verify N random rows per batch
+
+  # Error handling
+  max_retries: 3
+  retry_delay_ms: 5000
+  continue_on_error: false  # Stop on first error
+
+# Verification settings
+verification:
+  # Accuracy verification
+  sample_size: 10000
+  required_accuracy: 99.9  # Percentage
+
+  # Checks to run
+  checks:
+    - row_count_match
+    - data_integrity_sample
+    - index_exists
+    - trigger_functionality
+    - performance_benchmark
+
+  # Performance benchmarks
+  performance:
+    max_query_time_ms: 100
+    max_replication_lag_ms: 5000
+
+# Rollback configuration
+rollback:
+  # Automatic rollback conditions
+  auto_rollback_on:
+    - accuracy_below_threshold
+    - replication_lag_exceeded
+    - trigger_errors_threshold
+
+  # Rollback procedure
+  steps:
+    - switch_application_to_old_schema
+    - re_enable_triggers
+    - verify_old_schema_current
+    - sync_new_data_to_old
+
+  # Rollback timeout
+  max_rollback_time_minutes: 15
+
+# Monitoring and alerting
+monitoring:
+  # Metrics to track
+  metrics:
+    - replication_lag
+    - query_latency_p95
+    - error_rate
+    - rows_migrated
+    - transformation_accuracy
+
+  # Alert thresholds
+  alerts:
+    replication_lag_seconds: 5
+    error_rate_percentage: 0.1
+    query_latency_ms: 200
+
+  # Dashboard refresh interval
+  refresh_interval_seconds: 5
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "/var/log/confiture/migration_users_name_split.log"
+  log_format: "json"
+  include_sql: true
+  include_timing: true
+
+# Cleanup settings (after successful migration)
+cleanup:
+  # When to clean up (hours after cutover)
+  delay_hours: 48
+
+  # What to clean up
+  remove:
+    - old_to_new_trigger
+    - new_to_old_trigger
+    - fdw_server
+    - fdw_user_mapping
+    - transformation_functions
+
+  # What to keep (for rollback capability)
+  keep:
+    - old_schema  # Keep for 2 weeks
+    - new_schema
+    - migration_logs
+
+  # Final cleanup (drop old schema)
+  final_cleanup_delay_days: 14

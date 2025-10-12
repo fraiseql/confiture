@@ -1,0 +1,247 @@
+# Staging Database Configuration
+# Confiture Production Data Sync - Example 04
+#
+# This configuration defines connection settings for the staging database
+# (target for data sync operations with PII anonymization).
+#
+# SECURITY NOTES:
+# - This file should be committed to version control
+# - NEVER hardcode passwords - use environment variables
+# - Staging database receives anonymized production data
+
+# Database Connection
+host: staging-db.example.com    # Staging database hostname
+port: 5432                      # PostgreSQL port
+database: ecommerce_staging     # Database name
+user: confiture_sync_user       # Database user (needs write access)
+
+# Password (NEVER hardcode - use environment variable)
+password: ${STAGING_DB_PASSWORD}  # Resolves to $STAGING_DB_PASSWORD env var
+
+# SSL/TLS Configuration
+ssl_mode: prefer                # Options: disable, allow, prefer, require, verify-ca, verify-full
+                                # 'prefer' tries SSL, falls back to non-SSL
+ssl_cert: null                  # Path to client certificate (optional)
+ssl_key: null                   # Path to client key (optional)
+ssl_root_cert: null             # Path to CA certificate (optional)
+
+# Connection Pool Settings
+pool_size: 1                    # Single connection for sync operations
+max_overflow: 0                 # No additional connections needed
+pool_recycle: 3600              # Recycle connections after 1 hour (seconds)
+pool_pre_ping: true             # Verify connections before use
+
+# Timeouts
+connect_timeout: 30             # Connection timeout (seconds)
+statement_timeout: 7200         # Query timeout: 2 hours for large operations (seconds)
+idle_in_transaction_timeout: 600  # Idle transaction timeout: 10 minutes (seconds)
+
+# Read-Only Safety
+readonly: false                 # Allow writes (required for sync target)
+
+# Application Name (visible in pg_stat_activity)
+application_name: confiture_sync_target
+
+# Search Path (schema order)
+search_path: public             # Default schema
+
+# Encoding
+client_encoding: UTF8           # Character encoding
+
+# Transaction Isolation Level
+isolation_level: READ COMMITTED # Options: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
+
+# Query Logging (for debugging)
+log_queries: false              # Log all SQL queries (use for debugging only)
+log_query_duration_threshold: 10  # Log queries slower than 10 seconds
+
+# Retry Configuration
+max_retries: 3                  # Retry failed connections
+retry_delay: 5                  # Wait 5 seconds between retries
+
+# Performance Tuning
+fetch_size: 50000               # Larger batches for staging (faster writes)
+
+# Environment Metadata
+environment: staging
+description: "Staging e-commerce database (receives anonymized production data)"
+owner: "Engineering Team <engineering@example.com>"
+support_contact: "devops@example.com"
+
+# Tags (for organization)
+tags:
+  - staging
+  - anonymized-data
+  - development
+  - testing
+
+# AWS-Specific Settings (if using RDS)
+aws:
+  region: us-west-2
+  instance_id: staging-db-instance-01
+  backup_retention_days: 7      # Shorter retention for staging
+  multi_az: false               # Single AZ for cost savings
+
+# Monitoring
+monitoring:
+  enabled: true
+  slow_query_threshold_ms: 10000
+  connection_pool_threshold: 0.9  # Less strict for staging
+
+# Backup Configuration
+backup:
+  schedule: "0 3 * * 1"           # Weekly on Monday at 3 AM (after sync)
+  retention_days: 7               # Keep 1 week of backups
+  s3_bucket: staging-db-backups
+
+# Refresh Schedule
+refresh:
+  schedule: "0 2 * * 1"           # Weekly on Monday at 2 AM
+  source: production
+  anonymize: true
+  verification_required: true
+  auto_approve: false             # Require manual approval
+
+# Security Audit
+security:
+  last_credential_rotation: "2024-09-15"
+  credential_rotation_days: 90
+  requires_vpn: true
+  ip_whitelist:
+    - 10.0.0.0/8                  # Internal network
+    - 172.16.0.0/12               # VPN range
+    - 192.168.1.0/24              # Office network
+
+# Access Control
+access:
+  teams:
+    - name: Engineering
+      permission: read_write
+      members: 25
+    - name: QA
+      permission: read_only
+      members: 10
+    - name: Product
+      permission: read_only
+      members: 5
+
+  # Allowed operations
+  allow_ddl: true                 # Allow schema changes
+  allow_truncate: true            # Allow table truncation
+  allow_drop: false               # Prevent accidental drops
+
+# Data Retention
+data_retention:
+  policy: "Refresh weekly, purge old data"
+  max_age_days: 7                 # Data older than 7 days is replaced
+  anonymization_required: true    # Always anonymize before loading
+
+# Compliance
+compliance:
+  gdpr: true
+  data_classification: "Anonymized - Safe for Development"
+  pii_allowed: false              # No PII should exist in staging
+  audit_required: true            # Log all access
+
+# Post-Sync Actions
+post_sync:
+  # Reset sequences to match data
+  reset_sequences: true
+
+  # Create test users
+  create_test_users: true
+  test_users:
+    - email: admin@anon.local
+      role: admin
+    - email: developer@anon.local
+      role: developer
+    - email: tester@anon.local
+      role: tester
+
+  # Update feature flags for staging
+  feature_flags:
+    debug_mode: true
+    api_rate_limit: 10000         # Higher limits for testing
+    enable_test_payments: true
+    disable_emails: true          # Don't send emails from staging
+
+  # Grant permissions
+  grant_permissions:
+    - user: engineering_team
+      schema: public
+      privilege: SELECT, INSERT, UPDATE, DELETE
+    - user: qa_team
+      schema: public
+      privilege: SELECT
+
+# Notification Settings
+notifications:
+  # Notify on sync completion
+  on_sync_complete:
+    - type: slack
+      channel: "#engineering"
+      message: "Staging database refreshed with anonymized production data"
+
+    - type: email
+      to: engineering@example.com
+      subject: "Staging DB Refresh Complete"
+
+  # Notify on sync failure
+  on_sync_failure:
+    - type: slack
+      channel: "#engineering-alerts"
+      message: "Staging database sync FAILED - investigate immediately"
+
+    - type: pagerduty
+      service: staging-db-sync
+      severity: warning
+
+# Cost Optimization
+cost_optimization:
+  # Stop database during non-business hours
+  auto_stop:
+    enabled: false                # Don't auto-stop (needed for CI/CD)
+    schedule: "0 20 * * *"        # 8 PM
+    auto_start: "0 8 * * 1-5"     # 8 AM weekdays
+
+  # Use smaller instance type
+  instance_type: db.t3.large      # Smaller than production (db.r5.2xlarge)
+
+  # Reduce storage
+  storage_type: gp2               # General purpose (cheaper than io1)
+  allocated_storage_gb: 100       # Much smaller than production (500 GB)
+
+# Notes
+notes: |
+  Staging database for e-commerce platform development and testing.
+
+  Data Source:
+  - Synced from production weekly (Monday 2 AM)
+  - All PII anonymized per anonymization_config.yaml
+  - Verified for GDPR compliance
+
+  Access:
+  - VPN connection required
+  - Available to Engineering, QA, and Product teams
+  - No production credentials should work here
+
+  Data Characteristics:
+  - 100% anonymized production data
+  - ~1 week old (refreshed weekly)
+  - Safe for debugging, testing, demos
+
+  Testing Guidelines:
+  - Feel free to modify data (resets weekly)
+  - DO NOT use for load testing (use separate perf environment)
+  - DO NOT expose to external parties (internal only)
+
+  Maintenance Windows:
+  - Monday 2-4 AM PST (weekly refresh)
+
+  Contacts:
+  - DevOps Team: devops@example.com
+  - Engineering Lead: eng-lead@example.com
+
+  Useful Queries:
+  - Check last refresh: SELECT * FROM confiture_sync_metadata;
+  - Verify anonymization: \i verify_anonymization.sql

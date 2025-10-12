@@ -1,0 +1,14 @@
+name: local
+database:
+  host: localhost
+  port: 5432
+  database: confiture_tutorial
+  user: postgres
+  password: postgres
+
+# Which directories to include when building schema
+include_dirs:
+  - db/schema
+
+# Directories to exclude (none for this simple example)
+exclude_dirs: []

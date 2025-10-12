@@ -1,0 +1,142 @@
+# Production Database Configuration
+# Confiture Production Data Sync - Example 04
+#
+# This configuration defines connection settings for the production database
+# (source for data sync operations).
+#
+# SECURITY NOTES:
+# - This file should be committed to version control
+# - NEVER hardcode passwords - use environment variables
+# - Production credentials should be stored in a secure credential manager
+# - Use read-only credentials for sync operations
+
+# Database Connection
+host: prod-db.example.com       # Production database hostname
+port: 5432                      # PostgreSQL port
+database: ecommerce_prod        # Database name
+user: confiture_sync_user       # Database user (should be read-only)
+
+# Password (NEVER hardcode - use environment variable)
+password: ${PROD_DB_PASSWORD}   # Resolves to $PROD_DB_PASSWORD env var
+
+# SSL/TLS Configuration (REQUIRED for production)
+ssl_mode: require               # Options: disable, allow, prefer, require, verify-ca, verify-full
+ssl_cert: null                  # Path to client certificate (optional)
+ssl_key: null                   # Path to client key (optional)
+ssl_root_cert: null             # Path to CA certificate (optional)
+
+# For AWS RDS with IAM authentication:
+# iam_auth: true
+# iam_role: arn:aws:iam::123456789012:role/confiture-sync-role
+
+# Connection Pool Settings
+pool_size: 5                    # Maximum number of connections in pool
+max_overflow: 10                # Additional connections beyond pool_size
+pool_recycle: 3600              # Recycle connections after 1 hour (seconds)
+pool_pre_ping: true             # Verify connections before use
+
+# Timeouts
+connect_timeout: 30             # Connection timeout (seconds)
+statement_timeout: 3600         # Query timeout: 1 hour for pg_dump (seconds)
+idle_in_transaction_timeout: 600  # Idle transaction timeout: 10 minutes (seconds)
+
+# Read-Only Safety
+readonly: true                  # Prevent accidental writes to production
+                                # Confiture will reject any INSERT/UPDATE/DELETE
+
+# Application Name (visible in pg_stat_activity)
+application_name: confiture_sync
+
+# Search Path (schema order)
+search_path: public             # Default schema
+
+# Encoding
+client_encoding: UTF8           # Character encoding
+
+# Transaction Isolation Level
+isolation_level: READ COMMITTED # Options: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
+
+# Query Logging (for debugging)
+log_queries: false              # Log all SQL queries (use for debugging only)
+log_query_duration_threshold: 5 # Log queries slower than 5 seconds
+
+# Retry Configuration
+max_retries: 3                  # Retry failed connections
+retry_delay: 5                  # Wait 5 seconds between retries
+
+# Performance Tuning
+fetch_size: 10000               # Rows to fetch per cursor iteration
+
+# Environment Metadata
+environment: production
+description: "Production e-commerce database (READ-ONLY for sync)"
+owner: "Platform Team <platform@example.com>"
+support_contact: "dba@example.com"
+
+# Tags (for organization)
+tags:
+  - production
+  - read-only
+  - pii-source
+  - critical
+
+# AWS-Specific Settings (if using RDS)
+aws:
+  region: us-west-2
+  instance_id: prod-db-instance-01
+  backup_retention_days: 30
+  multi_az: true
+
+# Monitoring
+monitoring:
+  enabled: true
+  slow_query_threshold_ms: 5000
+  connection_pool_threshold: 0.8  # Alert if >80% of pool in use
+
+# Backup Configuration (informational - not used by Confiture)
+backup:
+  schedule: "0 2 * * *"           # Daily at 2 AM
+  retention_days: 30
+  s3_bucket: prod-db-backups
+
+# Security Audit
+security:
+  last_credential_rotation: "2024-09-15"
+  credential_rotation_days: 90
+  requires_vpn: true
+  ip_whitelist:
+    - 10.0.0.0/8                  # Internal network
+    - 172.16.0.0/12               # VPN range
+
+# Compliance
+compliance:
+  gdpr: true
+  hipaa: false
+  pci_dss: true
+  sox: true
+  data_classification: "Highly Sensitive"
+
+# Notes
+notes: |
+  Production database for e-commerce platform.
+
+  Access Requirements:
+  - VPN connection required
+  - MFA authentication enabled
+  - Read-only credentials only for sync operations
+
+  Emergency Contacts:
+  - DBA Team: dba@example.com
+  - On-Call: +1-555-123-4567
+
+  Maintenance Windows:
+  - Sunday 2-4 AM PST (weekly)
+
+  Data Volume:
+  - Database size: ~250 GB
+  - Row count: ~10M rows
+  - Tables: 45
+
+  Sync Schedule:
+  - Production → Staging: Weekly (Monday 2 AM)
+  - Estimated sync time: 35-45 minutes
