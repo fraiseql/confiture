@@ -6,11 +6,41 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 
 > **Part of the FraiseQL ecosystem** - While Confiture works standalone for any PostgreSQL project, it's designed to integrate seamlessly with FraiseQL's GraphQL-first approach.
 
-[![PyPI version](https://badge.fury.io/py/confiture.svg)](https://pypi.org/project/confiture/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+<div align="center">
+
+### 📦 Package Status
+
+[![PyPI version](https://img.shields.io/pypi/v/confiture?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/confiture/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/confiture?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/confiture?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/confiture/)
+[![PyPI - Wheel](https://img.shields.io/pypi/wheel/confiture?logo=pypi&logoColor=white)](https://pypi.org/project/confiture/)
+
+### 🔨 Build & Quality
+
+[![CI](https://img.shields.io/github/actions/workflow/status/evoludigit/confiture/ci.yml?branch=main&logo=github&label=CI)](https://github.com/evoludigit/confiture/actions/workflows/ci.yml)
+[![Build Wheels](https://img.shields.io/github/actions/workflow/status/evoludigit/confiture/wheels.yml?branch=main&logo=github&label=Wheels)](https://github.com/evoludigit/confiture/actions/workflows/wheels.yml)
+[![codecov](https://img.shields.io/codecov/c/github/evoludigit/confiture?logo=codecov&logoColor=white)](https://codecov.io/gh/evoludigit/confiture)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://github.com/python/mypy)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+
+### 🖥️ Platform Support
+
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white)](https://pypi.org/project/confiture/)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-blue?logo=apple&logoColor=white)](https://pypi.org/project/confiture/)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue?logo=windows&logoColor=white)](https://pypi.org/project/confiture/)
+[![PostgreSQL: 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
+### 📖 Project Info
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/fraiseql/confiture/workflows/CI/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/ci.yml)
-[![Wheels](https://github.com/fraiseql/confiture/workflows/Build%20Wheels/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/wheels.yml)
+[![GitHub stars](https://img.shields.io/github/stars/evoludigit/confiture?style=social)](https://github.com/evoludigit/confiture/stargazers)
+[![GitHub last commit](https://img.shields.io/github/last-commit/evoludigit/confiture?logo=github)](https://github.com/evoludigit/confiture/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/evoludigit/confiture?logo=github)](https://github.com/evoludigit/confiture/issues)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/evoludigit/confiture/graphs/commit-activity)
+[![Development Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/evoludigit/confiture)
+
+</div>
 
 ---
 
