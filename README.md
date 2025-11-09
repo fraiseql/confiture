@@ -14,7 +14,7 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://github.com/python/mypy)
 [![Made with Rust](https://img.shields.io/badge/Made%20with-Rust-orange?logo=rust)](https://www.rust-lang.org/)
 [![Part of FraiseQL](https://img.shields.io/badge/Part%20of-FraiseQL-ff69b4)](https://github.com/fraiseql/fraiseql)
-[![Status: Beta](https://img.shields.io/badge/status-beta-orange)](https://github.com/fraiseql/confiture)
+[![Status: Stable](https://img.shields.io/badge/status-stable-green)](https://github.com/fraiseql/confiture)
 
 ---
 
@@ -65,10 +65,10 @@ Complex migrations via FDW with 0-5 second downtime.
 ### Installation
 
 ```bash
-pip install confiture
+pip install fraiseql-confiture
 
 # Or with FraiseQL integration
-pip install confiture[fraiseql]
+pip install fraiseql-confiture[fraiseql]
 ```
 
 ### Initialize Project
@@ -200,7 +200,7 @@ confiture migrate up
 
 ## Development Status
 
-**Current Version**: 0.3.0-beta (Phase 3 Complete) 🎉
+**Current Version**: 0.2.0 (Production Release) 🎉
 
 **Milestone Progress**:
 - ✅ Phase 1: Python MVP (Complete - Oct 2025)
@@ -210,6 +210,11 @@ confiture migrate up
   - ✅ Production data sync with PII anonymization
   - ✅ Comprehensive documentation (5 guides, 4 API references)
   - ✅ Production examples (5 complete scenarios)
+- ✅ **CI/CD & Release Pipeline** (Complete - Nov 2025)
+  - ✅ Multi-platform wheel building (Linux, macOS, Windows)
+  - ✅ PyPI Trusted Publishing
+  - ✅ Quality gate with comprehensive checks
+  - ✅ Python 3.11, 3.12, 3.13 support verified
 - ⏳ Phase 4: Advanced Features (Q1 2026)
   - Migration hooks, wizards, dry-run mode
 
@@ -218,8 +223,9 @@ confiture migrate up
 - 📖 5 comprehensive user guides
 - 📚 4 API reference pages
 - 💡 5 production-ready examples
-- 🧪 95% test coverage
+- 🧪 89% test coverage (255 tests)
 - ⚡ 10-50x performance with Rust
+- 🚀 Production-ready CI/CD pipeline
 
 See [PHASES.md](PHASES.md) for detailed roadmap.
 
@@ -303,4 +309,4 @@ Confiture is part of the FraiseQL family:
 
 *Vibe-engineered with ❤️ by Lionel Hamayon*
 
-**[Documentation](https://github.com/fraiseql/confiture)** • **[GitHub](https://github.com/fraiseql/confiture)** • **[PyPI](https://pypi.org/project/confiture/)**
+**[Documentation](https://github.com/fraiseql/confiture)** • **[GitHub](https://github.com/fraiseql/confiture)** • **[PyPI](https://pypi.org/project/fraiseql-confiture/)**

@@ -7,10 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-11-09
+
 ### Added
-- GitHub Actions CI/CD for multi-platform wheel building
-- Automated PyPI publishing via trusted publisher
-- CI workflow for continuous testing across platforms
+- **Production-ready CI/CD workflows** inspired by FraiseQL patterns
+- GitHub Actions Quality Gate workflow (tests, lint, type-check, rust, security)
+- Multi-platform wheel building (Linux, macOS, Windows)
+- **PyPI Trusted Publishing** - secure publishing without API tokens
+- Python version matrix testing (3.11, 3.12, 3.13)
+- Comprehensive documentation for trusted publishing setup
+
+### Fixed
+- **CI database creation issue** - properly connect to postgres database when creating test databases
+- Quality gate blocking on any failed check (enforced quality standards)
+- PostgreSQL service configuration for consistent testing
+
+### Changed
+- Upgraded from alpha to stable release
+- Replaced legacy ci.yml with comprehensive quality-gate.yml
+- Merged wheels.yml into publish.yml with full release automation
+- Improved workflow documentation and setup guides
+
+### Infrastructure
+- Quality gate pattern with 6 parallel jobs
+- Security scanning with Bandit + Trivy
+- Rust checks (fmt + clippy) in CI
+- Automated GitHub Releases with artifacts
+- 255 tests passing with 89.35% coverage
 
 ## [0.2.0-alpha] - 2025-10-11
 
@@ -110,6 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.2.0 | 2025-11-09 | Production CI/CD, Trusted Publishing, Multi-platform wheels |
 | 0.2.0-alpha | 2025-10-11 | Rust performance layer, 10-50x speedup |
 | 0.1.0-alpha | 2025-10-11 | Core schema builder, CLI, migrations |
 | 0.0.1 | 2025-10-10 | Initial setup |

@@ -6,12 +6,12 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    0.1.0-alpha
+    0.2.0
 """
 
 from typing import Any
 
-__version__ = "0.1.0-alpha"
+__version__ = "0.2.0"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel@fraiseql.com"
 

@@ -1,6 +1,6 @@
 [project]
-name = "confiture"
-version = "0.2.0-alpha"
+name = "fraiseql-confiture"
+version = "0.2.0"
 description = "PostgreSQL migrations, sweetly done 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
