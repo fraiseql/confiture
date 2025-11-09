@@ -200,7 +200,12 @@ confiture migrate up
 
 ## Development Status
 
-**Current Version**: 0.2.0 (Production Release) 🎉
+**Current Version**: 0.3.0 (Production Release) 🎉
+
+**Recent Updates (v0.3.0)**:
+- ✅ Hexadecimal file sorting for better schema organization
+- ✅ Enhanced dynamic SQL file discovery
+- ✅ Recursive directory support with improved performance
 
 **Milestone Progress**:
 - ✅ Phase 1: Python MVP (Complete - Oct 2025)
@@ -215,17 +220,24 @@ confiture migrate up
   - ✅ PyPI Trusted Publishing
   - ✅ Quality gate with comprehensive checks
   - ✅ Python 3.11, 3.12, 3.13 support verified
+- ✅ **v0.3.0: Enhanced Schema Building** (Complete - Nov 2025)
+  - ✅ Hexadecimal file sorting (0x01_, 0x0A_, etc.)
+  - ✅ Dynamic discovery with patterns and filtering
+  - ✅ Recursive directory support
+  - ✅ Advanced configuration options
+  - ✅ Comprehensive feature documentation
 - ⏳ Phase 4: Advanced Features (Q1 2026)
   - Migration hooks, wizards, dry-run mode
 
 **Statistics**:
 - 📦 4 migration strategies implemented
-- 📖 5 comprehensive user guides
+- 📖 5 comprehensive user guides + 3 feature guides
 - 📚 4 API reference pages
 - 💡 5 production-ready examples
-- 🧪 89% test coverage (255 tests)
+- 🧪 89% test coverage (258 tests) - 3 new test files added
 - ⚡ 10-50x performance with Rust
 - 🚀 Production-ready CI/CD pipeline
+- 🔧 Advanced file discovery with hex sorting support
 
 See [PHASES.md](PHASES.md) for detailed roadmap.
 

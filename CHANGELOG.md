@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-11-XX
+
+### Added
+- **Hexadecimal Sorting** - Support for hex-prefixed schema files (e.g., `0x01_`, `0x0A_`) for better organization of large schemas
+- **Dynamic Discovery** - Enhanced SQL file discovery with include/exclude patterns, recursive directory control, and flexible project structures
+- **Recursive Directory Support** - Automatic discovery of SQL files in nested directory hierarchies with deterministic ordering
+- New configuration options for advanced file discovery (`include`, `exclude`, `recursive`, `order`, `auto_discover`)
+- Build configuration section with `sort_mode` option for hex vs alphabetical sorting
+- Comprehensive documentation for all new features with examples and migration guides
+- 3 new test files covering hex sorting, dynamic discovery, and recursive directories
+
+### Changed
+- Enhanced `include_dirs` configuration to support object format with advanced options while maintaining backward compatibility
+- Schema builder now supports multiple file naming conventions simultaneously
+- File discovery logic refactored for flexibility and performance
+- Updated documentation structure with dedicated features section
+
+### Documentation
+- Added 3 new feature documentation pages (hex sorting, dynamic discovery, recursive directories)
+- Updated organizing-sql-files.md with hex sorting examples and patterns
+- Enhanced configuration reference with new include_dirs options and build configuration
+- Updated main documentation index to highlight new v0.3.0 features
+
+### Performance
+- Improved file discovery caching for better performance with complex directory structures
+- Optimized recursive directory scanning algorithms
+
 ## [0.2.0] - 2025-11-09
 
 ### Added
