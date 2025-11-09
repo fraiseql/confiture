@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.0] - 2025-11-XX
+## [0.3.0] - 2025-11-09
 
 ### Added
 - **Hexadecimal Sorting** - Support for hex-prefixed schema files (e.g., `0x01_`, `0x0A_`) for better organization of large schemas
