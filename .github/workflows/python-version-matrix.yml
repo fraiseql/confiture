@@ -96,9 +96,9 @@ jobs:
 
     - name: Create test databases
       run: |
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_test || PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_test;"
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_source_test || PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_source_test;"
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_target_test || PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_target_test;"
+        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_test;"
+        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_source_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;"
+        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_target_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;"
 
     - name: Run tests with pytest
       env:

@@ -62,9 +62,9 @@ jobs:
 
     - name: Create test databases
       run: |
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_test;" || true
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_source_test;" || true
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_target_test;" || true
+        PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_test;" || true
+        PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;" || true
+        PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;" || true
 
     - name: Run core tests with coverage
       run: |
