@@ -1,5 +1,7 @@
 """Tests for recursive directory support in SchemaBuilder."""
 
+from confiture.core.builder import SchemaBuilder
+
 """Tests for recursive directory support feature.
 
 This module tests the SchemaBuilder's ability to recursively discover SQL files
@@ -12,7 +14,6 @@ Key features tested:
 - Directory ordering for consistent builds
 - Backward compatibility with string-based configurations
 """
-from confiture.core.builder import SchemaBuilder
 
 
 def test_recursive_directory_discovery(tmp_path):

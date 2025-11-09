@@ -1,5 +1,10 @@
 """Tests for dynamic schema discovery with glob patterns."""
 
+import pytest
+
+from confiture.core.builder import SchemaBuilder
+from confiture.exceptions import ConfigurationError
+
 """Tests for dynamic SQL file discovery feature.
 
 This module tests the SchemaBuilder's enhanced file discovery capabilities,
@@ -12,7 +17,6 @@ Key features tested:
 - Auto-discovery mode for flexible project structures
 - Multiple include directory configurations
 """
-from confiture.core.builder import SchemaBuilder
 
 
 def test_auto_discover_skips_missing_directories(tmp_path):
@@ -187,10 +191,6 @@ include_dirs:
   - path: {missing_dir}
     auto_discover: false
 """)
-
-    import pytest
-
-    from confiture.exceptions import ConfigurationError
 
     with pytest.raises(ConfigurationError, match="Include directory does not exist"):
         SchemaBuilder(env="test", project_dir=tmp_path)

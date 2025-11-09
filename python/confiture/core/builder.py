@@ -140,10 +140,10 @@ class SchemaBuilder:
                 )
 
         # Sort by order
-        self.include_configs.sort(key=lambda x: x["order"])
+        self.include_configs.sort(key=lambda x: int(x["order"]))  # type: ignore
 
         # Extract paths for backward compatibility
-        self.include_dirs = [cfg["path"] for cfg in self.include_configs]
+        self.include_dirs: list[Path] = [cfg["path"] for cfg in self.include_configs]  # type: ignore
 
         # Base directory for relative path calculation
         # Find the common parent of all include directories
@@ -214,7 +214,7 @@ class SchemaBuilder:
         except ValueError:
             return False
 
-    def _hex_sort_key(self, path: Path) -> tuple:
+    def _hex_sort_key(self, path: Path) -> tuple[float | int, str]:
         """Generate sort key for hexadecimal-prefixed files.
 
         Args:
@@ -252,7 +252,7 @@ class SchemaBuilder:
         all_sql_files = []
 
         for config in self.include_configs:
-            include_dir = config["path"]
+            include_dir: Path = config["path"]  # type: ignore
             recursive = config["recursive"]
             include_patterns = config["include"]
             exclude_patterns = config["exclude"]
@@ -266,7 +266,7 @@ class SchemaBuilder:
                     raise SchemaError(f"Include directory does not exist: {include_dir}")
 
             # Find files matching include patterns
-            for pattern in include_patterns:
+            for pattern in include_patterns:  # type: ignore
                 if recursive:
                     sql_files = list(include_dir.rglob(pattern))
                 else:
@@ -276,7 +276,8 @@ class SchemaBuilder:
                 for file in sql_files:
                     rel_path = file.relative_to(include_dir)
                     is_excluded = any(
-                        rel_path.match(exclude_pattern) for exclude_pattern in exclude_patterns
+                        rel_path.match(exclude_pattern)
+                        for exclude_pattern in exclude_patterns  # type: ignore
                     )
 
                     if not is_excluded:

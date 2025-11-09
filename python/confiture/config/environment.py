@@ -183,7 +183,7 @@ class Environment(BaseModel):
             raise ConfigurationError(f"Missing required field 'include_dirs' in {config_path}")
 
         # Resolve include_dirs paths to absolute
-        resolved_include_dirs = []
+        resolved_include_dirs: list[str | dict[str, Any]] = []
         for include_item in data["include_dirs"]:
             if isinstance(include_item, str):
                 # Simple string format - resolve to absolute path
