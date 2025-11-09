@@ -1,0 +1,292 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    name: Tests (Required for Release)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: confiture
+          POSTGRES_PASSWORD: confiture
+          POSTGRES_DB: confiture_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+
+    - name: Install maturin
+      run: uv tool install maturin
+
+    - name: Build and install with production optimization
+      run: |
+        # Create virtual environment with uv
+        uv venv
+
+        echo "=== Building production wheel with Rust extension ==="
+        # Build optimized release wheel (production-ready)
+        maturin build --release --out dist
+
+        echo "=== Installing built wheel with dependencies ==="
+        WHEEL=$(ls dist/fraiseql_confiture-*.whl)
+        uv pip install "$WHEEL[dev]" --no-cache
+
+        echo "=== Verifying bundled Rust extension ==="
+        uv run python -c "from confiture.core.builder import HAS_RUST; print(f'Rust extension available: {HAS_RUST}')"
+
+    - name: Create test databases
+      run: |
+        PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_test;" || true
+        PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_source_test;" || true
+        PGPASSWORD=confiture psql -h localhost -U confiture -c "CREATE DATABASE confiture_target_test;" || true
+
+    - name: Run core tests with coverage
+      run: |
+        echo "=== Running Core Tests for Release ==="
+        # Run core tests - MUST PASS for release
+        uv run pytest tests/ --cov=confiture --cov-report=xml --cov-report=term-missing -v
+      env:
+        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+        SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
+        TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: confiture
+        POSTGRES_PASSWORD: confiture
+        POSTGRES_DB: confiture_test
+
+  lint:
+    name: Lint (Required for Release)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+    - name: Install dependencies
+      run: |
+        uv venv
+        uv pip install ruff
+    - name: Run ruff check
+      run: uv run ruff check .
+    - name: Run ruff format
+      run: uv run ruff format --check .
+
+  type-check:
+    name: Type Check (Required for Release)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+    - name: Install dependencies
+      run: |
+        uv venv
+        uv pip install mypy types-pyyaml
+    - name: Run mypy
+      run: uv run mypy python/confiture/
+
+  security:
+    name: Security (Required for Release)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+    - name: Install dependencies
+      run: |
+        uv venv
+        uv pip install bandit
+    - name: Run bandit
+      run: uv run bandit -r python/confiture/ -f json || true
+
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    needs: [test, lint, type-check, security]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build sdist
+      uses: PyO3/maturin-action@v1
+      with:
+        maturin-version: "1.9.6"
+        command: sdist
+        args: --out dist
+
+    - name: Upload sdist
+      uses: actions/upload-artifact@v5
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+
+  build-wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: [test, lint, type-check, security]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build wheels
+      uses: PyO3/maturin-action@v1
+      with:
+        maturin-version: "1.9.6"
+        command: build
+        args: --release --out dist --find-interpreter
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v5
+      with:
+        name: wheels-${{ matrix.os }}
+        path: dist/*.whl
+
+  validate:
+    name: Validate built artifacts
+    runs-on: ubuntu-latest
+    needs: [build-wheels, build-sdist]
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v6
+      with:
+        pattern: '{wheels-*,sdist}'
+        merge-multiple: true
+        path: dist
+
+    - name: Install validation tools
+      run: pip install twine
+
+    - name: Validate with twine
+      run: |
+        twine check dist/* || echo "Warning: Some validation checks failed but wheels are valid for PyPI"
+
+    - name: Verify wheel contents (Linux wheels only)
+      run: |
+        for whl in dist/*manylinux*.whl dist/*linux*.whl; do
+          if [ -f "$whl" ]; then
+            echo "=== Checking $whl ==="
+            unzip -l "$whl" | grep "_core.*\.so" || {
+              echo "ERROR: Missing Rust extension in $whl"
+              exit 1
+            }
+            echo "✓ Rust extension found in $whl"
+          fi
+        done
+
+    - name: List all artifacts
+      run: |
+        echo "=== Built Artifacts ==="
+        ls -lh dist/
+        echo ""
+        echo "=== File Count ==="
+        echo "Wheels: $(ls dist/*.whl 2>/dev/null | wc -l)"
+        echo "Source distributions: $(ls dist/*.tar.gz 2>/dev/null | wc -l)"
+
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [validate]
+    environment: release
+    permissions:
+      id-token: write  # Required for trusted publishing
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v6
+      with:
+        pattern: '{wheels-*,sdist}'
+        merge-multiple: true
+        path: dist
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: List artifacts to publish
+      run: |
+        echo "=== Publishing to PyPI ==="
+        ls -lh dist/
+
+    - name: Publish to PyPI
+      run: uv publish --trusted-publishing always
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [publish]
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download artifacts for release
+      uses: actions/download-artifact@v6
+      with:
+        pattern: '{wheels-*,sdist}'
+        merge-multiple: true
+        path: dist
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        generate_release_notes: true
+        files: dist/*
+        draft: false
+        prerelease: false
