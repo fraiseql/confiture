@@ -12,6 +12,23 @@ from pydantic import BaseModel, Field, field_validator
 from confiture.exceptions import ConfigurationError
 
 
+class BuildConfig(BaseModel):
+    """Build configuration options."""
+
+    sort_mode: str = "alphabetical"  # Options: alphabetical, hex
+
+
+class DirectoryConfig(BaseModel):
+    """Directory configuration with pattern matching."""
+
+    path: str
+    recursive: bool = True
+    include: list[str] = Field(default_factory=lambda: ["**/*.sql"])
+    exclude: list[str] = Field(default_factory=list)
+    auto_discover: bool = True
+    order: int = 0
+
+
 class DatabaseConfig(BaseModel):
     """Database connection configuration.
 
@@ -79,20 +96,22 @@ class Environment(BaseModel):
     Attributes:
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
-        include_dirs: Directories to include when building schema
+        include_dirs: Directories to include when building schema (supports both string and dict formats)
         exclude_dirs: Directories to exclude from schema build
         migration_table: Table name for tracking migrations
         auto_backup: Whether to automatically backup before migrations
         require_confirmation: Whether to require user confirmation for risky operations
+        build: Build configuration options
     """
 
     name: str
     database_url: str
-    include_dirs: list[str]
+    include_dirs: list[str | DirectoryConfig]
     exclude_dirs: list[str] = Field(default_factory=list)
     migration_table: str = "confiture_migrations"
     auto_backup: bool = True
     require_confirmation: bool = True
+    build: BuildConfig = Field(default_factory=BuildConfig)
 
     @property
     def database(self) -> DatabaseConfig:
@@ -163,17 +182,40 @@ class Environment(BaseModel):
         if "include_dirs" not in data:
             raise ConfigurationError(f"Missing required field 'include_dirs' in {config_path}")
 
-        # Resolve paths to absolute
-        include_dirs = []
-        for dir_path in data["include_dirs"]:
-            abs_path = (project_dir / dir_path).resolve()
-            if not abs_path.exists():
+        # Resolve include_dirs paths to absolute
+        resolved_include_dirs = []
+        for include_item in data["include_dirs"]:
+            if isinstance(include_item, str):
+                # Simple string format - resolve to absolute path
+                abs_path = (project_dir / include_item).resolve()
+                if not abs_path.exists():
+                    raise ConfigurationError(
+                        f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
+                    )
+                resolved_include_dirs.append(str(abs_path))
+            elif isinstance(include_item, dict):
+                # Dict format - resolve the path field and keep as dict
+                path_str = include_item.get("path")
+                if not path_str:
+                    raise ConfigurationError(
+                        f"Missing 'path' field in include_dirs item: {include_item}\nIn {config_path}"
+                    )
+                abs_path = (project_dir / path_str).resolve()
+                auto_discover = include_item.get("auto_discover", True)
+                if not abs_path.exists() and not auto_discover:
+                    raise ConfigurationError(
+                        f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
+                    )
+                # Keep the dict format but with resolved path
+                resolved_item = include_item.copy()
+                resolved_item["path"] = str(abs_path)
+                resolved_include_dirs.append(resolved_item)
+            else:
                 raise ConfigurationError(
-                    f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
+                    f"Invalid include_dirs item type: {type(include_item)}. Expected str or dict.\nIn {config_path}"
                 )
-            include_dirs.append(str(abs_path))
 
-        data["include_dirs"] = include_dirs
+        data["include_dirs"] = resolved_include_dirs
 
         # Resolve exclude_dirs if present
         if "exclude_dirs" in data:
@@ -182,6 +224,9 @@ class Environment(BaseModel):
                 abs_path = (project_dir / dir_path).resolve()
                 exclude_dirs.append(str(abs_path))
             data["exclude_dirs"] = exclude_dirs
+
+        # Set environment name
+        data["name"] = env_name
 
         # Create Environment instance
         try:

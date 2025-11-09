@@ -45,7 +45,7 @@ class SchemaBuilder:
     """
 
     def __init__(self, env: str, project_dir: Path | None = None):
-        """Initialize SchemaBuilder
+        """Initialize SchemaBuilder with recursive directory support
 
         Args:
             env: Environment name (e.g., "local", "production")
@@ -57,8 +57,93 @@ class SchemaBuilder:
         if not self.env_config.include_dirs:
             raise SchemaError("No include_dirs specified in environment config")
 
-        # Store include dirs for file discovery
-        self.include_dirs = [Path(d) for d in self.env_config.include_dirs]
+        # Parse include_dirs (support string, dict, and DirectoryConfig formats)
+        self.include_configs = []
+        for include in self.env_config.include_dirs:
+            if isinstance(include, str):
+                self.include_configs.append(
+                    {
+                        "path": Path(include),
+                        "recursive": True,  # Default recursive for backward compatibility
+                        "include": ["**/*.sql"],
+                        "exclude": [],
+                        "auto_discover": True,
+                        "order": 0,
+                    }
+                )
+            elif isinstance(include, dict):
+                recursive = include.get("recursive", True)
+                default_include = ["**/*.sql"] if recursive else ["*.sql"]
+                self.include_configs.append(
+                    {
+                        "path": Path(include["path"]),
+                        "recursive": recursive,
+                        "include": include.get("include", default_include),
+                        "exclude": include.get("exclude", []),
+                        "auto_discover": include.get("auto_discover", True),
+                        "order": include.get("order", 0),
+                    }
+                )
+            elif hasattr(include, "path"):  # DirectoryConfig object
+                recursive = include.recursive
+                # If using default include pattern and recursive=False, adjust to non-recursive pattern
+                include_patterns = include.include
+                if include_patterns == ["**/*.sql"] and not recursive:
+                    include_patterns = ["*.sql"]
+                self.include_configs.append(
+                    {
+                        "path": Path(include.path),
+                        "recursive": recursive,
+                        "include": include_patterns,
+                        "exclude": include.exclude,
+                        "auto_discover": include.auto_discover,
+                        "order": include.order,
+                    }
+                )
+            elif isinstance(include, dict):
+                self.include_configs.append(
+                    {
+                        "path": Path(include["path"]),
+                        "recursive": include.get("recursive", True),
+                        "include": include.get("include", ["**/*.sql"]),
+                        "exclude": include.get("exclude", []),
+                        "auto_discover": include.get("auto_discover", True),
+                        "order": include.get("order", 0),
+                    }
+                )
+            elif hasattr(include, "path"):  # DirectoryConfig object
+                self.include_configs.append(
+                    {
+                        "path": Path(include.path),
+                        "recursive": include.recursive,
+                        "include": include.include,
+                        "exclude": include.exclude,
+                        "auto_discover": include.auto_discover,
+                        "order": include.order,
+                    }
+                )
+            elif isinstance(include, dict):
+                self.include_configs.append(
+                    {
+                        "path": Path(include["path"]),
+                        "recursive": include.get("recursive", True),
+                        "order": include.get("order", 0),
+                    }
+                )
+            elif hasattr(include, "path"):  # DirectoryConfig object
+                self.include_configs.append(
+                    {
+                        "path": Path(include.path),
+                        "recursive": include.recursive,
+                        "order": include.order,
+                    }
+                )
+
+        # Sort by order
+        self.include_configs.sort(key=lambda x: x["order"])
+
+        # Extract paths for backward compatibility
+        self.include_dirs = [cfg["path"] for cfg in self.include_configs]
 
         # Base directory for relative path calculation
         # Find the common parent of all include directories
@@ -102,11 +187,55 @@ class SchemaBuilder:
         # Reconstruct path from common parts
         return Path(*common_parts)
 
-    def find_sql_files(self) -> list[Path]:
-        """Discover SQL files in all include directories
+    def _is_hex_prefix(self, filename: str) -> bool:
+        """Check if filename starts with hexadecimal prefix.
 
-        Files are returned in deterministic alphabetical order. Use numbered
-        directories (00_common/, 10_tables/, 20_views/) to control ordering.
+        Hex prefixes must consist of valid hexadecimal characters where
+        all letters are uppercase, followed by an underscore.
+
+        Args:
+            filename: Filename to check
+
+        Returns:
+            True if filename starts with valid hex prefix
+        """
+        parts = filename.split("_", 1)
+        if len(parts) != 2:
+            return False
+        prefix = parts[0]
+
+        # Check that all letters are uppercase
+        if not all(c.isupper() or c.isdigit() for c in prefix):
+            return False
+
+        try:
+            int(prefix, 16)
+            return True
+        except ValueError:
+            return False
+
+    def _hex_sort_key(self, path: Path) -> tuple:
+        """Generate sort key for hexadecimal-prefixed files.
+
+        Args:
+            path: File path to generate sort key for
+
+        Returns:
+            Tuple for sorting: (hex_value, rest_of_filename) or (inf, filename)
+        """
+        filename = path.stem
+        if self._is_hex_prefix(filename):
+            parts = filename.split("_", 1)
+            hex_value = int(parts[0], 16)
+            rest = parts[1] if len(parts) > 1 else ""
+            return (hex_value, rest)
+        return (float("inf"), filename)
+
+    def find_sql_files(self) -> list[Path]:
+        """Discover SQL files with pattern matching
+
+        Files are returned in deterministic order based on configuration.
+        Supports glob patterns for include/exclude and auto-discovery.
 
         Returns:
             Sorted list of SQL file paths
@@ -122,16 +251,38 @@ class SchemaBuilder:
         """
         all_sql_files = []
 
-        # Collect SQL files from all include directories
-        for include_dir in self.include_dirs:
+        for config in self.include_configs:
+            include_dir = config["path"]
+            recursive = config["recursive"]
+            include_patterns = config["include"]
+            exclude_patterns = config["exclude"]
+            auto_discover = config["auto_discover"]
+
             if not include_dir.exists():
-                raise SchemaError(f"Include directory does not exist: {include_dir}")
+                if auto_discover:
+                    # Skip non-existent directories in auto-discover mode
+                    continue
+                else:
+                    raise SchemaError(f"Include directory does not exist: {include_dir}")
 
-            # Find all SQL files recursively in this directory
-            sql_files = list(include_dir.rglob("*.sql"))
-            all_sql_files.extend(sql_files)
+            # Find files matching include patterns
+            for pattern in include_patterns:
+                if recursive:
+                    sql_files = list(include_dir.rglob(pattern))
+                else:
+                    sql_files = list(include_dir.glob(pattern))
 
-        # Filter out excluded directories
+                # Filter out excluded patterns
+                for file in sql_files:
+                    rel_path = file.relative_to(include_dir)
+                    is_excluded = any(
+                        rel_path.match(exclude_pattern) for exclude_pattern in exclude_patterns
+                    )
+
+                    if not is_excluded:
+                        all_sql_files.append(file)
+
+        # Filter out excluded directories (legacy support)
         filtered_files = []
         exclude_paths = [Path(d) for d in self.env_config.exclude_dirs]
 
@@ -148,8 +299,20 @@ class SchemaBuilder:
                 f"Expected files in subdirectories like 00_common/, 10_tables/, etc."
             )
 
-        # Sort alphabetically for deterministic order
-        return sorted(filtered_files)
+        # Sort files based on configuration
+        if self.env_config.build.sort_mode == "hex":
+            # Check if any file has hex prefix
+            has_hex = any(self._is_hex_prefix(f.stem) for f in filtered_files)
+
+            if has_hex:
+                # Sort by hex value
+                return sorted(filtered_files, key=self._hex_sort_key)
+            else:
+                # Default alphabetical sort
+                return sorted(filtered_files)
+        else:
+            # Default alphabetical sort
+            return sorted(filtered_files)
 
     def build(self, output_path: Path | None = None) -> str:
         """Build schema by concatenating DDL files
