@@ -190,6 +190,9 @@ jobs:
         maturin-version: "1.9.6"
         command: build
         args: --release --out dist --find-interpreter
+      env:
+        # Constrain to Python 3.11-3.13 (avoid 3.14 until PyO3 support is confirmed)
+        PYO3_PYTHON: python3.11
 
     - name: Upload wheels
       uses: actions/upload-artifact@v5
