@@ -36,6 +36,54 @@ db/schema/
 
 ---
 
+## Hexadecimal Prefix Pattern (Advanced)
+
+### When to Use Hex Prefixes
+
+For large schemas requiring more than 9 main categories, or when you need clearer visual separation between major sections, use hexadecimal prefixes with `sort_mode: hex` in your configuration.
+
+### Hex Prefix Format
+
+```
+0x{HH}_{description}.sql
+
+Where:
+- 0x: Literal hex prefix
+- HH: Two hexadecimal digits (00-FF, allowing 255 categories)
+- _: Underscore separator
+- description: Human-readable name
+```
+
+### Example with Hex Sorting
+
+```yaml
+# db/environments/production.yaml
+build:
+  sort_mode: hex  # Enable hex sorting
+```
+
+```bash
+db/schema/
+├── 0x00_extensions.sql       # 0   - Extensions
+├── 0x01_security.sql         # 1   - Security
+├── 0x0A_users.sql            # 10  - User domain
+├── 0x0B_posts.sql            # 11  - Content domain
+├── 0x14_views.sql            # 20  - Views
+├── 0x1E_functions.sql        # 30  - Functions
+├── 0x28_triggers.sql         # 40  - Triggers
+└── 0xFF_finalize.sql         # 255 - Final steps
+```
+
+**Benefits**:
+- **255 possible categories** (vs 9 with decimal)
+- **Clear visual hierarchy** with hex notation
+- **Easy insertion** of new categories
+- **Deterministic sorting** across all locales
+
+**See [Hexadecimal Sorting](../features/hexadecimal-sorting.md)** for complete documentation.
+
+---
+
 ## Directory Organization Patterns
 
 ### Pattern 1: Flat Structure (Simple Projects)

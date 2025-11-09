@@ -147,6 +147,9 @@ Explore complete, production-ready examples:
 - CLI with rich terminal output
 - **Binary wheels** for Linux, macOS, Windows
 - FraiseQL integration
+- **Hexadecimal file sorting** (v0.3.0)
+- **Dynamic SQL discovery** with patterns (v0.3.0)
+- **Recursive directory support** (v0.3.0)
 
 ## Comparison
 
@@ -163,7 +166,9 @@ Explore complete, production-ready examples:
 
 - **[Getting Started](getting-started.md)** - Installation and first steps
 - **[User Guides](guides/migration-decision-tree.md)** - Complete guides for all 4 mediums
+- **[Features](features/hexadecimal-sorting.md)** - Advanced features documentation
 - **[CLI Reference](reference/cli.md)** - All commands documented
+- **[Configuration Reference](reference/configuration.md)** - Environment setup
 - **[API Reference](api/builder.md)** - Python API documentation
 - **[Examples](../examples/)** - Production-ready examples
 

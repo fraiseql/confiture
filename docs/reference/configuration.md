@@ -164,25 +164,59 @@ def load_config_with_secrets(env_name: str):
 
 ### `include_dirs`
 
-**Type**: Array of strings (relative or absolute paths)
+**Type**: Array of strings or objects
 **Required**: Yes
-**Description**: Directories to include when building schema (processed in alphabetical order)
+**Description**: Directories to include when building schema with advanced filtering and ordering options
+
+#### Simple String Format (Backward Compatible)
 
 ```yaml
 include_dirs:
   - db/schema/00_common
   - db/schema/10_tables
-  - db/seeds/common  # Include seeds in development
+  - db/seeds/common
 ```
+
+#### Advanced Object Format
+
+```yaml
+include_dirs:
+  - path: db/schema
+    recursive: true          # Default: true
+    include:                 # Include patterns (optional)
+      - "**/*.sql"
+    exclude:                 # Exclude patterns (optional)
+      - "**/*.bak"
+      - "**/temp/**"
+    order: 10                # Processing order (optional)
+    auto_discover: false     # Default: false
+```
+
+**Configuration Options**:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | string | required | Directory path (relative or absolute) |
+| `recursive` | boolean | `true` | Recursively discover files in subdirectories |
+| `include` | array[string] | `["**/*.sql"]` | Glob patterns for files to include |
+| `exclude` | array[string] | `[]` | Glob patterns for files to exclude |
+| `order` | integer | auto | Processing order (lower numbers first) |
+| `auto_discover` | boolean | `false` | Skip missing directories silently |
 
 **Path resolution**:
 - **Relative paths**: Resolved from project root (where `db/` directory is located)
 - **Absolute paths**: Used as-is
-- **Validation**: Confiture checks that all directories exist at load time
+- **Validation**: Confiture checks directory existence unless `auto_discover: true`
+
+**Pattern syntax**: Uses glob patterns with `**` for recursive matching:
+- `*` - Match any characters (non-recursive)
+- `**` - Match any characters (recursive)
+- `?` - Match single character
+- `[abc]` - Match any character in set
 
 **Ordering strategy**:
 
-Use numbered prefixes to control execution order:
+Use numbered prefixes or explicit `order` values to control execution order:
 
 ```
 db/schema/
@@ -199,16 +233,68 @@ db/schema/
 ```yaml
 # local.yaml (includes seeds)
 include_dirs:
-  - db/schema/00_common
-  - db/schema/10_tables
-  - db/seeds/common
-  - db/seeds/development
+  - path: db/schema
+    recursive: true
+  - path: db/seeds/common
+    order: 20
+  - path: db/seeds/development
+    order: 30
 
-# production.yaml (excludes seeds)
+# production.yaml (excludes development seeds)
 include_dirs:
-  - db/schema/00_common
-  - db/schema/10_tables
+  - path: db/schema
+    recursive: true
+  - path: db/seeds/common
+    order: 20
+    exclude:
+      - "**/development/**"
 ```
+
+---
+
+## Build Configuration
+
+### `build`
+
+**Type**: Object
+**Required**: No
+**Description**: Build-time configuration options
+
+```yaml
+build:
+  sort_mode: hex  # Enable hexadecimal file sorting
+```
+
+**Options**:
+
+#### `sort_mode`
+
+**Type**: string
+**Default**: `alphabetical`
+**Values**: `alphabetical`, `hex`
+**Description**: File sorting algorithm for deterministic builds
+
+```yaml
+# Alphabetical sorting (default)
+build:
+  sort_mode: alphabetical
+
+# Hexadecimal sorting for complex schemas
+build:
+  sort_mode: hex
+```
+
+**When to use hex sorting**:
+- Large schemas with 10+ main categories
+- Need more than 9 numbered prefixes
+- Clear visual hierarchy required
+
+**Hex sorting details**:
+- Files with `0x{HH}_` prefixes sort by hex value
+- Non-hex files sort alphabetically after hex files
+- Supports 255 possible categories (0x00-0xFF)
+
+**See [Hexadecimal Sorting](../features/hexadecimal-sorting.md)** for complete documentation.
 
 ---
 
