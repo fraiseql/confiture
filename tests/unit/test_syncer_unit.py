@@ -7,6 +7,7 @@ in isolation without requiring database connections.
 import json
 import tempfile
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -500,8 +501,10 @@ class TestDataclasses:
         )
 
         assert config.tables.include == ["users"]
-        assert "users" in config.anonymization
-        assert len(config.anonymization["users"]) == 2
+        assert config.anonymization is not None
+        anon_config = cast(dict[str, list], config.anonymization)
+        assert "users" in anon_config
+        assert len(anon_config["users"]) == 2
         assert config.batch_size == 1000
         assert config.resume is True
         assert config.show_progress is True
