@@ -4,9 +4,8 @@ Tests FDW setup logic, strategy selection, verification logic, and error handlin
 in isolation without requiring database connections.
 """
 
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock
 
-import psycopg
 import pytest
 from psycopg import sql
 
@@ -139,10 +138,7 @@ class TestStrategySelection:
         row_count = 1_000_000
 
         # Should select FDW
-        if row_count >= LARGE_TABLE_THRESHOLD:
-            strategy = "copy"
-        else:
-            strategy = "fdw"
+        strategy = "copy" if row_count >= LARGE_TABLE_THRESHOLD else "fdw"
 
         assert strategy == "fdw"
 
@@ -152,10 +148,7 @@ class TestStrategySelection:
         row_count = 50_000_000
 
         # Should select COPY
-        if row_count >= LARGE_TABLE_THRESHOLD:
-            strategy = "copy"
-        else:
-            strategy = "fdw"
+        strategy = "copy" if row_count >= LARGE_TABLE_THRESHOLD else "fdw"
 
         assert strategy == "copy"
 
@@ -164,10 +157,7 @@ class TestStrategySelection:
         row_count = LARGE_TABLE_THRESHOLD
 
         # Should select COPY (>= threshold)
-        if row_count >= LARGE_TABLE_THRESHOLD:
-            strategy = "copy"
-        else:
-            strategy = "fdw"
+        strategy = "copy" if row_count >= LARGE_TABLE_THRESHOLD else "fdw"
 
         assert strategy == "copy"
 
@@ -431,7 +421,6 @@ class TestAnalysisRecommendations:
     def test_recommendation_structure(self):
         """Test recommendation dictionary structure."""
         # Simulates the structure returned by analyze_tables
-        table_name = "users"
         row_count = 1000
         strategy = "fdw"
         estimated_seconds = 0.002
