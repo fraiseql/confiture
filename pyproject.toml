@@ -147,13 +147,22 @@ warn_unused_ignores = true
 warn_no_return = true
 follow_imports = "normal"
 ignore_missing_imports = false
+exclude = ["examples/.*"]
 
 [[tool.mypy.overrides]]
 module = "sqlparse.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "pydantic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "examples.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
 ignore_errors = true
 
 [dependency-groups]
