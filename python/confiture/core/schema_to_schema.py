@@ -286,7 +286,7 @@ class SchemaToSchemaMigrator:
                 )
 
                 cursor.execute(insert_query)
-                rows_migrated = cursor.rowcount
+                rows_migrated = cursor.rowcount or 0
 
             self.target_connection.commit()
             return rows_migrated
@@ -397,7 +397,7 @@ class SchemaToSchemaMigrator:
                     )
                 )
                 result = cursor.fetchone()
-                rows_migrated = result[0] if result else 0
+                rows_migrated = int(result[0]) if result else 0
 
             self.target_connection.commit()
             return rows_migrated

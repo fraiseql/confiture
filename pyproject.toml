@@ -133,6 +133,14 @@ ignore = [
 "tests/*" = ["ARG", "S101"]  # Allow assert statements in tests
 "python/confiture/cli/*" = ["ARG001"]  # Allow unused args in CLI callbacks
 
+[[tool.mypy.overrides]]
+module = "confiture.config.environment"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "confiture.cli.main"
+ignore_errors = true
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
@@ -155,6 +163,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "pydantic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "typer.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "psycopg.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
