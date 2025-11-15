@@ -125,9 +125,9 @@ def test_baseline_copy_performance(benchmark_databases):
         print(f"  Throughput: {rows_per_second:,.0f} rows/sec")
 
         # We expect at least 10K rows/sec even in worst case
-        assert rows_per_second > 10_000, (
-            f"COPY performance too low: {rows_per_second:.0f} rows/sec (expected >10K)"
-        )
+        assert (
+            rows_per_second > 10_000
+        ), f"COPY performance too low: {rows_per_second:.0f} rows/sec (expected >10K)"
 
         # Get metrics
         metrics = syncer.get_metrics()
@@ -172,9 +172,9 @@ def test_baseline_anonymization_performance(benchmark_databases):
         print("  Columns anonymized: 3 (email, phone, name)")
 
         # We expect at least 2K rows/sec even in worst case
-        assert rows_per_second > 2_000, (
-            f"Anonymization performance too low: {rows_per_second:.0f} rows/sec (expected >2K)"
-        )
+        assert (
+            rows_per_second > 2_000
+        ), f"Anonymization performance too low: {rows_per_second:.0f} rows/sec (expected >2K)"
 
         # Get metrics
         metrics = syncer.get_metrics()
@@ -262,9 +262,9 @@ def test_connection_overhead(benchmark_databases):
     print(f"  Max: {max_connection_time * 1000:.1f}ms")
 
     # Connection should be fast (<100ms)
-    assert avg_connection_time < 0.1, (
-        f"Connection overhead too high: {avg_connection_time * 1000:.0f}ms"
-    )
+    assert (
+        avg_connection_time < 0.1
+    ), f"Connection overhead too high: {avg_connection_time * 1000:.0f}ms"
 
 
 @pytest.mark.benchmark
