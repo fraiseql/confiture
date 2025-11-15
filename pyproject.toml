@@ -184,4 +184,5 @@ ignore_errors = true
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
+    "ruff==0.14.5",
 ]
