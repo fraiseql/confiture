@@ -428,18 +428,22 @@ def migrate_up(
 
         # Try to load environment config for migration settings
         effective_strict_mode = strict
-        if not strict and config.parent.name == "environments" and config.parent.parent.name == "db":
+        if (
+            not strict
+            and config.parent.name == "environments"
+            and config.parent.parent.name == "db"
+        ):
             # Check if config is in standard environments directory
-                try:
-                    from confiture.config.environment import Environment
+            try:
+                from confiture.config.environment import Environment
 
-                    env_name = config.stem  # e.g., "local" from "local.yaml"
-                    project_dir = config.parent.parent.parent
-                    env_config = Environment.load(env_name, project_dir=project_dir)
-                    effective_strict_mode = env_config.migration.strict_mode
-                except Exception:
-                    # If environment config loading fails, use default (False)
-                    pass
+                env_name = config.stem  # e.g., "local" from "local.yaml"
+                project_dir = config.parent.parent.parent
+                env_config = Environment.load(env_name, project_dir=project_dir)
+                effective_strict_mode = env_config.migration.strict_mode
+            except Exception:
+                # If environment config loading fails, use default (False)
+                pass
 
         # Create database connection
         conn = create_connection(config_data)
