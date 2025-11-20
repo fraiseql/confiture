@@ -326,7 +326,7 @@ class ProductionSyncer:
         # Get final count
         dst_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
         result = dst_cursor.fetchone()
-        return result[0] if result else 0
+        return int(result[0]) if result else 0
 
     def _sync_with_anonymization(
         self,

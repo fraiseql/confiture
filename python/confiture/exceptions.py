@@ -139,3 +139,54 @@ class RollbackError(ConfiturError):
     """
 
     pass
+
+
+class SQLError(ConfiturError):
+    """SQL execution error with detailed context
+
+    Raised when:
+    - SQL statement fails during migration execution
+    - Provides context about which SQL statement failed
+    - Includes original SQL and error details
+
+    Attributes:
+        sql: The SQL statement that failed
+        params: Query parameters (if any)
+        original_error: The underlying database error
+
+    Example:
+        >>> raise SQLError(
+        ...     "CREATE TABLE users (id INT PRIMARY KEY, name TEXT)",
+        ...     None,
+        ...     psycopg_error
+        ... )
+    """
+
+    def __init__(
+        self,
+        sql: str,
+        params: tuple[str, ...] | None,
+        original_error: Exception,
+    ):
+        self.sql = sql
+        self.params = params
+        self.original_error = original_error
+
+        # Create detailed error message
+        message_parts = ["SQL execution failed"]
+
+        # Add SQL snippet (first 100 chars)
+        sql_preview = sql.strip()[:100]
+        if len(sql.strip()) > 100:
+            sql_preview += "..."
+        message_parts.append(f"SQL: {sql_preview}")
+
+        # Add parameters if present
+        if params:
+            message_parts.append(f"Parameters: {params}")
+
+        # Add original error
+        message_parts.append(f"Error: {original_error}")
+
+        message = " | ".join(message_parts)
+        super().__init__(message)

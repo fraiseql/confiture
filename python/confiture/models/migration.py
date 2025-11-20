@@ -36,6 +36,9 @@ class Migration(ABC):
     version: str
     name: str
 
+    # Configuration attributes
+    strict_mode: bool = False  # Default: lenient error handling
+
     def __init__(self, connection: psycopg.Connection):
         """Initialize migration with database connection.
 
@@ -80,16 +83,42 @@ class Migration(ABC):
     def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         """Execute a SQL statement.
 
+        In strict mode:
+        - Validates statement success explicitly
+        - May check for PostgreSQL warnings (future enhancement)
+
+        In normal mode:
+        - Only fails on actual errors (default)
+        - Ignores notices and warnings
+
         Args:
             sql: SQL statement to execute
             params: Optional query parameters (for parameterized queries)
+
+        Raises:
+            SQLError: If SQL execution fails, with detailed context
 
         Example:
             >>> self.execute("CREATE TABLE users (id INT)")
             >>> self.execute("INSERT INTO users (name) VALUES (%s)", ("Alice",))
         """
-        with self.connection.cursor() as cursor:
-            if params:
-                cursor.execute(sql, params)
-            else:
-                cursor.execute(sql)
+        from confiture.exceptions import SQLError
+
+        try:
+            with self.connection.cursor() as cursor:
+                if params:
+                    cursor.execute(sql, params)
+                else:
+                    cursor.execute(sql)
+
+                # In strict mode, we could check for warnings here
+                # For now, this is a placeholder for future enhancement
+                if self.strict_mode:
+                    # TODO: Implement warning detection
+                    # PostgreSQL notices are sent via connection.notices
+                    # or through a notice handler
+                    pass
+
+        except Exception as e:
+            # Wrap the error with SQL context
+            raise SQLError(sql, params, e) from e

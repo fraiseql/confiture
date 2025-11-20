@@ -18,6 +18,12 @@ class BuildConfig(BaseModel):
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
 
 
+class MigrationConfig(BaseModel):
+    """Migration configuration options."""
+
+    strict_mode: bool = False  # Whether to fail on warnings/notices
+
+
 class DirectoryConfig(BaseModel):
     """Directory configuration with pattern matching."""
 
@@ -112,6 +118,7 @@ class Environment(BaseModel):
     auto_backup: bool = True
     require_confirmation: bool = True
     build: BuildConfig = Field(default_factory=BuildConfig)
+    migration: MigrationConfig = Field(default_factory=MigrationConfig)
 
     @property
     def database(self) -> DatabaseConfig:
