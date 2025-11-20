@@ -1,5 +1,6 @@
 # tests/e2e/test_cli_error_reporting.py
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -38,16 +39,20 @@ class FailingMigration(Migration):
         self.execute("DROP TABLE IF EXISTS users")
 """)
 
-        # Create test config
+        # Create test config using environment variables for credentials
         config_file = project_dir / "db" / "environments" / "local.yaml"
-        config_file.write_text("""
+        db_user = os.environ.get("POSTGRES_USER", "postgres")
+        db_password = os.environ.get("POSTGRES_PASSWORD", "postgres")
+        db_name = os.environ.get("POSTGRES_DB", "confiture_test")
+
+        config_file.write_text(f"""
 name: local
 database:
   host: localhost
   port: 5432
-  database: confiture_test
-  user: postgres
-  password: postgres
+  database: {db_name}
+  user: {db_user}
+  password: {db_password}
 include_dirs:
   - db/schema
 exclude_dirs: []
