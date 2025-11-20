@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2025-11-20
+
+### Added
+- **`--force` flag for `migrate up` command** - Force migration reapplication even when tracking shows migrations as already applied (#4)
+- Warning messages when force mode is enabled to prevent accidental misuse
+- New `Migrator.migrate_up()` method for complete migration workflow with force support
+- Comprehensive troubleshooting guide (`docs/guides/troubleshooting.md`) with 400+ lines covering common migration issues
+- `database_url` connection format support for simpler configuration
+
+### Changed
+- `Migrator.apply()` now accepts `force` parameter to skip "already applied" checks
+- Force mode skips migration state checks but still updates tracking after successful application
+- Enhanced CLI output with force-specific messages and warnings
+
+### Documentation
+- New `docs/guides/troubleshooting.md` - Complete troubleshooting guide
+- Updated `docs/reference/cli.md` - Full `--force` flag documentation with examples and safety warnings
+- Updated `README.md` - Added `--force` flag to feature list
+- Updated `docs/index.md` - Added troubleshooting guide link
+
+### Testing
+- Added `tests/unit/test_cli_migrate.py` - CLI flag parsing tests (4 tests)
+- Added `tests/unit/test_migrator.py` - Force logic unit tests (4 tests)
+- Added `tests/integration/test_migrate_force.py` - Complete force workflow integration tests (4 scenarios)
+
+### Fixed
+- Migration state tracking now correctly handles force reapplication
+- Connection handling improved with `database_url` support for testing workflows
+
 ## [0.3.0] - 2025-11-09
 
 ### Added
@@ -160,6 +189,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.3.2 | 2025-11-20 | --force flag for migrate up, troubleshooting guide, database_url support |
+| 0.3.0 | 2025-11-09 | Hexadecimal sorting, dynamic discovery, recursive directories |
 | 0.2.0 | 2025-11-09 | Production CI/CD, Trusted Publishing, Multi-platform wheels |
 | 0.2.0-alpha | 2025-10-11 | Rust performance layer, 10-50x speedup |
 | 0.1.0-alpha | 2025-10-11 | Core schema builder, CLI, migrations |
