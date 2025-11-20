@@ -39,7 +39,7 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
     """Create database connection from configuration.
 
     Args:
-        config: Configuration dictionary with 'database' section or DatabaseConfig instance
+        config: Configuration dictionary with 'database' section, 'database_url', or DatabaseConfig instance
 
     Returns:
         PostgreSQL connection
@@ -49,21 +49,33 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
     """
     from confiture.config.environment import DatabaseConfig
 
-    # Handle DatabaseConfig instance
-    if isinstance(config, DatabaseConfig):
-        config_dict = config.to_dict()
-        db_config = config_dict.get("database", {})
-    else:
-        db_config = config.get("database", {})
-
     try:
-        conn = psycopg.connect(
-            host=db_config.get("host", "localhost"),
-            port=db_config.get("port", 5432),
-            dbname=db_config.get("database", "postgres"),
-            user=db_config.get("user", "postgres"),
-            password=db_config.get("password", ""),
-        )
+        # Handle DatabaseConfig instance
+        if isinstance(config, DatabaseConfig):
+            config_dict = config.to_dict()
+            db_config = config_dict.get("database", {})
+            conn = psycopg.connect(
+                host=db_config.get("host", "localhost"),
+                port=db_config.get("port", 5432),
+                dbname=db_config.get("database", "postgres"),
+                user=db_config.get("user", "postgres"),
+                password=db_config.get("password", ""),
+            )
+        else:
+            # Check for database_url first
+            database_url = config.get("database_url")
+            if database_url:
+                conn = psycopg.connect(database_url)
+            else:
+                # Fall back to database section
+                db_config = config.get("database", {})
+                conn = psycopg.connect(
+                    host=db_config.get("host", "localhost"),
+                    port=db_config.get("port", 5432),
+                    dbname=db_config.get("database", "postgres"),
+                    user=db_config.get("user", "postgres"),
+                    password=db_config.get("password", ""),
+                )
         return conn
     except psycopg.Error as e:
         raise MigrationError(f"Failed to connect to database: {e}") from e

@@ -166,6 +166,7 @@ Explore complete, production-ready examples:
 
 - **[Getting Started](getting-started.md)** - Installation and first steps
 - **[User Guides](guides/migration-decision-tree.md)** - Complete guides for all 4 mediums
+- **[Troubleshooting](guides/troubleshooting.md)** - Common issues and solutions
 - **[Features](features/hexadecimal-sorting.md)** - Advanced features documentation
 - **[CLI Reference](reference/cli.md)** - All commands documented
 - **[Configuration Reference](reference/configuration.md)** - Environment setup

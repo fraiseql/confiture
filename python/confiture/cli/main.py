@@ -409,6 +409,11 @@ def migrate_up(
         "--strict",
         help="Enable strict mode (fail on warnings)",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Force migration application, skipping state checks",
+    ),
 ) -> None:
     """Apply pending migrations.
 
@@ -445,6 +450,15 @@ def migrate_up(
                 # If environment config loading fails, use default (False)
                 pass
 
+        # Show warnings for force mode before attempting database operations
+        if force:
+            console.print(
+                "[yellow]⚠️  Force mode enabled - skipping migration state checks[/yellow]"
+            )
+            console.print(
+                "[yellow]This may cause issues if applied incorrectly. Use with caution![/yellow]\n"
+            )
+
         # Create database connection
         conn = create_connection(config_data)
 
@@ -452,22 +466,34 @@ def migrate_up(
         migrator = Migrator(connection=conn)
         migrator.initialize()
 
-        # Find pending migrations
-        pending_migrations = migrator.find_pending(migrations_dir=migrations_dir)
-
-        if not pending_migrations:
-            console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
-            conn.close()
-            return
-
-        console.print(f"[cyan]📦 Found {len(pending_migrations)} pending migration(s)[/cyan]\n")
+        # Find migrations to apply
+        if force:
+            # In force mode, apply all migrations regardless of state
+            migrations_to_apply = migrator.find_migration_files(migrations_dir=migrations_dir)
+            if not migrations_to_apply:
+                console.print("[yellow]⚠️  No migration files found.[/yellow]")
+                conn.close()
+                return
+            console.print(
+                f"[cyan]📦 Force mode: Found {len(migrations_to_apply)} migration(s) to apply[/cyan]\n"
+            )
+        else:
+            # Normal mode: only apply pending migrations
+            migrations_to_apply = migrator.find_pending(migrations_dir=migrations_dir)
+            if not migrations_to_apply:
+                console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
+                conn.close()
+                return
+            console.print(
+                f"[cyan]📦 Found {len(migrations_to_apply)} pending migration(s)[/cyan]\n"
+            )
 
         # Apply migrations
         applied_count = 0
         failed_migration = None
         failed_exception = None
 
-        for migration_file in pending_migrations:
+        for migration_file in migrations_to_apply:
             # Load migration module
             module = load_migration_module(migration_file)
             migration_class = get_migration_class(module)
@@ -489,7 +515,7 @@ def migrate_up(
             )
 
             try:
-                migrator.apply(migration)
+                migrator.apply(migration, force=force)
                 console.print("[green]✅[/green]")
                 applied_count += 1
             except Exception as e:
@@ -511,7 +537,17 @@ def migrate_up(
             conn.close()
             raise typer.Exit(1)
         else:
-            console.print(f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]")
+            if force:
+                console.print(
+                    f"\n[green]✅ Force mode: Successfully applied {applied_count} migration(s)![/green]"
+                )
+                console.print(
+                    "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
+                )
+            else:
+                console.print(
+                    f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]"
+                )
             conn.close()
 
     except Exception as e:

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core.connection import get_migration_class, load_migration_module
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
@@ -170,12 +171,18 @@ class Migrator:
             else:
                 raise MigrationError(f"Failed to initialize migrations table: {e}") from e
 
-    def apply(self, migration: Migration) -> None:
+    def apply(self, migration: Migration, force: bool = False) -> None:
         """Apply a migration and record it in the tracking table.
 
         Uses savepoints for clean rollback on failure.
+
+        Args:
+            migration: Migration instance to apply
+            force: If True, skip the "already applied" check
         """
-        if self._is_applied(migration.version):
+        already_applied = self._is_applied(migration.version)
+
+        if not force and already_applied:
             raise MigrationError(
                 f"Migration {migration.version} ({migration.name}) has already been applied"
             )
@@ -189,7 +196,10 @@ class Migrator:
             migration.up()
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
 
-            self._record_migration(migration, execution_time_ms)
+            # Only record the migration if it's not already applied
+            # In force mode, we re-apply but don't re-record
+            if not already_applied:
+                self._record_migration(migration, execution_time_ms)
             self._release_savepoint(savepoint_name)
 
             self.connection.commit()
@@ -403,3 +413,47 @@ class Migrator:
         # Split on first underscore
         version = filename.split("_")[0]
         return version
+
+    def migrate_up(
+        self, force: bool = False, migrations_dir: Path | None = None, target: str | None = None
+    ) -> list[str]:
+        """Apply pending migrations up to target version.
+
+        Args:
+            force: If True, skip migration state checks and apply all migrations
+            migrations_dir: Custom migrations directory (default: db/migrations)
+            target: Target migration version (applies all if None)
+
+        Returns:
+            List of applied migration versions
+
+        Raises:
+            MigrationError: If migration application fails
+        """
+        # Find migrations to apply
+        if force:
+            # In force mode, apply all migrations regardless of state
+            migrations_to_apply = self.find_migration_files(migrations_dir)
+        else:
+            # Normal mode: only apply pending migrations
+            migrations_to_apply = self.find_pending(migrations_dir)
+
+        applied_versions = []
+
+        for migration_file in migrations_to_apply:
+            # Load migration module
+            module = load_migration_module(migration_file)
+            migration_class = get_migration_class(module)
+
+            # Create migration instance
+            migration = migration_class(connection=self.connection)
+
+            # Check target
+            if target and migration.version > target:
+                break
+
+            # Apply migration
+            self.apply(migration, force=force)
+            applied_versions.append(migration.version)
+
+        return applied_versions

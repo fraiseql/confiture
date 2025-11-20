@@ -167,6 +167,7 @@ confiture migrate up
 - ✅ Environment-specific seed data (development/test/production)
 - ✅ Schema diff detection with auto-generation
 - ✅ CLI with rich terminal output and colors
+- ✅ `--force` flag for migration reapplication
 - ✅ Comprehensive documentation (5 guides, 4 API docs)
 - ✅ Production-ready examples (5 complete scenarios)
 
@@ -200,9 +201,15 @@ confiture migrate up
 
 ## Development Status
 
-**Current Version**: 0.3.0 (Production Release) 🎉
+**Current Version**: 0.3.2 (Production Release) 🎉
 
-**Recent Updates (v0.3.0)**:
+**Recent Updates (v0.3.2)**:
+- ✅ `--force` flag for migration reapplication
+- ✅ Comprehensive troubleshooting guide with 400+ lines
+- ✅ `database_url` connection format support
+- ✅ Enhanced CLI warnings and safety messages
+
+**Previous Release (v0.3.0)**:
 - ✅ Hexadecimal file sorting for better schema organization
 - ✅ Enhanced dynamic SQL file discovery
 - ✅ Recursive directory support with improved performance
