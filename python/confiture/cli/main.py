@@ -385,6 +385,246 @@ def migrate_status(
         raise typer.Exit(1) from e
 
 
+@migrate_app.command("up")
+def migrate_up(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file",
+    ),
+    target: str = typer.Option(
+        None,
+        "--target",
+        "-t",
+        help="Target migration version (applies all if not specified)",
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Enable strict mode (fail on warnings)",
+    ),
+) -> None:
+    """Apply pending migrations.
+
+    Applies all pending migrations up to the target version (or all if no target).
+    """
+    from confiture.core.connection import (
+        create_connection,
+        get_migration_class,
+        load_config,
+        load_migration_module,
+    )
+    from confiture.core.migrator import Migrator
+
+    try:
+        # Load configuration
+        config_data = load_config(config)
+
+        # Try to load environment config for migration settings
+        effective_strict_mode = strict
+        if not strict and config.parent.name == "environments" and config.parent.parent.name == "db":
+            # Check if config is in standard environments directory
+                try:
+                    from confiture.config.environment import Environment
+
+                    env_name = config.stem  # e.g., "local" from "local.yaml"
+                    project_dir = config.parent.parent.parent
+                    env_config = Environment.load(env_name, project_dir=project_dir)
+                    effective_strict_mode = env_config.migration.strict_mode
+                except Exception:
+                    # If environment config loading fails, use default (False)
+                    pass
+
+        # Create database connection
+        conn = create_connection(config_data)
+
+        # Create migrator
+        migrator = Migrator(connection=conn)
+        migrator.initialize()
+
+        # Find pending migrations
+        pending_migrations = migrator.find_pending(migrations_dir=migrations_dir)
+
+        if not pending_migrations:
+            console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
+            conn.close()
+            return
+
+        console.print(f"[cyan]📦 Found {len(pending_migrations)} pending migration(s)[/cyan]\n")
+
+        # Apply migrations
+        applied_count = 0
+        failed_migration = None
+        failed_exception = None
+
+        for migration_file in pending_migrations:
+            # Load migration module
+            module = load_migration_module(migration_file)
+            migration_class = get_migration_class(module)
+
+            # Create migration instance
+            migration = migration_class(connection=conn)
+            # Override strict_mode from CLI/config if not already set on class
+            if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
+                migration.strict_mode = effective_strict_mode
+
+            # Check target
+            if target and migration.version > target:
+                console.print(f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]")
+                break
+
+            # Apply migration
+            console.print(
+                f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+            )
+
+            try:
+                migrator.apply(migration)
+                console.print("[green]✅[/green]")
+                applied_count += 1
+            except Exception as e:
+                console.print("[red]❌[/red]")
+                failed_migration = migration
+                failed_exception = e
+                break
+
+        # Handle results
+        if failed_migration:
+            console.print("\n[red]❌ Migration failed![/red]")
+            if applied_count > 0:
+                console.print(
+                    f"[yellow]⚠️  {applied_count} migration(s) were applied successfully before the failure.[/yellow]"
+                )
+
+            # Show detailed error information
+            _show_migration_error_details(failed_migration, failed_exception, applied_count)
+            conn.close()
+            raise typer.Exit(1)
+        else:
+            console.print(f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]")
+            conn.close()
+
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+def _show_migration_error_details(failed_migration, exception, applied_count: int) -> None:
+    """Show detailed error information for a failed migration with actionable guidance.
+
+    Args:
+        failed_migration: The Migration instance that failed
+        exception: The exception that was raised
+        applied_count: Number of migrations that succeeded before this one
+    """
+    from confiture.exceptions import MigrationError
+
+    console.print("\n[red]Failed Migration Details:[/red]")
+    console.print(f"  Version: {failed_migration.version}")
+    console.print(f"  Name: {failed_migration.name}")
+    console.print(f"  File: db/migrations/{failed_migration.version}_{failed_migration.name}.py")
+
+    # Analyze error type and provide specific guidance
+    error_message = str(exception)
+
+    # Check if this is a SQL error wrapped in a MigrationError
+    if "SQL execution failed" in error_message:
+        console.print("  Error Type: SQL Execution Error")
+
+        # Extract SQL and error details from the message
+        # Message format: "...SQL execution failed | SQL: ... | Error: ..."
+        parts = error_message.split(" | ")
+        sql_part = next((part for part in parts if part.startswith("SQL: ")), None)
+        error_part = next((part for part in parts if part.startswith("Error: ")), None)
+
+        if sql_part:
+            sql_content = sql_part[5:].strip()  # Remove "SQL: " prefix
+            console.print(
+                f"  SQL Statement: {sql_content[:100]}{'...' if len(sql_content) > 100 else ''}"
+            )
+
+        if error_part:
+            db_error = error_part[7:].strip()  # Remove "Error: " prefix
+            console.print(f"  Database Error: {db_error.split(chr(10))[0]}")
+
+            # Specific SQL error guidance
+            error_msg = db_error.lower()
+            if "syntax error" in error_msg:
+                console.print("\n[yellow]🔍 SQL Syntax Error Detected:[/yellow]")
+                console.print("  • Check for typos in SQL keywords, table names, or column names")
+                console.print(
+                    "  • Verify quotes, parentheses, and semicolons are properly balanced"
+                )
+                if sql_part:
+                    sql_content = sql_part[5:].strip()
+                    console.print(f'  • Test the SQL manually: psql -c "{sql_content}"')
+            elif "does not exist" in error_msg:
+                if "schema" in error_msg:
+                    console.print("\n[yellow]🔍 Missing Schema Error:[/yellow]")
+                    console.print(
+                        "  • Create the schema first: CREATE SCHEMA IF NOT EXISTS schema_name;"
+                    )
+                    console.print("  • Or use the public schema by default")
+                elif "table" in error_msg or "relation" in error_msg:
+                    console.print("\n[yellow]🔍 Missing Table Error:[/yellow]")
+                    console.print("  • Ensure dependent migrations ran first")
+                    console.print("  • Check table name spelling and schema qualification")
+                elif "function" in error_msg:
+                    console.print("\n[yellow]🔍 Missing Function Error:[/yellow]")
+                    console.print("  • Define the function before using it")
+                    console.print("  • Check function name and parameter types")
+            elif "already exists" in error_msg:
+                console.print("\n[yellow]🔍 Object Already Exists:[/yellow]")
+                console.print("  • Use IF NOT EXISTS clauses for safe creation")
+                console.print("  • Check if migration was partially applied")
+            elif "permission denied" in error_msg:
+                console.print("\n[yellow]🔍 Permission Error:[/yellow]")
+                console.print("  • Verify database user has required privileges")
+                console.print("  • Check GRANT statements in earlier migrations")
+
+    elif isinstance(exception, MigrationError):
+        console.print("  Error Type: Migration Framework Error")
+        console.print(f"  Message: {exception}")
+
+        # Migration-specific guidance
+        error_msg = str(exception).lower()
+        if "already been applied" in error_msg:
+            console.print("\n[yellow]🔍 Migration Already Applied:[/yellow]")
+            console.print("  • Check migration status: confiture migrate status")
+            console.print("  • This migration may have run successfully before")
+        elif "connection" in error_msg:
+            console.print("\n[yellow]🔍 Database Connection Error:[/yellow]")
+            console.print("  • Verify database is running and accessible")
+            console.print("  • Check connection string in config file")
+            console.print("  • Test connection: psql 'your-connection-string'")
+
+    else:
+        console.print(f"  Error Type: {type(exception).__name__}")
+        console.print(f"  Message: {exception}")
+
+    # General troubleshooting
+    console.print("\n[yellow]🛠️  General Troubleshooting:[/yellow]")
+    console.print(
+        f"  • View migration file: cat db/migrations/{failed_migration.version}_{failed_migration.name}.py"
+    )
+    console.print("  • Check database logs for more details")
+    console.print("  • Test SQL manually in psql")
+
+    if applied_count > 0:
+        console.print(f"  • {applied_count} migration(s) succeeded - database is partially updated")
+        console.print("  • Fix the error and re-run: confiture migrate up")
+        console.print(f"  • Or rollback and retry: confiture migrate down --steps {applied_count}")
+    else:
+        console.print("  • No migrations applied yet - database state is clean")
+        console.print("  • Fix the error and re-run: confiture migrate up")
+
+
 @migrate_app.command("generate")
 def migrate_generate(
     name: str = typer.Argument(..., help="Migration name (snake_case)"),
@@ -530,90 +770,6 @@ def migrate_diff(
             migration_file = generator.generate(diff, name=name)
 
             console.print(f"\n[green]✅ Migration generated: {migration_file.name}[/green]")
-
-    except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
-
-
-@migrate_app.command("up")
-def migrate_up(
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file",
-    ),
-    target: str = typer.Option(
-        None,
-        "--target",
-        "-t",
-        help="Target migration version (applies all if not specified)",
-    ),
-) -> None:
-    """Apply pending migrations.
-
-    Applies all pending migrations up to the target version (or all if no target).
-    """
-    from confiture.core.connection import (
-        create_connection,
-        get_migration_class,
-        load_config,
-        load_migration_module,
-    )
-    from confiture.core.migrator import Migrator
-
-    try:
-        # Load configuration
-        config_data = load_config(config)
-
-        # Create database connection
-        conn = create_connection(config_data)
-
-        # Create migrator
-        migrator = Migrator(connection=conn)
-        migrator.initialize()
-
-        # Find pending migrations
-        pending_migrations = migrator.find_pending(migrations_dir=migrations_dir)
-
-        if not pending_migrations:
-            console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
-            conn.close()
-            return
-
-        console.print(f"[cyan]📦 Found {len(pending_migrations)} pending migration(s)[/cyan]\n")
-
-        # Apply migrations
-        applied_count = 0
-        for migration_file in pending_migrations:
-            # Load migration module
-            module = load_migration_module(migration_file)
-            migration_class = get_migration_class(module)
-
-            # Create migration instance
-            migration = migration_class(connection=conn)
-
-            # Check target
-            if target and migration.version > target:
-                console.print(f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]")
-                break
-
-            # Apply migration
-            console.print(
-                f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
-            )
-            migrator.apply(migration)
-            console.print("[green]✅[/green]")
-            applied_count += 1
-
-        console.print(f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]")
-        conn.close()
 
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")

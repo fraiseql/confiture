@@ -92,8 +92,8 @@ class TestMigratorApplyEdgeCases:
         with pytest.raises(MigrationError, match="Failed to apply migration"):
             migrator.apply(mock_migration)
 
-        # Should rollback
-        mock_conn.rollback.assert_called()
+        # Should commit the savepoint rollback
+        mock_conn.commit.assert_called()
 
 
 class TestMigratorRollbackEdgeCases:

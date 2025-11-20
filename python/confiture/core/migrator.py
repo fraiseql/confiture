@@ -5,7 +5,7 @@ from pathlib import Path
 
 import psycopg
 
-from confiture.exceptions import MigrationError
+from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
 
@@ -34,6 +34,25 @@ class Migrator:
         """
         self.connection = connection
 
+    def _execute_sql(self, sql: str, params: tuple[str, ...] | None = None) -> None:
+        """Execute SQL with detailed error reporting.
+
+        Args:
+            sql: SQL statement to execute
+            params: Optional query parameters
+
+        Raises:
+            SQLError: If SQL execution fails with detailed context
+        """
+        try:
+            with self.connection.cursor() as cursor:
+                if params:
+                    cursor.execute(sql, params)
+                else:
+                    cursor.execute(sql)
+        except Exception as e:
+            raise SQLError(sql, params, e) from e
+
     def initialize(self) -> None:
         """Create confiture_migrations tracking table with modern identity trinity.
 
@@ -49,11 +68,11 @@ class Migrator:
             MigrationError: If table creation fails
         """
         try:
-            with self.connection.cursor() as cursor:
-                # Enable UUID extension
-                cursor.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+            # Enable UUID extension
+            self._execute_sql('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
-                # Check if table exists
+            # Check if table exists
+            with self.connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables
@@ -63,8 +82,9 @@ class Migrator:
                 result = cursor.fetchone()
                 table_exists = result[0] if result else False
 
-                if table_exists:
-                    # Check if we need to migrate old table structure
+            if table_exists:
+                # Check if we need to migrate old table structure
+                with self.connection.cursor() as cursor:
                     cursor.execute("""
                         SELECT EXISTS (
                             SELECT FROM information_schema.columns
@@ -75,134 +95,151 @@ class Migrator:
                     result = cursor.fetchone()
                     has_new_structure = result[0] if result else False
 
-                    if not has_new_structure:
-                        # Migrate old table structure to new trinity pattern
-                        cursor.execute("""
-                            ALTER TABLE confiture_migrations
-                            ADD COLUMN pk_migration UUID DEFAULT uuid_generate_v4() UNIQUE,
-                            ADD COLUMN slug TEXT,
-                            ALTER COLUMN id SET DATA TYPE BIGINT,
-                            ALTER COLUMN applied_at SET DATA TYPE TIMESTAMPTZ
-                        """)
-
-                        # Generate slugs for existing migrations
-                        cursor.execute("""
-                            UPDATE confiture_migrations
-                            SET slug = name || '_' || to_char(applied_at, 'YYYYMMDD_HH24MISS')
-                            WHERE slug IS NULL
-                        """)
-
-                        # Make slug NOT NULL and UNIQUE
-                        cursor.execute("""
-                            ALTER TABLE confiture_migrations
-                            ALTER COLUMN slug SET NOT NULL,
-                            ADD CONSTRAINT confiture_migrations_slug_unique UNIQUE (slug)
-                        """)
-
-                        # Create new indexes
-                        cursor.execute("""
-                            CREATE INDEX IF NOT EXISTS idx_confiture_migrations_pk_migration
-                                ON confiture_migrations(pk_migration)
-                        """)
-                        cursor.execute("""
-                            CREATE INDEX IF NOT EXISTS idx_confiture_migrations_slug
-                                ON confiture_migrations(slug)
-                        """)
-
-                else:
-                    # Create new table with trinity pattern
-                    cursor.execute("""
-                        CREATE TABLE confiture_migrations (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                            pk_migration UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
-                            slug TEXT NOT NULL UNIQUE,
-                            version VARCHAR(255) NOT NULL UNIQUE,
-                            name VARCHAR(255) NOT NULL,
-                            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                            execution_time_ms INTEGER,
-                            checksum VARCHAR(64)
-                        )
+                if not has_new_structure:
+                    # Migrate old table structure to new trinity pattern
+                    self._execute_sql("""
+                        ALTER TABLE confiture_migrations
+                        ADD COLUMN pk_migration UUID DEFAULT uuid_generate_v4() UNIQUE,
+                        ADD COLUMN slug TEXT,
+                        ALTER COLUMN id SET DATA TYPE BIGINT,
+                        ALTER COLUMN applied_at SET DATA TYPE TIMESTAMPTZ
                     """)
 
-                    # Create indexes
-                    cursor.execute("""
-                        CREATE INDEX idx_confiture_migrations_pk_migration
+                    # Generate slugs for existing migrations
+                    self._execute_sql("""
+                        UPDATE confiture_migrations
+                        SET slug = name || '_' || to_char(applied_at, 'YYYYMMDD_HH24MISS')
+                        WHERE slug IS NULL
+                    """)
+
+                    # Make slug NOT NULL and UNIQUE
+                    self._execute_sql("""
+                        ALTER TABLE confiture_migrations
+                        ALTER COLUMN slug SET NOT NULL,
+                        ADD CONSTRAINT confiture_migrations_slug_unique UNIQUE (slug)
+                    """)
+
+                    # Create new indexes
+                    self._execute_sql("""
+                        CREATE INDEX IF NOT EXISTS idx_confiture_migrations_pk_migration
                             ON confiture_migrations(pk_migration)
                     """)
-                    cursor.execute("""
-                        CREATE INDEX idx_confiture_migrations_slug
+                    self._execute_sql("""
+                        CREATE INDEX IF NOT EXISTS idx_confiture_migrations_slug
                             ON confiture_migrations(slug)
                     """)
-                    cursor.execute("""
-                        CREATE INDEX idx_confiture_migrations_version
-                            ON confiture_migrations(version)
-                    """)
-                    cursor.execute("""
-                        CREATE INDEX idx_confiture_migrations_applied_at
-                            ON confiture_migrations(applied_at DESC)
-                    """)
+
+            else:
+                # Create new table with trinity pattern
+                self._execute_sql("""
+                    CREATE TABLE confiture_migrations (
+                        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                        pk_migration UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
+                        slug TEXT NOT NULL UNIQUE,
+                        version VARCHAR(255) NOT NULL UNIQUE,
+                        name VARCHAR(255) NOT NULL,
+                        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        execution_time_ms INTEGER,
+                        checksum VARCHAR(64)
+                    )
+                """)
+
+                # Create indexes
+                self._execute_sql("""
+                    CREATE INDEX idx_confiture_migrations_pk_migration
+                        ON confiture_migrations(pk_migration)
+                """)
+                self._execute_sql("""
+                    CREATE INDEX idx_confiture_migrations_slug
+                        ON confiture_migrations(slug)
+                """)
+                self._execute_sql("""
+                    CREATE INDEX idx_confiture_migrations_version
+                        ON confiture_migrations(version)
+                """)
+                self._execute_sql("""
+                    CREATE INDEX idx_confiture_migrations_applied_at
+                        ON confiture_migrations(applied_at DESC)
+                """)
 
             self.connection.commit()
-        except psycopg.Error as e:
+        except Exception as e:
             self.connection.rollback()
-            raise MigrationError(f"Failed to initialize migrations table: {e}") from e
+            if isinstance(e, SQLError):
+                raise MigrationError(f"Failed to initialize migrations table: {e}") from e
+            else:
+                raise MigrationError(f"Failed to initialize migrations table: {e}") from e
 
     def apply(self, migration: Migration) -> None:
         """Apply a migration and record it in the tracking table.
 
-        This method:
-        1. Checks if migration was already applied
-        2. Executes migration.up() within a transaction
-        3. Records migration metadata (version, name, execution time)
-        4. Commits transaction
-
-        Args:
-            migration: Migration instance to apply
-
-        Raises:
-            MigrationError: If migration fails or was already applied
+        Uses savepoints for clean rollback on failure.
         """
-        # Check if already applied
         if self._is_applied(migration.version):
             raise MigrationError(
                 f"Migration {migration.version} ({migration.name}) has already been applied"
             )
 
+        savepoint_name = f"migration_{migration.version}"
+
         try:
-            # Start timing
+            self._create_savepoint(savepoint_name)
+
             start_time = time.perf_counter()
-
-            # Execute migration within transaction
             migration.up()
-
-            # Calculate execution time
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
 
-            # Record in tracking table with human-readable slug
-            # Format: migration-name_YYYYMMDD_HHMMSS
-            from datetime import datetime
+            self._record_migration(migration, execution_time_ms)
+            self._release_savepoint(savepoint_name)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            slug = f"{migration.name}_{timestamp}"
-
-            with self.connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO confiture_migrations
-                        (slug, version, name, execution_time_ms)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (slug, migration.version, migration.name, execution_time_ms),
-                )
-
-            # Commit transaction
             self.connection.commit()
 
         except Exception as e:
+            self._rollback_to_savepoint(savepoint_name)
+
+            if isinstance(e, MigrationError):
+                raise
+            else:
+                raise MigrationError(
+                    f"Failed to apply migration {migration.version} ({migration.name}): {e}"
+                ) from e
+
+    def _create_savepoint(self, name: str) -> None:
+        """Create a savepoint for transaction rollback."""
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"SAVEPOINT {name}")
+
+    def _release_savepoint(self, name: str) -> None:
+        """Release a savepoint (commit nested transaction)."""
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"RELEASE SAVEPOINT {name}")
+
+    def _rollback_to_savepoint(self, name: str) -> None:
+        """Rollback to a savepoint (undo nested transaction)."""
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            self.connection.commit()
+        except Exception:
+            # Savepoint rollback failed, do full rollback
             self.connection.rollback()
-            raise MigrationError(
-                f"Failed to apply migration {migration.version} ({migration.name}): {e}"
-            ) from e
+
+    def _record_migration(self, migration: Migration, execution_time_ms: int) -> None:
+        """Record migration in tracking table."""
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        slug = f"{migration.name}_{timestamp}"
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO confiture_migrations
+                    (slug, version, name, execution_time_ms)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (slug, migration.version, migration.name, execution_time_ms),
+            )
 
     def rollback(self, migration: Migration) -> None:
         """Rollback a migration and remove it from tracking table.
@@ -231,14 +268,13 @@ class Migrator:
             migration.down()
 
             # Remove from tracking table
-            with self.connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    DELETE FROM confiture_migrations
-                    WHERE version = %s
-                    """,
-                    (migration.version,),
-                )
+            self._execute_sql(
+                """
+                DELETE FROM confiture_migrations
+                WHERE version = %s
+                """,
+                (migration.version,),
+            )
 
             # Commit transaction
             self.connection.commit()

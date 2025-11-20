@@ -195,7 +195,7 @@ def clean_test_db(test_db_connection: psycopg.Connection) -> psycopg.Connection:
         with conn.cursor() as cur:
             # Drop all views
             cur.execute("""
-                SELECT tablename FROM pg_views
+                SELECT viewname FROM pg_views
                 WHERE schemaname = 'public'
             """)
             for (view_name,) in cur.fetchall():
