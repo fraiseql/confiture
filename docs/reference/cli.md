@@ -486,6 +486,7 @@ confiture migrate up [OPTIONS]
 | `--migrations-dir` | - | Path | `db/migrations` | Directory containing migration files |
 | `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file with database credentials |
 | `--target` | `-t` | String | (none) | Target migration version (applies all if not specified) |
+| `--force` | - | Flag | `false` | Force migration application, skipping state checks |
 
 #### Examples
 
@@ -501,7 +502,25 @@ confiture migrate up --config db/environments/production.yaml
 
 # Custom migrations directory
 confiture migrate up --migrations-dir custom/migrations
+
+# Force apply all migrations (skip state checks)
+confiture migrate up --force
 ```
+
+#### Force Mode Behavior
+
+The `--force` flag **skips migration state checks** and applies all migrations regardless of whether they've been applied before. This is useful for:
+
+- **Testing workflows**: Reapplying migrations after manual schema drops
+- **Development iteration**: Forcing reapplication during migration development
+- **Recovery scenarios**: Rebuilding databases from scratch
+
+**⚠️ Warning**: Force mode bypasses safety checks and may cause:
+- Duplicate data or schema conflicts
+- Performance issues from reapplying the same changes
+- Inconsistent database state
+
+**Use force mode only when you understand the risks and have verified the migrations are safe to reapply.**
 
 #### Output (Success)
 
@@ -512,6 +531,22 @@ confiture migrate up --migrations-dir custom/migrations
 ⚡ Applying 003_add_timestamps... ✅
 
 ✅ Successfully applied 2 migration(s)!
+```
+
+#### Output (Force Mode)
+
+```
+⚠️  Force mode enabled - skipping migration state checks
+This may cause issues if applied incorrectly. Use with caution!
+
+📦 Force mode: Found 3 migration(s) to apply
+
+⚡ Applying 001_create_users... ✅
+⚡ Applying 002_add_user_bio... ✅
+⚡ Applying 003_add_timestamps... ✅
+
+✅ Force mode: Successfully applied 3 migration(s)!
+⚠️  Remember to verify your database state after force application
 ```
 
 #### Output (No Pending)

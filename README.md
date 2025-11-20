@@ -167,6 +167,7 @@ confiture migrate up
 - ✅ Environment-specific seed data (development/test/production)
 - ✅ Schema diff detection with auto-generation
 - ✅ CLI with rich terminal output and colors
+- ✅ `--force` flag for migration reapplication
 - ✅ Comprehensive documentation (5 guides, 4 API docs)
 - ✅ Production-ready examples (5 complete scenarios)
 
