@@ -188,9 +188,12 @@ class LintReport:
         Returns:
             Multi-line string with summary of linting results
         """
+        tables_with_violations = {
+            v.location.split(".")[0] for v in self.violations
+        }
         lines = [
             f"Schema: {self.schema_name}",
-            f"Tables: {self.tables_checked} checked, {len(set(v.location.split('.')[0] for v in self.violations))} with violations",
+            f"Tables: {self.tables_checked} checked, {len(tables_with_violations)} with violations",
             f"Violations: {self.errors_count} errors, {self.warnings_count} warnings, {self.info_count} info",
             f"Time: {self.execution_time_ms}ms",
         ]
