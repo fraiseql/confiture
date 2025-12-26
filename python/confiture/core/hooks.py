@@ -13,10 +13,10 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from importlib.metadata import entry_points
 from typing import Any
 
 import psycopg
-from importlib.metadata import entry_points
 
 from confiture.exceptions import MigrationError
 
@@ -177,29 +177,46 @@ class HookRegistry:
         (entry_points().get("...")) API styles for compatibility.
         """
         try:
-            # Try Python 3.10+ style first
-            try:
-                eps = entry_points(group="confiture.hooks")
-            except TypeError:
-                # Fall back to Python 3.9 style
-                eps = entry_points().get("confiture.hooks", [])
-
+            eps = self._get_entry_points()
             for ep in eps:
-                try:
-                    hook_class = ep.load()
-                    # Validate it's a Hook subclass
-                    if not issubclass(hook_class, Hook):
-                        logger.warning(
-                            f"Entry point '{ep.name}' does not resolve to a Hook subclass, skipping"
-                        )
-                        continue
-                    self.register(ep.name, hook_class)
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to load hook from entry point {ep.name}: {e}"
-                    )
+                self._load_entry_point(ep)
         except Exception as e:
             logger.warning(f"Failed to load entry points: {e}")
+
+    def _get_entry_points(self) -> list:
+        """Get entry points from setuptools.
+
+        Tries Python 3.10+ style first, falls back to Python 3.9 style.
+
+        Returns:
+            List of entry points or empty list if none found.
+        """
+        try:
+            # Python 3.10+ style
+            return entry_points(group="confiture.hooks")
+        except TypeError:
+            # Python 3.9 style
+            return entry_points().get("confiture.hooks", [])
+
+    def _load_entry_point(self, ep) -> None:
+        """Load and register a single entry point.
+
+        Args:
+            ep: Entry point object with name and load() method.
+        """
+        try:
+            hook_class = ep.load()
+            if not issubclass(hook_class, Hook):
+                logger.warning(
+                    f"Entry point '{ep.name}' does not resolve to a Hook subclass, "
+                    "skipping"
+                )
+                return
+            self.register(ep.name, hook_class)
+        except Exception as e:
+            logger.warning(
+                f"Failed to load hook from entry point {ep.name}: {e}"
+            )
 
     def register(self, name: str, hook_class: type[Hook]) -> None:
         """Register a hook class by name.
@@ -323,60 +340,8 @@ class HookExecutor:
         )
 
         for hook in hooks:
-            hook_name = hook.__class__.__name__
-            start_time = time.time()
-
-            try:
-                # Log hook start
-                self.logger.debug(
-                    "hook_start",
-                    extra={
-                        "hook": hook_name,
-                        "phase": phase.name,
-                        "migration": context.migration_name,
-                    }
-                )
-
-                # Execute hook (in real implementation, wrap in savepoint)
-                result = hook.execute(conn, context)
-                duration_ms = int((time.time() - start_time) * 1000)
-
-                # Log hook completion
-                self.logger.info(
-                    "hook_completed",
-                    extra={
-                        "hook": hook_name,
-                        "phase": phase.name,
-                        "duration_ms": duration_ms,
-                        "rows_affected": result.rows_affected,
-                        "migration": context.migration_name,
-                    }
-                )
-
-                results.append(result)
-
-            except Exception as e:
-                duration_ms = int((time.time() - start_time) * 1000)
-
-                # Log hook failure
-                self.logger.error(
-                    "hook_failed",
-                    extra={
-                        "hook": hook_name,
-                        "phase": phase.name,
-                        "duration_ms": duration_ms,
-                        "error": str(e),
-                        "migration": context.migration_name,
-                    },
-                    exc_info=True
-                )
-
-                # Wrap any exception in HookError with context
-                raise HookError(
-                    hook_name=hook_name,
-                    phase=phase.name,
-                    error=e,
-                ) from e
+            result = self._execute_hook(hook, conn, phase, context)
+            results.append(result)
 
         # Log phase completion
         self.logger.info(
@@ -389,3 +354,79 @@ class HookExecutor:
         )
 
         return results
+
+    def _execute_hook(
+        self,
+        hook: Hook,
+        conn: psycopg.Connection,
+        phase: HookPhase,
+        context: HookContext,
+    ) -> HookResult:
+        """Execute a single hook with timing and logging.
+
+        Args:
+            hook: Hook instance to execute
+            conn: Database connection
+            phase: Hook phase
+            context: Hook context
+
+        Returns:
+            HookResult from hook execution
+
+        Raises:
+            HookError: If hook execution fails
+        """
+        hook_name = hook.__class__.__name__
+        start_time = time.time()
+
+        # Log hook start
+        self.logger.debug(
+            "hook_start",
+            extra={
+                "hook": hook_name,
+                "phase": phase.name,
+                "migration": context.migration_name,
+            }
+        )
+
+        try:
+            # Execute hook (in real implementation, wrap in savepoint)
+            result = hook.execute(conn, context)
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            # Log hook completion
+            self.logger.info(
+                "hook_completed",
+                extra={
+                    "hook": hook_name,
+                    "phase": phase.name,
+                    "duration_ms": duration_ms,
+                    "rows_affected": result.rows_affected,
+                    "migration": context.migration_name,
+                }
+            )
+
+            return result
+
+        except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            # Log hook failure
+            self.logger.error(
+                "hook_failed",
+                extra={
+                    "hook": hook_name,
+                    "phase": phase.name,
+                    "duration_ms": duration_ms,
+                    "error": str(e),
+                    "migration": context.migration_name,
+                },
+                exc_info=True
+            )
+
+            # Wrap any exception in HookError with context
+            raise HookError(
+                hook_name=hook_name,
+                phase=phase.name,
+                error=e,
+            ) from e

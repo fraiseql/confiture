@@ -4,10 +4,9 @@ This test suite validates that the HookRegistry can discover and load hooks
 from setuptools entry points, enabling third-party hook packages.
 """
 
-from unittest.mock import Mock, patch, MagicMock
-import pytest
+from unittest.mock import Mock, patch
 
-from confiture.core.hooks import Hook, HookPhase, HookRegistry, HookResult, HookContext
+from confiture.core.hooks import Hook, HookPhase, HookRegistry, HookResult
 
 
 class TestHookRegistryEntryPoints:
@@ -22,7 +21,7 @@ class TestHookRegistryEntryPoints:
     def test_load_entry_points_called_on_init(self):
         """HookRegistry should call _load_entry_points during initialization."""
         with patch.object(HookRegistry, "_load_entry_points") as mock_load:
-            registry = HookRegistry()
+            HookRegistry()
             mock_load.assert_called_once()
 
     def test_load_entry_points_discovers_entry_points(self):
@@ -186,13 +185,14 @@ class TestHookRegistryEntryPoints:
         mock_ep.name = "broken_hook"
         mock_ep.load.side_effect = ImportError("Module not found")
 
-        with patch("confiture.core.hooks.entry_points") as mock_entry_points:
-            with patch("confiture.core.hooks.logger") as mock_logger:
-                mock_entry_points.return_value = [mock_ep]
+        with patch("confiture.core.hooks.entry_points") as mock_entry_points, patch(
+            "confiture.core.hooks.logger"
+        ) as mock_logger:
+            mock_entry_points.return_value = [mock_ep]
 
-                registry = HookRegistry()
-                # Warning should be logged
-                mock_logger.warning.assert_called()
+            HookRegistry()
+            # Warning should be logged
+            mock_logger.warning.assert_called()
 
     def test_load_entry_points_with_multiple_hooks(self):
         """HookRegistry should load multiple hooks from entry points."""

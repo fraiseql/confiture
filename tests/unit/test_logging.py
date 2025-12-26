@@ -5,17 +5,18 @@ structured logging output for production observability.
 """
 
 from unittest.mock import Mock, patch
+
 import pytest
 
+from confiture.core.dry_run import DryRunExecutor
 from confiture.core.hooks import (
     Hook,
+    HookContext,
+    HookError,
+    HookExecutor,
     HookPhase,
     HookResult,
-    HookContext,
-    HookExecutor,
-    HookError,
 )
-from confiture.core.dry_run import DryRunExecutor
 
 
 class TestHookExecutorLogging:

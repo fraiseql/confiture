@@ -108,37 +108,8 @@ class DryRunExecutor:
         )
 
         try:
-            # Record start time for execution metrics
-            start_time = time.time()
-
-            # Execute migration (will raise if there are errors)
-            migration.up()
-
-            # Calculate execution time
-            execution_time_ms = int((time.time() - start_time) * 1000)
-
-            # In real implementation, would:
-            # - Detect locked tables via pg_locks
-            # - Calculate confidence based on lock time variance
-            # - Estimate production time with ±15% confidence
-
-            # Build result from successful execution
-            result = DryRunResult(
-                migration_name=migration.name,
-                migration_version=migration.version,
-                success=True,
-                execution_time_ms=execution_time_ms,
-                rows_affected=0,
-                locked_tables=[],
-                estimated_production_time_ms=execution_time_ms,  # Best estimate
-                confidence_percent=85,  # Default confidence
-                warnings=[],
-                stats={
-                    "measured_execution_ms": execution_time_ms,
-                    "estimated_range_low_ms": int(execution_time_ms * 0.85),
-                    "estimated_range_high_ms": int(execution_time_ms * 1.15),
-                },
-            )
+            execution_time_ms = self._execute_migration(migration)
+            result = self._build_result(migration, execution_time_ms)
 
             # Log dry-run completion
             self.logger.info(
@@ -166,3 +137,48 @@ class DryRunExecutor:
             )
 
             raise DryRunError(migration_name=migration.name, error=e) from e
+
+    def _execute_migration(self, migration) -> int:
+        """Execute migration and return execution time in milliseconds.
+
+        Args:
+            migration: Migration instance with up() method
+
+        Returns:
+            Execution time in milliseconds
+        """
+        start_time = time.time()
+        migration.up()
+        return int((time.time() - start_time) * 1000)
+
+    def _build_result(self, migration, execution_time_ms: int) -> DryRunResult:
+        """Build DryRunResult from execution metrics.
+
+        Args:
+            migration: Migration instance
+            execution_time_ms: Execution time in milliseconds
+
+        Returns:
+            DryRunResult with calculated metrics
+        """
+        # In real implementation, would:
+        # - Detect locked tables via pg_locks
+        # - Calculate confidence based on lock time variance
+        # - Estimate production time with ±15% confidence
+
+        return DryRunResult(
+            migration_name=migration.name,
+            migration_version=migration.version,
+            success=True,
+            execution_time_ms=execution_time_ms,
+            rows_affected=0,
+            locked_tables=[],
+            estimated_production_time_ms=execution_time_ms,  # Best estimate
+            confidence_percent=85,  # Default confidence
+            warnings=[],
+            stats={
+                "measured_execution_ms": execution_time_ms,
+                "estimated_range_low_ms": int(execution_time_ms * 0.85),
+                "estimated_range_high_ms": int(execution_time_ms * 1.15),
+            },
+        )
