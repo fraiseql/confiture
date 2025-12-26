@@ -57,6 +57,32 @@ class LintRule(ABC):
         """
         ...
 
+    def _create_violation(
+        self,
+        severity: LintSeverity,
+        message: str,
+        location: str,
+        suggested_fix: str | None = None,
+    ) -> Violation:
+        """Create a Violation with this rule's name.
+
+        Args:
+            severity: Severity level of the violation
+            message: Human-readable description
+            location: Where violation occurred (table, column, etc.)
+            suggested_fix: Optional fix suggestion
+
+        Returns:
+            Violation instance
+        """
+        return Violation(
+            rule_name=self.name,
+            severity=severity,
+            message=message,
+            location=location,
+            suggested_fix=suggested_fix,
+        )
+
 
 class NamingConventionRule(LintRule):
     """Enforce consistent naming conventions (snake_case by default)."""
@@ -77,8 +103,7 @@ class NamingConventionRule(LintRule):
             # Check table name
             if not self._is_valid_name(table.name, style):
                 violations.append(
-                    Violation(
-                        rule_name=self.name,
+                    self._create_violation(
                         severity=LintSeverity.ERROR,
                         message=f"Table '{table.name}' should use {style}",
                         location=f"Table: {table.name}",
@@ -90,8 +115,7 @@ class NamingConventionRule(LintRule):
             for column in table.columns:
                 if not self._is_valid_name(column.name, style):
                     violations.append(
-                        Violation(
-                            rule_name=self.name,
+                        self._create_violation(
                             severity=LintSeverity.ERROR,
                             message=(
                                 f"Column '{column.name}' should use {style}"
@@ -147,8 +171,7 @@ class PrimaryKeyRule(LintRule):
 
             if not has_pk:
                 violations.append(
-                    Violation(
-                        rule_name=self.name,
+                    self._create_violation(
                         severity=LintSeverity.ERROR,
                         message=f"Table '{table.name}' missing PRIMARY KEY",
                         location=f"Table: {table.name}",
@@ -181,8 +204,7 @@ class DocumentationRule(LintRule):
             comment = getattr(table, "comment", None)
             if not comment or not comment.strip():
                 violations.append(
-                    Violation(
-                        rule_name=self.name,
+                    self._create_violation(
                         severity=LintSeverity.WARNING,
                         message=(
                             f"Table '{table.name}' missing documentation"
@@ -238,8 +260,7 @@ class MultiTenantRule(LintRule):
 
                 if not has_tenant_id:
                     violations.append(
-                        Violation(
-                            rule_name=self.name,
+                        self._create_violation(
                             severity=LintSeverity.ERROR,
                             message=(
                                 f"Multi-tenant table '{table.name}' "
@@ -284,8 +305,7 @@ class MissingIndexRule(LintRule):
 
                 if not is_indexed:
                     violations.append(
-                        Violation(
-                            rule_name=self.name,
+                        self._create_violation(
                             severity=LintSeverity.WARNING,
                             message=(
                                 f"Foreign key '{column.name}' "
@@ -323,8 +343,7 @@ class SecurityRule(LintRule):
                     col_type = getattr(column, "column_type", "").upper()
                     if col_type in ("VARCHAR", "TEXT", "CHAR"):
                         violations.append(
-                            Violation(
-                                rule_name=self.name,
+                            self._create_violation(
                                 severity=LintSeverity.WARNING,
                                 message=(
                                     f"Column '{column.name}' may contain "
@@ -342,8 +361,7 @@ class SecurityRule(LintRule):
                 sensitive_words = ["token", "secret", "key"]
                 if any(word in column.name.lower() for word in sensitive_words):
                     violations.append(
-                        Violation(
-                            rule_name=self.name,
+                        self._create_violation(
                             severity=LintSeverity.WARNING,
                             message=(
                                 f"Column '{column.name}' contains "
@@ -417,6 +435,22 @@ class SchemaLinter:
         """
         start_time = time.time()
 
+        # Build and parse schema
+        tables = self._load_and_parse_schema()
+
+        # Execute linting rules
+        all_violations = self._execute_rules(tables)
+
+        # Build and return report
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        return self._create_report(all_violations, tables, execution_time_ms)
+
+    def _load_and_parse_schema(self) -> list[Any]:
+        """Load schema from DDL files and parse into table objects.
+
+        Returns:
+            List of parsed table objects
+        """
         # Build schema from DDL files
         schema_content = self.builder.build()
 
@@ -425,12 +459,20 @@ class SchemaLinter:
 
         # Filter excluded tables
         excluded_tables = set(self.config.exclude_tables)
-        tables = [
+        return [
             t for t in tables
             if t.name not in excluded_tables
         ]
 
-        # Execute each rule
+    def _execute_rules(self, tables: list[Any]) -> list[Violation]:
+        """Execute all enabled linting rules against tables.
+
+        Args:
+            tables: List of parsed table objects
+
+        Returns:
+            List of all violations found by all rules
+        """
         all_violations = []
         for rule_name, rule in self.rules.items():
             if rule_name not in self.config.rules:
@@ -440,24 +482,39 @@ class SchemaLinter:
             violations = rule.lint(tables, rule_config)
             all_violations.extend(violations)
 
-        # Build report
+        return all_violations
+
+    def _create_report(
+        self,
+        violations: list[Violation],
+        tables: list[Any],
+        execution_time_ms: int,
+    ) -> LintReport:
+        """Create a LintReport from violations and metrics.
+
+        Args:
+            violations: List of violations found
+            tables: List of tables that were checked
+            execution_time_ms: Time taken to lint in milliseconds
+
+        Returns:
+            Populated LintReport instance
+        """
         errors = [
-            v for v in all_violations
+            v for v in violations
             if v.severity == LintSeverity.ERROR
         ]
         warnings = [
-            v for v in all_violations
+            v for v in violations
             if v.severity == LintSeverity.WARNING
         ]
         infos = [
-            v for v in all_violations
+            v for v in violations
             if v.severity == LintSeverity.INFO
         ]
 
-        execution_time_ms = int((time.time() - start_time) * 1000)
-
         return LintReport(
-            violations=all_violations,
+            violations=violations,
             schema_name=self.env,
             tables_checked=len(tables),
             columns_checked=sum(len(t.columns) for t in tables),

@@ -40,6 +40,22 @@ def format_lint_report(
         return ""
 
 
+def _severity_string(severity: LintSeverity) -> str:
+    """Format severity level with color.
+
+    Args:
+        severity: Severity level to format
+
+    Returns:
+        Colored severity string for Rich output
+    """
+    if severity == LintSeverity.ERROR:
+        return "[red]ERROR[/red]"
+    elif severity == LintSeverity.WARNING:
+        return "[yellow]WARNING[/yellow]"
+    return "[blue]INFO[/blue]"
+
+
 def format_table(report: LintReport, console: Console) -> None:
     """Display LintReport as a rich table.
 
@@ -72,16 +88,8 @@ def format_table(report: LintReport, console: Console) -> None:
         ),
         reverse=True,
     ):
-        # Color severity
-        if violation.severity == LintSeverity.ERROR:
-            severity_str = "[red]ERROR[/red]"
-        elif violation.severity == LintSeverity.WARNING:
-            severity_str = "[yellow]WARNING[/yellow]"
-        else:
-            severity_str = "[blue]INFO[/blue]"
-
         table.add_row(
-            severity_str,
+            _severity_string(violation.severity),
             violation.rule_name,
             violation.location,
             violation.message,
