@@ -7,6 +7,7 @@ This module provides dry-run capability for migrations, allowing operators to:
 - Detect constraint violations early
 """
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,6 +15,9 @@ from typing import Any
 import psycopg
 
 from confiture.exceptions import MigrationError
+
+# Logger for dry-run execution
+logger = logging.getLogger(__name__)
 
 
 class DryRunError(MigrationError):
@@ -67,7 +71,12 @@ class DryRunExecutor:
     - Estimation of production execution time
     - Detection of constraint violations
     - Confidence level for estimates
+    - Structured logging for observability
     """
+
+    def __init__(self):
+        """Initialize dry-run executor."""
+        self.logger = logger
 
     def run(
         self,
@@ -89,6 +98,15 @@ class DryRunExecutor:
         Raises:
             DryRunError: If migration execution fails
         """
+        # Log dry-run start
+        self.logger.info(
+            "dry_run_start",
+            extra={
+                "migration": migration.name,
+                "version": migration.version,
+            }
+        )
+
         try:
             # Record start time for execution metrics
             start_time = time.time()
@@ -122,7 +140,29 @@ class DryRunExecutor:
                 },
             )
 
+            # Log dry-run completion
+            self.logger.info(
+                "dry_run_completed",
+                extra={
+                    "migration": migration.name,
+                    "version": migration.version,
+                    "execution_time_ms": execution_time_ms,
+                    "success": True,
+                }
+            )
+
             return result
 
         except Exception as e:
+            # Log dry-run failure
+            self.logger.error(
+                "dry_run_failed",
+                extra={
+                    "migration": migration.name,
+                    "version": migration.version,
+                    "error": str(e),
+                },
+                exc_info=True
+            )
+
             raise DryRunError(migration_name=migration.name, error=e) from e
