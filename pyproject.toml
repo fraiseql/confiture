@@ -37,7 +37,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-watch>=4.2.0",
     "ruff>=0.6.0",
-    "ty>=0.0.7",
+    "ty>=0.0.7",  # Astral's ultra-fast type checker (replaces mypy)
     "maturin>=1.7.0",
 ]
 

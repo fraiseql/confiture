@@ -48,7 +48,7 @@ def test_project_structure_exists():
 **GREEN Phase**:
 - Create directory structure
 - Set up `pyproject.toml`
-- Configure `pytest`, `ruff`, `mypy`
+- Configure `pytest`, `ruff`, `ty` (type checker)
 - Add `.gitignore`, `.python-version`
 
 **REFACTOR Phase**:
@@ -60,7 +60,7 @@ def test_project_structure_exists():
 ```bash
 uv run pytest tests/unit/test_project_structure.py
 uv run ruff check .
-uv run mypy python/confiture/
+uv run ty check python/confiture/
 ```
 
 **Deliverables**:
@@ -836,7 +836,7 @@ uv run pytest tests/ -v --cov=confiture --cov-report=html
 
 # Quality checks
 uv run ruff check .
-uv run mypy python/confiture/
+uv run ty check python/confiture/
 
 # Integration tests with real PostgreSQL
 uv run pytest tests/integration/ -v
@@ -847,7 +847,7 @@ uv run pytest tests/e2e/ -v
 
 **Quality Gates**:
 - ✅ Test coverage >90%
-- ✅ No type errors (mypy strict mode)
+- ✅ No type errors (ty type checker)
 - ✅ No linting errors (ruff)
 - ✅ All E2E tests pass
 - ✅ Documentation complete
@@ -1619,7 +1619,7 @@ uv publish
 - ✅ 223 tests passing (88.35% coverage)
 - ✅ 6 schema-to-schema integration tests
 - ✅ All integration tests passing
-- ✅ Type checking passing (mypy)
+- ✅ Type checking passing (ty type checker)
 - ✅ Linting passing (ruff)
 
 **Next Steps:**

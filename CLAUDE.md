@@ -413,8 +413,8 @@ uv run ruff format .
 # Check code
 uv run ruff check .
 
-# Type checking
-uv run mypy python/confiture/
+# Type checking (using Astral's ty type checker)
+uv run ty check python/confiture/
 ```
 
 ### Pre-commit Hooks
@@ -428,13 +428,10 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [types-pyyaml]
 ```
+
+Note: Type checking is handled by Astral's `ty` in CI/CD (see quality-gate.yml).
+For local type checking, run: `uv run ty check python/confiture/`
 
 ---
 
@@ -588,7 +585,7 @@ Brief description of changes
 ## Checklist
 - [x] Tests pass (`uv run pytest`)
 - [x] Code formatted (`uv run ruff format`)
-- [x] Type checking passes (`uv run mypy`)
+- [x] Type checking passes (`uv run ty check python/confiture/`)
 - [x] Documentation updated
 - [x] PHASES.md updated (if applicable)
 
