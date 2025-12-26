@@ -144,12 +144,11 @@ jobs:
         python-version: '3.11'
     - name: Install uv
       uses: astral-sh/setup-uv@v7
-    - name: Install dependencies
+    - name: Install ty (Astral type checker)
       run: |
-        uv venv
-        uv pip install mypy types-pyyaml
-    - name: Run mypy
-      run: uv run mypy python/confiture/
+        uv tool install ty
+    - name: Run ty type check
+      run: ty check python/confiture/
 
   rust-checks:
     name: Rust Checks
