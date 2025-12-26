@@ -1,16 +1,15 @@
 """Tests for individual linting rules."""
 
-import pytest
 
 from confiture.core.linting import (
+    DocumentationRule,
+    MissingIndexRule,
+    MultiTenantRule,
     NamingConventionRule,
     PrimaryKeyRule,
-    DocumentationRule,
-    MultiTenantRule,
-    MissingIndexRule,
     SecurityRule,
 )
-from confiture.models.lint import Violation, LintSeverity
+from confiture.models.lint import LintSeverity
 
 
 # Mock Table and Column classes for testing

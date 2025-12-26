@@ -1,14 +1,11 @@
 """Tests for linting models (Violation, LintConfig, LintReport)."""
 
-import pytest
-from pathlib import Path
-from datetime import datetime
 
 from confiture.models.lint import (
-    LintSeverity,
-    Violation,
     LintConfig,
     LintReport,
+    LintSeverity,
+    Violation,
 )
 
 

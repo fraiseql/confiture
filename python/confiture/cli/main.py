@@ -9,9 +9,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
+from confiture.core.linting import SchemaLinter
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.models.lint import LintConfig
 
 # Create Typer app
 app = typer.Typer(
@@ -289,6 +292,117 @@ def build(
         raise typer.Exit(1) from e
     except Exception as e:
         console.print(f"[red]❌ Error building schema: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def lint(
+    env: str = typer.Option(
+        "local",
+        "--env",
+        "-e",
+        help="Environment to lint (references db/environments/{env}.yaml)",
+    ),
+    project_dir: Path = typer.Option(
+        Path("."),
+        "--project-dir",
+        help="Project directory (default: current directory)",
+    ),
+    format_type: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv)",
+    ),
+    output: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output file path (only with json/csv format)",
+    ),
+    fail_on_error: bool = typer.Option(
+        True,
+        "--fail-on-error",
+        help="Exit with code 1 if errors found",
+    ),
+    fail_on_warning: bool = typer.Option(
+        False,
+        "--fail-on-warning",
+        help="Exit with code 1 if warnings found (stricter)",
+    ),
+) -> None:
+    """Lint schema against best practices.
+
+    Validates the schema against 6 built-in linting rules:
+    - Naming conventions (snake_case)
+    - Primary keys on all tables
+    - Documentation (COMMENT on tables)
+    - Multi-tenant identifier columns
+    - Indexes on foreign keys
+    - Security best practices (passwords, tokens, secrets)
+
+    Examples:
+        # Lint local environment, display as table
+        confiture lint
+
+        # Lint production environment, output as JSON
+        confiture lint --env production --format json
+
+        # Save results to file
+        confiture lint --format json --output lint-report.json
+
+        # Strict mode: fail on warnings
+        confiture lint --fail-on-warning
+    """
+    try:
+        # Validate format
+        if format_type not in ("table", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {format_type}[/red]")
+            console.print("Valid formats: table, json, csv")
+            raise typer.Exit(1)
+
+        # Create linter configuration
+        config = LintConfig(
+            enabled=True,
+            fail_on_error=fail_on_error,
+            fail_on_warning=fail_on_warning,
+        )
+
+        # Create linter
+        console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
+
+        linter = SchemaLinter(env=env, config=config)
+        report = linter.lint()
+
+        # Display results
+        if format_type == "table":
+            format_lint_report(report, format_type="table", console=console)
+        else:
+            # JSON/CSV format
+            formatted = format_lint_report(
+                report,
+                format_type=format_type,
+                console=console,
+            )
+
+            if output:
+                # Save to file
+                save_report(report, output, format_type=format_type)
+                console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
+            else:
+                # Print to console
+                console.print(formatted)
+
+        # Exit with appropriate code
+        if report.has_errors and fail_on_error or report.has_warnings and fail_on_warning:
+            raise typer.Exit(1)
+
+    except FileNotFoundError as e:
+        console.print(f"[red]❌ File not found: {e}[/red]")
+        console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]❌ Error linting schema: {e}[/red]")
         raise typer.Exit(1) from e
 
 

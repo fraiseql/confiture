@@ -1,11 +1,11 @@
 """Tests for SchemaLinter orchestrator and LintRule base class."""
 
-import pytest
-from abc import ABC
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from confiture.core.linting import SchemaLinter, LintRule
-from confiture.models.lint import LintConfig, LintReport, Violation, LintSeverity
+import pytest
+
+from confiture.core.linting import LintRule, SchemaLinter
+from confiture.models.lint import LintConfig, LintReport
 
 
 # Mock Table and Column for testing
@@ -117,7 +117,7 @@ class TestSchemaLinter:
         """All registered rules should be LintRule instances."""
         linter = SchemaLinter(env="test")
 
-        for rule_name, rule in linter.rules.items():
+        for _rule_name, rule in linter.rules.items():
             assert isinstance(rule, LintRule)
             assert hasattr(rule, "lint")
             assert hasattr(rule, "name")
