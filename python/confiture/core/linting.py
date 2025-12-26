@@ -9,14 +9,19 @@ This module provides a pluggable schema linting system with 6 built-in rules:
 - SecurityRule: Flag password/secret columns
 """
 
-import time
 import re
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
-from confiture.models.lint import LintConfig, LintReport, Violation, LintSeverity
+from confiture.models.lint import (
+    LintConfig,
+    LintReport,
+    LintSeverity,
+    Violation,
+)
 
 
 class LintRule(ABC):
@@ -125,7 +130,7 @@ class PrimaryKeyRule(LintRule):
     def lint(
         self,
         tables: list[Any],
-        config: dict[str, Any],
+        _config: dict[str, Any],
     ) -> list[Violation]:
         """Check that all tables have a PRIMARY KEY."""
         violations = []
@@ -163,7 +168,7 @@ class DocumentationRule(LintRule):
     def lint(
         self,
         tables: list[Any],
-        config: dict[str, Any],
+        _config: dict[str, Any],
     ) -> list[Violation]:
         """Check that all tables have documentation."""
         violations = []
@@ -260,7 +265,7 @@ class MissingIndexRule(LintRule):
     def lint(
         self,
         tables: list[Any],
-        config: dict[str, Any],
+        _config: dict[str, Any],
     ) -> list[Violation]:
         """Check that foreign keys are indexed."""
         violations = []
@@ -306,7 +311,7 @@ class SecurityRule(LintRule):
     def lint(
         self,
         tables: list[Any],
-        config: dict[str, Any],
+        _config: dict[str, Any],
     ) -> list[Violation]:
         """Check for security best practices."""
         violations = []
