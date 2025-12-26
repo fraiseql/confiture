@@ -23,6 +23,13 @@ from confiture.models.lint import (
     Violation,
 )
 
+# Pre-compiled regex patterns for performance
+# Matches valid snake_case names: start with letter, contain [a-z0-9_]
+SNAKE_CASE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+# Patterns for converting CamelCase to snake_case
+CAMEL_TO_SNAKE_PATTERN1 = re.compile(r"(.)([A-Z][a-z]+)")
+CAMEL_TO_SNAKE_PATTERN2 = re.compile(r"([a-z0-9])([A-Z])")
+
 
 class LintRule(ABC):
     """Abstract base class for schema linting rules.
@@ -130,18 +137,26 @@ class NamingConventionRule(LintRule):
         return violations
 
     def _is_valid_name(self, name: str, style: str) -> bool:
-        """Check if name matches the expected style."""
+        """Check if name matches the expected style.
+
+        Uses pre-compiled regex patterns for better performance
+        when checking many table and column names.
+        """
         if style == "snake_case":
-            # Valid: [a-z0-9_], starting with letter
-            return bool(re.match(r"^[a-z][a-z0-9_]*$", name))
+            # Use pre-compiled pattern for better performance
+            return bool(SNAKE_CASE_PATTERN.match(name))
         return True
 
     def _suggest_name(self, name: str, style: str) -> str:
-        """Suggest corrected name in the given style."""
+        """Suggest corrected name in the given style.
+
+        Uses pre-compiled regex patterns for converting
+        CamelCase/PascalCase to snake_case efficiently.
+        """
         if style == "snake_case":
-            # Convert CamelCase/PascalCase to snake_case
-            s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-            return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
+            # Convert CamelCase/PascalCase to snake_case using compiled patterns
+            s1 = CAMEL_TO_SNAKE_PATTERN1.sub(r"\1_\2", name)
+            return CAMEL_TO_SNAKE_PATTERN2.sub(r"\1_\2", s1).lower()
         return name
 
 

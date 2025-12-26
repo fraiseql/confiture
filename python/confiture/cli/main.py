@@ -16,6 +16,9 @@ from confiture.core.linting import SchemaLinter
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.models.lint import LintConfig
 
+# Valid output formats for linting
+LINT_FORMATS = ("table", "json", "csv")
+
 # Create Typer app
 app = typer.Typer(
     name="confiture",
@@ -355,10 +358,10 @@ def lint(
         confiture lint --fail-on-warning
     """
     try:
-        # Validate format
-        if format_type not in ("table", "json", "csv"):
+        # Validate format option
+        if format_type not in LINT_FORMATS:
             console.print(f"[red]❌ Invalid format: {format_type}[/red]")
-            console.print("Valid formats: table, json, csv")
+            console.print(f"Valid formats: {', '.join(LINT_FORMATS)}")
             raise typer.Exit(1)
 
         # Create linter configuration
@@ -368,17 +371,16 @@ def lint(
             fail_on_warning=fail_on_warning,
         )
 
-        # Create linter
+        # Create linter and run linting
         console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
-
         linter = SchemaLinter(env=env, config=config)
         report = linter.lint()
 
-        # Display results
+        # Display results based on format
         if format_type == "table":
             format_lint_report(report, format_type="table", console=console)
         else:
-            # JSON/CSV format
+            # JSON/CSV format: format and optionally save
             formatted = format_lint_report(
                 report,
                 format_type=format_type,
@@ -386,15 +388,17 @@ def lint(
             )
 
             if output:
-                # Save to file
                 save_report(report, output, format_type=format_type)
                 console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
-                # Print to console
                 console.print(formatted)
 
-        # Exit with appropriate code
-        if report.has_errors and fail_on_error or report.has_warnings and fail_on_warning:
+        # Determine exit code based on violations and fail mode
+        should_fail = (
+            (report.has_errors and fail_on_error) or
+            (report.has_warnings and fail_on_warning)
+        )
+        if should_fail:
             raise typer.Exit(1)
 
     except FileNotFoundError as e:
