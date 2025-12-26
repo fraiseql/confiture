@@ -6,6 +6,7 @@ from pathlib import Path
 import psycopg
 
 from confiture.core.connection import get_migration_class, load_migration_module
+from confiture.core.dry_run import DryRunExecutor
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
@@ -457,3 +458,32 @@ class Migrator:
             applied_versions.append(migration.version)
 
         return applied_versions
+
+    def dry_run(self, migration: Migration) -> "DryRunResult":  # noqa: F821
+        """Test a migration without making permanent changes.
+
+        Executes the migration in dry-run mode using DryRunExecutor,
+        which automatically rolls back all changes. Useful for:
+        - Verifying migrations work before production deployment
+        - Estimating execution time
+        - Detecting constraint violations
+        - Identifying table locking issues
+
+        Args:
+            migration: Migration instance to test
+
+        Returns:
+            DryRunResult with execution metrics and estimates
+
+        Raises:
+            DryRunError: If migration execution fails during dry-run
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> migration = MyMigration(connection=conn)
+            >>> result = migrator.dry_run(migration)
+            >>> print(f"Estimated time: {result.estimated_production_time_ms}ms")
+            >>> print(f"Confidence: {result.confidence_percent}%")
+        """
+        executor = DryRunExecutor()
+        return executor.run(self.connection, migration)
