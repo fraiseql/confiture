@@ -128,6 +128,7 @@ confiture migrate up
 - **[Medium 3: Production Data Sync](docs/guides/medium-3-production-sync.md)** - Copy and anonymize data
 - **[Medium 4: Zero-Downtime Migrations](docs/guides/medium-4-schema-to-schema.md)** - Schema-to-schema via FDW
 - **[Migration Decision Tree](docs/guides/migration-decision-tree.md)** - Choose the right strategy
+- **[Schema Linting Guide](docs/linting.md)** - Validate schemas, catch issues early (NEW!)
 
 ### 📚 API Reference
 - **[CLI Reference](docs/reference/cli.md)** - All commands documented
@@ -138,12 +139,17 @@ confiture migrate up
 - **[Schema-to-Schema API](docs/api/schema-to-schema.md)** - Zero-downtime migrations
 
 ### 💡 Examples
-- **[Examples Overview](examples/)** - 5 complete production examples
+- **[Examples Overview](examples/)** - 5 complete production examples + linting examples
 - **[Basic Migration](examples/01-basic-migration/)** - Learn the fundamentals (15 min)
 - **[FraiseQL Integration](examples/02-fraiseql-integration/)** - GraphQL workflow (20 min)
 - **[Zero-Downtime](examples/03-zero-downtime-migration/)** - Production deployment (30 min)
 - **[Production Sync](examples/04-production-sync-anonymization/)** - PII anonymization (25 min)
 - **[Multi-Environment Workflow](examples/05-multi-environment-workflow/)** - Complete CI/CD (30 min)
+- **[Schema Linting Examples](examples/linting/)** - Linting guides and examples (NEW!)
+  - Basic programmatic usage (Python)
+  - CLI commands and workflows
+  - CI/CD integration (GitHub Actions)
+  - Configuration examples
 
 ---
 
@@ -178,12 +184,20 @@ confiture migrate up
 - ✅ PII anonymization with compliance tools
 - ✅ CI/CD pipeline examples (GitHub Actions)
 
-### 🚧 Coming Soon (Phase 4)
+### ✅ Phase 4.2: Schema Linting (Complete)
+- ✅ **Schema linting** - Validate schemas against 6 built-in rules
+- ✅ **Configuration management** - Environment-specific linting rules
+- ✅ **Multiple output formats** - Table, JSON, CSV reports
+- ✅ **CI/CD integration** - GitHub Actions examples included
+- ✅ **Comprehensive documentation** - User guide with 2000+ words
+- ✅ **4+ working examples** - From basic to advanced usage
+
+### 🚧 Coming Soon (Phase 4.3+)
 - Advanced migration hooks (before/after)
 - Custom anonymization strategies
 - Interactive migration wizard
 - Migration dry-run mode
-- Database schema linting
+- Additional linting rules and extensibility
 
 ---
 

@@ -1,0 +1,347 @@
+# Example Schema Linting Configuration
+#
+# This file demonstrates different linting configurations for various
+# environments. Copy and adapt to your project's confiture.yaml file.
+#
+# Configuration applies to:
+# - confiture lint command
+# - Automated linting in CI/CD pipelines
+# - IDE integration
+# - Custom scripts using SchemaLinter API
+
+# ============================================================================
+# DEVELOPMENT ENVIRONMENT
+# ============================================================================
+# Relaxed standards for rapid iteration and experimentation
+
+development:
+  database_url: postgresql://localhost/myapp_dev
+
+  linting:
+    enabled: true
+
+    # Fail on errors but not warnings (rapid iteration)
+    fail_on_error: true
+    fail_on_warning: false
+
+    # Exclude system and temporary tables
+    exclude_tables:
+      - pg_*                      # PostgreSQL system tables
+      - information_schema.*      # Information schema
+      - _timescaledb_*           # TimescaleDB extension
+      - tmp_*                     # Temporary tables
+      - test_*                    # Test fixture tables
+
+    rules:
+      # Naming conventions - required
+      naming_convention:
+        enabled: true
+        style: snake_case
+
+      # Primary keys - required (data integrity)
+      primary_key:
+        enabled: true
+
+      # Documentation - optional in dev (too verbose)
+      documentation:
+        enabled: false
+
+      # Multi-tenant enforcement
+      multi_tenant:
+        enabled: true
+        identifier: tenant_id
+
+      # Index warnings - helpful but not critical
+      missing_index:
+        enabled: true
+
+      # Security review - always monitor
+      security:
+        enabled: true
+
+  migration:
+    strict_mode: false           # Allow some flexibility during development
+    auto_create_tables: true     # Helpful for rapid schema changes
+
+# ============================================================================
+# STAGING ENVIRONMENT
+# ============================================================================
+# Intermediate standards - approaching production quality
+
+staging:
+  database_url: postgresql://staging.example.com/myapp_staging
+
+  linting:
+    enabled: true
+
+    # Fail on both errors and warnings
+    fail_on_error: true
+    fail_on_warning: true
+
+    exclude_tables:
+      - pg_*
+      - information_schema.*
+      - _timescaledb_*
+
+    rules:
+      # All rules enabled
+      naming_convention:
+        enabled: true
+        style: snake_case
+
+      primary_key:
+        enabled: true
+
+      # Documentation required for staging
+      documentation:
+        enabled: true
+
+      multi_tenant:
+        enabled: true
+        identifier: tenant_id
+
+      missing_index:
+        enabled: true
+
+      security:
+        enabled: true
+
+  migration:
+    strict_mode: true            # More conservative than dev
+    auto_create_tables: false    # Explicit schema management
+
+# ============================================================================
+# PRODUCTION ENVIRONMENT
+# ============================================================================
+# Strict standards - highest quality requirements
+
+production:
+  database_url: postgresql://prod.example.com/myapp_prod
+
+  linting:
+    enabled: true
+
+    # Strict mode: fail on everything
+    fail_on_error: true
+    fail_on_warning: true        # Warnings are errors in production
+
+    # Minimal exclusions
+    exclude_tables:
+      - pg_*
+      - information_schema.*
+
+    rules:
+      # All rules strictly enabled
+      naming_convention:
+        enabled: true
+        style: snake_case
+
+      primary_key:
+        enabled: true
+
+      # Documentation mandatory
+      documentation:
+        enabled: true
+
+      multi_tenant:
+        enabled: true
+        identifier: tenant_id
+
+      # Index warnings are errors
+      missing_index:
+        enabled: true
+
+      # Security review mandatory
+      security:
+        enabled: true
+
+  migration:
+    strict_mode: true            # Conservative and careful
+    auto_create_tables: false    # Explicit, reviewed changes
+
+# ============================================================================
+# TESTING ENVIRONMENT
+# ============================================================================
+# Minimal standards - focus on correctness, not production readiness
+
+testing:
+  database_url: postgresql://localhost/myapp_test
+
+  linting:
+    enabled: true
+
+    # Only fail on actual errors
+    fail_on_error: true
+    fail_on_warning: false
+
+    # Exclude test data tables
+    exclude_tables:
+      - pg_*
+      - information_schema.*
+      - test_*
+      - fixture_*
+      - seed_*
+
+    rules:
+      naming_convention:
+        enabled: true
+        style: snake_case
+
+      primary_key:
+        enabled: true
+
+      # Documentation not required for test schemas
+      documentation:
+        enabled: false
+
+      multi_tenant:
+        enabled: false             # Often not relevant for tests
+
+      missing_index:
+        enabled: false             # Not critical for small test datasets
+
+      security:
+        enabled: false             # Test data, not sensitive
+
+  migration:
+    strict_mode: false
+    auto_create_tables: true
+
+# ============================================================================
+# LOCAL ENVIRONMENT (default)
+# ============================================================================
+# Developer-friendly standards - quick iteration
+
+local:
+  database_url: postgresql://localhost/myapp
+
+  linting:
+    enabled: true
+
+    fail_on_error: true
+    fail_on_warning: false
+
+    exclude_tables:
+      - pg_*
+      - information_schema.*
+      - tmp_*
+
+    rules:
+      naming_convention:
+        enabled: true
+        style: snake_case
+
+      primary_key:
+        enabled: true
+
+      documentation:
+        enabled: false             # Optional locally
+
+      multi_tenant:
+        enabled: true
+        identifier: tenant_id
+
+      missing_index:
+        enabled: true
+
+      security:
+        enabled: true
+
+  migration:
+    strict_mode: false
+    auto_create_tables: true
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+#
+# Lint default (local) environment:
+#   $ confiture lint
+#
+# Lint development:
+#   $ confiture lint --env development
+#
+# Lint production with strict rules:
+#   $ confiture lint --env production --fail-on-warning
+#
+# Generate JSON report for staging:
+#   $ confiture lint --env staging --format json --output report.json
+#
+# In CI/CD (fail if any errors or warnings):
+#   $ confiture lint --env staging --fail-on-error --fail-on-warning
+#
+# In CI/CD production validation (very strict):
+#   $ confiture lint --env production --fail-on-error --fail-on-warning
+#
+# ============================================================================
+# CONFIGURATION GUIDELINES
+# ============================================================================
+#
+# 1. NAMING CONVENTIONS
+#    - Always use snake_case in production
+#    - Consider allowing mixed case in development
+#    - Only one style currently supported: snake_case
+#
+# 2. PRIMARY KEYS
+#    - Recommended everywhere (data integrity)
+#    - Required in production
+#
+# 3. DOCUMENTATION
+#    - Optional in development (too verbose initially)
+#    - Recommended in staging (practice documenting)
+#    - Required in production (team communication)
+#
+# 4. MULTI-TENANT
+#    - Enforce in multi-tenant systems
+#    - Disable if not using multi-tenancy
+#    - Critical for SaaS applications
+#
+# 5. MISSING INDEXES
+#    - Helpful in development (catch perf issues early)
+#    - Recommended in staging
+#    - Required in production (performance)
+#
+# 6. SECURITY
+#    - Always enabled
+#    - Reviews passwords, secrets, tokens
+#    - Info level: requires manual review
+#
+# ============================================================================
+# ENVIRONMENT PROGRESSION
+# ============================================================================
+#
+# As changes move through environments, strictness increases:
+#
+#    DEVELOPMENT              STAGING                PRODUCTION
+#    ┌─────────────┐          ┌─────────────┐       ┌──────────────┐
+#    │ Rapid iter. │  ──────> │ Final test  │ ────> │ High quality │
+#    │ Errors OK   │          │ Strict      │       │ Strict       │
+#    │ Warnings OK │          │ All checks  │       │ All checks   │
+#    └─────────────┘          └─────────────┘       └──────────────┘
+#
+# ============================================================================
+# GRADUAL ADOPTION
+# ============================================================================
+#
+# If existing schema has many violations:
+#
+# Phase 1: Audit (baseline)
+#   - Set fail_on_error: false
+#   - Set fail_on_warning: false
+#   - Generate reports, measure violations
+#
+# Phase 2: Fix errors
+#   - Address critical violations (missing PKs, security)
+#   - Set fail_on_error: true
+#   - Keep fail_on_warning: false
+#
+# Phase 3: Fix warnings
+#   - Address performance issues (indexes)
+#   - Address quality issues (documentation)
+#   - Set fail_on_warning: true
+#
+# Phase 4: Maintain
+#   - Keep linting in CI/CD
+#   - Prevent new violations
+#
+# ============================================================================

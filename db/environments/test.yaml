@@ -1,0 +1,8 @@
+name: test
+database_url: postgresql://localhost/confiture_test
+include_dirs:
+  - db/schema
+exclude_dirs: []
+migration_table: confiture_migrations
+auto_backup: true
+require_confirmation: false
