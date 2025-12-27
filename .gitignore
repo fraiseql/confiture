@@ -63,6 +63,10 @@ Cargo.lock
 docs/_build/
 site/
 
+# Development artifacts (archived, not part of production)
+.development/
+.phases/
+
 # Internal development notes (do not commit)
 *ANALYSIS*.md
 *_ANALYSIS.md
