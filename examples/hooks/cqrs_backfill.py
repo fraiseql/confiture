@@ -10,7 +10,6 @@ When modifying w_* tables, r_* tables need to be backfilled.
 """
 
 import time
-from dataclasses import dataclass
 
 import psycopg
 
@@ -54,7 +53,7 @@ class BackfillCustomerLTVReadModelHook(Hook):
 
     phase = HookPhase.AFTER_DDL
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """
         Insert/update read model with lifetime value calculations.
 
@@ -113,7 +112,7 @@ class ValidateDataConsistencyHook(Hook):
 
     phase = HookPhase.AFTER_VALIDATION
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """Verify consistency between write and read models."""
         start = time.time()
 

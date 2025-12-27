@@ -22,7 +22,7 @@ class VerifyDatabaseHealthHook(Hook):
 
     phase = HookPhase.BEFORE_VALIDATION
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """Verify database health before migration."""
         start = time.time()
 
@@ -64,7 +64,7 @@ class ValidateReferentialIntegrityHook(Hook):
 
     phase = HookPhase.BEFORE_DDL
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """Validate no orphaned foreign keys exist."""
         start = time.time()
 
@@ -103,7 +103,7 @@ class ValidateDataQualityHook(Hook):
 
     phase = HookPhase.AFTER_VALIDATION
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """Validate no null values in required columns."""
         start = time.time()
 
@@ -141,7 +141,7 @@ class MeasureQueryPerformanceHook(Hook):
 
     phase = HookPhase.AFTER_VALIDATION
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """Measure execution time of critical queries."""
         start = time.time()
 
@@ -187,7 +187,7 @@ class NotifyOnErrorHook(Hook):
 
     phase = HookPhase.ON_ERROR
 
-    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:
+    def execute(self, conn: psycopg.Connection, context: HookContext) -> HookResult:  # noqa: ARG002
         """Log error details for ops team."""
         start = time.time()
 
