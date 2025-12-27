@@ -1030,5 +1030,72 @@ def migrate_down(
         raise typer.Exit(1) from e
 
 
+@app.command()
+def validate_profile(
+    path: Path = typer.Argument(
+        ...,
+        help="Path to anonymization profile YAML file",
+    ),
+) -> None:
+    """Validate anonymization profile YAML structure and schema.
+
+    Performs security validation:
+    - Uses safe_load() to prevent YAML injection
+    - Validates against Pydantic schema
+    - Checks strategy types are whitelisted
+    - Verifies all required fields present
+
+    Example:
+        confiture validate-profile db/profiles/production.yaml
+    """
+    try:
+        from confiture.core.anonymization.profile import AnonymizationProfile
+
+        console.print(f"[cyan]📋 Validating profile: {path}[/cyan]")
+        profile = AnonymizationProfile.load(path)
+
+        # Print profile summary
+        console.print("[green]✅ Valid profile![/green]")
+        console.print(f"   Name: {profile.name}")
+        console.print(f"   Version: {profile.version}")
+        if profile.global_seed:
+            console.print(f"   Global Seed: {profile.global_seed}")
+
+        # List strategies
+        console.print(f"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
+        for strategy_name, strategy_def in profile.strategies.items():
+            console.print(
+                f"   • {strategy_name}: {strategy_def.type}",
+                end="",
+            )
+            if strategy_def.seed_env_var:
+                console.print(f" [env: {strategy_def.seed_env_var}]")
+            else:
+                console.print()
+
+        # List tables
+        console.print(f"\n[cyan]Tables ({len(profile.tables)})[/cyan]:")
+        for table_name, table_def in profile.tables.items():
+            console.print(f"   • {table_name}: {len(table_def.rules)} rules")
+            for rule in table_def.rules:
+                console.print(f"      - {rule.column} → {rule.strategy}", end="")
+                if rule.seed:
+                    console.print(f" [seed: {rule.seed}]")
+                else:
+                    console.print()
+
+        console.print("[green]\n✅ Profile validation passed![/green]")
+
+    except FileNotFoundError as e:
+        console.print(f"[red]❌ File not found: {e}[/red]")
+        raise typer.Exit(1) from e
+    except ValueError as e:
+        console.print(f"[red]❌ Invalid profile: {e}[/red]")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]❌ Error validating profile: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
 if __name__ == "__main__":
     app()

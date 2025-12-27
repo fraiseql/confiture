@@ -1,0 +1,148 @@
+# Example Anonymization Profile for Confiture
+# This file demonstrates secure YAML profile structure with Pydantic validation
+#
+# Security Features:
+# - Safe YAML loading (yaml.safe_load) prevents injection attacks
+# - Strategy type whitelist prevents unknown strategies
+# - Pydantic schema validation enforces structure
+# - Environment variable support for seeds (not in YAML)
+
+name: production
+version: "1.0"
+
+# Global seed applied to all columns (unless overridden)
+# In production, load from environment variable:
+# export ANONYMIZATION_SEED=12345
+global_seed: 12345
+
+# Strategy definitions with whitelisted types
+strategies:
+  # Hash strategy with HMAC (rainbow-table resistant)
+  email_hash:
+    type: hash
+    config:
+      algorithm: sha256
+      length: 16
+      prefix: "user_"
+    seed_env_var: ANONYMIZATION_SEED
+
+  # Email masking (format-preserving)
+  email_mask:
+    type: email
+    config:
+      preserve_domain: true
+    seed_env_var: ANONYMIZATION_SEED
+
+  # Phone masking (format-preserving)
+  phone_mask:
+    type: phone
+    config:
+      format: "+1-555-{number}"
+    seed_env_var: ANONYMIZATION_SEED
+
+  # Simple redaction (for highly sensitive data)
+  redact:
+    type: redact
+    config:
+      replacement: "[REDACTED]"
+
+# Table and column rules
+tables:
+  users:
+    rules:
+      # Email masked to format like user_a1b2c3d4@example.com
+      - column: email
+        strategy: email_mask
+        # Uses global_seed for consistency
+
+      # Phone masked to format like +1-555-1234
+      - column: phone
+        strategy: phone_mask
+
+      # Internal ID hashed with prefix
+      - column: internal_id
+        strategy: email_hash
+
+      # SSN fully redacted
+      - column: ssn
+        strategy: redact
+
+      # API token with custom seed (intentionally different)
+      - column: api_token
+        strategy: email_hash
+        seed: 99999  # Override global_seed for this column
+
+  orders:
+    rules:
+      # Same email column name as users.email
+      # Will hash to SAME value if same email (foreign key consistency)
+      - column: customer_email
+        strategy: email_mask
+
+      # Order notes fully redacted
+      - column: internal_notes
+        strategy: redact
+
+  payments:
+    rules:
+      # Credit card last 4 digits hashed
+      - column: card_last_four
+        strategy: email_hash
+
+      # CVV fully redacted
+      - column: cvv
+        strategy: redact
+
+# YAML Security Features Demonstrated:
+#
+# 1. Safe Loading (yaml.safe_load):
+#    ✅ Prevents code execution attacks
+#    ❌ No !!python/object constructors allowed
+#    ❌ No arbitrary class instantiation
+#
+# 2. Strategy Type Whitelist:
+#    ✅ Only these types allowed: hash, email, phone, redact
+#    ❌ Unknown strategy types rejected (e.g., "pattern", "custom")
+#
+# 3. Pydantic Schema Validation:
+#    ✅ All required fields must be present
+#    ✅ Field types validated (string, int, dict, etc.)
+#    ✅ Nested structures validated recursively
+#
+# 4. Seed Management:
+#    ✅ Environment variables for production seeds
+#    ✅ Hardcoded seeds only for testing
+#    ✅ Proper precedence: column > global > default
+
+# Validation Command:
+#
+# confiture validate-profile examples/anonymization_profile_example.yaml
+#
+# Expected output:
+# 📋 Validating profile: examples/anonymization_profile_example.yaml
+# ✅ Valid profile!
+#    Name: production
+#    Version: 1.0
+#    Global Seed: 12345
+#
+# Strategies (4):
+#    • email_hash: hash [env: ANONYMIZATION_SEED]
+#    • email_mask: email [env: ANONYMIZATION_SEED]
+#    • phone_mask: phone [env: ANONYMIZATION_SEED]
+#    • redact: redact
+#
+# Tables (3):
+#    • users: 5 rules
+#       - email → email_mask
+#       - phone → phone_mask
+#       - internal_id → email_hash
+#       - ssn → redact
+#       - api_token → email_hash [seed: 99999]
+#    • orders: 2 rules
+#       - customer_email → email_mask
+#       - internal_notes → redact
+#    • payments: 2 rules
+#       - card_last_four → email_hash
+#       - cvv → redact
+#
+# ✅ Profile validation passed!
