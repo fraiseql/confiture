@@ -278,7 +278,7 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - ✅ **Comprehensive examples** - CQRS and validation hook examples
 - ✅ **Full documentation** - 2000+ word hooks guide with patterns
 
-### ✅ Phase 5: Comprehensive Documentation & Guides (In Development)
+### ✅ Phase 5: Enterprise Documentation & Integrations
 
 **Integration Guides**:
 - ✅ **Slack Integration** - Real-time migration notifications
@@ -293,15 +293,6 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - ✅ **E-Commerce (PCI-DSS)** - Secure credit card handling
 - ✅ **SaaS Multi-tenant** - Data isolation and rollback
 - ✅ **International Compliance** - GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act
-
-### 🚧 Advanced Features (In Development)
-Some advanced capabilities are under active development:
-- Migration hooks for custom logic before/after migrations
-- Schema linting and validation
-- Enhanced anonymization strategies
-- Interactive migration workflows
-
-See [documentation](docs/) for details on experimental features.
 
 ---
 
@@ -319,7 +310,7 @@ See [documentation](docs/) for details on experimental features.
 
 ## Current Version
 
-**v0.3.2 - Stable Release** 🎉
+**v0.3.3** 🎉
 
 ### Core Migration System
 All 4 migration strategies are implemented and production-tested:
@@ -328,16 +319,16 @@ All 4 migration strategies are implemented and production-tested:
 - ✅ **Medium 3**: Production Data Sync (with PII anonymization)
 - ✅ **Medium 4**: Zero-Downtime Migrations (via FDW)
 
-### What's Available
+### What's Included
 - ✅ All 4 migration mediums fully implemented
-- ✅ Comprehensive documentation and guides
+- ✅ Comprehensive documentation and guides (14 guides covering core, integrations, and compliance)
 - ✅ Production-ready examples
 - ✅ Python 3.11, 3.12, 3.13 support
 - ✅ Multi-platform wheels (Linux, macOS, Windows)
 - ✅ Rust performance layer (10-50x faster)
-
-### Additional Features in Development
-Some advanced features are being developed and documented but not yet formally released. See [documentation](docs/) for details on experimental features and roadmap.
+- ✅ Advanced features: Migration hooks, schema linting, custom anonymization strategies
+- ✅ Integration guides: Slack, GitHub Actions, Monitoring, PagerDuty, Webhooks
+- ✅ Compliance guides: HIPAA, SOX, PCI-DSS, SaaS Multi-tenant, International regulations
 
 For the detailed roadmap, see [PHASES.md](PHASES.md).
 
