@@ -816,6 +816,34 @@ class MyMigration(Migration):
 
 ---
 
+## 🎯 Next Steps
+
+**Ready to use Medium 2?**
+- ✅ You now understand: generating migrations, applying changes, handling downtime tradeoffs
+
+**What to do next:**
+
+1. **[Migration Decision Tree](./migration-decision-tree.md)** - Decide when Medium 2 is right vs other mediums
+
+2. **[Quick Start Guide](../getting-started.md)** - Practice generating and applying migrations
+
+3. **[Medium 4: Zero-Downtime Migrations](./medium-4-schema-to-schema.md)** - For large tables requiring zero downtime
+
+4. **[Migration Hooks](../hooks.md)** - Execute custom code (backfill, validation) during migrations
+
+5. **[Examples](../../examples/)** - See Medium 2 in action with real migrations
+
+**Advanced Topics:**
+- **[Advanced Patterns](./advanced-patterns.md)** - CQRS backfilling, complex transformations
+- **[Dry-Run Guide](./cli-dry-run.md)** - Test migrations before applying
+- **[Performance Guide](../performance.md)** - Optimization techniques for large tables
+
+**Got questions?**
+- **[Glossary](../glossary.md)** - Terms explained
+- **[Troubleshooting](./troubleshooting.md)** - Common migration issues and solutions
+
+---
+
 **Part of the Confiture documentation** 🍓
 
 *Evolving schemas, one migration at a time*

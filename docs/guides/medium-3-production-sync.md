@@ -905,6 +905,36 @@ confiture sync --from prod --to staging --resume               # Resume sync
 
 ---
 
+## 🎯 Next Steps
+
+**Ready to use Medium 3?**
+- ✅ You now understand: data syncing, anonymization strategies, performance optimization
+
+**What to do next:**
+
+1. **[Migration Decision Tree](./migration-decision-tree.md)** - When to use Medium 3 vs other mediums
+
+2. **[Anonymization Strategy Framework](./anonymization-strategy-framework.md)** - Create custom anonymization strategies
+
+3. **[Advanced Patterns](./advanced-patterns.md)** - Custom anonymization, complex data transformations
+
+4. **[Security Considerations](../security/)** - GDPR compliance, threat model, safe data handling
+
+5. **[Examples](../../examples/)** - See Medium 3 in action with production-like workflows
+
+**Common Use Cases:**
+- **Debugging production issues locally** - [See Medium 3 scenario](./migration-decision-tree.md#scenario-3-debugging-production-issue)
+- **Testing with real data** - Apply anonymization then test features
+- **QA environments** - Populate staging with production-like data
+- **Performance testing** - Use realistic data volumes
+
+**Got questions?**
+- **[Glossary](../glossary.md)** - Terms like anonymization, PII, FDW explained
+- **[Troubleshooting](./troubleshooting.md)** - Data sync issues and solutions
+- **[Getting Started by Role](../getting-started-by-role.md)** - Security officer guide for compliance
+
+---
+
 **Part of the Confiture documentation** 🍓
 
 *Production data, safely synced*

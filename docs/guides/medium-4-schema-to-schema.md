@@ -1438,6 +1438,49 @@ confiture migrate schema-to-schema cleanup --target new_prod
 
 ---
 
+## 🎯 Next Steps
+
+**Ready to use Medium 4?**
+- ✅ You now understand: zero-downtime migrations, FDW strategy, COPY strategy, column mapping
+
+**What to do next:**
+
+1. **[Migration Decision Tree](./migration-decision-tree.md)** - Decide if Medium 4 is right for your scenario
+
+2. **[Performance Guide](../performance.md)** - Benchmark your specific migration, optimize strategy selection
+
+3. **[Advanced Patterns](./advanced-patterns.md)** - Complex column mappings, custom transformations
+
+4. **[Dry-Run Guide](./cli-dry-run.md)** - Test migrations before executing on production
+
+5. **[Examples](../../examples/)** - See real zero-downtime migration workflows
+
+**Before Your Migration:**
+- ✅ Test on staging/staging database first
+- ✅ Plan your cutover strategy (Blue-Green vs Read-Write Split)
+- ✅ Prepare rollback procedures
+- ✅ Set up monitoring
+- ✅ Review and document column mappings
+
+**During Migration:**
+- ✅ Monitor both old and new databases
+- ✅ Track FDW/COPY progress
+- ✅ Have rollback command ready
+- ✅ Plan low-traffic cutover window
+
+**After Migration:**
+- ✅ Verify row counts and data integrity
+- ✅ Monitor error rates and performance
+- ✅ Keep old database warm (1-2 weeks)
+- ✅ Cleanup FDW and archive after confidence period
+
+**Got questions?**
+- **[Glossary](../glossary.md)** - FDW, zero-downtime, cutover explained
+- **[Troubleshooting](./troubleshooting.md)** - Common migration issues
+- **[Architecture](../../ARCHITECTURE.md)** - How Confiture works internally
+
+---
+
 **Part of the Confiture documentation** 🍓
 
 *Zero downtime, major refactoring*

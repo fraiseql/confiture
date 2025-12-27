@@ -727,6 +727,30 @@ db/schema/
 
 ---
 
+## 🎯 Next Steps
+
+**Ready to use Medium 1?**
+- ✅ You now understand: DDL-first philosophy, fast builds, file organization
+
+**What to do next:**
+
+1. **[Organizing SQL Files](../organizing-sql-files.md)** - Patterns for complex schemas with many tables and views
+
+2. **[Quick Start Guide](../getting-started.md)** - Hands-on walkthrough with real code examples
+
+3. **[Migration Decision Tree](./migration-decision-tree.md)** - When to use Medium 1 vs other mediums
+
+4. **[Medium 2: Incremental Migrations](./medium-2-incremental-migrations.md)** - For making schema changes after initial build
+
+5. **[Examples](../../examples/)** - See Medium 1 in action with working projects
+
+**Got questions?**
+- **[Glossary](../glossary.md)** - Terms explained
+- **[Getting Started by Role](../getting-started-by-role.md)** - Find guides for your use case
+- **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
+
+---
+
 **Part of the Confiture documentation** 🍓
 
 *Building schemas at the speed of thought*
