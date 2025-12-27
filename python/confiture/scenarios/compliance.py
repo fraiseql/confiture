@@ -19,8 +19,8 @@ Each regulation defines:
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Any
 from enum import Enum
+from typing import Any
 
 
 class RegulationType(Enum):
@@ -42,11 +42,11 @@ class PersonalDataCategory:
 
     name: str
     description: str
-    regulations: List[RegulationType]
+    regulations: list[RegulationType]
     requires_anonymization: bool
     requires_consent: bool
     retention_period_days: int = None
-    examples: List[str] = None
+    examples: list[str] = None
 
     def applies_to(self, regulation: RegulationType) -> bool:
         """Check if this category applies to a regulation."""
@@ -313,7 +313,7 @@ class PersonalDataCategories:
     )
 
     @classmethod
-    def get_for_regulation(cls, regulation: RegulationType) -> List[PersonalDataCategory]:
+    def get_for_regulation(cls, regulation: RegulationType) -> list[PersonalDataCategory]:
         """Get all data categories applicable to a regulation."""
         categories = [
             cls.DIRECT_IDENTIFIERS,
@@ -348,8 +348,8 @@ class ComplianceVerifier:
         self.categories = PersonalDataCategories.get_for_regulation(regulation)
 
     def verify_anonymization(
-        self, original: Dict[str, Any], anonymized: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, original: dict[str, Any], anonymized: dict[str, Any]
+    ) -> dict[str, Any]:
         """Verify that anonymization meets regulation requirements.
 
         Args:
@@ -392,7 +392,7 @@ class ComplianceVerifier:
             "preserved_count": len(preserved_fields),
         }
 
-    def get_requirements(self) -> Dict[str, Any]:
+    def get_requirements(self) -> dict[str, Any]:
         """Get anonymization requirements for regulation.
 
         Returns:

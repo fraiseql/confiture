@@ -7,10 +7,12 @@ Provides:
 - Performance regression detection
 """
 
-import time
 import sys
-from typing import Any, Callable, Dict, List, Tuple
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
+
 from confiture.core.anonymization.strategy import AnonymizationStrategy
 
 
@@ -69,10 +71,10 @@ class Benchmarker:
             verbose: Print detailed timing information.
         """
         self.verbose = verbose
-        self.results: List[BenchmarkResult] = []
+        self.results: list[BenchmarkResult] = []
 
     def benchmark_strategy(
-        self, strategy: AnonymizationStrategy, test_values: List[Any], iterations: int = 1000
+        self, strategy: AnonymizationStrategy, test_values: list[Any], iterations: int = 1000
     ) -> BenchmarkResult:
         """Benchmark a single strategy.
 
@@ -123,8 +125,8 @@ class Benchmarker:
         return result
 
     def benchmark_batch_anonymization(
-        self, anonymize_func: Callable[[List[Dict]], List[Dict]], batch_sizes: List[int]
-    ) -> Dict[int, BenchmarkResult]:
+        self, anonymize_func: Callable[[list[dict]], list[dict]], batch_sizes: list[int]
+    ) -> dict[int, BenchmarkResult]:
         """Benchmark batch anonymization at different sizes.
 
         Args:
@@ -227,7 +229,7 @@ class PerformanceTracker:
 
     def __init__(self):
         """Initialize tracker."""
-        self.timings: Dict[str, List[float]] = {}
+        self.timings: dict[str, list[float]] = {}
 
     def record(self, operation: str, elapsed_ms: float) -> None:
         """Record a timing measurement.
@@ -240,7 +242,7 @@ class PerformanceTracker:
             self.timings[operation] = []
         self.timings[operation].append(elapsed_ms)
 
-    def get_stats(self, operation: str) -> Dict[str, float]:
+    def get_stats(self, operation: str) -> dict[str, float]:
         """Get statistics for an operation.
 
         Args:
@@ -289,7 +291,7 @@ class PerformanceTracker:
 class ScalabilityTester:
     """Test scalability and performance with varying data sizes."""
 
-    def __init__(self, anonymize_func: Callable[[Dict], Dict]):
+    def __init__(self, anonymize_func: Callable[[dict], dict]):
         """Initialize tester.
 
         Args:
@@ -297,7 +299,7 @@ class ScalabilityTester:
         """
         self.anonymize_func = anonymize_func
 
-    def test_scaling(self, field_count_range: Tuple[int, int], step: int = 10) -> Dict[int, float]:
+    def test_scaling(self, field_count_range: tuple[int, int], step: int = 10) -> dict[int, float]:
         """Test anonymization performance as number of fields increases.
 
         Args:
@@ -323,7 +325,7 @@ class ScalabilityTester:
 
         return results
 
-    def analyze_complexity(self, scaling_results: Dict[int, float]) -> str:
+    def analyze_complexity(self, scaling_results: dict[int, float]) -> str:
         """Analyze computational complexity from scaling results.
 
         Args:
@@ -357,7 +359,7 @@ class ScalabilityTester:
         else:
             complexity = "O(n²) or higher - Quadratic or worse"
 
-        analysis = f"Complexity Analysis\n"
+        analysis = "Complexity Analysis\n"
         analysis += f"{'Field Count':<15} {'Time (ms)':<15} {'Trend':<20}\n"
         analysis += "-" * 50 + "\n"
 
