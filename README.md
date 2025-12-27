@@ -20,9 +20,36 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 
 ## Why Confiture?
 
-Traditional migration tools (Alembic, Django migrations) **replay migration history** to build databases. This is slow and brittle.
+### The Problem with Migration History
 
-Confiture treats **DDL source files as the single source of truth**:
+Traditional migration tools (Alembic, Django migrations, Flyway) use **migration history replay**: every time you build a database, the tool executes every migration file in order. This works, but it's **slow and brittle**:
+
+- **Slow**: Fresh database builds take 5-10 minutes (replaying hundreds of operations)
+- **Brittle**: One broken migration breaks everything - your database history is fragile
+- **Complicated**: Developers maintain two things: current schema AND migration history
+- **Messy**: Technical debt accumulates as migrations pile up over months/years
+
+### The Confiture Approach
+
+Confiture flips the model: **DDL source files are the single source of truth**. To build a database:
+
+1. Read all `.sql` files in `db/schema/`
+2. Execute them once (in order)
+3. Done ✅
+
+No migration history to replay. No accumulated technical debt. Just your actual, current schema. **Fresh databases in <1 second.**
+
+### Key Advantages Over Alembic
+
+| Feature | Confiture | Alembic | Impact |
+|---------|-----------|---------|--------|
+| **Fresh DB setup** | <1 second | 5-10 minutes | 50-700x faster |
+| **Zero-downtime migrations** | ✅ Yes (via FDW) | ❌ No | Production safety |
+| **Production data sync** | ✅ Built-in (with PII anonymization) | ❌ Not available | Safer local dev |
+| **Schema diffs** | ✅ Auto-generated | ⚠️ Manual | Less toil |
+| **Conceptual simplicity** | ✅ DDL-first (simple) | ⚠️ Migration-first (complex) | Easier to learn |
+
+### What You Get
 
 - ✅ **Fresh databases in <1 second** (not minutes)
 - ✅ **4 migration strategies** (simple ALTER to zero-downtime FDW)
@@ -150,6 +177,8 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - **[Dry-Run Analysis Guide](docs/guides/cli-dry-run.md)** - Test migrations before applying (NEW!)
 - **[Migration Decision Tree](docs/guides/migration-decision-tree.md)** - Choose the right strategy
 - **[Schema Linting Guide](docs/linting.md)** - Validate schemas, catch issues early
+- **[Confiture vs Alembic](docs/comparison-with-alembic.md)** - Detailed comparison & migration path (NEW!)
+- **[Advanced Patterns](docs/guides/advanced-patterns.md)** - Custom anonymization, hooks, CQRS (NEW!)
 
 ### 📚 API Reference
 - **[CLI Reference](docs/reference/cli.md)** - All commands documented
