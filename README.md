@@ -300,7 +300,14 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - ✅ **SaaS** - Multi-tenant isolation and per-tenant rollback
 - ✅ **International** - GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act compliant
 
-### 🚧 Coming Soon (Phase 4.4+)
+### ✅ Phase 4.4: Advanced Features (Complete - Dec 2025)
+- ✅ **Migration Hooks** - Execute custom logic before/after migrations (BEFORE_VALIDATION, BEFORE_DDL, AFTER_DDL, AFTER_VALIDATION, CLEANUP, ON_ERROR)
+- ✅ **Custom Anonymization Strategies** - Build your own PII masking with composable strategies
+- ✅ **Interactive Migration Wizard** - Guided migrations with risk assessment and approvals
+- ✅ **Schema Linting** - Validate schemas against 6 built-in rules + custom rule framework
+- ✅ **Advanced Patterns** - 5 enterprise workflows (audit system, GDPR sync, approval pipelines)
+
+### 🚧 Coming Soon (Phase 4.5+)
 - Additional linting rules and extensibility
 - Advanced threat modeling
 
@@ -320,28 +327,27 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Current Version
 
-**v0.3.2 - Production Ready** 🎉
+**v0.5.0+ - Production Ready** 🎉
 
-All 4 migration mediums are fully implemented and production-tested:
+### Core Migration Mediums (All Complete)
+All 4 migration strategies are fully implemented and production-tested:
 - ✅ **Medium 1**: Build from DDL (fresh databases in <1 second)
 - ✅ **Medium 2**: Incremental Migrations (simple ALTER-based changes)
 - ✅ **Medium 3**: Production Data Sync (with PII anonymization)
 - ✅ **Medium 4**: Zero-Downtime Migrations (via FDW)
 
-**What's Available Now**:
-- ✅ All 14 guides with 309+ code examples
-- ✅ All 8 API references (Core + Phase 5 new APIs)
-- ✅ All 5 enterprise integrations (Slack, GitHub Actions, Monitoring, PagerDuty, Webhooks)
-- ✅ All 5 compliance frameworks (HIPAA, SOX, PCI-DSS, SaaS, International)
-- ✅ 10+ regulatory jurisdictions (GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act, and more)
-- ✅ 5 production-ready examples
-- ✅ Python 3.11, 3.12, 3.13 support
-- ✅ Multi-platform wheels (Linux, macOS, Windows)
+### What's Available Now
+- ✅ **Core Features** (Phases 1-3): 4 migration mediums, DDL-first design, Rust performance
+- ✅ **Advanced Features** (Phase 4.4): Migration hooks, custom anonymization, interactive wizard, schema linting
+- ✅ **Enterprise Ready** (Phase 5): 14 guides, 309+ code examples, 5 integrations, 5 compliance frameworks, 10+ jurisdictions
+- ✅ **Integration Guides**: Slack, GitHub Actions, Monitoring, PagerDuty, Webhooks
+- ✅ **Compliance Frameworks**: HIPAA, SOX, PCI-DSS, SaaS Multi-tenant, International (GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act)
+- ✅ **API References**: 8 comprehensive guides covering all core and advanced APIs
+- ✅ **Production Examples**: 5 complete real-world scenarios
+- ✅ **Platform Support**: Python 3.11, 3.12, 3.13 on Linux, macOS, Windows
 
-**What's Coming Next** (Phase 4.4+):
-- Interactive migration wizard
-- Custom anonymization strategies
-- Additional schema linting rules
+### What's Coming Next (Phase 4.5+)
+- Additional linting rules and extensibility
 - Advanced threat modeling
 
 For the detailed roadmap, see [PHASES.md](PHASES.md).
