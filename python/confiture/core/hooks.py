@@ -33,6 +33,8 @@ class HookPhase(Enum):
     AFTER_VALIDATION = 4   # Verification after data operations
     CLEANUP = 5            # Final cleanup operations
     ON_ERROR = 6           # Error handlers during rollback
+    BEFORE_ANONYMIZATION = 7  # Preparation before anonymization (Phase 2.1)
+    AFTER_ANONYMIZATION = 8   # Post-anonymization verification (Phase 2.1)
 
 
 @dataclass

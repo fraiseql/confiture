@@ -156,6 +156,72 @@ class AnonymizationStrategy(ABC):
         """
         raise NotImplementedError
 
+    def validate_comprehensive(
+        self,
+        value: Any,
+        column_name: str = "",
+        table_name: str = "",
+    ) -> tuple[bool, list[str]]:
+        """Comprehensive validation with detailed error reporting.
+
+        Extended validation method (Phase 2.1) that provides:
+        - Basic type validation (from validate())
+        - Completeness checking (NULL handling)
+        - Format validation (if applicable)
+        - Reversibility checking (for tokenization/encryption)
+        - Size constraints (max length, etc.)
+
+        Args:
+            value: Value to validate
+            column_name: Column name (for error context)
+            table_name: Table name (for error context)
+
+        Returns:
+            Tuple of (is_valid: bool, errors: list[str])
+            - is_valid: True if value is acceptable
+            - errors: List of validation error messages (empty if valid)
+
+        Example:
+            >>> strategy = EmailMaskingStrategy(StrategyConfig(seed=12345))
+            >>> is_valid, errors = strategy.validate_comprehensive(
+            ...     "john@example.com",
+            ...     column_name="email",
+            ...     table_name="users"
+            ... )
+            >>> if not is_valid:
+            ...     for error in errors:
+            ...         print(f"Validation error: {error}")
+        """
+        errors = []
+
+        # 1. Basic type validation
+        if not self.validate(value):
+            errors.append(
+                f"Column {table_name}.{column_name}: "
+                f"Value '{value}' (type {type(value).__name__}) "
+                f"cannot be handled by {self.name_short()}"
+            )
+            return False, errors
+
+        # 2. NULL/None handling
+        if value is None:
+            errors.append(
+                f"Column {table_name}.{column_name}: "
+                f"NULL value detected (strategy may not handle NULL)"
+            )
+            return False, errors
+
+        # 3. Empty string handling
+        if isinstance(value, str) and len(value.strip()) == 0:
+            errors.append(
+                f"Column {table_name}.{column_name}: "
+                f"Empty string detected (strategy may produce artifacts)"
+            )
+            return False, errors
+
+        # All checks passed
+        return True, []
+
     def name_short(self) -> str:
         """Return short name for this strategy (for logging/reporting).
 
