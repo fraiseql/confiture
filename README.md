@@ -118,6 +118,26 @@ confiture migrate generate --name "add_user_bio"
 confiture migrate up
 ```
 
+### Test Migrations Before Applying (Dry-Run)
+
+Analyze migrations without executing them:
+
+```bash
+# Analyze pending migrations
+confiture migrate up --dry-run
+
+# Test in SAVEPOINT (guaranteed rollback)
+confiture migrate up --dry-run-execute
+
+# Save analysis to file
+confiture migrate up --dry-run --format json --output report.json
+
+# Analyze rollback impact
+confiture migrate down --dry-run --steps 2
+```
+
+For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
+
 ---
 
 ## Documentation
@@ -127,8 +147,9 @@ confiture migrate up
 - **[Medium 2: Incremental Migrations](docs/guides/medium-2-incremental-migrations.md)** - ALTER-based changes
 - **[Medium 3: Production Data Sync](docs/guides/medium-3-production-sync.md)** - Copy and anonymize data
 - **[Medium 4: Zero-Downtime Migrations](docs/guides/medium-4-schema-to-schema.md)** - Schema-to-schema via FDW
+- **[Dry-Run Analysis Guide](docs/guides/cli-dry-run.md)** - Test migrations before applying (NEW!)
 - **[Migration Decision Tree](docs/guides/migration-decision-tree.md)** - Choose the right strategy
-- **[Schema Linting Guide](docs/linting.md)** - Validate schemas, catch issues early (NEW!)
+- **[Schema Linting Guide](docs/linting.md)** - Validate schemas, catch issues early
 
 ### 📚 API Reference
 - **[CLI Reference](docs/reference/cli.md)** - All commands documented
