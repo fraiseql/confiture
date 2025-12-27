@@ -532,10 +532,40 @@ def migrate_up(
         "--force",
         help="Force migration application, skipping state checks",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Analyze migrations without executing (metadata queries only)",
+    ),
+    dry_run_execute: bool = typer.Option(
+        False,
+        "--dry-run-execute",
+        help="Execute migrations in SAVEPOINT for realistic testing (guaranteed rollback)",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed analysis in dry-run report",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Report format (text or json)",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save report to file",
+    ),
 ) -> None:
     """Apply pending migrations.
 
     Applies all pending migrations up to the target version (or all if no target).
+
+    Use --dry-run for analysis without execution, or --dry-run-execute to test in SAVEPOINT.
     """
     from confiture.core.connection import (
         create_connection,
@@ -546,6 +576,20 @@ def migrate_up(
     from confiture.core.migrator import Migrator
 
     try:
+        # Validate dry-run options
+        if dry_run and dry_run_execute:
+            console.print("[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]")
+            raise typer.Exit(1)
+
+        if (dry_run or dry_run_execute) and force:
+            console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
+            raise typer.Exit(1)
+
+        # Validate format option
+        if format_output not in ("text", "json"):
+            console.print(f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]")
+            raise typer.Exit(1)
+
         # Load configuration
         config_data = load_config(config)
 
@@ -953,10 +997,35 @@ def migrate_down(
         "-n",
         help="Number of migrations to rollback",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Analyze rollback without executing",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed analysis in dry-run report",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Report format (text or json)",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save report to file",
+    ),
 ) -> None:
     """Rollback applied migrations.
 
     Rolls back the last N applied migrations (default: 1).
+
+    Use --dry-run to analyze rollback without executing.
     """
     from confiture.core.connection import (
         create_connection,
@@ -967,6 +1036,11 @@ def migrate_down(
     from confiture.core.migrator import Migrator
 
     try:
+        # Validate format option
+        if format_output not in ("text", "json"):
+            console.print(f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]")
+            raise typer.Exit(1)
+
         # Load configuration
         config_data = load_config(config)
 
