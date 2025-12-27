@@ -4,7 +4,7 @@
 
 ## What are Incremental Migrations?
 
-Incremental migrations are the traditional approach to database schema evolution. Instead of rebuilding the entire schema, you apply targeted changes (ALTER TABLE, CREATE INDEX, etc.) to existing databases.
+Incremental [migrations](../glossary.md#migration) are the traditional approach to database schema evolution. Instead of rebuilding the entire schema, you apply targeted changes (ALTER TABLE, CREATE INDEX, etc.) to existing databases.
 
 ### Key Concept
 
@@ -30,12 +30,12 @@ Confiture tracks which migrations have been applied in the `confiture_migrations
 
 ### ❌ Not For
 
-- **Fresh databases** - Use Medium 1 (Build from DDL) instead
+- **Fresh databases** - Use [Medium 1](./medium-1-build-from-ddl.md) (Build from DDL) instead
 - **Zero-downtime required** - Use Medium 4 (Schema-to-Schema)
 - **Complex transformations** - Large tables with type changes
 - **Production data sync** - Use Medium 3 instead
 
-### Comparison with Medium 1 (Build from DDL)
+### Comparison with [Medium 1](./medium-1-build-from-ddl.md) (Build from DDL)
 
 | Scenario | Medium 1 (Build) | Medium 2 (Migrate) |
 |----------|------------------|-------------------|

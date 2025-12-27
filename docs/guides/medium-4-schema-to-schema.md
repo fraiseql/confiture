@@ -4,7 +4,7 @@
 
 ## What is Schema-to-Schema Migration?
 
-Schema-to-Schema migration enables zero-downtime database migrations for major schema changes by running old and new schemas side-by-side, then seamlessly cutting over. It uses PostgreSQL's Foreign Data Wrapper (FDW) to connect the new schema to the old schema, allowing data migration while the old schema remains operational.
+Schema-to-Schema [migration](../glossary.md#migration) enables [zero-downtime](../glossary.md#zero-downtime-migration) database migrations for major schema changes by running old and new schemas side-by-side, then seamlessly cutting over. It uses PostgreSQL's [FDW](../glossary.md#fdw) (Foreign Data Wrapper) to connect the new schema to the old schema, allowing data migration while the old schema remains operational.
 
 ### Key Concept
 
@@ -27,9 +27,9 @@ Confiture creates a new database with the new schema while keeping the old datab
 
 ### Not For
 
-- **Simple changes** - Use Medium 2 (Incremental) for simple ALTER TABLE operations
-- **Fresh database** - Use Medium 1 (Build from DDL) for new environments
-- **Data copying only** - Use Medium 3 (Production Sync) for copying data without schema changes
+- **Simple changes** - Use [Medium 2](./medium-2-incremental-migrations.md) (Incremental) for simple ALTER TABLE operations
+- **Fresh database** - Use [Medium 1](./medium-1-build-from-ddl.md) (Build from DDL) for new environments
+- **Data copying only** - Use [Medium 3](./medium-3-production-sync.md) (Production Sync) for copying data without schema changes
 - **Emergency hotfixes** - Too complex for urgent production fixes
 
 ### When Breaking Changes Require Zero-Downtime
@@ -126,7 +126,7 @@ then instant cutover (0-5 seconds, zero downtime!)
 
 Confiture automatically selects the optimal strategy based on table size:
 
-### Strategy 1: FDW (Foreign Data Wrapper)
+### Strategy 1: [FDW](../glossary.md#fdw) (Foreign Data Wrapper)
 
 **Best for**: Small-medium tables (<10M rows), complex transformations
 

@@ -4,11 +4,11 @@
 
 ## What is Build from DDL?
 
-Build from DDL is Confiture's fastest way to create a PostgreSQL database. Instead of replaying migration history (like Alembic or Django migrations), Confiture concatenates your schema files and executes them directly.
+Build from [DDL](../glossary.md#ddl) is Confiture's fastest way to create a PostgreSQL database. Instead of replaying migration history (like Alembic or Django migrations), Confiture concatenates your schema files and executes them directly.
 
 ### Key Concept
 
-> **"DDL files are the source of truth, not migration history"**
+> **"[DDL](../glossary.md#ddl) files are the source of truth, not migration history"**
 
 Traditional tools:
 ```

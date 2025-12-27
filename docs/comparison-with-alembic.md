@@ -33,9 +33,9 @@ Database = execute all migrations in order
 - ❌ Technical debt accumulates (100+ migration files)
 - ❌ Complex for developers to reason about
 
-### Confiture: DDL Source Files are Primary
+### Confiture: [DDL](./glossary.md#ddl) Source Files are Primary
 
-Confiture treats **DDL source files as the primary artifact**. Your database is built by executing the current schema definition:
+Confiture treats **[DDL](./glossary.md#ddl) source files as the primary artifact**. Your database is built by executing the current schema definition:
 
 ```
 DDL Source Files (Primary Source)
@@ -116,9 +116,9 @@ CONFITURE (DDL-First)
 
 | Feature | Confiture | Alembic | Notes |
 |---------|-----------|---------|-------|
-| **Zero-downtime migrations** | ✅ Yes (FDW) | ❌ No | Confiture exclusive |
+| **Zero-downtime migrations** | ✅ Yes ([FDW](./glossary.md#fdw)) | ❌ No | Confiture exclusive |
 | **Production data sync** | ✅ Built-in | ❌ No | Confiture exclusive |
-| **PII anonymization** | ✅ Built-in | ❌ No | Confiture exclusive |
+| **[PII](./glossary.md#pii) anonymization** | ✅ Built-in | ❌ No | Confiture exclusive |
 | **Schema validation/linting** | ✅ Yes | ❌ No | Confiture exclusive |
 | **Migration hooks** | ✅ Yes (6 phases) | ✅ Yes | Confiture has more control |
 | **Python SDK** | ✅ Full API | ✅ Full API | Tie |

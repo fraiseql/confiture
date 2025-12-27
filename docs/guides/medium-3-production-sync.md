@@ -4,7 +4,7 @@
 
 ## What is Production Data Sync?
 
-Production Data Sync copies data from your production database to local or staging environments, with built-in PII (Personally Identifiable Information) anonymization. This gives you production-like data for development and testing without exposing sensitive user information.
+Production Data Sync copies data from your production database to local or staging environments, with built-in [PII](../glossary.md#pii) (Personally Identifiable Information) [anonymization](../glossary.md#anonymization). This gives you production-like data for development and testing without exposing sensitive user information.
 
 ### Key Concept
 
@@ -27,10 +27,10 @@ Confiture streams data using PostgreSQL's high-performance COPY protocol while a
 
 ### ❌ Not For
 
-- **Schema changes** - Use Medium 2 (Incremental) or 4 (Schema-to-Schema)
-- **Fresh database setup** - Use Medium 1 (Build from DDL)
+- **Schema changes** - Use [Medium 2](./medium-2-incremental-migrations.md) (Incremental) or [Medium 4](./medium-4-schema-to-schema.md) (Schema-to-Schema)
+- **Fresh database setup** - Use [Medium 1](./medium-1-build-from-ddl.md) (Build from DDL)
 - **Production backups** - Use pg_dump or proper backup tools
-- **Sharing unmasked PII** - Always use anonymization!
+- **Sharing unmasked [PII](../glossary.md#pii)** - Always use [anonymization](../glossary.md#anonymization)!
 
 ### Compliance and Security
 
