@@ -327,7 +327,7 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Current Version
 
-**v0.5.0+ - Production Ready** 🎉
+**Released: v0.3.2** | **In Development: Phase 4.4 + Phase 5**
 
 ### Core Migration Mediums (All Complete)
 All 4 migration strategies are fully implemented and production-tested:
@@ -336,19 +336,17 @@ All 4 migration strategies are fully implemented and production-tested:
 - ✅ **Medium 3**: Production Data Sync (with PII anonymization)
 - ✅ **Medium 4**: Zero-Downtime Migrations (via FDW)
 
-### What's Available Now
+### What's Available in v0.3.2 (Released)
 - ✅ **Core Features** (Phases 1-3): 4 migration mediums, DDL-first design, Rust performance
-- ✅ **Advanced Features** (Phase 4.4): Migration hooks, custom anonymization, interactive wizard, schema linting
-- ✅ **Enterprise Ready** (Phase 5): 14 guides, 309+ code examples, 5 integrations, 5 compliance frameworks, 10+ jurisdictions
-- ✅ **Integration Guides**: Slack, GitHub Actions, Monitoring, PagerDuty, Webhooks
-- ✅ **Compliance Frameworks**: HIPAA, SOX, PCI-DSS, SaaS Multi-tenant, International (GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act)
-- ✅ **API References**: 8 comprehensive guides covering all core and advanced APIs
+- ✅ **Documentation**: 9 user guides, 4 API references
 - ✅ **Production Examples**: 5 complete real-world scenarios
 - ✅ **Platform Support**: Python 3.11, 3.12, 3.13 on Linux, macOS, Windows
 
-### What's Coming Next (Phase 4.5+)
-- Additional linting rules and extensibility
-- Advanced threat modeling
+### Currently in Development (Not Yet Released)
+- 🚧 **Phase 4.4 Advanced Features**: Migration hooks, custom anonymization, interactive wizard, schema linting
+- 🚧 **Phase 5 Enterprise Ready**: 14 comprehensive guides, 309+ code examples, 5 integrations, 5 compliance frameworks
+- 🚧 **Phase 5 Integration Guides**: Slack, GitHub Actions, Monitoring, PagerDuty, Webhooks
+- 🚧 **Phase 5 Compliance**: HIPAA, SOX, PCI-DSS, SaaS Multi-tenant, International (GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act)
 
 For the detailed roadmap, see [PHASES.md](PHASES.md).
 
