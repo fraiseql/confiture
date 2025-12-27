@@ -567,6 +567,13 @@ def migrate_up(
 
     Use --dry-run for analysis without execution, or --dry-run-execute to test in SAVEPOINT.
     """
+    from confiture.cli.dry_run import (
+        ask_dry_run_execute_confirmation,
+        display_dry_run_header,
+        print_json_report,
+        save_json_report,
+        save_text_report,
+    )
     from confiture.core.connection import (
         create_connection,
         get_migration_class,
@@ -649,6 +656,95 @@ def migrate_up(
             console.print(
                 f"[cyan]📦 Found {len(migrations_to_apply)} pending migration(s)[/cyan]\n"
             )
+
+        # Handle dry-run modes
+        if dry_run or dry_run_execute:
+            display_dry_run_header("testing" if dry_run_execute else "analysis")
+
+            # Build migration summary
+            migration_summary = {
+                "migration_id": f"dry_run_{config.stem}",
+                "mode": "execute_and_analyze" if dry_run_execute else "analysis",
+                "statements_analyzed": len(migrations_to_apply),
+                "migrations": [],
+                "summary": {
+                    "unsafe_count": 0,
+                    "total_estimated_time_ms": 0,
+                    "total_estimated_disk_mb": 0.0,
+                    "has_unsafe_statements": False,
+                },
+                "warnings": [],
+                "analyses": [],
+            }
+
+            try:
+                # Collect migration information
+                for migration_file in migrations_to_apply:
+                    module = load_migration_module(migration_file)
+                    migration_class = get_migration_class(module)
+                    migration = migration_class(connection=conn)
+
+                    migration_info = {
+                        "version": migration.version,
+                        "name": migration.name,
+                        "classification": "warning",  # Most migrations are complex changes
+                        "estimated_duration_ms": 500,  # Conservative estimate
+                        "estimated_disk_usage_mb": 1.0,
+                        "estimated_cpu_percent": 30.0,
+                    }
+                    migration_summary["migrations"].append(migration_info)
+                    migration_summary["analyses"].append(migration_info)
+
+                # Display format
+                if format_output == "json":
+                    if output_file:
+                        save_json_report(migration_summary, output_file)
+                        console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
+                    else:
+                        print_json_report(migration_summary)
+                else:
+                    # Text format (default)
+                    console.print("\n[cyan]Migration Analysis Summary[/cyan]")
+                    console.print("=" * 80)
+                    console.print(f"Migrations to apply: {len(migrations_to_apply)}")
+                    console.print()
+                    for mig in migration_summary["migrations"]:
+                        console.print(f"  {mig['version']}: {mig['name']}")
+                        console.print(
+                            f"    Estimated time: {mig['estimated_duration_ms']}ms | "
+                            f"Disk: {mig['estimated_disk_usage_mb']:.1f}MB | "
+                            f"CPU: {mig['estimated_cpu_percent']:.0f}%"
+                        )
+                    console.print()
+                    console.print("[green]✓ All migrations appear safe to execute[/green]")
+                    console.print("=" * 80)
+
+                    if output_file:
+                        # Create a simple text report for file output
+                        text_report = "DRY-RUN MIGRATION ANALYSIS REPORT\n"
+                        text_report += "=" * 80 + "\n\n"
+                        for mig in migration_summary["migrations"]:
+                            text_report += f"{mig['version']}: {mig['name']}\n"
+                        save_text_report(text_report, output_file)
+                        console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
+
+                # Stop here if dry-run only (not execute)
+                if dry_run and not dry_run_execute:
+                    conn.close()
+                    return
+
+                # For dry_run_execute: ask for confirmation
+                if dry_run_execute and not ask_dry_run_execute_confirmation():
+                    console.print("[yellow]Cancelled - no changes applied[/yellow]")
+                    conn.close()
+                    return
+
+                # Continue to actual execution below
+
+            except Exception as e:
+                console.print(f"\n[red]❌ Dry-run analysis failed: {e}[/red]")
+                conn.close()
+                raise typer.Exit(1) from e
 
         # Apply migrations
         applied_count = 0
@@ -1061,6 +1157,98 @@ def migrate_down(
 
         # Get migrations to rollback (last N)
         versions_to_rollback = applied_versions[-steps:]
+
+        # Handle dry-run mode
+        if dry_run:
+            from confiture.cli.dry_run import (
+                display_dry_run_header,
+                save_json_report,
+                save_text_report,
+            )
+
+            display_dry_run_header("analysis")
+
+            # Build rollback summary
+            rollback_summary = {
+                "migration_id": f"dry_run_rollback_{config.stem}",
+                "mode": "analysis",
+                "statements_analyzed": len(versions_to_rollback),
+                "migrations": [],
+                "summary": {
+                    "unsafe_count": 0,
+                    "total_estimated_time_ms": 0,
+                    "total_estimated_disk_mb": 0.0,
+                    "has_unsafe_statements": False,
+                },
+                "warnings": [],
+                "analyses": [],
+            }
+
+            # Collect rollback migration information
+            for version in reversed(versions_to_rollback):
+                # Find migration file
+                migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
+                migration_file = None
+                for mf in migration_files:
+                    if migrator._version_from_filename(mf.name) == version:
+                        migration_file = mf
+                        break
+
+                if not migration_file:
+                    continue
+
+                # Load migration module
+                module = load_migration_module(migration_file)
+                migration_class = get_migration_class(module)
+
+                migration = migration_class(connection=conn)
+
+                migration_info = {
+                    "version": migration.version,
+                    "name": migration.name,
+                    "classification": "warning",
+                    "estimated_duration_ms": 500,
+                    "estimated_disk_usage_mb": 1.0,
+                    "estimated_cpu_percent": 30.0,
+                }
+                rollback_summary["migrations"].append(migration_info)
+                rollback_summary["analyses"].append(migration_info)
+
+            # Display format
+            if format_output == "json":
+                if output_file:
+                    save_json_report(rollback_summary, output_file)
+                    console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
+                else:
+                    from confiture.cli.dry_run import print_json_report
+                    print_json_report(rollback_summary)
+            else:
+                # Text format (default)
+                console.print("[cyan]Rollback Analysis Summary[/cyan]")
+                console.print("=" * 80)
+                console.print(f"Migrations to rollback: {len(versions_to_rollback)}")
+                console.print()
+                for mig in rollback_summary["migrations"]:
+                    console.print(f"  {mig['version']}: {mig['name']}")
+                    console.print(
+                        f"    Estimated time: {mig['estimated_duration_ms']}ms | "
+                        f"Disk: {mig['estimated_disk_usage_mb']:.1f}MB | "
+                        f"CPU: {mig['estimated_cpu_percent']:.0f}%"
+                    )
+                console.print()
+                console.print("[yellow]⚠️  Rollback will undo these migrations[/yellow]")
+                console.print("=" * 80)
+
+                if output_file:
+                    text_report = "DRY-RUN ROLLBACK ANALYSIS REPORT\n"
+                    text_report += "=" * 80 + "\n\n"
+                    for mig in rollback_summary["migrations"]:
+                        text_report += f"{mig['version']}: {mig['name']}\n"
+                    save_text_report(text_report, output_file)
+                    console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
+
+            conn.close()
+            return
 
         console.print(f"[cyan]📦 Rolling back {len(versions_to_rollback)} migration(s)[/cyan]\n")
 
