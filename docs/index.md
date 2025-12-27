@@ -164,13 +164,29 @@ Explore complete, production-ready examples:
 
 ## Documentation
 
+### 🚀 Getting Started
 - **[Getting Started](getting-started.md)** - Installation and first steps
-- **[User Guides](guides/migration-decision-tree.md)** - Complete guides for all 4 mediums
-- **[Troubleshooting](guides/troubleshooting.md)** - Common issues and solutions
-- **[Features](features/hexadecimal-sorting.md)** - Advanced features documentation
+- **[Glossary](glossary.md)** - Key terms and concepts (NEW!)
+
+### 📖 User Guides
+- **[Migration Decision Tree](guides/migration-decision-tree.md)** - Choose the right strategy
+- **[Medium 1: Build from DDL](guides/medium-1-build-from-ddl.md)** - Fresh databases in <1 second
+- **[Medium 2: Incremental Migrations](guides/medium-2-incremental-migrations.md)** - ALTER-based changes
+- **[Medium 3: Production Data Sync](guides/medium-3-production-sync.md)** - Copy and anonymize data
+- **[Medium 4: Zero-Downtime](guides/medium-4-schema-to-schema.md)** - Schema-to-schema via FDW
+
+### 📚 Reference
 - **[CLI Reference](reference/cli.md)** - All commands documented
 - **[Configuration Reference](reference/configuration.md)** - Environment setup
 - **[API Reference](api/builder.md)** - Python API documentation
+
+### 💡 Advanced Topics
+- **[Advanced Patterns](guides/advanced-patterns.md)** - Custom anonymization, hooks, CQRS (NEW!)
+- **[Comparison with Alembic](comparison-with-alembic.md)** - Detailed comparison (NEW!)
+- **[Performance Guide](performance.md)** - Benchmarks and optimization
+
+### 🆘 Help & Support
+- **[Troubleshooting](guides/troubleshooting.md)** - Common issues and solutions
 - **[Examples](../examples/)** - Production-ready examples
 
 ## Contributing

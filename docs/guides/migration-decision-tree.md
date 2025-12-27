@@ -7,33 +7,54 @@ This guide helps you choose the right migration strategy ("medium") for your spe
 ## Quick Decision Flowchart
 
 ```
-START: What do you need to do?
-│
-├─ 🆕 Setting up a NEW database (empty)?
-│  └─ Use Medium 1: Build from DDL
-│     Examples: New developer onboarding, CI/CD tests, review environments
-│
-├─ 📊 Need PRODUCTION DATA in dev/staging?
-│  └─ Use Medium 3: Production Data Sync
-│     Examples: Debug production issues locally, test with real data
-│
-├─ ✏️ Making SIMPLE schema changes?
-│  (Add column, create index, add constraint)
-│  │
-│  ├─ Can tolerate 1-30 seconds downtime?
-│  │  └─ YES: Use Medium 2: Incremental Migrations
-│  │
-│  └─ NO: Zero-downtime required
-│     └─ Use Medium 4: Schema-to-Schema (FDW)
-│
-└─ 🔧 Making COMPLEX schema changes?
-   (Type changes, renames, major refactoring)
-   │
-   ├─ Small table (<10M rows) + seconds downtime OK?
-   │  └─ YES: Use Medium 2: Incremental Migrations
-   │
-   └─ NO: Large table (>10M rows) OR zero-downtime required
-      └─ Use Medium 4: Schema-to-Schema (FDW or COPY)
+                    🚀 WHAT DO YOU NEED TO DO?
+                              │
+                   ┌──────────┼──────────┬─────────────┐
+                   │          │          │             │
+              ┌────▼────┐  ┌──▼───┐  ┌──▼───┐   ┌────▼────┐
+              │          │  │      │  │      │   │         │
+         🆕 NEW         📊 PROD  ✏️  SIMPLE  │  🔧 COMPLEX │
+        DATABASE?      DATA?    CHANGES?   │   CHANGES?  │
+              │          │          │       │   │         │
+              │          │          │       │   │         │
+           YES ↓       YES ↓      YES ↓   NO↓   │    YES↓  │
+              │          │          │   │  │   │         │
+              │          │          ├───┼──→  │   NO↓   │
+              │          │          │   │  │   └────────┘
+        ┌─────┴───┐ ┌────┴────┐ ┌──┴─┐ │  │          │
+        │ Medium 1│ │ Medium 3│ │M2/4│ │  └──────────┘
+        │Build    │ │Prod Data│ │   └─→M4
+        │from DDL │ │ Sync    │ │    │
+        │<1s      │ │70K r/s  │ │ M2 │
+        │         │ │+PII     │ │    │
+        │         │ │         │ │    │
+        └─────────┘ └─────────┘ └────┘
+
+                    MEDIUM SELECTION:
+
+        ┌────────────────────────────────────────────────┐
+        │ Medium 1: Build from DDL                       │
+        │ └─ Fresh databases: <1 second                 │
+        │ └─ Use: Onboarding, CI/CD, dev setup         │
+        └────────────────────────────────────────────────┘
+
+        ┌────────────────────────────────────────────────┐
+        │ Medium 2: Incremental Migrations              │
+        │ └─ Simple ALTERs: 1-30s downtime             │
+        │ └─ Use: Small schema updates                  │
+        └────────────────────────────────────────────────┘
+
+        ┌────────────────────────────────────────────────┐
+        │ Medium 3: Production Data Sync                │
+        │ └─ Copy data: 70K rows/sec                    │
+        │ └─ Use: Debug production locally              │
+        └────────────────────────────────────────────────┘
+
+        ┌────────────────────────────────────────────────┐
+        │ Medium 4: Schema-to-Schema (FDW/COPY)        │
+        │ └─ Zero-downtime: 0-5s cutover               │
+        │ └─ Use: Major refactoring, 10M+ rows         │
+        └────────────────────────────────────────────────┘
 ```
 
 ---

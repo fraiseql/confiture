@@ -48,6 +48,28 @@ DDL Source Files (Primary Source)
 Database = execute current DDL files once
 ```
 
+### Visual Comparison
+
+```
+┌─────────────────────────────┐    ┌─────────────────────────────┐
+│    ALEMBIC APPROACH         │    │    CONFITURE APPROACH       │
+│  (Migration-History First)  │    │     (DDL-First)             │
+└─────────────────────────────┘    └─────────────────────────────┘
+
+Migration Files               DDL Source Files
+├─ v001_users.py            ├─ db/schema/10_users.sql
+├─ v002_email.py            ├─ db/schema/20_views.sql
+├─ v003_roles.py            └─ db/schema/30_indexes.sql
+├─ ...
+└─ v100_migration.py        Current State (Definitive)
+
+Execute all 100 files        Execute once
+5-10 minutes ⏱️              <1 second ⚡
+
+One broken file =            Source files = source of truth
+Schema breaks ❌             Cleaner, simpler ✅
+```
+
 **Pros**:
 - ✅ Fresh database builds are FAST (<1 second)
 - ✅ What you see in db/schema/ is what you get in the database

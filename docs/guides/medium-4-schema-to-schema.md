@@ -50,67 +50,92 @@ Confiture creates a new database with the new schema while keeping the old datab
 ### The Migration Architecture
 
 ```
-┌─────────────────────┐
-│  Old Database       │  ← Application still running
-│  (Source)           │     Reading/writing here
-│                     │
-│  old_users table    │
-│  - full_name        │
-│  - email            │
-└─────────────────────┘
+Application Traffic              Application Traffic
+    (Read/Write)                     (Read/Write)
+         │                                │
+         ↓                                ↓
+    ┌────────────┐                   ┌────────────┐
+    │  Old DB    │                   │  Old DB    │
+    │ (Source)   │                   │ (Source)   │
+    ├────────────┤      Phase →      ├────────────┤
+    │ old_users  │                   │ old_users  │
+    │ full_name  │                   │ full_name  │
+    │ email      │                   │ email      │
+    └────────────┘                   └────────────┘
+         │                                │
+         │                                │ FDW (Read)
+         │                                ↓
+         │                           ┌────────────┐
+         │                           │  New DB    │
+         │                           │ (Target)   │
+         │                           ├────────────┤
+         │                           │ Foreign    │
+         │                           │ old_users  │
+         │                           │ (via FDW)  │
+         │                           │            │
+         │                           │ public.    │
+         │                           │ users      │
+         │                           │ display_   │
+         │                           │ name (new) │
+         │                           └────────────┘
          │
-         │ FDW Connection
-         │ (Read-only access)
-         ↓
-┌─────────────────────┐
-│  New Database       │  ← New schema ready
-│  (Target)           │     Being populated in background
-│                     │
-│  Foreign Schema:    │
-│  ├─ old_schema.     │  ← FDW views of old tables
-│  │   old_users      │
-│  │                  │
-│  New Schema:        │
-│  ├─ public.users    │  ← New schema structure
-│      - display_name │     (renamed from full_name)
-│      - email        │
-└─────────────────────┘
+         └──► CUTOVER (switch traffic)
+              Zero downtime!
 ```
+
+**Key concept**: Data migrates in background (hours/days), then instant cutover (seconds)
 
 ### Migration Process
 
 ```
-1. Setup Phase
-   ↓
-   Create new database with new schema (Medium 1: Build from DDL)
-
-2. FDW Setup
-   ↓
-   Configure Foreign Data Wrapper to connect to old database
-
-3. Strategy Selection
-   ↓
-   Auto-analyze tables, choose optimal strategy:
-   - FDW Strategy: <10M rows (500K rows/sec)
-   - COPY Strategy: ≥10M rows (6M rows/sec, 10-20x faster)
-
-4. Data Migration
-   ↓
-   For each table, migrate data with column mapping:
-   old_schema.old_users.full_name → public.users.display_name
-
-5. Verification
-   ↓
-   Compare row counts, verify data integrity
-
-6. Cutover
-   ↓
-   Switch application to new database (DNS/config change)
-   Zero downtime!
-
-7. Cleanup
-   ↓
-   Monitor new database, decommission old when confident
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 1️⃣ : SETUP                                                │
+│ Create new database with new schema (Medium 1: Build from DDL)  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 2️⃣ : FDW SETUP                                             │
+│ Configure Foreign Data Wrapper to connect old DB → new DB      │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 3️⃣ : STRATEGY SELECTION                                    │
+│ Auto-analyze tables:                                            │
+│  • <10M rows   → FDW Strategy (500K rows/sec)                  │
+│  • ≥10M rows   → COPY Strategy (6M rows/sec) ⚡ 10-20x faster  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 4️⃣ : DATA MIGRATION (Background)                          │
+│ For each table: old_schema.old_users.full_name                 │
+│                ↓ mapped to                                      │
+│                public.users.display_name                        │
+│ While: Application keeps reading/writing old DB ✅             │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 5️⃣ : VERIFICATION                                          │
+│ • Compare row counts (source vs target)                        │
+│ • Verify data integrity                                        │
+│ • Sample data comparison                                       │
+│ • All checks pass? ✅                                          │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 6️⃣ : CUTOVER (0-5 seconds downtime)                       │
+│ Update application config:                                      │
+│ OLD: DATABASE_URL=old-db.example.com                           │
+│ NEW: DATABASE_URL=new-db.example.com                           │
+│                                                                 │
+│ Instant traffic switch ⚡ Zero downtime achieved!              │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 7️⃣ : CLEANUP & MONITORING                                  │
+│ • Monitor new database (error rates, performance)              │
+│ • Keep old database warm (1-2 weeks rollback safety)           │
+│ • After confidence period: cleanup FDW, archive old DB         │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -173,18 +198,40 @@ COPY public.users (display_name, email) FROM STDIN
 
 ### Strategy Comparison
 
+```
+FDW STRATEGY                        COPY STRATEGY
+┌────────────────────────┐          ┌────────────────────────┐
+│ INSERT...SELECT        │          │ COPY...TO STDOUT      │
+│ through FDW            │          │ + COPY...FROM STDIN   │
+│                        │          │                        │
+│ Slower:                │          │ Faster:                │
+│ 500K rows/sec          │          │ 6M rows/sec ⚡        │
+│ Many round-trips       │          │ Streaming (bulk)      │
+│ SQL transformations    │          │ Column mapping only    │
+└────────────────────────┘          └────────────────────────┘
+
+Performance Comparison:
+┌──────────────┬──────────────┬──────────────┬───────────┐
+│ Table Size   │ FDW Time     │ COPY Time    │ Speedup   │
+├──────────────┼──────────────┼──────────────┼───────────┤
+│ 1M rows      │ 2.0s         │ 0.17s        │ 11.8x     │
+│ 10M rows     │ 20.0s        │ 1.7s         │ 11.8x     │
+│ 100M rows    │ 3.3 min      │ 16.7s        │ 12.0x     │
+│ 200M rows    │ 6.7 min      │ 33.3s        │ 12.0x     │
+└──────────────┴──────────────┴──────────────┴───────────┘
+
+Auto-selection threshold: 10,000,000 rows
+• <10M rows    → Use FDW (supports complex SQL)
+• ≥10M rows    → Use COPY (10-20x faster)
+```
+
 | Metric | FDW Strategy | COPY Strategy |
 |--------|-------------|--------------|
 | **Throughput** | 500K rows/sec | 6M rows/sec ⚡ |
 | **Best for** | <10M rows | ≥10M rows |
-| **1M rows** | ~2 seconds | ~0.17 seconds |
-| **10M rows** | ~20 seconds | ~1.7 seconds |
-| **100M rows** | ~3.3 minutes | ~17 seconds |
 | **Transformations** | Complex SQL | Column mapping |
 | **Memory** | Medium | Low (streaming) |
 | **Network** | Higher overhead | Optimized |
-
-**Auto-selection threshold**: 10,000,000 rows
 
 ---
 
