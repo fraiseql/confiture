@@ -1,10 +1,19 @@
 """Healthcare PHI (Protected Health Information) anonymization scenario.
 
-Real-world use case: HIPAA-compliant anonymization for research and analytics.
+Real-world use case: Compliant anonymization for research across multiple regions.
+
+Supports multiple data protection regulations:
+- HIPAA (USA) - Safe Harbor rules for de-identification
+- GDPR (EU/EEA) - General Data Protection Regulation
+- PIPEDA (Canada) - Personal Information Protection Act
+- LGPD (Brazil) - Lei Geral de Proteção de Dados
+- PIPL (China) - Personal Information Protection Law
+- Privacy Act (Australia) - Privacy Act 1988
+- POPIA (South Africa) - Protection of Personal Information Act
 
 Data Types (PHI - Protected Health Information):
 - Patient names (PII)
-- Social security numbers (SSN)
+- Social security numbers / Tax IDs (SSN)
 - Dates of birth (sensitive)
 - Medical record numbers (identifiers)
 - Diagnosis codes (sensitive)
@@ -15,17 +24,10 @@ Data Types (PHI - Protected Health Information):
 - Vital signs (may need masking)
 - Test results (sensitive)
 
-HIPAA Safe Harbor Rules:
-- Remove names, addresses, phone numbers, emails
-- Mask SSN and medical record numbers
-- Mask dates (keep year as 1900s for birthdate)
-- Remove admission dates within a year
-- Generalize location data
-
 Strategy:
 - Names: Complete masking
-- SSN: Pattern redaction
-- Birth dates: Year masking (convert to safe range)
+- SSN/Tax IDs: Pattern redaction
+- Birth dates: Year masking
 - Medical record numbers: Hash-based replacement
 - Diagnoses: Preserve ICD codes
 - Medications: Preserve as-is
@@ -35,14 +37,16 @@ Strategy:
 """
 
 from confiture.core.anonymization.factory import StrategyProfile, StrategyFactory
+from confiture.scenarios.compliance import RegulationType, ComplianceVerifier, PersonalDataCategories
 
 
 class HealthcareScenario:
-    """Healthcare PHI anonymization scenario.
+    """Healthcare PHI anonymization scenario supporting multiple regulations.
 
-    Demonstrates HIPAA-compliant anonymization for research purposes.
+    Demonstrates anonymization for research across different regions with
+    compliance verification for various data protection regulations.
 
-    Example:
+    Example (Default - HIPAA):
         >>> scenario = HealthcareScenario()
         >>> data = {
         ...     "patient_id": "PAT-00123",
@@ -55,21 +59,29 @@ class HealthcareScenario:
         ...     "visit_date": "2024-12-15",
         ...     "provider_name": "Dr. Sarah Johnson",
         ...     "facility_name": "St. Mary's Hospital",
-        ...     "vital_temp": 98.6,
-        ...     "vital_bp": "120/80",
         ... }
         >>> anonymized = scenario.anonymize(data)
         >>> # PHI masked, clinical data preserved
+
+    Example (GDPR):
+        >>> anonymized = scenario.anonymize(data, regulation=RegulationType.GDPR)
+        >>> compliant = scenario.verify_compliance(data, anonymized, RegulationType.GDPR)
     """
 
+    # Default seed for reproducibility
+    DEFAULT_SEED = 42
+
     @staticmethod
-    def get_profile() -> StrategyProfile:
-        """Get healthcare anonymization profile (HIPAA safe harbor).
+    def get_profile(regulation: RegulationType = RegulationType.GDPR) -> StrategyProfile:
+        """Get healthcare anonymization profile for specified regulation.
+
+        Args:
+            regulation: Target data protection regulation. Defaults to GDPR.
 
         Returns:
             StrategyProfile configured for healthcare PHI anonymization.
 
-        Strategy Mapping:
+        Strategy Mapping (applies to all regulations):
             - patient_id: preserve (study identifier)
             - patient_name: name masking (complete)
             - ssn: text redaction (SSN pattern)
@@ -83,9 +95,10 @@ class HealthcareScenario:
             - vital signs: preserve (clinical)
             - test results: preserve (clinical)
         """
+        profile_name = f"healthcare_{regulation.value}"
         return StrategyProfile(
-            name="healthcare_hipaa",
-            seed=42,  # Fixed seed for reproducibility
+            name=profile_name,
+            seed=HealthcareScenario.DEFAULT_SEED,  # Fixed seed for reproducibility
             columns={
                 # Study/research identifiers - preserve
                 "patient_id": "preserve",
@@ -103,8 +116,8 @@ class HealthcareScenario:
                 # Identifiers - redact/mask
                 "ssn": "text_redaction",
                 "social_security_number": "text_redaction",
-                "medical_record_number": "custom",
-                "mrn": "custom",
+                "medical_record_number": "text_redaction",
+                "mrn": "text_redaction",
 
                 # Contact - redact
                 "email": "text_redaction",
@@ -178,24 +191,28 @@ class HealthcareScenario:
         )
 
     @classmethod
-    def create_factory(cls) -> StrategyFactory:
+    def create_factory(cls, regulation: RegulationType = RegulationType.GDPR) -> StrategyFactory:
         """Create factory for healthcare anonymization.
+
+        Args:
+            regulation: Target data protection regulation. Defaults to GDPR.
 
         Returns:
             Configured StrategyFactory for healthcare PHI.
         """
-        profile = cls.get_profile()
+        profile = cls.get_profile(regulation)
         return StrategyFactory(profile)
 
     @classmethod
-    def anonymize(cls, data: dict) -> dict:
-        """Anonymize healthcare PHI data.
+    def anonymize(cls, data: dict, regulation: RegulationType = RegulationType.GDPR) -> dict:
+        """Anonymize healthcare PHI data according to specified regulation.
 
         Args:
             data: Patient/encounter data dictionary.
+            regulation: Target data protection regulation. Defaults to GDPR.
 
         Returns:
-            HIPAA-compliant anonymized data with PHI masked.
+            Compliant anonymized data with PHI masked.
 
         Example:
             >>> data = {
@@ -214,21 +231,25 @@ class HealthcareScenario:
             '[REDACTED]'
             >>> result["diagnosis"]  # Preserved
             'E11'
+
+            >>> # Use different regulation
+            >>> result_ccpa = HealthcareScenario.anonymize(data, RegulationType.CCPA)
         """
-        factory = cls.create_factory()
+        factory = cls.create_factory(regulation)
         return factory.anonymize(data)
 
     @classmethod
-    def anonymize_batch(cls, data_list: list[dict]) -> list[dict]:
+    def anonymize_batch(cls, data_list: list[dict], regulation: RegulationType = RegulationType.GDPR) -> list[dict]:
         """Anonymize batch of healthcare records.
 
         Args:
             data_list: List of patient/encounter records.
+            regulation: Target data protection regulation. Defaults to GDPR.
 
         Returns:
-            List of HIPAA-compliant anonymized records.
+            List of compliant anonymized records.
         """
-        factory = cls.create_factory()
+        factory = cls.create_factory(regulation)
         return [factory.anonymize(record) for record in data_list]
 
     @classmethod
@@ -243,31 +264,58 @@ class HealthcareScenario:
         return factory.list_column_strategies()
 
     @classmethod
-    def verify_hipaa_compliance(cls, data: dict, original: dict) -> dict:
-        """Verify HIPAA compliance of anonymized data.
+    def verify_compliance(
+        cls, original: dict, anonymized: dict, regulation: RegulationType = RegulationType.GDPR
+    ) -> dict:
+        """Verify compliance of anonymized data with specified regulation.
 
-        Checks that sensitive fields have been properly masked.
+        Checks that sensitive fields have been properly masked according to
+        the regulation's requirements.
 
         Args:
-            data: Anonymized data.
             original: Original data before anonymization.
+            anonymized: Anonymized data.
+            regulation: Target data protection regulation. Defaults to GDPR.
 
         Returns:
-            Dictionary with compliance verification results.
+            Dictionary with compliance verification results including:
+            - compliant: Boolean indicating compliance status
+            - regulation: Name of regulation checked
+            - masked_fields: List of fields that were anonymized
+            - preserved_fields: List of fields that were preserved
+            - issues: List of compliance issues if any
+            - masked_count: Number of masked fields
+            - preserved_count: Number of preserved fields
+
+        Example:
+            >>> data = {
+            ...     "patient_id": "PAT-123",
+            ...     "patient_name": "John Smith",
+            ...     "ssn": "123-45-6789",
+            ... }
+            >>> anon = HealthcareScenario.anonymize(data, RegulationType.GDPR)
+            >>> result = HealthcareScenario.verify_compliance(data, anon, RegulationType.GDPR)
+            >>> print(result["compliant"])
+            True
         """
-        issues = []
-        pii_fields = {
-            "ssn", "social_security_number",
-            "patient_name", "provider_name",
-            "medical_record_number", "mrn",
-        }
+        verifier = ComplianceVerifier(regulation)
+        return verifier.verify_anonymization(original, anonymized)
 
-        for field in pii_fields:
-            if field in original and field in data:
-                if data[field] == original[field]:
-                    issues.append(f"PII not masked: {field}")
+    @classmethod
+    def get_compliance_requirements(cls, regulation: RegulationType = RegulationType.GDPR) -> dict:
+        """Get compliance requirements for specified regulation.
 
-        return {
-            "compliant": len(issues) == 0,
-            "issues": issues,
-        }
+        Args:
+            regulation: Target data protection regulation. Defaults to GDPR.
+
+        Returns:
+            Dictionary with regulation requirements including applicable
+            data categories and consent requirements.
+
+        Example:
+            >>> reqs = HealthcareScenario.get_compliance_requirements(RegulationType.GDPR)
+            >>> print(reqs["total_categories"])  # Number of applicable categories
+            15
+        """
+        verifier = ComplianceVerifier(regulation)
+        return verifier.get_requirements()

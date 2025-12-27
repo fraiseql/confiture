@@ -118,8 +118,10 @@ class TestHealthcareScenario:
 
     def test_healthcare_profile_creation(self):
         """Test healthcare profile creation."""
-        profile = HealthcareScenario.get_profile()
-        assert profile.name == "healthcare_hipaa"
+        from confiture.scenarios.compliance import RegulationType
+
+        profile = HealthcareScenario.get_profile(RegulationType.GDPR)
+        assert profile.name == "healthcare_gdpr"
         assert profile.seed == 42
 
     def test_healthcare_hipaa_compliance(self):
@@ -166,17 +168,21 @@ class TestHealthcareScenario:
         assert results[1]["patient_id"] == "PAT-002"
 
     def test_healthcare_verify_compliance(self):
-        """Test HIPAA compliance verification."""
+        """Test multi-region compliance verification."""
+        from confiture.scenarios.compliance import RegulationType
+
         original = {
             "patient_id": "PAT-001",
             "patient_name": "John Smith",
             "ssn": "123-45-6789",
         }
-        anonymized = HealthcareScenario.anonymize(original)
+        anonymized = HealthcareScenario.anonymize(original, RegulationType.GDPR)
 
-        result = HealthcareScenario.verify_hipaa_compliance(anonymized, original)
+        result = HealthcareScenario.verify_compliance(original, anonymized, RegulationType.GDPR)
         # Patient name should be masked, primary PII protection is in place
         assert anonymized["patient_name"] != original["patient_name"]
+        assert "compliant" in result
+        assert "regulation" in result
 
     def test_healthcare_preserves_clinical_data(self):
         """Test that clinical data is preserved."""
