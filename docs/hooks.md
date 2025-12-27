@@ -304,9 +304,9 @@ class MyMigration(Migration):
 When you run `confiture migrate up`, hooks execute in this order:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                  Migration: 001_create_users                    │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│              Migration: 001_create_users                 │
+└──────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────┐
 │ 1️⃣  BEFORE_VALIDATION Phase                              │
@@ -316,8 +316,8 @@ When you run `confiture migrate up`, hooks execute in this order:
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 2️⃣  BEFORE_DDL Phase                                     │
-│    └─ CaptureStatsHook                                 │
-│       └─ Save initial row counts, index definitions ✅ │
+│    └─ CaptureStatsHook                                  │
+│       └─ Save initial row counts, index definitions ✅  │
 └──────────────────────────────────────────────────────────┘
                            ↓
 ┌──────────────────────────────────────────────────────────┐
@@ -330,30 +330,30 @@ When you run `confiture migrate up`, hooks execute in this order:
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 4️⃣  AFTER_DDL Phase                                      │
-│    └─ BackfillReadModelHook                            │
-│       └─ INSERT INTO read_model SELECT...              │
-│       └─ UPDATE denormalized_table...                  │
+│    └─ BackfillReadModelHook                             │
+│       └─ INSERT INTO read_model SELECT...               │
+│       └─ UPDATE denormalized_table...                   │
 │       └─ Populate new columns ✅                        │
 └──────────────────────────────────────────────────────────┘
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 5️⃣  AFTER_VALIDATION Phase                               │
-│    └─ ValidateConsistencyHook                          │
-│       └─ Check data integrity, FK constraints ✅       │
+│    └─ ValidateConsistencyHook                           │
+│       └─ Check data integrity, FK constraints ✅        │
 └──────────────────────────────────────────────────────────┘
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 6️⃣  CLEANUP Phase                                        │
-│    └─ CleanupTemporaryDataHook                         │
-│       └─ DROP temporary tables                         │
-│       └─ ANALYZE indexes                               │
-│       └─ Reset sequences ✅                            │
+│    └─ CleanupTemporaryDataHook                          │
+│       └─ DROP temporary tables                          │
+│       └─ ANALYZE indexes                                │
+│       └─ Reset sequences ✅                             │
 └──────────────────────────────────────────────────────────┘
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 7️⃣  Commit Transaction                                   │
-│    └─ All changes saved to database                    │
-│    └─ Migration recorded in migration_history ✅       │
+│    └─ All changes saved to database                     │
+│    └─ Migration recorded in migration_history ✅        │
 └──────────────────────────────────────────────────────────┘
                            ↓
                    ✅ SUCCESS
@@ -372,27 +372,27 @@ If any hook fails:
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 4️⃣  AFTER_DDL Phase                                      │
-│    └─ BackfillReadModelHook                            │
-│       └─ INSERT INTO read_model SELECT...              │
-│       └─ ❌ ERROR: SQL syntax error!                   │
+│    └─ BackfillReadModelHook                             │
+│       └─ INSERT INTO read_model SELECT...               │
+│       └─ ❌ ERROR: SQL syntax error!                    │
 └──────────────────────────────────────────────────────────┘
                            ↓
-      ⚠️  TRANSACTION ROLLBACK TRIGGERED
+       ⚠️  TRANSACTION ROLLBACK TRIGGERED
                            ↓
 ┌──────────────────────────────────────────────────────────┐
-│ ROLLBACK Phase                                          │
-│ ├─ Undo DDL EXECUTION                                  │
-│ ├─ Release savepoints                                  │
-│ ├─ Reset transaction to start                          │
-│ └─ All changes discarded ✅                            │
+│ ROLLBACK Phase                                           │
+│ ├─ Undo DDL EXECUTION                                   │
+│ ├─ Release savepoints                                   │
+│ ├─ Reset transaction to start                           │
+│ └─ All changes discarded ✅                             │
 └──────────────────────────────────────────────────────────┘
                            ↓
 ┌──────────────────────────────────────────────────────────┐
 │ 6️⃣  ON_ERROR Phase                                       │
-│    └─ AlertOnErrorHook                                 │
-│       └─ Send alert to monitoring system               │
-│       └─ Log error details                             │
-│       └─ Notify ops team ✅                            │
+│    └─ AlertOnErrorHook                                  │
+│       └─ Send alert to monitoring system                │
+│       └─ Log error details                              │
+│       └─ Notify ops team ✅                             │
 └──────────────────────────────────────────────────────────┘
                            ↓
                    ❌ MIGRATION FAILED

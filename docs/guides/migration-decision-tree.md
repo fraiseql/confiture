@@ -7,54 +7,54 @@ This guide helps you choose the right migration strategy ("medium") for your spe
 ## Quick Decision Flowchart
 
 ```
-                    🚀 WHAT DO YOU NEED TO DO?
-                              │
-                   ┌──────────┼──────────┬─────────────┐
-                   │          │          │             │
-              ┌────▼────┐  ┌──▼───┐  ┌──▼───┐   ┌────▼────┐
-              │          │  │      │  │      │   │         │
-         🆕 NEW         📊 PROD  ✏️  SIMPLE  │  🔧 COMPLEX │
-        DATABASE?      DATA?    CHANGES?   │   CHANGES?  │
-              │          │          │       │   │         │
-              │          │          │       │   │         │
-           YES ↓       YES ↓      YES ↓   NO↓   │    YES↓  │
-              │          │          │   │  │   │         │
-              │          │          ├───┼──→  │   NO↓   │
-              │          │          │   │  │   └────────┘
-        ┌─────┴───┐ ┌────┴────┐ ┌──┴─┐ │  │          │
-        │ Medium 1│ │ Medium 3│ │M2/4│ │  └──────────┘
-        │Build    │ │Prod Data│ │   └─→M4
-        │from DDL │ │ Sync    │ │    │
-        │<1s      │ │70K r/s  │ │ M2 │
-        │         │ │+PII     │ │    │
-        │         │ │         │ │    │
-        └─────────┘ └─────────┘ └────┘
+QUESTION:         Fresh       Prod        Simple      Complex
+                  DB?         Data?       Change?     Change?
+                  │           │           │           │
+ANSWER:       ┌───┴───┐   ┌──┴──┐    ┌──┴──┐    ┌───┴───┐
+              │ YES   │   │ YES │    │ YES │    │ YES   │
+              └───┬───┘   └──┬──┘    └──┬──┘    └───┬───┘
+                  │          │         │ └─ Downtime OK?
+                  │          │         │    ├─ YES → M2
+                  │          │         │    └─ NO → M4
+                  ↓          ↓         ↓
+              Medium 1   Medium 3  Medium 2/4
+              (Build)    (Sync)    (Varies)
+```
 
-                    MEDIUM SELECTION:
+**MEDIUM SELECTION GUIDE:**
 
-        ┌────────────────────────────────────────────────┐
-        │ Medium 1: Build from DDL                       │
-        │ └─ Fresh databases: <1 second                 │
-        │ └─ Use: Onboarding, CI/CD, dev setup         │
-        └────────────────────────────────────────────────┘
+| Question | Answer | Use Medium |
+|----------|--------|-----------|
+| Building fresh database? | YES | Medium 1: Build from DDL |
+| Need production data? | YES | Medium 3: Production Data Sync |
+| Making simple schema change? | YES | Medium 2: Incremental Migrations |
+| Large table + zero downtime? | YES | Medium 4: Schema-to-Schema |
 
-        ┌────────────────────────────────────────────────┐
-        │ Medium 2: Incremental Migrations              │
-        │ └─ Simple ALTERs: 1-30s downtime             │
-        │ └─ Use: Small schema updates                  │
-        └────────────────────────────────────────────────┘
+**QUICK SUMMARY:**
 
-        ┌────────────────────────────────────────────────┐
-        │ Medium 3: Production Data Sync                │
-        │ └─ Copy data: 70K rows/sec                    │
-        │ └─ Use: Debug production locally              │
-        └────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Medium 1: Build from DDL                         │
+│ • Fresh databases: <1 second                    │
+│ • Best for: Onboarding, CI/CD, dev setup       │
+└──────────────────────────────────────────────────┘
 
-        ┌────────────────────────────────────────────────┐
-        │ Medium 4: Schema-to-Schema (FDW/COPY)        │
-        │ └─ Zero-downtime: 0-5s cutover               │
-        │ └─ Use: Major refactoring, 10M+ rows         │
-        └────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Medium 2: Incremental Migrations                │
+│ • Simple ALTERs: 1-30s downtime                 │
+│ • Best for: Small schema updates                │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ Medium 3: Production Data Sync                  │
+│ • Copy data: 70K rows/sec                       │
+│ • Best for: Debug production locally            │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ Medium 4: Schema-to-Schema (FDW/COPY)          │
+│ • Zero-downtime: 0-5s cutover                  │
+│ • Best for: Major refactoring, 10M+ rows       │
+└──────────────────────────────────────────────────┘
 ```
 
 ---

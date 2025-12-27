@@ -51,23 +51,37 @@ Database = execute current DDL files once
 ### Visual Comparison
 
 ```
-┌─────────────────────────────┐    ┌─────────────────────────────┐
-│    ALEMBIC APPROACH         │    │    CONFITURE APPROACH       │
-│  (Migration-History First)  │    │     (DDL-First)             │
-└─────────────────────────────┘    └─────────────────────────────┘
+ALEMBIC (Migration-History First)
+┌────────────────────────────┐
+│ Migration Files            │
+├─ v001_create_users.py     │
+├─ v002_add_email.py        │
+├─ v003_add_roles.py        │
+├─ ...                       │
+└─ v100_final_change.py     │
+│                            │
+│ Execute ALL 100 files      │
+│ in order (replay history)  │
+│                            │
+│ Time: 5-10 minutes ⏱️       │
+│ Risk: One broken file =    │
+│       Schema breaks ❌     │
+└────────────────────────────┘
 
-Migration Files               DDL Source Files
-├─ v001_users.py            ├─ db/schema/10_users.sql
-├─ v002_email.py            ├─ db/schema/20_views.sql
-├─ v003_roles.py            └─ db/schema/30_indexes.sql
-├─ ...
-└─ v100_migration.py        Current State (Definitive)
-
-Execute all 100 files        Execute once
-5-10 minutes ⏱️              <1 second ⚡
-
-One broken file =            Source files = source of truth
-Schema breaks ❌             Cleaner, simpler ✅
+CONFITURE (DDL-First)
+┌────────────────────────────┐
+│ DDL Source Files           │
+├─ db/schema/10_users.sql   │
+├─ db/schema/20_views.sql   │
+└─ db/schema/30_indexes.sql │
+│                            │
+│ Execute ONCE (current DDL) │
+│ No replay, no history      │
+│                            │
+│ Time: <1 second ⚡          │
+│ Safety: Source = truth ✅   │
+│        No technical debt   │
+└────────────────────────────┘
 ```
 
 **Pros**:

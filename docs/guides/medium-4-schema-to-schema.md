@@ -50,40 +50,22 @@ Confiture creates a new database with the new schema while keeping the old datab
 ### The Migration Architecture
 
 ```
-Application Traffic              Application Traffic
-    (Read/Write)                     (Read/Write)
-         │                                │
-         ↓                                ↓
-    ┌────────────┐                   ┌────────────┐
-    │  Old DB    │                   │  Old DB    │
-    │ (Source)   │                   │ (Source)   │
-    ├────────────┤      Phase →      ├────────────┤
-    │ old_users  │                   │ old_users  │
-    │ full_name  │                   │ full_name  │
-    │ email      │                   │ email      │
-    └────────────┘                   └────────────┘
-         │                                │
-         │                                │ FDW (Read)
-         │                                ↓
-         │                           ┌────────────┐
-         │                           │  New DB    │
-         │                           │ (Target)   │
-         │                           ├────────────┤
-         │                           │ Foreign    │
-         │                           │ old_users  │
-         │                           │ (via FDW)  │
-         │                           │            │
-         │                           │ public.    │
-         │                           │ users      │
-         │                           │ display_   │
-         │                           │ name (new) │
-         │                           └────────────┘
-         │
-         └──► CUTOVER (switch traffic)
-              Zero downtime!
-```
+BEFORE MIGRATION          DURING MIGRATION         AT CUTOVER
+┌─────────────────┐       ┌─────────────────┐      ┌──────────────┐
+│   Old DB        │       │   Old DB        │      │   New DB     │
+│  (Source)       │       │  (Source)       │      │  (Target)    │
+│  ┌───────────┐  │       │  ┌───────────┐  │      │ ┌──────────┐ │
+│  │ old_users │  │       │  │ old_users │  │      │ │ users    │ │
+│  │ full_name │  │──────→│  │ full_name │  │─────→│ │ display_ │ │
+│  │ email     │  │ FDW   │  │ email     │  │ Copy │ │ name     │ │
+│  └───────────┘  │       │  └───────────┘  │      │ │ email    │ │
+│ (App using)     │       │ (App using)     │      │ └──────────┘ │
+└─────────────────┘       └─────────────────┘      │ (App switch) │
+                                                    └──────────────┘
 
-**Key concept**: Data migrates in background (hours/days), then instant cutover (seconds)
+Key concept: Data migrates in background (hours/days),
+then instant cutover (0-5 seconds, zero downtime!)
+```
 
 ### Migration Process
 
