@@ -278,38 +278,30 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - ✅ **Comprehensive examples** - CQRS and validation hook examples
 - ✅ **Full documentation** - 2000+ word hooks guide with patterns
 
-### ✅ Phase 5: Enterprise Integration & Compliance (Complete - Jan 2026) 🎉
+### ✅ Phase 5: Comprehensive Documentation & Guides (In Development)
 
-**4 New APIs for Advanced Use Cases**:
-- ✅ **Hook API** - Execute custom code before/after migrations
-- ✅ **Anonymization API** - 10+ PII masking strategies for safe data copying
-- ✅ **Linting API** - Automated schema validation with custom rules
-- ✅ **Migration Wizard API** - Interactive guided migrations with risk assessment
+**Integration Guides**:
+- ✅ **Slack Integration** - Real-time migration notifications
+- ✅ **GitHub Actions** - CI/CD workflow automation
+- ✅ **Monitoring Integration** - Prometheus, Datadog, CloudWatch
+- ✅ **PagerDuty** - Incident management
+- ✅ **Webhooks** - Custom integrations
 
-**Enterprise Integrations**:
-- ✅ **Slack** - Real-time notifications for migration events
-- ✅ **GitHub Actions** - Automated CI/CD workflows with approval gates
-- ✅ **Monitoring** - Prometheus, Datadog, CloudWatch integration
-- ✅ **PagerDuty** - Automatic incident creation on failures
-- ✅ **Webhooks** - Custom integrations with your own systems
+**Compliance & Industry Guides**:
+- ✅ **Healthcare (HIPAA)** - Audit logging and PHI protection
+- ✅ **Finance (SOX)** - Segregation of duties and controls
+- ✅ **E-Commerce (PCI-DSS)** - Secure credit card handling
+- ✅ **SaaS Multi-tenant** - Data isolation and rollback
+- ✅ **International Compliance** - GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act
 
-**Compliance Ready**:
-- ✅ **Healthcare (HIPAA)** - Audit logging, PHI protection, retention policies
-- ✅ **Finance (SOX)** - Segregation of duties, reconciliation, audit trails
-- ✅ **E-Commerce (PCI-DSS)** - Secure credit card handling and masking
-- ✅ **SaaS** - Multi-tenant isolation and per-tenant rollback
-- ✅ **International** - GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act compliant
+### 🚧 Advanced Features (In Development)
+Some advanced capabilities are under active development:
+- Migration hooks for custom logic before/after migrations
+- Schema linting and validation
+- Enhanced anonymization strategies
+- Interactive migration workflows
 
-### ✅ Phase 4.4: Advanced Features (Complete - Dec 2025)
-- ✅ **Migration Hooks** - Execute custom logic before/after migrations (BEFORE_VALIDATION, BEFORE_DDL, AFTER_DDL, AFTER_VALIDATION, CLEANUP, ON_ERROR)
-- ✅ **Custom Anonymization Strategies** - Build your own PII masking with composable strategies
-- ✅ **Interactive Migration Wizard** - Guided migrations with risk assessment and approvals
-- ✅ **Schema Linting** - Validate schemas against 6 built-in rules + custom rule framework
-- ✅ **Advanced Patterns** - 5 enterprise workflows (audit system, GDPR sync, approval pipelines)
-
-### 🚧 Coming Soon (Phase 4.5+)
-- Additional linting rules and extensibility
-- Advanced threat modeling
+See [documentation](docs/) for details on experimental features.
 
 ---
 
@@ -327,26 +319,25 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Current Version
 
-**Released: v0.3.2** | **In Development: Phase 4.4 + Phase 5**
+**v0.3.2 - Stable Release** 🎉
 
-### Core Migration Mediums (All Complete)
-All 4 migration strategies are fully implemented and production-tested:
+### Core Migration System
+All 4 migration strategies are implemented and production-tested:
 - ✅ **Medium 1**: Build from DDL (fresh databases in <1 second)
 - ✅ **Medium 2**: Incremental Migrations (simple ALTER-based changes)
 - ✅ **Medium 3**: Production Data Sync (with PII anonymization)
 - ✅ **Medium 4**: Zero-Downtime Migrations (via FDW)
 
-### What's Available in v0.3.2 (Released)
-- ✅ **Core Features** (Phases 1-3): 4 migration mediums, DDL-first design, Rust performance
-- ✅ **Documentation**: 9 user guides, 4 API references
-- ✅ **Production Examples**: 5 complete real-world scenarios
-- ✅ **Platform Support**: Python 3.11, 3.12, 3.13 on Linux, macOS, Windows
+### What's Available
+- ✅ All 4 migration mediums fully implemented
+- ✅ Comprehensive documentation and guides
+- ✅ Production-ready examples
+- ✅ Python 3.11, 3.12, 3.13 support
+- ✅ Multi-platform wheels (Linux, macOS, Windows)
+- ✅ Rust performance layer (10-50x faster)
 
-### Currently in Development (Not Yet Released)
-- 🚧 **Phase 4.4 Advanced Features**: Migration hooks, custom anonymization, interactive wizard, schema linting
-- 🚧 **Phase 5 Enterprise Ready**: 14 comprehensive guides, 309+ code examples, 5 integrations, 5 compliance frameworks
-- 🚧 **Phase 5 Integration Guides**: Slack, GitHub Actions, Monitoring, PagerDuty, Webhooks
-- 🚧 **Phase 5 Compliance**: HIPAA, SOX, PCI-DSS, SaaS Multi-tenant, International (GDPR, LGPD, PIPEDA, PDPA, POPIA, Privacy Act)
+### Additional Features in Development
+Some advanced features are being developed and documented but not yet formally released. See [documentation](docs/) for details on experimental features and roadmap.
 
 For the detailed roadmap, see [PHASES.md](PHASES.md).
 
