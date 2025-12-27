@@ -1,5 +1,6 @@
 """Migration executor for applying and rolling back database migrations."""
 
+import logging
 import time
 from pathlib import Path
 
@@ -7,8 +8,11 @@ import psycopg
 
 from confiture.core.connection import get_migration_class, load_migration_module
 from confiture.core.dry_run import DryRunExecutor
+from confiture.core.hooks import HookContext, HookError, HookExecutor, HookPhase
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
+
+logger = logging.getLogger(__name__)
 
 
 class Migrator:
@@ -176,10 +180,20 @@ class Migrator:
         """Apply a migration and record it in the tracking table.
 
         Uses savepoints for clean rollback on failure.
+        Executes hooks before and after DDL execution:
+        - BEFORE_VALIDATION: Pre-flight checks
+        - BEFORE_DDL: Data preparation
+        - AFTER_DDL: Data backfill (e.g., read model updates)
+        - AFTER_VALIDATION: Consistency verification
+        - CLEANUP: Final cleanup
+        - ON_ERROR: Error handlers (if migration fails)
 
         Args:
             migration: Migration instance to apply
             force: If True, skip the "already applied" check
+
+        Raises:
+            MigrationError: If migration fails or hooks fail
         """
         already_applied = self._is_applied(migration.version)
 
@@ -189,13 +203,66 @@ class Migrator:
             )
 
         savepoint_name = f"migration_{migration.version}"
+        executor = HookExecutor()
+        context = HookContext(
+            migration_name=migration.name,
+            migration_version=migration.version,
+            direction="forward"
+        )
 
         try:
             self._create_savepoint(savepoint_name)
 
+            # BEFORE_VALIDATION phase
+            logger.debug(f"Executing BEFORE_VALIDATION hooks for migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.BEFORE_VALIDATION,
+                migration.before_validation_hooks or [],
+                context
+            )
+
+            # BEFORE_DDL phase
+            logger.debug(f"Executing BEFORE_DDL hooks for migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.BEFORE_DDL,
+                migration.before_ddl_hooks or [],
+                context
+            )
+
+            # Execute migration DDL
+            logger.debug(f"Executing DDL for migration {migration.version}")
             start_time = time.perf_counter()
             migration.up()
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # AFTER_DDL phase
+            logger.debug(f"Executing AFTER_DDL hooks for migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.AFTER_DDL,
+                migration.after_ddl_hooks or [],
+                context
+            )
+
+            # AFTER_VALIDATION phase
+            logger.debug(f"Executing AFTER_VALIDATION hooks for migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.AFTER_VALIDATION,
+                migration.after_validation_hooks or [],
+                context
+            )
+
+            # CLEANUP phase
+            logger.debug(f"Executing CLEANUP hooks for migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.CLEANUP,
+                migration.cleanup_hooks or [],
+                context
+            )
 
             # Only record the migration if it's not already applied
             # In force mode, we re-apply but don't re-record
@@ -204,11 +271,28 @@ class Migrator:
             self._release_savepoint(savepoint_name)
 
             self.connection.commit()
+            logger.info(f"Successfully applied migration {migration.version} ({migration.name})")
 
         except Exception as e:
             self._rollback_to_savepoint(savepoint_name)
 
-            if isinstance(e, MigrationError):
+            # ON_ERROR phase: execute error handlers if migration fails
+            logger.debug(f"Migration {migration.version} failed, executing ON_ERROR hooks")
+            try:
+                executor.execute_phase(
+                    self.connection,
+                    HookPhase.ON_ERROR,
+                    migration.error_hooks or [],
+                    context
+                )
+            except Exception as hook_error:
+                # Log hook error but don't mask the original migration error
+                logger.error(
+                    f"ON_ERROR hook failed for migration {migration.version}: {hook_error}",
+                    exc_info=True
+                )
+
+            if isinstance(e, (MigrationError, HookError)):
                 raise
             else:
                 raise MigrationError(
@@ -257,9 +341,12 @@ class Migrator:
 
         This method:
         1. Checks if migration was applied
-        2. Executes migration.down() within a transaction
-        3. Removes migration record from tracking table
-        4. Commits transaction
+        2. Executes BEFORE_DDL hooks (for rollback cleanup prep)
+        3. Executes migration.down() within a transaction
+        4. Executes CLEANUP hooks (for rollback cleanup)
+        5. Removes migration record from tracking table
+        6. Commits transaction
+        7. Executes ON_ERROR hooks if rollback fails
 
         Args:
             migration: Migration instance to rollback
@@ -274,9 +361,35 @@ class Migrator:
                 "has not been applied, cannot rollback"
             )
 
+        executor = HookExecutor()
+        context = HookContext(
+            migration_name=migration.name,
+            migration_version=migration.version,
+            direction="backward"
+        )
+
         try:
+            # BEFORE_DDL phase (for rollback cleanup prep)
+            logger.debug(f"Executing BEFORE_DDL hooks for rollback of migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.BEFORE_DDL,
+                migration.before_ddl_hooks or [],
+                context
+            )
+
             # Execute down() method
+            logger.debug(f"Executing rollback (down) for migration {migration.version}")
             migration.down()
+
+            # CLEANUP phase (for rollback cleanup)
+            logger.debug(f"Executing CLEANUP hooks for rollback of migration {migration.version}")
+            executor.execute_phase(
+                self.connection,
+                HookPhase.CLEANUP,
+                migration.cleanup_hooks or [],
+                context
+            )
 
             # Remove from tracking table
             self._execute_sql(
@@ -289,9 +402,27 @@ class Migrator:
 
             # Commit transaction
             self.connection.commit()
+            logger.info(f"Successfully rolled back migration {migration.version} ({migration.name})")
 
         except Exception as e:
             self.connection.rollback()
+
+            # ON_ERROR phase: execute error handlers if rollback fails
+            logger.debug(f"Rollback of migration {migration.version} failed, executing ON_ERROR hooks")
+            try:
+                executor.execute_phase(
+                    self.connection,
+                    HookPhase.ON_ERROR,
+                    migration.error_hooks or [],
+                    context
+                )
+            except Exception as hook_error:
+                # Log hook error but don't mask the original rollback error
+                logger.error(
+                    f"ON_ERROR hook failed during rollback of migration {migration.version}: {hook_error}",
+                    exc_info=True
+                )
+
             raise MigrationError(
                 f"Failed to rollback migration {migration.version} ({migration.name}): {e}"
             ) from e

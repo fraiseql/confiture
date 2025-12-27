@@ -192,8 +192,16 @@ confiture migrate up
 - ✅ **Comprehensive documentation** - User guide with 2000+ words
 - ✅ **4+ working examples** - From basic to advanced usage
 
-### 🚧 Coming Soon (Phase 4.3+)
-- Advanced migration hooks (before/after)
+### ✅ Phase 4.3: Migration Hooks (Complete - Dec 2025)
+- ✅ **Migration hooks** - Execute custom code before/after DDL
+- ✅ **6 hook phases** - BEFORE_VALIDATION, BEFORE_DDL, AFTER_DDL, AFTER_VALIDATION, CLEANUP, ON_ERROR
+- ✅ **CQRS backfilling** - Sync read models after schema changes
+- ✅ **Data validation** - Verify integrity before/after migrations
+- ✅ **Error handling** - Custom error handlers with rollback
+- ✅ **Comprehensive examples** - CQRS and validation hook examples
+- ✅ **Full documentation** - 2000+ word hooks guide with patterns
+
+### 🚧 Coming Soon (Phase 4.4+)
 - Custom anonymization strategies
 - Interactive migration wizard
 - Migration dry-run mode
@@ -247,8 +255,20 @@ confiture migrate up
   - ✅ Recursive directory support
   - ✅ Advanced configuration options
   - ✅ Comprehensive feature documentation
-- ⏳ Phase 4: Advanced Features (Q1 2026)
-  - Migration hooks, wizards, dry-run mode
+- ✅ **Phase 4.1-4.2: Advanced Features Foundation** (Complete - Dec 2025)
+  - ✅ Entry points and structured logging
+  - ✅ Schema linting with 6 rules
+  - ✅ Type checker migration (mypy → Astral's ty)
+- ✅ **Phase 4.3: Migration Hooks System** (Complete - Dec 2025)
+  - ✅ 6-phase hook execution (BEFORE_VALIDATION → CLEANUP → ON_ERROR)
+  - ✅ CQRS backfilling and validation hooks
+  - ✅ Hook context for inter-hook communication
+  - ✅ Error handling with ON_ERROR hooks
+- ⏳ Phase 4.4+: Advanced Features (Q1 2026)
+  - Custom anonymization strategies
+  - Interactive migration wizard
+  - Migration dry-run mode
+  - Additional linting rules
 
 **Statistics**:
 - 📦 4 migration strategies implemented

@@ -1,9 +1,12 @@
 """Migration base class for database migrations."""
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg
+
+if TYPE_CHECKING:
+    from confiture.core.hooks import Hook
 
 
 class Migration(ABC):
@@ -14,6 +17,14 @@ class Migration(ABC):
     - Define a name (e.g., "create_users")
     - Implement up() method for applying the migration
     - Implement down() method for rolling back the migration
+
+    Migrations can optionally define hooks that execute before/after DDL:
+    - before_validation_hooks: Pre-flight checks before migration
+    - before_ddl_hooks: Data prep before structural changes
+    - after_ddl_hooks: Data backfill after structural changes
+    - after_validation_hooks: Verification after data operations
+    - cleanup_hooks: Final cleanup operations
+    - error_hooks: Error handlers during rollback
 
     Example:
         >>> class CreateUsers(Migration):
@@ -30,6 +41,18 @@ class Migration(ABC):
         ...
         ...     def down(self):
         ...         self.execute('DROP TABLE users')
+
+    Example with hooks:
+        >>> class AddAnalyticsTable(Migration):
+        ...     version = "002"
+        ...     name = "add_analytics_table"
+        ...     after_ddl_hooks = [BackfillAnalyticsHook()]
+        ...
+        ...     def up(self):
+        ...         self.execute('CREATE TABLE analytics (...)')
+        ...
+        ...     def down(self):
+        ...         self.execute('DROP TABLE analytics')
     """
 
     # Subclasses must define these
@@ -38,6 +61,14 @@ class Migration(ABC):
 
     # Configuration attributes
     strict_mode: bool = False  # Default: lenient error handling
+
+    # Hook attributes (optional, default to empty lists)
+    before_validation_hooks: list["Hook"] = []
+    before_ddl_hooks: list["Hook"] = []
+    after_ddl_hooks: list["Hook"] = []
+    after_validation_hooks: list["Hook"] = []
+    cleanup_hooks: list["Hook"] = []
+    error_hooks: list["Hook"] = []
 
     def __init__(self, connection: psycopg.Connection):
         """Initialize migration with database connection.
