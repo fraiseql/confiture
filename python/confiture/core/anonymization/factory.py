@@ -160,7 +160,11 @@ class StrategyFactory:
         ]
 
         for strategy_name in all_strategies:
-            if not StrategyRegistry.is_registered(strategy_name):
+            # Extract base strategy name (remove config suffix if present)
+            # "name:firstname_lastname" -> "name"
+            base_name = strategy_name.split(":")[0] if strategy_name else ""
+
+            if not StrategyRegistry.is_registered(base_name):
                 raise ValueError(f"Unknown strategy: {strategy_name}")
 
     def list_column_strategies(self) -> Dict[str, str]:
