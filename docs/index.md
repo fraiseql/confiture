@@ -137,19 +137,31 @@ Explore complete, production-ready examples:
 
 ### ✅ Available Now
 
+**Core Mediums**:
 - Build from DDL (Medium 1)
 - Incremental migrations (Medium 2)
 - Production data sync with anonymization (Medium 3)
 - Schema-to-schema FDW migration (Medium 4)
-- **Rust performance layer** (10-50x speedup)
+
+**Performance & Integration**:
+- Rust performance layer (10-50x speedup)
+- Binary wheels for Linux, macOS, Windows
+- FraiseQL integration
 - Environment-specific configurations
 - Schema diff detection
+
+**Phase 4 Features** (NEW!):
+- **Migration Hooks** - Before/after execution hooks
+- **Custom Anonymization** - Build your own data masking strategies
+- **Interactive Wizard** - Guided step-by-step migrations
+- **Schema Linting** - Validate schema against best practices
+- **Dry-run Mode** - Analyze migrations before applying (v0.4.0)
+
+**v0.3.0+ Features**:
+- Hexadecimal file sorting
+- Dynamic SQL discovery with patterns
+- Recursive directory support
 - CLI with rich terminal output
-- **Binary wheels** for Linux, macOS, Windows
-- FraiseQL integration
-- **Hexadecimal file sorting** (v0.3.0)
-- **Dynamic SQL discovery** with patterns (v0.3.0)
-- **Recursive directory support** (v0.3.0)
 
 ## Comparison
 
@@ -180,9 +192,14 @@ Explore complete, production-ready examples:
 - **[Configuration Reference](reference/configuration.md)** - Environment setup
 - **[API Reference](api/builder.md)** - Python API documentation
 
-### 💡 Advanced Topics
-- **[Advanced Patterns](guides/advanced-patterns.md)** - Custom anonymization, hooks, CQRS (NEW!)
-- **[Comparison with Alembic](comparison-with-alembic.md)** - Detailed comparison (NEW!)
+### 💡 Advanced Topics (Phase 4 - NEW!)
+- **[Migration Hooks](guides/migration-hooks.md)** - Extend migrations with before/after hooks
+- **[Custom Anonymization Strategies](guides/custom-anonymization-strategies.md)** - Build your own data masking
+- **[Interactive Migration Wizard](guides/interactive-migration-wizard.md)** - Guided step-by-step migrations
+- **[Schema Linting](guides/schema-linting.md)** - Validate schema against best practices
+- **[Hooks vs Pre-commit](guides/hooks-vs-pre-commit.md)** - Choose the right validation tool
+- **[Advanced Patterns](guides/advanced-patterns.md)** - Custom workflows, CQRS patterns
+- **[Comparison with Alembic](comparison-with-alembic.md)** - Detailed comparison
 - **[Performance Guide](performance.md)** - Benchmarks and optimization
 
 ### 🆘 Help & Support
