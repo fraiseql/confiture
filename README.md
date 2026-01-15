@@ -18,6 +18,47 @@ Confiture is the official migration tool for [FraiseQL](https://github.com/frais
 
 ---
 
+## 🍓 Part of the FraiseQL Ecosystem
+
+**confiture** accelerates PostgreSQL schema evolution across the FraiseQL stack:
+
+### **Server Stack (PostgreSQL + Python/Rust)**
+
+| Tool | Purpose | Status | Performance Gain |
+|------|---------|--------|------------------|
+| **[pg_tviews](https://github.com/fraiseql/pg_tviews)** | Incremental materialized views | Beta | **100-500× faster** |
+| **[jsonb_delta](https://github.com/evoludigit/jsonb_delta)** | JSONB surgical updates | Stable | **2-7× faster** |
+| **[pgGit](https://pggit.dev)** | Database version control | Stable | Git for databases |
+| **[confiture](https://github.com/fraiseql/confiture)** | PostgreSQL migrations | **Stable** ⭐ | **300-600× faster** |
+| **[fraiseql](https://fraiseql.dev)** | GraphQL framework | Stable | **7-10× faster** |
+| **[fraiseql-data](https://github.com/fraiseql/fraiseql-seed)** | Seed data generation | Phase 6 | Auto-dependency resolution |
+
+### **Client Libraries (TypeScript/JavaScript)**
+
+| Library | Purpose | Framework Support |
+|---------|---------|-------------------|
+| **[graphql-cascade](https://github.com/graphql-cascade/graphql-cascade)** | Automatic cache invalidation | Apollo, React Query, Relay, URQL |
+
+**How confiture fits:**
+- **Build from DDL** → Fresh DB in <1s for **fraiseql** GraphQL testing
+- **pgGit** automatically tracks confiture migrations
+- Manage **pg_tviews** schema evolution with 4 migration strategies
+- **fraiseql-data** seeds the schema confiture built
+
+**Lightning-fast workflow:**
+```bash
+# Build schema (300-600× faster than Alembic)
+confiture build --env test  # <1 second!
+
+# Seed test data
+fraiseql-data add tb_user --count 100
+
+# Run GraphQL tests
+pytest  # Fresh DB every run, zero wait time
+```
+
+---
+
 ## Why Confiture?
 
 ### The Problem with Migration History
