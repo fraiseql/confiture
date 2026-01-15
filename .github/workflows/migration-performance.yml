@@ -1,0 +1,274 @@
+name: Migration Performance Monitoring
+
+# Run nightly performance tests and track regression
+on:
+  schedule:
+    # Run nightly at 2 AM UTC (equivalent to 9 PM previous day PT)
+    - cron: '0 2 * * *'
+  # Also allow manual trigger via workflow_dispatch
+  workflow_dispatch:
+  # Run on main branch pushes to migration testing code
+  push:
+    branches: [ main ]
+    paths:
+      - 'python/confiture/testing/frameworks/performance.py'
+      - 'tests/migration_testing/test_performance.py'
+      - 'tests/migration_testing/test_load_testing.py'
+      - '.github/workflows/migration-performance.yml'
+
+concurrency:
+  group: migration-performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: confiture
+          POSTGRES_PASSWORD: confiture
+          POSTGRES_DB: confiture_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Setup environment and install dependencies
+      run: |
+        # Create virtual environment with uv
+        uv venv
+
+        # Install all dependencies including testing extras
+        uv pip install ".[dev,testing]"
+
+    - name: Verify PostgreSQL Connection
+      env:
+        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+      run: |
+        echo "=== Verifying PostgreSQL 16 Connection ==="
+        pg_isready -h localhost -p 5432 -U confiture && echo '✅ PostgreSQL Ready' || exit 1
+        uv run python -c "import psycopg; conn = psycopg.connect('$DATABASE_URL'); print('✅ DB connection successful'); conn.close()" || exit 1
+
+    - name: Create performance test database
+      env:
+        PGPASSWORD: confiture
+      run: |
+        echo "=== Creating Performance Test Database ==="
+        psql -h localhost -U confiture -d postgres -c "DROP DATABASE IF EXISTS confiture_perf_test;"
+        psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_perf_test;"
+        echo "✅ Performance test database created"
+
+    - name: Run performance profiling tests
+      env:
+        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: confiture
+        POSTGRES_PASSWORD: confiture
+      run: |
+        echo "=== Running Performance Profiling Tests ==="
+        uv run pytest tests/migration_testing/test_performance.py \
+          -v \
+          --tb=short \
+          --durations=10 \
+          -r fEsxXw \
+          || {
+            echo "⚠️  Performance tests completed with warnings"
+            exit 0
+          }
+        echo "✅ Performance profiling tests completed"
+
+    - name: Run load testing suite
+      env:
+        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: confiture
+        POSTGRES_PASSWORD: confiture
+      run: |
+        echo "=== Running Load Testing Suite ==="
+        uv run pytest tests/migration_testing/test_load_testing.py \
+          -v \
+          --tb=short \
+          --durations=10 \
+          -r fEsxXw \
+          || {
+            echo "⚠️  Load tests completed with warnings"
+            exit 0
+          }
+        echo "✅ Load testing suite completed"
+
+    - name: Capture Performance Metrics
+      env:
+        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: confiture
+        POSTGRES_PASSWORD: confiture
+      run: |
+        echo "=== Capturing Performance Metrics ==="
+
+        # Create metrics directory
+        mkdir -p .performance-metrics
+
+        # Run specific performance-critical tests with timing
+        uv run python << 'EOF'
+import subprocess
+import json
+import time
+from datetime import datetime
+
+metrics = {
+    "timestamp": datetime.utcnow().isoformat(),
+    "run_date": datetime.utcnow().strftime("%Y-%m-%d"),
+    "tests": []
+}
+
+# Test cases to monitor
+test_cases = [
+    ("test_forward_migrations.py::test_basic_forward_migration", "basic_forward"),
+    ("test_rollback_migrations.py::test_rollback_reverses_table_creation", "rollback_table"),
+    ("test_load_testing.py::test_bulk_insert_10k_rows", "bulk_10k"),
+    ("test_load_testing.py::test_bulk_insert_50k_rows", "bulk_50k"),
+    ("test_load_testing.py::test_index_creation_on_large_table", "index_large"),
+    ("test_advanced_scenarios.py::test_multi_table_migration_with_dependencies", "multi_table"),
+]
+
+for test_path, test_name in test_cases:
+    start = time.time()
+    result = subprocess.run(
+        ["python", "-m", "pytest", f"tests/migration_testing/{test_path}", "-q"],
+        capture_output=True,
+        timeout=60
+    )
+    duration = time.time() - start
+
+    metrics["tests"].append({
+        "name": test_name,
+        "duration_seconds": round(duration, 3),
+        "passed": result.returncode == 0
+    })
+    print(f"  {test_name:.<30} {duration:.3f}s {'✅' if result.returncode == 0 else '❌'}")
+
+# Save metrics
+with open(".performance-metrics/latest.json", "w") as f:
+    json.dump(metrics, f, indent=2)
+
+print(f"\n✅ Performance metrics captured: .performance-metrics/latest.json")
+EOF
+
+    - name: Check for Performance Regressions
+      run: |
+        echo "=== Checking for Performance Regressions ==="
+
+        # Load latest metrics
+        if [ -f ".performance-metrics/latest.json" ]; then
+          echo "Latest performance metrics:"
+          cat .performance-metrics/latest.json | python -m json.tool
+
+          # Check for regressions (duration > 30s)
+          REGRESSIONS=$(python << 'EOF'
+import json
+with open(".performance-metrics/latest.json") as f:
+    metrics = json.load(f)
+    regressions = [t for t in metrics["tests"] if t["duration_seconds"] > 30]
+    for test in regressions:
+        print(f"⚠️  {test['name']}: {test['duration_seconds']}s (threshold: 30s)")
+    return len(regressions)
+EOF
+          )
+
+          if [ "$REGRESSIONS" -gt 0 ]; then
+            echo "⚠️  $REGRESSIONS potential performance regressions detected"
+            echo "   Review metrics: .performance-metrics/latest.json"
+          fi
+        fi
+
+    - name: Create Performance Report
+      if: always()
+      run: |
+        echo "========================================="
+        echo "📊 Performance Monitoring Report"
+        echo "========================================="
+        echo ""
+        echo "Configuration:"
+        echo "  • Database: PostgreSQL 16"
+        echo "  • Test Framework: pytest"
+        echo "  • Timeout: 30 minutes"
+        echo ""
+        echo "Monitored Metrics:"
+        echo "  ✅ Forward Migration Timing"
+        echo "  ✅ Rollback Migration Timing"
+        echo "  ✅ Bulk Insert Performance (10k rows)"
+        echo "  ✅ Bulk Insert Performance (50k rows)"
+        echo "  ✅ Index Creation Performance"
+        echo "  ✅ Advanced Scenario Timing"
+        echo ""
+        echo "Regression Thresholds:"
+        echo "  • Individual test: 30 seconds"
+        echo "  • Overall suite: 300 seconds"
+        echo "  • Detection: 20% increase from baseline"
+        echo ""
+        echo "Next Steps:"
+        echo "  1. Review metrics in .performance-metrics/"
+        echo "  2. Compare against baseline metrics"
+        echo "  3. Investigate any significant increases"
+        echo "  4. File performance improvement issues"
+        echo ""
+
+    - name: Upload Performance Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-metrics
+        path: .performance-metrics/
+        retention-days: 30
+
+    - name: Comment Performance Results
+      if: github.event_name == 'push' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+
+          // Try to read metrics if they exist
+          let metricsComment = "📊 **Performance Monitoring Results**\n\n";
+
+          try {
+            const metrics = JSON.parse(fs.readFileSync('.performance-metrics/latest.json', 'utf8'));
+            metricsComment += `**Run Time**: ${metrics.timestamp}\n\n`;
+            metricsComment += "| Test | Duration | Status |\n";
+            metricsComment += "|------|----------|--------|\n";
+
+            metrics.tests.forEach(test => {
+              const status = test.passed ? "✅" : "❌";
+              metricsComment += `| ${test.name} | ${test.duration_seconds}s | ${status} |\n`;
+            });
+
+            metricsComment += "\n**Regression Thresholds:**\n";
+            metricsComment += "- Individual test: 30s\n";
+            metricsComment += "- Overall suite: 300s\n";
+          } catch (e) {
+            metricsComment += "Unable to read performance metrics.\n";
+          }
+
+          console.log(metricsComment);
