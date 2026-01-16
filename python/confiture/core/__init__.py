@@ -6,15 +6,22 @@ from confiture.core.dry_run import (
     DryRunResult,
 )
 from confiture.core.hooks import (
+    CircuitBreaker,
+    CircuitBreakerState,
+    ExecutionDAG,
     Hook,
     HookContext,
-    HookError,
-    HookExecutor,
+    HookErrorStrategy,
+    HookExecutionEvent,
+    HookExecutionResult,
+    HookExecutionStatus,
+    HookExecutionStrategy,
+    HookExecutionTracer,
     HookPhase,
     HookRegistry,
     HookResult,
-    get_hook,
-    register_hook,
+    PerformanceTrace,
+    RetryConfig,
 )
 
 __all__ = [
@@ -22,14 +29,23 @@ __all__ = [
     "DryRunError",
     "DryRunExecutor",
     "DryRunResult",
-    # Hook system
+    # Hook system - Base
     "Hook",
     "HookContext",
-    "HookError",
-    "HookExecutor",
+    "HookResult",
     "HookPhase",
     "HookRegistry",
-    "HookResult",
-    "get_hook",
-    "register_hook",
+    # Hook system - Execution strategies
+    "HookExecutionStrategy",
+    "HookErrorStrategy",
+    "RetryConfig",
+    # Hook system - Observability
+    "HookExecutionStatus",
+    "HookExecutionEvent",
+    "HookExecutionResult",
+    "CircuitBreaker",
+    "CircuitBreakerState",
+    "HookExecutionTracer",
+    "ExecutionDAG",
+    "PerformanceTrace",
 ]
