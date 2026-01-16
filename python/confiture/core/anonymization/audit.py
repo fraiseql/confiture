@@ -245,6 +245,8 @@ class AuditLogger:
             psycopg.DatabaseError: If insertion fails
         """
         with self.conn.cursor() as cursor:
+            # Truncate microseconds to ensure consistent signature verification
+            ts = entry.timestamp.replace(microsecond=0)
             cursor.execute(
                 """
                 INSERT INTO confiture_audit_log (
@@ -257,7 +259,7 @@ class AuditLogger:
             """,
                 (
                     str(entry.id),
-                    entry.timestamp,
+                    ts,
                     entry.user,
                     entry.hostname,
                     entry.source_database,
@@ -305,10 +307,15 @@ class AuditLogger:
 
             entries = []
             for row in cursor.fetchall():
+                # Normalize timestamp to UTC and remove microseconds for consistent signing
+                ts = row[1]
+                if ts and hasattr(ts, 'astimezone'):
+                    # Convert to UTC and truncate microseconds
+                    ts = ts.astimezone(UTC).replace(microsecond=0)
                 entries.append(
                     AuditEntry(
-                        id=UUID(row[0]),
-                        timestamp=row[1],
+                        id=row[0],
+                        timestamp=ts,
                         user=row[2],
                         hostname=row[3],
                         source_database=row[4],
@@ -317,8 +324,8 @@ class AuditLogger:
                         profile_version=row[7],
                         profile_hash=row[8],
                         tables_synced=list(row[9]),
-                        rows_anonymized=row[10],
-                        strategies_applied=row[11],
+                        rows_anonymized=json.loads(row[10]) if isinstance(row[10], str) else row[10],
+                        strategies_applied=json.loads(row[11]) if isinstance(row[11], str) else row[11],
                         verification_passed=row[12],
                         verification_report=row[13],
                         signature=row[14],
@@ -354,9 +361,11 @@ def sign_audit_entry(entry: AuditEntry, secret: str | None = None) -> str:
 
     # Create deterministic JSON for signing
     # Include only immutable/important fields
+    # Truncate microseconds to avoid precision issues when round-tripping through database
+    ts = entry.timestamp.replace(microsecond=0)
     data = {
         "id": str(entry.id),
-        "timestamp": entry.timestamp.isoformat(),
+        "timestamp": ts.isoformat(),
         "user": entry.user,
         "hostname": entry.hostname,
         "source_database": entry.source_database,

@@ -9,6 +9,7 @@ Tests cover:
 """
 
 import json
+import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -554,6 +555,9 @@ class TestAuditLoggerDatabase:
             )
             logger.log_sync(entry)
             entries.append(entry)
+            # Sleep to ensure different timestamps (we truncate to seconds)
+            if i < 2:
+                time.sleep(1.1)
 
         # Retrieve entries
         logged = logger.get_audit_log(limit=10)
