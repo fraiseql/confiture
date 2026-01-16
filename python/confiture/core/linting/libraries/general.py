@@ -5,13 +5,10 @@ from ..versioning import LintSeverity, Rule, RuleVersion
 
 
 class GeneralLibrary(RuleLibrary):
-    """General best practices rule library (20+ rules)."""
+    """General best practices rule library (20 rules)."""
 
     def __init__(self):
-        super().__init__(
-            name="General",
-            version=RuleVersion(major=1, minor=0, patch=0),
-            rules=[
+        rules = [
                 Rule(
                     rule_id="general_001",
                     name="no_implicit_casts",
@@ -172,6 +169,14 @@ class GeneralLibrary(RuleLibrary):
                     severity=LintSeverity.WARNING,
                     enabled_by_default=True,
                 ),
-            ],
+        ]
+
+        # Verify rule count matches docstring
+        assert len(rules) == 20, f"Expected 20 rules in GeneralLibrary, got {len(rules)}"
+
+        super().__init__(
+            name="General",
+            version=RuleVersion(major=1, minor=0, patch=0),
+            rules=rules,
             tags=["general", "best-practices", "performance", "naming"],
         )

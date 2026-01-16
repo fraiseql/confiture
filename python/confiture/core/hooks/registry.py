@@ -26,6 +26,18 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+def _extract_phase_value(phase: Any) -> str:
+    """Extract string value from phase enum or convert to string.
+
+    Args:
+        phase: A phase/event/alert that may be an enum or string.
+
+    Returns:
+        String representation of the phase value.
+    """
+    return phase.value if hasattr(phase, "value") else str(phase)
+
+
 class HookRegistry(Generic[T]):
     """Manage hook registration and execution."""
 
@@ -40,7 +52,7 @@ class HookRegistry(Generic[T]):
 
     def register(self, phase_key: str | Any, hook: Hook) -> None:
         """Register a hook for a phase/event/alert."""
-        phase_value = phase_key.value if hasattr(phase_key, "value") else str(phase_key)
+        phase_value = _extract_phase_value(phase_key)
 
         if phase_value not in self.hooks:
             self.hooks[phase_value] = []
@@ -59,7 +71,7 @@ class HookRegistry(Generic[T]):
         context: HookContext[T],
     ) -> HookExecutionResult:
         """Trigger hooks for a phase/event/alert."""
-        phase_value = phase.value if hasattr(phase, "value") else str(phase)
+        phase_value = _extract_phase_value(phase)
         config = self.execution_config.get(
             phase, HookPhaseConfig(phase=phase)
         )
@@ -110,7 +122,7 @@ class HookRegistry(Generic[T]):
                         HookExecutionEvent(
                             execution_id=context.execution_id,
                             hook_id=hook.id,
-                            phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+                            phase=_extract_phase_value(config.phase),
                             status=HookExecutionStatus.FAILED,
                             error=str(e),
                             duration_ms=0,
@@ -123,7 +135,7 @@ class HookRegistry(Generic[T]):
                     raise
 
         return HookExecutionResult(
-            phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+            phase=_extract_phase_value(config.phase),
             hooks_executed=len(results),
             results=results,
             total_duration_ms=sum(r.duration_ms for r in results),
@@ -159,9 +171,8 @@ class HookRegistry(Generic[T]):
                 f"{len(failed)} hooks failed in parallel execution"
             )
 
-        phase_value = config.phase.value if hasattr(config.phase, "value") else str(config.phase)
         return HookExecutionResult(
-            phase=phase_value,
+            phase=_extract_phase_value(config.phase),
             hooks_executed=len(results),
             results=[r for r in results if not isinstance(r, Exception)],
             total_duration_ms=sum(
@@ -206,7 +217,7 @@ class HookRegistry(Generic[T]):
             return HookExecutionEvent(
                 execution_id=context.execution_id,
                 hook_id=hook.id,
-                phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+                phase=_extract_phase_value(config.phase),
                 status=HookExecutionStatus.SKIPPED,
                 reason="Circuit breaker open",
                 duration_ms=0,
@@ -222,7 +233,7 @@ class HookRegistry(Generic[T]):
             event = HookExecutionEvent(
                 execution_id=context.execution_id,
                 hook_id=hook.id,
-                phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+                phase=_extract_phase_value(config.phase),
                 status=HookExecutionStatus.COMPLETED,
                 duration_ms=int(duration),
                 rows_affected=result.rows_affected,
@@ -241,7 +252,7 @@ class HookRegistry(Generic[T]):
             return HookExecutionEvent(
                 execution_id=context.execution_id,
                 hook_id=hook.id,
-                phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+                phase=_extract_phase_value(config.phase),
                 status=HookExecutionStatus.TIMEOUT,
                 reason=f"Exceeded {config.timeout_per_hook_ms}ms timeout",
                 duration_ms=config.timeout_per_hook_ms,
@@ -252,7 +263,7 @@ class HookRegistry(Generic[T]):
             return HookExecutionEvent(
                 execution_id=context.execution_id,
                 hook_id=hook.id,
-                phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+                phase=_extract_phase_value(config.phase),
                 status=HookExecutionStatus.FAILED,
                 error=str(e),
                 duration_ms=int((datetime.utcnow() - start).total_seconds() * 1000),
@@ -292,7 +303,7 @@ class HookRegistry(Generic[T]):
         return HookExecutionEvent(
             execution_id=context.execution_id,
             hook_id=hook.id,
-            phase=config.phase.value if hasattr(config.phase, "value") else str(config.phase),
+            phase=_extract_phase_value(config.phase),
             status=HookExecutionStatus.FAILED,
             error=f"Failed after {retry_config.max_attempts} attempts: {last_error}",
             duration_ms=0,

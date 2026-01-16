@@ -216,11 +216,22 @@ class RiskScoringFormula:
         """
         Calculate overall risk score from factors.
 
-        Formula: weighted sum
-        overall_score = Σ(factor.value * factor.weight)
+        Formula: weighted sum with automatic weight normalization
+        overall_score = Σ(factor.value * (factor.weight / sum(weights)))
+
+        If not all factors are provided, weights are automatically renormalized
+        to sum to 1.0 for the provided factors.
         """
+        if not factors:
+            return RiskLevel.LOW, 0.0
+
+        # Calculate total weight from provided factors
+        total_weight = sum(factor.weight for factor in factors.values())
+
+        # Calculate overall score with renormalized weights
         overall_score = sum(
-            factor.value * factor.weight for factor in factors.values()
+            factor.value * (factor.weight / total_weight)
+            for factor in factors.values()
         )
 
         # Map score to risk level

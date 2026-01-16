@@ -8,10 +8,7 @@ class HIPAALibrary(RuleLibrary):
     """HIPAA compliance rule library (15 rules)."""
 
     def __init__(self):
-        super().__init__(
-            name="HIPAA",
-            version=RuleVersion(major=1, minor=0, patch=0),
-            rules=[
+        rules = [
                 Rule(
                     rule_id="hipaa_001",
                     name="encrypt_phi",
@@ -132,6 +129,14 @@ class HIPAALibrary(RuleLibrary):
                     severity=LintSeverity.ERROR,
                     enabled_by_default=True,
                 ),
-            ],
+        ]
+
+        # Verify rule count matches docstring
+        assert len(rules) == 15, f"Expected 15 rules in HIPAALibrary, got {len(rules)}"
+
+        super().__init__(
+            name="HIPAA",
+            version=RuleVersion(major=1, minor=0, patch=0),
+            rules=rules,
             tags=["healthcare", "compliance", "phi", "hipaa"],
         )

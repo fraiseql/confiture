@@ -8,10 +8,7 @@ class GDPRLibrary(RuleLibrary):
     """GDPR compliance rule library (18 rules)."""
 
     def __init__(self):
-        super().__init__(
-            name="GDPR",
-            version=RuleVersion(major=1, minor=0, patch=0),
-            rules=[
+        rules = [
                 Rule(
                     rule_id="gdpr_001",
                     name="personal_data_encryption",
@@ -156,6 +153,14 @@ class GDPRLibrary(RuleLibrary):
                     severity=LintSeverity.ERROR,
                     enabled_by_default=True,
                 ),
-            ],
+        ]
+
+        # Verify rule count matches docstring
+        assert len(rules) == 18, f"Expected 18 rules in GDPRLibrary, got {len(rules)}"
+
+        super().__init__(
+            name="GDPR",
+            version=RuleVersion(major=1, minor=0, patch=0),
+            rules=rules,
             tags=["privacy", "compliance", "gdpr", "eu"],
         )

@@ -8,10 +8,7 @@ class PCI_DSSLibrary(RuleLibrary):
     """PCI-DSS compliance rule library (10 rules)."""
 
     def __init__(self):
-        super().__init__(
-            name="PCI-DSS",
-            version=RuleVersion(major=1, minor=0, patch=0),
-            rules=[
+        rules = [
                 Rule(
                     rule_id="pci_dss_001",
                     name="cardholder_data_encryption",
@@ -92,6 +89,14 @@ class PCI_DSSLibrary(RuleLibrary):
                     severity=LintSeverity.WARNING,
                     enabled_by_default=True,
                 ),
-            ],
+        ]
+
+        # Verify rule count matches docstring
+        assert len(rules) == 10, f"Expected 10 rules in PCI_DSSLibrary, got {len(rules)}"
+
+        super().__init__(
+            name="PCI-DSS",
+            version=RuleVersion(major=1, minor=0, patch=0),
+            rules=rules,
             tags=["payment", "compliance", "pci-dss", "security"],
         )

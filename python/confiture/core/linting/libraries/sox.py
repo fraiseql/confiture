@@ -8,10 +8,7 @@ class SOXLibrary(RuleLibrary):
     """SOX compliance rule library (12 rules)."""
 
     def __init__(self):
-        super().__init__(
-            name="SOX",
-            version=RuleVersion(major=1, minor=0, patch=0),
-            rules=[
+        rules = [
                 Rule(
                     rule_id="sox_001",
                     name="financial_data_integrity",
@@ -108,6 +105,14 @@ class SOXLibrary(RuleLibrary):
                     severity=LintSeverity.ERROR,
                     enabled_by_default=True,
                 ),
-            ],
+        ]
+
+        # Verify rule count matches docstring
+        assert len(rules) == 12, f"Expected 12 rules in SOXLibrary, got {len(rules)}"
+
+        super().__init__(
+            name="SOX",
+            version=RuleVersion(major=1, minor=0, patch=0),
+            rules=rules,
             tags=["finance", "compliance", "sox", "auditing"],
         )
