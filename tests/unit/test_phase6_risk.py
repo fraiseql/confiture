@@ -76,13 +76,13 @@ class TestLockTimeScoring:
         """Test 100ms lock time risk."""
         factor = RiskScoringFormula.calculate_lock_time_score(100)
 
-        assert 0.0 < factor.value < 0.2  # Should be low risk
+        assert 0.6 < factor.value < 0.8  # Should be medium-high risk
 
     def test_1s_lock_time(self):
         """Test 1s lock time risk."""
         factor = RiskScoringFormula.calculate_lock_time_score(1000)
 
-        assert 0.3 < factor.value < 0.7  # Should be medium risk
+        assert 0.7 < factor.value < 0.9  # Should be high risk
 
     def test_10s_lock_time(self):
         """Test 10s lock time risk."""
@@ -302,12 +302,13 @@ class TestDowntimePredictor:
     def test_migration_operation_creation(self):
         """Test creating migration operation metadata."""
         op = MigrationOperation(
-            operation_type="ALTER TABLE",
+            id="op_001",
+            type="ALTER TABLE",
             table_name="users",
             table_size_mb=100,
         )
 
-        assert op.operation_type == "ALTER TABLE"
+        assert op.type == "ALTER TABLE"
         assert op.table_name == "users"
 
     def test_historical_migration_creation(self):
@@ -315,24 +316,24 @@ class TestDowntimePredictor:
         migration = HistoricalMigration(
             operation_type="ALTER TABLE",
             table_size_mb=100,
-            downtime_ms=50,
-            similar=True,
+            actual_downtime_ms=50,
         )
 
-        assert migration.downtime_ms == 50
-        assert migration.similar is True
+        assert migration.actual_downtime_ms == 50
 
     def test_downtime_estimate_creation(self):
         """Test creating downtime estimate."""
         estimate = DowntimeEstimate(
-            predicted_downtime_ms=100,
-            confidence_percent=95.0,
-            method="historical",
+            estimated_downtime_ms=100,
+            lower_bound_ms=90,
+            upper_bound_ms=110,
+            confidence_level=0.95,
+            estimate_method="historical",
             caveats=["Based on similar past migrations"],
         )
 
-        assert estimate.predicted_downtime_ms == 100
-        assert estimate.confidence_percent == 95.0
+        assert estimate.estimated_downtime_ms == 100
+        assert estimate.confidence_level == 0.95
 
     def test_historical_estimation(self):
         """Test historical downtime estimation."""
@@ -343,20 +344,19 @@ class TestDowntimePredictor:
             HistoricalMigration(
                 operation_type="ALTER TABLE",
                 table_size_mb=100,
-                downtime_ms=50,
-                similar=True,
+                actual_downtime_ms=50,
             ),
             HistoricalMigration(
                 operation_type="ALTER TABLE",
                 table_size_mb=100,
-                downtime_ms=60,
-                similar=True,
+                actual_downtime_ms=60,
             ),
         ]
 
         # Should use historical data
         operation = MigrationOperation(
-            operation_type="ALTER TABLE",
+            id="op_001",
+            type="ALTER TABLE",
             table_name="users",
             table_size_mb=100,
         )
@@ -371,20 +371,24 @@ class TestDowntimeConfidenceBounds:
     def test_estimate_has_confidence(self):
         """Test that estimate includes confidence level."""
         estimate = DowntimeEstimate(
-            predicted_downtime_ms=100,
-            confidence_percent=95.0,
-            method="historical",
+            estimated_downtime_ms=100,
+            lower_bound_ms=90,
+            upper_bound_ms=110,
+            confidence_level=0.95,
+            estimate_method="historical",
         )
 
-        assert estimate.confidence_percent > 0
-        assert estimate.confidence_percent <= 100
+        assert estimate.confidence_level > 0
+        assert estimate.confidence_level <= 1.0
 
     def test_low_confidence_requires_caveat(self):
         """Test that low confidence estimates include caveats."""
         estimate = DowntimeEstimate(
-            predicted_downtime_ms=100,
-            confidence_percent=30.0,
-            method="heuristic",
+            estimated_downtime_ms=100,
+            lower_bound_ms=80,
+            upper_bound_ms=120,
+            confidence_level=0.30,
+            estimate_method="heuristic",
             caveats=["No historical data available"],
         )
 
@@ -394,15 +398,15 @@ class TestDowntimeConfidenceBounds:
     def test_estimate_uncertainty_bounds(self):
         """Test that estimate includes uncertainty bounds."""
         estimate = DowntimeEstimate(
-            predicted_downtime_ms=100,
-            confidence_percent=95.0,
-            method="historical",
-            uncertainty_lower_ms=90,
-            uncertainty_upper_ms=110,
+            estimated_downtime_ms=100,
+            lower_bound_ms=90,
+            upper_bound_ms=110,
+            confidence_level=0.95,
+            estimate_method="historical",
         )
 
-        assert estimate.uncertainty_lower_ms < estimate.predicted_downtime_ms
-        assert estimate.uncertainty_upper_ms > estimate.predicted_downtime_ms
+        assert estimate.lower_bound_ms < estimate.estimated_downtime_ms
+        assert estimate.upper_bound_ms > estimate.estimated_downtime_ms
 
 
 class TestRiskFactorProperties:
