@@ -18,8 +18,8 @@ from .composer import (
     RuleLibraryComposer,
 )
 from .libraries import (
-    GeneralLibrary,
     GDPRLibrary,
+    GeneralLibrary,
     HIPAALibrary,
     PCI_DSSLibrary,
     SOXLibrary,

@@ -4,11 +4,9 @@ Wraps confiture migrations to provide structured test results and execution
 tracking for PrintOptim's migration test suite.
 """
 
-import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import psycopg
 
@@ -22,7 +20,7 @@ class MigrationResult:
     duration_seconds: float
     stdout: str
     stderr: str
-    error: Optional[Exception] = None
+    error: Exception | None = None
 
 
 class MigrationRunner:
@@ -35,7 +33,7 @@ class MigrationRunner:
     - Tracking rollbacks
     """
 
-    def __init__(self, connection: psycopg.Connection, migrations_dir: Optional[Path] = None):
+    def __init__(self, connection: psycopg.Connection, migrations_dir: Path | None = None):
         """Initialize migration runner.
 
         Args:

@@ -56,7 +56,6 @@ import psycopg
 
 from confiture.core.anonymization.security.kms_manager import KMSClient
 from confiture.core.anonymization.security.lineage import (
-    DataLineageEntry,
     DataLineageTracker,
     create_lineage_entry,
 )

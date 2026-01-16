@@ -1,13 +1,11 @@
 """Rule library composition with explicit conflict handling - Phase 6."""
 from __future__ import annotations
 
-
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
-from .versioning import Rule, LintSeverity, RuleVersion
+from .versioning import LintSeverity, Rule, RuleVersion
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +79,7 @@ class RuleLibraryComposer:
         self,
         library: RuleLibrary,
         on_conflict: ConflictResolution = ConflictResolution.ERROR,
-    ) -> "RuleLibraryComposer":
+    ) -> RuleLibraryComposer:
         """Add library with conflict handling."""
         conflicts = self._detect_conflicts(library)
 
@@ -102,19 +100,19 @@ class RuleLibraryComposer:
         self.libraries.append(library)
         return self
 
-    def override_rule(self, rule_id: str, new_rule: Rule) -> "RuleLibraryComposer":
+    def override_rule(self, rule_id: str, new_rule: Rule) -> RuleLibraryComposer:
         """Override a specific rule."""
         self.overrides[rule_id] = new_rule
         logger.info(f"Overridden rule {rule_id}")
         return self
 
-    def disable_rule(self, rule_id: str) -> "RuleLibraryComposer":
+    def disable_rule(self, rule_id: str) -> RuleLibraryComposer:
         """Disable a rule from any library."""
         self.disabled_rules.add(rule_id)
         logger.info(f"Disabled rule {rule_id}")
         return self
 
-    def build(self) -> "ComposedRuleSet":
+    def build(self) -> ComposedRuleSet:
         """Build final rule set with conflicts resolved."""
         all_rules = {}
 
@@ -153,7 +151,7 @@ class RuleLibraryComposer:
                             severity=LintSeverity.WARNING,
                             description=f"Rule {existing_rule_id} exists in both libraries",
                             suggested_resolution=(
-                                f"Use override_rule() to select preferred version"
+                                "Use override_rule() to select preferred version"
                             ),
                         )
                     )

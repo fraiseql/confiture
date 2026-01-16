@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
-
 # Sample streets for anonymization
 SAMPLE_STREETS = [
     "Main", "Oak", "Elm", "Maple", "Pine", "Cedar", "Birch", "Ash",

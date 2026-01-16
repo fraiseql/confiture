@@ -14,8 +14,8 @@ Security Note:
 
 import random
 from dataclasses import dataclass
-from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
+from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
 # Card type patterns: (name, digit_lengths, prefix_patterns)
 CARD_TYPES = {

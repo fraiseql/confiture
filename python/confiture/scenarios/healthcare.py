@@ -36,8 +36,11 @@ Strategy:
 - Facilities: Preserve facility ID but mask name
 """
 
-from confiture.core.anonymization.factory import StrategyProfile, StrategyFactory
-from confiture.scenarios.compliance import RegulationType, ComplianceVerifier, PersonalDataCategories
+from confiture.core.anonymization.factory import StrategyFactory, StrategyProfile
+from confiture.scenarios.compliance import (
+    ComplianceVerifier,
+    RegulationType,
+)
 
 
 class HealthcareScenario:

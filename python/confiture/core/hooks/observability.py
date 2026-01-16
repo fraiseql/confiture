@@ -1,7 +1,6 @@
 """Observability and tracing infrastructure for hooks - Phase 6."""
 from __future__ import annotations
 
-
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime

@@ -7,7 +7,6 @@ Provides:
 """
 from __future__ import annotations
 
-
 from .baseline_manager import (
     BaselineStorage,
     InMemoryBaselineStorage,

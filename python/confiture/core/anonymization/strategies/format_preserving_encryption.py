@@ -38,7 +38,6 @@ Note on FF3:
     - Not streaming-capable (process entire value at once)
 """
 
-import re
 from dataclasses import dataclass
 from typing import Any
 

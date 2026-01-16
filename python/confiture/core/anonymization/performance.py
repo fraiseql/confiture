@@ -34,12 +34,12 @@ Example:
 """
 
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
+from typing import Any
 
 import psycopg
 

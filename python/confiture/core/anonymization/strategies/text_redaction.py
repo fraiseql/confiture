@@ -12,8 +12,8 @@ Useful for documents, logs, and unstructured text.
 
 import re
 from dataclasses import dataclass, field
-from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
+from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
 # Common patterns for redaction
 COMMON_PATTERNS = {

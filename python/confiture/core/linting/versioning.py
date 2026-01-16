@@ -1,7 +1,6 @@
 """Rule versioning and compatibility management - Phase 6."""
 from __future__ import annotations
 
-
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -29,39 +28,39 @@ class RuleVersion:
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}"
 
-    def is_compatible_with(self, other: "RuleVersion") -> bool:
+    def is_compatible_with(self, other: RuleVersion) -> bool:
         """Check if compatible (major version must match)."""
         return self.major == other.major
 
-    def __le__(self, other: "RuleVersion") -> bool:
+    def __le__(self, other: RuleVersion) -> bool:
         return (self.major, self.minor, self.patch) <= (
             other.major,
             other.minor,
             other.patch,
         )
 
-    def __ge__(self, other: "RuleVersion") -> bool:
+    def __ge__(self, other: RuleVersion) -> bool:
         return (self.major, self.minor, self.patch) >= (
             other.major,
             other.minor,
             other.patch,
         )
 
-    def __lt__(self, other: "RuleVersion") -> bool:
+    def __lt__(self, other: RuleVersion) -> bool:
         return (self.major, self.minor, self.patch) < (
             other.major,
             other.minor,
             other.patch,
         )
 
-    def __gt__(self, other: "RuleVersion") -> bool:
+    def __gt__(self, other: RuleVersion) -> bool:
         return (self.major, self.minor, self.patch) > (
             other.major,
             other.minor,
             other.patch,
         )
 
-    def __eq__(self, other: "RuleVersion") -> bool:
+    def __eq__(self, other: RuleVersion) -> bool:
         return (self.major, self.minor, self.patch) == (
             other.major,
             other.minor,

@@ -10,7 +10,7 @@ Features:
 - Configuration validation
 """
 
-from typing import Any, Type
+from typing import Any
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
@@ -28,10 +28,10 @@ class StrategyRegistry:
         ['email', 'hash', 'phone', ...]
     """
 
-    _registry: dict[str, Type[AnonymizationStrategy]] = {}
+    _registry: dict[str, type[AnonymizationStrategy]] = {}
 
     @classmethod
-    def register(cls, name: str, strategy_class: Type[AnonymizationStrategy]) -> None:
+    def register(cls, name: str, strategy_class: type[AnonymizationStrategy]) -> None:
         """Register a strategy implementation.
 
         Args:
@@ -119,7 +119,7 @@ class StrategyRegistry:
         return sorted(cls._registry.keys())
 
     @classmethod
-    def get_strategy_class(cls, name: str) -> Type[AnonymizationStrategy]:
+    def get_strategy_class(cls, name: str) -> type[AnonymizationStrategy]:
         """Get the strategy class (not instance).
 
         Useful for introspection, documentation, or creating multiple instances
@@ -187,7 +187,7 @@ def register_strategy(name: str) -> type:
         ...     ...
     """
 
-    def decorator(strategy_class: Type[AnonymizationStrategy]) -> Type:
+    def decorator(strategy_class: type[AnonymizationStrategy]) -> type:
         StrategyRegistry.register(name, strategy_class)
         return strategy_class
 

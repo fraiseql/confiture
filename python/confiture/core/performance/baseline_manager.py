@@ -1,13 +1,11 @@
 """Performance baseline management with statistical confidence - Phase 6."""
 from __future__ import annotations
 
-
 import logging
 import statistics
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ class BaselineStorage:
         """Save baseline."""
         raise NotImplementedError
 
-    def get(self, operation_id: str, environment: str) -> Optional[PerformanceBaseline]:
+    def get(self, operation_id: str, environment: str) -> PerformanceBaseline | None:
         """Get baseline."""
         raise NotImplementedError
 
@@ -83,7 +81,7 @@ class InMemoryBaselineStorage(BaselineStorage):
             self.history[key] = []
         self.history[key].append(baseline)
 
-    def get(self, operation_id: str, environment: str) -> Optional[PerformanceBaseline]:
+    def get(self, operation_id: str, environment: str) -> PerformanceBaseline | None:
         """Get baseline."""
         key = (operation_id, environment)
         return self.baselines.get(key)
@@ -102,7 +100,7 @@ class InMemoryBaselineStorage(BaselineStorage):
 class PerformanceBaselineManager:
     """Manage performance baselines with precision."""
 
-    def __init__(self, storage: Optional[BaselineStorage] = None):
+    def __init__(self, storage: BaselineStorage | None = None):
         self.storage = storage or InMemoryBaselineStorage()
 
     def record_baseline(

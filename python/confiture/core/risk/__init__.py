@@ -7,7 +7,6 @@ Provides:
 """
 from __future__ import annotations
 
-
 from .predictor import (
     DowntimeEstimate,
     DowntimePredictor,

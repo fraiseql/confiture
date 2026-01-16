@@ -1,7 +1,6 @@
 """Hook registry and execution engine for Phase 6."""
 from __future__ import annotations
 
-
 import asyncio
 import logging
 from datetime import datetime
@@ -248,7 +247,7 @@ class HookRegistry(Generic[T]):
             self.tracer.record_execution(event)
             return event
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if circuit_breaker:
                 circuit_breaker.record_failure()
             return HookExecutionEvent(

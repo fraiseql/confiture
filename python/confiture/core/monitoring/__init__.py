@@ -7,15 +7,14 @@ Provides:
 """
 from __future__ import annotations
 
-
 from .slo import (
     DEFAULT_SLOS,
     OperationMetric,
     OperationStatus,
+    ServiceLevelObjective,
     SLOConfiguration,
     SLOMonitor,
     SLOViolation,
-    ServiceLevelObjective,
     get_slo_config,
 )
 

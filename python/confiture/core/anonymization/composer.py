@@ -14,9 +14,10 @@ Enables complex anonymization scenarios like:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, List
-from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
+from typing import Any
+
 from confiture.core.anonymization.registry import StrategyRegistry
+from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
 
 @dataclass
@@ -38,7 +39,7 @@ class CompositionConfig(StrategyConfig):
         ... )
     """
 
-    strategies: List[str] = field(default_factory=list)
+    strategies: list[str] = field(default_factory=list)
     stop_on_none: bool = False
     stop_on_error: bool = False
     continue_on_empty: bool = False
@@ -139,7 +140,7 @@ class StrategyComposer(AnonymizationStrategy):
 
         return False
 
-    def _load_strategies(self) -> List[tuple]:
+    def _load_strategies(self) -> list[tuple]:
         """Load strategies from configuration.
 
         Returns:
@@ -189,7 +190,7 @@ class StrategyComposer(AnonymizationStrategy):
         strategies_str = "_".join(strategy_names)
         return f"{self.strategy_name}:{strategies_str}"
 
-    def get_strategy_chain(self) -> List[str]:
+    def get_strategy_chain(self) -> list[str]:
         """Get list of strategies in chain.
 
         Returns:

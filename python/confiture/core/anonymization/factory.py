@@ -11,10 +11,10 @@ Enables declarative strategy configuration via profiles.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
+from typing import Any
+
 from confiture.core.anonymization.registry import StrategyRegistry
-from confiture.core.anonymization.composer import StrategyComposer, CompositionConfig
+from confiture.core.anonymization.strategy import AnonymizationStrategy
 
 
 @dataclass
@@ -41,7 +41,7 @@ class StrategyProfile:
 
     name: str
     seed: int = 0
-    columns: Dict[str, str] = field(default_factory=dict)
+    columns: dict[str, str] = field(default_factory=dict)
     defaults: str = "preserve"
 
 
@@ -112,8 +112,8 @@ class StrategyFactory:
             ) from e
 
     def get_strategies(
-        self, column_names: List[str]
-    ) -> Dict[str, AnonymizationStrategy]:
+        self, column_names: list[str]
+    ) -> dict[str, AnonymizationStrategy]:
         """Get strategies for multiple columns.
 
         Args:
@@ -124,7 +124,7 @@ class StrategyFactory:
         """
         return {col: self.get_strategy(col) for col in column_names}
 
-    def anonymize(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def anonymize(self, data: dict[str, Any]) -> dict[str, Any]:
         """Anonymize entire data dictionary using profile.
 
         Args:
@@ -167,7 +167,7 @@ class StrategyFactory:
             if not StrategyRegistry.is_registered(base_name):
                 raise ValueError(f"Unknown strategy: {strategy_name}")
 
-    def list_column_strategies(self) -> Dict[str, str]:
+    def list_column_strategies(self) -> dict[str, str]:
         """List all column-to-strategy mappings.
 
         Returns:
@@ -207,7 +207,7 @@ class StrategySuggester:
 
     def suggest(
         self, column_name: str, sample_value: str | None = None
-    ) -> List[tuple]:
+    ) -> list[tuple]:
         """Suggest strategies for column.
 
         Args:
@@ -261,7 +261,7 @@ class StrategySuggester:
             reverse=True
         )
 
-    def _analyze_value(self, value: str) -> List[tuple]:
+    def _analyze_value(self, value: str) -> list[tuple]:
         """Analyze sample value for pattern matching.
 
         Args:
@@ -296,7 +296,7 @@ class StrategySuggester:
         return suggestions
 
     def create_profile(
-        self, name: str, columns: List[str], seed: int = 0
+        self, name: str, columns: list[str], seed: int = 0
     ) -> StrategyProfile:
         """Create profile based on column suggestions.
 

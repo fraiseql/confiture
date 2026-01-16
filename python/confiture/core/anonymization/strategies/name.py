@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
-
 # Common first names (50 names for diversity)
 FIRST_NAMES = [
     "James", "Mary", "Robert", "Patricia", "Michael", "Jennifer", "William",

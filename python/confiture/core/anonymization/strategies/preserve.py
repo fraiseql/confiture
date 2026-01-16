@@ -9,6 +9,7 @@ Useful for:
 """
 
 from dataclasses import dataclass
+
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
 

@@ -21,12 +21,11 @@ Usage:
 
 # Import strategies to ensure registration (must come before scenario imports)
 import confiture.core.anonymization.strategies  # noqa: F401
-
 from confiture.scenarios.ecommerce import ECommerceScenario
-from confiture.scenarios.healthcare import HealthcareScenario
 from confiture.scenarios.financial import FinancialScenario
-from confiture.scenarios.saas import SaaSScenario
+from confiture.scenarios.healthcare import HealthcareScenario
 from confiture.scenarios.multi_tenant import MultiTenantScenario
+from confiture.scenarios.saas import SaaSScenario
 
 __all__ = [
     "ECommerceScenario",

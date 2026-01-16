@@ -1,7 +1,6 @@
 """General best practices rule library - Phase 6."""
 from __future__ import annotations
 
-
 from ..composer import RuleLibrary
 from ..versioning import LintSeverity, Rule, RuleVersion
 

@@ -9,11 +9,12 @@ Architecture:
 - PerformanceOptimizationReport: Bottleneck identification and recommendations
 """
 
-import time
 import json
-from dataclasses import dataclass, field, asdict
+import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any
+
 import psycopg
 
 
@@ -25,12 +26,12 @@ class OperationMetrics:
     end_time: float                    # Timestamp when operation ended
     duration_seconds: float            # Total duration in seconds
     percent_of_total: float            # Percentage of migration time
-    memory_before_mb: Optional[float]  # Memory before operation (if tracked)
-    memory_after_mb: Optional[float]   # Memory after operation (if tracked)
-    io_operations: Optional[int]       # Number of I/O operations (if tracked)
+    memory_before_mb: float | None  # Memory before operation (if tracked)
+    memory_after_mb: float | None   # Memory after operation (if tracked)
+    io_operations: int | None       # Number of I/O operations (if tracked)
 
     @property
-    def memory_delta_mb(self) -> Optional[float]:
+    def memory_delta_mb(self) -> float | None:
         """Calculate memory change during operation."""
         if self.memory_before_mb is not None and self.memory_after_mb is not None:
             return self.memory_after_mb - self.memory_before_mb
@@ -45,12 +46,12 @@ class PerformanceProfile:
     end_timestamp: float
     total_duration_seconds: float
 
-    operations: Dict[str, OperationMetrics] = field(default_factory=dict)
-    memory_peak_mb: Optional[float] = None
-    cpu_avg_percent: Optional[float] = None
-    total_io_operations: Optional[int] = None
+    operations: dict[str, OperationMetrics] = field(default_factory=dict)
+    memory_peak_mb: float | None = None
+    cpu_avg_percent: float | None = None
+    total_io_operations: int | None = None
 
-    def get_bottlenecks(self, threshold: float = 0.05) -> List[OperationMetrics]:
+    def get_bottlenecks(self, threshold: float = 0.05) -> list[OperationMetrics]:
         """Get operations consuming more than threshold of total time.
 
         Args:
@@ -65,7 +66,7 @@ class PerformanceProfile:
         ]
         return sorted(bottlenecks, key=lambda x: x.duration_seconds, reverse=True)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert profile to dictionary for JSON serialization."""
         return {
             "migration_name": self.migration_name,
@@ -81,7 +82,7 @@ class PerformanceProfile:
 class RegressionReport:
     """Report of performance regressions detected."""
     migration_name: str
-    regressions: List[Dict[str, Any]] = field(default_factory=list)
+    regressions: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def has_regressions(self) -> bool:
@@ -111,10 +112,10 @@ class PerformanceOptimizationRecommendation:
 class PerformanceOptimizationReport:
     """Report with optimization recommendations."""
     migration_name: str
-    bottlenecks: List[OperationMetrics]
-    recommendations: List[PerformanceOptimizationRecommendation] = field(default_factory=list)
+    bottlenecks: list[OperationMetrics]
+    recommendations: list[PerformanceOptimizationRecommendation] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "migration_name": self.migration_name,
@@ -128,8 +129,8 @@ class MigrationPerformanceProfiler:
 
     def __init__(self, db_connection: psycopg.Connection):
         self.connection = db_connection
-        self.current_profile: Optional[PerformanceProfile] = None
-        self.section_stack: List[Tuple[str, float]] = []
+        self.current_profile: PerformanceProfile | None = None
+        self.section_stack: list[tuple[str, float]] = []
 
     def profile_migration(self, migration_name: str, execute_fn) -> PerformanceProfile:
         """Profile migration execution.
@@ -177,9 +178,9 @@ class MigrationPerformanceProfiler:
         self,
         name: str,
         duration_seconds: float,
-        memory_before_mb: Optional[float] = None,
-        memory_after_mb: Optional[float] = None,
-        io_operations: Optional[int] = None,
+        memory_before_mb: float | None = None,
+        memory_after_mb: float | None = None,
+        io_operations: int | None = None,
     ):
         """Record an operation's metrics.
 
@@ -218,7 +219,7 @@ class MigrationPerformanceProfiler:
         for operation in self.current_profile.operations.values():
             operation.percent_of_total = (operation.duration_seconds / total) * 100
 
-    def get_profile(self) -> Optional[PerformanceProfile]:
+    def get_profile(self) -> PerformanceProfile | None:
         """Get current profile."""
         return self.current_profile
 
@@ -230,8 +231,8 @@ class _SectionTracker:
         self.profiler = profiler
         self.section_name = section_name
         self.start_time = 0.0
-        self.memory_before_mb: Optional[float] = None
-        self.memory_after_mb: Optional[float] = None
+        self.memory_before_mb: float | None = None
+        self.memory_after_mb: float | None = None
 
     def __enter__(self):
         self.start_time = time.time()
@@ -250,7 +251,7 @@ class _SectionTracker:
             memory_after_mb=self.memory_after_mb,
         )
 
-    def _get_memory_usage_mb(self) -> Optional[float]:
+    def _get_memory_usage_mb(self) -> float | None:
         """Get current memory usage (best effort)."""
         try:
             import psutil
@@ -265,7 +266,7 @@ class PerformanceBaseline:
 
     def __init__(self, baselines_file: Path):
         self.baselines_file = baselines_file
-        self.baselines: Dict[str, Dict[str, float]] = {}
+        self.baselines: dict[str, dict[str, float]] = {}
         self._load_baselines()
 
     def _load_baselines(self):
@@ -381,7 +382,7 @@ class PerformanceBaseline:
         self,
         bottleneck: OperationMetrics,
         profile: PerformanceProfile,
-    ) -> Optional[PerformanceOptimizationRecommendation]:
+    ) -> PerformanceOptimizationRecommendation | None:
         """Generate optimization recommendation for a bottleneck."""
         operation_type = self._extract_operation_type(bottleneck.name)
 
@@ -392,11 +393,11 @@ class PerformanceBaseline:
                 percent_of_total=bottleneck.percent_of_total,
                 severity="CRITICAL" if bottleneck.percent_of_total > 50 else "IMPORTANT",
                 recommendation=(
-                    f"UPDATE operation is slow. Consider:\n"
-                    f"  - Use bulk update with WHERE clause\n"
-                    f"  - Add index on filter columns\n"
-                    f"  - Batch processing with LIMIT\n"
-                    f"  - Analyze query plan with EXPLAIN"
+                    "UPDATE operation is slow. Consider:\n"
+                    "  - Use bulk update with WHERE clause\n"
+                    "  - Add index on filter columns\n"
+                    "  - Batch processing with LIMIT\n"
+                    "  - Analyze query plan with EXPLAIN"
                 ),
                 potential_speedup="2-5x",
             )
@@ -408,11 +409,11 @@ class PerformanceBaseline:
                 percent_of_total=bottleneck.percent_of_total,
                 severity="IMPORTANT",
                 recommendation=(
-                    f"INSERT operation is slow. Consider:\n"
-                    f"  - Use COPY command for bulk insert\n"
-                    f"  - Disable triggers during insert\n"
-                    f"  - Increase work_mem for sort operations\n"
-                    f"  - Batch insert in smaller chunks"
+                    "INSERT operation is slow. Consider:\n"
+                    "  - Use COPY command for bulk insert\n"
+                    "  - Disable triggers during insert\n"
+                    "  - Increase work_mem for sort operations\n"
+                    "  - Batch insert in smaller chunks"
                 ),
                 potential_speedup="3-10x",
             )
@@ -424,11 +425,11 @@ class PerformanceBaseline:
                 percent_of_total=bottleneck.percent_of_total,
                 severity="IMPORTANT",
                 recommendation=(
-                    f"Index creation is slow. Consider:\n"
-                    f"  - Create index CONCURRENTLY\n"
-                    f"  - Use FILLFACTOR for indexes on volatile tables\n"
-                    f"  - Create in parallel on replicas first\n"
-                    f"  - Consider partial index if possible"
+                    "Index creation is slow. Consider:\n"
+                    "  - Create index CONCURRENTLY\n"
+                    "  - Use FILLFACTOR for indexes on volatile tables\n"
+                    "  - Create in parallel on replicas first\n"
+                    "  - Consider partial index if possible"
                 ),
                 potential_speedup="1.5-3x",
             )

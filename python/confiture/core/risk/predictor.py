@@ -1,11 +1,10 @@
 """Downtime prediction with confidence bounds - Phase 6."""
 from __future__ import annotations
 
-
 import logging
 import statistics
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,7 @@ class HistoricalMigrations:
 class DowntimePredictor:
     """Predict migration downtime with confidence."""
 
-    def __init__(self, historical_data: Optional[HistoricalMigrations] = None):
+    def __init__(self, historical_data: HistoricalMigrations | None = None):
         self.historical_data = historical_data
         self.prediction_method = (
             "historical" if historical_data else "heuristic"
@@ -129,8 +128,8 @@ class DowntimePredictor:
             caveats=[
                 f"Based on {len(similar)} similar migrations",
                 f"Standard deviation: {stdev:.0f}ms",
-                f"System load on current date may differ",
-                f"Database statistics may have changed",
+                "System load on current date may differ",
+                "Database statistics may have changed",
             ],
         )
 

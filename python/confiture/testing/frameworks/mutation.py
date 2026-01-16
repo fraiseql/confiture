@@ -10,13 +10,14 @@ Architecture:
 - MutationMetrics: Calculate mutation kill rate and effectiveness
 """
 
-import copy
 import json
 import re
-from dataclasses import dataclass, field, asdict
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional, Dict, List, Any
+from typing import Any
+
 import psycopg
 
 
@@ -43,8 +44,8 @@ class Mutation:
     description: str                     # What the mutation does
     category: MutationCategory           # Type of mutation
     severity: MutationSeverity          # Impact level
-    apply_fn: Optional[Callable] = None # Function to apply mutation
-    apply_regex: Optional[str] = None   # Regex for SQL transformation
+    apply_fn: Callable | None = None # Function to apply mutation
+    apply_regex: str | None = None   # Regex for SQL transformation
 
     def apply(self, sql: str) -> str:
         """Apply this mutation to SQL code."""
@@ -69,8 +70,8 @@ class MutationResult:
     duration_seconds: float
     stdout: str
     stderr: str
-    database_state: Optional[Dict] = None  # Schema state after mutation
-    error: Optional[Exception] = None
+    database_state: dict | None = None  # Schema state after mutation
+    error: Exception | None = None
 
 
 @dataclass
@@ -91,9 +92,9 @@ class MutationMetrics:
     survived_mutations: int = 0  # Missed by tests
     equivalent_mutations: int = 0  # Logically equivalent
 
-    by_category: Dict[str, Dict[str, int]] = field(default_factory=dict)
-    by_severity: Dict[str, Dict[str, int]] = field(default_factory=dict)
-    weak_tests: List[str] = field(default_factory=list)
+    by_category: dict[str, dict[str, int]] = field(default_factory=dict)
+    by_severity: dict[str, dict[str, int]] = field(default_factory=dict)
+    weak_tests: list[str] = field(default_factory=list)
 
     @property
     def kill_rate(self) -> float:
@@ -109,11 +110,11 @@ class MutationReport:
     timestamp: str
     total_mutations: int
     metrics: MutationMetrics
-    results_by_mutation: Dict[str, List[MutationTestResult]] = field(default_factory=dict)
-    results_by_test: Dict[str, List[MutationTestResult]] = field(default_factory=dict)
-    recommendations: List[str] = field(default_factory=list)
+    results_by_mutation: dict[str, list[MutationTestResult]] = field(default_factory=dict)
+    results_by_test: dict[str, list[MutationTestResult]] = field(default_factory=dict)
+    recommendations: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert report to dictionary."""
         return {
             "timestamp": self.timestamp,
@@ -128,7 +129,7 @@ class MutationRegistry:
     """Registry of all available mutations."""
 
     def __init__(self):
-        self.mutations: Dict[str, Mutation] = {}
+        self.mutations: dict[str, Mutation] = {}
         self._initialize_default_mutations()
 
     def _initialize_default_mutations(self):
@@ -397,19 +398,19 @@ class MutationRegistry:
         for mutation in performance_mutations:
             self.mutations[mutation.id] = mutation
 
-    def get_mutation(self, mutation_id: str) -> Optional[Mutation]:
+    def get_mutation(self, mutation_id: str) -> Mutation | None:
         """Get a specific mutation by ID."""
         return self.mutations.get(mutation_id)
 
-    def get_by_category(self, category: MutationCategory) -> List[Mutation]:
+    def get_by_category(self, category: MutationCategory) -> list[Mutation]:
         """Get all mutations in a category."""
         return [m for m in self.mutations.values() if m.category == category]
 
-    def get_by_severity(self, severity: MutationSeverity) -> List[Mutation]:
+    def get_by_severity(self, severity: MutationSeverity) -> list[Mutation]:
         """Get all mutations of a severity level."""
         return [m for m in self.mutations.values() if m.severity == severity]
 
-    def list_all(self) -> List[Mutation]:
+    def list_all(self) -> list[Mutation]:
         """Get all mutations."""
         return list(self.mutations.values())
 
@@ -421,7 +422,7 @@ class MutationRunner:
         self.connection = db_connection
         self.migrations_dir = migrations_dir
         self.registry = MutationRegistry()
-        self.test_results: List[MutationTestResult] = []
+        self.test_results: list[MutationTestResult] = []
 
     def run_migration_with_mutation(
         self,
@@ -544,7 +545,7 @@ class MutationRunner:
 
         return report
 
-    def _generate_recommendations(self) -> List[str]:
+    def _generate_recommendations(self) -> list[str]:
         """Generate recommendations based on test results."""
         recommendations = []
 

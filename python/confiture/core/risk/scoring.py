@@ -1,12 +1,10 @@
 """Transparent risk scoring formula with explicit weights - Phase 6."""
 from __future__ import annotations
 
-
 import logging
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

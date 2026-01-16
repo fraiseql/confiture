@@ -1,12 +1,11 @@
 """Query profiler with observable overhead tracking - Phase 6."""
 from __future__ import annotations
 
-
 import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +61,8 @@ class QueryProfiler:
         self,
         query: str,
         params: tuple = (),
-        connection: Optional[Any] = None,
-    ) -> tuple[Optional[QueryProfile], ProfilingMetadata]:
+        connection: Any | None = None,
+    ) -> tuple[QueryProfile | None, ProfilingMetadata]:
         """Profile query with overhead tracking.
 
         Supports two modes:
@@ -265,11 +264,11 @@ class QueryProfiler:
             skipped_analysis_reasons=["Sampling (profiling skipped)"],
         )
 
-    def get_profile(self, query_hash: str) -> Optional[QueryProfile]:
+    def get_profile(self, query_hash: str) -> QueryProfile | None:
         """Get profile for a query."""
         return self.profiles.get(query_hash)
 
-    def get_metadata(self, query_hash: str) -> Optional[ProfilingMetadata]:
+    def get_metadata(self, query_hash: str) -> ProfilingMetadata | None:
         """Get metadata for a query."""
         return self.profiling_metadata.get(query_hash)
 

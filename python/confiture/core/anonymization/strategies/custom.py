@@ -9,8 +9,10 @@ Provides a framework for implementing custom anonymization logic:
 Useful for domain-specific anonymization that doesn't fit into built-in strategies.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Any
+from typing import Any
+
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
 

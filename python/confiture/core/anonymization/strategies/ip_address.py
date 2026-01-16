@@ -10,9 +10,10 @@ Provides IPv4 and IPv6 anonymization with:
 Useful for log anonymization while preserving network patterns.
 """
 
-import random
 import ipaddress
+import random
 from dataclasses import dataclass
+
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
 
@@ -118,9 +119,7 @@ class IPAddressStrategy(AnonymizationStrategy):
         """
         # Skip localhost if configured
         if not self.config.anonymize_localhost:
-            if isinstance(ip, ipaddress.IPv4Address) and ip == ipaddress.IPv4Address("127.0.0.1"):
-                return str(ip)
-            elif isinstance(ip, ipaddress.IPv6Address) and ip == ipaddress.IPv6Address("::1"):
+            if isinstance(ip, ipaddress.IPv4Address) and ip == ipaddress.IPv4Address("127.0.0.1") or isinstance(ip, ipaddress.IPv6Address) and ip == ipaddress.IPv6Address("::1"):
                 return str(ip)
 
         if isinstance(ip, ipaddress.IPv4Address):

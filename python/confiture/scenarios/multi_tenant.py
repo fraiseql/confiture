@@ -27,7 +27,7 @@ Strategy:
 - Relationships: Maintain via deterministic hashing
 """
 
-from confiture.core.anonymization.factory import StrategyProfile, StrategyFactory
+from confiture.core.anonymization.factory import StrategyFactory, StrategyProfile
 
 
 class MultiTenantScenario:

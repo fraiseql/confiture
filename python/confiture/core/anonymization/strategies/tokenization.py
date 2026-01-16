@@ -23,8 +23,6 @@ Security:
 - Reversal requires authorization + audit trail
 """
 
-import hashlib
-import uuid
 from dataclasses import dataclass
 from typing import Any
 

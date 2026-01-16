@@ -5,17 +5,17 @@ All strategies are automatically registered with the StrategyRegistry.
 """
 
 from confiture.core.anonymization.registry import StrategyRegistry
-from confiture.core.anonymization.strategies.name import NameMaskingStrategy
-from confiture.core.anonymization.strategies.date import DateMaskingStrategy
 from confiture.core.anonymization.strategies.address import AddressStrategy
 from confiture.core.anonymization.strategies.credit_card import CreditCardStrategy
-from confiture.core.anonymization.strategies.ip_address import IPAddressStrategy
-from confiture.core.anonymization.strategies.text_redaction import TextRedactionStrategy
-from confiture.core.anonymization.strategies.preserve import PreserveStrategy
 from confiture.core.anonymization.strategies.custom import (
-    CustomStrategy,
     CustomLambdaStrategy,
+    CustomStrategy,
 )
+from confiture.core.anonymization.strategies.date import DateMaskingStrategy
+from confiture.core.anonymization.strategies.ip_address import IPAddressStrategy
+from confiture.core.anonymization.strategies.name import NameMaskingStrategy
+from confiture.core.anonymization.strategies.preserve import PreserveStrategy
+from confiture.core.anonymization.strategies.text_redaction import TextRedactionStrategy
 
 # Register all strategies
 StrategyRegistry.register("name", NameMaskingStrategy)

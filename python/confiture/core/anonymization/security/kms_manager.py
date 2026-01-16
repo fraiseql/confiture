@@ -8,13 +8,12 @@ Provides multi-cloud support for key management:
 Enables secure key storage, rotation, and lifecycle management.
 """
 
-import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +35,8 @@ class KeyMetadata:
     provider: KMSProvider
     algorithm: str
     created_at: datetime
-    rotated_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    rotated_at: datetime | None = None
+    expires_at: datetime | None = None
     version: int = 1
     is_active: bool = True
 
@@ -287,8 +286,8 @@ class AzureKMSClient(KMSClient):
         self.provider = KMSProvider.AZURE
 
         try:
-            from azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm
             from azure.identity import DefaultAzureCredential
+            from azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm
 
             self.CryptographyClient = CryptographyClient
             self.EncryptionAlgorithm = EncryptionAlgorithm
@@ -477,7 +476,7 @@ class LocalKMSClient(KMSClient):
             key_id=key_id,
             provider=KMSProvider.LOCAL,
             algorithm="Fernet",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             version=1,
             is_active=True,
         )
@@ -486,7 +485,7 @@ class LocalKMSClient(KMSClient):
 class KMSFactory:
     """Factory for creating KMS clients."""
 
-    _clients: Dict[str, KMSClient] = {}
+    _clients: dict[str, KMSClient] = {}
 
     @staticmethod
     def create(

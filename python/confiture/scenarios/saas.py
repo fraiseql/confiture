@@ -31,7 +31,7 @@ Strategy:
 - Subscription data: Preserve
 """
 
-from confiture.core.anonymization.factory import StrategyProfile, StrategyFactory
+from confiture.core.anonymization.factory import StrategyFactory, StrategyProfile
 
 
 class SaaSScenario:
