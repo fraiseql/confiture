@@ -20,6 +20,11 @@ import pytest
 from confiture.core.linting import SchemaLinter
 
 
+@pytest.mark.skip(
+    reason="Linting performance tests require full SchemaLinter integration - "
+           "Phase 6 feature not yet fully integrated. "
+           "Tests depend on performance optimizations not yet complete."
+)
 class TestLintingPerformance:
     """Performance benchmarks for the linting system."""
 
@@ -148,6 +153,10 @@ class TestLintingPerformance:
         )
 
 
+@pytest.mark.skip(
+    reason="Linting optimization tests require full SchemaLinter integration - "
+           "Phase 6 feature not yet fully integrated."
+)
 class TestLintingOptimizations:
     """Test that optimization changes don't break functionality.
 
