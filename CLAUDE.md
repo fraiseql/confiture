@@ -624,7 +624,7 @@ Closes #123
   - CI/CD pipeline with multi-platform wheels
 
 **Current Status**:
-- **Test Coverage**: 81.68% (332 tests passing)
+- **Test Coverage**: 52.60% (899 tests passing, 0 failing) ⚠️ See Phase 6 plan for improvements
 - **Version**: 0.3.2 (Production Release 🎉)
 - **Dependencies**: All installed and verified
 - **Rust Extension**: Compiled and working for Python 3.11+
@@ -725,7 +725,9 @@ except psycopg.OperationalError as e:
 
 **Achieved Metrics** (v0.3.2):
 
-- ✅ **Test Coverage**: 81.68% (332 tests passing, 0 failing)
+- ✅ **Test Coverage**: 52.60% actual (899 tests, up from 332 in earlier version) 📈
+  - Core features (Phases 1-3): ~85% coverage ✅
+  - Phase 6 features: ~50% coverage (improving with Phase 5) ⚠️
 - ✅ **Build Speed**: <1 second for fresh database builds
 - ✅ **CLI Commands**: 8 working (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`)
 - ✅ **Documentation**: 9 comprehensive guides + 4 API references

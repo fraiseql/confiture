@@ -140,7 +140,14 @@ class SchemaLinter:
     Example:
         >>> config = LintConfig(enabled=True)
         >>> linter = SchemaLinter(env="local", config=config)
+        >>>
+        >>> # Option 1: Load schema from files
         >>> report = linter.lint()
+        >>>
+        >>> # Option 2: Pass schema directly
+        >>> schema = "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255));"
+        >>> report = linter.lint(schema=schema)
+        >>>
         >>> if report.has_errors:
         ...     print(f"Found {len(report.errors)} errors")
     """
@@ -169,8 +176,11 @@ class SchemaLinter:
         self._schema_sql: str | None = None
         self._tables: dict[str, dict[str, Any]] | None = None
 
-    def lint(self) -> LintReport:
+    def lint(self, schema: str | None = None) -> LintReport:
         """Run linting and return report.
+
+        Args:
+            schema: Optional schema SQL to lint. If not provided, loads from files.
 
         Returns:
             LintReport with all violations found
@@ -180,8 +190,11 @@ class SchemaLinter:
         if not self.config.enabled:
             return report
 
-        # Load schema
-        self._load_schema()
+        # Use provided schema or load from files
+        if schema is not None:
+            self._schema_sql = schema
+        else:
+            self._load_schema()
 
         if not self._schema_sql:
             logger.warning("No schema SQL found, skipping linting")
