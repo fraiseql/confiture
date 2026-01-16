@@ -1,8 +1,8 @@
-# Dry-Run Mode Guide: Analyze Migrations Before Execution
+# Dry-Run Mode Guide: Test Migrations Before Execution
 
-**Feature 4: Migration Dry-Run Mode**
+**Feature: Migration Dry-Run Mode**
 
-This guide explains how to use Confiture's dry-run mode to analyze migrations before executing them. Dry-run mode provides comprehensive analysis including impact assessment, concurrency risk evaluation, and cost estimation - all without modifying your database.
+This guide explains how to use Confiture's dry-run mode to test migrations before executing them. Dry-run mode executes migrations within a transaction that is automatically rolled back, allowing you to verify migrations without modifying your database.
 
 ---
 
@@ -10,562 +10,351 @@ This guide explains how to use Confiture's dry-run mode to analyze migrations be
 
 1. [Overview](#overview)
 2. [Quick Start](#quick-start)
-3. [Analysis Modes](#analysis-modes)
-4. [Understanding Results](#understanding-results)
-5. [Advanced Configuration](#advanced-configuration)
-6. [Real-World Examples](#real-world-examples)
-7. [Troubleshooting](#troubleshooting)
-8. [Best Practices](#best-practices)
+3. [Understanding Results](#understanding-results)
+4. [CLI Integration](#cli-integration)
+5. [Real-World Examples](#real-world-examples)
+6. [Troubleshooting](#troubleshooting)
+7. [Best Practices](#best-practices)
 
 ---
 
 ## Overview
 
-Dry-run mode analyzes SQL migrations **without executing them** (in analysis-only mode) or **with guaranteed rollback** (in execute-and-analyze mode). This allows you to:
+Dry-run mode executes migrations in a transaction with **guaranteed rollback**. This allows you to:
 
-- **Assess Impact**: Understand which tables are affected, row counts, and data size changes
-- **Evaluate Risk**: Detect potential lock conflicts and concurrency issues
-- **Estimate Cost**: Predict execution time, disk usage, and CPU impact
-- **Review Safety**: Identify unsafe operations before production deployment
+- **Test Execution**: Verify migrations run without errors
+- **Measure Performance**: Capture actual execution time
+- **Detect Issues**: Find constraint violations before production
+- **Review Impact**: See rows affected and tables locked
 
 ### Key Capabilities
 
 | Feature | Details |
 |---------|---------|
-| **Statement Classification** | Categorizes statements as SAFE, WARNING, or UNSAFE |
-| **Impact Analysis** | Table impacts, row counts, constraint violations, size estimates |
-| **Concurrency Analysis** | Lock prediction, blocking queries, risk level assessment |
-| **Cost Estimation** | Time, disk, CPU predictions with threshold-based warnings |
-| **Selective Components** | Run fast analysis (classification only) or comprehensive analysis |
-| **Two Modes** | analyze() for metadata queries or execute_and_analyze() for SAVEPOINT testing |
-| **Multiple Formats** | Text reports for humans, JSON for programmatic consumption |
+| **Transaction Rollback** | All changes are automatically rolled back |
+| **Execution Metrics** | Time, rows affected, locked tables captured |
+| **Production Estimates** | Confidence-based time predictions |
+| **Warning Detection** | Identifies potential issues during execution |
 
 ---
 
 ## Quick Start
 
-### Basic Analysis (Fastest)
+### Basic Dry-Run Execution
 
 ```python
-from confiture.core.migration.dry_run.dry_run_mode import DryRunMode
-from psycopg import AsyncConnection
+import psycopg
+from confiture.core.dry_run import DryRunExecutor, DryRunResult
 
-# Lightweight analysis (classification only)
-dry_run = DryRunMode(
-    analyze_impact=False,
-    analyze_concurrency=False,
-    estimate_costs=False
-)
+# Connect to database
+conn = psycopg.connect("postgresql://localhost/mydb")
 
-# Analyze statements without touching database
-report = await dry_run.analyze(
-    statements=[
-        "ALTER TABLE users ADD COLUMN bio TEXT",
-        "CREATE INDEX idx_bio ON users(bio)",
-    ],
-    connection=connection,
-    migration_id="migration_001"
-)
+# Create executor
+executor = DryRunExecutor()
 
-# View results
-print(f"Unsafe statements: {report.unsafe_count}")
-for warning in report.warnings:
-    print(f"⚠️  {warning}")
+# Execute migration in dry-run mode
+result = executor.run(conn, migration)
+
+# Check results
+if result.success:
+    print(f"Migration {result.migration_name} succeeded")
+    print(f"Execution time: {result.execution_time_ms}ms")
+    print(f"Rows affected: {result.rows_affected}")
+else:
+    print(f"Migration failed")
+    for warning in result.warnings:
+        print(f"  Warning: {warning}")
 ```
 
-### Comprehensive Analysis
+### With Error Handling
 
 ```python
-# Full analysis with all components
-dry_run = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
+from confiture.core.dry_run import DryRunExecutor, DryRunError
 
-# Analyze statements
-report = await dry_run.analyze(
-    statements=[
-        "ALTER TABLE users ADD COLUMN bio TEXT",
-        "DELETE FROM logs WHERE created_at < NOW() - INTERVAL '1 year'",
-    ],
-    connection=connection,
-    migration_id="migration_002"
-)
+executor = DryRunExecutor()
 
-# Inspect detailed results
-for analysis in report.analyses:
-    print(f"Statement: {analysis.statement}")
-    print(f"  Classification: {analysis.classification}")
-    print(f"  Impact: {analysis.impact}")
-    print(f"  Concurrency: {analysis.concurrency}")
-    print(f"  Cost: {analysis.cost}")
-```
+try:
+    result = executor.run(conn, migration)
 
-### Execute and Analyze (Most Realistic)
+    if result.success:
+        print(f"Ready to execute: {result.migration_name}")
+        print(f"Estimated production time: {result.estimated_production_time_ms}ms")
+        print(f"Confidence: {result.confidence_percent}%")
+    else:
+        print("Dry-run completed with issues")
 
-```python
-# Full analysis with actual execution in SAVEPOINT
-dry_run = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
-
-# Execute in SAVEPOINT (guaranteed rollback)
-report = await dry_run.execute_and_analyze(
-    statements=[
-        "ALTER TABLE users ADD COLUMN bio TEXT",
-    ],
-    connection=connection,
-    migration_id="migration_003"
-)
-
-# Results include actual execution time
-for analysis in report.analyses:
-    print(f"Actual execution time: {analysis.execution_time_ms}ms")
-    print(f"Estimated time: {analysis.cost.estimated_duration_ms}ms")
-    print(f"Estimate accuracy: {analysis.execution_time_ms / analysis.cost.estimated_duration_ms * 100:.0f}%")
-```
-
----
-
-## Analysis Modes
-
-### Mode 1: analyze() - Metadata Only
-
-**When to use**: Quick analysis, no production impact, fast results
-
-```python
-dry_run = DryRunMode()
-report = await dry_run.analyze(
-    statements=["ALTER TABLE users ADD COLUMN bio TEXT"],
-    connection=connection
-)
-```
-
-**Characteristics**:
-- ✅ Fast: 50-100ms per statement
-- ✅ Zero database modification
-- ✅ Uses only metadata queries
-- ⚠️ Estimates are heuristic-based
-- ⚠️ Execution time is predicted, not actual
-
-**Performance**:
-```
-Classification:    <1ms per statement
-Impact analysis:   10-50ms per statement
-Concurrency:       <5ms per statement
-Cost estimation:   <5ms per statement
-────────────────────────────────
-Total:            20-60ms per statement
-```
-
-### Mode 2: execute_and_analyze() - With SAVEPOINT
-
-**When to use**: Pre-production validation, realistic results, need actual measurements
-
-```python
-dry_run = DryRunMode()
-report = await dry_run.execute_and_analyze(
-    statements=["ALTER TABLE users ADD COLUMN bio TEXT"],
-    connection=connection
-)
-```
-
-**Characteristics**:
-- ✅ Realistic: Executes actual SQL
-- ✅ Accurate metrics: Real execution time, actual row counts
-- ✅ Guaranteed rollback: No data left behind
-- ⚠️ Slower: 100-1000ms per statement
-- ⚠️ Requires transaction capability
-
-**Performance**:
-```
-Execution in SAVEPOINT:  10-1000ms per statement
-Post-execution analysis: 20-60ms per statement
-────────────────────────────────
-Total:                  30-1100ms per statement
-```
-
-**Safety Guarantee**:
-```sql
--- All statements wrapped in SAVEPOINT
-BEGIN;
-  SAVEPOINT migration;
-    -- Your migration statement here
-  ROLLBACK TO SAVEPOINT migration;
-COMMIT;
--- No data modified!
+except DryRunError as e:
+    print(f"Dry-run failed for {e.migration_name}")
+    print(f"Error: {e.original_error}")
 ```
 
 ---
 
 ## Understanding Results
 
-### Classification Levels
+### DryRunResult Fields
 
-Each statement is classified into one of three categories:
-
-#### SAFE ✓
-- Read-only operations (SELECT)
-- Simple inserts without constraints
-- Non-blocking schema changes
-
-**Examples**:
-```sql
-SELECT * FROM users
-INSERT INTO logs VALUES (...)
--- Safe to execute
-```
-
-#### WARNING ⚠️
-- ALTER TABLE operations
-- Index creation/modification
-- Schema changes that require locks
-- May cause temporary service impact
-
-**Examples**:
-```sql
-ALTER TABLE users ADD COLUMN bio TEXT
-CREATE INDEX idx_email ON users(email)
--- Use with caution, best during low-traffic periods
-```
-
-#### UNSAFE ❌
-- Destructive operations
-- DELETE/UPDATE without WHERE clause
-- DROP TABLE/INDEX
-- Operations affecting production data
-
-**Examples**:
-```sql
-DELETE FROM users  -- Missing WHERE clause!
-DROP TABLE legacy_data
-UPDATE accounts SET balance = 0  -- Oops!
--- Requires explicit confirmation before execution
-```
-
-### Impact Analysis
-
-Impact analysis shows which tables are affected and how:
+The `DryRunResult` dataclass contains all execution metrics:
 
 ```python
-analysis = report.analyses[0]
-impact = analysis.impact
-
-print(f"Affected tables: {impact.affected_tables}")
-# ['users', 'orders']
-
-for table_name, table_impact in impact.impact_by_table.items():
-    print(f"\n{table_name}:")
-    print(f"  Current rows: {table_impact.current_row_count}")
-    print(f"  Size: {table_impact.size_mb}MB")
-    print(f"  Estimated rows after: {table_impact.estimated_new_row_count}")
-    print(f"  Size change: {table_impact.estimated_size_change_mb}MB")
-    print(f"  Affected rows: {table_impact.affected_rows}")
-
-# Check constraint violations
-if impact.constraint_violations:
-    print("\n⚠️  Constraint violations detected:")
-    for violation in impact.constraint_violations:
-        print(f"  {violation.constraint_type}: {violation.constraint_name}")
-        print(f"    Affected rows: {violation.affected_rows}")
+@dataclass
+class DryRunResult:
+    migration_name: str           # Migration identifier
+    migration_version: str        # Version string
+    success: bool                 # Whether execution succeeded
+    execution_time_ms: int        # Actual execution time
+    rows_affected: int            # Number of rows modified
+    locked_tables: list[str]      # Tables that were locked
+    estimated_production_time_ms: int  # Predicted production time
+    confidence_percent: int       # Estimate confidence (0-100)
+    warnings: list[str]           # List of warnings
+    stats: dict[str, Any]         # Additional statistics
 ```
 
-**What it means**:
-- **current_row_count**: How many rows are in the table now
-- **size_mb**: Current disk usage
-- **estimated_new_row_count**: Projected rows after operation
-- **estimated_size_change_mb**: Disk space change
-- **constraint_violations**: Foreign key or check constraint issues
+### Interpreting Results
 
-### Concurrency Analysis
-
-Concurrency analysis predicts lock conflicts:
+#### Execution Time
 
 ```python
-concurrency = analysis.concurrency
+result = executor.run(conn, migration)
 
-print(f"Risk level: {concurrency.risk_level}")  # low, medium, high
-print(f"Tables locked: {concurrency.tables_locked}")
-print(f"Lock duration estimate: {concurrency.lock_duration_estimate_ms}ms")
+print(f"Actual time: {result.execution_time_ms}ms")
+print(f"Estimated production time: {result.estimated_production_time_ms}ms")
+print(f"Confidence: {result.confidence_percent}%")
 
-# Check for blocking
-if concurrency.blocking_statements:
-    print("⚠️  This may block other queries:")
-    for stmt in concurrency.blocking_statements:
-        print(f"  - {stmt}")
+# High confidence (>80%) means estimate is reliable
+# Low confidence (<50%) means results may vary in production
 ```
 
-**Risk Levels**:
-
-| Level | Lock Type | Duration | Impact |
-|-------|-----------|----------|--------|
-| **LOW** | RowExclusiveLock | <50ms | Minimal impact on concurrent queries |
-| **MEDIUM** | ShareUpdateExclusiveLock | 50-200ms | May delay some concurrent operations |
-| **HIGH** | ExclusiveLock, AccessExclusiveLock | 200-500ms+ | Blocks other queries, use during maintenance |
-
-**Best Practices**:
-- Execute LOW risk operations anytime
-- Execute MEDIUM risk during low-traffic periods
-- Execute HIGH risk during scheduled maintenance windows
-
-### Cost Analysis
-
-Cost analysis estimates resource usage:
+#### Locked Tables
 
 ```python
-cost = analysis.cost
+if result.locked_tables:
+    print("Tables locked during migration:")
+    for table in result.locked_tables:
+        print(f"  - {table}")
 
-print(f"Estimated time: {cost.estimated_duration_ms}ms")
-print(f"Estimated disk: {cost.estimated_disk_usage_mb}MB")
-print(f"Estimated CPU: {cost.estimated_cpu_percent}%")
-print(f"Recommended batch size: {cost.recommended_batch_size}")
-print(f"Cost score: {cost.total_cost_score}/100")
-print(f"Is expensive: {cost.is_expensive}")
-
-# Check warnings
-if cost.warnings:
-    print("\nCost warnings:")
-    for warning in cost.warnings:
-        print(f"  ⚠️  {warning}")
+    # If many tables locked, consider running during maintenance
+    if len(result.locked_tables) > 3:
+        print("Warning: Multiple tables locked - schedule during low traffic")
 ```
 
-**Thresholds**:
-
-| Metric | LOW | MEDIUM | HIGH (Expensive) |
-|--------|-----|--------|------------------|
-| **Time** | <5s | 5-10s | >10s |
-| **Disk** | <50MB | 50-100MB | >100MB |
-| **CPU** | <60% | 60-80% | >80% |
-
-### Report Summary
-
-Get a quick overview:
+#### Warnings
 
 ```python
-print(f"Total statements: {report.statements_analyzed}")
-print(f"Unsafe statements: {report.unsafe_count}")
-print(f"Safe to execute: {not report.has_unsafe_statements}")
-print(f"Total estimated time: {report.total_estimated_time_ms}ms")
-print(f"Total estimated disk: {report.total_estimated_disk_mb}MB")
+if result.warnings:
+    print("Warnings detected:")
+    for warning in result.warnings:
+        print(f"  - {warning}")
 
-print("\nWarnings:")
-for warning in report.warnings:
-    print(f"  {warning}")
+    # Decide whether to proceed based on warnings
+    if any("constraint" in w.lower() for w in result.warnings):
+        print("Constraint issue detected - review before proceeding")
 ```
 
 ---
 
-## Advanced Configuration
+## CLI Integration
 
-### Selective Component Analysis
+### Helper Functions
 
-Enable only the analysis you need:
+Confiture provides CLI helper functions for dry-run integration:
 
 ```python
-# Fast analysis - classification only (no impact/concurrency/cost)
-dry_run_fast = DryRunMode(
-    analyze_impact=False,
-    analyze_concurrency=False,
-    estimate_costs=False
+from pathlib import Path
+from confiture.cli.dry_run import (
+    save_text_report,
+    save_json_report,
+    print_json_report,
+    display_dry_run_header,
+    ask_dry_run_execute_confirmation,
 )
-# ~10-20ms per statement
 
-# Medium analysis - skip cost estimation
-dry_run_medium = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=False
-)
-# ~30-50ms per statement
+# Display header
+display_dry_run_header("testing")
+# Output: 🧪 Executing migrations in SAVEPOINT (guaranteed rollback)...
 
-# Full analysis - everything
-dry_run_full = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
-# ~50-100ms per statement
+# Save reports
+save_text_report("Migration completed successfully", Path("reports/dry-run.txt"))
+save_json_report({"success": True, "time_ms": 250}, Path("reports/dry-run.json"))
+
+# Print JSON to console
+print_json_report({"success": True, "time_ms": 250})
+
+# Ask for confirmation
+if ask_dry_run_execute_confirmation():
+    print("Proceeding with real execution...")
+else:
+    print("Execution cancelled")
 ```
 
-### Formatted Output
-
-Generate reports in different formats:
+### Display Modes
 
 ```python
-from confiture.core.migration.dry_run.report import DryRunReportGenerator
+# For analysis-only mode
+display_dry_run_header("analysis")
+# Output: 🔍 Analyzing migrations without execution...
 
-generator = DryRunReportGenerator(use_colors=True, verbose=True)
-
-# Plain text report (human-readable)
-text_report = generator.generate_text_report(report)
-print(text_report)
-
-# JSON report (programmatic)
-json_report = generator.generate_json_report(report)
-import json
-print(json.dumps(json_report, indent=2))
-
-# One-line summary
-summary = generator.generate_summary_line(report)
-print(summary)
-# Output: [✓ SAFE] 3 statements | Time: 1500ms | Disk: 5.2MB
-```
-
-### Batch Analysis
-
-Analyze multiple statements efficiently:
-
-```python
-from confiture.core.migration.dry_run.estimator import CostEstimator
-
-estimator = CostEstimator()
-
-statements = [
-    "ALTER TABLE users ADD COLUMN bio TEXT",
-    "CREATE INDEX idx_email ON users(email)",
-    "INSERT INTO logs SELECT * FROM archive_logs",
-]
-
-# Estimate costs for multiple statements
-cost_estimates = await estimator.estimate_batch(statements)
-
-# Get total cost
-total_cost = estimator.get_total_cost(list(cost_estimates.values()))
-print(f"Total time: {total_cost.estimated_duration_ms}ms")
-print(f"Total disk: {total_cost.estimated_disk_usage_mb}MB")
-print(f"Average CPU: {total_cost.estimated_cpu_percent}%")
+# For execute-and-rollback mode
+display_dry_run_header("testing")
+# Output: 🧪 Executing migrations in SAVEPOINT (guaranteed rollback)...
 ```
 
 ---
 
 ## Real-World Examples
 
-### Example 1: Large Table Migration
+### Example 1: Pre-Production Validation
 
-**Scenario**: Add column to users table with 1M rows
-
-```python
-# Setup
-dry_run = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
-
-# Analyze
-report = await dry_run.analyze(
-    statements=["ALTER TABLE users ADD COLUMN bio TEXT"],
-    connection=connection,
-    migration_id="add_bio_column"
-)
-
-# Review results
-analysis = report.analyses[0]
-print(f"Classification: {analysis.classification}")
-# WARNING - Schema change, will take time
-
-print(f"Impact:")
-print(f"  Affected table: users")
-print(f"  Current rows: {analysis.impact.impact_by_table['users'].current_row_count}")
-print(f"  Estimated time: {analysis.cost.estimated_duration_ms}ms")
-
-print(f"Concurrency:")
-print(f"  Risk: {analysis.concurrency.risk_level}")
-# HIGH - Requires exclusive lock
-
-print(f"Recommendation:")
-print(f"  Execute during maintenance window (low-traffic period)")
-```
-
-### Example 2: Bulk Data Deletion
-
-**Scenario**: Delete old records from logs table
+**Scenario**: Validate migration before deploying to production
 
 ```python
-# Setup
-dry_run = DryRunMode()
+from confiture.core.dry_run import DryRunExecutor, DryRunError
 
-# Analyze
-report = await dry_run.execute_and_analyze(
-    statements=[
-        "DELETE FROM logs WHERE created_at < NOW() - INTERVAL '1 year'"
-    ],
-    connection=connection
-)
+def validate_migration(conn, migration):
+    """Validate migration in dry-run mode before production."""
+    executor = DryRunExecutor()
 
-# Review
-analysis = report.analyses[0]
-print(f"Classification: {analysis.classification}")
-# UNSAFE - No WHERE clause restriction? Actually has condition, so WARNING
+    try:
+        result = executor.run(conn, migration)
 
-impact = analysis.impact
-print(f"Rows affected: {impact.rows_affected_estimate}")
-print(f"Disk freed: {impact.estimated_size_change_mb}MB")
+        if not result.success:
+            print(f"Migration {result.migration_name} failed validation")
+            return False
 
-cost = analysis.cost
-print(f"Recommended batch size: {cost.recommended_batch_size}")
-# Large deletions should be batched
+        # Check execution time
+        if result.execution_time_ms > 5000:  # >5 seconds
+            print(f"Warning: Slow migration ({result.execution_time_ms}ms)")
+            print("Consider running during maintenance window")
 
-# Decision
-if cost.is_expensive:
-    print("⚠️  Large deletion - consider running in batches")
-    print(f"Batch size: {cost.recommended_batch_size} rows")
-```
+        # Check locked tables
+        if len(result.locked_tables) > 5:
+            print(f"Warning: {len(result.locked_tables)} tables locked")
+            print("Consider batching or off-peak execution")
 
-### Example 3: Pre-Production Validation
+        # Check warnings
+        if result.warnings:
+            print("Warnings detected:")
+            for w in result.warnings:
+                print(f"  - {w}")
 
-**Scenario**: Full migration validation before deploying to production
+        print(f"Migration validated successfully")
+        print(f"  Time: {result.execution_time_ms}ms")
+        print(f"  Rows: {result.rows_affected}")
+        return True
 
-```python
-# Setup - Full analysis with execution
-dry_run = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
+    except DryRunError as e:
+        print(f"Validation failed: {e}")
+        return False
 
-migration_statements = [
-    "ALTER TABLE users ADD COLUMN last_login_ip INET",
-    "CREATE INDEX idx_last_login ON users(last_login_ip)",
-    "UPDATE user_settings SET theme = 'light' WHERE theme IS NULL",
-]
 
-# Analyze with actual execution
-report = await dry_run.execute_and_analyze(
-    statements=migration_statements,
-    connection=connection,
-    migration_id="pre_deploy_001"
-)
-
-# Comprehensive review
-print("=" * 80)
-print("MIGRATION VALIDATION REPORT")
-print("=" * 80)
-print(f"Total statements: {report.statements_analyzed}")
-print(f"Safe to execute: {not report.has_unsafe_statements}")
-print(f"Total time estimate: {report.total_estimated_time_ms}ms")
-print()
-
-for i, analysis in enumerate(report.analyses, 1):
-    print(f"Statement {i}:")
-    print(f"  SQL: {analysis.statement[:60]}...")
-    print(f"  Classification: {analysis.classification}")
-    print(f"  Actual execution time: {analysis.execution_time_ms}ms")
-    if analysis.cost:
-        accuracy = (analysis.execution_time_ms / analysis.cost.estimated_duration_ms * 100)
-        print(f"  Estimate accuracy: {accuracy:.0f}%")
-    if analysis.concurrency:
-        print(f"  Concurrency risk: {analysis.concurrency.risk_level}")
-    print()
-
-# Final approval
-if not report.has_unsafe_statements:
-    print("✓ APPROVED FOR PRODUCTION DEPLOYMENT")
+# Usage
+if validate_migration(staging_conn, migration):
+    print("Approved for production")
 else:
-    print("❌ UNSAFE STATEMENTS DETECTED - REVIEW REQUIRED")
+    print("Review required before production")
+```
+
+### Example 2: Batch Migration Testing
+
+**Scenario**: Test multiple migrations in sequence
+
+```python
+def test_migration_batch(conn, migrations):
+    """Test a batch of migrations in dry-run mode."""
+    executor = DryRunExecutor()
+    results = []
+
+    for migration in migrations:
+        try:
+            result = executor.run(conn, migration)
+            results.append({
+                "name": result.migration_name,
+                "success": result.success,
+                "time_ms": result.execution_time_ms,
+                "warnings": result.warnings
+            })
+        except DryRunError as e:
+            results.append({
+                "name": e.migration_name,
+                "success": False,
+                "error": str(e.original_error)
+            })
+
+    # Summary
+    successful = sum(1 for r in results if r["success"])
+    print(f"Tested {len(migrations)} migrations: {successful} passed")
+
+    total_time = sum(r.get("time_ms", 0) for r in results)
+    print(f"Total estimated time: {total_time}ms")
+
+    failed = [r for r in results if not r["success"]]
+    if failed:
+        print("Failed migrations:")
+        for r in failed:
+            print(f"  - {r['name']}: {r.get('error', 'unknown')}")
+
+    return results
+```
+
+### Example 3: CI/CD Integration
+
+**Scenario**: Automate dry-run in CI pipeline
+
+```python
+import sys
+import json
+from pathlib import Path
+
+def ci_dry_run_check(conn, migration, report_path: Path):
+    """CI-friendly dry-run check with JSON report."""
+    from confiture.core.dry_run import DryRunExecutor, DryRunError
+    from confiture.cli.dry_run import save_json_report
+
+    executor = DryRunExecutor()
+
+    report = {
+        "migration": None,
+        "success": False,
+        "execution_time_ms": 0,
+        "warnings": [],
+        "error": None
+    }
+
+    try:
+        result = executor.run(conn, migration)
+
+        report["migration"] = result.migration_name
+        report["success"] = result.success
+        report["execution_time_ms"] = result.execution_time_ms
+        report["warnings"] = result.warnings
+        report["rows_affected"] = result.rows_affected
+
+        # Save report
+        save_json_report(report, report_path)
+
+        # Exit with appropriate code
+        if result.success and not result.warnings:
+            print("CI Check: PASSED")
+            return 0
+        elif result.success:
+            print("CI Check: PASSED with warnings")
+            return 0
+        else:
+            print("CI Check: FAILED")
+            return 1
+
+    except DryRunError as e:
+        report["migration"] = e.migration_name
+        report["error"] = str(e.original_error)
+        save_json_report(report, report_path)
+        print(f"CI Check: FAILED - {e}")
+        return 1
+
+
+# Usage in CI
+# exit_code = ci_dry_run_check(conn, migration, Path("dry-run-report.json"))
+# sys.exit(exit_code)
 ```
 
 ---
@@ -574,179 +363,122 @@ else:
 
 ### Common Issues
 
-#### "Analysis failed with: table does not exist"
+#### "DryRunError: Migration failed"
 
-**Cause**: Analyzing statements that reference non-existent tables
-
-**Solution**:
-```python
-# Option 1: Create tables before analysis
-# Option 2: Use analyze-only mode (faster, no table requirements)
-dry_run = DryRunMode(analyze_impact=False)
-report = await dry_run.analyze(statements, connection)
-```
-
-#### "Cost estimate seems inaccurate"
-
-**Cause**: Heuristic estimates are based on statement patterns, not actual data
+**Cause**: The migration SQL has errors or constraint violations
 
 **Solution**:
 ```python
-# Use execute_and_analyze for realistic metrics
-report = await dry_run.execute_and_analyze(statements, connection)
-# Actual execution time will be recorded
+try:
+    result = executor.run(conn, migration)
+except DryRunError as e:
+    print(f"Migration: {e.migration_name}")
+    print(f"Original error: {e.original_error}")
+    # Fix the SQL and retry
 ```
 
-#### "Concurrency analysis says 'high risk' but it's blocking users"
+#### "Execution time is 0ms"
 
-**Cause**: HIGH risk operations require exclusive locks that block all other queries
+**Cause**: Migration has no actual SQL to execute
 
 **Solution**:
+```python
+# Check if migration has content
+if result.execution_time_ms == 0:
+    print("Migration may be empty or only contains comments")
 ```
-Execute during maintenance window:
-- Scheduled off-hours
-- During known low-traffic period
-- With application disconnects
 
-Example:
-  Mon 2:00 AM - 3:00 AM (low traffic)
-  Pause application for 5 minutes
-  Run migration
-  Resume application
+#### "Locked tables list is empty"
+
+**Cause**: Read-only operations don't acquire locks
+
+**Solution**:
+```python
+# This is expected for SELECT statements
+if not result.locked_tables:
+    print("No locks acquired (read-only operation)")
 ```
 
 ---
 
 ## Best Practices
 
-### 1. Always Analyze Before Production
+### 1. Always Dry-Run Before Production
 
 ```python
-# Before deploying migrations to production:
-dry_run = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
+# Before any production migration:
+result = executor.run(staging_conn, migration)
 
-report = await dry_run.execute_and_analyze(
-    statements=migration.statements,
-    connection=staging_connection
-)
-
-# Review report before approving
-if report.has_unsafe_statements:
-    return ApprovalResult.REJECTED
-```
-
-### 2. Choose the Right Mode
-
-```python
-# For quick checks during development
-dry_run_fast = DryRunMode(
-    analyze_impact=False,
-    analyze_concurrency=False,
-    estimate_costs=False
-)
-
-# For pre-production validation
-dry_run_full = DryRunMode(
-    analyze_impact=True,
-    analyze_concurrency=True,
-    estimate_costs=True
-)
-```
-
-### 3. Batch Large Operations
-
-```python
-# If batch size is recommended
-cost = analysis.cost
-if cost.recommended_batch_size < 100000:
-    print(f"Consider batching in groups of {cost.recommended_batch_size}")
-```
-
-### 4. Schedule Based on Risk
-
-```python
-# Check concurrency risk and schedule accordingly
-if analysis.concurrency.risk_level == "high":
-    print("Schedule during maintenance window")
-elif analysis.concurrency.risk_level == "medium":
-    print("Execute during low-traffic period")
+if result.success:
+    # Proceed to production
+    pass
 else:
-    print("Safe to execute anytime")
+    # Fix issues first
+    pass
 ```
 
-### 5. Monitor Estimate vs. Actual
+### 2. Check Execution Time Thresholds
 
 ```python
-# For execute_and_analyze, compare estimates vs. actual
-actual_time = analysis.execution_time_ms
-estimated_time = analysis.cost.estimated_duration_ms
-accuracy = (actual_time / estimated_time * 100)
+SLOW_THRESHOLD_MS = 5000  # 5 seconds
+VERY_SLOW_THRESHOLD_MS = 30000  # 30 seconds
 
-if accuracy < 50 or accuracy > 200:
-    print(f"⚠️  Estimate was significantly off: {accuracy:.0f}%")
-    # Review estimation logic
+if result.execution_time_ms > VERY_SLOW_THRESHOLD_MS:
+    print("CRITICAL: Very slow migration - requires maintenance window")
+elif result.execution_time_ms > SLOW_THRESHOLD_MS:
+    print("WARNING: Slow migration - consider low-traffic period")
 ```
 
-### 6. Document Migration Decisions
+### 3. Review Warnings Thoroughly
 
 ```python
-# Save report for documentation
-report_json = generator.generate_json_report(report)
+CRITICAL_WARNINGS = ["constraint", "foreign key", "unique", "not null"]
 
-import json
-with open(f"migrations/reports/{migration_id}.json", "w") as f:
-    json.dump(report_json, f, indent=2)
-
-# Attach to deployment ticket with approval notes
+for warning in result.warnings:
+    if any(crit in warning.lower() for crit in CRITICAL_WARNINGS):
+        print(f"CRITICAL: {warning}")
+        # Require manual approval
 ```
 
----
-
-## Integration with Wizard (Feature 3)
-
-Dry-run mode integrates seamlessly with the interactive migration wizard:
+### 4. Save Reports for Audit
 
 ```python
-# Step 5: Execute & Verify
-if user_chooses_dry_run:
-    dry_run = DryRunMode(
-        analyze_impact=True,
-        analyze_concurrency=True,
-        estimate_costs=True
-    )
+from confiture.cli.dry_run import save_json_report
+from datetime import datetime
 
-    # Execute with analysis
-    report = await dry_run.execute_and_analyze(
-        statements=migration.statements,
-        connection=connection
-    )
+report_data = {
+    "timestamp": datetime.now().isoformat(),
+    "migration": result.migration_name,
+    "version": result.migration_version,
+    "success": result.success,
+    "execution_time_ms": result.execution_time_ms,
+    "rows_affected": result.rows_affected,
+    "warnings": result.warnings,
+}
 
-    # Show results to user
-    console.print(report_generator.generate_text_report(report))
+save_json_report(report_data, Path(f"audits/{result.migration_name}.json"))
+```
 
-    # Ask for confirmation
-    if questionary.confirm("Proceed with migration?").ask():
-        # Execute for real
-        await migrator.execute(migration.statements, connection)
-    else:
-        console.print("Migration cancelled")
+### 5. Use Confidence Levels
+
+```python
+if result.confidence_percent >= 80:
+    print("High confidence - estimate is reliable")
+elif result.confidence_percent >= 50:
+    print("Medium confidence - add buffer time")
+else:
+    print("Low confidence - run additional tests")
 ```
 
 ---
 
 ## See Also
 
-- [API Reference: DryRunMode](../reference/dry-run-api.md)
-- [Cost Estimation Details](../reference/cost-estimation.md)
-- [Statement Classification Rules](../reference/statement-classification.md)
-- [Interactive Migration Wizard](./migration-wizard.md)
+- [API Reference: Dry-Run Mode](../reference/dry-run-api.md)
+- [Migration Guide](./migration-strategies.md)
 
 ---
 
-**Version**: 1.0
-**Last Updated**: December 27, 2025
-**Feature**: Feature 4 - Migration Dry-Run Mode
+**Version**: 2.0
+**Last Updated**: January 2026
+**Note**: This guide reflects the current simplified dry-run implementation.

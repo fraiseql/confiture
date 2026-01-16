@@ -177,13 +177,13 @@ class DryRunResult:
     locked_tables: list[str]
     estimated_production_time_ms: int
 
-class DryRunMode:
+class DryRunExecutor:
     """Orchestrate safe migration testing"""
 
-    async def test_migration(
+    def run(
         self,
-        migration: Migration,
-        conn: AsyncConnection
+        conn: psycopg.Connection,
+        migration: Migration
     ) -> DryRunResult:
         """Execute in SAVEPOINT, guaranteed rollback"""
 ```
@@ -521,7 +521,7 @@ Return: "✅ Successfully applied 2 migration(s)!"
 
 **Rationale**:
 - CLI uses synchronous psycopg.Connection
-- Full DryRunMode designed for AsyncConnection
+- DryRunExecutor provides transaction-based testing with rollback
 - Estimates still provide safety value
 - Can be enhanced when async support added
 
