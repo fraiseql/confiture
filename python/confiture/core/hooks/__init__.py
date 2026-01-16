@@ -9,7 +9,7 @@ Provides:
 from __future__ import annotations
 
 
-from .base import Hook, HookResult
+from .base import Hook, HookError, HookExecutor, HookResult
 from .context import (
     ExecutionContext,
     HookContext,
@@ -48,6 +48,8 @@ __all__ = [
     # Base classes
     "Hook",
     "HookResult",
+    "HookError",
+    "HookExecutor",
     "HookContext",
     # Phases/Events/Alerts
     "HookPhase",

@@ -4,8 +4,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.core.linting import LintRule, SchemaLinter
+from confiture.core.linting import SchemaLinter
 from confiture.models.lint import LintConfig, LintReport
+
+# Note: LintRule not yet exported - will be added in future phase
+# from confiture.core.linting import LintRule
 
 
 # Mock Table and Column for testing

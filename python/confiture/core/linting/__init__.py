@@ -25,6 +25,13 @@ from .libraries import (
     PCI_DSSLibrary,
     SOXLibrary,
 )
+from .schema_linter import (
+    LintConfig,
+    LintReport,
+    LintViolation,
+    RuleSeverity,
+    SchemaLinter,
+)
 from .versioning import (
     LintSeverity,
     Rule,
@@ -54,4 +61,10 @@ __all__ = [
     "SOXLibrary",
     "GDPRLibrary",
     "PCI_DSSLibrary",
+    # Schema Linter
+    "SchemaLinter",
+    "LintConfig",
+    "LintReport",
+    "LintViolation",
+    "RuleSeverity",
 ]
