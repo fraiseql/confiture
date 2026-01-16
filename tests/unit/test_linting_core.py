@@ -4,11 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.core.linting import SchemaLinter
+from confiture.core.linting import LintRule, SchemaLinter
 from confiture.models.lint import LintConfig, LintReport
-
-# Note: LintRule not yet exported - will be added in future phase
-# from confiture.core.linting import LintRule
 
 
 # Mock Table and Column for testing
@@ -29,11 +26,6 @@ class MockTable:
         self.columns = columns or []
 
 
-@pytest.mark.skip(
-    reason="LintRule is not exported yet - it's used internally by SchemaLinter "
-           "but not exposed as a public API. These tests require the abstract base "
-           "class which is part of incomplete Phase 6 implementation."
-)
 class TestLintRuleBase:
     """Tests for LintRule abstract base class."""
 
@@ -69,9 +61,8 @@ class TestLintRuleBase:
 
 
 @pytest.mark.skip(
-    reason="SchemaLinter integration tests require full Phase 6 linting system integration - "
-           "tests depend on mocked SchemaBuilder and SchemaDiffer that don't properly integrate "
-           "with current architecture. Linting system is partially implemented."
+    reason="SchemaLinter integration tests require refactored linting system - "
+           "API incompatibility with new linting/schema_linter.py module."
 )
 class TestSchemaLinter:
     """Tests for SchemaLinter orchestrator."""

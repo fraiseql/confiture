@@ -11,6 +11,17 @@ Example:
 
 from typing import Any
 
+from confiture.core.linting import (
+    DocumentationRule,
+    LintRule,
+    MissingIndexRule,
+    MultiTenantRule,
+    NamingConventionRule,
+    PrimaryKeyRule,
+    SchemaLinter,
+    SecurityRule,
+)
+
 __version__ = "0.3.2"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel@fraiseql.com"
@@ -19,6 +30,14 @@ __all__ = [
     "__version__",
     "__author__",
     "__email__",
+    "LintRule",
+    "NamingConventionRule",
+    "PrimaryKeyRule",
+    "DocumentationRule",
+    "MultiTenantRule",
+    "MissingIndexRule",
+    "SecurityRule",
+    "SchemaLinter",
 ]
 
 # Lazy imports to avoid errors during development

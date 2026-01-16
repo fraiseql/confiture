@@ -14,9 +14,8 @@ from confiture.models.lint import LintConfig, LintSeverity
 
 
 @pytest.mark.skip(
-    reason="Linting integration tests require Phase 6 integration with SchemaLinter - "
-           "currently fails due to missing schema context and environment setup. "
-           "Linting rules are implemented but integration with config parsing incomplete."
+    reason="Linting integration tests require refactored linting system - "
+           "API incompatibility with new linting/schema_linter.py module."
 )
 class TestLinderIntegration:
     """Integration tests for SchemaLinter with real files."""

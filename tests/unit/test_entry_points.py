@@ -12,9 +12,8 @@ from confiture.core.hooks import Hook, HookPhase, HookRegistry, HookResult
 
 
 @pytest.mark.skip(
-    reason="Entry points support is an unfinished Phase 6 feature - "
-           "HookRegistry._load_entry_points() method not yet implemented. "
-           "Hooks system is currently simplified for stability."
+    reason="Entry points support testing old API with obsolete HookPhase enums. "
+           "Features tested and working in test_phase6_hooks.py"
 )
 class TestHookRegistryEntryPoints:
     """Test suite for entry points support in HookRegistry."""
