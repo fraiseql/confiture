@@ -317,7 +317,7 @@ database:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, f"CLI failed with exit code {result.exit_code}. Output: {result.output}"
         assert "applied" in result.stdout.lower() or "success" in result.stdout.lower()
 
         # Verify table was created

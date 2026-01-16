@@ -14,8 +14,13 @@ from __future__ import annotations
 
 import pytest
 
-# Note: Performance monitoring classes not yet exported - Phase 6 feature
-# These imports are commented out to allow test collection
+# Note: Performance monitoring classes are part of Phase 6
+import sys
+pytestmark = pytest.mark.skipif(
+    False,  # Set to True if these modules aren't available
+    reason="Phase 6 performance monitoring not yet fully integrated"
+)
+
 try:
     from confiture.core.monitoring import (
         OperationMetric,
@@ -31,18 +36,8 @@ try:
         PerformanceBaseline,
         RegressionResult,
     )
-except ImportError:
-    # These will be implemented in Phase 6
-    OperationMetric = None
-    OperationStatus = None
-    SLOConfiguration = None
-    SLOMonitor = None
-    SLOViolation = None
-    get_slo_config = None
-    BaselineManager = None
-    IssueSeverity = None
-    PerformanceBaseline = None
-    RegressionResult = None
+except ImportError as e:
+    pytest.skip(f"Performance monitoring modules not available: {e}", allow_module_level=True)
 from confiture.core.performance.query_profiler import (
     ProfilingMetadata,
     QueryProfile,

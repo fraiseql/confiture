@@ -17,6 +17,15 @@ from confiture.core.hooks import (
     HookPhase,
     HookResult,
 )
+from confiture.core.hooks.context import ExecutionContext
+
+
+def _make_hook_context(migration_name: str = "test_migration", migration_version: str = "001") -> HookContext:
+    """Helper function to create HookContext for tests."""
+    exec_context = ExecutionContext()
+    exec_context.metadata["migration_name"] = migration_name
+    exec_context.metadata["migration_version"] = migration_version
+    return HookContext(phase=HookPhase.AFTER_EXECUTE, data=exec_context)
 
 
 class TestHookExecutorLogging:
@@ -32,21 +41,21 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class SimpleHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="SimpleHook",
                     rows_affected=0,
                 )
 
         hook = SimpleHook()
         conn = Mock()
-        context = HookContext("test_migration", "001")
+        context = _make_hook_context()
 
         with patch.object(executor, "logger") as mock_logger:
-            executor.execute_phase(conn, HookPhase.AFTER_DDL, [hook], context)
+            executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, [hook], context)
             # Should log phase start
             assert mock_logger.info.called
 
@@ -55,21 +64,21 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class SimpleHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="SimpleHook",
                     rows_affected=42,
                 )
 
         hook = SimpleHook()
         conn = Mock()
-        context = HookContext("test_migration", "001")
+        context = _make_hook_context()
 
         with patch.object(executor, "logger") as mock_logger:
-            executor.execute_phase(conn, HookPhase.AFTER_DDL, [hook], context)
+            executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, [hook], context)
             # Should log hook completion with metrics
             info_calls = [
                 c for c in mock_logger.info.call_args_list
@@ -82,18 +91,18 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class FailingHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 raise ValueError("Test error")
 
         hook = FailingHook()
         conn = Mock()
-        context = HookContext("test_migration", "001")
+        context = _make_hook_context()
 
         with patch.object(executor, "logger") as mock_logger:
             with pytest.raises(HookError):
-                executor.execute_phase(conn, HookPhase.AFTER_DDL, [hook], context)
+                executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, [hook], context)
             # Should log hook failure
             assert mock_logger.error.called
 
@@ -102,11 +111,11 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class SimpleHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="SimpleHook",
                     rows_affected=0,
                     execution_time_ms=123,
@@ -114,10 +123,10 @@ class TestHookExecutorLogging:
 
         hook = SimpleHook()
         conn = Mock()
-        context = HookContext("test_migration", "001")
+        context = _make_hook_context()
 
         with patch.object(executor, "logger") as mock_logger:
-            executor.execute_phase(conn, HookPhase.AFTER_DDL, [hook], context)
+            executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, [hook], context)
             # Should include duration_ms in logs
             assert mock_logger.info.called
 
@@ -126,21 +135,21 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class SimpleHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="SimpleHook",
                     rows_affected=0,
                 )
 
         hook = SimpleHook()
         conn = Mock()
-        context = HookContext("001_add_users", "001")
+        context = _make_hook_context("001_add_users", "001")
 
         with patch.object(executor, "logger") as mock_logger:
-            executor.execute_phase(conn, HookPhase.AFTER_DDL, [hook], context)
+            executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, [hook], context)
             # Logs should include migration context
             assert mock_logger.info.called
 
@@ -149,31 +158,31 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class Hook1(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="Hook1",
                     rows_affected=10,
                 )
 
         class Hook2(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="Hook2",
                     rows_affected=20,
                 )
 
         hooks = [Hook1(), Hook2()]
         conn = Mock()
-        context = HookContext("test_migration", "001")
+        context = _make_hook_context()
 
         with patch.object(executor, "logger") as mock_logger:
-            executor.execute_phase(conn, HookPhase.AFTER_DDL, hooks, context)
+            executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, hooks, context)
             # Should log for both hooks
             assert mock_logger.info.called
 
@@ -182,21 +191,21 @@ class TestHookExecutorLogging:
         executor = HookExecutor()
 
         class SimpleHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
-                    phase="AFTER_DDL",
+                    phase="AFTER_EXECUTE",
                     hook_name="SimpleHook",
                     rows_affected=1500,
                 )
 
         hook = SimpleHook()
         conn = Mock()
-        context = HookContext("test_migration", "001")
+        context = _make_hook_context()
 
         with patch.object(executor, "logger") as mock_logger:
-            executor.execute_phase(conn, HookPhase.AFTER_DDL, [hook], context)
+            executor.execute_phase(conn, HookPhase.AFTER_EXECUTE, [hook], context)
             # Logs should include rows_affected
             assert mock_logger.info.called
 

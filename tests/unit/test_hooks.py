@@ -27,7 +27,7 @@ class TestHookSystem:
         class CaptureStatsHook(Hook):
             """Example hook to capture row counts before DDL."""
 
-            phase = HookPhase.BEFORE_DDL
+            phase = HookPhase.BEFORE_EXECUTE
 
             def execute(self, conn, context):
                 """Execute hook with database connection and context."""
@@ -37,7 +37,7 @@ class TestHookSystem:
         # Verify hook can be instantiated
         hook = CaptureStatsHook()
         assert hook is not None
-        assert hook.phase == HookPhase.BEFORE_DDL
+        assert hook.phase == HookPhase.BEFORE_EXECUTE
 
     def test_hook_phases_enum_exists(self):
         """HookPhase enum should define all hook execution phases."""
@@ -74,7 +74,7 @@ class TestHookSystem:
         from confiture.core.hooks import Hook, HookPhase, HookExecutor, HookResult
 
         class TestHook1(Hook):
-            phase = HookPhase.BEFORE_DDL
+            phase = HookPhase.BEFORE_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
@@ -85,7 +85,7 @@ class TestHookSystem:
                 )
 
         class TestHook2(Hook):
-            phase = HookPhase.BEFORE_DDL
+            phase = HookPhase.BEFORE_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
@@ -106,7 +106,7 @@ class TestHookSystem:
         context = Mock()
 
         # Execute hooks
-        results = executor.execute_phase(mock_conn, HookPhase.BEFORE_DDL, hooks, context)
+        results = executor.execute_phase(mock_conn, HookPhase.BEFORE_EXECUTE, hooks, context)
 
         # Verify both hooks ran
         assert len(results) == 2
@@ -117,24 +117,25 @@ class TestHookSystem:
 
     def test_hook_context_provides_migration_data(self):
         """HookContext should provide migration metadata to hooks."""
-        from confiture.core.hooks import HookContext
+        from confiture.core.hooks import HookContext, HookPhase
+        from confiture.core.hooks.context import ExecutionContext
 
-        context = HookContext(
-            migration_name="001_add_users_table",
-            migration_version="001",
-            direction="forward",
-        )
+        exec_context = ExecutionContext()
+        exec_context.metadata["migration_name"] = "001_add_users_table"
+        exec_context.metadata["migration_version"] = "001"
+        exec_context.metadata["direction"] = "forward"
+        context = HookContext(phase=HookPhase.BEFORE_VALIDATION, data=exec_context)
 
-        assert context.migration_name == "001_add_users_table"
-        assert context.migration_version == "001"
-        assert context.direction == "forward"
+        assert context.data.metadata["migration_name"] == "001_add_users_table"
+        assert context.data.metadata["migration_version"] == "001"
+        assert context.data.metadata["direction"] == "forward"
 
     def test_hook_error_is_rolled_back_via_savepoint(self):
         """Failed hook should trigger savepoint rollback."""
         from confiture.core.hooks import Hook, HookPhase, HookExecutor, HookError
 
         class FailingHook(Hook):
-            phase = HookPhase.BEFORE_DDL
+            phase = HookPhase.BEFORE_EXECUTE
 
             def execute(self, conn, context):
                 raise ValueError("Simulated hook failure")
@@ -148,7 +149,7 @@ class TestHookSystem:
         context = Mock()
 
         with pytest.raises(HookError) as exc_info:
-            executor.execute_phase(mock_conn, HookPhase.BEFORE_DDL, [FailingHook()], context)
+            executor.execute_phase(mock_conn, HookPhase.BEFORE_EXECUTE, [FailingHook()], context)
 
         # Verify error includes hook information
         assert "FailingHook" in str(exc_info.value)
@@ -184,7 +185,7 @@ class TestHookSystem:
         from confiture.core.hooks import Hook, HookPhase, HookRegistry, HookResult
 
         class TestHook(Hook):
-            phase = HookPhase.AFTER_DDL
+            phase = HookPhase.AFTER_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
@@ -214,7 +215,7 @@ class TestHookSystem:
         )
 
         class CustomHook(Hook):
-            phase = HookPhase.BEFORE_DDL
+            phase = HookPhase.BEFORE_EXECUTE
 
             def execute(self, conn, context):
                 return HookResult(
