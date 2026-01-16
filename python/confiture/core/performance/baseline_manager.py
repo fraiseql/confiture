@@ -222,7 +222,3 @@ class PerformanceBaselineManager:
     ) -> list[PerformanceBaseline]:
         """Get baseline evolution over time."""
         return self.storage.get_history(operation_id, environment, days)
-
-
-# Backward compatibility alias
-BaselineManager = PerformanceBaselineManager

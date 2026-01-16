@@ -18,9 +18,6 @@ from .baseline_manager import (
 )
 from .query_profiler import ProfilingMetadata, QueryProfile, QueryProfiler
 
-# Backward compatibility alias
-BaselineManager = PerformanceBaselineManager
-
 __all__ = [
     # Query Profiling
     "QueryProfiler",
@@ -28,7 +25,6 @@ __all__ = [
     "ProfilingMetadata",
     # Baseline Management
     "PerformanceBaselineManager",
-    "BaselineManager",  # Alias for backward compatibility
     "PerformanceBaseline",
     "BaselineStorage",
     "InMemoryBaselineStorage",
