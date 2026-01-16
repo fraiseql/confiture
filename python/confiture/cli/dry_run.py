@@ -6,12 +6,9 @@ This module provides helper functions for dry-run analysis integration with the 
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from rich.console import Console
-
-if TYPE_CHECKING:
-    from confiture.core.migration.dry_run.dry_run_mode import DryRunReport
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -55,11 +52,12 @@ def print_json_report(report_data: dict) -> None:
     console.print_json(data=report_data)
 
 
-def show_report_summary(report: "DryRunReport") -> None:
+def show_report_summary(report: Any) -> None:
     """Show a brief summary of the report status.
 
     Args:
-        report: DryRunReport object
+        report: Report object with has_unsafe_statements, unsafe_count,
+                total_estimated_time_ms, and total_estimated_disk_mb attributes
     """
     if not report.has_unsafe_statements:
         console.print("[green]✓ SAFE[/green]", end=" ")
@@ -123,15 +121,3 @@ def display_dry_run_header(mode: str) -> None:
         console.print(msg + "\n")
 
 
-def display_dry_run_results(report: "DryRunReport", verbose: bool = False) -> None:
-    """Display dry-run analysis results.
-
-    Args:
-        report: DryRunReport object
-        verbose: Show detailed analysis
-    """
-    from confiture.core.migration.dry_run.report import DryRunReportGenerator
-
-    generator = DryRunReportGenerator(use_colors=True, verbose=verbose)
-    text_report = generator.generate_text_report(report)
-    console.print(text_report)

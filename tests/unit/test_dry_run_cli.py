@@ -18,7 +18,6 @@ from confiture.cli.dry_run import (
     ask_dry_run_execute_confirmation,
     extract_sql_statements_from_migration,
     display_dry_run_header,
-    display_dry_run_results,
 )
 
 
@@ -331,58 +330,6 @@ class TestDisplayDryRunHeader:
             assert mock_console.print.called
 
 
-class TestDisplayDryRunResults:
-    """Test display_dry_run_results function."""
-
-    def test_display_results_basic(self):
-        """Test displaying basic dry-run results."""
-        mock_report = Mock()
-        mock_report.has_unsafe_statements = False
-
-        with patch("confiture.cli.dry_run.console") as mock_console:
-            # Test that display_dry_run_results can be called without error
-            try:
-                display_dry_run_results(mock_report)
-                # If it doesn't raise an error, that's sufficient for this test
-                assert True
-            except Exception as e:
-                pytest.skip(f"DryRunReportGenerator not available: {e}")
-
-    def test_display_results_verbose_mode(self):
-        """Test displaying results in verbose mode."""
-        mock_report = Mock()
-
-        with patch("confiture.cli.dry_run.console"):
-            # Test that display_dry_run_results can be called with verbose=True
-            try:
-                display_dry_run_results(mock_report, verbose=True)
-                assert True
-            except Exception as e:
-                pytest.skip(f"DryRunReportGenerator not available: {e}")
-
-    def test_display_results_prints_to_console(self):
-        """Test that results print without error."""
-        mock_report = Mock()
-
-        with patch("confiture.cli.dry_run.console") as mock_console:
-            try:
-                display_dry_run_results(mock_report)
-                # Verify console methods were used
-                assert True
-            except Exception as e:
-                pytest.skip(f"DryRunReportGenerator not available: {e}")
-
-    def test_display_results_accepts_report(self):
-        """Test that display_dry_run_results accepts DryRunReport."""
-        mock_report = Mock()
-
-        with patch("confiture.cli.dry_run.console"):
-            try:
-                # Should not raise an error
-                display_dry_run_results(mock_report, verbose=False)
-                assert True
-            except Exception as e:
-                pytest.skip(f"DryRunReportGenerator not available: {e}")
 
 
 class TestDryRunIntegration:

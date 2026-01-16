@@ -8,9 +8,6 @@ Provides:
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from .composer import (
     ComposedRuleSet,
     ConflictResolution,
@@ -42,33 +39,6 @@ from .versioning import (
     RuleVersionManager,
 )
 
-# Import from parent linting.py (the old module) for backward compatibility
-try:
-    # Add parent directory to path temporarily to import the linting.py file
-    import importlib.util
-    linting_py_path = Path(__file__).parent.parent / "linting.py"
-    spec = importlib.util.spec_from_file_location("_linting_legacy", linting_py_path)
-    _linting_legacy = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(_linting_legacy)
-
-    LintRule = _linting_legacy.LintRule
-    NamingConventionRule = _linting_legacy.NamingConventionRule
-    PrimaryKeyRule = _linting_legacy.PrimaryKeyRule
-    DocumentationRule = _linting_legacy.DocumentationRule
-    MultiTenantRule = _linting_legacy.MultiTenantRule
-    MissingIndexRule = _linting_legacy.MissingIndexRule
-    SecurityRule = _linting_legacy.SecurityRule
-    # Also expose the legacy SchemaLinter and its dependencies for mocking in tests
-    SchemaBuilder = _linting_legacy.SchemaBuilder
-    SchemaDiffer = _linting_legacy.SchemaDiffer
-    # Expose pre-compiled regex patterns for performance testing
-    SNAKE_CASE_PATTERN = _linting_legacy.SNAKE_CASE_PATTERN
-    CAMEL_TO_SNAKE_PATTERN1 = _linting_legacy.CAMEL_TO_SNAKE_PATTERN1
-    CAMEL_TO_SNAKE_PATTERN2 = _linting_legacy.CAMEL_TO_SNAKE_PATTERN2
-except Exception:
-    # If legacy import fails, try direct import (shouldn't happen in normal usage)
-    pass
-
 __all__ = [
     # Versioning
     "RuleVersion",
@@ -96,19 +66,4 @@ __all__ = [
     "LintReport",
     "LintViolation",
     "RuleSeverity",
-    # Legacy LintRule classes
-    "LintRule",
-    "NamingConventionRule",
-    "PrimaryKeyRule",
-    "DocumentationRule",
-    "MultiTenantRule",
-    "MissingIndexRule",
-    "SecurityRule",
-    # Legacy dependencies for testing
-    "SchemaBuilder",
-    "SchemaDiffer",
-    # Performance testing patterns
-    "SNAKE_CASE_PATTERN",
-    "CAMEL_TO_SNAKE_PATTERN1",
-    "CAMEL_TO_SNAKE_PATTERN2",
 ]

@@ -1,0 +1,1 @@
+"""Anonymization strategy tests."""
