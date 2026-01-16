@@ -1,0 +1,127 @@
+################################################################################
+# Docker Compose Configuration for Confiture Development
+#
+# Provides a complete PostgreSQL stack for local development and testing
+#
+# Usage:
+#   docker-compose up -d                 # Start services in background
+#   docker-compose down                  # Stop and remove services
+#   docker-compose logs postgres         # View PostgreSQL logs
+#   docker-compose exec postgres psql    # Connect to PostgreSQL
+#
+# Services:
+#   - postgres: PostgreSQL 16 database server
+#   - pgadmin: Web UI for database administration (optional)
+#
+# Databases Created:
+#   - confiture_test: Primary test database
+#   - confiture_source_test: Source DB for sync tests
+#   - confiture_target_test: Target DB for sync tests
+################################################################################
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: confiture-postgres
+
+    environment:
+      POSTGRES_USER: confiture
+      POSTGRES_PASSWORD: confiture
+      POSTGRES_DB: confiture_test
+      # Timezone for consistent timestamp handling
+      TZ: UTC
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      # Persist database data
+      - confiture-pgdata:/var/lib/postgresql/data
+
+      # Initialize databases
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/01-init.sql
+
+      # PostgreSQL configuration
+      - ./docker/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./docker/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U confiture"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - confiture-network
+
+    labels:
+      description: "PostgreSQL 16 database for Confiture testing"
+      version: "16"
+
+  # PgAdmin Web Interface (Optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: confiture-pgadmin
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@confiture.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'False'
+      PGADMIN_CONFIG_COOKIE_DEFAULT_SECURE: 'False'
+      PGADMIN_CONFIG_COOKIE_SAMESITE: 'Lax'
+
+    ports:
+      - "5050:80"
+
+    volumes:
+      # Persist pgAdmin configuration
+      - confiture-pgadmin:/var/lib/pgadmin
+
+      # Pre-configured server connections
+      - ./docker/pgadmin-servers.json:/pgadmin4/servers.json:ro
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - confiture-network
+
+    labels:
+      description: "PgAdmin web interface for database management"
+      url: "http://localhost:5050"
+      credentials: "admin@confiture.local / admin"
+
+    profiles:
+      - optional
+      - monitoring
+
+networks:
+  confiture-network:
+    driver: bridge
+    name: confiture-network
+
+volumes:
+  confiture-pgdata:
+    driver: local
+    name: confiture-pgdata
+    labels:
+      description: "PostgreSQL data directory"
+
+  confiture-pgadmin:
+    driver: local
+    name: confiture-pgadmin
+    labels:
+      description: "PgAdmin configuration and data"
