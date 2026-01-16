@@ -1,4 +1,6 @@
 """Service Level Objectives and monitoring - Phase 6."""
+from __future__ import annotations
+
 
 import logging
 from dataclasses import dataclass, field
@@ -17,8 +19,118 @@ class OperationStatus(Enum):
 
 
 @dataclass
+class SLOConfiguration:
+    """Environment-aware SLO configuration.
+
+    Different environments have different performance expectations:
+    - local: Development machine, relaxed latency targets
+    - staging: Production-like, moderate latency targets
+    - production: Strict latency targets for user-facing operations
+    """
+
+    environment: str  # "local", "staging", "production"
+
+    # Hook execution SLOs
+    hook_execution_latency_p99_ms: int  # P99 latency per hook
+    hook_execution_latency_p95_ms: int  # P95 latency per hook
+    hook_execution_timeout_ms: int  # Global timeout for entire hook execution
+
+    # Risk assessment SLOs
+    risk_assessment_latency_p99_ms: int  # P99 latency
+    risk_assessment_latency_p95_ms: int  # P95 latency
+
+    # Profiling overhead SLOs
+    profiling_overhead_percent: float  # Max overhead as percentage
+    profiling_accuracy_minimum: float  # Minimum accuracy (0.0-1.0)
+
+    # Rule library SLOs
+    rule_composition_latency_ms: int  # Time to compose rules
+    rule_conflict_detection_latency_ms: int  # Time to detect conflicts
+
+    # Performance baseline SLOs
+    baseline_lookup_latency_ms: int  # Time to lookup baseline
+    regression_check_latency_ms: int  # Time to check regression
+
+    def get_target_for_operation(self, operation: str) -> int | None:
+        """Get SLO target for a specific operation.
+
+        Args:
+            operation: Operation name (e.g., "hook_execution", "risk_assessment")
+
+        Returns:
+            Target latency in milliseconds, or None if operation not recognized
+        """
+        targets = {
+            "hook_execution_p99": self.hook_execution_latency_p99_ms,
+            "hook_execution_p95": self.hook_execution_latency_p95_ms,
+            "risk_assessment_p99": self.risk_assessment_latency_p99_ms,
+            "risk_assessment_p95": self.risk_assessment_latency_p95_ms,
+            "rule_composition": self.rule_composition_latency_ms,
+            "rule_conflict_detection": self.rule_conflict_detection_latency_ms,
+            "baseline_lookup": self.baseline_lookup_latency_ms,
+            "regression_check": self.regression_check_latency_ms,
+        }
+        return targets.get(operation)
+
+
+# Environment-specific SLO configurations
+SLO_CONFIGURATIONS = {
+    "local": SLOConfiguration(
+        environment="local",
+        # Local development: relaxed targets
+        hook_execution_latency_p99_ms=100,
+        hook_execution_latency_p95_ms=50,
+        hook_execution_timeout_ms=60000,  # 60 second timeout
+        risk_assessment_latency_p99_ms=10000,
+        risk_assessment_latency_p95_ms=5000,
+        profiling_overhead_percent=10.0,
+        profiling_accuracy_minimum=0.7,
+        rule_composition_latency_ms=200,
+        rule_conflict_detection_latency_ms=100,
+        baseline_lookup_latency_ms=20,
+        regression_check_latency_ms=50,
+    ),
+    "staging": SLOConfiguration(
+        environment="staging",
+        # Staging: production-like
+        hook_execution_latency_p99_ms=75,
+        hook_execution_latency_p95_ms=40,
+        hook_execution_timeout_ms=45000,  # 45 second timeout
+        risk_assessment_latency_p99_ms=7000,
+        risk_assessment_latency_p95_ms=3000,
+        profiling_overhead_percent=7.0,
+        profiling_accuracy_minimum=0.75,
+        rule_composition_latency_ms=125,
+        rule_conflict_detection_latency_ms=70,
+        baseline_lookup_latency_ms=15,
+        regression_check_latency_ms=30,
+    ),
+    "production": SLOConfiguration(
+        environment="production",
+        # Production: strict targets for user-facing operations
+        hook_execution_latency_p99_ms=50,
+        hook_execution_latency_p95_ms=30,
+        hook_execution_timeout_ms=30000,  # 30 second timeout
+        risk_assessment_latency_p99_ms=5000,
+        risk_assessment_latency_p95_ms=2000,
+        profiling_overhead_percent=5.0,
+        profiling_accuracy_minimum=0.8,
+        rule_composition_latency_ms=100,
+        rule_conflict_detection_latency_ms=50,
+        baseline_lookup_latency_ms=10,
+        regression_check_latency_ms=20,
+    ),
+}
+
+
+# Legacy class for backward compatibility
+@dataclass
 class ServiceLevelObjective:
-    """Define SLOs for Phase 6 operations."""
+    """Define SLOs for Phase 6 operations (DEPRECATED).
+
+    Use SLOConfiguration with environment-specific targets instead.
+    This class is maintained for backward compatibility only.
+    """
 
     # Hook execution SLOs
     HOOK_EXECUTION_LATENCY_P99_MS = 50  # 50ms per hook max
@@ -140,7 +252,28 @@ class SLOMonitor:
         return compliance >= threshold_percent
 
 
-# Predefined SLO configurations
+# Get default SLO configuration (production)
+def get_slo_config(environment: str = "production") -> SLOConfiguration:
+    """Get SLO configuration for the specified environment.
+
+    Args:
+        environment: Environment name ("local", "staging", or "production")
+
+    Returns:
+        SLOConfiguration for the environment, defaults to production if not found
+
+    Raises:
+        ValueError: If environment is not recognized
+    """
+    if environment not in SLO_CONFIGURATIONS:
+        available = ", ".join(SLO_CONFIGURATIONS.keys())
+        raise ValueError(
+            f"Unknown environment: {environment}. Available: {available}"
+        )
+    return SLO_CONFIGURATIONS[environment]
+
+
+# Legacy default SLOs (production environment)
 DEFAULT_SLOS = {
     "hook_execution": 50,  # ms
     "hook_execution_p95": 30,  # ms

@@ -5,6 +5,8 @@ Provides:
 - Downtime predictions with confidence bounds
 - Historical migration tracking
 """
+from __future__ import annotations
+
 
 from .predictor import (
     DowntimeEstimate,

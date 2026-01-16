@@ -1,4 +1,6 @@
 """Hook registry and execution engine for Phase 6."""
+from __future__ import annotations
+
 
 import asyncio
 import logging

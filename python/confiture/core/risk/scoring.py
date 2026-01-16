@@ -1,4 +1,6 @@
 """Transparent risk scoring formula with explicit weights - Phase 6."""
+from __future__ import annotations
+
 
 import logging
 import math
@@ -99,28 +101,26 @@ class RiskScoringFormula:
     @staticmethod
     def calculate_lock_time_score(estimated_lock_ms: int) -> RiskFactor:
         """
-        Calculate risk from lock time.
+        Calculate risk from lock time using piecewise smooth function.
 
-        Formula: exponential scaling
-        - 100ms = 0.1
-        - 1s = 0.5
-        - 10s+ = 1.0
+        Formula: smooth exponential scaling without discontinuities
+        - 0ms = 0.0 (no risk)
+        - 100ms = 0.1 (low risk)
+        - 1s = 0.5 (medium risk)
+        - 10s = 0.95 (high risk)
+        - 10s+ = 1.0 (critical risk)
         """
-        if estimated_lock_ms > 10000:
+        if estimated_lock_ms >= 10000:
             score = 1.0
-        elif estimated_lock_ms < 100:
-            score = min(estimated_lock_ms / 1000, 1.0)
+        elif estimated_lock_ms <= 0:
+            score = 0.0
         else:
-            # Log scaling between 100ms and 10s
-            score = min(
-                (
-                    math.log(estimated_lock_ms / 100)
-                    / math.log(100)
-                )
-                * 0.9
-                + 0.1,
-                1.0,
-            )
+            # Use logarithmic scaling for all positive values
+            # log(estimated_lock_ms) ranges from 0 (at 1ms) to ~4 (at 10s)
+            # This creates a smooth curve without discontinuities
+            log_value = math.log10(estimated_lock_ms)  # -3 to 4 for 1ms to 10s
+            # Normalize to 0-1 range: map -3 (1ms) to 0, map 4 (10s) to 1
+            score = min((log_value + 3) / 7 * 0.95, 1.0)
 
         return RiskFactor(
             name="lock_time",

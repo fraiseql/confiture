@@ -1,4 +1,6 @@
 """Compliance and best-practices rule libraries - Phase 6."""
+from __future__ import annotations
+
 
 from .general import GeneralLibrary
 from .gdpr import GDPRLibrary

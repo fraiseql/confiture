@@ -5,14 +5,18 @@ Provides:
 - SLO compliance tracking and reporting
 - Violation detection and alerting
 """
+from __future__ import annotations
+
 
 from .slo import (
     DEFAULT_SLOS,
     OperationMetric,
     OperationStatus,
+    SLOConfiguration,
     SLOMonitor,
     SLOViolation,
     ServiceLevelObjective,
+    get_slo_config,
 )
 
 __all__ = [
@@ -21,5 +25,7 @@ __all__ = [
     "OperationStatus",
     "SLOMonitor",
     "SLOViolation",
+    "SLOConfiguration",
+    "get_slo_config",
     "DEFAULT_SLOS",
 ]

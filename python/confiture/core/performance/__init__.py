@@ -5,6 +5,8 @@ Provides:
 - Statistical baseline management with confidence intervals
 - Regression detection
 """
+from __future__ import annotations
+
 
 from .baseline_manager import (
     BaselineStorage,

@@ -1,4 +1,6 @@
 """Query profiler with observable overhead tracking - Phase 6."""
+from __future__ import annotations
+
 
 import hashlib
 import logging

@@ -1,4 +1,6 @@
 """Base classes for hooks with priority and dependencies."""
+from __future__ import annotations
+
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field

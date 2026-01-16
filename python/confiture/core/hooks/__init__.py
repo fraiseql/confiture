@@ -6,6 +6,8 @@ Provides:
 - Three-category event system (Lifecycle, State, Alert)
 - Full observability infrastructure (tracing, circuit breakers)
 """
+from __future__ import annotations
+
 
 from .base import Hook, HookResult
 from .context import (

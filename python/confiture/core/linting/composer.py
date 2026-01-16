@@ -1,4 +1,6 @@
 """Rule library composition with explicit conflict handling - Phase 6."""
+from __future__ import annotations
+
 
 import logging
 from dataclasses import dataclass, field
