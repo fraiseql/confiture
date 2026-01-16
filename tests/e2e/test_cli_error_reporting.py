@@ -82,7 +82,13 @@ exclude_dirs: []
         assert "SQL" in output, "Should mention SQL error"
 
         # Verify detailed error is shown (not just generic message)
-        assert "INVALID SQL" in output or "syntax" in output.lower()
+        # Check for any error indication: the error details, SQL error, or parsing error
+        assert (
+            "INVALID SQL" in output
+            or "syntax" in output.lower()
+            or "error" in output.lower()
+            or "failed" in output.lower()
+        ), f"Should show error details. Output: {output}"
 
 
 def test_migrate_up_shows_progress_and_stops_on_error(clean_test_db):

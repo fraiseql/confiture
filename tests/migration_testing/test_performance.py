@@ -112,23 +112,28 @@ def test_view_creation_performance(test_db_connection, performance_profiler):
 
 def test_performance_regression_detection():
     """Test performance regression detection."""
+    import time
     from confiture.testing.frameworks.performance import PerformanceProfile
 
+    baseline_start = time.time()
     baseline = PerformanceProfile(
-        timestamp="2026-01-15T00:00:00Z",
-        operation="CREATE TABLE",
-        duration_seconds=0.5
+        migration_name="test_migration",
+        start_timestamp=baseline_start,
+        end_timestamp=baseline_start + 0.5,
+        total_duration_seconds=0.5
     )
 
     # 20% slower
+    current_start = time.time()
     current = PerformanceProfile(
-        timestamp="2026-01-15T01:00:00Z",
-        operation="CREATE TABLE",
-        duration_seconds=0.6  # 20% slower
+        migration_name="test_migration",
+        start_timestamp=current_start,
+        end_timestamp=current_start + 0.6,
+        total_duration_seconds=0.6  # 20% slower
     )
 
     # Should detect regression
-    regression_pct = ((current.duration_seconds / baseline.duration_seconds) - 1) * 100
+    regression_pct = ((current.total_duration_seconds / baseline.total_duration_seconds) - 1) * 100
     assert regression_pct > 0
 
 
@@ -189,16 +194,36 @@ def test_large_table_index_performance(test_db_connection, performance_profiler)
         assert duration < 10.0
 
 
-def test_performance_baseline_tracking():
+def test_performance_baseline_tracking(tmp_path):
     """Test performance baseline storage and comparison."""
-    from confiture.testing.frameworks.performance import PerformanceBaseline
+    import time
+    from pathlib import Path
+    from confiture.testing.frameworks.performance import PerformanceBaseline, PerformanceProfile
 
-    baseline = PerformanceBaseline()
-    baseline.add_profile("operation_1", 0.5)
-    baseline.add_profile("operation_2", 1.0)
+    baselines_file = tmp_path / "baselines.json"
+    baseline_tracker = PerformanceBaseline(baselines_file)
 
-    assert "operation_1" in baseline.profiles
-    assert baseline.profiles["operation_1"].duration_seconds == 0.5
+    # Create a performance profile
+    start_time = time.time()
+    profile = PerformanceProfile(
+        migration_name="operation_1",
+        start_timestamp=start_time,
+        end_timestamp=start_time + 0.5,
+        total_duration_seconds=0.5
+    )
+
+    # Set the baseline
+    baseline_tracker.set_baseline("operation_1", profile)
+    baseline_tracker.save_baselines()
+
+    # Verify baseline was stored
+    assert "operation_1" in baseline_tracker.baselines
+    assert baseline_tracker.baselines["operation_1"]["total_duration_seconds"] == 0.5
+
+    # Load baselines from disk in a new instance
+    baseline_tracker_2 = PerformanceBaseline(baselines_file)
+    assert "operation_1" in baseline_tracker_2.baselines
+    assert baseline_tracker_2.baselines["operation_1"]["total_duration_seconds"] == 0.5
 
 
 # Note: Complete performance testing suite (19 tests) requires:

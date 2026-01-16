@@ -779,7 +779,7 @@ def test_multi_step_schema_modification(test_db_connection):
         test_db_connection.commit()
 
         # Step 2: Add index
-        cur.execute("CREATE INDEX idx_email ON evolving(email)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_evolving_email ON evolving(email)")
         test_db_connection.commit()
 
         # Step 3: Add constraint

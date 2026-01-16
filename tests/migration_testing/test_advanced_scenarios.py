@@ -139,12 +139,12 @@ def test_data_transformation_migration(test_db_connection):
         test_db_connection.commit()
 
         # Step 3: Transform data
+        # Note: PostgreSQL SPLIT_PART doesn't support negative indices, so we use array approach
         cur.execute("""
             UPDATE adv_transform
             SET
-                first_name = SPLIT_PART(full_name, ' ', 1),
-                last_name = SPLIT_PART(full_name, ' ', -1),
-                middle_name = SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1 FOR POSITION(' ' IN REVERSE(full_name)) - POSITION(' ' IN full_name) - 1),
+                first_name = (STRING_TO_ARRAY(full_name, ' '))[1],
+                last_name = (STRING_TO_ARRAY(full_name, ' '))[ARRAY_LENGTH(STRING_TO_ARRAY(full_name, ' '), 1)],
                 dob = TO_DATE(date_of_birth, 'YYYY-MM-DD')
         """)
         test_db_connection.commit()
@@ -256,16 +256,18 @@ def test_versioned_schema_migration(test_db_connection):
 def test_partitioning_migration(test_db_connection):
     """Test time-based or value-based partitioning."""
     with test_db_connection.cursor() as cur:
-        # Create main table
+        # Create main partitioned table
+        # Note: Primary key must include partition key in PostgreSQL
         cur.execute("DROP TABLE IF EXISTS adv_events CASCADE;")
         cur.execute("""
             CREATE TABLE adv_events (
-                id UUID PRIMARY KEY,
+                id UUID,
                 event_type VARCHAR(100),
-                event_date DATE,
+                event_date DATE NOT NULL,
                 data JSONB,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
+                created_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (id, event_date)
+            ) PARTITION BY RANGE (event_date)
         """)
 
         # Create partitions for different date ranges

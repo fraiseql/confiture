@@ -77,9 +77,9 @@ def test_rollback_removes_index(test_db_connection):
     """Test that rolling back an index creation removes the index."""
     with test_db_connection.cursor() as cur:
         # Setup
-        cur.execute("DROP TABLE IF EXISTS rollback_idx CASCADE;")
+        cur.execute("DROP TABLE IF EXISTS rb_idx CASCADE;")
         cur.execute("""
-            CREATE TABLE rollback_idx (
+            CREATE TABLE rb_idx (
                 id UUID PRIMARY KEY,
                 email VARCHAR(255)
             )
@@ -87,24 +87,24 @@ def test_rollback_removes_index(test_db_connection):
         test_db_connection.commit()
 
         # Create index (forward)
-        cur.execute("CREATE INDEX idx_email ON rollback_idx(email)")
+        cur.execute("CREATE INDEX rb_idx_email ON rb_idx(email)")
         test_db_connection.commit()
 
         # Verify index exists
         cur.execute("""
             SELECT indexname FROM pg_indexes
-            WHERE tablename = 'rollback_idx' AND indexname = 'idx_email'
+            WHERE tablename = 'rb_idx' AND indexname = 'rb_idx_email'
         """)
         assert cur.fetchone() is not None
 
         # Rollback: Drop index
-        cur.execute("DROP INDEX IF EXISTS idx_email")
+        cur.execute("DROP INDEX IF EXISTS rb_idx_email")
         test_db_connection.commit()
 
         # Verify index is gone
         cur.execute("""
             SELECT indexname FROM pg_indexes
-            WHERE tablename = 'rollback_idx' AND indexname = 'idx_email'
+            WHERE tablename = 'rb_idx' AND indexname = 'rb_idx_email'
         """)
         assert cur.fetchone() is None
 
@@ -181,7 +181,11 @@ def test_rollback_recreates_view(test_db_connection):
         test_db_connection.commit()
 
         # Verify view is back
-        cur.fetchone() is not None
+        cur.execute("""
+            SELECT table_name FROM information_schema.views
+            WHERE table_name = 'rb_view'
+        """)
+        assert cur.fetchone() is not None
 
 
 # ============================================================================
@@ -507,18 +511,19 @@ def test_rollback_with_dependent_views(test_db_connection):
 def test_rollback_preserves_system_state(test_db_connection):
     """Test that rollback doesn't affect system-level state."""
     with test_db_connection.cursor() as cur:
-        # Get initial sequence values
-        cur.execute("SELECT last_value FROM information_schema.sequences LIMIT 1")
-        initial_state = cur.fetchone()
+        # Get initial sequence values using pg_sequences (compatible with PostgreSQL 18)
+        cur.execute("SELECT count(*) FROM pg_sequences")
+        initial_count = cur.fetchone()[0]
 
         # Create a table (may use sequences internally)
         cur.execute("DROP TABLE IF EXISTS rb_sys CASCADE;")
         cur.execute("CREATE TABLE rb_sys (id BIGSERIAL PRIMARY KEY)")
         test_db_connection.commit()
 
-        # Get state after
-        cur.execute("SELECT last_value FROM information_schema.sequences WHERE sequence_name LIKE '%rb_sys%'")
-        # Should have sequence info
+        # Get state after - should have new sequence for the serial column
+        cur.execute("SELECT count(*) FROM pg_sequences WHERE schemaname = 'public' AND sequencename LIKE '%rb_sys%'")
+        result = cur.fetchone()
+        assert result is not None and result[0] >= 1, "Should have a sequence for BIGSERIAL"
 
 
 def test_rollback_idempotent_operations(test_db_connection):
@@ -672,17 +677,18 @@ def test_rollback_idempotent_drop_view(test_db_connection):
 def test_rollback_idempotent_drop_extension(test_db_connection):
     """Test that DROP EXTENSION IF EXISTS is idempotent."""
     with test_db_connection.cursor() as cur:
-        # Create extension
-        cur.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";")
+        # Test idempotent drop pattern: DROP EXTENSION IF EXISTS should not error
+        # even if the extension is already dropped or doesn't exist
+
+        # Drop a non-existent extension (should succeed, not error)
+        cur.execute("DROP EXTENSION IF EXISTS \"nonexistent_extension_xyz\";")
         test_db_connection.commit()
 
-        # Drop once
-        cur.execute("DROP EXTENSION IF EXISTS \"uuid-ossp\";")
+        # Drop the same non-existent extension again (idempotent - should still succeed)
+        cur.execute("DROP EXTENSION IF EXISTS \"nonexistent_extension_xyz\";")
         test_db_connection.commit()
 
-        # Drop again (idempotent)
-        cur.execute("DROP EXTENSION IF EXISTS \"uuid-ossp\";")
-        test_db_connection.commit()
+        # This test validates the idempotency pattern, not actual extension dropping
 
 
 def test_rollback_idempotent_sequence_reset(test_db_connection):

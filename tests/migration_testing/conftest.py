@@ -135,11 +135,12 @@ def mutation_registry():
 
 
 @pytest.fixture
-def performance_profiler():
+def performance_profiler(test_db_connection):
     """Provide performance profiler for performance testing.
 
     Uses the performance framework from confiture.testing.frameworks.
+    Requires database connection for profiling actual migrations.
     """
     from confiture.testing.frameworks.performance import MigrationPerformanceProfiler
 
-    return MigrationPerformanceProfiler()
+    return MigrationPerformanceProfiler(test_db_connection)
