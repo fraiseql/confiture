@@ -61,6 +61,10 @@ try:
     # Also expose the legacy SchemaLinter and its dependencies for mocking in tests
     SchemaBuilder = _linting_legacy.SchemaBuilder
     SchemaDiffer = _linting_legacy.SchemaDiffer
+    # Expose pre-compiled regex patterns for performance testing
+    SNAKE_CASE_PATTERN = _linting_legacy.SNAKE_CASE_PATTERN
+    CAMEL_TO_SNAKE_PATTERN1 = _linting_legacy.CAMEL_TO_SNAKE_PATTERN1
+    CAMEL_TO_SNAKE_PATTERN2 = _linting_legacy.CAMEL_TO_SNAKE_PATTERN2
 except Exception:
     # If legacy import fails, try direct import (shouldn't happen in normal usage)
     pass
@@ -103,4 +107,8 @@ __all__ = [
     # Legacy dependencies for testing
     "SchemaBuilder",
     "SchemaDiffer",
+    # Performance testing patterns
+    "SNAKE_CASE_PATTERN",
+    "CAMEL_TO_SNAKE_PATTERN1",
+    "CAMEL_TO_SNAKE_PATTERN2",
 ]
