@@ -175,9 +175,46 @@ class HookExecutionTracer:
         )
 
     def _compute_critical_path(self, events: list[HookExecutionEvent]) -> list[str]:
-        """Compute critical path (longest chain of dependent hooks)."""
-        # Simplified implementation - returns list of hooks in order
-        return [e.hook_id for e in sorted(events, key=lambda e: e.timestamp)]
+        """Compute critical path - hooks that contributed most to total duration.
+
+        Algorithm:
+        1. Sort events by timestamp (execution order)
+        2. Identify sequential execution blocks (no overlap)
+        3. Return hooks in the longest duration chain
+
+        Note: This assumes sequential execution. For parallel execution,
+        a full DAG analysis with explicit dependencies would be needed.
+        """
+        if not events:
+            return []
+
+        if len(events) == 1:
+            return [events[0].hook_id]
+
+        # Sort events by timestamp and end time
+        sorted_events = sorted(events, key=lambda e: e.timestamp)
+
+        # Find hooks that form a critical path (non-overlapping sequential chain)
+        critical_path = []
+        max_end_time = None
+
+        for event in sorted_events:
+            # Only include events that start after the previous one ended
+            # (indicating sequential dependency)
+            if max_end_time is None or event.timestamp >= datetime.fromtimestamp(
+                max_end_time.timestamp() if isinstance(max_end_time, datetime) else max_end_time
+            ):
+                critical_path.append(event.hook_id)
+                # Update end time (approximated as timestamp + duration)
+                end_timestamp = event.timestamp.timestamp() + (event.duration_ms / 1000)
+                max_end_time = datetime.fromtimestamp(end_timestamp)
+
+        # If we got no sequential chain, return the longest single execution
+        if not critical_path:
+            longest = max(sorted_events, key=lambda e: e.duration_ms)
+            return [longest.hook_id]
+
+        return critical_path
 
 
 class HookExecutionError(Exception):
