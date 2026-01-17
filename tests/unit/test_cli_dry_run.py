@@ -37,7 +37,9 @@ class TestMigrateUpDryRun:
 
                     # Mock migration module loading
                     with patch("confiture.core.connection.load_migration_module") as mock_load:
-                        with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                        with patch(
+                            "confiture.core.connection.get_migration_class"
+                        ) as mock_get_class:
                             # Setup migration mock
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
@@ -55,7 +57,9 @@ class TestMigrateUpDryRun:
                             )
 
                             # Assert
-                            assert result.exit_code == 0, f"Exit code: {result.exit_code}, Output: {result.stdout}"
+                            assert result.exit_code == 0, (
+                                f"Exit code: {result.exit_code}, Output: {result.stdout}"
+                            )
                             assert "Migration Analysis Summary" in result.stdout
                             # apply() should NOT be called
                             mock_migrator.apply.assert_not_called()
@@ -80,7 +84,9 @@ class TestMigrateUpDryRun:
                     ]
 
                     with patch("confiture.core.connection.load_migration_module") as mock_load:
-                        with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                        with patch(
+                            "confiture.core.connection.get_migration_class"
+                        ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
                             mock_migration.name = "init"
@@ -106,7 +112,9 @@ class TestMigrateUpDryRun:
                                 if line.startswith("{"):
                                     json_start = i
                                     break
-                            assert json_start is not None, f"No JSON found in output: {result.stdout}"
+                            assert json_start is not None, (
+                                f"No JSON found in output: {result.stdout}"
+                            )
                             json_str = "\n".join(output_lines[json_start:])
                             output_json = json.loads(json_str)
                             assert "migration_id" in output_json
@@ -138,7 +146,9 @@ class TestMigrateUpDryRun:
                         ]
 
                         with patch("confiture.core.connection.load_migration_module") as mock_load:
-                            with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                            with patch(
+                                "confiture.core.connection.get_migration_class"
+                            ) as mock_get_class:
                                 mock_migration = MagicMock()
                                 mock_migration.version = "001"
                                 mock_migration.name = "init"
@@ -181,7 +191,9 @@ class TestMigrateUpDryRun:
                     ]
 
                     with patch("confiture.core.connection.load_migration_module") as mock_load:
-                        with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                        with patch(
+                            "confiture.core.connection.get_migration_class"
+                        ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
                             mock_migration.name = "init"
@@ -226,7 +238,9 @@ class TestMigrateDownDryRun:
                     ]
 
                     with patch("confiture.core.connection.load_migration_module") as mock_load:
-                        with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                        with patch(
+                            "confiture.core.connection.get_migration_class"
+                        ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "002"
                             mock_migration.name = "add_users"
@@ -266,7 +280,9 @@ class TestMigrateDownDryRun:
                     ]
 
                     with patch("confiture.core.connection.load_migration_module") as mock_load:
-                        with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                        with patch(
+                            "confiture.core.connection.get_migration_class"
+                        ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
                             mock_migration.name = "init"
@@ -291,7 +307,9 @@ class TestMigrateDownDryRun:
                                 if line.startswith("{"):
                                     json_start = i
                                     break
-                            assert json_start is not None, f"No JSON found in output: {result.stdout}"
+                            assert json_start is not None, (
+                                f"No JSON found in output: {result.stdout}"
+                            )
                             json_str = "\n".join(output_lines[json_start:])
                             output_json = json.loads(json_str)
                             assert "migration_id" in output_json
@@ -371,7 +389,9 @@ class TestDryRunExecution:
                     ]
 
                     with patch("confiture.core.connection.load_migration_module") as mock_load:
-                        with patch("confiture.core.connection.get_migration_class") as mock_get_class:
+                        with patch(
+                            "confiture.core.connection.get_migration_class"
+                        ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
                             mock_migration.name = "init"

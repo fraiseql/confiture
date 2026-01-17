@@ -329,6 +329,7 @@ class TestHealthIntegration:
         """Create test database connection if available."""
         try:
             import psycopg
+
             conn = psycopg.connect("postgresql://localhost/confiture_test")
             yield conn
             conn.close()

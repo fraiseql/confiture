@@ -32,9 +32,7 @@ class DryRunError(MigrationError):
         """
         self.migration_name = migration_name
         self.original_error = error
-        super().__init__(
-            f"Dry-run failed for migration {migration_name}: {str(error)}"
-        )
+        super().__init__(f"Dry-run failed for migration {migration_name}: {str(error)}")
 
 
 @dataclass
@@ -104,7 +102,7 @@ class DryRunExecutor:
             extra={
                 "migration": migration.name,
                 "version": migration.version,
-            }
+            },
         )
 
         try:
@@ -119,7 +117,7 @@ class DryRunExecutor:
                     "version": migration.version,
                     "execution_time_ms": execution_time_ms,
                     "success": True,
-                }
+                },
             )
 
             return result
@@ -133,7 +131,7 @@ class DryRunExecutor:
                     "version": migration.version,
                     "error": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
 
             raise DryRunError(migration_name=migration.name, error=e) from e

@@ -57,7 +57,7 @@ class TestStrategyComposerInitialization:
         """Test composer initialization with custom config."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             config = CompositionConfig(
                 strategies=["preserve"],
                 seed=42,
@@ -68,7 +68,7 @@ class TestStrategyComposerInitialization:
 
     def test_init_loads_strategies(self):
         """Test that init loads strategies from registry."""
-        with patch.object(StrategyRegistry, 'get') as mock_get:
+        with patch.object(StrategyRegistry, "get") as mock_get:
             mock_strategy = Mock(spec=AnonymizationStrategy)
             mock_get.return_value = mock_strategy
 
@@ -101,7 +101,7 @@ class TestStrategyComposerAnonymize:
         mock_strategy = Mock(spec=AnonymizationStrategy)
         mock_strategy.anonymize.return_value = "anonymized"
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("original")
 
@@ -123,7 +123,7 @@ class TestStrategyComposerAnonymize:
                 return mock_first
             return mock_second
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("original")
 
@@ -148,7 +148,7 @@ class TestStrategyComposerAnonymize:
                 return mock_first
             return mock_second
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("original")
 
@@ -174,7 +174,7 @@ class TestStrategyComposerAnonymize:
                 return mock_first
             return mock_second
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("original")
 
@@ -198,7 +198,7 @@ class TestStrategyComposerAnonymize:
                 return mock_first
             return mock_second
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("original")
 
@@ -222,7 +222,7 @@ class TestStrategyComposerAnonymize:
         def get_strategy(name, config):
             return mock_first
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
 
             with pytest.raises(Exception, match="Error in strategy 'first'"):
@@ -246,7 +246,7 @@ class TestStrategyComposerAnonymize:
                 return mock_first
             return mock_second
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("original")
 
@@ -277,7 +277,7 @@ class TestStrategyComposerValidate:
                 return mock_first
             return mock_second
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             assert composer.validate("test") is True
 
@@ -288,7 +288,7 @@ class TestStrategyComposerValidate:
         mock_strategy = Mock(spec=AnonymizationStrategy)
         mock_strategy.validate.return_value = False
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             composer = StrategyComposer(config)
             assert composer.validate("test") is False
 
@@ -307,7 +307,7 @@ class TestStrategyComposerHelpers:
 
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             composer = StrategyComposer(config)
             assert "compose:" in composer.short_name()
             assert "name" in composer.short_name()
@@ -318,7 +318,7 @@ class TestStrategyComposerHelpers:
 
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             composer = StrategyComposer(config)
             short_name = composer.short_name()
             assert "compose:" in short_name
@@ -331,7 +331,7 @@ class TestStrategyComposerHelpers:
 
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             composer = StrategyComposer(config)
             chain = composer.get_strategy_chain()
             assert chain == ["name", "email"]
@@ -346,7 +346,7 @@ class TestStrategyComposerStrategyLoading:
 
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy) as mock_get:
             composer = StrategyComposer(config)
 
             mock_get.assert_called()
@@ -358,7 +358,7 @@ class TestStrategyComposerStrategyLoading:
 
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy) as mock_get:
             StrategyComposer(config)
 
             # Should extract base name 'name' and pass to registry
@@ -370,7 +370,7 @@ class TestStrategyComposerStrategyLoading:
         """Test that invalid strategy raises ValueError."""
         config = CompositionConfig(strategies=["invalid_strategy"])
 
-        with patch.object(StrategyRegistry, 'get', side_effect=ValueError("Not found")):
+        with patch.object(StrategyRegistry, "get", side_effect=ValueError("Not found")):
             with pytest.raises(ValueError, match="Failed to load strategy"):
                 StrategyComposer(config)
 
@@ -475,7 +475,7 @@ class TestStrategySequence:
         """Test that build creates StrategyComposer."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             seq = StrategySequence(seed=42).add("name")
             composer = seq.build()
 
@@ -487,7 +487,7 @@ class TestStrategySequence:
         """Test that build preserves all sequence configuration."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
             seq = (
                 StrategySequence(seed=99)
                 .add_many("name", "email")
@@ -512,12 +512,8 @@ class TestStrategyComposerIntegration:
         mock_strategy = Mock(spec=AnonymizationStrategy)
         mock_strategy.anonymize.side_effect = lambda x: f"anonymized_{x}"
 
-        with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
-            composer = (
-                StrategySequence(seed=42)
-                .add("name")
-                .build()
-            )
+        with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
+            composer = StrategySequence(seed=42).add("name").build()
 
             result = composer.anonymize("John")
             assert "anonymized_" in result
@@ -546,7 +542,7 @@ class TestStrategyComposerIntegration:
             call_count[0] += 1
             return result
 
-        with patch.object(StrategyRegistry, 'get', side_effect=get_strategy):
+        with patch.object(StrategyRegistry, "get", side_effect=get_strategy):
             composer = StrategyComposer(config)
             result = composer.anonymize("data")
 

@@ -74,9 +74,7 @@ class TestFreetextAddressFormat:
 
     def test_preserves_city(self):
         """Test city preservation."""
-        config = AddressConfig(
-            seed=12345, format="freetext", preserve_fields=["city"]
-        )
+        config = AddressConfig(seed=12345, format="freetext", preserve_fields=["city"])
         strategy = AddressStrategy(config)
         result = strategy.anonymize("123 Main St, Springfield, IL 62701")
 
@@ -85,9 +83,7 @@ class TestFreetextAddressFormat:
 
     def test_preserves_state(self):
         """Test state preservation."""
-        config = AddressConfig(
-            seed=12345, format="freetext", preserve_fields=["state"]
-        )
+        config = AddressConfig(seed=12345, format="freetext", preserve_fields=["state"])
         strategy = AddressStrategy(config)
         result = strategy.anonymize("123 Main St, Springfield, IL 62701")
 
@@ -96,9 +92,7 @@ class TestFreetextAddressFormat:
 
     def test_preserves_zip(self):
         """Test zip code preservation."""
-        config = AddressConfig(
-            seed=12345, format="freetext", preserve_fields=["zip"]
-        )
+        config = AddressConfig(seed=12345, format="freetext", preserve_fields=["zip"])
         strategy = AddressStrategy(config)
         result = strategy.anonymize("123 Main St, Springfield, IL 62701")
 
@@ -107,9 +101,7 @@ class TestFreetextAddressFormat:
 
     def test_preserves_country(self):
         """Test country preservation."""
-        config = AddressConfig(
-            seed=12345, format="freetext", preserve_fields=["country"]
-        )
+        config = AddressConfig(seed=12345, format="freetext", preserve_fields=["country"])
         strategy = AddressStrategy(config)
         result = strategy.anonymize("123 Main St, Springfield, IL 62701, USA")
 
@@ -425,9 +417,7 @@ class TestShortName:
 
     def test_short_name_with_preservation(self):
         """Test short name includes preserved fields."""
-        config = AddressConfig(
-            seed=12345, preserve_fields=["city", "state"]
-        )
+        config = AddressConfig(seed=12345, preserve_fields=["city", "state"])
         strategy = AddressStrategy(config)
         short_name = strategy.short_name()
 
@@ -539,7 +529,4 @@ class TestComplexScenarios:
             assert result is not None
             assert isinstance(result, str)
             # City and state should be preserved
-            assert any(
-                city in result
-                for city in ["Springfield", "Shelbyville", "Capital City"]
-            )
+            assert any(city in result for city in ["Springfield", "Shelbyville", "Capital City"])

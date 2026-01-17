@@ -247,7 +247,7 @@ example-name/
 **Start here if**: You're new to Confiture or database migrations
 
 1. **[Example 1: Basic Migration](./01-basic-migration/)** - Core concepts (15 min)
-2. Read [Getting Started Guide](../docs/guides/getting-started.md)
+2. Read [Getting Started Guide](../docs/getting-started.md)
 3. Read [CLI Reference](../docs/reference/cli.md)
 4. Practice: Create your own project with `confiture init`
 
@@ -260,7 +260,7 @@ example-name/
 **Start here if**: You understand basics and want to integrate with frameworks
 
 1. **[Example 2: FraiseQL Integration](./02-fraiseql-integration/)** - GraphQL integration (20 min)
-2. Read [Migration Strategies](../docs/guides/migration-strategies.md)
+2. Read [Migration Decision Tree](../docs/guides/migration-decision-tree.md)
 3. Review [Configuration Reference](../docs/reference/configuration.md)
 4. Practice: Apply to your team's project
 
@@ -275,7 +275,7 @@ example-name/
 1. **[Example 3: Zero-Downtime](./03-zero-downtime-migration/)** - Production safety (30 min)
 2. **[Example 4: Production Sync](./04-production-sync-anonymization/)** - PII anonymization (25 min)
 3. **[Example 5: Multi-Environment Workflow](./05-multi-environment-workflow/)** - Complete CI/CD (30 min)
-4. Read [Zero-Downtime Migrations](../docs/guides/zero-downtime.md)
+4. Read [Zero-Downtime Migrations](../docs/guides/04-schema-to-schema.md)
 5. Practice: Deploy to production with rollback procedures
 
 **Goal**: Master production deployments, CI/CD, and data compliance

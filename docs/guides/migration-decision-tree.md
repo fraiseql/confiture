@@ -1,5 +1,7 @@
 # Migration Decision Tree
 
+[← Back to Guides](../index.md) · [Build from DDL](01-build-from-ddl.md)
+
 **Which migration strategy should I use?**
 
 This guide helps you choose the right migration strategy ("medium") for your specific scenario. Confiture provides 4 migration strategies, each optimized for different use cases.
@@ -455,11 +457,11 @@ Otherwise → Use Medium 2
 
 ## See Also
 
-- [Medium 1: Build from DDL](./medium-1-build-from-ddl.md) - Detailed guide
-- [Medium 2: Incremental Migrations](./medium-2-incremental-migrations.md) - Migration workflows
-- [Medium 3: Production Data Sync](./medium-3-production-sync.md) - Data syncing strategies
-- [Medium 4: Schema-to-Schema](./medium-4-schema-to-schema.md) - Zero-downtime migrations
-- [Examples](../../examples/) - Working examples for each medium
+- [Build from DDL](./01-build-from-ddl.md) - Fresh databases in <1 second
+- [Incremental Migrations](./02-incremental-migrations.md) - ALTER-based changes
+- [Production Data Sync](./03-production-sync.md) - Copy and anonymize data
+- [Schema-to-Schema](./04-schema-to-schema.md) - Zero-downtime migrations
+- [Examples](../../examples/) - Working examples for each strategy
 
 ---
 

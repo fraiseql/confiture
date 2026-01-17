@@ -1,8 +1,7 @@
 # Migration Wizard API Reference
 
-**Status**: Complete API Documentation
-**API Version**: 1.0 (from Phase 4)
-**Last Updated**: January 2, 2026
+[← Back to API Reference](index.md)
+
 **Stability**: Stable ✅
 
 ---
@@ -579,14 +578,10 @@ new_scheduled = await wizard.run_scheduled(migration_id, new_time)
 ## See Also
 
 - [Interactive Migration Wizard Guide](../guides/interactive-migration-wizard.md) - User guide
-- [Risk Assessment Patterns](../guides/phase-4-patterns.md#risk-based-workflow) - Workflow patterns
-- [Approval Workflow Examples](../guides/phase-4-patterns.md#team-migrations) - Team patterns
+- [Advanced Patterns](../guides/advanced-patterns.md) - Workflow patterns
+- [Troubleshooting](../troubleshooting.md) - Common issues
 
 ---
 
-**Last Updated**: January 2, 2026
-**Status**: Production Ready ✅
-**Tested On**: Python 3.11, 3.12, 3.13
-
-🍓 Wizard: Guide your team through migrations safely
+**Last Updated**: January 17, 2026
 

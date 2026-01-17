@@ -222,9 +222,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         """
         # Check budget
         if self.budget_remaining <= 0:
-            raise ValueError(
-                "Privacy budget exhausted. Cannot anonymize more values."
-            )
+            raise ValueError("Privacy budget exhausted. Cannot anonymize more values.")
 
         # Handle NULL
         if value is None:
@@ -281,17 +279,25 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
             # Laplace distribution: symmetric around 0
             # Variance = 2 * scale^2
             u = random.uniform(-0.5, 0.5)
-            noise = -scale * (1 if u > 0 else -1) * \
-                    sum(1 for _ in range(int(-scale * __import__('math').log(2 * abs(u)))))
+            noise = (
+                -scale
+                * (1 if u > 0 else -1)
+                * sum(1 for _ in range(int(-scale * __import__("math").log(2 * abs(u)))))
+            )
             # Simplified: use exponential approximation
-            noise = scale * __import__('math').log(random.random()) if random.random() > 0.5 else -scale * __import__('math').log(random.random())
+            noise = (
+                scale * __import__("math").log(random.random())
+                if random.random() > 0.5
+                else -scale * __import__("math").log(random.random())
+            )
             return noise
 
         elif self.config.mechanism == "gaussian":
             # Gaussian distribution: normal distribution
             # Variance = 2 * scale^2 / delta (for (ε, δ)-DP)
             import math
-            variance = 2 * (scale ** 2) / self.config.delta
+
+            variance = 2 * (scale**2) / self.config.delta
             stddev = math.sqrt(variance)
             noise = random.gauss(0, stddev)
             return noise
@@ -343,10 +349,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         try:
             numeric_value = float(value)
             if numeric_value != numeric_value:  # NaN check
-                errors.append(
-                    f"Column {table_name}.{column_name}: "
-                    f"NaN value cannot be anonymized"
-                )
+                errors.append(f"Column {table_name}.{column_name}: NaN value cannot be anonymized")
         except (TypeError, ValueError):
             errors.append(
                 f"Column {table_name}.{column_name}: "
@@ -390,8 +393,6 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
             "remaining": self.budget_remaining,
             "consumed": self.config.budget_total - self.budget_remaining,
             "percentage": (
-                100
-                * (self.config.budget_total - self.budget_remaining)
-                / self.config.budget_total
+                100 * (self.config.budget_total - self.budget_remaining) / self.config.budget_total
             ),
         }

@@ -188,7 +188,7 @@ class TestBatchAnonymizationPerformance:
             {
                 "patient_id": f"PAT-{i:06d}",
                 "patient_name": f"Patient {i}",
-                "ssn": f"{100+i:03d}-{20+i:02d}-{i:04d}",
+                "ssn": f"{100 + i:03d}-{20 + i:02d}-{i:04d}",
                 "diagnosis": "E11",
                 "medication": "Metformin",
             }
@@ -315,7 +315,7 @@ class TestScalability:
                 {
                     "patient_id": f"PAT-{i:06d}",
                     "patient_name": f"Patient {i}",
-                    "ssn": f"{100+i:03d}-{20+i:02d}-{i:04d}",
+                    "ssn": f"{100 + i:03d}-{20 + i:02d}-{i:04d}",
                     "diagnosis": "E11",
                 }
                 for i in range(batch_size)

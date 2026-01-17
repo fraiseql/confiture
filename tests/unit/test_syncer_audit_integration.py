@@ -29,7 +29,9 @@ class TestProfileHashing:
         """Hash of None profile is empty hash."""
         hash_val = hash_profile(None)
         assert len(hash_val) == 64  # SHA256 hex
-        assert hash_val == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"  # SHA256("")
+        assert (
+            hash_val == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )  # SHA256("")
 
     def test_hash_simple_profile(self):
         """Hash of simple profile is deterministic."""

@@ -125,9 +125,7 @@ def create_sync_audit_entry(
     profile_version = profile.version if profile else "0.0"
 
     verification_json = (
-        json.dumps(verification_report, sort_keys=True)
-        if verification_report
-        else "{}"
+        json.dumps(verification_report, sort_keys=True) if verification_report else "{}"
     )
 
     return create_audit_entry(

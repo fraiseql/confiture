@@ -111,9 +111,7 @@ class TestHealthCheckResult:
 
     def test_failed_result_with_message(self):
         """Test failed health check with message."""
-        result = HealthCheckResult(
-            name="db", passed=False, message="Connection timeout"
-        )
+        result = HealthCheckResult(name="db", passed=False, message="Connection timeout")
         assert result.passed is False
         assert result.message == "Connection timeout"
 

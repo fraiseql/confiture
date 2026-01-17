@@ -107,7 +107,6 @@ class HealthcareScenario:
                 "patient_id": "preserve",
                 "study_id": "preserve",
                 "record_id": "preserve",
-
                 # PII - mask completely
                 "patient_name": "name",
                 "first_name": "name",
@@ -115,19 +114,16 @@ class HealthcareScenario:
                 "provider_name": "name",
                 "provider_first": "name",
                 "provider_last": "name",
-
                 # Identifiers - redact/mask
                 "ssn": "text_redaction",
                 "social_security_number": "text_redaction",
                 "medical_record_number": "text_redaction",
                 "mrn": "text_redaction",
-
                 # Contact - redact
                 "email": "text_redaction",
                 "phone": "text_redaction",
                 "phone_number": "text_redaction",
                 "address": "address",
-
                 # Sensitive dates - mask to year only
                 "date_of_birth": "date",
                 "birth_date": "date",
@@ -138,7 +134,6 @@ class HealthcareScenario:
                 "appointment_date": "date",
                 "procedure_date": "date",
                 "test_date": "date",
-
                 # Clinical data - preserve
                 "diagnosis": "preserve",
                 "diagnosis_code": "preserve",
@@ -150,7 +145,6 @@ class HealthcareScenario:
                 "dosage": "preserve",
                 "route": "preserve",
                 "frequency": "preserve",
-
                 # Vital signs - preserve
                 "temperature": "preserve",
                 "heart_rate": "preserve",
@@ -160,32 +154,27 @@ class HealthcareScenario:
                 "weight": "preserve",
                 "height": "preserve",
                 "bmi": "preserve",
-
                 # Lab results - preserve
                 "test_name": "preserve",
                 "test_value": "preserve",
                 "test_result": "preserve",
                 "lab_result": "preserve",
                 "reference_range": "preserve",
-
                 # Facility - preserve facility ID but mask name
                 "facility_id": "preserve",
                 "facility_name": "name",
                 "facility_code": "preserve",
                 "department": "preserve",
                 "ward": "preserve",
-
                 # Location - generalize
                 "city": "preserve",
                 "state": "preserve",
                 "country": "preserve",
-
                 # Metadata - preserve
                 "encounter_type": "preserve",
                 "admission_type": "preserve",
                 "discharge_disposition": "preserve",
                 "status": "preserve",
-
                 # IP/technical - mask
                 "ip_address": "ip_address",
                 "device_id": "preserve",
@@ -242,7 +231,9 @@ class HealthcareScenario:
         return factory.anonymize(data)
 
     @classmethod
-    def anonymize_batch(cls, data_list: list[dict], regulation: RegulationType = RegulationType.GDPR) -> list[dict]:
+    def anonymize_batch(
+        cls, data_list: list[dict], regulation: RegulationType = RegulationType.GDPR
+    ) -> list[dict]:
         """Anonymize batch of healthcare records.
 
         Args:

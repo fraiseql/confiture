@@ -58,9 +58,7 @@ class TestGlobalSeedConsistency:
         )
 
         # Create strategy instances with same seed
-        strategy = EmailMaskingStrategy(
-            EmailMaskConfig(seed=profile.global_seed)
-        )
+        strategy = EmailMaskingStrategy(EmailMaskConfig(seed=profile.global_seed))
 
         # Anonymize same email
         email = "john@example.com"
@@ -87,9 +85,7 @@ class TestGlobalSeedConsistency:
             tables={},
         )
 
-        strategy = EmailMaskingStrategy(
-            EmailMaskConfig(seed=profile.global_seed)
-        )
+        strategy = EmailMaskingStrategy(EmailMaskConfig(seed=profile.global_seed))
 
         hash1 = strategy.anonymize("john@example.com")
         hash2 = strategy.anonymize("jane@example.com")
@@ -248,9 +244,7 @@ class TestForeignKeyIntegration:
             },
         )
 
-        strategy = DeterministicHashStrategy(
-            DeterministicHashConfig(seed=profile.global_seed)
-        )
+        strategy = DeterministicHashStrategy(DeterministicHashConfig(seed=profile.global_seed))
 
         # Same user ID hashed in both tables
         user_id = "uuid_123"
@@ -289,9 +283,7 @@ class TestForeignKeyIntegration:
             },
         )
 
-        strategy = EmailMaskingStrategy(
-            EmailMaskConfig(seed=profile.global_seed)
-        )
+        strategy = EmailMaskingStrategy(EmailMaskConfig(seed=profile.global_seed))
 
         email = "customer@example.com"
         email_in_users = strategy.anonymize(email)
@@ -337,9 +329,7 @@ class TestForeignKeyIntegration:
             },
         )
 
-        strategy = EmailMaskingStrategy(
-            EmailMaskConfig(seed=profile.global_seed)
-        )
+        strategy = EmailMaskingStrategy(EmailMaskConfig(seed=profile.global_seed))
 
         email = "admin@company.com"
         hash1 = strategy.anonymize(email)
@@ -526,9 +516,7 @@ class TestRealWorldScenarios:
         )
 
         # Verify all email fields use same seed
-        email_strategy = EmailMaskingStrategy(
-            EmailMaskConfig(seed=profile.global_seed)
-        )
+        email_strategy = EmailMaskingStrategy(EmailMaskConfig(seed=profile.global_seed))
 
         customer_email = "customer@example.com"
         results = {
@@ -543,9 +531,7 @@ class TestRealWorldScenarios:
         assert all(v == values[0] for v in values)
 
         # Verify all ID fields use same seed
-        hash_strategy = DeterministicHashStrategy(
-            DeterministicHashConfig(seed=profile.global_seed)
-        )
+        hash_strategy = DeterministicHashStrategy(DeterministicHashConfig(seed=profile.global_seed))
 
         user_id = "uuid_12345"
         id_results = {
@@ -591,23 +577,17 @@ class TestRealWorldScenarios:
         )
 
         # user_id should be consistent across tables
-        hash_strategy = DeterministicHashStrategy(
-            DeterministicHashConfig(seed=11111)
-        )
+        hash_strategy = DeterministicHashStrategy(DeterministicHashConfig(seed=11111))
         user_id = "uuid_123"
         hash1 = hash_strategy.anonymize(user_id)
 
-        hash_strategy2 = DeterministicHashStrategy(
-            DeterministicHashConfig(seed=11111)
-        )
+        hash_strategy2 = DeterministicHashStrategy(DeterministicHashConfig(seed=11111))
         hash2 = hash_strategy2.anonymize(user_id)
 
         assert hash1 == hash2
 
         # api_token should be different due to override
-        override_strategy = DeterministicHashStrategy(
-            DeterministicHashConfig(seed=22222)
-        )
+        override_strategy = DeterministicHashStrategy(DeterministicHashConfig(seed=22222))
         api_token = "secret_token"
         hash_default = hash_strategy.anonymize(api_token)
         hash_override = override_strategy.anonymize(api_token)

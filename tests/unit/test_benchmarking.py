@@ -151,9 +151,7 @@ class TestBenchmarker:
         strategy = DeterministicHashStrategy()
         test_values = ["test1", "test2", "test3"]
 
-        result = benchmarker.benchmark_strategy(
-            strategy, test_values, iterations=10
-        )
+        result = benchmarker.benchmark_strategy(strategy, test_values, iterations=10)
 
         assert result.operation == "DeterministicHashStrategy"
         assert result.iterations > 0
@@ -283,9 +281,7 @@ class TestBenchmarker:
             memory_estimate_kb=1024.0,
         )
 
-        result = benchmarker.compare_performance(
-            baseline, candidate, regression_threshold=1.1
-        )
+        result = benchmarker.compare_performance(baseline, candidate, regression_threshold=1.1)
 
         assert result.speedup > 1.0
         assert result.regression is False

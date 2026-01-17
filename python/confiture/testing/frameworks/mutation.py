@@ -23,29 +23,32 @@ import psycopg
 
 class MutationSeverity(Enum):
     """Severity level of a mutation."""
-    CRITICAL = "CRITICAL"      # Schema/data integrity issues
-    IMPORTANT = "IMPORTANT"    # Significant behavior changes
-    MINOR = "MINOR"           # Edge cases, optimization
+
+    CRITICAL = "CRITICAL"  # Schema/data integrity issues
+    IMPORTANT = "IMPORTANT"  # Significant behavior changes
+    MINOR = "MINOR"  # Edge cases, optimization
 
 
 class MutationCategory(Enum):
     """Category of mutation."""
-    SCHEMA = "schema"           # Table/column/constraint changes
-    DATA = "data"              # Data transformations
-    ROLLBACK = "rollback"      # Rollback operations
-    PERFORMANCE = "performance" # Performance optimization
+
+    SCHEMA = "schema"  # Table/column/constraint changes
+    DATA = "data"  # Data transformations
+    ROLLBACK = "rollback"  # Rollback operations
+    PERFORMANCE = "performance"  # Performance optimization
 
 
 @dataclass
 class Mutation:
     """Definition of a single mutation."""
-    id: str                              # Unique identifier
-    name: str                            # Human-readable name
-    description: str                     # What the mutation does
-    category: MutationCategory           # Type of mutation
-    severity: MutationSeverity          # Impact level
-    apply_fn: Callable | None = None # Function to apply mutation
-    apply_regex: str | None = None   # Regex for SQL transformation
+
+    id: str  # Unique identifier
+    name: str  # Human-readable name
+    description: str  # What the mutation does
+    category: MutationCategory  # Type of mutation
+    severity: MutationSeverity  # Impact level
+    apply_fn: Callable | None = None  # Function to apply mutation
+    apply_regex: str | None = None  # Regex for SQL transformation
 
     def apply(self, sql: str) -> str:
         """Apply this mutation to SQL code."""
@@ -64,9 +67,10 @@ class Mutation:
 @dataclass
 class MutationResult:
     """Result of executing a migration with a mutation."""
+
     mutation_id: str
-    success: bool              # Migration executed
-    mutation_applied: bool     # Mutation was successfully applied
+    success: bool  # Migration executed
+    mutation_applied: bool  # Mutation was successfully applied
     duration_seconds: float
     stdout: str
     stderr: str
@@ -77,16 +81,18 @@ class MutationResult:
 @dataclass
 class MutationTestResult:
     """Result of testing a mutation against test suite."""
+
     mutation_id: str
     mutation_name: str
     test_name: str
-    caught: bool               # Test caught the mutation
+    caught: bool  # Test caught the mutation
     duration_seconds: float
 
 
 @dataclass
 class MutationMetrics:
     """Metrics for mutation test results."""
+
     total_mutations: int = 0
     killed_mutations: int = 0  # Caught by tests
     survived_mutations: int = 0  # Missed by tests
@@ -107,6 +113,7 @@ class MutationMetrics:
 @dataclass
 class MutationReport:
     """Complete mutation testing report."""
+
     timestamp: str
     total_mutations: int
     metrics: MutationMetrics
@@ -176,7 +183,9 @@ class MutationRegistry:
                 description="Remove FOREIGN KEY constraint",
                 category=MutationCategory.SCHEMA,
                 severity=MutationSeverity.CRITICAL,
-                apply_regex=r"FOREIGN\s+KEY\s+\([^)]+\)\s+REFERENCES\s+\S+\s*\([^)]+\)" + "=>" + " ",
+                apply_regex=r"FOREIGN\s+KEY\s+\([^)]+\)\s+REFERENCES\s+\S+\s*\([^)]+\)"
+                + "=>"
+                + " ",
             ),
             Mutation(
                 id="schema_005",
@@ -192,8 +201,7 @@ class MutationRegistry:
                 description="Change column data type",
                 category=MutationCategory.SCHEMA,
                 severity=MutationSeverity.CRITICAL,
-                apply_fn=lambda sql: sql.replace("TEXT", "VARCHAR(50)")
-                if "TEXT" in sql else sql,
+                apply_fn=lambda sql: sql.replace("TEXT", "VARCHAR(50)") if "TEXT" in sql else sql,
             ),
             Mutation(
                 id="schema_007",
@@ -250,7 +258,8 @@ class MutationRegistry:
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
                 apply_fn=lambda sql: sql.replace("'active'", "'inactive'")
-                if "'active'" in sql else sql,
+                if "'active'" in sql
+                else sql,
             ),
             Mutation(
                 id="data_003",
@@ -275,7 +284,8 @@ class MutationRegistry:
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
                 apply_fn=lambda sql: sql.replace("WHERE id > 0", "WHERE id < 0")
-                if "WHERE id > 0" in sql else sql,
+                if "WHERE id > 0" in sql
+                else sql,
             ),
             Mutation(
                 id="data_006",
@@ -283,8 +293,7 @@ class MutationRegistry:
                 description="Don't use COALESCE for NULLs",
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql.replace("COALESCE(", "")
-                if "COALESCE(" in sql else sql,
+                apply_fn=lambda sql: sql.replace("COALESCE(", "") if "COALESCE(" in sql else sql,
             ),
             Mutation(
                 id="data_007",
@@ -293,7 +302,8 @@ class MutationRegistry:
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
                 apply_fn=lambda sql: sql.replace("UPDATE table", "UPDATE table WHERE id IN (1,2,3)")
-                if "UPDATE table" in sql else sql,
+                if "UPDATE table" in sql
+                else sql,
             ),
             Mutation(
                 id="data_008",
@@ -301,8 +311,7 @@ class MutationRegistry:
                 description="Use wrong type cast",
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql.replace("::TEXT", "::INTEGER")
-                if "::TEXT" in sql else sql,
+                apply_fn=lambda sql: sql.replace("::TEXT", "::INTEGER") if "::TEXT" in sql else sql,
             ),
         ]
 
@@ -391,7 +400,8 @@ class MutationRegistry:
                 category=MutationCategory.PERFORMANCE,
                 severity=MutationSeverity.IMPORTANT,
                 apply_fn=lambda sql: sql.replace("WHERE id =", "WHERE TRUE")
-                if "WHERE id =" in sql else sql,
+                if "WHERE id =" in sql
+                else sql,
             ),
         ]
 
@@ -457,6 +467,7 @@ class MutationRunner:
 
             # Execute in isolated transaction
             import time
+
             start_time = time.time()
 
             try:
@@ -564,7 +575,7 @@ class MutationRunner:
                 catch_rate = stats["caught"] / stats["total"]
                 if catch_rate < 0.5:
                     recommendations.append(
-                        f"Test '{test_name}' has low mutation kill rate ({catch_rate*100:.0f}%). "
+                        f"Test '{test_name}' has low mutation kill rate ({catch_rate * 100:.0f}%). "
                         f"Consider adding more assertions or validations."
                     )
 

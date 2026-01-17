@@ -67,9 +67,7 @@ class TestBatchProgress:
 
     def test_rows_per_second(self):
         """Test rows per second calculation."""
-        progress = BatchProgress(
-            total_rows=1000, processed_rows=500, elapsed_seconds=10.0
-        )
+        progress = BatchProgress(total_rows=1000, processed_rows=500, elapsed_seconds=10.0)
         assert progress.rows_per_second == 50.0
 
     def test_rows_per_second_zero_elapsed(self):
@@ -79,9 +77,7 @@ class TestBatchProgress:
 
     def test_estimated_remaining_seconds(self):
         """Test estimated remaining time."""
-        progress = BatchProgress(
-            total_rows=1000, processed_rows=500, elapsed_seconds=10.0
-        )
+        progress = BatchProgress(total_rows=1000, processed_rows=500, elapsed_seconds=10.0)
         # 500 rows in 10 seconds = 50 rows/sec
         # 500 remaining / 50 rows/sec = 10 seconds
         assert progress.estimated_remaining_seconds == 10.0
@@ -167,9 +163,7 @@ class TestBatchedMigration:
         def callback(processed, total):
             callback_calls.append((processed, total))
 
-        config = BatchConfig(
-            batch_size=50, sleep_between_batches=0, progress_callback=callback
-        )
+        config = BatchConfig(batch_size=50, sleep_between_batches=0, progress_callback=callback)
         batched = BatchedMigration(conn, config)
 
         # Set up rowcount to return 50 first, then 0
@@ -309,9 +303,7 @@ class TestOnlineIndexBuilder:
         conn, cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
-        index_name = builder.create_index_concurrently(
-            table="users", columns=["email"]
-        )
+        index_name = builder.create_index_concurrently(table="users", columns=["email"])
 
         assert index_name == "idx_users_email"
         cursor.execute.assert_called()
@@ -334,9 +326,7 @@ class TestOnlineIndexBuilder:
         conn, cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
-        builder.create_index_concurrently(
-            table="users", columns=["email"], unique=True
-        )
+        builder.create_index_concurrently(table="users", columns=["email"], unique=True)
 
         call_args = str(cursor.execute.call_args)
         assert "UNIQUE" in call_args
@@ -346,9 +336,7 @@ class TestOnlineIndexBuilder:
         conn, cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
-        builder.create_index_concurrently(
-            table="users", columns=["email"], where="active = true"
-        )
+        builder.create_index_concurrently(table="users", columns=["email"], where="active = true")
 
         call_args = str(cursor.execute.call_args)
         assert "WHERE active = true" in call_args
@@ -358,9 +346,7 @@ class TestOnlineIndexBuilder:
         conn, cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
-        builder.create_index_concurrently(
-            table="users", columns=["id"], include=["email", "name"]
-        )
+        builder.create_index_concurrently(table="users", columns=["id"], include=["email", "name"])
 
         call_args = str(cursor.execute.call_args)
         assert "INCLUDE" in call_args
@@ -370,9 +356,7 @@ class TestOnlineIndexBuilder:
         conn, cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
-        builder.create_index_concurrently(
-            table="documents", columns=["content"], method="gin"
-        )
+        builder.create_index_concurrently(table="documents", columns=["content"], method="gin")
 
         call_args = str(cursor.execute.call_args)
         assert "USING gin" in call_args

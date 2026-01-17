@@ -172,13 +172,7 @@ class TestPrintJsonReport:
 
     def test_print_json_report_nested(self):
         """Test printing nested JSON report."""
-        data = {
-            "level1": {
-                "level2": {
-                    "value": 42
-                }
-            }
-        }
+        data = {"level1": {"level2": {"value": 42}}}
 
         with patch("confiture.cli.dry_run.console") as mock_console:
             print_json_report(data)
@@ -326,8 +320,6 @@ class TestDisplayDryRunHeader:
             display_dry_run_header("unknown")
             # Should call console.print for both known and unknown modes
             assert mock_console.print.called
-
-
 
 
 class TestDryRunIntegration:

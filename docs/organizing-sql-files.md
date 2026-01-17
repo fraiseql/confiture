@@ -649,7 +649,7 @@ See working examples in the repository:
 
 - **[Meaningful Test UUIDs](./meaningful-test-uuids.md)** - Generate debuggable UUIDs for seed data
 - **[Getting Started Guide](./getting-started.md)** - First steps with Confiture
-- **[Migration Strategies](./migration-strategies.md)** - When to use each approach
+- **[Migration Decision Tree](./guides/migration-decision-tree.md)** - When to use each approach
 
 ---
 

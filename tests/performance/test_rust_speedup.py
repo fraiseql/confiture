@@ -123,7 +123,9 @@ def test_repeated_operations_performance(large_schema_dir):
 
     # No single iteration should be much slower (allowing for system variance)
     # Use 3x multiplier to account for system variance and GC pauses
-    assert max_duration < avg_duration * 3, f"Performance degradation detected: max={max_duration:.3f}s, avg={avg_duration:.3f}s"
+    assert max_duration < avg_duration * 3, (
+        f"Performance degradation detected: max={max_duration:.3f}s, avg={avg_duration:.3f}s"
+    )
 
     print(f"\n✓ Repeated operations: avg={avg_duration:.3f}s, max={max_duration:.3f}s")
 

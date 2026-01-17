@@ -1,8 +1,7 @@
 # Linting Rule API Reference
 
-**Status**: Complete API Documentation
-**API Version**: 1.0 (from Phase 4)
-**Last Updated**: January 2, 2026
+[← Back to API Reference](index.md)
+
 **Stability**: Stable ✅
 
 ---
@@ -570,14 +569,10 @@ for violation in violations:
 ## See Also
 
 - [Schema Linting Guide](../guides/schema-linting.md) - User guide with patterns
-- [Git Hooks Integration](../guides/hooks-vs-pre-commit.md) - Pre-commit linting
-- [GitHub Actions](../guides/github-actions-workflow.md) - CI/CD linting
+- [Migration Hooks Guide](../guides/hooks.md) - Pre-commit integration
+- [Integrations Guide](../guides/integrations.md) - CI/CD linting
 
 ---
 
-**Last Updated**: January 2, 2026
-**Status**: Production Ready ✅
-**Tested On**: Python 3.11, 3.12, 3.13
-
-🍓 Linting: Keep your schema quality high
+**Last Updated**: January 17, 2026
 

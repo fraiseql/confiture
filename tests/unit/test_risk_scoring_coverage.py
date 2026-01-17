@@ -515,9 +515,9 @@ class TestRiskScoringIntegration:
             "data_volume": RiskScoringFormula.calculate_data_volume_score(100000),
             "lock_time": RiskScoringFormula.calculate_lock_time_score(5000),
             "dependencies": RiskScoringFormula.calculate_dependency_score(3, 2, 1),
-            "anomalies": RiskScoringFormula.calculate_anomaly_score([
-                DataAnomaly("issue1", Severity.HIGH, "Issue 1")
-            ]),
+            "anomalies": RiskScoringFormula.calculate_anomaly_score(
+                [DataAnomaly("issue1", Severity.HIGH, "Issue 1")]
+            ),
             "concurrent_load": RiskScoringFormula.calculate_concurrent_load_score(80, 100),
         }
 
@@ -532,9 +532,9 @@ class TestRiskScoringIntegration:
             "data_volume": RiskScoringFormula.calculate_data_volume_score(1024 * 1024),
             "lock_time": RiskScoringFormula.calculate_lock_time_score(20000),
             "dependencies": RiskScoringFormula.calculate_dependency_score(5, 4, 3),
-            "anomalies": RiskScoringFormula.calculate_anomaly_score([
-                DataAnomaly("data_loss", Severity.CRITICAL, "Critical issue")
-            ]),
+            "anomalies": RiskScoringFormula.calculate_anomaly_score(
+                [DataAnomaly("data_loss", Severity.CRITICAL, "Critical issue")]
+            ),
             "concurrent_load": RiskScoringFormula.calculate_concurrent_load_score(95, 100),
         }
 

@@ -67,9 +67,7 @@ class DataValidator:
                 constraint_violations=constraint_violations,
             )
 
-    def no_data_loss(
-        self, baseline: DataBaseline, allow_additions: bool = True
-    ) -> bool:
+    def no_data_loss(self, baseline: DataBaseline, allow_additions: bool = True) -> bool:
         """Verify no data was lost during migration.
 
         Args:
@@ -148,9 +146,7 @@ class DataValidator:
                     )
                 else:
                     cur.execute(
-                        sql.SQL("SELECT COUNT(*) FROM {}").format(
-                            sql.Identifier(table_name)
-                        )
+                        sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table_name))
                     )
                 row = cur.fetchone()
                 return row[0] if row else 0

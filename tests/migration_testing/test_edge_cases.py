@@ -538,16 +538,22 @@ def test_primary_key_violation(test_db_connection):
 
         # Insert record
         test_uuid = "550e8400-e29b-41d4-a716-446655440000"
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO pk_test (id) VALUES (%s)
-        """, (test_uuid,))
+        """,
+            (test_uuid,),
+        )
         test_db_connection.commit()
 
         # Try to insert duplicate key
         try:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO pk_test (id) VALUES (%s)
-            """, (test_uuid,))
+            """,
+                (test_uuid,),
+            )
             pytest.fail("Should fail on PK violation")
         except Exception:
             test_db_connection.rollback()
@@ -649,14 +655,19 @@ def test_view_with_joined_tables(test_db_connection):
 
         # Insert data
         customer_id = None
-        cur.execute("INSERT INTO customers (id, name) VALUES (gen_random_uuid(), 'Alice') RETURNING id")
+        cur.execute(
+            "INSERT INTO customers (id, name) VALUES (gen_random_uuid(), 'Alice') RETURNING id"
+        )
         customer_id = cur.fetchone()[0]
 
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO orders (id, customer_id, amount) VALUES
             (gen_random_uuid(), %s, 100),
             (gen_random_uuid(), %s, 200)
-        """, (customer_id, customer_id))
+        """,
+            (customer_id, customer_id),
+        )
         test_db_connection.commit()
 
         # Query view
@@ -755,7 +766,7 @@ def test_multi_table_creation_sequence(test_db_connection):
         test_db_connection.commit()
 
         # Verify all tables exist
-        for table in ['users', 'posts', 'comments']:
+        for table in ["users", "posts", "comments"]:
             cur.execute("SELECT to_regclass(%s)", (table,))
             assert cur.fetchone()[0] is not None
 
@@ -792,7 +803,7 @@ def test_multi_step_schema_modification(test_db_connection):
             ORDER BY ordinal_position
         """)
         columns = [row[0] for row in cur.fetchall()]
-        assert 'email' in columns
+        assert "email" in columns
 
 
 def test_data_transformation_across_steps(test_db_connection):
@@ -913,13 +924,18 @@ def test_denormalization_transformation(test_db_connection):
 
         # Insert data
         user_id = None
-        cur.execute("INSERT INTO users_denorm (id, name) VALUES (gen_random_uuid(), 'Alice') RETURNING id")
+        cur.execute(
+            "INSERT INTO users_denorm (id, name) VALUES (gen_random_uuid(), 'Alice') RETURNING id"
+        )
         user_id = cur.fetchone()[0]
 
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO profiles (id, user_id, bio, avatar_url) VALUES
             (gen_random_uuid(), %s, 'My bio', 'http://avatar.url')
-        """, (user_id,))
+        """,
+            (user_id,),
+        )
         test_db_connection.commit()
 
         # Step 2: Denormalize (add profile fields to users table)

@@ -1,8 +1,7 @@
 # Anonymization Strategy API Reference
 
-**Status**: Complete API Documentation
-**API Version**: 1.0 (from Phase 4)
-**Last Updated**: January 2, 2026
+[← Back to API Reference](index.md)
+
 **Stability**: Stable ✅
 
 ---
@@ -691,15 +690,11 @@ Use anonymization when:
 
 ## See Also
 
-- [Custom Anonymization Guide](../guides/custom-anonymization-strategies.md) - User guide with patterns
-- [Production Sync](../guides/production-sync.md) - Using anonymization with data sync
-- [Healthcare HIPAA](../guides/healthcare-hipaa-migrations.md) - HIPAA-compliant examples
+- [Anonymization Guide](../guides/anonymization.md) - User guide with patterns
+- [Production Sync](../guides/03-production-sync.md) - Using anonymization with data sync
+- [Compliance Guide](../guides/compliance.md) - HIPAA, GDPR, PCI-DSS examples
 
 ---
 
-**Last Updated**: January 2, 2026
-**Status**: Production Ready ✅
-**Tested On**: Python 3.11, 3.12, 3.13
-
-🍓 Anonymization: Test data without the privacy risk
+**Last Updated**: January 17, 2026
 

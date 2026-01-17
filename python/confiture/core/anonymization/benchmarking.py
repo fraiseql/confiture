@@ -54,11 +54,7 @@ class ComparativeResult:
     def __str__(self) -> str:
         """Format as readable string."""
         status = "🔴 REGRESSION" if self.regression else "🟢 IMPROVEMENT"
-        return (
-            f"{self.operation:30} | "
-            f"{status:20} | "
-            f"Speedup: {self.speedup:6.2f}x"
-        )
+        return f"{self.operation:30} | {status:20} | Speedup: {self.speedup:6.2f}x"
 
 
 class Benchmarker:
@@ -89,7 +85,7 @@ class Benchmarker:
         times = []
 
         # Warmup
-        for value in test_values[:min(10, len(test_values))]:
+        for value in test_values[: min(10, len(test_values))]:
             _ = strategy.anonymize(value)
 
         # Benchmark
@@ -174,7 +170,10 @@ class Benchmarker:
         return results
 
     def compare_performance(
-        self, baseline: BenchmarkResult, candidate: BenchmarkResult, regression_threshold: float = 0.95
+        self,
+        baseline: BenchmarkResult,
+        candidate: BenchmarkResult,
+        regression_threshold: float = 0.95,
     ) -> ComparativeResult:
         """Compare performance between two benchmark results.
 

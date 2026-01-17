@@ -224,9 +224,7 @@ class VaultKMSClient(KMSClient):
         try:
             import base64
 
-            ciphertext_str = (
-                ciphertext.decode() if isinstance(ciphertext, bytes) else ciphertext
-            )
+            ciphertext_str = ciphertext.decode() if isinstance(ciphertext, bytes) else ciphertext
 
             response = self.client.secrets.transit.decrypt_data(
                 name=key_id,
@@ -405,10 +403,7 @@ class LocalKMSClient(KMSClient):
         if not os.path.exists(self.keys_dir):
             os.makedirs(self.keys_dir)
 
-        logger.warning(
-            "⚠️  LocalKMSClient is for TESTING ONLY. "
-            "Never use in production."
-        )
+        logger.warning("⚠️  LocalKMSClient is for TESTING ONLY. Never use in production.")
 
     def encrypt(self, plaintext: bytes, key_id: str) -> bytes:
         """Simple XOR encryption for testing.

@@ -95,12 +95,8 @@ class GracefulShutdown:
             return self
 
         # Store original handlers
-        self._original_handlers[signal.SIGTERM] = signal.signal(
-            signal.SIGTERM, self._handle_signal
-        )
-        self._original_handlers[signal.SIGINT] = signal.signal(
-            signal.SIGINT, self._handle_signal
-        )
+        self._original_handlers[signal.SIGTERM] = signal.signal(signal.SIGTERM, self._handle_signal)
+        self._original_handlers[signal.SIGINT] = signal.signal(signal.SIGINT, self._handle_signal)
 
         self._registered = True
         logger.info("Graceful shutdown handlers registered")
@@ -118,9 +114,7 @@ class GracefulShutdown:
         self._registered = False
         logger.info("Graceful shutdown handlers unregistered")
 
-    def add_cleanup(
-        self, handler: Callable[[ShutdownContext], None], priority: int = 0
-    ) -> None:
+    def add_cleanup(self, handler: Callable[[ShutdownContext], None], priority: int = 0) -> None:
         """Add cleanup handler to run on shutdown.
 
         Args:
@@ -261,9 +255,7 @@ def register_shutdown() -> GracefulShutdown:
     return get_shutdown_handler().register()
 
 
-def add_cleanup(
-    handler: Callable[[ShutdownContext], None], priority: int = 0
-) -> None:
+def add_cleanup(handler: Callable[[ShutdownContext], None], priority: int = 0) -> None:
     """Add cleanup handler to global shutdown handler.
 
     Args:
@@ -336,9 +328,7 @@ class MigrationShutdownGuard:
 
         # Register cleanup handler
         def cleanup(ctx: ShutdownContext) -> None:  # noqa: ARG001
-            logger.warning(
-                f"Shutdown during migration {self.migration_name}, cleaning up..."
-            )
+            logger.warning(f"Shutdown during migration {self.migration_name}, cleaning up...")
 
             # Release lock if held
             if self.lock is not None:

@@ -139,9 +139,7 @@ class CustomLambdaStrategy(AnonymizationStrategy):
         try:
             return self.config.func(value)
         except Exception as e:
-            raise Exception(
-                f"Error in lambda anonymization: {e}"
-            ) from e
+            raise Exception(f"Error in lambda anonymization: {e}") from e
 
     def validate(self, value: Any) -> bool:  # noqa: ARG002
         """Check if strategy can handle this value type.

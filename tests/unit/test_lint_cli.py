@@ -52,9 +52,7 @@ class TestLintCommand:
         result = runner.invoke(app, ["lint", "--env", "production"])
 
         assert result.exit_code == 0
-        mock_linter_class.assert_called_with(
-            env="production", config=ANY
-        )
+        mock_linter_class.assert_called_with(env="production", config=ANY)
 
     @patch("confiture.cli.main.SchemaLinter")
     def test_lint_command_with_errors_fail_on_error(self, mock_linter_class):
@@ -99,9 +97,7 @@ class TestLintCommand:
         mock_linter.lint.return_value = mock_report
 
         # Run with --fail-on-warning
-        result = runner.invoke(
-            app, ["lint", "--fail-on-warning"]
-        )
+        result = runner.invoke(app, ["lint", "--fail-on-warning"])
 
         # Should fail
         assert result.exit_code == 1
@@ -172,9 +168,7 @@ class TestLintCommand:
 
     @patch("confiture.cli.main.SchemaLinter")
     @patch("confiture.cli.main.save_report")
-    def test_lint_command_save_json_output(
-        self, mock_save, mock_linter_class
-    ):
+    def test_lint_command_save_json_output(self, mock_save, mock_linter_class):
         """Should save JSON output to file when --output specified."""
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
@@ -193,9 +187,7 @@ class TestLintCommand:
 
     def test_lint_command_invalid_format(self):
         """Should fail with invalid format option."""
-        result = runner.invoke(
-            app, ["lint", "--format", "invalid"]
-        )
+        result = runner.invoke(app, ["lint", "--format", "invalid"])
 
         assert result.exit_code == 1
         assert "Invalid format" in result.stdout or "Invalid format" in result.stderr

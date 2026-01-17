@@ -136,9 +136,7 @@ class SchemaSnapshotter:
             snapshot.views = {row[0] for row in cur.fetchall()}
 
             # Get materialized views
-            cur.execute(
-                "SELECT matviewname FROM pg_matviews WHERE schemaname != 'pg_catalog'"
-            )
+            cur.execute("SELECT matviewname FROM pg_matviews WHERE schemaname != 'pg_catalog'")
             snapshot.materialized_views = {row[0] for row in cur.fetchall()}
 
             # Get functions
@@ -308,8 +306,7 @@ class SchemaSnapshotter:
 
             table_changes = {
                 "table": table_name,
-                "columns_added": set(after_table.columns.keys())
-                - set(before_table.columns.keys()),
+                "columns_added": set(after_table.columns.keys()) - set(before_table.columns.keys()),
                 "columns_removed": set(before_table.columns.keys())
                 - set(after_table.columns.keys()),
                 "columns_modified": [],
@@ -339,12 +336,8 @@ class SchemaSnapshotter:
             before_constraint_names = {c.name for c in before_table.constraints}
             after_constraint_names = {c.name for c in after_table.constraints}
 
-            table_changes["constraints_added"] = (
-                after_constraint_names - before_constraint_names
-            )
-            table_changes["constraints_removed"] = (
-                before_constraint_names - after_constraint_names
-            )
+            table_changes["constraints_added"] = after_constraint_names - before_constraint_names
+            table_changes["constraints_removed"] = before_constraint_names - after_constraint_names
 
             # Only add to modified list if there are actual changes
             if (

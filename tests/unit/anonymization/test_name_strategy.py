@@ -34,9 +34,7 @@ class TestNameMaskingStrategy:
     @pytest.fixture
     def strategy_case_preserving(self):
         """Create strategy with case preservation."""
-        config = NameMaskConfig(
-            seed=12345, format_type="firstname_lastname", case_preserving=True
-        )
+        config = NameMaskConfig(seed=12345, format_type="firstname_lastname", case_preserving=True)
         return NameMaskingStrategy(config)
 
     # firstname_lastname format tests

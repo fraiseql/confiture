@@ -371,15 +371,9 @@ class TestDowntimePredictorHistorical:
     async def test_historical_prediction_with_data(self):
         """Test prediction with historical data available."""
         historical_data = HistoricalMigrations()
-        historical_data.add(
-            HistoricalMigration("ADD_COLUMN", 100, 150)
-        )
-        historical_data.add(
-            HistoricalMigration("ADD_COLUMN", 105, 160)
-        )
-        historical_data.add(
-            HistoricalMigration("ADD_COLUMN", 95, 140)
-        )
+        historical_data.add(HistoricalMigration("ADD_COLUMN", 100, 150))
+        historical_data.add(HistoricalMigration("ADD_COLUMN", 105, 160))
+        historical_data.add(HistoricalMigration("ADD_COLUMN", 95, 140))
 
         predictor = DowntimePredictor(historical_data=historical_data)
         op = MigrationOperation(
@@ -399,9 +393,7 @@ class TestDowntimePredictorHistorical:
     async def test_historical_prediction_single_sample(self):
         """Test prediction with single historical sample."""
         historical_data = HistoricalMigrations()
-        historical_data.add(
-            HistoricalMigration("ALTER_TYPE", 100, 500)
-        )
+        historical_data.add(HistoricalMigration("ALTER_TYPE", 100, 500))
 
         predictor = DowntimePredictor(historical_data=historical_data)
         op = MigrationOperation(
@@ -420,9 +412,7 @@ class TestDowntimePredictorHistorical:
     async def test_historical_prediction_no_similar(self):
         """Test prediction falls back to heuristic when no similar data."""
         historical_data = HistoricalMigrations()
-        historical_data.add(
-            HistoricalMigration("ALTER_TYPE", 100, 500)
-        )
+        historical_data.add(HistoricalMigration("ALTER_TYPE", 100, 500))
 
         predictor = DowntimePredictor(historical_data=historical_data)
         op = MigrationOperation(
@@ -443,12 +433,8 @@ class TestDowntimePredictorHistorical:
         """Test that historical predictions include standard deviation in confidence."""
         historical_data = HistoricalMigrations()
         # Add data with significant variation
-        historical_data.add(
-            HistoricalMigration("ADD_COLUMN", 100, 100)
-        )
-        historical_data.add(
-            HistoricalMigration("ADD_COLUMN", 105, 500)
-        )
+        historical_data.add(HistoricalMigration("ADD_COLUMN", 100, 100))
+        historical_data.add(HistoricalMigration("ADD_COLUMN", 105, 500))
 
         predictor = DowntimePredictor(historical_data=historical_data)
         op = MigrationOperation(
@@ -471,9 +457,7 @@ class TestDowntimePredictorHistorical:
         # Add data with known mean and variance
         values = [100, 120, 140, 160, 180]  # mean=140, stdev~32
         for val in values:
-            historical_data.add(
-                HistoricalMigration("ADD_COLUMN", 100, val)
-            )
+            historical_data.add(HistoricalMigration("ADD_COLUMN", 100, val))
 
         predictor = DowntimePredictor(historical_data=historical_data)
         op = MigrationOperation(
@@ -541,9 +525,7 @@ class TestDowntimePredictionIntegration:
         # Build historical data
         historical_data = HistoricalMigrations()
         for i in range(10):
-            historical_data.add(
-                HistoricalMigration("ADD_COLUMN", 100 + i * 10, 150 + i * 10)
-            )
+            historical_data.add(HistoricalMigration("ADD_COLUMN", 100 + i * 10, 150 + i * 10))
 
         predictor = DowntimePredictor(historical_data=historical_data)
 

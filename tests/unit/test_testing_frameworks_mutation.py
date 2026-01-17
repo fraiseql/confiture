@@ -437,7 +437,9 @@ class TestMutationRunner:
         assert result.mutation_applied is True
         mock_cursor.execute.assert_called_once()
 
-    def test_run_migration_with_mutation_execution_error(self, mock_connection, temp_migrations_dir):
+    def test_run_migration_with_mutation_execution_error(
+        self, mock_connection, temp_migrations_dir
+    ):
         """Test run_migration_with_mutation with execution error."""
         # Create migration file
         migration_file = temp_migrations_dir / "test_migration.sql"

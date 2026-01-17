@@ -322,13 +322,34 @@ class TestAuditTrail:
         """Test getting audit history."""
         conn, cursor = mock_connection
         cursor.fetchall.return_value = [
-            (1, "001", "create_users", "apply", "completed", "user", "host", None, None, 100, None, "{}")
+            (
+                1,
+                "001",
+                "create_users",
+                "apply",
+                "completed",
+                "user",
+                "host",
+                None,
+                None,
+                100,
+                None,
+                "{}",
+            )
         ]
         cursor.description = [
-            ("id",), ("migration_version",), ("migration_name",),
-            ("action",), ("status",), ("username",), ("hostname",),
-            ("started_at",), ("completed_at",), ("duration_ms",),
-            ("error_message",), ("metadata",),
+            ("id",),
+            ("migration_version",),
+            ("migration_name",),
+            ("action",),
+            ("status",),
+            ("username",),
+            ("hostname",),
+            ("started_at",),
+            ("completed_at",),
+            ("duration_ms",),
+            ("error_message",),
+            ("metadata",),
         ]
 
         audit = AuditTrail(conn, AuditConfig(enabled=True))
@@ -371,6 +392,7 @@ class TestAuditTrailIntegration:
         """Create test database connection if available."""
         try:
             import psycopg
+
             conn = psycopg.connect("postgresql://localhost/confiture_test")
             yield conn
             conn.close()

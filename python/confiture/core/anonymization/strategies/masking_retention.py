@@ -134,9 +134,9 @@ class MaskingRetentionStrategy(AnonymizationStrategy):
 
         # If preservation disabled, return deterministic hash
         if not self.config.preserve_pattern:
-            hash_val = hashlib.sha256(
-                f"{self._seed}:{value_str}".encode()
-            ).hexdigest()[:len(value_str)]
+            hash_val = hashlib.sha256(f"{self._seed}:{value_str}".encode()).hexdigest()[
+                : len(value_str)
+            ]
             return hash_val
 
         # Preserve start characters
@@ -247,9 +247,6 @@ class MaskingRetentionStrategy(AnonymizationStrategy):
                     f"Empty string will be masked to empty string"
                 )
         except Exception as e:
-            errors.append(
-                f"Column {table_name}.{column_name}: "
-                f"Cannot convert to string: {e}"
-            )
+            errors.append(f"Column {table_name}.{column_name}: Cannot convert to string: {e}")
 
         return len(errors) == 0, errors

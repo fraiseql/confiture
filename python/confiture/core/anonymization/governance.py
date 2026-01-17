@@ -312,8 +312,7 @@ class DataValidator:
                     null_count += count
                     if is_nullable == "NO":
                         warnings.append(
-                            f"NULL found in non-nullable column {column_name} "
-                            f"({count} rows)"
+                            f"NULL found in non-nullable column {column_name} ({count} rows)"
                         )
                     continue
 
@@ -329,9 +328,7 @@ class DataValidator:
             # 3. Get total row count
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    sql.SQL("SELECT COUNT(*) FROM {}").format(
-                        sql.Identifier(table_name)
-                    ),
+                    sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table_name)),
                 )
                 row = cursor.fetchone()
                 total_rows = row[0] if row else 0
@@ -431,9 +428,7 @@ class DataGovernancePipeline:
 
             validation = self._pre_validate(conn, context, strategy)
             if not validation.is_valid:
-                raise MigrationError(
-                    f"Pre-validation failed: {'; '.join(validation.errors)}"
-                )
+                raise MigrationError(f"Pre-validation failed: {'; '.join(validation.errors)}")
 
             if context.stats is None:
                 context.stats = {}
@@ -577,8 +572,7 @@ class DataGovernancePipeline:
             Exception: If anonymization fails
         """
         logger.info(
-            f"Applying {context.strategy_name} to "
-            f"{context.table_name}.{context.column_name}"
+            f"Applying {context.strategy_name} to {context.table_name}.{context.column_name}"
         )
 
         # In a real implementation, would:
@@ -709,9 +703,7 @@ class StrategyValidator:
                         f"value: {repr(value)}"
                     )
             except Exception as e:
-                errors.append(
-                    f"Strategy {strategy.name_short()} validation error: {e}"
-                )
+                errors.append(f"Strategy {strategy.name_short()} validation error: {e}")
 
         return len(errors) == 0, errors
 
@@ -737,17 +729,9 @@ class StrategyValidator:
         # Check for reversibility requirements
         if hasattr(strategy, "is_reversible") and strategy.is_reversible:
             if strategy_name == "tokenization" and token_store is None:
-                errors.append(
-                    "Tokenization strategy requires token store to be configured"
-                )
+                errors.append("Tokenization strategy requires token store to be configured")
 
-            if (
-                hasattr(strategy, "requires_kms")
-                and strategy.requires_kms
-                and kms_client is None
-            ):
-                errors.append(
-                    f"{strategy_name} strategy requires KMS client to be configured"
-                )
+            if hasattr(strategy, "requires_kms") and strategy.requires_kms and kms_client is None:
+                errors.append(f"{strategy_name} strategy requires KMS client to be configured")
 
         return len(errors) == 0, errors

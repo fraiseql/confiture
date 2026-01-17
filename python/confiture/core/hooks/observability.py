@@ -1,4 +1,5 @@
 """Observability and tracing infrastructure for hooks."""
+
 from __future__ import annotations
 
 import logging
@@ -138,8 +139,7 @@ class HookExecutionTracer:
         """Record hook execution event."""
         self.execution_log.append(event)
         logger.info(
-            f"Hook {event.hook_id} in {event.phase}: {event.status.value} "
-            f"({event.duration_ms}ms)"
+            f"Hook {event.hook_id} in {event.phase}: {event.status.value} ({event.duration_ms}ms)"
         )
 
     def get_execution_log(

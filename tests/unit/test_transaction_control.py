@@ -363,7 +363,7 @@ class TestMixedModeWarning:
         migrations_dir.mkdir()
 
         # Transactional migration
-        (migrations_dir / "001_trans.py").write_text('''
+        (migrations_dir / "001_trans.py").write_text("""
 from confiture.models.migration import Migration
 
 class CreateTable(Migration):
@@ -373,10 +373,10 @@ class CreateTable(Migration):
 
     def up(self): pass
     def down(self): pass
-''')
+""")
 
         # Non-transactional migration
-        (migrations_dir / "002_non_trans.py").write_text('''
+        (migrations_dir / "002_non_trans.py").write_text("""
 from confiture.models.migration import Migration
 
 class CreateIndex(Migration):
@@ -386,7 +386,7 @@ class CreateIndex(Migration):
 
     def up(self): pass
     def down(self): pass
-''')
+""")
 
         mock_conn = MagicMock()
         migrator = Migrator(connection=mock_conn)
@@ -406,7 +406,7 @@ class CreateIndex(Migration):
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        (migrations_dir / "001_single.py").write_text('''
+        (migrations_dir / "001_single.py").write_text("""
 from confiture.models.migration import Migration
 
 class Single(Migration):
@@ -416,7 +416,7 @@ class Single(Migration):
 
     def up(self): pass
     def down(self): pass
-''')
+""")
 
         mock_conn = MagicMock()
         migrator = Migrator(connection=mock_conn)
@@ -436,7 +436,7 @@ class Single(Migration):
         migrations_dir.mkdir()
 
         for i in range(3):
-            (migrations_dir / f"00{i}_trans_{i}.py").write_text(f'''
+            (migrations_dir / f"00{i}_trans_{i}.py").write_text(f"""
 from confiture.models.migration import Migration
 
 class Trans{i}(Migration):
@@ -446,7 +446,7 @@ class Trans{i}(Migration):
 
     def up(self): pass
     def down(self): pass
-''')
+""")
 
         mock_conn = MagicMock()
         migrator = Migrator(connection=mock_conn)
@@ -466,7 +466,7 @@ class Trans{i}(Migration):
         migrations_dir.mkdir()
 
         for i in range(2):
-            (migrations_dir / f"00{i}_non_trans_{i}.py").write_text(f'''
+            (migrations_dir / f"00{i}_non_trans_{i}.py").write_text(f"""
 from confiture.models.migration import Migration
 
 class NonTrans{i}(Migration):
@@ -476,7 +476,7 @@ class NonTrans{i}(Migration):
 
     def up(self): pass
     def down(self): pass
-''')
+""")
 
         mock_conn = MagicMock()
         migrator = Migrator(connection=mock_conn)
@@ -513,9 +513,7 @@ class TestConcurrentIndexMigrationPattern:
             transactional = False  # Required for CONCURRENTLY
 
             def up(self):
-                self.execute(
-                    "CREATE INDEX CONCURRENTLY idx_search ON products(name)"
-                )
+                self.execute("CREATE INDEX CONCURRENTLY idx_search ON products(name)")
 
             def down(self):
                 self.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_search")

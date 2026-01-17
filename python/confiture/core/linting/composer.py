@@ -1,4 +1,5 @@
 """Rule library composition with explicit conflict handling."""
+
 from __future__ import annotations
 
 import logging
@@ -87,9 +88,7 @@ class RuleLibraryComposer:
             self.conflict_log.extend(conflicts)
 
             if on_conflict == ConflictResolution.ERROR:
-                raise RuleConflictError(
-                    f"Found {len(conflicts)} rule conflicts in {library.name}"
-                )
+                raise RuleConflictError(f"Found {len(conflicts)} rule conflicts in {library.name}")
             elif on_conflict == ConflictResolution.WARN:
                 for conflict in conflicts:
                     logger.warning(

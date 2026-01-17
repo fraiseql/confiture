@@ -112,9 +112,7 @@ class StrategyComposer(AnonymizationStrategy):
 
             except Exception as e:
                 if self.config.stop_on_error:
-                    raise Exception(
-                        f"Error in strategy '{strategy_name}': {e}"
-                    ) from e
+                    raise Exception(f"Error in strategy '{strategy_name}': {e}") from e
                 else:
                     # Skip failing strategy and continue
                     continue
@@ -156,9 +154,7 @@ class StrategyComposer(AnonymizationStrategy):
                     base_name = strategy_spec.split(":")[0]
 
                     # Get from registry with seed
-                    strategy = StrategyRegistry.get(
-                        base_name, {"seed": self.config.seed}
-                    )
+                    strategy = StrategyRegistry.get(base_name, {"seed": self.config.seed})
                     strategy_name = strategy_spec
                 else:
                     # Config dict or StrategyConfig object
@@ -167,9 +163,7 @@ class StrategyComposer(AnonymizationStrategy):
                 loaded.append((strategy, strategy_name))
 
             except Exception as e:
-                raise ValueError(
-                    f"Failed to load strategy '{strategy_spec}': {e}"
-                ) from e
+                raise ValueError(f"Failed to load strategy '{strategy_spec}': {e}") from e
 
         return loaded
 

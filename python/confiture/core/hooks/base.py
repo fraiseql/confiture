@@ -1,4 +1,5 @@
 """Base classes for hooks with priority and dependencies."""
+
 from __future__ import annotations
 
 import logging
@@ -191,7 +192,11 @@ class HookExecutor:
 
             # Execute the hook
             if hasattr(hook, "execute"):
-                result = await hook.execute(context) if hasattr(hook.execute, "__await__") else hook.execute(context)
+                result = (
+                    await hook.execute(context)
+                    if hasattr(hook.execute, "__await__")
+                    else hook.execute(context)
+                )
             else:
                 raise HookError(
                     message="Hook does not have execute method",

@@ -505,9 +505,7 @@ class DataSubjectRightsManager:
         else:
             raise ValueError(f"Unsupported format: {format}")
 
-    def _export_to_file(
-        self, request: DataSubjectRequest, data: dict[str, Any]
-    ) -> Path:
+    def _export_to_file(self, request: DataSubjectRequest, data: dict[str, Any]) -> Path:
         """Export data to file.
 
         Args:
@@ -526,15 +524,11 @@ class DataSubjectRightsManager:
         logger.info(f"Exported data to {filepath}")
         return filepath
 
-    def _export_json(
-        self, request: DataSubjectRequest, data: dict[str, Any]
-    ) -> Path:
+    def _export_json(self, request: DataSubjectRequest, data: dict[str, Any]) -> Path:
         """Export data as JSON."""
         return self._export_to_file(request, data)
 
-    def _export_csv(
-        self, request: DataSubjectRequest, data: dict[str, Any]
-    ) -> Path:
+    def _export_csv(self, request: DataSubjectRequest, data: dict[str, Any]) -> Path:
         """Export data as CSV."""
         # In a real implementation, would convert to CSV format
         return self._export_to_file(request, data)
@@ -599,7 +593,11 @@ class DataSubjectRightsManager:
                 WHERE status IN (%s, %s, %s)
                 ORDER BY deadline ASC
             """,
-                (RequestStatus.RECEIVED.value, RequestStatus.VERIFYING.value, RequestStatus.PROCESSING.value),
+                (
+                    RequestStatus.RECEIVED.value,
+                    RequestStatus.VERIFYING.value,
+                    RequestStatus.PROCESSING.value,
+                ),
             )
             rows = cursor.fetchall()
 

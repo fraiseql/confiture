@@ -90,8 +90,7 @@ class MigrationTracer:
 
         except ImportError:
             logger.warning(
-                "OpenTelemetry not installed. Install with: "
-                "pip install confiture[observability]"
+                "OpenTelemetry not installed. Install with: pip install confiture[observability]"
             )
             self.config.enabled = False
 

@@ -141,18 +141,14 @@ class TestAnomalyScoring:
 
     def test_low_severity_anomaly(self):
         """Test low severity anomaly."""
-        anomalies = [
-            DataAnomaly(name="test", severity=Severity.LOW, description="test")
-        ]
+        anomalies = [DataAnomaly(name="test", severity=Severity.LOW, description="test")]
         factor = RiskScoringFormula.calculate_anomaly_score(anomalies)
 
         assert factor.value < 0.2
 
     def test_critical_anomaly(self):
         """Test critical anomaly."""
-        anomalies = [
-            DataAnomaly(name="test", severity=Severity.CRITICAL, description="test")
-        ]
+        anomalies = [DataAnomaly(name="test", severity=Severity.CRITICAL, description="test")]
         factor = RiskScoringFormula.calculate_anomaly_score(anomalies)
 
         assert factor.value >= 1.0

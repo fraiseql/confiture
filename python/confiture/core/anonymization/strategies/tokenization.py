@@ -201,9 +201,7 @@ class TokenizationStrategy(AnonymizationStrategy):
             Exception: If token storage fails
         """
         if self.token_store is None:
-            raise ValueError(
-                "TokenizationStrategy requires token_store to be configured"
-            )
+            raise ValueError("TokenizationStrategy requires token_store to be configured")
 
         # Handle NULL
         if value is None:
@@ -268,14 +266,10 @@ class TokenizationStrategy(AnonymizationStrategy):
             Exception: If reversal fails
         """
         if self.token_store is None:
-            raise ValueError(
-                "TokenizationStrategy requires token_store to be configured"
-            )
+            raise ValueError("TokenizationStrategy requires token_store to be configured")
 
         if not self.config.allow_reversals:
-            raise PermissionError(
-                f"Reversals are not allowed for {self.name_short()} strategy"
-            )
+            raise PermissionError(f"Reversals are not allowed for {self.name_short()} strategy")
 
         # Request reversal from token store (handles RBAC)
         request = TokenReversalRequest(
@@ -332,13 +326,9 @@ class TokenizationStrategy(AnonymizationStrategy):
             value_str = str(value).strip()
             if not value_str:
                 errors.append(
-                    f"Column {table_name}.{column_name}: "
-                    f"Empty string cannot be tokenized"
+                    f"Column {table_name}.{column_name}: Empty string cannot be tokenized"
                 )
         except Exception as e:
-            errors.append(
-                f"Column {table_name}.{column_name}: "
-                f"Cannot convert to string: {e}"
-            )
+            errors.append(f"Column {table_name}.{column_name}: Cannot convert to string: {e}")
 
         return len(errors) == 0, errors

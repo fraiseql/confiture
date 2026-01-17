@@ -161,9 +161,7 @@ class SaltedHashingStrategy(AnonymizationStrategy):
         """
         allowed = {"sha256", "sha512", "sha1", "blake2b", "md5"}
         if self.config.algorithm not in allowed:
-            raise ValueError(
-                f"Algorithm must be one of {allowed}, got '{self.config.algorithm}'"
-            )
+            raise ValueError(f"Algorithm must be one of {allowed}, got '{self.config.algorithm}'")
 
     def anonymize(self, value: Any) -> Any:
         """Hash value using salt and HMAC.
@@ -310,10 +308,7 @@ class SaltedHashingStrategy(AnonymizationStrategy):
                     f"Empty string will hash to same value (consider masking instead)"
                 )
         except Exception as e:
-            errors.append(
-                f"Column {table_name}.{column_name}: "
-                f"Cannot convert to string: {e}"
-            )
+            errors.append(f"Column {table_name}.{column_name}: Cannot convert to string: {e}")
 
         return len(errors) == 0, errors
 

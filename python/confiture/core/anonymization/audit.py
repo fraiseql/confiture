@@ -309,7 +309,7 @@ class AuditLogger:
             for row in cursor.fetchall():
                 # Normalize timestamp to UTC and remove microseconds for consistent signing
                 ts = row[1]
-                if ts and hasattr(ts, 'astimezone'):
+                if ts and hasattr(ts, "astimezone"):
                     # Convert to UTC and truncate microseconds
                     ts = ts.astimezone(UTC).replace(microsecond=0)
                 entries.append(
@@ -324,8 +324,12 @@ class AuditLogger:
                         profile_version=row[7],
                         profile_hash=row[8],
                         tables_synced=list(row[9]),
-                        rows_anonymized=json.loads(row[10]) if isinstance(row[10], str) else row[10],
-                        strategies_applied=json.loads(row[11]) if isinstance(row[11], str) else row[11],
+                        rows_anonymized=json.loads(row[10])
+                        if isinstance(row[10], str)
+                        else row[10],
+                        strategies_applied=json.loads(row[11])
+                        if isinstance(row[11], str)
+                        else row[11],
                         verification_passed=row[12],
                         verification_report=row[13],
                         signature=row[14],

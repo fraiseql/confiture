@@ -1,4 +1,5 @@
 """Downtime prediction with confidence bounds."""
+
 from __future__ import annotations
 
 import logging
@@ -73,9 +74,7 @@ class DowntimePredictor:
 
     def __init__(self, historical_data: HistoricalMigrations | None = None):
         self.historical_data = historical_data
-        self.prediction_method = (
-            "historical" if historical_data else "heuristic"
-        )
+        self.prediction_method = "historical" if historical_data else "heuristic"
 
     async def predict_downtime(
         self,
@@ -108,11 +107,7 @@ class DowntimePredictor:
         actual_downtimes = [m.actual_downtime_ms for m in similar]
 
         mean = statistics.mean(actual_downtimes)
-        stdev = (
-            statistics.stdev(actual_downtimes)
-            if len(actual_downtimes) > 1
-            else 0
-        )
+        stdev = statistics.stdev(actual_downtimes) if len(actual_downtimes) > 1 else 0
 
         return DowntimeEstimate(
             estimated_downtime_ms=int(mean),

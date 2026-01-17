@@ -56,7 +56,7 @@ class PhoneMaskingStrategy(AnonymizationStrategy):
     """
 
     # Basic phone number regex (allows various formats)
-    PHONE_REGEX = re.compile(r'[\d\s\-\+\(\)]{10,}')
+    PHONE_REGEX = re.compile(r"[\d\s\-\+\(\)]{10,}")
 
     def __init__(self, config: PhoneMaskConfig | None = None):
         """Initialize phone masking strategy.
@@ -92,9 +92,7 @@ class PhoneMaskingStrategy(AnonymizationStrategy):
             return ""
 
         # Create deterministic hash from phone number
-        hash_value = hashlib.sha256(
-            f"{self._seed}:{value_str}".encode()
-        ).hexdigest()
+        hash_value = hashlib.sha256(f"{self._seed}:{value_str}".encode()).hexdigest()
 
         # Extract digits to generate phone number
         # Use hash to create a 4-digit phone number suffix

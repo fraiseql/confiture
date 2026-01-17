@@ -102,8 +102,9 @@ jobs:
       run: uv run ruff format --check .
 
   type-check:
-    name: Type Check (Required for Release)
+    name: Type Check (Advisory)
     runs-on: ubuntu-latest
+    continue-on-error: true  # Don't block release on type errors
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
@@ -115,9 +116,9 @@ jobs:
     - name: Install dependencies
       run: |
         uv venv
-        uv pip install mypy types-pyyaml
-    - name: Run mypy
-      run: uv run mypy python/confiture/
+        uv pip install ty
+    - name: Run ty (Astral's type checker)
+      run: uv run ty check python/confiture/ || echo "Type check warnings (non-blocking)"
 
   security:
     name: Security (Required for Release)

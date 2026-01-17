@@ -423,7 +423,9 @@ class Migrator:
 
             # Commit transaction
             self.connection.commit()
-            logger.info(f"Successfully rolled back migration {migration.version} ({migration.name})")
+            logger.info(
+                f"Successfully rolled back migration {migration.version} ({migration.name})"
+            )
 
         except Exception as e:
             self.connection.rollback()
@@ -453,7 +455,9 @@ class Migrator:
 
         try:
             # Execute down() method
-            logger.debug(f"Executing rollback (down) for migration {migration.version} (autocommit)")
+            logger.debug(
+                f"Executing rollback (down) for migration {migration.version} (autocommit)"
+            )
             migration.down()
 
             # Remove from tracking table

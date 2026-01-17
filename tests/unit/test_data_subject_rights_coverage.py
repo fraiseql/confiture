@@ -48,8 +48,14 @@ class TestRequestType:
 
     def test_all_request_types(self):
         """Test all request types are defined."""
-        types = [RequestType.ACCESS, RequestType.ERASURE, RequestType.RECTIFICATION,
-                RequestType.PORTABILITY, RequestType.RESTRICT, RequestType.OBJECT]
+        types = [
+            RequestType.ACCESS,
+            RequestType.ERASURE,
+            RequestType.RECTIFICATION,
+            RequestType.PORTABILITY,
+            RequestType.RESTRICT,
+            RequestType.OBJECT,
+        ]
         assert len(types) == 6
 
 
@@ -86,9 +92,15 @@ class TestRequestStatus:
 
     def test_all_statuses(self):
         """Test all statuses are defined."""
-        statuses = [RequestStatus.RECEIVED, RequestStatus.VERIFYING, RequestStatus.VERIFIED,
-                   RequestStatus.PROCESSING, RequestStatus.FULFILLED, RequestStatus.REJECTED,
-                   RequestStatus.PARTIAL]
+        statuses = [
+            RequestStatus.RECEIVED,
+            RequestStatus.VERIFYING,
+            RequestStatus.VERIFIED,
+            RequestStatus.PROCESSING,
+            RequestStatus.FULFILLED,
+            RequestStatus.REJECTED,
+            RequestStatus.PARTIAL,
+        ]
         assert len(statuses) == 7
 
 

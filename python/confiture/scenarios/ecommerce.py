@@ -77,18 +77,15 @@ class ECommerceScenario:
                 # Identifiers - preserve
                 "customer_id": "preserve",
                 "order_id": "preserve",
-
                 # PII - mask
                 "first_name": "name",
                 "last_name": "name",
                 "full_name": "name",
                 "customer_name": "name",
-
                 # Contact - redact
                 "email": "text_redaction",
                 "phone": "text_redaction",
                 "phone_number": "text_redaction",
-
                 # Address - preserve with masking
                 "address": "address",
                 "street": "address",
@@ -96,18 +93,15 @@ class ECommerceScenario:
                 "state": "preserve",
                 "zip": "preserve",
                 "postal_code": "preserve",
-
                 # Sensitive dates - mask month/year
                 "birth_date": "date",
                 "dob": "date",
                 "date_of_birth": "date",
-
                 # Payment - PCI-DSS compliant
                 "payment_method": "preserve",
                 "payment_type": "preserve",
                 "card_type": "preserve",
                 "card_number": "credit_card",
-
                 # Business data - preserve
                 "order_total": "preserve",
                 "order_amount": "preserve",
@@ -118,7 +112,6 @@ class ECommerceScenario:
                 "quantity": "preserve",
                 "product_id": "preserve",
                 "sku": "preserve",
-
                 # Dates - preserve with masking
                 "order_date": "date",
                 "purchase_date": "date",
@@ -126,7 +119,6 @@ class ECommerceScenario:
                 "updated_at": "date",
                 "shipped_date": "date",
                 "delivered_date": "date",
-
                 # Location data
                 "ip_address": "ip_address",
                 "country": "preserve",

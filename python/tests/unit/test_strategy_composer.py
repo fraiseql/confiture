@@ -43,6 +43,7 @@ class TestStrategyComposer:
 
     def test_composer_with_custom_strategies(self):
         """Test composer with custom function strategies."""
+
         def uppercase(value):
             return value.upper() if isinstance(value, str) else value
 
@@ -333,10 +334,7 @@ class TestStrategySequence:
     def test_sequence_add_many_with_other_options(self):
         """Test add_many works with other builder options."""
         composer = (
-            StrategySequence(seed=12345)
-            .add_many("preserve", "preserve")
-            .on_none(True)
-            .build()
+            StrategySequence(seed=12345).add_many("preserve", "preserve").on_none(True).build()
         )
         assert len(composer.config.strategies) == 2
         assert composer.config.stop_on_none is True

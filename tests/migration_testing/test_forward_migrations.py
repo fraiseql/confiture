@@ -368,7 +368,10 @@ def test_migration_with_special_characters_in_name(temp_project_dir):
     valid_file.write_text("-- Valid name with underscores")
 
     assert valid_file.exists()
-    assert valid_file.name.replace(".sql", "").replace("_", "").replace("0", "").isalnum() or "_" in valid_file.name
+    assert (
+        valid_file.name.replace(".sql", "").replace("_", "").replace("0", "").isalnum()
+        or "_" in valid_file.name
+    )
 
 
 def test_large_migration_file_handled(temp_project_dir):
@@ -590,15 +593,12 @@ def test_schema_execution_idempotent(test_db_connection, sample_confiture_schema
         users_content = sample_confiture_schema["users"].read_text()
 
         # Use "IF NOT EXISTS" pattern for idempotency on table and indices
-        idempotent_content = users_content.replace(
-            "CREATE TABLE users",
-            "CREATE TABLE IF NOT EXISTS users"
-        ).replace(
-            "CREATE INDEX idx_users_username",
-            "CREATE INDEX IF NOT EXISTS idx_users_username"
-        ).replace(
-            "CREATE INDEX idx_users_email",
-            "CREATE INDEX IF NOT EXISTS idx_users_email"
+        idempotent_content = (
+            users_content.replace("CREATE TABLE users", "CREATE TABLE IF NOT EXISTS users")
+            .replace(
+                "CREATE INDEX idx_users_username", "CREATE INDEX IF NOT EXISTS idx_users_username"
+            )
+            .replace("CREATE INDEX idx_users_email", "CREATE INDEX IF NOT EXISTS idx_users_email")
         )
 
         cur.execute(idempotent_content)
@@ -658,11 +658,11 @@ def test_schema_extension_idempotent(test_db_connection):
     """Test that extension creation is idempotent."""
     with test_db_connection.cursor() as cur:
         # Create extension
-        cur.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";")
+        cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
         test_db_connection.commit()
 
         # Create same extension again
-        cur.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";")
+        cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
         test_db_connection.commit()
 
 

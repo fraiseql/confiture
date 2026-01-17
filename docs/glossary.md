@@ -9,11 +9,11 @@
 ### Anonymization
 Replacing sensitive data with fictional or redacted values to protect privacy.
 
-**In Confiture**: Used during [Production Data Sync](guides/medium-3-production-sync.md) to safely copy production data to local development environments while masking PII (personally identifiable information).
+**In Confiture**: Used during [Production Data Sync](guides/03-production-sync.md) to safely copy production data to local development environments while masking PII (personally identifiable information).
 
 **Example**: Email "alice@example.com" → "alice@hashed.local" before sync
 
-**Related**: [Anonymization Strategy Framework](guides/anonymization-strategy-framework.md)
+**Related**: [Anonymization Guide](guides/anonymization.md)
 
 ---
 
@@ -33,7 +33,7 @@ ALTER TABLE users ADD COLUMN account_status VARCHAR;
 UPDATE users SET account_status = 'active' WHERE created_at < now() - interval '30 days';
 ```
 
-**Related**: [Medium 2: Incremental Migrations](guides/medium-2-incremental-migrations.md)
+**Related**: [Medium 2: Incremental Migrations](guides/02-incremental-migrations.md)
 
 ---
 
@@ -44,7 +44,7 @@ Saved progress point during long-running migrations that allows resumption if in
 
 **In Confiture**: When syncing large datasets, checkpoints save progress so you can resume without starting over.
 
-**Related**: [Production Data Sync](guides/medium-3-production-sync.md), `--checkpoint-file` flag
+**Related**: [Production Data Sync](guides/03-production-sync.md), `--checkpoint-file` flag
 
 ---
 
@@ -75,7 +75,7 @@ Data Definition Language - SQL commands that define database structure.
 
 **Contrast with**: [DML](#dml)
 
-**Related**: [Medium 1: Build from DDL](guides/medium-1-build-from-ddl.md), [Why Confiture?](../README.md#why-confiture)
+**Related**: [Medium 1: Build from DDL](guides/01-build-from-ddl.md), [Why Confiture?](../README.md#why-confiture)
 
 ---
 
@@ -92,7 +92,7 @@ confiture migrate up --dry-run              # Analyze migration
 confiture migrate up --dry-run-execute      # Test with rollback
 ```
 
-**Related**: [Dry-Run Guide](guides/cli-dry-run.md)
+**Related**: [Dry-Run Guide](guides/dry-run.md)
 
 ---
 
@@ -101,7 +101,7 @@ Data Manipulation Language - SQL commands that modify data.
 
 **Includes**: SELECT, INSERT, UPDATE, DELETE, etc.
 
-**In Confiture**: Used during [Production Data Sync](guides/medium-3-production-sync.md) and data backfilling operations.
+**In Confiture**: Used during [Production Data Sync](guides/03-production-sync.md) and data backfilling operations.
 
 **Contrast with**: [DDL](#ddl)
 
@@ -129,7 +129,7 @@ Named database configuration (local, test, staging, production, etc.)
 ### FDW
 Foreign Data Wrapper - PostgreSQL feature allowing one database to read from another.
 
-**In Confiture**: Used in [Medium 4: Schema-to-Schema](guides/medium-4-schema-to-schema.md) for zero-downtime migrations.
+**In Confiture**: Used in [Medium 4: Schema-to-Schema](guides/04-schema-to-schema.md) for zero-downtime migrations.
 
 **How it works**:
 1. Target database connects to source via FDW
@@ -137,7 +137,7 @@ Foreign Data Wrapper - PostgreSQL feature allowing one database to read from ano
 3. Meanwhile, source continues accepting writes
 4. Incremental sync catches up before cutover
 
-**Related**: [Zero-Downtime Migrations](guides/medium-4-schema-to-schema.md)
+**Related**: [Zero-Downtime Migrations](guides/04-schema-to-schema.md)
 
 ---
 
@@ -163,7 +163,7 @@ class BackfillHook(MigrationHook):
             await context.connection.execute(...)
 ```
 
-**Related**: [Migration Hooks](hooks.md), [Advanced Patterns](guides/advanced-patterns.md)
+**Related**: [Migration Hooks](guides/hooks.md), [Advanced Patterns](guides/advanced-patterns.md)
 
 ---
 
@@ -192,7 +192,7 @@ Schema change from one state to another.
 - **Scripts** - Custom SQL or Python in hooks
 - **Data sync** - Copying and transforming data
 
-**Related**: [Incremental Migrations](guides/medium-2-incremental-migrations.md)
+**Related**: [Incremental Migrations](guides/02-incremental-migrations.md)
 
 ---
 
@@ -203,7 +203,7 @@ Personally Identifiable Information - data that identifies individuals.
 
 **Examples**: Email, phone number, SSN, credit card, name, address
 
-**In Confiture**: Masked during [Production Data Sync](guides/medium-3-production-sync.md) using [anonymization strategies](guides/anonymization-strategy-framework.md)
+**In Confiture**: Masked during [Production Data Sync](guides/03-production-sync.md) using [anonymization strategies](guides/anonymization.md)
 
 **Related**: [Anonymization](#anonymization)
 
@@ -220,7 +220,7 @@ Database structure definition - tables, columns, indexes, views, functions, etc.
 
 **Building schema**: Execute `db/schema/` files to create database schema
 
-**Related**: [DDL](#ddl), [Medium 1: Build from DDL](guides/medium-1-build-from-ddl.md)
+**Related**: [DDL](#ddl), [Medium 1: Build from DDL](guides/01-build-from-ddl.md)
 
 ---
 
@@ -247,7 +247,7 @@ Atomic database operation - all changes succeed or all rollback.
 
 **Dry-run**: Uses transactions to test without persisting changes
 
-**Related**: [Dry-Run Guide](guides/cli-dry-run.md)
+**Related**: [Dry-Run Guide](guides/dry-run.md)
 
 ---
 
@@ -274,11 +274,11 @@ Schema change that doesn't interrupt database access or application traffic.
 
 **Confiture approach**: Use FDW to copy data while source remains live, then quickly switch
 
-**In Confiture**: [Medium 4: Schema-to-Schema](guides/medium-4-schema-to-schema.md)
+**In Confiture**: [Medium 4: Schema-to-Schema](guides/04-schema-to-schema.md)
 
 **Downtime**: 0-5 seconds (cutover only)
 
-**Related**: [Zero-Downtime Migrations](guides/medium-4-schema-to-schema.md)
+**Related**: [Zero-Downtime Migrations](guides/04-schema-to-schema.md)
 
 ---
 
@@ -290,4 +290,4 @@ Schema change that doesn't interrupt database access or application traffic.
 
 ---
 
-*Last updated: December 27, 2025*
+*Last updated: January 17, 2026*

@@ -1,9 +1,11 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.5.0
+**Version**: 0.3.4
 **Last Updated**: January 2026
-**Current Status**: Feature Complete (Beta)
+**Current Status**: Beta (Not Yet Production-Tested)
+
+> **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
 
 ---
 
@@ -602,44 +604,31 @@ Closes #123
 
 ## 🎯 Current Status
 
-### ✅ Feature Complete (v0.5.0)
+### Beta (v0.3.4)
 
-**Core Features**:
-- ✅ Schema builder (Medium 1) - Build from DDL in <1s
+> **⚠️ Not Production-Tested**: All features below are implemented and have passing tests, but have never been used in a real production environment.
+
+**Implemented Features**:
+- ✅ Schema builder (Medium 1) - Build from DDL
 - ✅ Migration system (Medium 2) - Incremental migrations with dry-run
 - ✅ Production sync (Medium 3) - Copy data with PII anonymization
 - ✅ Zero-downtime migrations (Medium 4) - Schema-to-schema via FDW
 - ✅ Schema diff detection
 - ✅ CLI with rich terminal output
+- ✅ Migration hooks
+- ✅ Schema linting
+- ✅ Anonymization strategies
 
-**Enterprise Features**:
-- ✅ Distributed locking with advisory locks
-- ✅ Checksum verification for migration integrity
-- ✅ Transaction boundary control
-- ✅ Connection pooling with health checks
-- ✅ Schema validation and drift detection
-- ✅ Built-in observability (metrics, tracing)
-- ✅ Rollback safety with auto-generation
-
-**Cloud Native**:
-- ✅ Kubernetes Helm charts
-- ✅ Health endpoints for probes
-- ✅ Graceful shutdown handling
-- ✅ CI/CD templates (GitHub Actions, GitLab, Jenkins, Argo CD)
-
-**Advanced**:
-- ✅ Migration hooks with DAG execution
-- ✅ Custom anonymization strategies
-- ✅ Database schema linting (HIPAA, SOX, GDPR, PCI-DSS)
-- ✅ Risk assessment with downtime prediction
-- ✅ Blue-green migration orchestration
-- ✅ Large table patterns (batched operations)
-
-**Quality Metrics**:
-- **Test Coverage**: 3,200+ tests passing
+**Test Metrics**:
+- **Tests**: 3,200+ passing
 - **Python Support**: 3.11, 3.12, 3.13
-- **Documentation**: Comprehensive guides and API references
-- **Rust Extension**: Optional 10-50x performance boost
+- **Documentation**: Comprehensive
+
+**Not Validated**:
+- ❌ Production usage
+- ❌ Real-world performance claims
+- ❌ Edge case handling under load
+- ❌ Failure recovery scenarios
 
 ---
 
@@ -701,16 +690,19 @@ except psycopg.OperationalError as e:
 
 ---
 
-## 📊 Success Metrics
+## 📊 Implementation Metrics
 
 - ✅ **Test Coverage**: 3,200+ tests passing
-- ✅ **Build Speed**: <1 second for fresh database builds
-- ✅ **CLI Commands**: 8 working (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`)
+- ✅ **CLI Commands**: 8 implemented (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`)
 - ✅ **Documentation**: Comprehensive guides + API references
-- ✅ **Performance**: 10-50x faster with Rust extension
-- ✅ **Examples**: 5 production-ready scenarios
-- ✅ **CI/CD**: Multi-platform wheel building, quality gates, automated testing
-- ✅ **Python Support**: 3.11, 3.12, 3.13 tested and verified
+- ✅ **Examples**: 5 example scenarios
+- ✅ **CI/CD**: Multi-platform wheel building, quality gates
+- ✅ **Python Support**: 3.11, 3.12, 3.13 tested
+
+**Not Yet Measured in Production**:
+- ❓ Actual build speed under real conditions
+- ❓ Rust extension performance gains
+- ❓ Reliability over time
 
 ---
 
@@ -745,7 +737,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: January 2026
-**Version**: 0.5.0 Feature Complete
+**Version**: 0.3.4 (Not Production-Tested)
 
 ---
 

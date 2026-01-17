@@ -145,9 +145,7 @@ class TestDryRunMode:
         mock_conn = Mock()
         mock_conn.autocommit = False
         mock_transaction = MagicMock()
-        mock_conn.transaction.return_value.__enter__ = Mock(
-            return_value=mock_transaction
-        )
+        mock_conn.transaction.return_value.__enter__ = Mock(return_value=mock_transaction)
         mock_conn.transaction.return_value.__exit__ = Mock(return_value=None)
 
         mock_migration = Mock()

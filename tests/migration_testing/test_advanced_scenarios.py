@@ -9,7 +9,6 @@ Tests verify complex real-world migration patterns:
 """
 
 
-
 def test_multi_table_migration_with_dependencies(test_db_connection):
     """Test creating multiple dependent tables."""
     with test_db_connection.cursor() as cur:
@@ -54,7 +53,7 @@ def test_multi_table_migration_with_dependencies(test_db_connection):
         test_db_connection.commit()
 
         # Verify all tables exist
-        for table in ['adv_users', 'adv_posts', 'adv_comments']:
+        for table in ["adv_users", "adv_posts", "adv_comments"]:
             cur.execute("SELECT to_regclass(%s)", (table,))
             assert cur.fetchone()[0] is not None
 
@@ -152,8 +151,8 @@ def test_data_transformation_migration(test_db_connection):
         cur.execute("SELECT first_name, last_name FROM adv_transform WHERE first_name = 'John'")
         result = cur.fetchone()
         assert result is not None
-        assert result[0] == 'John'
-        assert result[1] == 'Doe'
+        assert result[0] == "John"
+        assert result[1] == "Doe"
 
 
 def test_denormalization_migration(test_db_connection):
@@ -188,10 +187,13 @@ def test_denormalization_migration(test_db_connection):
         """)
         user_id = cur.fetchone()[0]
 
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO adv_profiles (id, user_id, bio, avatar_url, website) VALUES
             (gen_random_uuid(), %s, 'Software Engineer', 'http://avatar.jpg', 'example.com')
-        """, (user_id,))
+        """,
+            (user_id,),
+        )
         test_db_connection.commit()
 
         # Denormalization: Add profile fields to users
@@ -213,7 +215,7 @@ def test_denormalization_migration(test_db_connection):
         cur.execute("SELECT bio FROM adv_denorm_users WHERE name = 'Alice'")
         result = cur.fetchone()
         assert result is not None
-        assert result[0] == 'Software Engineer'
+        assert result[0] == "Software Engineer"
 
 
 def test_versioned_schema_migration(test_db_connection):
@@ -304,7 +306,9 @@ def test_indexing_strategy_migration(test_db_connection):
         cur.execute("CREATE INDEX idx_status ON adv_indexed(status)")
         cur.execute("CREATE INDEX idx_created_at ON adv_indexed(created_at DESC)")
         cur.execute("CREATE INDEX idx_composite ON adv_indexed(user_id, status, created_at DESC)")
-        cur.execute("CREATE INDEX idx_partial ON adv_indexed(user_id, amount) WHERE status = 'active'")
+        cur.execute(
+            "CREATE INDEX idx_partial ON adv_indexed(user_id, amount) WHERE status = 'active'"
+        )
 
         test_db_connection.commit()
 
@@ -366,7 +370,9 @@ def test_trigger_and_function_migration(test_db_connection):
 
         # Test trigger
         data_id = None
-        cur.execute("INSERT INTO adv_data (id, name) VALUES (gen_random_uuid(), 'Initial') RETURNING id")
+        cur.execute(
+            "INSERT INTO adv_data (id, name) VALUES (gen_random_uuid(), 'Initial') RETURNING id"
+        )
         data_id = cur.fetchone()[0]
         test_db_connection.commit()
 
@@ -430,8 +436,8 @@ def test_schema_extension_migration(test_db_connection):
     """Test adding schema extensions and custom types."""
     with test_db_connection.cursor() as cur:
         # Enable extensions
-        cur.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
-        cur.execute("CREATE EXTENSION IF NOT EXISTS \"pg_trgm\"")
+        cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+        cur.execute('CREATE EXTENSION IF NOT EXISTS "pg_trgm"')
         test_db_connection.commit()
 
         # Create custom type

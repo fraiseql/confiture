@@ -375,9 +375,7 @@ class BatchedMigration:
                 if self.config.checkpoint_callback:
                     self.config.checkpoint_callback(processed)
 
-                logger.info(
-                    f"Delete batch {batch_num}: {progress.percent_complete:.1f}% complete"
-                )
+                logger.info(f"Delete batch {batch_num}: {progress.percent_complete:.1f}% complete")
 
                 if self.config.sleep_between_batches > 0:
                     time.sleep(self.config.sleep_between_batches)

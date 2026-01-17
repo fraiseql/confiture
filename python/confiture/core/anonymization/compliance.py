@@ -120,9 +120,7 @@ class ComplianceReport:
     regulations: list[Regulation] = field(default_factory=list)
     """Regulations included in report."""
 
-    requirements: dict[Regulation, list[ComplianceRequirement]] = field(
-        default_factory=dict
-    )
+    requirements: dict[Regulation, list[ComplianceRequirement]] = field(default_factory=dict)
     """Requirements by regulation."""
 
     recommendations: list[str] = field(default_factory=list)
@@ -583,8 +581,7 @@ class CrossRegulationComplianceMatrix:
                 reqs = requirements.get(regulation, [])
                 # Check if any requirement matches theme
                 has_theme = any(
-                    any(kw.lower() in req.description.lower() for kw in keywords)
-                    for req in reqs
+                    any(kw.lower() in req.description.lower() for kw in keywords) for req in reqs
                 )
                 matrix[theme][regulation.value] = has_theme
 

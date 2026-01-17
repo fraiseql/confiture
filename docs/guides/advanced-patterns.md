@@ -632,10 +632,10 @@ async def checkpointed_hook(context):
 
 ## 🔗 Related Guides
 
-- **[Migration Hooks](../hooks.md)** - Full hook API reference
-- **[Production Data Sync](./medium-3-production-sync.md)** - Sync strategies
-- **[Anonymization Strategy Framework](./anonymization-strategy-framework.md)** - Built-in strategies
-- **[Zero-Downtime Migrations](./medium-4-schema-to-schema.md)** - FDW strategy
+- **[Migration Hooks](./hooks.md)** - Full hook API reference
+- **[Production Data Sync](./03-production-sync.md)** - Sync strategies
+- **[Anonymization Guide](./anonymization.md)** - Built-in strategies
+- **[Zero-Downtime Migrations](./04-schema-to-schema.md)** - FDW strategy
 
 ---
 
@@ -649,4 +649,4 @@ async def checkpointed_hook(context):
 ---
 
 *Last updated: December 27, 2025*
-*Questions? See [Troubleshooting](troubleshooting.md) or [Getting Started](../getting-started.md)*
+*Questions? See [Troubleshooting](../troubleshooting.md) or [Getting Started](../getting-started.md)*

@@ -486,4 +486,4 @@ class TestGovernanceIntegration:
 
         for i, phase in enumerate(valid_sequence):
             if i > 0:
-                assert phase.value > valid_sequence[i-1].value
+                assert phase.value > valid_sequence[i - 1].value

@@ -152,9 +152,7 @@ class BlueGreenOrchestrator:
         """
         self._health_checks.append((name, check))
 
-    def on_phase_change(
-        self, callback: Callable[[MigrationPhase, MigrationPhase], None]
-    ) -> None:
+    def on_phase_change(self, callback: Callable[[MigrationPhase, MigrationPhase], None]) -> None:
         """Register callback for phase changes.
 
         Args:
@@ -231,9 +229,7 @@ class BlueGreenOrchestrator:
     def _create_target_schema(self) -> None:
         """Create target schema for new version."""
         with self.connection.cursor() as cur:
-            cur.execute(
-                f"CREATE SCHEMA IF NOT EXISTS {self.config.target_schema}"
-            )
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {self.config.target_schema}")
         self.connection.commit()
         self._set_phase(MigrationPhase.SCHEMA_CREATED)
         logger.info(f"Created schema: {self.config.target_schema}")
@@ -360,9 +356,7 @@ class BlueGreenOrchestrator:
                 )
                 time.sleep(self.config.health_check_interval)
 
-        self.state.metadata["health_check_results"] = [
-            r.__dict__ for r in results
-        ]
+        self.state.metadata["health_check_results"] = [r.__dict__ for r in results]
         return results
 
     def _switch_traffic(self) -> None:
@@ -370,9 +364,7 @@ class BlueGreenOrchestrator:
         self._set_phase(MigrationPhase.TRAFFIC_SWITCHING)
 
         if self.config.traffic_switch_delay > 0:
-            logger.info(
-                f"Waiting {self.config.traffic_switch_delay}s before traffic switch..."
-            )
+            logger.info(f"Waiting {self.config.traffic_switch_delay}s before traffic switch...")
             time.sleep(self.config.traffic_switch_delay)
 
         backup_schema = f"{self.config.source_schema}_backup_{int(time.time())}"
@@ -435,9 +427,7 @@ class BlueGreenOrchestrator:
         """Rollback by dropping target schema."""
         try:
             with self.connection.cursor() as cur:
-                cur.execute(
-                    f"DROP SCHEMA IF EXISTS {self.config.target_schema} CASCADE"
-                )
+                cur.execute(f"DROP SCHEMA IF EXISTS {self.config.target_schema} CASCADE")
             self.connection.commit()
             self._set_phase(MigrationPhase.ROLLED_BACK)
             logger.info(f"Rolled back: dropped {self.config.target_schema}")
@@ -549,16 +539,12 @@ class TrafficController:
         # Set database connection to read-only transaction
         if enabled:
             with connection.cursor() as cur:
-                cur.execute(
-                    "SET default_transaction_read_only = ON"
-                )
+                cur.execute("SET default_transaction_read_only = ON")
             connection.commit()
             logger.info("Database connection set to read-only")
         else:
             with connection.cursor() as cur:
-                cur.execute(
-                    "SET default_transaction_read_only = OFF"
-                )
+                cur.execute("SET default_transaction_read_only = OFF")
             connection.commit()
             logger.info("Database connection set to read-write")
 
@@ -644,9 +630,9 @@ class TrafficController:
 
             # Filter out excluded applications
             active = [
-                c for c in active
-                if c.get("application_name") not in exclude_apps
-                and c.get("state") != "idle"
+                c
+                for c in active
+                if c.get("application_name") not in exclude_apps and c.get("state") != "idle"
             ]
 
             if not active:

@@ -364,7 +364,7 @@ z_old_backup.sql        # Fourth (alphabetical)
 
 - **[Organizing SQL Files](../organizing-sql-files.md)** - Complete file organization guide
 - **[Configuration Reference](../reference/configuration.md)** - Build configuration options
-- **[Migration Strategies](../guides/migration-strategies.md)** - When to use different approaches
+- **[Migration Decision Tree](../guides/migration-decision-tree.md)** - When to use different approaches
 
 ---
 

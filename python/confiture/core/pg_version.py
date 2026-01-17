@@ -322,8 +322,7 @@ class VersionAwareSQL:
         """
         # PG 11+ supports instant add column with default
         return (
-            f"ALTER TABLE {table} "
-            f"ADD COLUMN IF NOT EXISTS {column} {column_type} DEFAULT {default}"
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {column_type} DEFAULT {default}"
         )
 
     def unique_nulls_not_distinct(
@@ -340,9 +339,7 @@ class VersionAwareSQL:
             SQL statement or None if not supported
         """
         if not self.version.supports(PGFeature.UNIQUE_NULLS_NOT_DISTINCT):
-            logger.warning(
-                f"NULLS NOT DISTINCT not available in PG {self.version.major}"
-            )
+            logger.warning(f"NULLS NOT DISTINCT not available in PG {self.version.major}")
             return None
 
         return (
@@ -350,9 +347,7 @@ class VersionAwareSQL:
             f"UNIQUE NULLS NOT DISTINCT ({column})"
         )
 
-    def detach_partition_concurrently(
-        self, parent: str, partition: str
-    ) -> str:
+    def detach_partition_concurrently(self, parent: str, partition: str) -> str:
         """Generate DETACH PARTITION CONCURRENTLY (PG 14+).
 
         Args:

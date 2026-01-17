@@ -193,13 +193,7 @@ class TestPreserveEdgeCases:
         config = PreserveConfig(seed=12345)
         strategy = PreserveStrategy(config)
 
-        nested = {
-            "level1": {
-                "level2": {
-                    "level3": [1, 2, 3]
-                }
-            }
-        }
+        nested = {"level1": {"level2": {"level3": [1, 2, 3]}}}
 
         result = strategy.anonymize(nested)
         assert result == nested

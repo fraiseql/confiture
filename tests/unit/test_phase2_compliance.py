@@ -10,7 +10,6 @@ Test Coverage:
 - Regulation-specific requirements
 """
 
-
 import pytest
 
 # These tests are designed to work with the compliance module structure
@@ -24,6 +23,7 @@ class TestComplianceModuleStructure:
         """Verify compliance module can be imported."""
         try:
             from confiture.core.anonymization import compliance
+
             assert compliance is not None
         except ImportError:
             pytest.skip("Compliance module not yet imported")
@@ -32,6 +32,7 @@ class TestComplianceModuleStructure:
         """Verify breach notification module can be imported."""
         try:
             from confiture.core.anonymization import breach_notification
+
             assert breach_notification is not None
         except ImportError:
             pytest.skip("Breach notification module not yet imported")
@@ -40,6 +41,7 @@ class TestComplianceModuleStructure:
         """Verify data subject rights module can be imported."""
         try:
             from confiture.core.anonymization import data_subject_rights
+
             assert data_subject_rights is not None
         except ImportError:
             pytest.skip("Data subject rights module not yet imported")
@@ -51,13 +53,13 @@ class TestRegulationCoverage:
     def test_seven_regulations_defined(self):
         """Verify that 7 major regulations are covered."""
         regulations = [
-            "GDPR",       # EU
-            "CCPA",       # USA (California)
-            "PIPEDA",     # Canada
-            "LGPD",       # Brazil
-            "PIPL",       # China
+            "GDPR",  # EU
+            "CCPA",  # USA (California)
+            "PIPEDA",  # Canada
+            "LGPD",  # Brazil
+            "PIPL",  # China
             "PRIVACY_ACT",  # Australia
-            "POPIA",      # South Africa
+            "POPIA",  # South Africa
         ]
         assert len(regulations) == 7
 
@@ -264,10 +266,10 @@ class TestBreachNotification:
     def test_breach_severity_levels(self):
         """Test breach severity classification."""
         severity_levels = [
-            "LOW",      # No real risk (e.g., anonymized data)
-            "MEDIUM",   # Moderate risk
-            "HIGH",     # Significant risk to individuals
-            "CRITICAL", # Widespread impact, regulatory action likely
+            "LOW",  # No real risk (e.g., anonymized data)
+            "MEDIUM",  # Moderate risk
+            "HIGH",  # Significant risk to individuals
+            "CRITICAL",  # Widespread impact, regulatory action likely
         ]
         assert len(severity_levels) == 4
 

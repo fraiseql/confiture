@@ -314,8 +314,8 @@ class SchemaDriftDetector:
                         actual=f"nullable={act_nullable}",
                         message=f"Column '{table_name}.{col}' nullable mismatch: "
                         f"expected {exp_nullable}, got {act_nullable}",
-                        )
                     )
+                )
 
     def _types_compatible(self, type1: str, type2: str) -> bool:
         """Check if two PostgreSQL types are compatible/equivalent."""

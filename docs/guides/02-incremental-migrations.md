@@ -1,0 +1,169 @@
+# Incremental Migrations
+
+[← Back to Guides](../index.md) · [Build from DDL](01-build-from-ddl.md) · [Production Sync →](03-production-sync.md)
+
+**Apply schema changes to existing databases using ALTER statements**
+
+---
+
+## Overview
+
+Incremental migrations apply targeted changes (ALTER TABLE, CREATE INDEX) to existing databases while preserving data.
+
+> **"Track changes over time, modify schema incrementally"**
+
+Each migration has two methods:
+- `up()` - Apply the change
+- `down()` - Reverse the change
+
+### When to Use
+
+| Use Case | Incremental Migrations |
+|----------|----------------------|
+| Add/drop columns | Perfect |
+| Create indexes | Perfect |
+| Fresh databases | Use Medium 1 |
+| Zero-downtime required | Use Medium 4 |
+| Large table refactoring | Use Medium 4 |
+
+---
+
+## Quick Start
+
+```bash
+# Apply all pending migrations
+confiture migrate up
+
+# Rollback last migration
+confiture migrate down
+
+# Check status
+confiture migrate status
+
+# Dry run
+confiture migrate up --dry-run
+```
+
+---
+
+## Creating Migrations
+
+```python
+# db/migrations/002_add_user_bio.py
+"""Add bio column to users table"""
+
+from confiture.models.migration import Migration
+
+class AddUserBio(Migration):
+    version = "002"
+    name = "add_user_bio"
+
+    def up(self) -> None:
+        self.execute("""
+            ALTER TABLE users ADD COLUMN bio TEXT
+        """)
+
+    def down(self) -> None:
+        self.execute("""
+            ALTER TABLE users DROP COLUMN bio
+        """)
+```
+
+---
+
+## Common Operations
+
+### Add Column (Fast)
+
+```python
+def up(self):
+    # Nullable column - instant
+    self.execute("ALTER TABLE users ADD COLUMN bio TEXT")
+
+    # With default (PostgreSQL 11+) - instant
+    self.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
+```
+
+### Create Index (Use CONCURRENTLY)
+
+```python
+def up(self):
+    # No locks with CONCURRENTLY
+    self.execute("CREATE INDEX CONCURRENTLY idx_users_email ON users(email)")
+
+def down(self):
+    self.execute("DROP INDEX CONCURRENTLY idx_users_email")
+```
+
+### Two-Step NOT NULL
+
+For adding NOT NULL columns to tables with existing data:
+
+**Migration 1: Add nullable column**
+```python
+def up(self):
+    self.execute("ALTER TABLE users ADD COLUMN email TEXT")
+```
+
+**Migration 2: Backfill and add constraint**
+```python
+def up(self):
+    self.execute("UPDATE users SET email = username || '@example.com' WHERE email IS NULL")
+    self.execute("ALTER TABLE users ALTER COLUMN email SET NOT NULL")
+```
+
+---
+
+## Migration Tracking
+
+Confiture tracks applied migrations in `confiture_migrations`:
+
+```sql
+SELECT version, name, applied_at FROM confiture_migrations ORDER BY applied_at;
+```
+
+---
+
+## Best Practices
+
+1. **Small, focused migrations** - One change per file
+2. **Test rollback** - Always verify `down()` works
+3. **Use transactions** - Default behavior, atomic changes
+4. **Document complex changes** - Add context in docstrings
+5. **Update schema files** - Keep `db/schema/` in sync with migrations
+6. **Use CONCURRENTLY** - For indexes on production tables
+7. **Version numbering** - Zero-padded, sequential (001, 002, 003)
+
+---
+
+## Performance Guide
+
+| Operation | 1M rows | 10M rows |
+|-----------|---------|----------|
+| ADD COLUMN (nullable) | 0.1s | 0.5s |
+| DROP COLUMN | 0.1s | 0.5s |
+| CREATE INDEX | 5s | 30s |
+| CREATE INDEX CONCURRENTLY | 10s | 1min |
+| ALTER TYPE (cast) | 30s | 5min |
+
+---
+
+## Common Issues
+
+### Forgetting down() method
+Always implement rollback logic.
+
+### Mixing transactional operations
+`CREATE INDEX CONCURRENTLY` can't run in transactions. Use separate migrations.
+
+### Schema drift
+Always update both `db/schema/` files and migrations together.
+
+---
+
+## See Also
+
+- [Build from DDL](./01-build-from-ddl.md) - For fresh databases
+- [Schema-to-Schema](./04-schema-to-schema.md) - For zero-downtime
+- [Dry-Run Guide](./dry-run.md) - Test migrations safely
+- [CLI Reference](../reference/cli.md) - All migrate commands

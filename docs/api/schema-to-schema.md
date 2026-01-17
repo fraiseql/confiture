@@ -1,6 +1,10 @@
-# Schema-to-Schema Migrator API
+# SchemaToSchemaMigrator API
 
-The `SchemaToSchemaMigrator` class implements Medium 4: Zero-downtime schema-to-schema migrations using PostgreSQL Foreign Data Wrapper (FDW).
+[← Back to API Reference](index.md)
+
+The `SchemaToSchemaMigrator` class implements **Medium 4: Zero-downtime schema-to-schema migrations** using PostgreSQL Foreign Data Wrapper (FDW).
+
+**When to use**: Major schema refactoring in production with zero downtime.
 
 ## Overview
 
@@ -142,6 +146,6 @@ else:
 
 ## See Also
 
-- [Medium 4: Schema-to-Schema Guide](../guides/medium-4-schema-to-schema.md)
+- [Medium 4: Schema-to-Schema Guide](../guides/04-schema-to-schema.md)
 - [Zero-Downtime Migration Example](../../examples/03-zero-downtime-migration/)
-- [CLI Reference: schema-to-schema command](../reference/cli.md#schema-to-schema)
+- [CLI Reference](../reference/cli.md)

@@ -40,7 +40,13 @@ from confiture.core.hooks.observability import (
 class SimpleTestHook(Hook):
     """Simple test hook implementation."""
 
-    def __init__(self, hook_id: str = "test_hook", delay_ms: int = 0, should_fail: bool = False, priority: int = 10):
+    def __init__(
+        self,
+        hook_id: str = "test_hook",
+        delay_ms: int = 0,
+        should_fail: bool = False,
+        priority: int = 10,
+    ):
         self.id = hook_id
         self.name = hook_id
         self.priority = priority
@@ -55,7 +61,9 @@ class SimpleTestHook(Hook):
             await asyncio.sleep(self.delay_ms / 1000)
         if self.should_fail:
             raise RuntimeError(f"Hook {self.id} intentionally failed")
-        return HookResult(success=True, rows_affected=0, stats={"executed": True, "hook_id": self.id})
+        return HookResult(
+            success=True, rows_affected=0, stats={"executed": True, "hook_id": self.id}
+        )
 
 
 class TestHookRegistration:
@@ -234,6 +242,7 @@ class TestCircuitBreaker:
         # Record success in HALF_OPEN state (after timeout)
         # Simulate timeout by setting last_failure_time to past
         from datetime import UTC, timedelta
+
         breaker.last_failure_time = datetime.now(UTC) - timedelta(seconds=1)
         assert not breaker.is_open  # Should be HALF_OPEN
 

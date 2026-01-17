@@ -462,7 +462,7 @@ def check_permissions(context: HookContext) -> None:
 
 - [Advanced Patterns](./advanced-patterns.md) - Collaborative workflows
 - [Migration Decision Tree](./migration-decision-tree.md) - Choose strategy
-- [Troubleshooting](./troubleshooting.md) - Common issues
+- [Troubleshooting](../troubleshooting.md) - Common issues
 - [CLI Reference](../reference/cli.md) - All wizard flags
 
 ---
@@ -480,7 +480,7 @@ def check_permissions(context: HookContext) -> None:
 
 **Got questions?**
 - **[FAQ](../glossary.md)** - Glossary and definitions
-- **[Troubleshooting](./troubleshooting.md)** - Common issues
+- **[Troubleshooting](../troubleshooting.md)** - Common issues
 
 ---
 

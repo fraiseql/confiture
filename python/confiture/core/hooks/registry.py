@@ -1,4 +1,5 @@
 """Hook registry and execution engine."""
+
 from __future__ import annotations
 
 import asyncio
@@ -42,9 +43,7 @@ def _extract_phase_value(phase: Any) -> str:
 class HookRegistry(Generic[T]):
     """Manage hook registration and execution."""
 
-    def __init__(
-        self, execution_config: dict[Any, HookPhaseConfig] | None = None
-    ):
+    def __init__(self, execution_config: dict[Any, HookPhaseConfig] | None = None):
         self.hooks: dict[str, list[Hook]] = {}  # phase/event/alert -> hooks
         self.execution_config = execution_config or {}
         self.circuit_breakers: dict[str, CircuitBreaker] = {}
@@ -73,9 +72,7 @@ class HookRegistry(Generic[T]):
     ) -> HookExecutionResult:
         """Trigger hooks for a phase/event/alert."""
         phase_value = _extract_phase_value(phase)
-        config = self.execution_config.get(
-            phase, HookPhaseConfig(phase=phase)
-        )
+        config = self.execution_config.get(phase, HookPhaseConfig(phase=phase))
         hooks = self.hooks.get(phase_value, [])
 
         if not hooks:
@@ -102,9 +99,7 @@ class HookRegistry(Generic[T]):
 
         for hook in sorted(hooks, key=lambda h: h.priority):
             try:
-                result = await self._execute_hook_with_timeout(
-                    hook, context, config
-                )
+                result = await self._execute_hook_with_timeout(hook, context, config)
                 results.append(result)
 
                 # Check if we should fail fast
@@ -112,9 +107,7 @@ class HookRegistry(Generic[T]):
                     result.status == HookExecutionStatus.FAILED
                     and config.error_strategy == HookErrorStrategy.FAIL_FAST
                 ):
-                    raise HookExecutionError(
-                        f"Hook {hook.name} failed: {result.error}"
-                    )
+                    raise HookExecutionError(f"Hook {hook.name} failed: {result.error}")
 
             except Exception as e:
                 if config.error_strategy == HookErrorStrategy.FAIL_SAFE:
@@ -163,33 +156,25 @@ class HookRegistry(Generic[T]):
 
         # Process results
         failed = [
-            r
-            for r in results
-            if isinstance(r, Exception) or r.status == HookExecutionStatus.FAILED
+            r for r in results if isinstance(r, Exception) or r.status == HookExecutionStatus.FAILED
         ]
         if failed and config.error_strategy == HookErrorStrategy.FAIL_FAST:
-            raise HookExecutionError(
-                f"{len(failed)} hooks failed in parallel execution"
-            )
+            raise HookExecutionError(f"{len(failed)} hooks failed in parallel execution")
 
         return HookExecutionResult(
             phase=_extract_phase_value(config.phase),
             hooks_executed=len(results),
             results=[r for r in results if not isinstance(r, Exception)],
-            total_duration_ms=sum(
-                r.duration_ms for r in results if not isinstance(r, Exception)
-            ),
+            total_duration_ms=sum(r.duration_ms for r in results if not isinstance(r, Exception)),
             failed_count=sum(
                 1
                 for r in results
-                if not isinstance(r, Exception)
-                and r.status == HookExecutionStatus.FAILED
+                if not isinstance(r, Exception) and r.status == HookExecutionStatus.FAILED
             ),
             timeout_count=sum(
                 1
                 for r in results
-                if not isinstance(r, Exception)
-                and r.status == HookExecutionStatus.TIMEOUT
+                if not isinstance(r, Exception) and r.status == HookExecutionStatus.TIMEOUT
             ),
         )
 
@@ -290,8 +275,7 @@ class HookRegistry(Generic[T]):
                 last_error = e
                 if attempt < retry_config.max_attempts - 1:
                     delay_ms = min(
-                        retry_config.initial_delay_ms
-                        * (retry_config.backoff_multiplier ** attempt),
+                        retry_config.initial_delay_ms * (retry_config.backoff_multiplier**attempt),
                         retry_config.max_delay_ms,
                     )
                     logger.warning(

@@ -100,27 +100,23 @@ class FinancialScenario:
                 "loan_id": "preserve",
                 "account_id": "preserve",
                 "reference_number": "preserve",
-
                 # Applicant PII - mask
                 "applicant_name": "name",
                 "first_name": "name",
                 "last_name": "name",
                 "full_name": "name",
                 "co_applicant_name": "name",
-
                 # Sensitive identifiers - redact
                 "ssn": "text_redaction",
                 "social_security_number": "text_redaction",
                 "tax_id": "text_redaction",
                 "ein": "text_redaction",
-
                 # Contact - redact
                 "email": "text_redaction",
                 "phone": "text_redaction",
                 "phone_number": "text_redaction",
                 "cell_phone": "text_redaction",
                 "work_phone": "text_redaction",
-
                 # Address - preserve with masking
                 "address": "address",
                 "street_address": "address",
@@ -129,7 +125,6 @@ class FinancialScenario:
                 "zip": "preserve",
                 "postal_code": "preserve",
                 "country": "preserve",
-
                 # Employment - mask employer name but preserve dates
                 "employer_name": "name",
                 "employment_name": "name",
@@ -140,7 +135,6 @@ class FinancialScenario:
                 "employment_end_date": "date",
                 "employment_duration": "preserve",
                 "years_employed": "preserve",
-
                 # Financial metrics - preserve
                 "annual_income": "preserve",
                 "income": "preserve",
@@ -150,7 +144,6 @@ class FinancialScenario:
                 "other_income": "preserve",
                 "total_assets": "preserve",
                 "total_liabilities": "preserve",
-
                 # Credit data - preserve
                 "credit_score": "preserve",
                 "fico_score": "preserve",
@@ -159,14 +152,12 @@ class FinancialScenario:
                 "outstanding_balance": "preserve",
                 "debt_to_income": "preserve",
                 "payment_history": "preserve",
-
                 # Bank/Payment - hash accounts
                 "bank_account": "custom",
                 "bank_account_number": "custom",
                 "routing_number": "custom",
                 "card_number": "credit_card",
                 "account_number": "custom",
-
                 # Loan details - preserve
                 "loan_amount": "preserve",
                 "principal": "preserve",
@@ -177,7 +168,6 @@ class FinancialScenario:
                 "loan_type": "preserve",
                 "loan_purpose": "preserve",
                 "collateral": "preserve",
-
                 # Dates - mask to year/month
                 "application_date": "date",
                 "decision_date": "date",
@@ -186,12 +176,10 @@ class FinancialScenario:
                 "closing_date": "date",
                 "maturity_date": "date",
                 "payment_due_date": "preserve",
-
                 # Document references
                 "document_id": "preserve",
                 "document_type": "preserve",
                 "verification_status": "preserve",
-
                 # IP/technical - mask
                 "ip_address": "ip_address",
                 "device_id": "preserve",

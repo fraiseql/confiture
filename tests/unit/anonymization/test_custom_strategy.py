@@ -15,22 +15,28 @@ class TestCustomStrategy:
     @pytest.fixture
     def uppercase_func(self):
         """Create a simple uppercase function."""
+
         def func(value):
             return value.upper() if isinstance(value, str) else value
+
         return func
 
     @pytest.fixture
     def hash_func(self):
         """Create a simple hash function."""
+
         def func(value):
             return f"hash_{hash(str(value)) % 10000}"
+
         return func
 
     @pytest.fixture
     def seeded_func(self):
         """Create a function that uses seed."""
+
         def func(value, seed):
             return f"{seed}_{value}"
+
         return func
 
     @pytest.fixture
@@ -48,9 +54,7 @@ class TestCustomStrategy:
     @pytest.fixture
     def strategy_seeded(self, seeded_func):
         """Create strategy with seeded function."""
-        config = CustomConfig(
-            seed=12345, func=seeded_func, name="seeded", accepts_seed=True
-        )
+        config = CustomConfig(seed=12345, func=seeded_func, name="seeded", accepts_seed=True)
         return CustomStrategy(config)
 
     # Basic anonymization tests
@@ -86,6 +90,7 @@ class TestCustomStrategy:
     # Function error tests
     def test_func_error_wrapped(self):
         """Test function errors are wrapped with context."""
+
         def error_func(value):
             raise ValueError("Test error")
 
@@ -131,18 +136,14 @@ class TestCustomLambdaStrategy:
         config = CustomConfig(
             seed=12345,
             func=lambda x: x.upper() if isinstance(x, str) else x,
-            name="uppercase_lambda"
+            name="uppercase_lambda",
         )
         return CustomLambdaStrategy(config)
 
     @pytest.fixture
     def lambda_prefix(self):
         """Create strategy with prefix lambda."""
-        config = CustomConfig(
-            seed=12345,
-            func=lambda x: f"anon_{x}",
-            name="prefix"
-        )
+        config = CustomConfig(seed=12345, func=lambda x: f"anon_{x}", name="prefix")
         return CustomLambdaStrategy(config)
 
     # Basic lambda tests
@@ -171,7 +172,7 @@ class TestCustomLambdaStrategy:
         config = CustomConfig(
             seed=12345,
             func=lambda x: x.upper(),  # Will fail on non-string
-            name="error_lambda"
+            name="error_lambda",
         )
         strategy = CustomLambdaStrategy(config)
 
@@ -252,9 +253,7 @@ class TestCustomEdgeCases:
     def test_none_handling(self):
         """Test handling None value."""
         config = CustomConfig(
-            seed=12345,
-            func=lambda x: x if x is None else x.upper(),
-            name="none_handler"
+            seed=12345, func=lambda x: x if x is None else x.upper(), name="none_handler"
         )
         strategy = CustomStrategy(config)
 
@@ -263,6 +262,7 @@ class TestCustomEdgeCases:
 
     def test_complex_function(self):
         """Test complex multi-step function."""
+
         def complex_func(value):
             if value is None:
                 return None
@@ -299,9 +299,7 @@ class TestCustomEdgeCases:
         def seeded_hash(value, seed):
             return hashlib.sha256(f"{seed}:{value}".encode()).hexdigest()[:8]
 
-        config = CustomConfig(
-            seed=12345, func=seeded_hash, name="seeded_hash", accepts_seed=True
-        )
+        config = CustomConfig(seed=12345, func=seeded_hash, name="seeded_hash", accepts_seed=True)
         strategy = CustomStrategy(config)
 
         result1 = strategy.anonymize("test")
@@ -310,15 +308,12 @@ class TestCustomEdgeCases:
 
     def test_different_seeds_different_results(self):
         """Test different seeds produce different results."""
+
         def seeded_func(value, seed):
             return f"{seed}_{value}"
 
-        config1 = CustomConfig(
-            seed=12345, func=seeded_func, name="seeded", accepts_seed=True
-        )
-        config2 = CustomConfig(
-            seed=67890, func=seeded_func, name="seeded", accepts_seed=True
-        )
+        config1 = CustomConfig(seed=12345, func=seeded_func, name="seeded", accepts_seed=True)
+        config2 = CustomConfig(seed=67890, func=seeded_func, name="seeded", accepts_seed=True)
         strategy1 = CustomStrategy(config1)
         strategy2 = CustomStrategy(config2)
 

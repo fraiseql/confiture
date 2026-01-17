@@ -21,14 +21,15 @@ import psycopg
 @dataclass
 class OperationMetrics:
     """Metrics for a single operation."""
-    name: str                          # Operation name (e.g., "ALTER TABLE")
-    start_time: float                  # Timestamp when operation started
-    end_time: float                    # Timestamp when operation ended
-    duration_seconds: float            # Total duration in seconds
-    percent_of_total: float            # Percentage of migration time
+
+    name: str  # Operation name (e.g., "ALTER TABLE")
+    start_time: float  # Timestamp when operation started
+    end_time: float  # Timestamp when operation ended
+    duration_seconds: float  # Total duration in seconds
+    percent_of_total: float  # Percentage of migration time
     memory_before_mb: float | None  # Memory before operation (if tracked)
-    memory_after_mb: float | None   # Memory after operation (if tracked)
-    io_operations: int | None       # Number of I/O operations (if tracked)
+    memory_after_mb: float | None  # Memory after operation (if tracked)
+    io_operations: int | None  # Number of I/O operations (if tracked)
 
     @property
     def memory_delta_mb(self) -> float | None:
@@ -41,6 +42,7 @@ class OperationMetrics:
 @dataclass
 class PerformanceProfile:
     """Performance profile for a migration execution."""
+
     migration_name: str
     start_timestamp: float
     end_timestamp: float
@@ -61,8 +63,7 @@ class PerformanceProfile:
             List of bottleneck operations sorted by duration descending
         """
         bottlenecks = [
-            op for op in self.operations.values()
-            if op.percent_of_total >= (threshold * 100)
+            op for op in self.operations.values() if op.percent_of_total >= (threshold * 100)
         ]
         return sorted(bottlenecks, key=lambda x: x.duration_seconds, reverse=True)
 
@@ -81,6 +82,7 @@ class PerformanceProfile:
 @dataclass
 class RegressionReport:
     """Report of performance regressions detected."""
+
     migration_name: str
     regressions: list[dict[str, Any]] = field(default_factory=list)
 
@@ -100,6 +102,7 @@ class RegressionReport:
 @dataclass
 class PerformanceOptimizationRecommendation:
     """A recommendation for performance optimization."""
+
     operation: str
     current_duration_seconds: float
     percent_of_total: float
@@ -111,6 +114,7 @@ class PerformanceOptimizationRecommendation:
 @dataclass
 class PerformanceOptimizationReport:
     """Report with optimization recommendations."""
+
     migration_name: str
     bottlenecks: list[OperationMetrics]
     recommendations: list[PerformanceOptimizationRecommendation] = field(default_factory=list)
@@ -255,6 +259,7 @@ class _SectionTracker:
         """Get current memory usage (best effort)."""
         try:
             import psutil  # type: ignore[import-untyped]
+
             process = psutil.Process()
             return process.memory_info().rss / 1024 / 1024
         except ImportError:
@@ -288,10 +293,7 @@ class PerformanceBaseline:
         self.baselines[migration_name] = {
             "total_duration_seconds": profile.total_duration_seconds,
             "memory_peak_mb": profile.memory_peak_mb or 0.0,
-            "operations": {
-                name: op.duration_seconds
-                for name, op in profile.operations.items()
-            },
+            "operations": {name: op.duration_seconds for name, op in profile.operations.items()},
         }
 
     def detect_regression(
@@ -321,13 +323,15 @@ class PerformanceBaseline:
 
         if current_total > baseline_total * (1.0 + threshold_pct / 100.0):
             regression_pct = ((current_total / baseline_total) - 1.0) * 100
-            report.regressions.append({
-                "type": "total_duration",
-                "operation": "Overall migration",
-                "baseline": baseline_total,
-                "current": current_total,
-                "regression_pct": regression_pct,
-            })
+            report.regressions.append(
+                {
+                    "type": "total_duration",
+                    "operation": "Overall migration",
+                    "baseline": baseline_total,
+                    "current": current_total,
+                    "regression_pct": regression_pct,
+                }
+            )
 
         # Check individual operation regressions
         baseline_ops = baseline.get("operations", {})
@@ -342,13 +346,15 @@ class PerformanceBaseline:
                 regression_pct = (
                     (current_duration.duration_seconds / baseline_duration) - 1.0
                 ) * 100
-                report.regressions.append({
-                    "type": "operation_duration",
-                    "operation": op_name,
-                    "baseline": baseline_duration,
-                    "current": current_duration.duration_seconds,
-                    "regression_pct": regression_pct,
-                })
+                report.regressions.append(
+                    {
+                        "type": "operation_duration",
+                        "operation": op_name,
+                        "baseline": baseline_duration,
+                        "current": current_duration.duration_seconds,
+                        "regression_pct": regression_pct,
+                    }
+                )
 
         return report
 

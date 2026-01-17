@@ -44,9 +44,7 @@ class DeterministicHashConfig(StrategyConfig):
         """Validate algorithm is one of allowed values."""
         allowed = {"sha256", "sha1", "md5"}
         if self.algorithm not in allowed:
-            raise ValueError(
-                f"Algorithm must be one of {allowed}, got '{self.algorithm}'"
-            )
+            raise ValueError(f"Algorithm must be one of {allowed}, got '{self.algorithm}'")
 
 
 class DeterministicHashStrategy(AnonymizationStrategy):
@@ -125,9 +123,7 @@ class DeterministicHashStrategy(AnonymizationStrategy):
 
         # Create HMAC hash
         key = f"{self._seed}{secret}".encode()
-        hash_obj = hmac.new(
-            key, value_str.encode(), getattr(hashlib, self.config.algorithm)
-        )
+        hash_obj = hmac.new(key, value_str.encode(), getattr(hashlib, self.config.algorithm))
         hash_value = hash_obj.hexdigest()
 
         # Apply truncation if specified

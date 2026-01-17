@@ -124,9 +124,7 @@ class TestFirstnameLastnameFormat:
 
     def test_case_preserving_lowercase(self):
         """Test case preservation with lowercase input."""
-        config = NameMaskConfig(
-            seed=12345, format_type="firstname_lastname", case_preserving=True
-        )
+        config = NameMaskConfig(seed=12345, format_type="firstname_lastname", case_preserving=True)
         strategy = NameMaskingStrategy(config)
         result = strategy.anonymize("john doe")
 
@@ -138,9 +136,7 @@ class TestFirstnameLastnameFormat:
 
     def test_case_preserving_uppercase(self):
         """Test case preservation with uppercase input."""
-        config = NameMaskConfig(
-            seed=12345, format_type="firstname_lastname", case_preserving=True
-        )
+        config = NameMaskConfig(seed=12345, format_type="firstname_lastname", case_preserving=True)
         strategy = NameMaskingStrategy(config)
         result = strategy.anonymize("JOHN DOE")
 
@@ -152,9 +148,7 @@ class TestFirstnameLastnameFormat:
 
     def test_case_not_preserved(self):
         """Test disabling case preservation."""
-        config = NameMaskConfig(
-            seed=12345, format_type="firstname_lastname", case_preserving=False
-        )
+        config = NameMaskConfig(seed=12345, format_type="firstname_lastname", case_preserving=False)
         strategy = NameMaskingStrategy(config)
         result = strategy.anonymize("john doe")
 
@@ -261,12 +255,8 @@ class TestRandomFormat:
 
     def test_random_different_seed_different_output(self):
         """Test random format differs with different seed."""
-        strategy1 = NameMaskingStrategy(
-            NameMaskConfig(seed=12345, format_type="random")
-        )
-        strategy2 = NameMaskingStrategy(
-            NameMaskConfig(seed=67890, format_type="random")
-        )
+        strategy1 = NameMaskingStrategy(NameMaskConfig(seed=12345, format_type="random"))
+        strategy2 = NameMaskingStrategy(NameMaskConfig(seed=67890, format_type="random"))
 
         result1 = strategy1.anonymize("John Doe")
         result2 = strategy2.anonymize("John Doe")

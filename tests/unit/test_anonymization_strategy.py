@@ -164,9 +164,7 @@ class TestDeterministicHashStrategy:
 
     def test_prefix_and_length_combined(self):
         """Prefix and length work together."""
-        config = DeterministicHashConfig(
-            seed=12345, prefix="hash_", length=8
-        )
+        config = DeterministicHashConfig(seed=12345, prefix="hash_", length=8)
         strategy = DeterministicHashStrategy(config)
 
         result = strategy.anonymize("test@example.com")

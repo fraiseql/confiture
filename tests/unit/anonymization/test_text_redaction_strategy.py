@@ -27,9 +27,7 @@ class TestTextRedactionStrategy:
     @pytest.fixture
     def strategy_multiple(self):
         """Create strategy with multiple patterns."""
-        config = TextRedactionConfig(
-            seed=12345, patterns=["email", "phone_us", "ssn"]
-        )
+        config = TextRedactionConfig(seed=12345, patterns=["email", "phone_us", "ssn"])
         return TextRedactionStrategy(config)
 
     @pytest.fixture
@@ -43,9 +41,7 @@ class TestTextRedactionStrategy:
     @pytest.fixture
     def strategy_custom_replacement(self):
         """Create strategy with custom replacement."""
-        config = TextRedactionConfig(
-            seed=12345, patterns=["email"], replacement="[EMAIL HIDDEN]"
-        )
+        config = TextRedactionConfig(seed=12345, patterns=["email"], replacement="[EMAIL HIDDEN]")
         return TextRedactionStrategy(config)
 
     # Email redaction tests
@@ -57,9 +53,7 @@ class TestTextRedactionStrategy:
 
     def test_redact_email_multiple(self, strategy_email):
         """Test multiple email redaction."""
-        result = strategy_email.anonymize(
-            "Email john@example.com or jane@test.org"
-        )
+        result = strategy_email.anonymize("Email john@example.com or jane@test.org")
         assert "john@example.com" not in result
         assert "jane@test.org" not in result
         assert result.count("[REDACTED]") == 2
@@ -244,9 +238,7 @@ class TestTextRedactionStrategy:
 
     def test_case_sensitive(self):
         """Test case sensitive matching."""
-        config = TextRedactionConfig(
-            seed=12345, patterns=["email"], case_insensitive=False
-        )
+        config = TextRedactionConfig(seed=12345, patterns=["email"], case_insensitive=False)
         strategy = TextRedactionStrategy(config)
 
         # Pattern is lowercase, so uppercase should still match (emails are usually case-insensitive)

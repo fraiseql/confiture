@@ -133,12 +133,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(
-            tables={"users": {"id": {"type": "integer", "nullable": False}}}
-        )
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer", "nullable": False}}}
-        )
+        expected = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": False}}})
+        actual = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": False}}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -258,12 +254,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(
-            tables={"users": {"id": {"type": "integer", "nullable": False}}}
-        )
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer", "nullable": True}}}
-        )
+        expected = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": False}}})
+        actual = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": True}}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -424,6 +416,7 @@ class TestDriftDetectorIntegration:
         """Create test database connection if available."""
         try:
             import psycopg
+
             conn = psycopg.connect("postgresql://localhost/confiture_test")
             yield conn
             conn.close()

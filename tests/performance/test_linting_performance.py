@@ -88,9 +88,7 @@ class TestLintingPerformance:
         elapsed = time.perf_counter() - start
 
         # Linting should be fast (< 100ms for typical schema)
-        assert elapsed < 0.1, (
-            f"Linting took {elapsed:.4f}s, expected < 0.1s"
-        )
+        assert elapsed < 0.1, f"Linting took {elapsed:.4f}s, expected < 0.1s"
 
     def test_linting_speed_improvement_from_optimizations(self) -> None:
         """Verify that regex optimizations provide measurable improvement.
@@ -98,6 +96,7 @@ class TestLintingPerformance:
         This test confirms that the pre-compiled patterns provide a tangible
         performance benefit compared to dynamic approaches.
         """
+
         # Create mock tables with camelCase names
         class MockColumn:
             def __init__(self, name: str) -> None:
@@ -106,9 +105,7 @@ class TestLintingPerformance:
         class MockTable:
             def __init__(self, name: str, num_columns: int = 20) -> None:
                 self.name = name
-                self.columns = [
-                    MockColumn(f"column{i}") for i in range(num_columns)
-                ]
+                self.columns = [MockColumn(f"column{i}") for i in range(num_columns)]
 
         # Create multiple tables
         tables = [MockTable(f"Table{i}", 20) for i in range(10)]
@@ -157,16 +154,14 @@ class TestLintingOptimizations:
             "trailing_underscore_",  # Valid - underscore allowed anywhere after first char
         ]
         invalid_names = [
-            "InvalidName",       # Has uppercase
-            "INVALID_NAME",      # All uppercase
-            "123_invalid",       # Starts with number
+            "InvalidName",  # Has uppercase
+            "INVALID_NAME",  # All uppercase
+            "123_invalid",  # Starts with number
             "_leading_underscore",  # Starts with underscore (not lowercase letter)
         ]
 
         for name in valid_names:
-            assert SNAKE_CASE_PATTERN.match(name), (
-                f"Pattern should match valid snake_case: {name}"
-            )
+            assert SNAKE_CASE_PATTERN.match(name), f"Pattern should match valid snake_case: {name}"
 
         for name in invalid_names:
             assert not SNAKE_CASE_PATTERN.match(name), (

@@ -366,15 +366,15 @@ Answer these questions to decide:
 
 | Aspect | Verdict |
 |--------|---------|
-| **Speed** | 🏆 Confiture (50-700x faster builds) |
-| **Features** | 🏆 Confiture (zero-downtime, data sync) |
-| **Simplicity** | 🏆 Confiture (DDL-based, easier to understand) |
+| **Philosophy** | Different (DDL-first vs migration-first) |
+| **Features** | Confiture (zero-downtime, data sync) |
+| **Simplicity** | Confiture (DDL-based, easier to understand) |
 | **Community** | Alembic (larger, more established) |
-| **Maturity** | Both mature (both production-ready) |
-| **Learning curve** | 🏆 Confiture (easier to learn) |
+| **Maturity** | Alembic (production-proven), Confiture (Beta) |
+| **Learning curve** | Confiture (easier to learn) |
 
-**For new projects**: Choose Confiture
-**For existing Alembic projects**: Consider switching if speed matters
+**For new projects**: Consider Confiture if DDL-first philosophy appeals
+**For production-critical**: Alembic is more battle-tested
 
 ---
 
@@ -383,7 +383,7 @@ Answer these questions to decide:
 - **[Getting Started](getting-started.md)** - Start using Confiture
 - **[Migration Decision Tree](guides/migration-decision-tree.md)** - Choose right strategy
 - **[Performance Guide](performance.md)** - See speed benefits
-- **[Zero-Downtime Migrations](guides/medium-4-schema-to-schema.md)** - Learn FDW strategy
+- **[Zero-Downtime Migrations](guides/04-schema-to-schema.md)** - Learn FDW strategy
 
 ---
 
@@ -396,7 +396,7 @@ A: Yes, though not recommended. Use Confiture for local/test, Alembic for produc
 A: No, they're different approaches. But migrating is straightforward (see migration path above).
 
 **Q: Is Confiture stable/production-ready?**
-A: Yes, v0.4.0+ is production-ready with 630+ passing tests.
+A: Confiture is currently **Beta** software with 3,200+ passing tests. It has not yet been used in production environments. Use with caution for critical workloads.
 
 **Q: What if I need complex Python migrations?**
 A: Use Alembic for those migrations, then switch to Confiture for simple ones. Or write hooks in Confiture (more limited but functional).
@@ -407,4 +407,4 @@ A: Yes! Confiture is open-source. Contributions welcome on [GitHub](https://gith
 ---
 
 *Last updated: December 27, 2025*
-*Have questions? See [Getting Started](getting-started.md) or [Troubleshooting](guides/troubleshooting.md)*
+*Have questions? See [Getting Started](getting-started.md) or [Troubleshooting](troubleshooting.md)*

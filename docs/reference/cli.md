@@ -880,12 +880,12 @@ confiture migrate status --config production.yaml
 
 ## Further Reading
 
-- **[Getting Started Guide](../guides/getting-started.md)** - Step-by-step tutorial
-- **[Migration Strategies](../guides/migration-strategies.md)** - Choosing the right strategy
+- **[Getting Started Guide](../getting-started.md)** - Step-by-step tutorial
+- **[Migration Decision Tree](../guides/migration-decision-tree.md)** - Choosing the right strategy
 - **[Configuration Reference](./configuration.md)** - Environment configuration
-- **[API Reference](./api.md)** - Python API documentation
+- **[API Reference](../api/index.md)** - Python API documentation
 
 ---
 
-**Last Updated**: October 12, 2025
+**Last Updated**: January 17, 2026
 **Version**: 1.0

@@ -1,6 +1,5 @@
 """Tests for linting models (Violation, LintConfig, LintReport)."""
 
-
 from confiture.models.lint import (
     LintConfig,
     LintReport,

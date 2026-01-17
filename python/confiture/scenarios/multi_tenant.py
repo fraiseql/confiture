@@ -99,13 +99,11 @@ class MultiTenantScenario:
                 "workspace_id": "preserve",
                 "client_id": "preserve",
                 "customer_id": "preserve",
-
                 # User identifiers - preserve (tenant-scoped)
                 "user_id": "preserve",
                 "user_uuid": "preserve",
                 "employee_id": "preserve",
                 "member_id": "preserve",
-
                 # User PII - anonymize
                 "user_name": "text_redaction",
                 "username": "text_redaction",
@@ -116,7 +114,6 @@ class MultiTenantScenario:
                 "email": "text_redaction",
                 "phone": "text_redaction",
                 "phone_number": "text_redaction",
-
                 # Organization/Tenant info - mask names
                 "organization_name": "name",
                 "tenant_name": "name",
@@ -124,13 +121,11 @@ class MultiTenantScenario:
                 "department": "preserve",  # Business metadata
                 "team": "preserve",
                 "division": "preserve",
-
                 # Address - mask
                 "address": "address",
                 "city": "preserve",
                 "state": "preserve",
                 "country": "preserve",
-
                 # Relationships - anonymize names but preserve IDs
                 "created_by": "text_redaction",
                 "created_by_user_id": "preserve",
@@ -140,7 +135,6 @@ class MultiTenantScenario:
                 "assigned_to_user_id": "preserve",
                 "manager": "text_redaction",
                 "manager_id": "preserve",
-
                 # Tenant metadata - preserve
                 "tenant_type": "preserve",
                 "tenant_status": "preserve",
@@ -148,7 +142,6 @@ class MultiTenantScenario:
                 "industry": "preserve",
                 "region": "preserve",
                 "timezone": "preserve",
-
                 # Business metrics - preserve
                 "active_users": "preserve",
                 "total_users": "preserve",
@@ -156,7 +149,6 @@ class MultiTenantScenario:
                 "api_quota": "preserve",
                 "monthly_cost": "preserve",
                 "annual_contract_value": "preserve",
-
                 # Dates - preserve for audit trail
                 "created_at": "preserve",
                 "updated_at": "preserve",
@@ -165,19 +157,16 @@ class MultiTenantScenario:
                 "contract_start": "preserve",
                 "contract_end": "preserve",
                 "billing_cycle": "preserve",
-
                 # Content/Data - preserve
                 "description": "preserve",
                 "notes": "preserve",
                 "tags": "preserve",
                 "status": "preserve",
                 "data_classification": "preserve",
-
                 # IP/Technical - mask
                 "ip_address": "ip_address",
                 "device_id": "preserve",
                 "browser": "preserve",
-
                 # Audit fields
                 "change_log": "preserve",
                 "audit_trail": "preserve",
@@ -290,9 +279,7 @@ class MultiTenantScenario:
         return factory.list_column_strategies()
 
     @classmethod
-    def verify_data_isolation(
-        cls, data_list: list[dict], original_list: list[dict]
-    ) -> dict:
+    def verify_data_isolation(cls, data_list: list[dict], original_list: list[dict]) -> dict:
         """Verify data isolation across tenants.
 
         Checks that same user IDs in different tenants produce different
@@ -338,8 +325,7 @@ class MultiTenantScenario:
         for (user_id,), tenants_data in user_by_tenant.items():
             if len(tenants_data) > 1:
                 anon_values = [
-                    tenants_data[t]["anonymized"].get("text_redaction")
-                    for t in tenants_data
+                    tenants_data[t]["anonymized"].get("text_redaction") for t in tenants_data
                 ]
                 if len(set(anon_values)) != len(anon_values):
                     results["isolated"] = False

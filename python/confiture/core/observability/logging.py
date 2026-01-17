@@ -54,9 +54,7 @@ class StructuredFormatter(logging.Formatter):
             log_data["timestamp"] = datetime.now(UTC).isoformat()
 
         if self.config.include_correlation_id:
-            log_data["correlation_id"] = getattr(
-                record, "correlation_id", str(uuid.uuid4())[:8]
-            )
+            log_data["correlation_id"] = getattr(record, "correlation_id", str(uuid.uuid4())[:8])
 
         # Add extra fields from record
         extra_fields = [

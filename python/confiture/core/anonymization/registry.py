@@ -47,9 +47,7 @@ class StrategyRegistry:
             >>> StrategyRegistry.register("custom", CustomStrategy)
         """
         if not issubclass(strategy_class, AnonymizationStrategy):
-            raise TypeError(
-                f"{strategy_class.__name__} must inherit from AnonymizationStrategy"
-            )
+            raise TypeError(f"{strategy_class.__name__} must inherit from AnonymizationStrategy")
 
         if name in cls._registry:
             raise ValueError(f"Strategy '{name}' is already registered")
@@ -78,9 +76,7 @@ class StrategyRegistry:
         """
         if name not in cls._registry:
             available = ", ".join(cls.list_available())
-            raise ValueError(
-                f"Unknown strategy: '{name}'. Available: {available}"
-            )
+            raise ValueError(f"Unknown strategy: '{name}'. Available: {available}")
 
         strategy_class = cls._registry[name]
 

@@ -233,12 +233,14 @@ class SchemaAnalyzer:
                 table_name = row[0]
                 if table_name not in info.foreign_keys:
                     info.foreign_keys[table_name] = []
-                info.foreign_keys[table_name].append({
-                    "column": row[1],
-                    "foreign_table": row[2],
-                    "foreign_column": row[3],
-                    "constraint_name": row[4],
-                })
+                info.foreign_keys[table_name].append(
+                    {
+                        "column": row[1],
+                        "foreign_table": row[2],
+                        "foreign_column": row[3],
+                        "constraint_name": row[4],
+                    }
+                )
 
         # Get extensions
         with self.connection.cursor() as cur:
@@ -436,9 +438,7 @@ class SchemaAnalyzer:
                 )
             else:
                 # Validate index columns exist
-                col_issues = self._validate_index_columns(
-                    sql, table_name, schema, line_num
-                )
+                col_issues = self._validate_index_columns(sql, table_name, schema, line_num)
                 issues.extend(col_issues)
 
         return issues
@@ -499,10 +499,7 @@ class SchemaAnalyzer:
                 # Skip expressions
                 if "(" in col_name or col_name.upper() in ("ASC", "DESC", "NULLS"):
                     continue
-                if (
-                    table_name in schema.tables
-                    and col_name not in schema.tables[table_name]
-                ):
+                if table_name in schema.tables and col_name not in schema.tables[table_name]:
                     issues.append(
                         ValidationIssue(
                             severity=ValidationSeverity.ERROR,
@@ -543,9 +540,7 @@ class SchemaAnalyzer:
                 )
             elif table_name in schema.tables:
                 # Check column operations
-                issues.extend(
-                    self._validate_column_operations(sql, schema, table_name, line_num)
-                )
+                issues.extend(self._validate_column_operations(sql, schema, table_name, line_num))
 
         return issues
 
@@ -562,7 +557,9 @@ class SchemaAnalyzer:
         table_columns = schema.tables.get(table_name, {})
 
         # ADD COLUMN that already exists
-        match = re.search(r"ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?:\")?(\w+)(?:\")?", sql_upper)
+        match = re.search(
+            r"ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?:\")?(\w+)(?:\")?", sql_upper
+        )
         if match and "ADD CONSTRAINT" not in sql_upper:
             col_name = match.group(1).lower()
             if col_name in table_columns and "IF NOT EXISTS" not in sql_upper:
@@ -637,9 +634,7 @@ class SchemaAnalyzer:
         if match and "IF EXISTS" not in sql_upper:
             index_name = match.group(1).lower()
             # Check if index exists in any table
-            index_exists = any(
-                index_name in indexes for indexes in schema.indexes.values()
-            )
+            index_exists = any(index_name in indexes for indexes in schema.indexes.values())
             if not index_exists:
                 issues.append(
                     ValidationIssue(

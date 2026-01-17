@@ -120,21 +120,28 @@ class TestNamingConventionChecks:
         # Should have warning about naming
         assert result.has_warnings or result.has_info
         violations = result.warnings + result.info
-        assert any("naming" in v.rule_name.lower() or "case" in v.message.lower()
-                   for v in violations)
+        assert any(
+            "naming" in v.rule_name.lower() or "case" in v.message.lower() for v in violations
+        )
 
     def test_accept_snake_case_table_name(self):
         """Test acceptance of snake_case table names."""
         schema = "CREATE TABLE user_accounts (id INT PRIMARY KEY);"
-        config = LintConfig(check_naming=True, check_primary_keys=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_naming=True,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should not have naming violations for snake_case
-        naming_violations = [v for v in result.warnings + result.info
-                            if "naming" in v.rule_name.lower()]
+        naming_violations = [
+            v for v in result.warnings + result.info if "naming" in v.rule_name.lower()
+        ]
         assert len(naming_violations) == 0
 
     def test_detect_camel_case_column_name(self):
@@ -145,16 +152,24 @@ class TestNamingConventionChecks:
             firstName VARCHAR(255)
         );
         """
-        config = LintConfig(check_naming=True, check_primary_keys=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_naming=True,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should detect firstName as camelCase
-        naming_violations = [v for v in result.warnings + result.info
-                            if "firstName" in v.message or
-                            (v.object_type == "column" and "naming" in v.rule_name.lower())]
+        naming_violations = [
+            v
+            for v in result.warnings + result.info
+            if "firstName" in v.message
+            or (v.object_type == "column" and "naming" in v.rule_name.lower())
+        ]
         assert len(naming_violations) > 0
 
     def test_accept_snake_case_column_names(self):
@@ -166,16 +181,23 @@ class TestNamingConventionChecks:
             last_name VARCHAR(255)
         );
         """
-        config = LintConfig(check_naming=True, check_primary_keys=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_naming=True,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should accept snake_case columns
-        column_naming_violations = [v for v in result.warnings + result.info
-                                  if v.object_type == "column" and
-                                  "naming" in v.rule_name.lower()]
+        column_naming_violations = [
+            v
+            for v in result.warnings + result.info
+            if v.object_type == "column" and "naming" in v.rule_name.lower()
+        ]
         assert len(column_naming_violations) == 0
 
 
@@ -190,15 +212,22 @@ class TestPrimaryKeyChecks:
             message VARCHAR(255)
         );
         """
-        config = LintConfig(check_primary_keys=True, check_naming=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_primary_keys=True,
+            check_naming=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should warn about missing primary key
-        assert any("primary" in v.rule_name.lower() or "key" in v.message.lower()
-                   for v in result.warnings + result.errors)
+        assert any(
+            "primary" in v.rule_name.lower() or "key" in v.message.lower()
+            for v in result.warnings + result.errors
+        )
 
     def test_accept_tables_with_primary_keys(self):
         """Test acceptance of tables with primary keys."""
@@ -208,15 +237,21 @@ class TestPrimaryKeyChecks:
             name VARCHAR(255)
         );
         """
-        config = LintConfig(check_primary_keys=True, check_naming=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_primary_keys=True,
+            check_naming=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should not warn about primary key
-        pk_violations = [v for v in result.warnings + result.errors
-                        if "primary" in v.rule_name.lower()]
+        pk_violations = [
+            v for v in result.warnings + result.errors if "primary" in v.rule_name.lower()
+        ]
         assert len(pk_violations) == 0
 
     def test_skip_junction_table_primary_key_requirement(self):
@@ -227,9 +262,14 @@ class TestPrimaryKeyChecks:
             role_id INT REFERENCES roles(id)
         );
         """
-        config = LintConfig(check_primary_keys=True, check_naming=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_primary_keys=True,
+            check_naming=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
@@ -251,16 +291,23 @@ class TestDocumentationChecks:
             name VARCHAR(255)
         );
         """
-        config = LintConfig(check_documentation=True, check_naming=False,
-                           check_primary_keys=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_documentation=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should detect missing documentation
-        doc_violations = [v for v in result.info
-                         if "documentation" in v.rule_name.lower() or
-                         "comment" in v.message.lower()]
+        doc_violations = [
+            v
+            for v in result.info
+            if "documentation" in v.rule_name.lower() or "comment" in v.message.lower()
+        ]
         assert len(doc_violations) > 0
 
     def test_accept_documented_tables(self):
@@ -272,15 +319,23 @@ class TestDocumentationChecks:
         );
         COMMENT ON TABLE users IS 'Stores user information';
         """
-        config = LintConfig(check_documentation=True, check_naming=False,
-                           check_primary_keys=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_documentation=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should not report undocumented tables if they have comments
-        undocumented = [v for v in result.info
-                       if "documentation" in v.rule_name.lower() and "users" in v.message]
+        undocumented = [
+            v
+            for v in result.info
+            if "documentation" in v.rule_name.lower() and "users" in v.message
+        ]
         assert len(undocumented) == 0
 
     def test_detect_multiple_undocumented_tables(self):
@@ -291,15 +346,19 @@ class TestDocumentationChecks:
         CREATE TABLE comments (id INT PRIMARY KEY);
         COMMENT ON TABLE users IS 'Users table';
         """
-        config = LintConfig(check_documentation=True, check_naming=False,
-                           check_primary_keys=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_documentation=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should detect posts and comments as undocumented
-        doc_violations = [v for v in result.info
-                         if "documentation" in v.rule_name.lower()]
+        doc_violations = [v for v in result.info if "documentation" in v.rule_name.lower()]
         assert len(doc_violations) >= 2
 
 
@@ -312,15 +371,19 @@ class TestSecurityChecks:
     id INT PRIMARY KEY,
     password VARCHAR(255)
 );"""
-        config = LintConfig(check_security=True, check_naming=False,
-                           check_primary_keys=False, check_documentation=False,
-                           check_indexes=False, check_constraints=False)
+        config = LintConfig(
+            check_security=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should warn about password column
-        security_violations = [v for v in result.warnings
-                              if "password" in v.message.lower()]
+        security_violations = [v for v in result.warnings if "password" in v.message.lower()]
         assert len(security_violations) > 0
 
     def test_detect_token_column(self):
@@ -329,9 +392,14 @@ class TestSecurityChecks:
     id INT PRIMARY KEY,
     token VARCHAR(255)
 );"""
-        config = LintConfig(check_security=True, check_naming=False,
-                           check_primary_keys=False, check_documentation=False,
-                           check_indexes=False, check_constraints=False)
+        config = LintConfig(
+            check_security=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
@@ -345,15 +413,19 @@ class TestSecurityChecks:
     id INT PRIMARY KEY,
     secret VARCHAR(255)
 );"""
-        config = LintConfig(check_security=True, check_naming=False,
-                           check_primary_keys=False, check_documentation=False,
-                           check_indexes=False, check_constraints=False)
+        config = LintConfig(
+            check_security=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should warn about secret column
-        security_violations = [v for v in result.warnings
-                              if "secret" in v.message.lower()]
+        security_violations = [v for v in result.warnings if "secret" in v.message.lower()]
         assert len(security_violations) > 0
 
     def test_detect_api_key_column(self):
@@ -362,9 +434,14 @@ class TestSecurityChecks:
     id INT PRIMARY KEY,
     api_key VARCHAR(255)
 );"""
-        config = LintConfig(check_security=True, check_naming=False,
-                           check_primary_keys=False, check_documentation=False,
-                           check_indexes=False, check_constraints=False)
+        config = LintConfig(
+            check_security=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
@@ -382,15 +459,19 @@ class TestSecurityChecks:
             created_at TIMESTAMP
         );
         """
-        config = LintConfig(check_security=True, check_naming=False,
-                           check_primary_keys=False, check_documentation=False,
-                           check_indexes=False, check_constraints=False)
+        config = LintConfig(
+            check_security=True,
+            check_naming=False,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should not warn about normal columns
-        security_violations = [v for v in result.warnings
-                              if v.object_type == "column"]
+        security_violations = [v for v in result.warnings if v.object_type == "column"]
         assert len(security_violations) == 0
 
 
@@ -535,14 +616,16 @@ class TestLintReportViolations:
 
         # Add multiple violations
         for i in range(3):
-            report.add_violation(LintViolation(
-                rule_id=f"rule_{i}",
-                rule_name=f"Rule {i}",
-                severity=RuleSeverity.ERROR if i == 0 else RuleSeverity.WARNING,
-                object_type="table",
-                object_name=f"table_{i}",
-                message=f"Message {i}",
-            ))
+            report.add_violation(
+                LintViolation(
+                    rule_id=f"rule_{i}",
+                    rule_name=f"Rule {i}",
+                    severity=RuleSeverity.ERROR if i == 0 else RuleSeverity.WARNING,
+                    object_type="table",
+                    object_name=f"table_{i}",
+                    message=f"Message {i}",
+                )
+            )
 
         assert len(report.errors) == 1
         assert len(report.warnings) == 2
@@ -586,10 +669,9 @@ class TestSchemaLinterEdgeCases:
 
     def test_linter_with_very_long_schema(self):
         """Test linting with very large schema."""
-        tables = "\n".join([
-            f"CREATE TABLE table_{i} (id INT PRIMARY KEY, name VARCHAR(255));"
-            for i in range(100)
-        ])
+        tables = "\n".join(
+            [f"CREATE TABLE table_{i} (id INT PRIMARY KEY, name VARCHAR(255));" for i in range(100)]
+        )
         schema = tables
 
         linter = SchemaLinter()
@@ -650,7 +732,11 @@ CREATE TABLE post_tags (
         # Should analyze complete schema
         assert result is not None
         # password_hash should trigger security warning (may be in warnings or just analyzed)
-        [v for v in result.warnings if "sensitive" in v.message.lower() or "password" in v.message.lower()]
+        [
+            v
+            for v in result.warnings
+            if "sensitive" in v.message.lower() or "password" in v.message.lower()
+        ]
         # Accept either the warning exists or just that the linting completed
         assert result is not None and isinstance(result, LintReport)
 
@@ -665,13 +751,19 @@ CREATE TABLE post_tags (
         );
         """
 
-        config = LintConfig(check_naming=True, check_primary_keys=False,
-                           check_documentation=False, check_indexes=False,
-                           check_security=False, check_constraints=False)
+        config = LintConfig(
+            check_naming=True,
+            check_primary_keys=False,
+            check_documentation=False,
+            check_indexes=False,
+            check_security=False,
+            check_constraints=False,
+        )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
 
         # Should detect multiple naming violations
-        naming_violations = [v for v in result.warnings + result.info
-                            if "naming" in v.rule_name.lower()]
+        naming_violations = [
+            v for v in result.warnings + result.info if "naming" in v.rule_name.lower()
+        ]
         assert len(naming_violations) > 0

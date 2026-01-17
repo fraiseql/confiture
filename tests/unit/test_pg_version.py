@@ -223,9 +223,7 @@ class TestVersionAwareSQL:
         version = PGVersionInfo(major=15, minor=0)
         sql = VersionAwareSQL(version)
 
-        result = sql.create_index_concurrently(
-            "idx_users_email", "users", ["email"]
-        )
+        result = sql.create_index_concurrently("idx_users_email", "users", ["email"])
 
         assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS" in result
         assert "idx_users_email" in result
@@ -237,9 +235,7 @@ class TestVersionAwareSQL:
         version = PGVersionInfo(major=15, minor=0)
         sql = VersionAwareSQL(version)
 
-        result = sql.create_index_concurrently(
-            "idx_users_email", "users", ["email"], unique=True
-        )
+        result = sql.create_index_concurrently("idx_users_email", "users", ["email"], unique=True)
 
         assert "CREATE UNIQUE INDEX CONCURRENTLY" in result
 
@@ -306,9 +302,7 @@ class TestVersionAwareSQL:
         version = PGVersionInfo(major=15, minor=0)
         sql = VersionAwareSQL(version)
 
-        result = sql.add_column_with_default_fast(
-            "users", "status", "TEXT", "'active'"
-        )
+        result = sql.add_column_with_default_fast("users", "status", "TEXT", "'active'")
 
         assert "ALTER TABLE users" in result
         assert "ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'" in result
@@ -318,9 +312,7 @@ class TestVersionAwareSQL:
         version = PGVersionInfo(major=15, minor=0)
         sql = VersionAwareSQL(version)
 
-        result = sql.unique_nulls_not_distinct(
-            "users", "email", "uq_users_email"
-        )
+        result = sql.unique_nulls_not_distinct("users", "email", "uq_users_email")
 
         assert result is not None
         assert "UNIQUE NULLS NOT DISTINCT" in result
@@ -421,9 +413,7 @@ class TestCheckVersionCompatibility:
     def test_custom_minimum_version(self):
         """Test custom minimum version."""
         version = PGVersionInfo(major=13, minor=0)
-        is_compatible, error = check_version_compatibility(
-            version, min_version=(14, 0)
-        )
+        is_compatible, error = check_version_compatibility(version, min_version=(14, 0))
 
         assert is_compatible is False
         assert "13.0" in error
@@ -432,9 +422,7 @@ class TestCheckVersionCompatibility:
     def test_compatible_with_custom_minimum(self):
         """Test compatible with custom minimum."""
         version = PGVersionInfo(major=15, minor=0)
-        is_compatible, error = check_version_compatibility(
-            version, min_version=(14, 5)
-        )
+        is_compatible, error = check_version_compatibility(version, min_version=(14, 5))
 
         assert is_compatible is True
         assert error is None

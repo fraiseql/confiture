@@ -283,7 +283,15 @@ class SchemaLinter:
             column_name = col_match.group(1)
 
             # Skip if it's a keyword (PRIMARY KEY, CONSTRAINT, etc.)
-            if column_name.upper() in ("PRIMARY", "KEY", "CONSTRAINT", "CHECK", "DEFAULT", "NOT", "NULL"):
+            if column_name.upper() in (
+                "PRIMARY",
+                "KEY",
+                "CONSTRAINT",
+                "CHECK",
+                "DEFAULT",
+                "NOT",
+                "NULL",
+            ):
                 continue
 
             if not self._is_snake_case(column_name):

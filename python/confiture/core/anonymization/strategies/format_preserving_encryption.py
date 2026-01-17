@@ -210,9 +210,7 @@ class FormatPreservingEncryptionStrategy(AnonymizationStrategy):
         # For now, return deterministic placeholder
         import hashlib
 
-        hash_val = hashlib.sha256(
-            f"{self._seed}:{value}".encode()
-        ).hexdigest()
+        hash_val = hashlib.sha256(f"{self._seed}:{value}".encode()).hexdigest()
 
         # Return string of same length
         result = ""
@@ -220,10 +218,7 @@ class FormatPreservingEncryptionStrategy(AnonymizationStrategy):
             if char.isdigit():
                 result += hash_val[i % len(hash_val)][0]
             elif char.isalpha():
-                result += chr(
-                    ord("a")
-                    + (int(hash_val[i % len(hash_val)], 16) % 26)
-                )
+                result += chr(ord("a") + (int(hash_val[i % len(hash_val)], 16) % 26))
             else:
                 result += char
 
@@ -301,8 +296,7 @@ class FormatPreservingEncryptionStrategy(AnonymizationStrategy):
             value_str = str(value).strip()
             if not value_str:
                 errors.append(
-                    f"Column {table_name}.{column_name}: "
-                    f"Empty string cannot be encrypted"
+                    f"Column {table_name}.{column_name}: Empty string cannot be encrypted"
                 )
             # Check length compatibility
             if len(value_str) > 1000:
@@ -311,9 +305,6 @@ class FormatPreservingEncryptionStrategy(AnonymizationStrategy):
                     f"Value too long ({len(value_str)} chars) for FPE"
                 )
         except Exception as e:
-            errors.append(
-                f"Column {table_name}.{column_name}: "
-                f"Cannot convert to string: {e}"
-            )
+            errors.append(f"Column {table_name}.{column_name}: Cannot convert to string: {e}")
 
         return len(errors) == 0, errors

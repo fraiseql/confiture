@@ -138,11 +138,13 @@ class TextRedactionStrategy(AnonymizationStrategy):
 
             try:
                 compiled_regex = re.compile(regex_pattern, flags)
-                compiled.append({
-                    "name": pattern_name if pattern_name in COMMON_PATTERNS else "custom",
-                    "pattern": regex_pattern,
-                    "compiled": compiled_regex,
-                })
+                compiled.append(
+                    {
+                        "name": pattern_name if pattern_name in COMMON_PATTERNS else "custom",
+                        "pattern": regex_pattern,
+                        "compiled": compiled_regex,
+                    }
+                )
             except re.error:
                 # Skip invalid patterns
                 continue

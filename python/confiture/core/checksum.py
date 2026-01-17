@@ -299,7 +299,7 @@ class MigrationChecksumVerifier:
         msg_lines = ["Checksum verification found modified migrations:"]
         for m in mismatches:
             msg_lines.append(
-                f"  - {m.version}_{m.name}: " f"expected {m.expected[:12]}..., got {m.actual[:12]}..."
+                f"  - {m.version}_{m.name}: expected {m.expected[:12]}..., got {m.actual[:12]}..."
             )
 
         message = "\n".join(msg_lines)

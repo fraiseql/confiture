@@ -1,8 +1,7 @@
 # Hook API Reference
 
-**Status**: Complete API Documentation
-**API Version**: 1.0 (from Phase 4)
-**Last Updated**: January 2, 2026
+[← Back to API Reference](index.md)
+
 **Stability**: Stable ✅
 
 ---
@@ -640,16 +639,11 @@ The Hook API is stable and won't change in breaking ways:
 
 ## See Also
 
-- [Migration Hooks Guide](../guides/migration-hooks.md) - User guide with patterns
-- [Slack Integration](../guides/slack-integration.md) - Using hooks for notifications
-- [GitHub Actions Integration](../guides/github-actions-workflow.md) - CI/CD integration
-- [Troubleshooting](../guides/troubleshooting.md) - Common issues
+- [Migration Hooks Guide](../guides/hooks.md) - User guide with patterns
+- [Integrations Guide](../guides/integrations.md) - CI/CD, Slack, monitoring
+- [Troubleshooting](../troubleshooting.md) - Common issues
 
 ---
 
-**Last Updated**: January 2, 2026
-**Status**: Production Ready ✅
-**Tested On**: Python 3.11, 3.12, 3.13
-
-🍓 Hooks: Extend your migrations with custom logic
+**Last Updated**: January 17, 2026
 

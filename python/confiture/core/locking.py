@@ -195,7 +195,9 @@ class MigrationLock:
             self._acquire_blocking(lock_id)
 
         self._lock_held = True
-        logger.info(f"Acquired migration lock (namespace={self.DEFAULT_LOCK_NAMESPACE}, id={lock_id})")
+        logger.info(
+            f"Acquired migration lock (namespace={self.DEFAULT_LOCK_NAMESPACE}, id={lock_id})"
+        )
 
     def _acquire_blocking(self, lock_id: int) -> None:
         """Acquire lock with timeout.
@@ -297,7 +299,9 @@ class MigrationLock:
                 if unlocked:
                     logger.info(f"Released migration lock (id={lock_id})")
                 else:
-                    logger.warning(f"Lock release returned false (id={lock_id}) - lock may not have been held")
+                    logger.warning(
+                        f"Lock release returned false (id={lock_id}) - lock may not have been held"
+                    )
 
         except Exception as e:
             # Don't raise - lock will be released when connection closes

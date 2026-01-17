@@ -1,6 +1,5 @@
 """Unit tests for email, phone, and redact strategies."""
 
-
 from confiture.core.anonymization.strategies.email import (
     EmailMaskConfig,
     EmailMaskingStrategy,
@@ -65,10 +64,7 @@ class TestEmailMaskingStrategy:
 
     def test_custom_format(self):
         """Custom email format is used."""
-        config = EmailMaskConfig(
-            seed=12345,
-            format="test_{hash}@custom.org"
-        )
+        config = EmailMaskConfig(seed=12345, format="test_{hash}@custom.org")
         strategy = EmailMaskingStrategy(config)
 
         masked = strategy.anonymize("user@example.com")
@@ -167,10 +163,7 @@ class TestPhoneMaskingStrategy:
 
     def test_custom_phone_format(self):
         """Custom phone format is used."""
-        config = PhoneMaskConfig(
-            seed=12345,
-            format="(555) {number}"
-        )
+        config = PhoneMaskConfig(seed=12345, format="(555) {number}")
         strategy = PhoneMaskingStrategy(config)
 
         masked = strategy.anonymize("202-555-0123")

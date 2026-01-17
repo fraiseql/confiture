@@ -1,4 +1,5 @@
 """Transparent risk scoring formula with explicit weights."""
+
 from __future__ import annotations
 
 import logging
@@ -167,9 +168,12 @@ class RiskScoringFormula:
             score = 0.0
         else:
             severity_scores = [
-                1.0 if a.severity == Severity.CRITICAL
-                else 0.7 if a.severity == Severity.HIGH
-                else 0.3 if a.severity == Severity.MEDIUM
+                1.0
+                if a.severity == Severity.CRITICAL
+                else 0.7
+                if a.severity == Severity.HIGH
+                else 0.3
+                if a.severity == Severity.MEDIUM
                 else 0.1
                 for a in anomalies
             ]
@@ -204,7 +208,7 @@ class RiskScoringFormula:
             value=score,
             unit="percent",
             weight=RiskScoringFormula.WEIGHT_CONCURRENT_LOAD,
-            description=f"Connection utilization: {utilization*100:.1f}%",
+            description=f"Connection utilization: {utilization * 100:.1f}%",
         )
 
     @staticmethod
@@ -228,8 +232,7 @@ class RiskScoringFormula:
 
         # Calculate overall score with renormalized weights
         overall_score = sum(
-            factor.value * (factor.weight / total_weight)
-            for factor in factors.values()
+            factor.value * (factor.weight / total_weight) for factor in factors.values()
         )
 
         # Map score to risk level

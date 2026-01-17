@@ -120,7 +120,7 @@ def test_performance_regression_detection():
         migration_name="test_migration",
         start_timestamp=baseline_start,
         end_timestamp=baseline_start + 0.5,
-        total_duration_seconds=0.5
+        total_duration_seconds=0.5,
     )
 
     # 20% slower
@@ -129,7 +129,7 @@ def test_performance_regression_detection():
         migration_name="test_migration",
         start_timestamp=current_start,
         end_timestamp=current_start + 0.6,
-        total_duration_seconds=0.6  # 20% slower
+        total_duration_seconds=0.6,  # 20% slower
     )
 
     # Should detect regression
@@ -209,7 +209,7 @@ def test_performance_baseline_tracking(tmp_path):
         migration_name="operation_1",
         start_timestamp=start_time,
         end_timestamp=start_time + 0.5,
-        total_duration_seconds=0.5
+        total_duration_seconds=0.5,
     )
 
     # Set the baseline

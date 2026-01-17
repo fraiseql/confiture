@@ -49,9 +49,7 @@ class TestStrategyDefinitionValidation:
 
     def test_strategy_with_config(self):
         """Strategy definition accepts optional config."""
-        strategy = StrategyDefinition(
-            type="hash", config={"algorithm": "sha256", "length": 16}
-        )
+        strategy = StrategyDefinition(type="hash", config={"algorithm": "sha256", "length": 16})
         assert strategy.config["algorithm"] == "sha256"
         assert strategy.config["length"] == 16
 
@@ -182,11 +180,7 @@ class TestAnonymizationProfileValidation:
             "version": "1.0",
             "global_seed": 12345,
             "strategies": {"email": {"type": "email"}},
-            "tables": {
-                "users": {
-                    "rules": [{"column": "email", "strategy": "email"}]
-                }
-            },
+            "tables": {"users": {"rules": [{"column": "email", "strategy": "email"}]}},
         }
         profile = AnonymizationProfile.from_dict(data)
         assert profile.name == "production"

@@ -503,9 +503,7 @@ class TestConcurrentAnonymizer:
         """Test concurrent anonymizer creation."""
         mock_conn = MagicMock()
         strategy = DummyStrategy()
-        anonymizer = ConcurrentAnonymizer(
-            mock_conn, strategy, num_workers=4, batch_size=5000
-        )
+        anonymizer = ConcurrentAnonymizer(mock_conn, strategy, num_workers=4, batch_size=5000)
 
         assert anonymizer.num_workers == 4
         assert anonymizer.batch_size == 5000

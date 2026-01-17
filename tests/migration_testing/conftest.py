@@ -21,8 +21,7 @@ def test_db_connection() -> Generator:
     Yields the connection for use in tests.
     """
     db_url = os.environ.get(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/confiture_test"
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/confiture_test"
     )
 
     conn = psycopg.connect(db_url)

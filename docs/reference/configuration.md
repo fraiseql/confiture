@@ -865,8 +865,8 @@ include_dirs:
 ## Further Reading
 
 - **[CLI Reference](./cli.md)** - Command-line usage
-- **[Getting Started](../guides/getting-started.md)** - Project setup tutorial
-- **[Migration Strategies](../guides/migration-strategies.md)** - Choosing the right approach
+- **[Getting Started](../getting-started.md)** - Project setup tutorial
+- **[Migration Decision Tree](../guides/migration-decision-tree.md)** - Choosing the right approach
 - **[API Reference](./api.md)** - Python API documentation
 
 ---

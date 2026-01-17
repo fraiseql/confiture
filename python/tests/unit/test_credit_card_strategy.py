@@ -150,14 +150,14 @@ class TestCreditCardMasking:
 
     def test_preserve_last4_digits(self):
         """Test preserving last 4 digits (except checksum digit)."""
-        config = CreditCardConfig(
-            seed=12345, preserve_last4=True, preserve_bin=False
-        )
+        config = CreditCardConfig(seed=12345, preserve_last4=True, preserve_bin=False)
         strategy = CreditCardStrategy(config)
         result = strategy.anonymize("4242424242424242")
 
         # Extract last 4 from both
-        original_last4 = "4242424242424242"[-4:-1]  # Get 3rd, 2nd, 1st before last (last is checksum)
+        original_last4 = "4242424242424242"[
+            -4:-1
+        ]  # Get 3rd, 2nd, 1st before last (last is checksum)
         result_last4 = result[-4:-1]
 
         # Should preserve first 3 of last 4
@@ -167,9 +167,7 @@ class TestCreditCardMasking:
 
     def test_preserve_bin(self):
         """Test preserving BIN (first 6 digits)."""
-        config = CreditCardConfig(
-            seed=12345, preserve_last4=False, preserve_bin=True
-        )
+        config = CreditCardConfig(seed=12345, preserve_last4=False, preserve_bin=True)
         strategy = CreditCardStrategy(config)
         result = strategy.anonymize("4242424242424242")
 
@@ -180,9 +178,7 @@ class TestCreditCardMasking:
 
     def test_full_anonymization(self):
         """Test full anonymization (no preservation)."""
-        config = CreditCardConfig(
-            seed=12345, preserve_last4=False, preserve_bin=False
-        )
+        config = CreditCardConfig(seed=12345, preserve_last4=False, preserve_bin=False)
         strategy = CreditCardStrategy(config)
         result = strategy.anonymize("4242424242424242")
 
@@ -324,9 +320,7 @@ class TestCreditCardShortName:
 
     def test_short_name_full(self):
         """Test short name for full anonymization."""
-        config = CreditCardConfig(
-            seed=12345, preserve_last4=False, preserve_bin=False
-        )
+        config = CreditCardConfig(seed=12345, preserve_last4=False, preserve_bin=False)
         strategy = CreditCardStrategy(config)
         assert strategy.short_name() == "credit_card:full"
 

@@ -74,11 +74,7 @@ class TestHookError:
 
     def test_hook_error_repr(self):
         """Test HookError representation."""
-        error = HookError(
-            "Test error",
-            hook_name="test_hook",
-            phase="pre_migration"
-        )
+        error = HookError("Test error", hook_name="test_hook", phase="pre_migration")
         error_repr = repr(error)
         assert error_repr  # Just verify it's not empty
 

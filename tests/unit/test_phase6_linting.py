@@ -294,7 +294,7 @@ class TestConflictDetection:
         composed = composer.build()
 
         # Should have conflicts attribute on composed result
-        assert hasattr(composed, 'conflicts')
+        assert hasattr(composed, "conflicts")
 
 
 class TestRuleVersionManager:
@@ -381,7 +381,8 @@ class TestRuleDisabling:
         library = HIPAALibrary()
 
         [
-            r for r in library.rules.values()
+            r
+            for r in library.rules.values()
             if r.severity == LintSeverity.CRITICAL and not r.enabled_by_default
         ]
 

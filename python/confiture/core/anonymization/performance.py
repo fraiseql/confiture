@@ -216,8 +216,7 @@ class PerformanceMonitor:
                 avg_duration_ms=sum(durations) / len(durations),
                 min_duration_ms=min(durations),
                 max_duration_ms=max(durations),
-                avg_throughput=sum(m.throughput_rows_per_sec for m in op_metrics)
-                / len(op_metrics),
+                avg_throughput=sum(m.throughput_rows_per_sec for m in op_metrics) / len(op_metrics),
                 total_rows_processed=sum(rows),
                 total_duration_ms=sum(durations),
                 error_count=len(errors),
@@ -263,7 +262,9 @@ class PerformanceMonitor:
         current = current_stats[0]
 
         # Check if throughput decreased by more than threshold
-        degradation = 100.0 * (baseline.avg_throughput - current.avg_throughput) / baseline.avg_throughput
+        degradation = (
+            100.0 * (baseline.avg_throughput - current.avg_throughput) / baseline.avg_throughput
+        )
         return degradation > threshold_pct
 
 
@@ -332,21 +333,18 @@ class BatchAnonymizer:
         try:
             # Get total row count
             with self.conn.cursor() as cursor:
-                count_query = sql.SQL("SELECT COUNT(*) FROM {}").format(
-                    sql.Identifier(table_name)
-                )
+                count_query = sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table_name))
                 if where_clause:
                     # Caller is responsible for ensuring where_clause is safe (not user input)
                     count_query = sql.SQL("{} WHERE {}").format(
-                        count_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                        count_query,
+                        sql.SQL(where_clause),  # type: ignore[arg-type]
                     )
                 cursor.execute(count_query)
                 row = cursor.fetchone()
                 total_rows = row[0] if row else 0
 
-            logger.info(
-                f"Anonymizing {table_name}.{column_name}: {total_rows} rows"
-            )
+            logger.info(f"Anonymizing {table_name}.{column_name}: {total_rows} rows")
 
             # Process in batches
             offset = 0
@@ -360,8 +358,7 @@ class BatchAnonymizer:
                 # Log progress every 100K rows
                 if offset % 100000 == 0:
                     logger.info(
-                        f"Progress: {offset}/{total_rows} rows "
-                        f"({100.0 * offset / total_rows:.1f}%)"
+                        f"Progress: {offset}/{total_rows} rows ({100.0 * offset / total_rows:.1f}%)"
                     )
 
         except Exception as e:
@@ -420,7 +417,8 @@ class BatchAnonymizer:
         if where_clause:
             # Caller is responsible for ensuring where_clause is safe (not user input)
             select_query = sql.SQL("{} WHERE {}").format(
-                select_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                select_query,
+                sql.SQL(where_clause),  # type: ignore[arg-type]
             )
         select_query = sql.SQL("{} LIMIT {} OFFSET {}").format(
             select_query, sql.Literal(batch_size), sql.Literal(offset)
@@ -529,13 +527,12 @@ class ConcurrentAnonymizer:
         try:
             # Get total row count
             with self.conn.cursor() as cursor:
-                count_query = sql.SQL("SELECT COUNT(*) FROM {}").format(
-                    sql.Identifier(table_name)
-                )
+                count_query = sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table_name))
                 if where_clause:
                     # Caller is responsible for ensuring where_clause is safe (not user input)
                     count_query = sql.SQL("{} WHERE {}").format(
-                        count_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                        count_query,
+                        sql.SQL(where_clause),  # type: ignore[arg-type]
                     )
                 cursor.execute(count_query)
                 row = cursor.fetchone()
@@ -554,8 +551,7 @@ class ConcurrentAnonymizer:
             # Process with thread pool
             with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
                 futures = [
-                    executor.submit(self._process_batch_concurrent, *task)
-                    for task in work_queue
+                    executor.submit(self._process_batch_concurrent, *task) for task in work_queue
                 ]
 
                 for future in as_completed(futures):
@@ -629,7 +625,8 @@ class ConcurrentAnonymizer:
             if where_clause:
                 # Caller is responsible for ensuring where_clause is safe (not user input)
                 select_query = sql.SQL("{} WHERE {}").format(
-                    select_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                    select_query,
+                    sql.SQL(where_clause),  # type: ignore[arg-type]
                 )
             select_query = sql.SQL("{} LIMIT {} OFFSET {}").format(
                 select_query, sql.Literal(self.batch_size), sql.Literal(offset)
@@ -808,9 +805,7 @@ class AnonymizationCache:
             if len(self._cache) >= self.max_entries:
                 self._evict_lru()
 
-            self._cache[key] = CacheEntry(
-                original_value, anonymized_value, self.ttl_seconds
-            )
+            self._cache[key] = CacheEntry(original_value, anonymized_value, self.ttl_seconds)
 
     def clear(self) -> None:
         """Clear entire cache."""
@@ -821,9 +816,7 @@ class AnonymizationCache:
         """Get cache statistics."""
         with self._lock:
             avg_lookup = (
-                sum(self._lookup_times) / len(self._lookup_times)
-                if self._lookup_times
-                else 0.0
+                sum(self._lookup_times) / len(self._lookup_times) if self._lookup_times else 0.0
             )
 
             return CacheStatistics(
@@ -840,9 +833,7 @@ class AnonymizationCache:
         if not self._cache:
             return
 
-        lru_key = min(
-            self._cache.keys(), key=lambda k: self._cache[k].last_accessed
-        )
+        lru_key = min(self._cache.keys(), key=lambda k: self._cache[k].last_accessed)
         del self._cache[lru_key]
         self._evictions += 1
 
@@ -907,9 +898,7 @@ class ConnectionPoolManager:
                     logger.error(f"Failed to create connection: {e}")
 
             self._initialized = True
-            logger.info(
-                f"Connection pool initialized: {len(self._available)}/{self.min_size}"
-            )
+            logger.info(f"Connection pool initialized: {len(self._available)}/{self.min_size}")
 
     def borrow(self, timeout_seconds: int = 30) -> psycopg.Connection | None:
         """Borrow connection from pool.
@@ -1060,9 +1049,7 @@ class QueryOptimizer:
 
         for column_name in column_names:
             index_name = f"idx_{table_name}_{column_name}"
-            recommendations.append(
-                f"CREATE INDEX {index_name} ON {table_name}({column_name})"
-            )
+            recommendations.append(f"CREATE INDEX {index_name} ON {table_name}({column_name})")
 
         return recommendations
 
@@ -1080,15 +1067,9 @@ class QueryOptimizer:
     def _is_slow_query(self, plan: list[tuple]) -> bool:
         """Detect if query is slow."""
         plan_str = str(plan)
-        return (
-            "Seq Scan" in plan_str
-            or "Sort" in plan_str
-            and "Sequential" in plan_str
-        )
+        return "Seq Scan" in plan_str or "Sort" in plan_str and "Sequential" in plan_str
 
-    def _get_recommendations(
-        self, _query: str, plan: list[tuple]
-    ) -> list[str]:
+    def _get_recommendations(self, _query: str, plan: list[tuple]) -> list[str]:
         """Get recommendations for query optimization."""
         recommendations = []
 
@@ -1104,12 +1085,8 @@ class QueryOptimizer:
         """Get query optimization statistics."""
         return {
             "total_queries_analyzed": len(self._query_stats),
-            "slow_queries": sum(
-                1 for stats in self._query_stats.values() if stats.get("is_slow")
-            ),
+            "slow_queries": sum(1 for stats in self._query_stats.values() if stats.get("is_slow")),
             "queries_with_recommendations": sum(
-                1
-                for stats in self._query_stats.values()
-                if stats.get("recommendations")
+                1 for stats in self._query_stats.values() if stats.get("recommendations")
             ),
         }

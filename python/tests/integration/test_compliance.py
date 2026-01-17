@@ -120,9 +120,7 @@ class TestComplianceFramework:
 
         # Political data should only be in some regulations
         pipl_verifier = ComplianceVerifier(RegulationType.PIPL)
-        political_in_pipl = any(
-            c.name == "Political Affiliation" for c in pipl_verifier.categories
-        )
+        political_in_pipl = any(c.name == "Political Affiliation" for c in pipl_verifier.categories)
         assert not political_in_pipl  # PIPL doesn't include political data
 
 
@@ -166,9 +164,7 @@ class TestHealthcareComplianceGDPR:
     def test_gdpr_compliance_verification(self, sample_data):
         """Test GDPR compliance verification."""
         anonymized = HealthcareScenario.anonymize(sample_data, RegulationType.GDPR)
-        result = HealthcareScenario.verify_compliance(
-            sample_data, anonymized, RegulationType.GDPR
-        )
+        result = HealthcareScenario.verify_compliance(sample_data, anonymized, RegulationType.GDPR)
 
         assert isinstance(result, dict)
         assert "compliant" in result
@@ -225,9 +221,7 @@ class TestHealthcareComplianceCCPA:
     def test_ccpa_compliance_verification(self, sample_data):
         """Test CCPA compliance verification."""
         anonymized = HealthcareScenario.anonymize(sample_data, RegulationType.CCPA)
-        result = HealthcareScenario.verify_compliance(
-            sample_data, anonymized, RegulationType.CCPA
-        )
+        result = HealthcareScenario.verify_compliance(sample_data, anonymized, RegulationType.CCPA)
 
         assert result["regulation"] == "ccpa"
         assert isinstance(result["compliant"], bool)
@@ -357,9 +351,7 @@ class TestHealthcareCompliancePrivacyAct:
 
     def test_privacy_act_requirements(self):
         """Test Privacy Act compliance requirements."""
-        reqs = HealthcareScenario.get_compliance_requirements(
-            RegulationType.PRIVACY_ACT
-        )
+        reqs = HealthcareScenario.get_compliance_requirements(RegulationType.PRIVACY_ACT)
 
         assert reqs["regulation"] == "privacy_act"
 
@@ -457,9 +449,7 @@ class TestComplianceCrossRegulation:
 
         for regulation in regulations:
             anonymized = HealthcareScenario.anonymize(sample_data, regulation)
-            result = HealthcareScenario.verify_compliance(
-                sample_data, anonymized, regulation
-            )
+            result = HealthcareScenario.verify_compliance(sample_data, anonymized, regulation)
 
             assert "compliant" in result
             assert "regulation" in result
@@ -520,9 +510,7 @@ class TestComplianceBatchProcessing:
 
     def test_batch_anonymization_gdpr(self, sample_batch):
         """Test batch anonymization with GDPR."""
-        anonymized = HealthcareScenario.anonymize_batch(
-            sample_batch, RegulationType.GDPR
-        )
+        anonymized = HealthcareScenario.anonymize_batch(sample_batch, RegulationType.GDPR)
 
         assert len(anonymized) == len(sample_batch)
 
@@ -538,14 +526,10 @@ class TestComplianceBatchProcessing:
 
     def test_batch_compliance_verification(self, sample_batch):
         """Test batch compliance verification."""
-        anonymized = HealthcareScenario.anonymize_batch(
-            sample_batch, RegulationType.GDPR
-        )
+        anonymized = HealthcareScenario.anonymize_batch(sample_batch, RegulationType.GDPR)
 
         for original, anon in zip(sample_batch, anonymized, strict=False):
-            result = HealthcareScenario.verify_compliance(
-                original, anon, RegulationType.GDPR
-            )
+            result = HealthcareScenario.verify_compliance(original, anon, RegulationType.GDPR)
 
             assert "compliant" in result
             assert isinstance(result["compliant"], bool)

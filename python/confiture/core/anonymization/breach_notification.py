@@ -483,11 +483,11 @@ Detected: {incident.detected_at.isoformat()}
 Description: {incident.description}
 
 Affected Records: {incident.affected_records}
-Data Categories: {', '.join(incident.data_types)}
+Data Categories: {", ".join(incident.data_types)}
 Severity: {incident.severity.value}
 
-Root Cause: {incident.root_cause or 'Under investigation'}
-Remediation Plan: {incident.remediation_plan or 'To be determined'}
+Root Cause: {incident.root_cause or "Under investigation"}
+Remediation Plan: {incident.remediation_plan or "To be determined"}
 
 All affected individuals will be notified as required under Article 34.
 """
@@ -502,7 +502,7 @@ Dear Valued Customer,
 We are writing to inform you about a security incident that may affect your personal data.
 
 Incident: {incident.title}
-Date Discovered: {incident.detected_at.strftime('%B %d, %Y')}
+Date Discovered: {incident.detected_at.strftime("%B %d, %Y")}
 
 What Happened: {incident.description}
 
@@ -529,7 +529,7 @@ A security incident has affected your personal information.
 
 Details:
 - Description: {incident.description}
-- Affected Information: {', '.join(incident.data_types)}
+- Affected Information: {", ".join(incident.data_types)}
 - Records Affected: {incident.affected_records}
 
 California law requires us to notify you of this incident.
@@ -608,9 +608,7 @@ Questions? Contact: privacy@example.com
             status=row[11],
         )
 
-    def get_notifications_for_incident(
-        self, incident_id: UUID
-    ) -> list[BreachNotification]:
+    def get_notifications_for_incident(self, incident_id: UUID) -> list[BreachNotification]:
         """Get all notifications for an incident.
 
         Args:

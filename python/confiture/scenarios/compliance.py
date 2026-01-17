@@ -377,9 +377,7 @@ class ComplianceVerifier:
             if category.requires_anonymization:
                 for example in category.examples or []:
                     if example in original and example not in masked_fields:
-                        issues.append(
-                            f"'{example}' ({category.name}) should be anonymized"
-                        )
+                        issues.append(f"'{example}' ({category.name}) should be anonymized")
 
         return {
             "compliant": len(issues) == 0,
@@ -397,12 +395,8 @@ class ComplianceVerifier:
         Returns:
             Dictionary with regulation requirements
         """
-        requires_consent = [
-            c.name for c in self.categories if c.requires_consent
-        ]
-        requires_anonymization = [
-            c.name for c in self.categories if c.requires_anonymization
-        ]
+        requires_consent = [c.name for c in self.categories if c.requires_consent]
+        requires_anonymization = [c.name for c in self.categories if c.requires_anonymization]
 
         return {
             "regulation": self.regulation.value,

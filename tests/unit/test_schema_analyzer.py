@@ -238,10 +238,7 @@ class TestSchemaAnalyzer:
             1,
         )
 
-        assert any(
-            i.severity == ValidationSeverity.ERROR and "email" in i.message
-            for i in issues
-        )
+        assert any(i.severity == ValidationSeverity.ERROR and "email" in i.message for i in issues)
 
     def test_validate_alter_nonexistent_table(self):
         """Test validation catches missing table."""
@@ -575,6 +572,7 @@ class TestSchemaAnalyzerIntegration:
         """Create test database connection if available."""
         try:
             import psycopg
+
             conn = psycopg.connect("postgresql://localhost/confiture_test")
             yield conn
             conn.close()

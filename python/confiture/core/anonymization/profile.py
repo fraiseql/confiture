@@ -93,8 +93,7 @@ class StrategyDefinition(BaseModel):
         allowed = {st.value for st in StrategyType}
         if v not in allowed:
             raise ValueError(
-                f"Strategy type '{v}' not allowed. "
-                f"Allowed types: {', '.join(sorted(allowed))}"
+                f"Strategy type '{v}' not allowed. Allowed types: {', '.join(sorted(allowed))}"
             )
         return v
 
@@ -241,9 +240,7 @@ class AnonymizationProfile(BaseModel):
         return cls(**data)
 
 
-def resolve_seed_for_column(
-    rule: AnonymizationRule, profile: AnonymizationProfile
-) -> int:
+def resolve_seed_for_column(rule: AnonymizationRule, profile: AnonymizationProfile) -> int:
     """Resolve seed for a column with proper precedence.
 
     Resolution order:

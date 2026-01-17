@@ -558,8 +558,8 @@ linting:
 ## See Also
 
 - [Advanced Patterns](./advanced-patterns.md) - Complex validation workflows
-- [Schema Design](../migration-strategies.md) - Best practices
-- [Troubleshooting](./troubleshooting.md) - Common issues
+- [Migration Decision Tree](./migration-decision-tree.md) - Best practices
+- [Troubleshooting](../troubleshooting.md) - Common issues
 - [CLI Reference](../reference/cli.md) - Lint command documentation
 
 ---
@@ -577,7 +577,7 @@ linting:
 
 **Got questions?**
 - **[FAQ](../glossary.md)** - Glossary and definitions
-- **[Troubleshooting](./troubleshooting.md)** - Common issues
+- **[Troubleshooting](../troubleshooting.md)** - Common issues
 
 ---
 

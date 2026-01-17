@@ -416,9 +416,7 @@ class EncryptedTokenStore:
             original_value = decrypted.decode()
 
             # 6. Log successful reversal
-            self._log_reversal(
-                reversal_id, request, reversed_at, success=True, error=None
-            )
+            self._log_reversal(reversal_id, request, reversed_at, success=True, error=None)
 
             logger.info(
                 f"Token reversed by {request.requester_id}: {request.token[:8]}... "
@@ -434,9 +432,7 @@ class EncryptedTokenStore:
             )
 
         except (PermissionError, ValueError) as e:
-            logger.warning(
-                f"Token reversal failed for {request.requester_id}: {e}"
-            )
+            logger.warning(f"Token reversal failed for {request.requester_id}: {e}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error during token reversal: {e}")
@@ -460,26 +456,19 @@ class EncryptedTokenStore:
             PermissionError: If requester not authorized
         """
         if requester_id not in self.allowed_reversers:
-            raise PermissionError(
-                f"User {requester_id} is not authorized to reverse tokens"
-            )
+            raise PermissionError(f"User {requester_id} is not authorized to reverse tokens")
 
         access_level = self.allowed_reversers[requester_id]
 
         # Check if reason is required
-        if (
-            access_level == TokenAccessLevel.REVERSE_WITH_REASON
-            and (not reason or not reason.strip())
+        if access_level == TokenAccessLevel.REVERSE_WITH_REASON and (
+            not reason or not reason.strip()
         ):
-            raise PermissionError(
-                f"User {requester_id} requires a reason for token reversal"
-            )
+            raise PermissionError(f"User {requester_id} requires a reason for token reversal")
 
         # NONE and READ_ONLY users can't reverse
         if access_level in (TokenAccessLevel.NONE, TokenAccessLevel.READ_ONLY):
-            raise PermissionError(
-                f"User {requester_id} does not have reversal permissions"
-            )
+            raise PermissionError(f"User {requester_id} does not have reversal permissions")
 
     def _log_reversal(
         self,
@@ -546,9 +535,7 @@ class EncryptedTokenStore:
             HMAC-SHA256 signature as hex string
         """
         json_str = json.dumps(audit_data, sort_keys=True)
-        signature = hashlib.sha256(
-            self.log_secret.encode() + json_str.encode()
-        ).hexdigest()
+        signature = hashlib.sha256(self.log_secret.encode() + json_str.encode()).hexdigest()
         return signature
 
     def get_reversal_audit_log(
@@ -609,9 +596,7 @@ class EncryptedTokenStore:
 
             return results
 
-    def deactivate_token(
-        self, token: str, deactivated_by: str, reason: str | None = None
-    ) -> None:
+    def deactivate_token(self, token: str, deactivated_by: str, reason: str | None = None) -> None:
         """Deactivate a token (prevent further reversals).
 
         Args:

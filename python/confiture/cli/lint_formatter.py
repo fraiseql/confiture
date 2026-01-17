@@ -189,9 +189,5 @@ def save_report(
         output_path: Path to save to
         format_type: Output format (json or csv)
     """
-    content = (
-        format_json(report)
-        if format_type == "json"
-        else format_csv(report)
-    )
+    content = format_json(report) if format_type == "json" else format_csv(report)
     output_path.write_text(content)

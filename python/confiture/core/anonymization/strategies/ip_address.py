@@ -119,13 +119,11 @@ class IPAddressStrategy(AnonymizationStrategy):
             Anonymized IP address string
         """
         # Skip localhost if configured
-        is_localhost_v4 = (
-            isinstance(ip, ipaddress.IPv4Address)
-            and ip == ipaddress.IPv4Address("127.0.0.1")
+        is_localhost_v4 = isinstance(ip, ipaddress.IPv4Address) and ip == ipaddress.IPv4Address(
+            "127.0.0.1"
         )
-        is_localhost_v6 = (
-            isinstance(ip, ipaddress.IPv6Address)
-            and ip == ipaddress.IPv6Address("::1")
+        is_localhost_v6 = isinstance(ip, ipaddress.IPv6Address) and ip == ipaddress.IPv6Address(
+            "::1"
         )
         if not self.config.anonymize_localhost and (is_localhost_v4 or is_localhost_v6):
             return str(ip)
@@ -192,7 +190,9 @@ class IPAddressStrategy(AnonymizationStrategy):
             ip_int = int(ip)
 
             # Create mask for preservation
-            preserve_mask = (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << bits_to_randomize) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            preserve_mask = (
+                0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << bits_to_randomize
+            ) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
             # Generate random bits for host part
             random_bits = rng.getrandbits(bits_to_randomize)

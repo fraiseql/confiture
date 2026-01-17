@@ -95,25 +95,17 @@ class StrategyFactory:
             return self._cache[column_name]
 
         # Get strategy name from profile
-        strategy_name = self.profile.columns.get(
-            column_name, self.profile.defaults
-        )
+        strategy_name = self.profile.columns.get(column_name, self.profile.defaults)
 
         # Create strategy
         try:
-            strategy = StrategyRegistry.get(
-                strategy_name, {"seed": self.profile.seed}
-            )
+            strategy = StrategyRegistry.get(strategy_name, {"seed": self.profile.seed})
             self._cache[column_name] = strategy
             return strategy
         except ValueError as e:
-            raise ValueError(
-                f"Failed to create strategy for column '{column_name}': {e}"
-            ) from e
+            raise ValueError(f"Failed to create strategy for column '{column_name}': {e}") from e
 
-    def get_strategies(
-        self, column_names: list[str]
-    ) -> dict[str, AnonymizationStrategy]:
+    def get_strategies(self, column_names: list[str]) -> dict[str, AnonymizationStrategy]:
         """Get strategies for multiple columns.
 
         Args:
@@ -155,9 +147,7 @@ class StrategyFactory:
             raise ValueError("Profile must have a name")
 
         # Validate strategy names exist
-        all_strategies = list(self.profile.columns.values()) + [
-            self.profile.defaults
-        ]
+        all_strategies = list(self.profile.columns.values()) + [self.profile.defaults]
 
         for strategy_name in all_strategies:
             # Extract base strategy name (remove config suffix if present)
@@ -195,8 +185,15 @@ class StrategySuggester:
 
     # Patterns for column name detection
     NAME_PATTERNS = [
-        "name", "fullname", "full_name", "firstname", "first_name",
-        "lastname", "last_name", "personname", "person_name"
+        "name",
+        "fullname",
+        "full_name",
+        "firstname",
+        "first_name",
+        "lastname",
+        "last_name",
+        "personname",
+        "person_name",
     ]
     EMAIL_PATTERNS = ["email", "email_address", "e_mail", "mail"]
     PHONE_PATTERNS = ["phone", "telephone", "mobile", "cellphone", "cell_phone"]
@@ -205,9 +202,7 @@ class StrategySuggester:
     CC_PATTERNS = ["credit", "card", "cc", "cardnumber", "card_number"]
     IP_PATTERNS = ["ip", "ipaddress", "ip_address", "server"]
 
-    def suggest(
-        self, column_name: str, sample_value: str | None = None
-    ) -> list[tuple]:
+    def suggest(self, column_name: str, sample_value: str | None = None) -> list[tuple]:
         """Suggest strategies for column.
 
         Args:
@@ -298,9 +293,7 @@ class StrategySuggester:
 
         return suggestions
 
-    def create_profile(
-        self, name: str, columns: list[str], seed: int = 0
-    ) -> StrategyProfile:
+    def create_profile(self, name: str, columns: list[str], seed: int = 0) -> StrategyProfile:
         """Create profile based on column suggestions.
 
         Args:
@@ -323,9 +316,4 @@ class StrategySuggester:
                 # Default to preserve
                 column_map[col] = "preserve"
 
-        return StrategyProfile(
-            name=name,
-            seed=seed,
-            columns=column_map,
-            defaults="preserve"
-        )
+        return StrategyProfile(name=name, seed=seed, columns=column_map, defaults="preserve")

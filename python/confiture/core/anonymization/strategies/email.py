@@ -66,7 +66,7 @@ class EmailMaskingStrategy(AnonymizationStrategy):
     """
 
     # Simple email regex for validation
-    EMAIL_REGEX = re.compile(r'^[^@]+@[^@]+\.[^@]+$')
+    EMAIL_REGEX = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
 
     def __init__(self, config: EmailMaskConfig | None = None):
         """Initialize email masking strategy.
@@ -102,9 +102,9 @@ class EmailMaskingStrategy(AnonymizationStrategy):
             return ""
 
         # Create deterministic hash from email
-        hash_value = hashlib.sha256(
-            f"{self._seed}:{value_str}".encode()
-        ).hexdigest()[: self.config.hash_length]
+        hash_value = hashlib.sha256(f"{self._seed}:{value_str}".encode()).hexdigest()[
+            : self.config.hash_length
+        ]
 
         # Extract domain if preserving (not recommended)
         if self.config.preserve_domain:

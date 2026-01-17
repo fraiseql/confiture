@@ -68,7 +68,7 @@ class TestStrategyFactoryInitialization:
         """Test factory initialization with valid profile."""
         Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
             profile = StrategyProfile(
                 name="test",
                 columns={"name": "name"},
@@ -86,7 +86,7 @@ class TestStrategyFactoryInitialization:
             columns={"name": "invalid_strategy"},
         )
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=False):
+        with patch.object(StrategyRegistry, "is_registered", return_value=False):
             with pytest.raises(ValueError, match="Unknown strategy"):
                 StrategyFactory(profile)
 
@@ -97,7 +97,7 @@ class TestStrategyFactoryInitialization:
             defaults="invalid_default",
         )
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=False):
+        with patch.object(StrategyRegistry, "is_registered", return_value=False):
             with pytest.raises(ValueError, match="Unknown strategy"):
                 StrategyFactory(profile)
 
@@ -116,8 +116,8 @@ class TestStrategyFactoryGetStrategy:
         """Test getting strategy for column in profile."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -131,8 +131,8 @@ class TestStrategyFactoryGetStrategy:
         """Test that unmapped columns use default strategy."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -147,8 +147,8 @@ class TestStrategyFactoryGetStrategy:
         """Test that strategies are cached."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy) as mock_get:
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -167,8 +167,8 @@ class TestStrategyFactoryGetStrategy:
         """Test that seed is passed to registry."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy) as mock_get:
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -186,8 +186,8 @@ class TestStrategyFactoryGetStrategy:
         """Test that strategy name with config suffix is handled."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy) as mock_get:
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name:firstname_lastname"},
@@ -202,8 +202,8 @@ class TestStrategyFactoryGetStrategy:
 
     def test_get_strategy_error(self):
         """Test error handling when strategy creation fails."""
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', side_effect=ValueError("Not found")):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", side_effect=ValueError("Not found")):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -221,8 +221,8 @@ class TestStrategyFactoryGetStrategies:
         """Test getting strategies for multiple columns."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name", "email": "email"},
@@ -237,7 +237,7 @@ class TestStrategyFactoryGetStrategies:
 
     def test_get_strategies_empty_list(self):
         """Test get_strategies with empty column list."""
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
             profile = StrategyProfile(name="test")
             factory = StrategyFactory(profile)
 
@@ -253,8 +253,8 @@ class TestStrategyFactoryAnonymize:
         mock_strategy = Mock(spec=AnonymizationStrategy)
         mock_strategy.anonymize.side_effect = lambda x: f"anonymized_{x}"
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name", "email": "email"},
@@ -272,8 +272,8 @@ class TestStrategyFactoryAnonymize:
         mock_strategy = Mock(spec=AnonymizationStrategy)
         mock_strategy.anonymize.side_effect = lambda x: x
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 profile = StrategyProfile(name="test")
                 factory = StrategyFactory(profile)
 
@@ -284,7 +284,7 @@ class TestStrategyFactoryAnonymize:
 
     def test_anonymize_empty_data(self):
         """Test anonymizing empty data dictionary."""
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
             profile = StrategyProfile(name="test")
             factory = StrategyFactory(profile)
 
@@ -297,7 +297,7 @@ class TestStrategyFactoryListAndCache:
 
     def test_list_column_strategies(self):
         """Test listing all column-to-strategy mappings."""
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
             columns = {"name": "name", "email": "email", "phone": "phone"}
             profile = StrategyProfile(name="test", columns=columns)
             factory = StrategyFactory(profile)
@@ -309,8 +309,8 @@ class TestStrategyFactoryListAndCache:
         """Test clearing strategy cache."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -570,8 +570,8 @@ class TestStrategyFactoryIntegration:
         """Test using suggester-created profile with factory."""
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 suggester = StrategySuggester()
                 profile = suggester.create_profile(
                     name="test",
@@ -588,8 +588,8 @@ class TestStrategyFactoryIntegration:
         mock_strategy = Mock(spec=AnonymizationStrategy)
         mock_strategy.anonymize.side_effect = lambda x: f"masked_{x}"
 
-        with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
+        with patch.object(StrategyRegistry, "is_registered", return_value=True):
+            with patch.object(StrategyRegistry, "get", return_value=mock_strategy):
                 # Suggest
                 suggester = StrategySuggester()
                 profile = suggester.create_profile(

@@ -387,9 +387,7 @@ class TestCreditCardConfig:
 
     def test_preserve_both_options(self):
         """Test both preserve options can be set."""
-        config = CreditCardConfig(
-            seed=12345, preserve_last4=True, preserve_bin=True
-        )
+        config = CreditCardConfig(seed=12345, preserve_last4=True, preserve_bin=True)
         assert config.preserve_last4 is True
         assert config.preserve_bin is True
 

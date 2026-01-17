@@ -165,7 +165,9 @@ def validate_identifier(name: str, context: str = "identifier") -> str:
         raise ValidationError(f"Empty {context}", field=context)
 
     if not isinstance(name, str):
-        raise ValidationError(f"{context} must be a string, got {type(name).__name__}", field=context)
+        raise ValidationError(
+            f"{context} must be a string, got {type(name).__name__}", field=context
+        )
 
     if len(name) > MAX_IDENTIFIER_LENGTH:
         raise ValidationError(
@@ -242,7 +244,9 @@ def validate_path(path: str | Path, must_exist: bool = False, base_dir: Path | N
         try:
             resolved.relative_to(base_resolved)
         except ValueError:
-            raise ValidationError(f"Path '{path}' is outside allowed directory '{base_dir}'") from None
+            raise ValidationError(
+                f"Path '{path}' is outside allowed directory '{base_dir}'"
+            ) from None
 
     # Check existence if required
     if must_exist and not resolved.exists():
@@ -284,7 +288,9 @@ def validate_environment(env: str) -> str:
     env_lower = env.lower().strip()
 
     if env_lower not in allowed:
-        raise ValidationError(f"Invalid environment: '{env}'. Allowed: {', '.join(sorted(allowed))}")
+        raise ValidationError(
+            f"Invalid environment: '{env}'. Allowed: {', '.join(sorted(allowed))}"
+        )
 
     return env_lower
 

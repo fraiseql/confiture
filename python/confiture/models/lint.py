@@ -46,15 +46,12 @@ class Violation:
 
     def __str__(self) -> str:
         """Format violation for human consumption."""
-        return (
-            f"[{self.severity.upper()}] {self.location}: {self.message}"
-        )
+        return f"[{self.severity.upper()}] {self.location}: {self.message}"
 
     def __repr__(self) -> str:
         """Return repr for debugging."""
         return (
-            f"Violation(rule={self.rule_name}, severity={self.severity}, "
-            f"location={self.location})"
+            f"Violation(rule={self.rule_name}, severity={self.severity}, location={self.location})"
         )
 
 
@@ -176,9 +173,7 @@ class LintReport:
         grouped: dict[LintSeverity, list[Violation]] = {}
 
         for severity in LintSeverity:
-            grouped[severity] = [
-                v for v in self.violations if v.severity == severity
-            ]
+            grouped[severity] = [v for v in self.violations if v.severity == severity]
 
         return grouped
 
@@ -188,9 +183,7 @@ class LintReport:
         Returns:
             Multi-line string with summary of linting results
         """
-        tables_with_violations = {
-            v.location.split(".")[0] for v in self.violations
-        }
+        tables_with_violations = {v.location.split(".")[0] for v in self.violations}
         lines = [
             f"Schema: {self.schema_name}",
             f"Tables: {self.tables_checked} checked, {len(tables_with_violations)} with violations",

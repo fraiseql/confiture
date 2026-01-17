@@ -8,7 +8,6 @@ Tests verify that the mutation testing framework correctly:
 """
 
 
-
 def test_mutation_registry_loads(mutation_registry):
     """Test that mutation registry is available."""
     assert mutation_registry is not None
@@ -18,26 +17,21 @@ def test_mutation_registry_loads(mutation_registry):
 def test_schema_mutations_available(mutation_registry):
     """Test that schema mutations are registered."""
     schema_mutations = [
-        m for m in mutation_registry.mutations.values()
-        if m.category.value == "schema"
+        m for m in mutation_registry.mutations.values() if m.category.value == "schema"
     ]
     assert len(schema_mutations) > 0
 
 
 def test_data_mutations_available(mutation_registry):
     """Test that data mutations are registered."""
-    data_mutations = [
-        m for m in mutation_registry.mutations.values()
-        if m.category.value == "data"
-    ]
+    data_mutations = [m for m in mutation_registry.mutations.values() if m.category.value == "data"]
     assert len(data_mutations) > 0
 
 
 def test_rollback_mutations_available(mutation_registry):
     """Test that rollback mutations are registered."""
     rollback_mutations = [
-        m for m in mutation_registry.mutations.values()
-        if m.category.value == "rollback"
+        m for m in mutation_registry.mutations.values() if m.category.value == "rollback"
     ]
     assert len(rollback_mutations) > 0
 
@@ -45,8 +39,7 @@ def test_rollback_mutations_available(mutation_registry):
 def test_performance_mutations_available(mutation_registry):
     """Test that performance mutations are registered."""
     perf_mutations = [
-        m for m in mutation_registry.mutations.values()
-        if m.category.value == "performance"
+        m for m in mutation_registry.mutations.values() if m.category.value == "performance"
     ]
     assert len(perf_mutations) > 0
 
@@ -81,11 +74,7 @@ def test_mutation_kill_rate_calculation():
     """Test kill rate metrics calculation."""
     from confiture.testing.frameworks.mutation import MutationMetrics
 
-    metrics = MutationMetrics(
-        total_mutations=10,
-        killed_mutations=8,
-        survived_mutations=2
-    )
+    metrics = MutationMetrics(total_mutations=10, killed_mutations=8, survived_mutations=2)
 
     assert metrics.kill_rate == 80.0
 
@@ -97,10 +86,7 @@ def test_mutation_metrics_by_category():
     metrics = MutationMetrics(
         total_mutations=10,
         killed_mutations=8,
-        by_category={
-            "schema": {"killed": 5, "survived": 1},
-            "data": {"killed": 3, "survived": 1}
-        }
+        by_category={"schema": {"killed": 5, "survived": 1}, "data": {"killed": 3, "survived": 1}},
     )
 
     assert "schema" in metrics.by_category

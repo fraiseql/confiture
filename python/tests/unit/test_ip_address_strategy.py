@@ -45,9 +45,7 @@ class TestIPv4Masking:
 
     def test_preserve_subnet_ipv4(self):
         """Test subnet preservation for IPv4."""
-        config = IPAddressConfig(
-            seed=12345, preserve_subnet=True, subnet_bits_ipv4=8
-        )
+        config = IPAddressConfig(seed=12345, preserve_subnet=True, subnet_bits_ipv4=8)
         strategy = IPAddressStrategy(config)
         result = strategy.anonymize("192.168.1.100")
 
@@ -56,9 +54,7 @@ class TestIPv4Masking:
 
     def test_preserve_larger_subnet_ipv4(self):
         """Test preserving larger subnet (16 bits)."""
-        config = IPAddressConfig(
-            seed=12345, preserve_subnet=True, subnet_bits_ipv4=16
-        )
+        config = IPAddressConfig(seed=12345, preserve_subnet=True, subnet_bits_ipv4=16)
         strategy = IPAddressStrategy(config)
         result = strategy.anonymize("192.168.1.100")
 
@@ -126,9 +122,7 @@ class TestIPv6Masking:
 
     def test_preserve_subnet_ipv6(self):
         """Test subnet preservation for IPv6."""
-        config = IPAddressConfig(
-            seed=12345, preserve_subnet=True, subnet_bits_ipv6=32
-        )
+        config = IPAddressConfig(seed=12345, preserve_subnet=True, subnet_bits_ipv6=32)
         strategy = IPAddressStrategy(config)
         result = strategy.anonymize("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
 

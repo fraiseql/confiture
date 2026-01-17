@@ -1,6 +1,8 @@
 # Getting Started with Confiture
 
-**Confiture** is a modern PostgreSQL migration tool for Python that emphasizes simplicity and developer experience. This guide will help you get started in minutes.
+> **⚠️ Beta Software**: Confiture has not yet been used in production. Use with caution for critical workloads.
+
+**Confiture** is a PostgreSQL migration tool for Python that emphasizes simplicity and developer experience. This guide will help you get started.
 
 ## Installation
 
@@ -547,10 +549,9 @@ confiture build --env local --schema-only
 
 ## Next Steps
 
-- **[Organizing SQL Files](./organizing-sql-files.md)** - Patterns for complex schemas
-- **[Meaningful Test UUIDs](./meaningful-test-uuids.md)** - Generate debuggable UUIDs for seed data
-- **[CLI Reference](./reference/cli.md)** - Complete command documentation
-- **[Migration Strategies](./migration-strategies.md)** - When to use each approach
+- **[Organizing SQL Files](organizing-sql-files.md)** - Patterns for complex schemas
+- **[CLI Reference](reference/cli.md)** - Complete command documentation
+- **[Migration Decision Tree](guides/migration-decision-tree.md)** - Choose the right approach
 - **[Examples](../examples/)** - Sample projects
 
 ## Getting Help

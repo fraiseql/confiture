@@ -26,9 +26,7 @@ class TestEmailMaskingStrategy:
     @pytest.fixture
     def strategy_custom_format(self):
         """Create strategy with custom format."""
-        config = EmailMaskConfig(
-            seed=12345, format="anon_{hash}@test.org", hash_length=6
-        )
+        config = EmailMaskConfig(seed=12345, format="anon_{hash}@test.org", hash_length=6)
         return EmailMaskingStrategy(config)
 
     @pytest.fixture

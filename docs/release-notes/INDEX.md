@@ -7,7 +7,7 @@ This directory contains detailed release notes for each version of Confiture.
 ### Latest Release
 
 - **[v0.4.0](./v0.4.0.md)** (December 27, 2025)
-  - Phase 5: CLI Integration for Dry-Run Mode
+  - CLI integration for dry-run mode
   - Dry-run analysis and SAVEPOINT testing
   - Multiple output formats (text, JSON, file)
   - 12 comprehensive tests, 0 linting issues

@@ -110,7 +110,6 @@ class SaaSScenario:
                 "account_id": "preserve",
                 "tenant_id": "preserve",
                 "organization_id": "preserve",
-
                 # User PII - mask
                 "user_name": "text_redaction",
                 "username": "text_redaction",
@@ -119,21 +118,18 @@ class SaaSScenario:
                 "last_name": "name",
                 "full_name": "name",
                 "display_name": "name",
-
                 # Contact - redact
                 "email": "text_redaction",
                 "backup_email": "text_redaction",
                 "phone": "text_redaction",
                 "phone_number": "text_redaction",
                 "mobile": "text_redaction",
-
                 # Organization - mask name
                 "organization_name": "name",
                 "org_name": "name",
                 "company_name": "name",
                 "team_name": "name",
                 "workspace_name": "name",
-
                 # Organization metadata - preserve
                 "organization_type": "preserve",
                 "industry": "preserve",
@@ -141,7 +137,6 @@ class SaaSScenario:
                 "organization_role": "preserve",
                 "role": "preserve",
                 "permission_level": "preserve",
-
                 # Billing address - mask
                 "billing_address": "address",
                 "billing_street": "address",
@@ -150,13 +145,11 @@ class SaaSScenario:
                 "billing_state": "preserve",
                 "billing_zip": "preserve",
                 "billing_country": "preserve",
-
                 # Shipping address - mask
                 "shipping_address": "address",
                 "shipping_city": "preserve",
                 "shipping_state": "preserve",
                 "shipping_country": "preserve",
-
                 # Payment - PCI-DSS compliant
                 "card_number": "credit_card",
                 "card_last4": "preserve",
@@ -164,7 +157,6 @@ class SaaSScenario:
                 "card_brand": "preserve",
                 "card_expiry": "preserve",
                 "billing_method": "preserve",
-
                 # Subscription/pricing - preserve
                 "subscription_id": "preserve",
                 "subscription_tier": "preserve",
@@ -178,7 +170,6 @@ class SaaSScenario:
                 "user_limit": "preserve",
                 "api_limit": "preserve",
                 "storage_limit": "preserve",
-
                 # Dates - preserve year/month
                 "created_at": "preserve",
                 "created_date": "preserve",
@@ -190,7 +181,6 @@ class SaaSScenario:
                 "last_activity": "date",
                 "trial_end_date": "date",
                 "billing_cycle_date": "preserve",
-
                 # Usage metrics - preserve for analytics
                 "monthly_api_calls": "preserve",
                 "api_calls": "preserve",
@@ -202,14 +192,12 @@ class SaaSScenario:
                 "active_users": "preserve",
                 "page_views": "preserve",
                 "events_processed": "preserve",
-
                 # Activity - preserve for analytics
                 "login_count": "preserve",
                 "failed_login_count": "preserve",
                 "actions_count": "preserve",
                 "documents_created": "preserve",
                 "integrations_active": "preserve",
-
                 # Technical - mask
                 "login_ip": "ip_address",
                 "ip_address": "ip_address",
@@ -219,7 +207,6 @@ class SaaSScenario:
                 "device_type": "preserve",
                 "browser": "preserve",
                 "os": "preserve",
-
                 # Features - preserve
                 "features_enabled": "preserve",
                 "add_ons": "preserve",
@@ -228,7 +215,6 @@ class SaaSScenario:
                 "sso_enabled": "preserve",
                 "mfa_enabled": "preserve",
                 "audit_logs": "preserve",
-
                 # Status/metadata - preserve
                 "status": "preserve",
                 "account_status": "preserve",

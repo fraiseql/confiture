@@ -356,7 +356,7 @@ config = SyncConfig(
 
 **Potential**: 10-50x faster anonymization
 
-**Status**: Planned for Phase 2
+**Status**: Planned
 
 **Expected Impact**:
 - Current: 6,500 rows/sec

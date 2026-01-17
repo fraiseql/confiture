@@ -209,8 +209,7 @@ class ConnectionPool:
         )
 
         logger.info(
-            f"Connection pool initialized: min={self.config.min_size}, "
-            f"max={self.config.max_size}"
+            f"Connection pool initialized: min={self.config.min_size}, max={self.config.max_size}"
         )
 
     @contextmanager

@@ -41,14 +41,14 @@
    - Understand when to use each medium
 
 3. **Choose Your Medium** (5-10 min) - Read relevant guide:
-   - **[Medium 1: Build from DDL](guides/medium-1-build-from-ddl.md)** - Fresh databases
-   - **[Medium 2: Incremental Migrations](guides/medium-2-incremental-migrations.md)** - Simple ALTER changes
-   - **[Medium 3: Production Data Sync](guides/medium-3-production-sync.md)** - Copy production data locally
-   - **[Medium 4: Zero-Downtime](guides/medium-4-schema-to-schema.md)** - Large production changes
+   - **[Medium 1: Build from DDL](guides/01-build-from-ddl.md)** - Fresh databases
+   - **[Medium 2: Incremental Migrations](guides/02-incremental-migrations.md)** - Simple ALTER changes
+   - **[Medium 3: Production Data Sync](guides/03-production-sync.md)** - Copy production data locally
+   - **[Medium 4: Zero-Downtime](guides/04-schema-to-schema.md)** - Large production changes
 
 **Hands-on next**: Try one of these [Examples](../examples/)
 
-**Need help?** → See [Troubleshooting](guides/troubleshooting.md)
+**Need help?** → See [Troubleshooting](troubleshooting.md)
 
 ---
 
@@ -67,7 +67,7 @@
    - Safety and transaction handling
    - Error recovery
 
-3. **[Zero-Downtime Migrations](guides/medium-4-schema-to-schema.md)** (10 min)
+3. **[Zero-Downtime Migrations](guides/04-schema-to-schema.md)** (10 min)
    - Complete guide to FDW strategy
    - Real-world production scenario
    - Handling large tables
@@ -83,7 +83,7 @@
 
 **Hands-on**: Try [Zero-Downtime Example](../examples/03-zero-downtime-migration/)
 
-**Deployment questions?** → Check [Medium 4 troubleshooting](guides/medium-4-schema-to-schema.md#troubleshooting)
+**Deployment questions?** → Check [Medium 4 troubleshooting](guides/04-schema-to-schema.md#troubleshooting)
 
 ---
 
@@ -93,22 +93,22 @@
 
 **Reading path**:
 
-1. **[Production Data Sync](guides/medium-3-production-sync.md)** (10 min)
+1. **[Production Data Sync](guides/03-production-sync.md)** (10 min)
    - How data is copied from production
    - PII anonymization explained
    - Safety mechanisms
 
-2. **[Anonymization Strategy Framework](guides/anonymization-strategy-framework.md)** (5 min)
+2. **[Anonymization Guide](guides/anonymization.md)** (5 min)
    - Available anonymization strategies
    - Custom strategy extension
    - Data masking techniques
 
-3. **[Security Considerations](../docs/security/)** (5 min)
+3. **[Security Considerations](security/)** (5 min)
    - Threat model
    - GDPR compliance
    - Safe seed data handling
 
-**Questions?** → Review specific anonymization strategies in [guides/anonymization-strategy-framework.md](guides/anonymization-strategy-framework.md)
+**Questions?** → Review specific anonymization strategies in [Anonymization Guide](guides/anonymization.md)
 
 ---
 
@@ -160,12 +160,12 @@
    - Complex migration scenarios
    - CQRS backfilling patterns
 
-2. **[Anonymization Strategy Framework](guides/anonymization-strategy-framework.md)** (10 min)
+2. **[Anonymization Guide](guides/anonymization.md)** (10 min)
    - All built-in strategies
    - Creating custom strategies
    - Composition and chaining
 
-3. **[Migration Hooks](hooks.md)** (10 min)
+3. **[Migration Hooks](guides/hooks.md)** (10 min)
    - Complete hook API reference
    - All 6 hook phases
    - Error handling
@@ -185,11 +185,11 @@
 ### Use this site map to navigate directly
 
 **By Task**:
-- **"I need to build a fresh database"** → [Medium 1: Build from DDL](guides/medium-1-build-from-ddl.md)
-- **"I need to make simple schema changes"** → [Medium 2: Incremental](guides/medium-2-incremental-migrations.md)
-- **"I need to copy production data locally"** → [Medium 3: Production Sync](guides/medium-3-production-sync.md)
-- **"I need zero-downtime production migration"** → [Medium 4: Zero-Downtime](guides/medium-4-schema-to-schema.md)
-- **"I need to test migrations first"** → [Dry-Run Guide](guides/cli-dry-run.md)
+- **"I need to build a fresh database"** → [Medium 1: Build from DDL](guides/01-build-from-ddl.md)
+- **"I need to make simple schema changes"** → [Medium 2: Incremental](guides/02-incremental-migrations.md)
+- **"I need to copy production data locally"** → [Medium 3: Production Sync](guides/03-production-sync.md)
+- **"I need zero-downtime production migration"** → [Medium 4: Zero-Downtime](guides/04-schema-to-schema.md)
+- **"I need to test migrations first"** → [Dry-Run Guide](guides/dry-run.md)
 - **"I need custom logic"** → [Advanced Patterns](guides/advanced-patterns.md)
 
 **By Topic**:
@@ -216,13 +216,13 @@
 → Follow [Migration Path](comparison-with-alembic.md#-migration-path-from-alembic)
 
 **Q: "What about production deployments?"**
-→ See [Medium 4: Zero-Downtime](guides/medium-4-schema-to-schema.md)
+→ See [Medium 4: Zero-Downtime](guides/04-schema-to-schema.md)
 
 **Q: "How do I handle sensitive data?"**
-→ Read [Production Data Sync](guides/medium-3-production-sync.md) and [Anonymization](guides/anonymization-strategy-framework.md)
+→ Read [Production Data Sync](guides/03-production-sync.md) and [Anonymization](guides/anonymization.md)
 
 **Q: "I'm stuck on something..."**
-→ Check [Troubleshooting](guides/troubleshooting.md) or [Advanced Patterns](guides/advanced-patterns.md)
+→ Check [Troubleshooting](troubleshooting.md) or [Advanced Patterns](guides/advanced-patterns.md)
 
 ---
 
@@ -236,18 +236,18 @@ Getting Started
 
 User Guides (Choose Your Medium)
 ├─ [Decision Tree](guides/migration-decision-tree.md)
-├─ [Medium 1: Build from DDL](guides/medium-1-build-from-ddl.md)
-├─ [Medium 2: Incremental](guides/medium-2-incremental-migrations.md)
-├─ [Medium 3: Production Sync](guides/medium-3-production-sync.md)
-└─ [Medium 4: Zero-Downtime](guides/medium-4-schema-to-schema.md)
+├─ [Medium 1: Build from DDL](guides/01-build-from-ddl.md)
+├─ [Medium 2: Incremental](guides/02-incremental-migrations.md)
+├─ [Medium 3: Production Sync](guides/03-production-sync.md)
+└─ [Medium 4: Zero-Downtime](guides/04-schema-to-schema.md)
 
 Advanced Topics
 ├─ [Advanced Patterns](guides/advanced-patterns.md)
 ├─ [Comparison with Alembic](comparison-with-alembic.md)
 ├─ [Performance Guide](performance.md)
-├─ [Dry-Run Guide](guides/cli-dry-run.md)
-├─ [Anonymization Framework](guides/anonymization-strategy-framework.md)
-├─ [Migration Hooks](hooks.md)
+├─ [Dry-Run Guide](guides/dry-run.md)
+├─ [Anonymization Guide](guides/anonymization.md)
+├─ [Migration Hooks](guides/hooks.md)
 └─ [Schema Linting](linting.md)
 
 Reference
@@ -256,7 +256,7 @@ Reference
 └─ [API Reference](api/)
 
 Help & Examples
-├─ [Troubleshooting](guides/troubleshooting.md)
+├─ [Troubleshooting](troubleshooting.md)
 ├─ [Examples](../examples/)
 └─ [Architecture](../ARCHITECTURE.md)
 ```
@@ -271,5 +271,5 @@ Most developers need 20 minutes to get productive with Confiture.
 
 ---
 
-*Last updated: December 27, 2025*
-*Questions? Check [Glossary](glossary.md) for term definitions or [Troubleshooting](guides/troubleshooting.md) for common issues.*
+*Last updated: January 17, 2026*
+*Questions? Check [Glossary](glossary.md) for term definitions or [Troubleshooting](troubleshooting.md) for common issues.*

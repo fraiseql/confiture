@@ -28,8 +28,7 @@ except ImportError:
     HAS_CRYPTOGRAPHY = False
 
 requires_cryptography = pytest.mark.skipif(
-    not HAS_CRYPTOGRAPHY,
-    reason="cryptography library not installed"
+    not HAS_CRYPTOGRAPHY, reason="cryptography library not installed"
 )
 
 

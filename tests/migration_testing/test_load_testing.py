@@ -394,9 +394,12 @@ def test_transaction_with_many_operations(test_db_connection):
         # Many operations in transaction
         start = time.time()
         for i in range(100):
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO load_txn (id, value) VALUES (gen_random_uuid(), %s)
-            """, (i * 1.5,))
+            """,
+                (i * 1.5,),
+            )
         test_db_connection.commit()
         time.time() - start
 

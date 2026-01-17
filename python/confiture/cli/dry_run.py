@@ -62,9 +62,7 @@ def show_report_summary(report: Any) -> None:
     if not report.has_unsafe_statements:
         console.print("[green]✓ SAFE[/green]", end=" ")
     else:
-        unsafe_msg = (
-            f"[red]❌ UNSAFE ({report.unsafe_count} statements)[/red]"
-        )
+        unsafe_msg = f"[red]❌ UNSAFE ({report.unsafe_count} statements)[/red]"
         console.print(unsafe_msg, end=" ")
 
     time_str = report.total_estimated_time_ms
@@ -111,13 +109,8 @@ def display_dry_run_header(mode: str) -> None:
         mode: Either "analysis" for --dry-run or "testing" for --dry-run-execute
     """
     if mode == "testing":
-        msg = (
-            "[cyan]🧪 Executing migrations in SAVEPOINT "
-            "(guaranteed rollback)...[/cyan]"
-        )
+        msg = "[cyan]🧪 Executing migrations in SAVEPOINT (guaranteed rollback)...[/cyan]"
         console.print(msg + "\n")
     else:
         msg = "[cyan]🔍 Analyzing migrations without execution...[/cyan]"
         console.print(msg + "\n")
-
-

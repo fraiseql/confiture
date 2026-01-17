@@ -472,9 +472,8 @@ def lint(
                 console.print(formatted)
 
         # Determine exit code based on violations and fail mode
-        should_fail = (
-            (report.has_errors and fail_on_error) or
-            (report.has_warnings and fail_on_warning)
+        should_fail = (report.has_errors and fail_on_error) or (
+            report.has_warnings and fail_on_warning
         )
         if should_fail:
             raise typer.Exit(1)
@@ -705,7 +704,9 @@ def migrate_up(
 
         # Validate format option
         if format_output not in ("text", "json"):
-            console.print(f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]")
+            console.print(
+                f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
+            )
             raise typer.Exit(1)
 
         # Validate checksum mismatch option
@@ -854,7 +855,9 @@ def migrate_up(
                 if format_output == "json":
                     if output_file:
                         save_json_report(migration_summary, output_file)
-                        console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
+                        console.print(
+                            f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]"
+                        )
                     else:
                         print_json_report(migration_summary)
                 else:
@@ -881,7 +884,9 @@ def migrate_up(
                         for mig in migration_summary["migrations"]:
                             text_report += f"{mig['version']}: {mig['name']}\n"
                         save_text_report(text_report, output_file)
-                        console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
+                        console.print(
+                            f"[green]✅ Report saved to: {output_file.absolute()}[/green]"
+                        )
 
                 # Stop here if dry-run only (not execute)
                 if dry_run and not dry_run_execute:
@@ -933,7 +938,9 @@ def migrate_up(
 
                     # Check target
                     if target and migration.version > target:
-                        console.print(f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]")
+                        console.print(
+                            f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]"
+                        )
                         break
 
                     # Apply migration
@@ -1319,7 +1326,9 @@ def migrate_down(
     try:
         # Validate format option
         if format_output not in ("text", "json"):
-            console.print(f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]")
+            console.print(
+                f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
+            )
             raise typer.Exit(1)
 
         # Load configuration
@@ -1406,6 +1415,7 @@ def migrate_down(
                     console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
                 else:
                     from confiture.cli.dry_run import print_json_report
+
                     print_json_report(rollback_summary)
             else:
                 # Text format (default)

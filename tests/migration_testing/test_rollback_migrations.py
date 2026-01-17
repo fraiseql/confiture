@@ -224,7 +224,9 @@ def test_rollback_preserves_data_on_column_removal(test_db_connection):
         test_db_connection.commit()
 
         # Verify names are preserved
-        cur.execute("SELECT COUNT(*), COUNT(DISTINCT name) FROM rb_data WHERE name IN ('Alice', 'Bob')")
+        cur.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT name) FROM rb_data WHERE name IN ('Alice', 'Bob')"
+        )
         count, distinct = cur.fetchone()
         assert count == 2
 
@@ -355,9 +357,12 @@ def test_rollback_preserves_foreign_key_relationships(test_db_connection):
         """)
         parent_id = cur.fetchone()[0]
 
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO rb_child (id, parent_id) VALUES (gen_random_uuid(), %s)
-        """, (parent_id,))
+        """,
+            (parent_id,),
+        )
         test_db_connection.commit()
 
         # Verify count before
@@ -392,11 +397,14 @@ def test_rollback_cascade_delete_handling(test_db_connection):
         """)
         parent_id = cur.execute("SELECT id FROM rb_cascade_parent LIMIT 1").fetchone()[0]
 
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO rb_cascade_child (id, parent_id) VALUES
             (gen_random_uuid(), %s),
             (gen_random_uuid(), %s)
-        """, (parent_id, parent_id))
+        """,
+            (parent_id, parent_id),
+        )
         test_db_connection.commit()
 
         # Count children before
@@ -520,7 +528,9 @@ def test_rollback_preserves_system_state(test_db_connection):
         test_db_connection.commit()
 
         # Get state after - should have new sequence for the serial column
-        cur.execute("SELECT count(*) FROM pg_sequences WHERE schemaname = 'public' AND sequencename LIKE '%rb_sys%'")
+        cur.execute(
+            "SELECT count(*) FROM pg_sequences WHERE schemaname = 'public' AND sequencename LIKE '%rb_sys%'"
+        )
         result = cur.fetchone()
         assert result is not None and result[0] >= 1, "Should have a sequence for BIGSERIAL"
 
@@ -680,11 +690,11 @@ def test_rollback_idempotent_drop_extension(test_db_connection):
         # even if the extension is already dropped or doesn't exist
 
         # Drop a non-existent extension (should succeed, not error)
-        cur.execute("DROP EXTENSION IF EXISTS \"nonexistent_extension_xyz\";")
+        cur.execute('DROP EXTENSION IF EXISTS "nonexistent_extension_xyz";')
         test_db_connection.commit()
 
         # Drop the same non-existent extension again (idempotent - should still succeed)
-        cur.execute("DROP EXTENSION IF EXISTS \"nonexistent_extension_xyz\";")
+        cur.execute('DROP EXTENSION IF EXISTS "nonexistent_extension_xyz";')
         test_db_connection.commit()
 
         # This test validates the idempotency pattern, not actual extension dropping

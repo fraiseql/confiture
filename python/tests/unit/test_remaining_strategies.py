@@ -39,9 +39,7 @@ class TestTextRedaction:
         """Test multiple emails redacted."""
         config = TextRedactionConfig(patterns=["email"])
         strategy = TextRedactionStrategy(config)
-        result = strategy.anonymize(
-            "Email john@example.com or jane@test.org for details"
-        )
+        result = strategy.anonymize("Email john@example.com or jane@test.org for details")
 
         # Both emails should be redacted
         assert "john@example.com" not in result
@@ -85,9 +83,7 @@ class TestTextRedaction:
         """Test redacting multiple pattern types."""
         config = TextRedactionConfig(patterns=["email", "phone_us"])
         strategy = TextRedactionStrategy(config)
-        result = strategy.anonymize(
-            "Email john@example.com or call 555-123-4567"
-        )
+        result = strategy.anonymize("Email john@example.com or call 555-123-4567")
 
         assert "john@example.com" not in result
         assert "555-123-4567" not in result
@@ -112,9 +108,7 @@ class TestTextRedaction:
 
     def test_preserve_length_redaction(self):
         """Test preserve-length redaction."""
-        config = TextRedactionConfig(
-            patterns=["email"], replacement="*", preserve_length=True
-        )
+        config = TextRedactionConfig(patterns=["email"], replacement="*", preserve_length=True)
         strategy = TextRedactionStrategy(config)
         result = strategy.anonymize("Email: john@example.com")
 
@@ -214,6 +208,7 @@ class TestCustomStrategy:
 
     def test_custom_func_uppercase(self):
         """Test custom function that uppercases."""
+
         def uppercase(value):
             return value.upper() if isinstance(value, str) else value
 
@@ -223,12 +218,11 @@ class TestCustomStrategy:
 
     def test_custom_func_with_seed(self):
         """Test custom function that uses seed."""
+
         def hash_with_seed(value, seed):
             return f"{value}_{seed}"
 
-        config = CustomConfig(
-            seed=12345, func=hash_with_seed, name="hash", accepts_seed=True
-        )
+        config = CustomConfig(seed=12345, func=hash_with_seed, name="hash", accepts_seed=True)
         strategy = CustomStrategy(config)
         result = strategy.anonymize("data")
 
@@ -236,6 +230,7 @@ class TestCustomStrategy:
 
     def test_custom_func_none_handling(self):
         """Test custom function with None."""
+
         def identity(value):
             return value
 
@@ -253,6 +248,7 @@ class TestCustomStrategy:
 
     def test_custom_func_exception_handling(self):
         """Test exception from custom function is wrapped."""
+
         def failing_func(value):
             raise ValueError("Custom error")
 
