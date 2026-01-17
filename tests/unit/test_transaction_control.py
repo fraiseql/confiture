@@ -393,7 +393,7 @@ class CreateIndex(Migration):
 
         files = migrator.find_migration_files(migrations_dir)
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger="confiture.core.migrator"):
             migrator._warn_mixed_transactional_modes(files)
 
         assert "both transactional and non-transactional" in caplog.text
