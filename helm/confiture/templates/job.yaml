@@ -1,0 +1,171 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "confiture.fullname" . }}
+  labels:
+    {{- include "confiture.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  {{- if .Values.hooks.enabled }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": {{ .Values.hooks.weight | quote }}
+    "helm.sh/hook-delete-policy": {{ .Values.hooks.deletePolicy }}
+    {{- with .Values.job.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- else }}
+  {{- with .Values.job.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  {{- if .Values.job.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "confiture.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "confiture.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: migration
+          image: {{ include "confiture.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.migration.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          args:
+            - --lock-timeout={{ .Values.migration.lockTimeout }}
+            {{- if .Values.migration.verifyChecksums }}
+            - --verify-checksums
+            {{- end }}
+            {{- if .Values.healthCheck.enabled }}
+            - --health-port={{ .Values.healthCheck.port }}
+            {{- end }}
+            {{- with .Values.migration.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: CONFITURE_ENV
+              value: {{ .Values.migration.environment | quote }}
+            {{- if .Values.database.existingSecret }}
+            # Use DATABASE_URL from existing secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else if .Values.database.passwordSecret }}
+            # Build DATABASE_URL from components
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.passwordSecret }}
+                  key: {{ .Values.database.passwordSecretKey }}
+            - name: DATABASE_URL
+              value: {{ include "confiture.databaseUrl" . | quote }}
+            {{- else }}
+            # Use DATABASE_URL from chart-created secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "confiture.fullname" . }}-db
+                  key: DATABASE_URL
+            {{- end }}
+            {{- if .Values.observability.tracing.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.tracing.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: "confiture-migration"
+            {{- end }}
+          {{- if .Values.healthCheck.enabled }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.healthCheck.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.migrations.configMap }}
+            - name: migrations
+              mountPath: {{ .Values.migrations.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.migrations.persistentVolumeClaim }}
+            - name: migrations-pvc
+              mountPath: {{ .Values.migrations.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.migrations.schemaConfigMap }}
+            - name: schema
+              mountPath: {{ .Values.migrations.schemaMountPath }}
+              readOnly: true
+            {{- end }}
+            # Writable tmp directory for temporary files
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+      volumes:
+        {{- if .Values.migrations.configMap }}
+        - name: migrations
+          configMap:
+            name: {{ .Values.migrations.configMap }}
+        {{- end }}
+        {{- if .Values.migrations.persistentVolumeClaim }}
+        - name: migrations-pvc
+          persistentVolumeClaim:
+            claimName: {{ .Values.migrations.persistentVolumeClaim }}
+        {{- end }}
+        {{- if .Values.migrations.schemaConfigMap }}
+        - name: schema
+          configMap:
+            name: {{ .Values.migrations.schemaConfigMap }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,25 @@
+apiVersion: v2
+name: confiture
+description: Helm chart for Confiture PostgreSQL migrations
+type: application
+version: 0.1.0
+appVersion: "0.5.0"
+
+keywords:
+  - postgresql
+  - migrations
+  - database
+  - schema
+  - devops
+
+home: https://github.com/evoludigit/confiture
+sources:
+  - https://github.com/evoludigit/confiture
+
+maintainers:
+  - name: Confiture Team
+    url: https://github.com/evoludigit/confiture
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/category: database

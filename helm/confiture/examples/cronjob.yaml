@@ -1,0 +1,85 @@
+# Example: Scheduled Schema Drift Detection
+#
+# This CronJob runs periodically to detect schema drift
+# (unauthorized changes to the database schema).
+#
+# Usage:
+#   kubectl apply -f cronjob.yaml
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: confiture-drift-check
+  labels:
+    app: confiture
+    component: drift-detection
+spec:
+  # Run every 6 hours
+  schedule: "0 */6 * * *"
+  # Keep last 3 successful and 1 failed job
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  # Don't allow concurrent runs
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: confiture
+            component: drift-detection
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: drift-check
+              image: confiture/confiture:0.5.0
+              command: ["confiture", "migrate", "drift-detect"]
+              args:
+                - --format=json
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: DATABASE_URL
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+
+---
+# Optional: AlertManager rule for drift detection
+# Requires Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: confiture-drift-alerts
+  labels:
+    app: confiture
+spec:
+  groups:
+    - name: confiture.drift
+      rules:
+        - alert: SchemaDriftDetected
+          expr: |
+            kube_job_status_failed{job_name=~"confiture-drift-check.*"} > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Schema drift detected in database"
+            description: "The drift detection job has failed, indicating potential unauthorized schema changes."

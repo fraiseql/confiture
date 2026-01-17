@@ -1,0 +1,75 @@
+Thank you for installing {{ .Chart.Name }}!
+
+{{- if .Values.hooks.enabled }}
+
+MIGRATION JOB
+=============
+Confiture is configured as a Helm hook and will run automatically during:
+- helm install
+- helm upgrade
+
+The migration job will:
+1. Wait for database connectivity
+2. Apply pending migrations with lock timeout of {{ .Values.migration.lockTimeout }}ms
+{{- if .Values.migration.verifyChecksums }}
+3. Verify migration checksums before applying
+{{- end }}
+
+{{- else }}
+
+MIGRATION JOB
+=============
+A migration job has been created: {{ include "confiture.fullname" . }}
+
+To check the job status:
+  kubectl get jobs -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To view migration logs:
+  kubectl logs job/{{ include "confiture.fullname" . }}
+
+{{- end }}
+
+DATABASE CONNECTION
+===================
+{{- if .Values.database.existingSecret }}
+Using existing secret: {{ .Values.database.existingSecret }}
+{{- else if .Values.database.passwordSecret }}
+Building connection from:
+  Host: {{ .Values.database.host }}:{{ .Values.database.port }}
+  Database: {{ .Values.database.name }}
+  User: {{ .Values.database.user }}
+  Password from: {{ .Values.database.passwordSecret }}
+{{- else }}
+WARNING: Using chart-created secret with placeholder password.
+This is only suitable for development. For production, set either:
+  --set database.existingSecret=<your-secret>
+  --set database.passwordSecret=<your-password-secret>
+{{- end }}
+
+MIGRATIONS SOURCE
+=================
+{{- if .Values.migrations.configMap }}
+Migrations mounted from ConfigMap: {{ .Values.migrations.configMap }}
+{{- else if .Values.migrations.persistentVolumeClaim }}
+Migrations mounted from PVC: {{ .Values.migrations.persistentVolumeClaim }}
+{{- else }}
+Using migrations baked into the container image.
+{{- end }}
+
+TROUBLESHOOTING
+===============
+If the migration job fails:
+
+1. Check job status:
+   kubectl describe job {{ include "confiture.fullname" . }}
+
+2. View pod logs:
+   kubectl logs -l job-name={{ include "confiture.fullname" . }}
+
+3. Check for lock conflicts:
+   The job uses advisory locks with timeout {{ .Values.migration.lockTimeout }}ms
+
+4. Retry the migration:
+   helm upgrade {{ .Release.Name }} {{ .Chart.Name }}
+
+For more information, visit: {{ .Chart.Home }}

@@ -1,0 +1,105 @@
+# Example: ArgoCD Application for Confiture
+#
+# This configures ArgoCD to manage Confiture migrations as part of
+# your GitOps workflow.
+#
+# Usage:
+#   kubectl apply -f argocd-application.yaml
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-migrations
+  namespace: argocd
+  # Ensure migrations run before app deployment
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # Your Helm chart repository
+    repoURL: https://charts.example.com
+    chart: confiture
+    targetRevision: 0.1.0
+    helm:
+      releaseName: myapp-migrations
+      values: |
+        image:
+          repository: confiture/confiture
+          tag: "0.5.0"
+
+        migration:
+          lockTimeout: 60000
+          verifyChecksums: true
+          environment: production
+
+        database:
+          existingSecret: myapp-db-credentials
+          existingSecretKey: DATABASE_URL
+
+        migrations:
+          configMap: myapp-migrations
+
+        hooks:
+          enabled: false  # ArgoCD manages sync order
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myapp
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+---
+# ArgoCD AppProject with migration-specific permissions
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: migrations
+  namespace: argocd
+spec:
+  description: Database migrations project
+  sourceRepos:
+    - https://charts.example.com
+    - https://github.com/your-org/*
+  destinations:
+    - namespace: '*'
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: Secret
+    - group: batch
+      kind: Job
+    - group: ''
+      kind: ServiceAccount
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding

@@ -1,0 +1,131 @@
+# Example: Using Confiture as an Init Container
+#
+# This pattern runs migrations before your application starts,
+# ensuring the database schema is up-to-date.
+#
+# Benefits:
+# - Application only starts after migrations complete
+# - Automatic retry on migration failure
+# - Clean separation of concerns
+#
+# Usage:
+#   kubectl apply -f init-container.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  labels:
+    app: myapp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      initContainers:
+        # Run migrations before app starts
+        - name: migrate
+          image: confiture/confiture:0.5.0
+          command: ["confiture", "migrate", "up"]
+          args:
+            - --lock-timeout=30000
+            - --verify-checksums
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_URL
+            - name: CONFITURE_ENV
+              value: "production"
+          volumeMounts:
+            - name: migrations
+              mountPath: /app/db/migrations
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+
+      containers:
+        - name: app
+          image: myapp:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+      volumes:
+        - name: migrations
+          configMap:
+            name: myapp-migrations
+
+---
+# ConfigMap containing migration files
+# In practice, you'd generate this from your db/migrations/ directory
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-migrations
+data:
+  001_create_users.py: |
+    """Create users table."""
+
+    def up(migrator):
+        migrator.execute('''
+            CREATE TABLE users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+
+    def down(migrator):
+        migrator.execute('DROP TABLE users')
+
+  002_add_user_name.py: |
+    """Add name column to users."""
+
+    def up(migrator):
+        migrator.execute('''
+            ALTER TABLE users ADD COLUMN name VARCHAR(255)
+        ''')
+
+    def down(migrator):
+        migrator.execute('''
+            ALTER TABLE users DROP COLUMN name
+        ''')
+
+---
+# Secret for database credentials
+# In production, use external secret management
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://postgres:password@postgres:5432/myapp?sslmode=require"

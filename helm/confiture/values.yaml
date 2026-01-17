@@ -1,0 +1,147 @@
+# Default values for Confiture Helm chart
+# This is a YAML-formatted file.
+
+# Image configuration
+image:
+  repository: confiture/confiture
+  tag: ""  # Defaults to appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Migration configuration
+migration:
+  # Command to run (default: migrate up)
+  command: ["confiture", "migrate", "up"]
+  # Lock timeout in milliseconds
+  lockTimeout: 30000
+  # Verify checksums before applying
+  verifyChecksums: true
+  # Additional arguments
+  extraArgs: []
+  # Environment name
+  environment: "production"
+
+# Database connection configuration
+database:
+  # Option 1: Use existing secret containing DATABASE_URL
+  existingSecret: ""
+  existingSecretKey: "DATABASE_URL"
+
+  # Option 2: Build connection string from components
+  # These are only used if existingSecret is not set
+  host: "postgres"
+  port: 5432
+  name: "mydb"
+  user: "postgres"
+  # Password must come from a secret
+  passwordSecret: ""
+  passwordSecretKey: "password"
+  # SSL mode (disable, require, verify-ca, verify-full)
+  sslMode: "require"
+
+# Migration files source
+migrations:
+  # Option 1: Mount from existing ConfigMap
+  configMap: ""
+
+  # Option 2: Mount from existing PersistentVolumeClaim
+  persistentVolumeClaim: ""
+
+  # Option 3: Use migrations baked into the image
+  # (no additional mounts needed)
+
+  # Mount path for migrations
+  mountPath: "/app/db/migrations"
+
+  # Schema files (optional)
+  schemaConfigMap: ""
+  schemaMountPath: "/app/db/schema"
+
+# Job configuration
+job:
+  # Number of retries before marking job as failed
+  backoffLimit: 3
+  # Maximum time for job to complete
+  activeDeadlineSeconds: 900
+  # Time to keep completed job before cleanup
+  ttlSecondsAfterFinished: 3600
+  # Annotations for the job
+  annotations: {}
+
+# Service account configuration
+serviceAccount:
+  # Create a service account
+  create: true
+  # Name of the service account (auto-generated if empty)
+  name: ""
+  # Annotations for the service account
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+
+# Pod configuration
+podAnnotations: {}
+
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Health check configuration (for init container usage)
+healthCheck:
+  # Enable health endpoint during migration
+  enabled: false
+  port: 8080
+
+# Observability configuration
+observability:
+  # Enable OpenTelemetry tracing
+  tracing:
+    enabled: false
+    endpoint: ""
+  # Enable Prometheus metrics
+  metrics:
+    enabled: false
+    port: 9090
+
+# Hooks configuration
+hooks:
+  # Run as Helm pre-upgrade/pre-install hook
+  enabled: true
+  # Hook weight (lower runs first)
+  weight: "-5"
+  # Delete policy: before-hook-creation, hook-succeeded, hook-failed
+  deletePolicy: "before-hook-creation"

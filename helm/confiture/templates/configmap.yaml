@@ -1,0 +1,34 @@
+{{/*
+ConfigMap for Confiture configuration
+Only created if specific configuration is needed
+*/}}
+{{- if or .Values.observability.metrics.enabled .Values.observability.tracing.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "confiture.fullname" . }}-config
+  labels:
+    {{- include "confiture.labels" . | nindent 4 }}
+data:
+  confiture.yaml: |
+    # Confiture configuration
+    environment: {{ .Values.migration.environment | quote }}
+
+    migration:
+      lock_timeout: {{ .Values.migration.lockTimeout }}
+      verify_checksums: {{ .Values.migration.verifyChecksums }}
+
+    {{- if .Values.observability.tracing.enabled }}
+    observability:
+      tracing:
+        enabled: true
+        exporter: otlp
+        endpoint: {{ .Values.observability.tracing.endpoint | quote }}
+    {{- end }}
+
+    {{- if .Values.observability.metrics.enabled }}
+    metrics:
+      enabled: true
+      port: {{ .Values.observability.metrics.port }}
+    {{- end }}
+{{- end }}

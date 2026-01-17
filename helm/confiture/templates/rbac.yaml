@@ -1,0 +1,48 @@
+{{- if and .Values.rbac.create .Values.serviceAccount.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "confiture.fullname" . }}
+  labels:
+    {{- include "confiture.labels" . | nindent 4 }}
+rules:
+  # Allow reading secrets for database credentials
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      {{- if .Values.database.existingSecret }}
+      - {{ .Values.database.existingSecret }}
+      {{- end }}
+      {{- if .Values.database.passwordSecret }}
+      - {{ .Values.database.passwordSecret }}
+      {{- end }}
+      - {{ include "confiture.fullname" . }}-db
+    verbs: ["get"]
+  # Allow reading configmaps for migrations
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      {{- if .Values.migrations.configMap }}
+      - {{ .Values.migrations.configMap }}
+      {{- end }}
+      {{- if .Values.migrations.schemaConfigMap }}
+      - {{ .Values.migrations.schemaConfigMap }}
+      {{- end }}
+      - {{ include "confiture.fullname" . }}-config
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "confiture.fullname" . }}
+  labels:
+    {{- include "confiture.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "confiture.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "confiture.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
