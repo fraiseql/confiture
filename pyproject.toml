@@ -75,7 +75,7 @@ module-name = "confiture._core"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "python/tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
@@ -98,6 +98,7 @@ omit = [
     "*/tests/*",
     "*/__pycache__/*",
     "*/site-packages/*",
+    "*/testing/fixtures/*",  # Test infrastructure, not application code
 ]
 
 [tool.coverage.report]
