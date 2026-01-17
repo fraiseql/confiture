@@ -256,9 +256,9 @@ class StrategySuggester:
 
         # Sort by confidence descending
         return sorted(
-            [(s, c) for s, c in seen.items()],
+            seen.items(),
             key=lambda x: x[1],
-            reverse=True
+            reverse=True,
         )
 
     def _analyze_value(self, value: str) -> list[tuple]:
@@ -277,9 +277,12 @@ class StrategySuggester:
             suggestions.append(("email", 0.85))
 
         # Check for phone pattern (simple)
-        if any(c.isdigit() for c in value) and len(value) >= 10:
-            if "-" in value or "(" in value or ")" in value:
-                suggestions.append(("phone", 0.75))
+        if (
+            any(c.isdigit() for c in value)
+            and len(value) >= 10
+            and ("-" in value or "(" in value or ")" in value)
+        ):
+            suggestions.append(("phone", 0.75))
 
         # Check for IP pattern
         if value.count(".") == 3:

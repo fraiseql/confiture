@@ -133,12 +133,8 @@ class TextRedactionStrategy(AnonymizationStrategy):
         flags = re.IGNORECASE if self.config.case_insensitive else 0
 
         for pattern_name in self.config.patterns:
-            # Check if it's a built-in pattern
-            if pattern_name in COMMON_PATTERNS:
-                regex_pattern = COMMON_PATTERNS[pattern_name]
-            else:
-                # Assume it's a custom regex pattern
-                regex_pattern = pattern_name
+            # Get built-in pattern or use as custom regex
+            regex_pattern = COMMON_PATTERNS.get(pattern_name, pattern_name)
 
             try:
                 compiled_regex = re.compile(regex_pattern, flags)

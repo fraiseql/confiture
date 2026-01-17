@@ -376,11 +376,10 @@ class ComplianceVerifier:
         for category in self.categories:
             if category.requires_anonymization:
                 for example in category.examples or []:
-                    if example in original:
-                        if example not in masked_fields:
-                            issues.append(
-                                f"'{example}' ({category.name}) should be anonymized"
-                            )
+                    if example in original and example not in masked_fields:
+                        issues.append(
+                            f"'{example}' ({category.name}) should be anonymized"
+                        )
 
         return {
             "compliant": len(issues) == 0,

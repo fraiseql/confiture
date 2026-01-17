@@ -520,7 +520,7 @@ class DataGovernancePipeline:
 
     def _before_anonymization(
         self,
-        conn: psycopg.Connection,
+        _conn: psycopg.Connection,
         context: AnonymizationContext,
     ) -> None:
         """Preparation before anonymization (BEFORE_ANONYMIZATION phase).
@@ -550,9 +550,9 @@ class DataGovernancePipeline:
 
     def _anonymize(
         self,
-        conn: psycopg.Connection,
+        _conn: psycopg.Connection,
         context: AnonymizationContext,
-        strategy: AnonymizationStrategy,
+        _strategy: AnonymizationStrategy,
     ) -> int:
         """Execute anonymization (ANONYMIZATION phase).
 
@@ -607,7 +607,7 @@ class DataGovernancePipeline:
 
     def _cleanup(
         self,
-        conn: psycopg.Connection,
+        _conn: psycopg.Connection,
         context: AnonymizationContext,
     ) -> None:
         """Final cleanup (CLEANUP phase).
@@ -628,7 +628,7 @@ class DataGovernancePipeline:
 
     def _record_lineage(
         self,
-        conn: psycopg.Connection,
+        _conn: psycopg.Connection,
         context: AnonymizationContext,
         audit_id: UUID,
         status: str = "success",
@@ -732,10 +732,13 @@ class StrategyValidator:
                     "Tokenization strategy requires token store to be configured"
                 )
 
-            if hasattr(strategy, "requires_kms") and strategy.requires_kms:
-                if kms_client is None:
-                    errors.append(
-                        f"{strategy_name} strategy requires KMS client to be configured"
-                    )
+            if (
+                hasattr(strategy, "requires_kms")
+                and strategy.requires_kms
+                and kms_client is None
+            ):
+                errors.append(
+                    f"{strategy_name} strategy requires KMS client to be configured"
+                )
 
         return len(errors) == 0, errors

@@ -297,7 +297,7 @@ class ComplianceReportGenerator:
     def _evaluate_requirement(
         self,
         requirement: ComplianceRequirement,
-        time_period: tuple[str, str] | None = None,
+        _time_period: tuple[str, str] | None = None,
     ) -> ComplianceRequirement:
         """Evaluate whether a requirement is met.
 
@@ -318,7 +318,7 @@ class ComplianceReportGenerator:
         return requirement
 
     def _collect_audit_trail(
-        self, time_period: tuple[str, str] | None = None
+        self, _time_period: tuple[str, str] | None = None
     ) -> list[dict[str, Any]]:
         """Collect audit trail from database.
 
@@ -335,7 +335,7 @@ class ComplianceReportGenerator:
         return []
 
     def _collect_data_lineage(
-        self, time_period: tuple[str, str] | None = None
+        self, _time_period: tuple[str, str] | None = None
     ) -> list[DataLineageEntry]:
         """Collect data lineage for reporting period.
 

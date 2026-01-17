@@ -140,7 +140,7 @@ class RuleLibraryComposer:
         new_rule_ids = set(new_library.rules.keys())
 
         for existing_library in self.libraries:
-            for existing_rule_id in existing_library.rules.keys():
+            for existing_rule_id in existing_library.rules:
                 if existing_rule_id in new_rule_ids:
                     conflicts.append(
                         RuleConflict(

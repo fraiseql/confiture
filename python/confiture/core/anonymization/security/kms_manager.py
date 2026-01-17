@@ -81,8 +81,8 @@ class AWSKMSClient(KMSClient):
             import boto3
 
             self.client = boto3.client("kms", region_name=region)
-        except ImportError:
-            raise ImportError("boto3 is required for AWS KMS support")
+        except ImportError as e:
+            raise ImportError("boto3 is required for AWS KMS support") from e
 
     def encrypt(self, plaintext: bytes, key_id: str) -> bytes:
         """Encrypt plaintext using AWS KMS.
@@ -107,12 +107,12 @@ class AWSKMSClient(KMSClient):
             logger.error(f"AWS KMS encryption failed: {e}")
             raise
 
-    def decrypt(self, ciphertext: bytes, key_id: str = None) -> bytes:
+    def decrypt(self, ciphertext: bytes, _key_id: str = None) -> bytes:
         """Decrypt ciphertext using AWS KMS.
 
         Args:
             ciphertext: Encrypted data
-            key_id: Not used (embedded in ciphertext by AWS)
+            _key_id: Not used (embedded in ciphertext by AWS)
 
         Returns:
             Decrypted plaintext
@@ -172,8 +172,8 @@ class VaultKMSClient(KMSClient):
             import hvac
 
             self.client = hvac.Client(url=vault_url, token=token)
-        except ImportError:
-            raise ImportError("hvac is required for HashiCorp Vault support")
+        except ImportError as e:
+            raise ImportError("hvac is required for HashiCorp Vault support") from e
 
     def encrypt(self, plaintext: bytes, key_id: str) -> bytes:
         """Encrypt plaintext using Vault.
@@ -252,7 +252,7 @@ class VaultKMSClient(KMSClient):
             Exception: If rotation fails
         """
         try:
-            response = self.client.secrets.transit.rotate_key(
+            self.client.secrets.transit.rotate_key(
                 name=key_id,
                 mount_point=self.engine,
             )
@@ -286,15 +286,14 @@ class AzureKMSClient(KMSClient):
         self.provider = KMSProvider.AZURE
 
         try:
-            from azure.identity import DefaultAzureCredential
             from azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm
 
             self.CryptographyClient = CryptographyClient
             self.EncryptionAlgorithm = EncryptionAlgorithm
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "azure-identity and azure-keyvault-keys are required for Azure support"
-            )
+            ) from e
 
     def encrypt(self, plaintext: bytes, key_id: str) -> bytes:
         """Encrypt plaintext using Azure Key Vault.
@@ -441,7 +440,7 @@ class LocalKMSClient(KMSClient):
 
         if not key_id:
             # Try all keys
-            for key_id, key in self.keys.items():
+            for _key_id, key in self.keys.items():
                 try:
                     f = Fernet(key)
                     return f.decrypt(ciphertext)

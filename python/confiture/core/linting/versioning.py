@@ -137,7 +137,7 @@ class RuleVersionManager:
 
     def validate_compatibility(
         self,
-        library_version: RuleVersion,
+        _library_version: RuleVersion,
         min_rule_version: RuleVersion,
     ) -> list[str]:
         """Check if all rules are compatible with version."""

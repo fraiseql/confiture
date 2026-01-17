@@ -33,6 +33,7 @@ Example:
     >>> stats = monitor.get_statistics()
 """
 
+import contextlib
 import logging
 import threading
 import time
@@ -927,19 +928,15 @@ class ConnectionPoolManager:
                 # Remove unhealthy connection
                 if conn in self._connections:
                     self._connections.remove(conn)
-                try:
+                with contextlib.suppress(psycopg.Error):
                     conn.close()
-                except psycopg.Error:
-                    pass
 
     def close_all(self) -> None:
         """Close all connections in pool."""
         with self._lock:
             for conn in self._connections:
-                try:
+                with contextlib.suppress(psycopg.Error):
                     conn.close()
-                except psycopg.Error:
-                    pass
 
             self._connections.clear()
             self._available.clear()
@@ -1036,7 +1033,7 @@ class QueryOptimizer:
 
         return recommendations
 
-    def _check_indexes(self, query: str) -> bool:
+    def _check_indexes(self, _query: str) -> bool:
         """Check if query uses indexes."""
         return "Index" in str(self._query_stats)
 
@@ -1057,7 +1054,7 @@ class QueryOptimizer:
         )
 
     def _get_recommendations(
-        self, query: str, plan: list[tuple]
+        self, _query: str, plan: list[tuple]
     ) -> list[str]:
         """Get recommendations for query optimization."""
         recommendations = []

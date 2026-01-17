@@ -97,11 +97,11 @@ class StrategyComposer(AnonymizationStrategy):
         for strategy, strategy_name in self._strategies:
             try:
                 # Check skip conditions
-                if self.config.continue_on_empty:
-                    if current_value is None or (
-                        isinstance(current_value, str) and not current_value.strip()
-                    ):
-                        continue
+                if self.config.continue_on_empty and (
+                    current_value is None
+                    or (isinstance(current_value, str) and not current_value.strip())
+                ):
+                    continue
 
                 # Apply strategy
                 current_value = strategy.anonymize(current_value)
@@ -134,11 +134,7 @@ class StrategyComposer(AnonymizationStrategy):
             return True
 
         # Check if any strategy accepts this type
-        for strategy, _ in self._strategies:
-            if strategy.validate(value):
-                return True
-
-        return False
+        return any(strategy.validate(value) for strategy, _ in self._strategies)
 
     def _load_strategies(self) -> list[tuple]:
         """Load strategies from configuration.

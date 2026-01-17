@@ -233,11 +233,11 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         # Validate numeric
         try:
             numeric_value = float(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as e:
             raise ValueError(
                 f"DifferentialPrivacyStrategy only works with numeric values, "
                 f"got {type(value).__name__}: {value}"
-            )
+            ) from e
 
         # Calculate noise scale
         noise_scale = self._calculate_noise_scale()

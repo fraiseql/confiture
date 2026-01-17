@@ -87,11 +87,11 @@ class CustomStrategy(AnonymizationStrategy):
                 f"Error in custom anonymization function '{self.config.name}': {e}"
             ) from e
 
-    def validate(self, value: Any) -> bool:
+    def validate(self, _value: Any) -> bool:
         """Check if strategy can handle this value type.
 
         Args:
-            value: Sample value to validate
+            _value: Sample value to validate (unused, custom accepts any)
 
         Returns:
             True (custom accepts any value type)
@@ -143,11 +143,11 @@ class CustomLambdaStrategy(AnonymizationStrategy):
                 f"Error in lambda anonymization: {e}"
             ) from e
 
-    def validate(self, value: Any) -> bool:
+    def validate(self, _value: Any) -> bool:
         """Check if strategy can handle this value type.
 
         Args:
-            value: Sample value to validate
+            _value: Sample value to validate (unused, lambda accepts any)
 
         Returns:
             True (lambda accepts any value type)

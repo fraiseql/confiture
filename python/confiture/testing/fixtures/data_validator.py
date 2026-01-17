@@ -105,10 +105,7 @@ class DataValidator:
                 return False
 
             # Check NULL violations
-            if self._count_null_violations(cur) > 0:
-                return False
-
-            return True
+            return self._count_null_violations(cur) == 0
 
     def validate_indexes(self) -> list[str]:
         """Validate all indexes are valid and not broken.
@@ -167,13 +164,13 @@ class DataValidator:
             # If query fails, assume no violations (constraint might not exist)
             return 0
 
-    def _count_null_violations(self, cur: psycopg.cursor) -> int:
+    def _count_null_violations(self, _cur: psycopg.cursor) -> int:
         """Count NULL violations in NOT NULL columns.
 
         This is a simplified check - in production you'd want to check each column.
 
         Args:
-            cur: Database cursor
+            _cur: Database cursor (unused in simplified implementation)
 
         Returns:
             Number of NULL violations detected (simplified to 0 for now)
@@ -182,12 +179,12 @@ class DataValidator:
         # to find actual violations. For now, return 0.
         return 0
 
-    def check_foreign_key_integrity(self, table_name: str, fk_column: str) -> bool:
+    def check_foreign_key_integrity(self, table_name: str, _fk_column: str) -> bool:
         """Check if foreign key values in a column all have valid references.
 
         Args:
             table_name: Table to check (schema.table format)
-            fk_column: Foreign key column name
+            _fk_column: Foreign key column name (unused in simplified implementation)
 
         Returns:
             True if all FK values are valid, False otherwise

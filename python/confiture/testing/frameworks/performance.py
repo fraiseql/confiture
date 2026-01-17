@@ -381,7 +381,7 @@ class PerformanceBaseline:
     def _generate_recommendation(
         self,
         bottleneck: OperationMetrics,
-        profile: PerformanceProfile,
+        _profile: PerformanceProfile,
     ) -> PerformanceOptimizationRecommendation | None:
         """Generate optimization recommendation for a bottleneck."""
         operation_type = self._extract_operation_type(bottleneck.name)

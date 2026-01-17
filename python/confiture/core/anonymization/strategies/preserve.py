@@ -64,11 +64,11 @@ class PreserveStrategy(AnonymizationStrategy):
         """
         return value
 
-    def validate(self, value) -> bool:
+    def validate(self, _value) -> bool:
         """Check if strategy can handle this value type.
 
         Args:
-            value: Sample value to validate
+            _value: Sample value to validate (unused, preserve accepts any)
 
         Returns:
             True (preserve accepts any value type)

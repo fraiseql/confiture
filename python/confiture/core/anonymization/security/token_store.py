@@ -467,11 +467,13 @@ class EncryptedTokenStore:
         access_level = self.allowed_reversers[requester_id]
 
         # Check if reason is required
-        if access_level == TokenAccessLevel.REVERSE_WITH_REASON:
-            if not reason or not reason.strip():
-                raise PermissionError(
-                    f"User {requester_id} requires a reason for token reversal"
-                )
+        if (
+            access_level == TokenAccessLevel.REVERSE_WITH_REASON
+            and (not reason or not reason.strip())
+        ):
+            raise PermissionError(
+                f"User {requester_id} requires a reason for token reversal"
+            )
 
         # NONE and READ_ONLY users can't reverse
         if access_level in (TokenAccessLevel.NONE, TokenAccessLevel.READ_ONLY):

@@ -118,9 +118,16 @@ class IPAddressStrategy(AnonymizationStrategy):
             Anonymized IP address string
         """
         # Skip localhost if configured
-        if not self.config.anonymize_localhost:
-            if isinstance(ip, ipaddress.IPv4Address) and ip == ipaddress.IPv4Address("127.0.0.1") or isinstance(ip, ipaddress.IPv6Address) and ip == ipaddress.IPv6Address("::1"):
-                return str(ip)
+        is_localhost_v4 = (
+            isinstance(ip, ipaddress.IPv4Address)
+            and ip == ipaddress.IPv4Address("127.0.0.1")
+        )
+        is_localhost_v6 = (
+            isinstance(ip, ipaddress.IPv6Address)
+            and ip == ipaddress.IPv6Address("::1")
+        )
+        if not self.config.anonymize_localhost and (is_localhost_v4 or is_localhost_v6):
+            return str(ip)
 
         if isinstance(ip, ipaddress.IPv4Address):
             return self._anonymize_ipv4(ip)
