@@ -1,0 +1,238 @@
+// Confiture Jenkins Pipeline
+// Copy to: Jenkinsfile
+//
+// This pipeline includes linting, dry-run testing, and staged deployments.
+// Production deployment requires manual approval.
+
+pipeline {
+    agent any
+
+    environment {
+        PYTHON_VERSION = '3.11'
+    }
+
+    options {
+        // Prevent concurrent migration runs
+        disableConcurrentBuilds()
+        // Timeout for entire pipeline
+        timeout(time: 30, unit: 'MINUTES')
+        // Keep build logs
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    stages {
+        stage('Setup') {
+            steps {
+                echo 'Installing Confiture...'
+                sh '''
+                    python -m pip install --upgrade pip
+                    pip install confiture
+                '''
+            }
+        }
+
+        stage('Lint Migrations') {
+            when {
+                anyOf {
+                    changeset 'db/migrations/**'
+                    changeset 'db/schema/**'
+                }
+            }
+            steps {
+                echo 'Linting migrations...'
+                sh 'confiture lint db/migrations/'
+                sh 'confiture migrate verify-checksums'
+            }
+        }
+
+        stage('Dry Run') {
+            when {
+                changeset 'db/migrations/**'
+            }
+            environment {
+                DATABASE_URL = credentials('test-database-url')
+            }
+            steps {
+                echo 'Running dry-run migration...'
+                sh 'confiture build --env test'
+                sh 'confiture migrate up --dry-run'
+            }
+        }
+
+        stage('Test Rollback') {
+            when {
+                changeset 'db/migrations/**'
+            }
+            environment {
+                DATABASE_URL = credentials('test-database-url')
+            }
+            steps {
+                echo 'Testing rollback...'
+                sh 'confiture migrate test-rollback db/migrations/*.py'
+            }
+        }
+
+        stage('Deploy Staging') {
+            when {
+                allOf {
+                    branch 'main'
+                    changeset 'db/migrations/**'
+                }
+            }
+            environment {
+                DATABASE_URL = credentials('staging-database-url')
+            }
+            steps {
+                echo 'Checking for pending migrations...'
+                script {
+                    def status = sh(
+                        script: 'confiture migrate status --format json',
+                        returnStdout: true
+                    ).trim()
+                    def pending = readJSON(text: status).pending.size()
+
+                    if (pending == 0) {
+                        echo 'No pending migrations'
+                        return
+                    }
+
+                    echo "Applying ${pending} migrations to staging..."
+                }
+
+                echo 'Pre-migration health check...'
+                sh 'confiture health check --timeout 30'
+
+                echo 'Running migrations...'
+                sh '''
+                    confiture migrate up \
+                        --lock-timeout 30000 \
+                        --verify-checksums
+                '''
+
+                echo 'Verifying migration...'
+                sh 'confiture migrate status'
+
+                echo 'Post-migration health check...'
+                sh 'confiture health check --timeout 30'
+            }
+            post {
+                success {
+                    slackSend(
+                        color: 'good',
+                        message: "✅ Staging migrations completed for ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+                    )
+                }
+                failure {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ Staging migrations failed for ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+                    )
+                }
+            }
+        }
+
+        stage('Deploy Production') {
+            when {
+                allOf {
+                    branch 'main'
+                    changeset 'db/migrations/**'
+                }
+            }
+            environment {
+                DATABASE_URL = credentials('production-database-url')
+            }
+            options {
+                timeout(time: 15, unit: 'MINUTES')
+            }
+            input {
+                message 'Deploy migrations to production?'
+                ok 'Deploy'
+                submitter 'admin,lead-dev'
+                parameters {
+                    booleanParam(
+                        name: 'CONFIRM',
+                        defaultValue: false,
+                        description: 'I have reviewed the migrations and confirm deployment'
+                    )
+                }
+            }
+            steps {
+                script {
+                    if (!params.CONFIRM) {
+                        error('Deployment confirmation required')
+                    }
+                }
+
+                echo 'Pre-migration health check...'
+                sh 'confiture health check --timeout 60'
+
+                echo 'Running production migrations...'
+                sh '''
+                    confiture migrate up \
+                        --lock-timeout 60000 \
+                        --verify-checksums
+                '''
+
+                echo 'Verifying migration...'
+                sh 'confiture migrate status'
+
+                echo 'Post-migration health check...'
+                sh 'confiture health check --timeout 60'
+            }
+            post {
+                success {
+                    slackSend(
+                        color: 'good',
+                        message: "✅ Production migrations completed for ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+                    )
+                }
+                failure {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ Production migrations FAILED for ${env.JOB_NAME} #${env.BUILD_NUMBER} - IMMEDIATE ATTENTION REQUIRED"
+                    )
+
+                    // Attempt automatic rollback
+                    script {
+                        try {
+                            sh 'confiture migrate down --steps 1'
+                            slackSend(
+                                color: 'warning',
+                                message: "⚠️ Automatic rollback attempted - please verify database state"
+                            )
+                        } catch (Exception e) {
+                            slackSend(
+                                color: 'danger',
+                                message: "🚨 Automatic rollback failed - manual intervention required"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        failure {
+            emailext(
+                subject: "Migration Pipeline Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    Migration pipeline failed.
+
+                    Job: ${env.JOB_NAME}
+                    Build: ${env.BUILD_NUMBER}
+                    URL: ${env.BUILD_URL}
+
+                    Please check the console output for details.
+                """,
+                recipientProviders: [
+                    [$class: 'CulpritsRecipientProvider'],
+                    [$class: 'DevelopersRecipientProvider']
+                ]
+            )
+        }
+    }
+}

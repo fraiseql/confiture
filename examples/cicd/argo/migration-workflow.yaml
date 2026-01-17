@@ -1,0 +1,440 @@
+# Confiture Argo Workflow
+# kubectl apply -f migration-workflow.yaml
+#
+# This workflow includes linting, dry-run testing, and staged deployments.
+# Designed for Kubernetes-native migration management.
+
+---
+# WorkflowTemplate for reusable migration steps
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: confiture-migration-template
+  namespace: migrations
+spec:
+  templates:
+    # Base container template
+    - name: confiture-base
+      inputs:
+        parameters:
+          - name: command
+          - name: args
+            default: ""
+          - name: database-secret
+            default: "db-credentials"
+          - name: database-key
+            default: "url"
+      container:
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            {{inputs.parameters.command}} {{inputs.parameters.args}}
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: "{{inputs.parameters.database-secret}}"
+                key: "{{inputs.parameters.database-key}}"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+    # Lint migrations
+    - name: lint-migrations
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            echo "Linting migrations..."
+            confiture lint db/migrations/
+            echo "Verifying checksums..."
+            confiture migrate verify-checksums
+
+    # Dry run migrations
+    - name: dry-run-migration
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+        parameters:
+          - name: database-secret
+            default: "db-credentials"
+          - name: database-key
+            default: "test-url"
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            echo "Running dry-run migration..."
+            confiture migrate up --dry-run
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: "{{inputs.parameters.database-secret}}"
+                key: "{{inputs.parameters.database-key}}"
+
+    # Deploy migrations
+    - name: deploy-migration
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+        parameters:
+          - name: database-secret
+            default: "db-credentials"
+          - name: database-key
+            default: "url"
+          - name: lock-timeout
+            default: "60000"
+          - name: environment
+            default: "production"
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            echo "Deploying migrations to {{inputs.parameters.environment}}..."
+            echo "Pre-migration health check..."
+            confiture health check --timeout 60
+            echo "Applying migrations..."
+            confiture migrate up \
+              --lock-timeout {{inputs.parameters.lock-timeout}} \
+              --verify-checksums
+            echo "Migration status:"
+            confiture migrate status
+            echo "Post-migration health check..."
+            confiture health check --timeout 60
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: "{{inputs.parameters.database-secret}}"
+                key: "{{inputs.parameters.database-key}}"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+    # Rollback migration
+    - name: rollback-migration
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+        parameters:
+          - name: database-secret
+            default: "db-credentials"
+          - name: database-key
+            default: "url"
+          - name: steps
+            default: "1"
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            echo "Rolling back {{inputs.parameters.steps}} migration(s)..."
+            confiture migrate down --steps {{inputs.parameters.steps}}
+            echo "Migration status after rollback:"
+            confiture migrate status
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: "{{inputs.parameters.database-secret}}"
+                key: "{{inputs.parameters.database-key}}"
+
+---
+# Main workflow for migration deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: confiture-migration-
+  namespace: migrations
+  labels:
+    app: confiture
+    type: migration
+spec:
+  entrypoint: migration-pipeline
+  serviceAccountName: argo-workflow
+
+  # Artifact storage for migration files
+  artifactRepositoryRef:
+    configMap: artifact-repositories
+    key: default-v1
+
+  arguments:
+    parameters:
+      - name: git-repo
+        value: "https://github.com/your-org/your-app.git"
+      - name: git-branch
+        value: "main"
+      - name: environment
+        value: "production"
+
+  templates:
+    - name: migration-pipeline
+      dag:
+        tasks:
+          # Clone repository
+          - name: clone
+            template: git-clone
+            arguments:
+              parameters:
+                - name: repo
+                  value: "{{workflow.parameters.git-repo}}"
+                - name: branch
+                  value: "{{workflow.parameters.git-branch}}"
+
+          # Lint migrations
+          - name: lint
+            template: lint-migrations
+            dependencies: [clone]
+            arguments:
+              artifacts:
+                - name: migrations
+                  from: "{{tasks.clone.outputs.artifacts.repo}}"
+                  subPath: db/migrations
+
+          # Dry run
+          - name: dry-run
+            template: dry-run-migration
+            dependencies: [lint]
+            arguments:
+              artifacts:
+                - name: migrations
+                  from: "{{tasks.clone.outputs.artifacts.repo}}"
+                  subPath: db/migrations
+              parameters:
+                - name: database-key
+                  value: "test-url"
+
+          # Deploy (depends on dry-run passing)
+          - name: deploy
+            template: deploy-migration
+            dependencies: [dry-run]
+            arguments:
+              artifacts:
+                - name: migrations
+                  from: "{{tasks.clone.outputs.artifacts.repo}}"
+                  subPath: db/migrations
+              parameters:
+                - name: database-key
+                  value: "{{workflow.parameters.environment}}-url"
+                - name: environment
+                  value: "{{workflow.parameters.environment}}"
+
+    - name: git-clone
+      inputs:
+        parameters:
+          - name: repo
+          - name: branch
+      container:
+        image: alpine/git:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            git clone --branch {{inputs.parameters.branch}} --depth 1 {{inputs.parameters.repo}} /workspace
+      outputs:
+        artifacts:
+          - name: repo
+            path: /workspace
+
+    - name: lint-migrations
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            confiture lint db/migrations/
+            confiture migrate verify-checksums
+
+    - name: dry-run-migration
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+        parameters:
+          - name: database-key
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            confiture migrate up --dry-run
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: db-credentials
+                key: "{{inputs.parameters.database-key}}"
+
+    - name: deploy-migration
+      inputs:
+        artifacts:
+          - name: migrations
+            path: /app/db/migrations
+        parameters:
+          - name: database-key
+          - name: environment
+      container:
+        image: python:3.11-slim
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --quiet confiture
+            confiture health check --timeout 60
+            confiture migrate up --lock-timeout 60000 --verify-checksums
+            confiture migrate status
+            confiture health check --timeout 60
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: db-credentials
+                key: "{{inputs.parameters.database-key}}"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# CronWorkflow for scheduled drift detection
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: confiture-drift-check
+  namespace: migrations
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  timezone: "UTC"
+  concurrencyPolicy: "Replace"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  workflowSpec:
+    entrypoint: drift-check
+    serviceAccountName: argo-workflow
+
+    templates:
+      - name: drift-check
+        container:
+          image: python:3.11-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install --quiet confiture
+              echo "Checking for schema drift..."
+              confiture migrate drift-detect
+              if [ $? -ne 0 ]; then
+                echo "Schema drift detected! Sending alert..."
+                # Add your alerting mechanism here
+              fi
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: production-url
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+
+---
+# EventSource for GitOps integration
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: confiture-webhook
+  namespace: argo-events
+spec:
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    migration-push:
+      port: "12000"
+      endpoint: /migrations
+      method: POST
+
+---
+# Sensor to trigger workflows on Git push
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: confiture-migration-trigger
+  namespace: argo-events
+spec:
+  dependencies:
+    - name: migration-push
+      eventSourceName: confiture-webhook
+      eventName: migration-push
+      filters:
+        data:
+          - path: body.ref
+            type: string
+            value:
+              - refs/heads/main
+
+  triggers:
+    - template:
+        name: migration-workflow
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: confiture-migration-
+                namespace: migrations
+              spec:
+                workflowTemplateRef:
+                  name: confiture-migration-template
+                arguments:
+                  parameters:
+                    - name: git-repo
+                      value: "{{.Input.body.repository.clone_url}}"
+                    - name: git-branch
+                      value: "main"

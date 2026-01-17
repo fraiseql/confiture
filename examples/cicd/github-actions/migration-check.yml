@@ -1,0 +1,118 @@
+# Confiture Migration Check Workflow
+# Add to: .github/workflows/migration-check.yml
+#
+# This workflow runs on pull requests that modify migrations or schema files.
+# It performs linting, checksum verification, and dry-run testing.
+
+name: Migration Check
+
+on:
+  pull_request:
+    paths:
+      - 'db/migrations/**'
+      - 'db/schema/**'
+
+jobs:
+  lint-migrations:
+    name: Lint Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Lint migrations
+        run: confiture lint db/migrations/
+
+      - name: Verify checksums
+        run: confiture migrate verify-checksums
+
+  dry-run:
+    name: Dry Run Migration
+    runs-on: ubuntu-latest
+    needs: lint-migrations
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Build test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        run: confiture build --env test
+
+      - name: Run dry-run migration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        run: confiture migrate up --dry-run
+
+      - name: Test rollback
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        run: confiture migrate test-rollback db/migrations/*.py
+
+  schema-diff:
+    name: Schema Diff Check
+    runs-on: ubuntu-latest
+    needs: lint-migrations
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for base comparison
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Check schema drift
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        run: |
+          confiture build --env test
+          confiture migrate drift-detect || echo "::warning::Schema drift detected"

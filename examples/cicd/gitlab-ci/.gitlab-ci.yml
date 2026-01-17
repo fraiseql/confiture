@@ -1,0 +1,170 @@
+# Confiture GitLab CI Configuration
+# Copy to: .gitlab-ci.yml
+#
+# This pipeline includes linting, dry-run testing, and staged deployments.
+# Production deployment requires manual trigger.
+
+stages:
+  - lint
+  - test
+  - deploy-staging
+  - deploy-production
+
+variables:
+  # Test database configuration
+  POSTGRES_DB: test_db
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST: postgres
+  # Python version
+  PYTHON_VERSION: "3.11"
+
+# Base template for all migration jobs
+.migration-base:
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install --quiet confiture
+
+# Lint migrations and verify checksums
+lint-migrations:
+  extends: .migration-base
+  stage: lint
+  script:
+    - confiture lint db/migrations/
+    - confiture migrate verify-checksums
+  rules:
+    - changes:
+        - db/migrations/**/*
+        - db/schema/**/*
+
+# Run migrations in dry-run mode against test database
+dry-run-migrations:
+  extends: .migration-base
+  stage: test
+  services:
+    - name: postgres:15
+      alias: postgres
+  variables:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
+  script:
+    - confiture build --env test
+    - confiture migrate up --dry-run
+    - confiture migrate test-rollback db/migrations/*.py
+  rules:
+    - changes:
+        - db/migrations/**/*
+
+# Test schema diff detection
+schema-diff-check:
+  extends: .migration-base
+  stage: test
+  services:
+    - name: postgres:15
+      alias: postgres
+  variables:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
+  script:
+    - confiture build --env test
+    - confiture migrate drift-detect
+  rules:
+    - changes:
+        - db/migrations/**/*
+        - db/schema/**/*
+  allow_failure: true  # Drift detection is informational
+
+# Deploy to staging environment
+deploy-staging:
+  extends: .migration-base
+  stage: deploy-staging
+  environment:
+    name: staging
+    url: https://staging.example.com
+  script:
+    - |
+      echo "Checking for pending migrations..."
+      PENDING=$(confiture migrate status --format json | jq '.pending | length')
+      if [ "$PENDING" -eq 0 ]; then
+        echo "No pending migrations"
+        exit 0
+      fi
+    - confiture health check --timeout 30
+    - |
+      confiture migrate up \
+        --lock-timeout 30000 \
+        --verify-checksums
+    - confiture migrate status
+    - confiture health check --timeout 30
+  variables:
+    DATABASE_URL: ${STAGING_DATABASE_URL}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - db/migrations/**/*
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" == "success" ]; then
+        curl -X POST "${SLACK_WEBHOOK}" \
+          -H 'Content-Type: application/json' \
+          -d "{\"text\":\"✅ Staging migrations completed for ${CI_PROJECT_NAME}\"}"
+      else
+        curl -X POST "${SLACK_WEBHOOK}" \
+          -H 'Content-Type: application/json' \
+          -d "{\"text\":\"❌ Staging migrations failed for ${CI_PROJECT_NAME}\"}"
+      fi
+
+# Deploy to production environment (manual trigger required)
+deploy-production:
+  extends: .migration-base
+  stage: deploy-production
+  environment:
+    name: production
+    url: https://example.com
+  script:
+    - |
+      echo "Checking for pending migrations..."
+      PENDING=$(confiture migrate status --format json | jq '.pending | length')
+      if [ "$PENDING" -eq 0 ]; then
+        echo "No pending migrations"
+        exit 0
+      fi
+    - echo "Running pre-migration health check..."
+    - confiture health check --timeout 60
+    - echo "Applying $PENDING migrations..."
+    - |
+      confiture migrate up \
+        --lock-timeout 60000 \
+        --verify-checksums
+    - confiture migrate status
+    - echo "Running post-migration health check..."
+    - confiture health check --timeout 60
+  variables:
+    DATABASE_URL: ${PRODUCTION_DATABASE_URL}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - db/migrations/**/*
+  when: manual
+  allow_failure: false
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" == "success" ]; then
+        curl -X POST "${SLACK_WEBHOOK}" \
+          -H 'Content-Type: application/json' \
+          -d "{\"text\":\"✅ Production migrations completed for ${CI_PROJECT_NAME}\"}"
+      else
+        curl -X POST "${SLACK_WEBHOOK}" \
+          -H 'Content-Type: application/json' \
+          -d "{\"text\":\"❌ Production migrations FAILED for ${CI_PROJECT_NAME} - immediate attention required\"}"
+      fi
+
+# Optional: Scheduled drift detection
+drift-detection:
+  extends: .migration-base
+  stage: lint
+  script:
+    - confiture migrate drift-detect
+  variables:
+    DATABASE_URL: ${PRODUCTION_DATABASE_URL}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  allow_failure: true

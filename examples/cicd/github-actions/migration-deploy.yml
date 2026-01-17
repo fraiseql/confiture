@@ -1,0 +1,190 @@
+# Confiture Migration Deploy Workflow
+# Add to: .github/workflows/migration-deploy.yml
+#
+# This workflow deploys migrations to staging and production environments.
+# Production deployment requires manual approval.
+
+name: Migration Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'db/migrations/**'
+
+# Prevent concurrent migration runs - migrations should never be cancelled mid-flight
+concurrency:
+  group: migration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      migration_count: ${{ steps.migrate.outputs.count }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Check pending migrations
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          STATUS=$(confiture migrate status --format json)
+          PENDING=$(echo "$STATUS" | jq '.pending | length')
+          echo "pending=$PENDING" >> $GITHUB_OUTPUT
+          if [ "$PENDING" -eq 0 ]; then
+            echo "No pending migrations"
+          else
+            echo "$PENDING migrations pending"
+          fi
+
+      - name: Run migrations
+        id: migrate
+        if: steps.check.outputs.pending != '0'
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          confiture migrate up \
+            --lock-timeout 30000 \
+            --verify-checksums
+
+          # Output migration count for later jobs
+          echo "count=${{ steps.check.outputs.pending }}" >> $GITHUB_OUTPUT
+
+      - name: Verify migration
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: confiture migrate status
+
+      - name: Run health checks
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          # Basic connectivity check
+          confiture health check --timeout 30
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment: production
+    if: needs.deploy-staging.outputs.migration_count != '0'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Pre-migration health check
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: confiture health check --timeout 60
+
+      - name: Run migrations
+        id: migrate
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          confiture migrate up \
+            --lock-timeout 60000 \
+            --verify-checksums
+
+      - name: Verify migration
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: confiture migrate status
+
+      - name: Post-migration health check
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: confiture health check --timeout 60
+
+      - name: Notify on success
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "✅ Production migrations completed",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Repository", "value": "${{ github.repository }}", "short": true},
+                  {"title": "Commit", "value": "${{ github.sha }}", "short": true}
+                ]
+              }]
+            }'
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "❌ Production migrations FAILED",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  {"title": "Repository", "value": "${{ github.repository }}", "short": true},
+                  {"title": "Commit", "value": "${{ github.sha }}", "short": true},
+                  {"title": "Run URL", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false}
+                ]
+              }]
+            }'
+
+  rollback-on-failure:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: failure() && needs.deploy-production.result == 'failure'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Attempt rollback
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          echo "Attempting to rollback last migration..."
+          confiture migrate down --steps 1 || echo "Rollback failed - manual intervention required"
+
+      - name: Notify rollback status
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "⚠️ Migration rollback attempted - please verify database state",
+              "attachments": [{
+                "color": "warning",
+                "fields": [
+                  {"title": "Action Required", "value": "Verify database state and application health", "short": false}
+                ]
+              }]
+            }'
