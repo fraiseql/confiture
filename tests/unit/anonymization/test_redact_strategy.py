@@ -182,7 +182,7 @@ class TestRedactEdgeCases:
             [1, 2, 3],
             {"key": "value"},
             (1, 2, 3),
-            set([1, 2, 3]),
+            {1, 2, 3},
             b"bytes",
         ]
 

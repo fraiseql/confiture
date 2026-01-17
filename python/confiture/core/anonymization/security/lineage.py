@@ -118,7 +118,7 @@ class DataLineageEntry:
     executed_by: str = "system"
     """User who executed the operation."""
 
-    executed_at: datetime = None
+    executed_at: datetime | None = None
     """When the operation was executed."""
 
     reason: str | None = None

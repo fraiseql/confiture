@@ -1,6 +1,5 @@
 """Tests for checksum computation and verification."""
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest

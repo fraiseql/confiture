@@ -1,4 +1,4 @@
-"""Transparent risk scoring formula with explicit weights - Phase 6."""
+"""Transparent risk scoring formula with explicit weights."""
 from __future__ import annotations
 
 import logging

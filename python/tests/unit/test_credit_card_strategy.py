@@ -9,12 +9,11 @@ Tests:
 - Deterministic output
 """
 
-import pytest
 from confiture.core.anonymization.strategies.credit_card import (
-    CreditCardStrategy,
     CreditCardConfig,
-    is_valid_card_number,
+    CreditCardStrategy,
     detect_card_type,
+    is_valid_card_number,
     luhn_checksum,
 )
 

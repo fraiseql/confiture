@@ -1,4 +1,4 @@
-"""Differential privacy anonymization strategy (Phase 2.2.5).
+"""Differential privacy anonymization strategy.
 
 Provides mathematical privacy guarantee using noise addition. Adds carefully
 calibrated random noise to numerical data to prevent individual re-identification.

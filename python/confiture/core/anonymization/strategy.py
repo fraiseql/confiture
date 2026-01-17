@@ -110,6 +110,9 @@ class AnonymizationStrategy(ABC):
         'user_a1b2c3d4@example.com'
     """
 
+    config_type: type[StrategyConfig] = StrategyConfig
+    strategy_name: str = "base"
+
     def __init__(self, config: StrategyConfig | None = None):
         """Initialize strategy with configuration.
 
@@ -164,7 +167,7 @@ class AnonymizationStrategy(ABC):
     ) -> tuple[bool, list[str]]:
         """Comprehensive validation with detailed error reporting.
 
-        Extended validation method (Phase 2.1) that provides:
+        Extended validation method that provides:
         - Basic type validation (from validate())
         - Completeness checking (NULL handling)
         - Format validation (if applicable)

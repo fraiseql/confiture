@@ -1,9 +1,9 @@
-"""Hook registry and execution engine for Phase 6."""
+"""Hook registry and execution engine."""
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 
 from .base import Hook, HookResult
@@ -211,7 +211,7 @@ class HookRegistry(Generic[T]):
         config: HookPhaseConfig,
     ) -> HookExecutionEvent:
         """Execute single hook with timeout enforcement."""
-        start = datetime.utcnow()
+        start = datetime.now(UTC)
         circuit_breaker = self.circuit_breakers.get(hook.id)
 
         if circuit_breaker and circuit_breaker.is_open:
@@ -229,7 +229,7 @@ class HookRegistry(Generic[T]):
                 hook.execute(context),
                 timeout=config.timeout_per_hook_ms / 1000,
             )
-            duration = (datetime.utcnow() - start).total_seconds() * 1000
+            duration = (datetime.now(UTC) - start).total_seconds() * 1000
 
             event = HookExecutionEvent(
                 execution_id=context.execution_id,
@@ -267,7 +267,7 @@ class HookRegistry(Generic[T]):
                 phase=_extract_phase_value(config.phase),
                 status=HookExecutionStatus.FAILED,
                 error=str(e),
-                duration_ms=int((datetime.utcnow() - start).total_seconds() * 1000),
+                duration_ms=int((datetime.now(UTC) - start).total_seconds() * 1000),
             )
 
     async def _retry_hook(

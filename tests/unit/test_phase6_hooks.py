@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for Phase 6 Hook System.
+"""Comprehensive unit tests for Hook System.
 
 Tests cover:
 - Hook registration and execution
@@ -22,8 +22,6 @@ import pytest
 from confiture.core.hooks import (
     Hook,
     HookContext,
-    HookExecutionResult,
-    HookExecutionStrategy,
     HookErrorStrategy,
     HookPhase,
     HookRegistry,
@@ -179,7 +177,7 @@ class TestErrorHandling:
 
         context = HookContext(phase=HookPhase.BEFORE_ANALYZE_SCHEMA, data={}, execution_id=uuid4())
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - Hook errors wrapped in generic Exception
             await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
     @pytest.mark.asyncio
@@ -194,7 +192,7 @@ class TestErrorHandling:
 
         context = HookContext(phase=HookPhase.BEFORE_ANALYZE_SCHEMA, data={}, execution_id=uuid4())
         # Default strategy is FAIL_FAST, which raises exception on first error
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - Hook errors wrapped in generic Exception
             await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
         # First hook should have executed and failed
@@ -235,9 +233,8 @@ class TestCircuitBreaker:
 
         # Record success in HALF_OPEN state (after timeout)
         # Simulate timeout by setting last_failure_time to past
-        breaker.last_failure_time = datetime.fromtimestamp(
-            datetime.utcnow().timestamp() - 1
-        )
+        from datetime import UTC, timedelta
+        breaker.last_failure_time = datetime.now(UTC) - timedelta(seconds=1)
         assert not breaker.is_open  # Should be HALF_OPEN
 
         breaker.record_success()

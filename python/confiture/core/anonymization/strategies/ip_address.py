@@ -13,6 +13,7 @@ Useful for log anonymization while preserving network patterns.
 import ipaddress
 import random
 from dataclasses import dataclass
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
@@ -63,7 +64,7 @@ class IPAddressStrategy(AnonymizationStrategy):
     config_type = IPAddressConfig
     strategy_name = "ip_address"
 
-    def anonymize(self, value: str) -> str:
+    def anonymize(self, value: str | None) -> str | None:
         """Anonymize an IP address.
 
         Args:
@@ -108,7 +109,7 @@ class IPAddressStrategy(AnonymizationStrategy):
         """
         return isinstance(value, str) or value is None
 
-    def _anonymize_address(self, ip: ipaddress.ip_address) -> str:
+    def _anonymize_address(self, ip: IPv4Address | IPv6Address) -> str:
         """Anonymize a single IP address.
 
         Args:
@@ -208,7 +209,7 @@ class IPAddressStrategy(AnonymizationStrategy):
             anon_ip = ipaddress.IPv6Address(random_int)
             return str(anon_ip)
 
-    def _anonymize_network(self, network: ipaddress.ip_network) -> str:
+    def _anonymize_network(self, network: IPv4Network | IPv6Network) -> str:
         """Anonymize network address.
 
         Args:

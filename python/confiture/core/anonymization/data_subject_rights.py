@@ -1,4 +1,4 @@
-"""Data subject rights automation for Phase 2.3.
+"""Data subject rights automation.
 
 Provides automated fulfillment of data subject rights required by modern
 data protection regulations. These include access, erasure, portability,
@@ -126,13 +126,13 @@ class DataSubjectRequest:
     status: RequestStatus = RequestStatus.RECEIVED
     """Current request status."""
 
-    created_at: datetime = None
+    created_at: datetime | None = None
     """When request was created."""
 
     verified_at: datetime | None = None
     """When identity was verified."""
 
-    deadline: datetime = None
+    deadline: datetime | None = None
     """Regulatory deadline (usually 30 days)."""
 
     fulfilled_at: datetime | None = None

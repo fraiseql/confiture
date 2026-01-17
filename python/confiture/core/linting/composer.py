@@ -1,4 +1,4 @@
-"""Rule library composition with explicit conflict handling - Phase 6."""
+"""Rule library composition with explicit conflict handling."""
 from __future__ import annotations
 
 import logging

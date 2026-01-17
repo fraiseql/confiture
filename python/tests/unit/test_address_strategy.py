@@ -11,6 +11,7 @@ Tests:
 """
 
 import pytest
+
 from confiture.core.anonymization.strategies.address import (
     AddressConfig,
     AddressStrategy,

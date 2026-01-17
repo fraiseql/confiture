@@ -4,13 +4,15 @@ Tests the rule versioning system including semantic versioning,
 deprecation tracking, and compatibility management.
 """
 
-import pytest
 import logging
+
+import pytest
+
 from confiture.core.linting.versioning import (
     LintSeverity,
-    RuleVersion,
     Rule,
     RuleRemovedError,
+    RuleVersion,
     RuleVersionManager,
 )
 
@@ -681,7 +683,7 @@ class TestRuleVersioningIntegration:
         """Test rule compatibility checking across versions."""
         v1 = RuleVersion(major=1, minor=0, patch=0)
         v2 = RuleVersion(major=2, minor=0, patch=0)
-        v3 = RuleVersion(major=3, minor=0, patch=0)
+        RuleVersion(major=3, minor=0, patch=0)
 
         rules = [
             Rule(rule_id="R-V1", name="rule_v1", description="V1 Rule", version=v1),

@@ -6,11 +6,11 @@ and comprehensive migration validation.
 
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
-import pytest
 import psycopg
+import pytest
 
 
 @pytest.fixture

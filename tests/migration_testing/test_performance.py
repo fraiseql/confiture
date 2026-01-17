@@ -7,7 +7,6 @@ Tests verify that the performance profiling framework correctly:
 4. Provides optimization recommendations
 """
 
-import pytest
 import time
 
 
@@ -113,6 +112,7 @@ def test_view_creation_performance(test_db_connection, performance_profiler):
 def test_performance_regression_detection():
     """Test performance regression detection."""
     import time
+
     from confiture.testing.frameworks.performance import PerformanceProfile
 
     baseline_start = time.time()
@@ -197,7 +197,7 @@ def test_large_table_index_performance(test_db_connection, performance_profiler)
 def test_performance_baseline_tracking(tmp_path):
     """Test performance baseline storage and comparison."""
     import time
-    from pathlib import Path
+
     from confiture.testing.frameworks.performance import PerformanceBaseline, PerformanceProfile
 
     baselines_file = tmp_path / "baselines.json"

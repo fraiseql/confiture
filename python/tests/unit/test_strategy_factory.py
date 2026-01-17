@@ -9,14 +9,13 @@ Tests for:
 """
 
 import pytest
+
 from confiture.core.anonymization.factory import (
     StrategyFactory,
     StrategyProfile,
     StrategySuggester,
 )
 from confiture.core.anonymization.strategies.preserve import PreserveStrategy
-from confiture.core.anonymization.strategies.name import NameMaskingStrategy
-from confiture.core.anonymization.registry import StrategyRegistry
 
 
 class TestStrategyProfile:
@@ -65,7 +64,7 @@ class TestStrategyProfile:
         }
         profile = StrategyProfile(name="test", columns=columns)
         assert len(profile.columns) == 3
-        assert all(col in profile.columns for col in columns.keys())
+        assert all(col in profile.columns for col in columns)
 
     def test_profile_seed_zero(self):
         """Test profile with zero seed."""
@@ -152,8 +151,8 @@ class TestStrategyFactory:
             columns={"name": "preserve", "other": "preserve"},
         )
         factory = StrategyFactory(profile)
-        strategy1 = factory.get_strategy("name")
-        strategy2 = factory.get_strategy("other")
+        factory.get_strategy("name")
+        factory.get_strategy("other")
         # Both cached but different entries
         assert "name" in factory._cache
         assert "other" in factory._cache

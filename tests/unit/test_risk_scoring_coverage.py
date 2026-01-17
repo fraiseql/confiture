@@ -4,14 +4,12 @@ Tests the transparent risk scoring system including individual factor scoring,
 anomaly detection, and overall risk level calculations.
 """
 
-import pytest
-import math
 from confiture.core.risk.scoring import (
-    RiskLevel,
-    Severity,
     DataAnomaly,
     RiskFactor,
+    RiskLevel,
     RiskScoringFormula,
+    Severity,
 )
 
 
@@ -555,5 +553,5 @@ class TestRiskScoringIntegration:
         ]
 
         expected_weights = [0.25, 0.35, 0.15, 0.15, 0.10]
-        for factor, expected_weight in zip(all_factors, expected_weights):
+        for factor, expected_weight in zip(all_factors, expected_weights, strict=True):
             assert factor.weight == expected_weight

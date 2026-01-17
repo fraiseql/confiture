@@ -7,18 +7,19 @@ Tests for:
 """
 
 import pytest
-from confiture.core.anonymization.strategies.text_redaction import (
-    TextRedactionStrategy,
-    TextRedactionConfig,
-)
-from confiture.core.anonymization.strategies.preserve import (
-    PreserveStrategy,
-    PreserveConfig,
-)
+
 from confiture.core.anonymization.strategies.custom import (
-    CustomStrategy,
     CustomConfig,
     CustomLambdaStrategy,
+    CustomStrategy,
+)
+from confiture.core.anonymization.strategies.preserve import (
+    PreserveConfig,
+    PreserveStrategy,
+)
+from confiture.core.anonymization.strategies.text_redaction import (
+    TextRedactionConfig,
+    TextRedactionStrategy,
 )
 
 

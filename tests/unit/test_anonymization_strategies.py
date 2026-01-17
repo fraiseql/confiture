@@ -1,6 +1,5 @@
 """Unit tests for email, phone, and redact strategies."""
 
-import pytest
 
 from confiture.core.anonymization.strategies.email import (
     EmailMaskConfig,

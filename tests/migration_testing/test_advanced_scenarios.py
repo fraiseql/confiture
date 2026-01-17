@@ -8,7 +8,6 @@ Tests verify complex real-world migration patterns:
 5. Advanced dependencies
 """
 
-import pytest
 
 
 def test_multi_table_migration_with_dependencies(test_db_connection):

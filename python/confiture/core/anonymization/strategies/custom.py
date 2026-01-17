@@ -32,7 +32,7 @@ class CustomConfig(StrategyConfig):
         >>> config = CustomConfig(seed=12345, func=upper_mask, name="uppercase")
     """
 
-    func: Callable[[Any], Any] = None
+    func: Callable[[Any], Any] | None = None
     name: str = "custom"
     accepts_seed: bool = False
 
@@ -87,11 +87,11 @@ class CustomStrategy(AnonymizationStrategy):
                 f"Error in custom anonymization function '{self.config.name}': {e}"
             ) from e
 
-    def validate(self, _value: Any) -> bool:
+    def validate(self, value: Any) -> bool:  # noqa: ARG002
         """Check if strategy can handle this value type.
 
         Args:
-            _value: Sample value to validate (unused, custom accepts any)
+            value: Sample value to validate (unused, custom accepts any)
 
         Returns:
             True (custom accepts any value type)
@@ -143,11 +143,11 @@ class CustomLambdaStrategy(AnonymizationStrategy):
                 f"Error in lambda anonymization: {e}"
             ) from e
 
-    def validate(self, _value: Any) -> bool:
+    def validate(self, value: Any) -> bool:  # noqa: ARG002
         """Check if strategy can handle this value type.
 
         Args:
-            _value: Sample value to validate (unused, lambda accepts any)
+            value: Sample value to validate (unused, lambda accepts any)
 
         Returns:
             True (lambda accepts any value type)

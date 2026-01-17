@@ -1,9 +1,9 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 2.0
-**Last Updated**: December 27, 2025
-**Current Status**: Phase 4 Documentation ✅ COMPLETE | Phase 5 Ready 🚀
+**Version**: 0.5.0
+**Last Updated**: January 2026
+**Current Status**: Feature Complete (Beta)
 
 ---
 
@@ -31,21 +31,20 @@ The `db/schema/` directory is the **single source of truth**. Migrations are der
 Before coding, read these documents in order:
 
 1. **[PRD.md](./PRD.md)** - Product requirements, user stories, success metrics
-2. **[PHASES.md](./PHASES.md)** - Detailed implementation phases
-3. **[MIGRATION_SYSTEM_DESIGN.md](/home/lionel/code/fraiseql/MIGRATION_SYSTEM_DESIGN.md)** - Technical architecture
-4. **[MIGRATION_COMPETITIVE_ANALYSIS.md](/home/lionel/code/fraiseql/MIGRATION_COMPETITIVE_ANALYSIS.md)** - Market positioning
+2. **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Technical architecture and design decisions
+3. **[docs/](./docs/)** - User guides and API documentation
 
 ---
 
 ## 🏗️ Development Methodology
 
-### Phased TDD Approach
+### TDD Approach
 
-Confiture follows **disciplined TDD cycles** from the global CLAUDE.md:
+Confiture follows **disciplined TDD cycles**:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ PHASE N: [Phase Objective]                              │
+│                    TDD CYCLE                            │
 │                                                         │
 │ ┌─────────┐  ┌─────────┐  ┌─────────────┐  ┌─────────┐ │
 │ │   RED   │─▶│ GREEN   │─▶│  REFACTOR   │─▶│   QA    │ │
@@ -55,27 +54,27 @@ Confiture follows **disciplined TDD cycles** from the global CLAUDE.md:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Phase Discipline
+### TDD Discipline
 
-**RED Phase**: Write specific failing test
+**RED**: Write specific failing test
 ```bash
 uv run pytest tests/unit/test_builder.py::test_build_schema_local -v
 # Expected: FAILED (not implemented yet)
 ```
 
-**GREEN Phase**: Minimal implementation to pass
+**GREEN**: Minimal implementation to pass
 ```bash
 uv run pytest tests/unit/test_builder.py::test_build_schema_local -v
 # Expected: PASSED (minimal working code)
 ```
 
-**REFACTOR Phase**: Clean up, optimize
+**REFACTOR**: Clean up, optimize
 ```bash
 uv run pytest tests/unit/test_builder.py -v
 # All tests still pass after refactoring
 ```
 
-**QA Phase**: Full validation
+**QA**: Full validation
 ```bash
 uv run pytest --cov=confiture --cov-report=term-missing
 uv run ruff check .
@@ -86,7 +85,7 @@ uv run mypy confiture/
 
 ## 🛠️ Technology Stack
 
-### Phase 1: Pure Python (Current)
+### Core Dependencies
 
 ```toml
 # pyproject.toml dependencies
@@ -110,10 +109,12 @@ dev = [
 ]
 ```
 
-### Phase 2: Rust Performance (Future)
+### Rust Extension (Optional Performance)
+
+Confiture includes an optional Rust extension for improved performance:
 
 ```toml
-# Cargo.toml (when adding Rust)
+# Cargo.toml
 [dependencies]
 pyo3 = "0.22"             # Python bindings
 sqlparser = "0.52"        # SQL parsing (Rust)
@@ -599,67 +600,46 @@ Closes #123
 
 ---
 
-## 🎯 Current Phase Focus
+## 🎯 Current Status
 
-### ✅ Phases 1-3: Complete (v0.3.2 - Production Release)
+### ✅ Feature Complete (v0.5.0)
 
-**Completed Work**:
-- ✅ Phase 1: Python MVP - All 4 mediums implemented
-  - Schema builder (Medium 1) - Build from DDL
-  - Migration system (Medium 2) - Incremental migrations
-  - Schema diff detection
-  - CLI with rich terminal output
-  - FraiseQL integration ready
+**Core Features**:
+- ✅ Schema builder (Medium 1) - Build from DDL in <1s
+- ✅ Migration system (Medium 2) - Incremental migrations with dry-run
+- ✅ Production sync (Medium 3) - Copy data with PII anonymization
+- ✅ Zero-downtime migrations (Medium 4) - Schema-to-schema via FDW
+- ✅ Schema diff detection
+- ✅ CLI with rich terminal output
 
-- ✅ Phase 2: Rust Performance Layer
-  - Rust extensions for file hashing and schema building
-  - Binary wheels for Linux, macOS, Windows
-  - 10-50x performance improvement
+**Enterprise Features**:
+- ✅ Distributed locking with advisory locks
+- ✅ Checksum verification for migration integrity
+- ✅ Transaction boundary control
+- ✅ Connection pooling with health checks
+- ✅ Schema validation and drift detection
+- ✅ Built-in observability (metrics, tracing)
+- ✅ Rollback safety with auto-generation
 
-- ✅ Phase 3: Production Features
-  - Production data sync (Medium 3) with PII anonymization
-  - Zero-downtime migrations via FDW (Medium 4)
-  - Comprehensive documentation (5 user guides, 4 API references)
-  - 5 production-ready examples
-  - CI/CD pipeline with multi-platform wheels
+**Cloud Native**:
+- ✅ Kubernetes Helm charts
+- ✅ Health endpoints for probes
+- ✅ Graceful shutdown handling
+- ✅ CI/CD templates (GitHub Actions, GitLab, Jenkins, Argo CD)
 
-**Current Status**:
-- **Test Coverage**: 52.60% (899 tests passing, 0 failing) ⚠️ See Phase 6 plan for improvements
-- **Version**: 0.3.2 (Production Release 🎉)
-- **Dependencies**: All installed and verified
-- **Rust Extension**: Compiled and working for Python 3.11+
-- **Database**: Test database (confiture_test) configured
+**Advanced**:
+- ✅ Migration hooks with DAG execution
+- ✅ Custom anonymization strategies
+- ✅ Database schema linting (HIPAA, SOX, GDPR, PCI-DSS)
+- ✅ Risk assessment with downtime prediction
+- ✅ Blue-green migration orchestration
+- ✅ Large table patterns (batched operations)
 
-### ✅ Phase 4: Advanced Features & Documentation (v0.5.0 - Complete)
-
-**Completed Work** (December 27, 2025):
-- ✅ Migration Hooks - Before/after hooks for validation, logging, side effects
-- ✅ Custom Anonymization Strategies - Build your own data masking functions
-- ✅ Interactive Migration Wizard - Guided step-by-step migrations with confirmations
-- ✅ Database Schema Linting - Validate schema against best practices
-- ✅ Comprehensive Documentation - 5 user guides (2,000+ lines)
-- ✅ Advanced Patterns - 5 enterprise-grade workflow examples
-- ✅ Release Notes Template - v0.5.0 (2,000+ lines)
-
-**Documentation Status**:
-- **User Guides**: 5 comprehensive guides (migration-hooks, custom-anonymization, interactive-wizard, schema-linting, hooks-vs-pre-commit)
-- **Advanced Patterns**: Phase 4 Patterns guide with 5 enterprise workflows
-- **Examples**: 30+ working, tested examples
-- **Learning Paths**: 5 different paths for different user roles
-- **API References**: Complete (in Phase 5 plan)
-- **Integration Guides**: Complete (in Phase 5 plan)
-
-**See [PHASE_4_DOCUMENTATION_COMPLETE.md](./PHASE_4_DOCUMENTATION_COMPLETE.md) for details.**
-
-### 🚧 Phase 5: API References & Advanced Integration (Q1 2026)
-
-**Planned Work**:
-- API reference documentation (Hooks, Anonymization, Linting, Wizard)
-- Integration guides (Slack, GitHub Actions, CloudWatch, PagerDuty)
-- Industry-specific guides (Healthcare/HIPAA, Finance/SOX, SaaS, E-commerce)
-- Advanced example projects
-
-**See [PHASE_5_PLAN.md](./PHASE_5_PLAN.md) for detailed roadmap.**
+**Quality Metrics**:
+- **Test Coverage**: 3,200+ tests passing
+- **Python Support**: 3.11, 3.12, 3.13
+- **Documentation**: Comprehensive guides and API references
+- **Rust Extension**: Optional 10-50x performance boost
 
 ---
 
@@ -721,17 +701,12 @@ except psycopg.OperationalError as e:
 
 ---
 
-## 📊 Success Metrics (Phases 1-3 Complete)
+## 📊 Success Metrics
 
-**Achieved Metrics** (v0.3.2):
-
-- ✅ **Test Coverage**: 52.60% actual (899 tests, up from 332 in earlier version) 📈
-  - Core features (Phases 1-3): ~85% coverage ✅
-  - Phase 6 features: ~50% coverage (improving with Phase 5) ⚠️
+- ✅ **Test Coverage**: 3,200+ tests passing
 - ✅ **Build Speed**: <1 second for fresh database builds
 - ✅ **CLI Commands**: 8 working (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`)
-- ✅ **Documentation**: 9 comprehensive guides + 4 API references
-- ✅ **Integration**: FraiseQL integration ready
+- ✅ **Documentation**: Comprehensive guides + API references
 - ✅ **Performance**: 10-50x faster with Rust extension
 - ✅ **Examples**: 5 production-ready scenarios
 - ✅ **CI/CD**: Multi-platform wheel building, quality gates, automated testing
@@ -743,18 +718,17 @@ except psycopg.OperationalError as e:
 
 ### Resources
 
-- **Project Docs**: `/home/lionel/code/confiture/docs/`
-- **Design Docs**: `/home/lionel/code/fraiseql/MIGRATION_*.md`
-- **FraiseQL Integration**: `/home/lionel/code/fraiseql/`
-- **Reference**: printoptim_backend `/home/lionel/code/printoptim_backend/db/`
+- **Project Docs**: `docs/`
+- **API Reference**: `docs/api/`
+- **Examples**: `examples/`
 
 ### Questions to Ask
 
 When stuck, ask:
-1. "What test should I write first?" (RED phase)
-2. "What's the simplest code to make this pass?" (GREEN phase)
-3. "How can I improve this without breaking tests?" (REFACTOR phase)
-4. "Does this meet quality standards?" (QA phase)
+1. "What test should I write first?" (RED)
+2. "What's the simplest code to make this pass?" (GREEN)
+3. "How can I improve this without breaking tests?" (REFACTOR)
+4. "Does this meet quality standards?" (QA)
 
 ---
 
@@ -764,15 +738,14 @@ When stuck, ask:
 
 1. **Make it work**: Write failing test, minimal implementation
 2. **Make it right**: Refactor, clean code, documentation
-3. **Make it fast**: Optimize (Rust layer in Phase 2)
+3. **Make it fast**: Optimize with Rust extension when needed
 
 **Always follow TDD cycles. Always.**
 
 ---
 
-**Last Updated**: October 11, 2025
-**Current Phase**: Phase 1 - Python MVP
-**Next Milestone**: Schema Builder Complete
+**Last Updated**: January 2026
+**Version**: 0.5.0 Feature Complete
 
 ---
 

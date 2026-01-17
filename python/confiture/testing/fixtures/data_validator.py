@@ -7,6 +7,7 @@ and foreign key relationships. Can be extracted to confiture-testing package.
 from dataclasses import dataclass
 
 import psycopg
+from psycopg import sql
 
 
 @dataclass
@@ -136,12 +137,27 @@ class DataValidator:
         """
         try:
             with self.connection.cursor() as cur:
-                cur.execute(f"SELECT COUNT(*) FROM {table_name}")
-                return cur.fetchone()[0]
+                # Handle schema.table format
+                if "." in table_name:
+                    schema, table = table_name.split(".", 1)
+                    cur.execute(
+                        sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                            sql.Identifier(schema),
+                            sql.Identifier(table),
+                        )
+                    )
+                else:
+                    cur.execute(
+                        sql.SQL("SELECT COUNT(*) FROM {}").format(
+                            sql.Identifier(table_name)
+                        )
+                    )
+                row = cur.fetchone()
+                return row[0] if row else 0
         except Exception:
             return 0
 
-    def _count_fk_violations(self, cur: psycopg.cursor) -> int:
+    def _count_fk_violations(self, cur: psycopg.Cursor) -> int:
         """Count foreign key constraint violations.
 
         Args:
@@ -159,12 +175,13 @@ class DataValidator:
                   AND convalidated = false
                 """
             )
-            return cur.fetchone()[0]
+            row = cur.fetchone()
+            return row[0] if row else 0
         except Exception:
             # If query fails, assume no violations (constraint might not exist)
             return 0
 
-    def _count_null_violations(self, _cur: psycopg.cursor) -> int:
+    def _count_null_violations(self, _cur: psycopg.Cursor) -> int:
         """Count NULL violations in NOT NULL columns.
 
         This is a simplified check - in production you'd want to check each column.

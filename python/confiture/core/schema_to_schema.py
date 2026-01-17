@@ -4,9 +4,7 @@ This module implements Medium 4: Schema-to-Schema migration for zero-downtime
 database migrations. It supports two strategies:
 
 1. FDW Strategy: Best for small-medium tables (<10M rows), complex transformations
-2. COPY Strategy: Best for large tables (>10M rows), 10-20x faster (Milestone 3.3)
-
-Phase 3, Milestone 3.1: FDW Strategy Setup
+2. COPY Strategy: Best for large tables (>10M rows), 10-20x faster
 """
 
 from io import BytesIO

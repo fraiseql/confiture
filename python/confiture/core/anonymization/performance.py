@@ -1,4 +1,4 @@
-"""Performance optimization for Phase 2.4.
+"""Performance optimization for anonymization.
 
 Provides optimizations for production-scale anonymization:
 - Batch processing (optimize database I/O)
@@ -43,6 +43,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy
 
@@ -331,11 +332,17 @@ class BatchAnonymizer:
         try:
             # Get total row count
             with self.conn.cursor() as cursor:
-                count_sql = f"SELECT COUNT(*) FROM {table_name}"
+                count_query = sql.SQL("SELECT COUNT(*) FROM {}").format(
+                    sql.Identifier(table_name)
+                )
                 if where_clause:
-                    count_sql += f" WHERE {where_clause}"
-                cursor.execute(count_sql)
-                total_rows = cursor.fetchone()[0]
+                    # Caller is responsible for ensuring where_clause is safe (not user input)
+                    count_query = sql.SQL("{} WHERE {}").format(
+                        count_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                    )
+                cursor.execute(count_query)
+                row = cursor.fetchone()
+                total_rows = row[0] if row else 0
 
             logger.info(
                 f"Anonymizing {table_name}.{column_name}: {total_rows} rows"
@@ -345,7 +352,7 @@ class BatchAnonymizer:
             offset = 0
             while offset < total_rows:
                 batch_updated = self._process_batch(
-                    table_name, column_name, offset, where_clause
+                    table_name, column_name, offset, self.batch_size, where_clause
                 )
                 updated_rows += batch_updated
                 offset += self.batch_size
@@ -390,6 +397,7 @@ class BatchAnonymizer:
         table_name: str,
         column_name: str,
         offset: int,
+        batch_size: int,
         where_clause: str | None = None,
     ) -> int:
         """Process a single batch.
@@ -398,19 +406,28 @@ class BatchAnonymizer:
             table_name: Table to anonymize
             column_name: Column to anonymize
             offset: Batch offset
+            batch_size: Number of rows per batch
             where_clause: Optional WHERE clause
 
         Returns:
             Number of rows updated
         """
         # Fetch batch
-        select_sql = f"SELECT id, {column_name} FROM {table_name}"
+        select_query = sql.SQL("SELECT id, {} FROM {}").format(
+            sql.Identifier(column_name),
+            sql.Identifier(table_name),
+        )
         if where_clause:
-            select_sql += f" WHERE {where_clause}"
-        select_sql += f" LIMIT {self.batch_size} OFFSET {offset}"
+            # Caller is responsible for ensuring where_clause is safe (not user input)
+            select_query = sql.SQL("{} WHERE {}").format(
+                select_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+            )
+        select_query = sql.SQL("{} LIMIT {} OFFSET {}").format(
+            select_query, sql.Literal(batch_size), sql.Literal(offset)
+        )
 
         with self.conn.cursor() as cursor:
-            cursor.execute(select_sql)
+            cursor.execute(select_query)
             rows = cursor.fetchall()
 
         if not rows:
@@ -427,12 +444,13 @@ class BatchAnonymizer:
 
         # Update database (batch update)
         if updates:
+            update_query = sql.SQL("UPDATE {} SET {} = %s WHERE id = %s").format(
+                sql.Identifier(table_name),
+                sql.Identifier(column_name),
+            )
             with self.conn.cursor() as cursor:
                 for row_id, anonymized in updates:
-                    cursor.execute(
-                        f"UPDATE {table_name} SET {column_name} = %s WHERE id = %s",
-                        (anonymized, row_id),
-                    )
+                    cursor.execute(update_query, (anonymized, row_id))
             self.conn.commit()
 
         return len(updates)
@@ -511,11 +529,17 @@ class ConcurrentAnonymizer:
         try:
             # Get total row count
             with self.conn.cursor() as cursor:
-                count_sql = f"SELECT COUNT(*) FROM {table_name}"
+                count_query = sql.SQL("SELECT COUNT(*) FROM {}").format(
+                    sql.Identifier(table_name)
+                )
                 if where_clause:
-                    count_sql += f" WHERE {where_clause}"
-                cursor.execute(count_sql)
-                total_rows = cursor.fetchone()[0]
+                    # Caller is responsible for ensuring where_clause is safe (not user input)
+                    count_query = sql.SQL("{} WHERE {}").format(
+                        count_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                    )
+                cursor.execute(count_query)
+                row = cursor.fetchone()
+                total_rows = row[0] if row else 0
 
             logger.info(
                 f"Anonymizing {table_name}.{column_name} "
@@ -598,13 +622,21 @@ class ConcurrentAnonymizer:
 
         try:
             # Fetch batch
-            select_sql = f"SELECT id, {column_name} FROM {table_name}"
+            select_query = sql.SQL("SELECT id, {} FROM {}").format(
+                sql.Identifier(column_name),
+                sql.Identifier(table_name),
+            )
             if where_clause:
-                select_sql += f" WHERE {where_clause}"
-            select_sql += f" LIMIT {self.batch_size} OFFSET {offset}"
+                # Caller is responsible for ensuring where_clause is safe (not user input)
+                select_query = sql.SQL("{} WHERE {}").format(
+                    select_query, sql.SQL(where_clause)  # type: ignore[arg-type]
+                )
+            select_query = sql.SQL("{} LIMIT {} OFFSET {}").format(
+                select_query, sql.Literal(self.batch_size), sql.Literal(offset)
+            )
 
             with worker_conn.cursor() as cursor:
-                cursor.execute(select_sql)
+                cursor.execute(select_query)
                 rows = cursor.fetchall()
 
             if not rows:
@@ -621,12 +653,13 @@ class ConcurrentAnonymizer:
 
             # Update database (batch update)
             if updates:
+                update_query = sql.SQL("UPDATE {} SET {} = %s WHERE id = %s").format(
+                    sql.Identifier(table_name),
+                    sql.Identifier(column_name),
+                )
                 with worker_conn.cursor() as cursor:
                     for row_id, anonymized in updates:
-                        cursor.execute(
-                            f"UPDATE {table_name} SET {column_name} = %s WHERE id = %s",
-                            (anonymized, row_id),
-                        )
+                        cursor.execute(update_query, (anonymized, row_id))
                 worker_conn.commit()
 
             return len(updates)

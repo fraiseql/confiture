@@ -9,12 +9,13 @@ Tests for:
 """
 
 import pytest
+
 from confiture.scenarios import (
     ECommerceScenario,
-    HealthcareScenario,
     FinancialScenario,
-    SaaSScenario,
+    HealthcareScenario,
     MultiTenantScenario,
+    SaaSScenario,
 )
 
 

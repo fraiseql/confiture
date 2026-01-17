@@ -1,4 +1,4 @@
-"""Rule versioning and compatibility management - Phase 6."""
+"""Rule versioning and compatibility management."""
 from __future__ import annotations
 
 import logging
@@ -60,7 +60,9 @@ class RuleVersion:
             other.patch,
         )
 
-    def __eq__(self, other: RuleVersion) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RuleVersion):
+            return NotImplemented
         return (self.major, self.minor, self.patch) == (
             other.major,
             other.minor,

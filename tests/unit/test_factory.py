@@ -5,15 +5,17 @@ for creating strategies from profiles and suggesting strategies based on
 column characteristics.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from confiture.core.anonymization.factory import (
     StrategyFactory,
     StrategyProfile,
     StrategySuggester,
 )
-from confiture.core.anonymization.strategy import AnonymizationStrategy
 from confiture.core.anonymization.registry import StrategyRegistry
+from confiture.core.anonymization.strategy import AnonymizationStrategy
 
 
 class TestStrategyProfile:
@@ -64,7 +66,7 @@ class TestStrategyFactoryInitialization:
 
     def test_init_valid_profile(self):
         """Test factory initialization with valid profile."""
-        mock_strategy = Mock(spec=AnonymizationStrategy)
+        Mock(spec=AnonymizationStrategy)
 
         with patch.object(StrategyRegistry, 'is_registered', return_value=True):
             profile = StrategyProfile(
@@ -308,7 +310,7 @@ class TestStrategyFactoryListAndCache:
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
         with patch.object(StrategyRegistry, 'is_registered', return_value=True):
-            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
+            with patch.object(StrategyRegistry, 'get', return_value=mock_strategy):
                 profile = StrategyProfile(
                     name="test",
                     columns={"name": "name"},
@@ -606,4 +608,4 @@ class TestStrategyFactoryIntegration:
                 }
                 result = factory.anonymize(data)
 
-                assert all(k in result for k in data.keys())
+                assert all(k in result for k in data)

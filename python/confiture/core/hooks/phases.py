@@ -1,4 +1,4 @@
-"""Hook event categorization for Phase 6 - Refined Architecture.
+"""Hook event categorization.
 
 Three categories with distinct semantics:
 1. LIFECYCLE EVENTS - Fired before/after specific operations

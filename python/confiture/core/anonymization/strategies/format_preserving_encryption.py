@@ -1,4 +1,4 @@
-"""Format-Preserving Encryption (FPE) strategy (Phase 2.2.3).
+"""Format-Preserving Encryption (FPE) strategy.
 
 Provides encryption that preserves input format/length/type, making encrypted
 data look like original data. Uses FF3 cipher for format-preserving encryption.

@@ -1,4 +1,4 @@
-"""SOX (Sarbanes-Oxley) compliance rule library - Phase 6."""
+"""SOX (Sarbanes-Oxley) compliance rule library."""
 from __future__ import annotations
 
 from ..composer import RuleLibrary

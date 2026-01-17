@@ -1,4 +1,4 @@
-"""Breach notification and incident management for Phase 2.3.
+"""Breach notification and incident management.
 
 Provides automated breach detection, notification, and incident tracking
 for compliance with regulations that require breach notification.

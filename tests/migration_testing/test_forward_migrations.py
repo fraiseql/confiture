@@ -9,8 +9,6 @@ Tests verify that:
 """
 
 import pytest
-from pathlib import Path
-
 
 # ============================================================================
 # CATEGORY 1: Basic Forward Migration (5 tests)
@@ -165,7 +163,7 @@ def test_migration_files_are_independent(temp_project_dir):
         (migrations_dir / filename).write_text(content)
 
     # Verify each can be identified
-    migration_files = sorted(list(migrations_dir.glob("*.sql")))
+    migration_files = sorted(migrations_dir.glob("*.sql"))
     assert len(migration_files) == 3
 
     for i, mig_file in enumerate(migration_files, 1):
@@ -247,7 +245,7 @@ def test_schema_enforces_constraints(test_db_connection, sample_confiture_schema
         try:
             cur.execute("INSERT INTO users (username, email) VALUES (NULL, 'test@example.com');")
             test_db_connection.commit()
-            assert False, "Should fail: username is NOT NULL"
+            pytest.fail("Should fail: username is NOT NULL")
         except psycopg.errors.NotNullViolation:
             # Expected: constraint violation
             test_db_connection.rollback()
@@ -355,7 +353,7 @@ def test_duplicate_migration_names_detected(temp_project_dir):
     (migrations_dir / "001_second.sql").write_text("-- Second migration")
 
     # Get files
-    files = sorted(list(migrations_dir.glob("001_*.sql")))
+    files = sorted(migrations_dir.glob("001_*.sql"))
 
     # Should detect multiple files with same prefix
     assert len(files) == 2, "Should detect duplicate migration numbers"

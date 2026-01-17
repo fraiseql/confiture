@@ -1,4 +1,4 @@
-"""Unit tests for Phase 2.4 Performance Optimization.
+"""Unit tests for Performance Optimization.
 
 Tests for performance monitoring, batch processing, concurrent processing,
 caching, connection pooling, and query optimization.
@@ -13,20 +13,21 @@ Test Coverage:
 """
 
 import time
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from confiture.core.anonymization.performance import (
-    PerformanceMetric,
-    PerformanceStatistics,
-    PerformanceMonitor,
+    AnonymizationCache,
     BatchAnonymizer,
-    ConcurrentAnonymizer,
     CacheEntry,
     CacheStatistics,
-    AnonymizationCache,
+    ConcurrentAnonymizer,
     ConnectionPoolManager,
+    PerformanceMetric,
+    PerformanceMonitor,
+    PerformanceStatistics,
     QueryOptimizer,
 )
 from confiture.core.anonymization.strategy import AnonymizationStrategy

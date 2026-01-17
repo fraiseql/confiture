@@ -84,7 +84,7 @@ class NameMaskingStrategy(AnonymizationStrategy):
     config_type = NameMaskConfig
     strategy_name = "name"
 
-    def anonymize(self, value: str) -> str:
+    def anonymize(self, value: str | None) -> str | None:
         """Anonymize a name value.
 
         Args:

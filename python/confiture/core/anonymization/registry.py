@@ -10,6 +10,7 @@ Features:
 - Configuration validation
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
@@ -176,7 +177,9 @@ class StrategyRegistry:
         return len(cls._registry)
 
 
-def register_strategy(name: str) -> type:
+def register_strategy(
+    name: str,
+) -> Callable[[type[AnonymizationStrategy]], type[AnonymizationStrategy]]:
     """Decorator for registering a strategy class.
 
     Enables cleaner registration syntax:
@@ -187,7 +190,9 @@ def register_strategy(name: str) -> type:
         ...     ...
     """
 
-    def decorator(strategy_class: type[AnonymizationStrategy]) -> type:
+    def decorator(
+        strategy_class: type[AnonymizationStrategy],
+    ) -> type[AnonymizationStrategy]:
         StrategyRegistry.register(name, strategy_class)
         return strategy_class
 

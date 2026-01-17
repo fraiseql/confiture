@@ -9,12 +9,13 @@ Tests cover:
 - Edge cases and error handling
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 from confiture.core.anonymization.strategies.format_preserving_encryption import (
-    FPEConfig,
     FormatPreservingEncryptionStrategy,
+    FPEConfig,
 )
 
 

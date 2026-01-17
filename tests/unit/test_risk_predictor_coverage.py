@@ -4,14 +4,16 @@ Tests the downtime predictor system including heuristic estimation,
 historical data analysis, and confidence interval generation.
 """
 
-import pytest
 import statistics
+
+import pytest
+
 from confiture.core.risk.predictor import (
-    MigrationOperation,
-    HistoricalMigration,
     DowntimeEstimate,
-    HistoricalMigrations,
     DowntimePredictor,
+    HistoricalMigration,
+    HistoricalMigrations,
+    MigrationOperation,
 )
 
 

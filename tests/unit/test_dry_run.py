@@ -1,25 +1,16 @@
-"""Unit tests for migration dry-run mode (Phase 4 Feature 2)."""
+"""Unit tests for migration dry-run mode."""
 
-from unittest.mock import Mock, MagicMock, patch
-from dataclasses import dataclass
-from datetime import datetime
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from confiture.exceptions import MigrationError
-
-
-# ============================================================================
-# RED PHASE TEST: Dry-Run Mode Doesn't Exist Yet - This Test FAILS
-# ============================================================================
-
 
 class TestDryRunMode:
-    """Test suite for Phase 4 migration dry-run mode."""
+    """Test suite for migration dry-run mode."""
 
     def test_dry_run_executor_can_test_migration_in_transaction(self):
         """DryRunExecutor should execute migration in transaction, then rollback."""
-        from confiture.core.dry_run import DryRunExecutor, DryRunResult
+        from confiture.core.dry_run import DryRunExecutor
 
         executor = DryRunExecutor()
 
@@ -71,7 +62,7 @@ class TestDryRunMode:
 
     def test_dry_run_detects_constraint_violations(self):
         """DryRunExecutor should detect constraint violations during test."""
-        from confiture.core.dry_run import DryRunExecutor, DryRunError
+        from confiture.core.dry_run import DryRunError, DryRunExecutor
 
         executor = DryRunExecutor()
 

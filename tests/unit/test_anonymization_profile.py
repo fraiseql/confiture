@@ -8,7 +8,6 @@ Tests cover:
 - Seed resolution with proper precedence
 """
 
-from pathlib import Path
 import tempfile
 
 import pytest

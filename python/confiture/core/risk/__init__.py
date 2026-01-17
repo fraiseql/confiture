@@ -1,4 +1,4 @@
-"""Phase 6 Advanced Risk Assessment System.
+"""Advanced Risk Assessment System.
 
 Provides:
 - Transparent risk scoring formula with explicit weights

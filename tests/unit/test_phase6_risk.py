@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for Phase 6 Risk Assessment System.
+"""Comprehensive unit tests for Risk Assessment System.
 
 Tests cover:
 - Risk scoring formula and calculations
@@ -11,8 +11,12 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
+from confiture.core.risk.predictor import (
+    DowntimeEstimate,
+    DowntimePredictor,
+    HistoricalMigration,
+    MigrationOperation,
+)
 from confiture.core.risk.scoring import (
     DataAnomaly,
     RiskFactor,
@@ -20,7 +24,6 @@ from confiture.core.risk.scoring import (
     RiskScoringFormula,
     Severity,
 )
-from confiture.core.risk.predictor import DowntimePredictor, DowntimeEstimate, HistoricalMigration, MigrationOperation
 
 
 class TestRiskScoringFormula:

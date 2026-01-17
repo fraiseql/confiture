@@ -45,8 +45,8 @@ class PersonalDataCategory:
     regulations: list[RegulationType]
     requires_anonymization: bool
     requires_consent: bool
-    retention_period_days: int = None
-    examples: list[str] = None
+    retention_period_days: int | None = None
+    examples: list[str] | None = None
 
     def applies_to(self, regulation: RegulationType) -> bool:
         """Check if this category applies to a regulation."""

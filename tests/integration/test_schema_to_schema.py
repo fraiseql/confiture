@@ -2,8 +2,6 @@
 
 These tests require a running PostgreSQL database and test the
 Foreign Data Wrapper (FDW) based schema-to-schema migration strategy.
-
-Phase 3, Milestone 3.1: FDW Strategy Setup
 """
 
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator

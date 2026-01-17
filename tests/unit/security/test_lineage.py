@@ -10,16 +10,17 @@ Tests cover:
 
 import json
 import os
-import pytest
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
+from unittest.mock import patch
 from uuid import UUID, uuid4
-from unittest.mock import Mock, patch, MagicMock
+
+import pytest
 
 from confiture.core.anonymization.security.lineage import (
     DataLineageEntry,
+    create_lineage_entry,
     sign_lineage_entry,
     verify_lineage_entry,
-    create_lineage_entry,
 )
 
 

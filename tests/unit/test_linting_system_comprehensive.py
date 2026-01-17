@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for linting system (Phase 6 Critical Coverage).
+"""Comprehensive unit tests for linting system.
 
 Tests cover:
 - Schema linting with direct schema parameter
@@ -11,8 +11,6 @@ Tests cover:
 """
 
 from __future__ import annotations
-
-import pytest
 
 from confiture.core.linting.schema_linter import (
     LintConfig,
@@ -652,7 +650,7 @@ CREATE TABLE post_tags (
         # Should analyze complete schema
         assert result is not None
         # password_hash should trigger security warning (may be in warnings or just analyzed)
-        security_warnings = [v for v in result.warnings if "sensitive" in v.message.lower() or "password" in v.message.lower()]
+        [v for v in result.warnings if "sensitive" in v.message.lower() or "password" in v.message.lower()]
         # Accept either the warning exists or just that the linting completed
         assert result is not None and isinstance(result, LintReport)
 

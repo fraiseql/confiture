@@ -8,20 +8,21 @@ Tests cover:
 """
 
 import os
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
 
 from confiture.core.anonymization.security.kms_manager import (
-    KMSProvider,
     KeyMetadata,
-    LocalKMSClient,
     KMSFactory,
+    KMSProvider,
+    LocalKMSClient,
 )
 
 # Check if cryptography is available
 try:
-    from cryptography.fernet import Fernet
+    import cryptography.fernet  # noqa: F401
+
     HAS_CRYPTOGRAPHY = True
 except ImportError:
     HAS_CRYPTOGRAPHY = False
@@ -62,7 +63,7 @@ class TestKeyMetadata:
 
     def test_key_metadata_creation(self):
         """Test creating KeyMetadata instance."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         metadata = KeyMetadata(
             key_id="test-key-123",
             provider=KMSProvider.LOCAL,
@@ -81,7 +82,7 @@ class TestKeyMetadata:
             key_id="test-key",
             provider=KMSProvider.AWS,
             algorithm="AES-256",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         assert metadata.rotated_at is None
@@ -91,7 +92,7 @@ class TestKeyMetadata:
 
     def test_key_metadata_with_rotation(self):
         """Test KeyMetadata with rotation information."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         metadata = KeyMetadata(
             key_id="rotated-key",
             provider=KMSProvider.VAULT,
@@ -110,7 +111,7 @@ class TestKeyMetadata:
             key_id="inactive-key",
             provider=KMSProvider.AZURE,
             algorithm="RSA-OAEP",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             is_active=False,
         )
 
@@ -325,7 +326,7 @@ class TestLocalKMSClientEdgeCases:
         client.rotate_key("rotate-key")
 
         # Old ciphertext should fail to decrypt with new key
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - Fernet raises InvalidToken but we test any failure
             client.decrypt(ciphertext, "rotate-key")
 
     def test_encrypt_empty_data(self, tmp_path):
@@ -360,7 +361,7 @@ class TestLocalKMSClientEdgeCases:
         assert client.decrypt(ct2, "key-b") == b"data2"
 
         # Cross-key decryption should fail
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - Fernet raises InvalidToken but we test any failure
             client.decrypt(ct1, "key-b")
 
     def test_key_metadata_for_nonexistent_key(self, tmp_path):

@@ -7,17 +7,16 @@ Tests:
 4. Scalability analysis
 """
 
-import pytest
 from confiture.core.anonymization.benchmarking import (
     Benchmarker,
     PerformanceTracker,
     ScalabilityTester,
 )
-from confiture.core.anonymization.registry import StrategyRegistry
 from confiture.core.anonymization.factory import StrategyFactory, StrategyProfile
+from confiture.core.anonymization.registry import StrategyRegistry
+from confiture.scenarios.compliance import RegulationType
 from confiture.scenarios.ecommerce import ECommerceScenario
 from confiture.scenarios.healthcare import HealthcareScenario
-from confiture.scenarios.compliance import RegulationType
 
 
 class TestStrategyPerformance:
@@ -155,7 +154,7 @@ class TestBatchAnonymizationPerformance:
         """Benchmark ecommerce scenario batch anonymization."""
         benchmarker = Benchmarker()
 
-        test_data = [
+        [
             {
                 "customer_id": f"CUST-{i:06d}",
                 "order_id": f"ORD-{i:06d}",
@@ -177,7 +176,7 @@ class TestBatchAnonymizationPerformance:
         )
 
         assert len(results) == 3
-        for batch_size, result in results.items():
+        for _batch_size, result in results.items():
             assert result.total_time_ms > 0
             assert result.ops_per_second > 0
 
@@ -185,7 +184,7 @@ class TestBatchAnonymizationPerformance:
         """Benchmark healthcare scenario batch anonymization."""
         benchmarker = Benchmarker()
 
-        test_data = [
+        [
             {
                 "patient_id": f"PAT-{i:06d}",
                 "patient_name": f"Patient {i}",
@@ -204,7 +203,7 @@ class TestBatchAnonymizationPerformance:
         )
 
         assert len(results) == 3
-        for batch_size, result in results.items():
+        for _batch_size, result in results.items():
             assert result.total_time_ms > 0
 
 
@@ -323,7 +322,7 @@ class TestScalability:
             ]
 
             start = time.perf_counter()
-            anonymized = [factory.anonymize(record) for record in test_data]
+            [factory.anonymize(record) for record in test_data]
             elapsed_ms = (time.perf_counter() - start) * 1000
 
             results[batch_size] = elapsed_ms
@@ -339,7 +338,7 @@ class TestMemoryFootprint:
 
     def test_strategy_memory_usage(self):
         """Measure memory footprint of strategies."""
-        benchmarker = Benchmarker()
+        Benchmarker()
 
         strategies = [
             ("name", {"seed": 42}),
@@ -355,7 +354,7 @@ class TestMemoryFootprint:
             results[strategy_name] = memory_kb
 
         # All strategies should be reasonably small
-        for name, memory in results.items():
+        for _name, memory in results.items():
             assert memory < 100  # Less than 100KB
 
     def test_factory_memory_usage(self):

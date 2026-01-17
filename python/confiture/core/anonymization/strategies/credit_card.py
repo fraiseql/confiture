@@ -150,7 +150,7 @@ class CreditCardStrategy(AnonymizationStrategy):
     config_type = CreditCardConfig
     strategy_name = "credit_card"
 
-    def anonymize(self, value: str) -> str:
+    def anonymize(self, value: str | None) -> str | None:
         """Anonymize a credit card number.
 
         Args:

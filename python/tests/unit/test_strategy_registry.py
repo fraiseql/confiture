@@ -11,6 +11,7 @@ Tests:
 """
 
 import pytest
+
 from confiture.core.anonymization.registry import (
     StrategyRegistry,
     register_strategy,

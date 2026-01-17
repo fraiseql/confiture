@@ -1,4 +1,4 @@
-"""Unit tests for migration transaction control (Phase 1C).
+"""Unit tests for migration transaction control.
 
 Tests for:
 - transactional attribute on Migration class

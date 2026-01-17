@@ -1,9 +1,9 @@
-"""Observability and tracing infrastructure for hooks - Phase 6."""
+"""Observability and tracing infrastructure for hooks."""
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -42,7 +42,7 @@ class HookExecutionEvent:
     error: str | None = None
     reason: str | None = None
     stats: dict[str, Any] | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -99,7 +99,7 @@ class CircuitBreaker:
             # Check if recovery timeout has elapsed
             if (
                 self.last_failure_time
-                and (datetime.utcnow() - self.last_failure_time).total_seconds() * 1000
+                and (datetime.now(UTC) - self.last_failure_time).total_seconds() * 1000
                 > self.recovery_timeout_ms
             ):
                 self.state = CircuitBreakerState.HALF_OPEN
@@ -117,7 +117,7 @@ class CircuitBreaker:
     def record_failure(self) -> None:
         """Record failed hook execution."""
         self.failure_count += 1
-        self.last_failure_time = datetime.utcnow()
+        self.last_failure_time = datetime.now(UTC)
 
         if self.failure_count >= self.failure_threshold:
             self.state = CircuitBreakerState.OPEN
@@ -200,13 +200,11 @@ class HookExecutionTracer:
         for event in sorted_events:
             # Only include events that start after the previous one ended
             # (indicating sequential dependency)
-            if max_end_time is None or event.timestamp >= datetime.fromtimestamp(
-                max_end_time.timestamp() if isinstance(max_end_time, datetime) else max_end_time
-            ):
+            if max_end_time is None or event.timestamp >= max_end_time:
                 critical_path.append(event.hook_id)
                 # Update end time (approximated as timestamp + duration)
                 end_timestamp = event.timestamp.timestamp() + (event.duration_ms / 1000)
-                max_end_time = datetime.fromtimestamp(end_timestamp)
+                max_end_time = datetime.fromtimestamp(end_timestamp, tz=UTC)
 
         # If we got no sequential chain, return the longest single execution
         if not critical_path:

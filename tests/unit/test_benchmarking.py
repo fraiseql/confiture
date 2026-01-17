@@ -8,12 +8,10 @@ Tests:
 - ScalabilityTester scaling analysis and complexity detection
 """
 
-import pytest
-from unittest.mock import Mock, patch
 from confiture.core.anonymization.benchmarking import (
+    Benchmarker,
     BenchmarkResult,
     ComparativeResult,
-    Benchmarker,
     PerformanceTracker,
     ScalabilityTester,
 )
@@ -474,7 +472,7 @@ class TestScalabilityTester:
         tester = ScalabilityTester(dummy_func)
         results = tester.test_scaling((5, 25), step=5)
 
-        for field_count, time_ms in results.items():
+        for _field_count, time_ms in results.items():
             assert time_ms > 0
 
     def test_analyze_complexity_insufficient_data(self):

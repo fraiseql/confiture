@@ -12,6 +12,7 @@ PostgreSQL advisory locks are:
 - Database-scoped (different databases = different locks)
 """
 
+import contextlib
 import hashlib
 import logging
 from collections.abc import Generator
@@ -226,10 +227,8 @@ class MigrationLock:
                 cur.execute("SET LOCAL statement_timeout = '0'")
             except psycopg.errors.QueryCanceled as e:
                 # Rollback the failed transaction to clear the error state
-                try:
+                with contextlib.suppress(Exception):
                     self.connection.rollback()
-                except Exception:
-                    pass  # Best effort rollback
                 raise LockAcquisitionError(
                     f"Could not acquire migration lock within {timeout_sec}s. "
                     "Another migration may be running. "

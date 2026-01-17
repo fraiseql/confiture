@@ -7,7 +7,6 @@ Tests verify that the mutation testing framework correctly:
 4. Reports weak tests
 """
 
-import pytest
 
 
 def test_mutation_registry_loads(mutation_registry):

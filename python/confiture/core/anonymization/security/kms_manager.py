@@ -50,7 +50,7 @@ class KMSClient(ABC):
         pass
 
     @abstractmethod
-    def decrypt(self, ciphertext: bytes, key_id: str = None) -> bytes:
+    def decrypt(self, ciphertext: bytes, key_id: str | None = None) -> bytes:
         """Decrypt ciphertext. Key ID can be embedded in ciphertext."""
         pass
 
@@ -78,7 +78,7 @@ class AWSKMSClient(KMSClient):
         self.provider = KMSProvider.AWS
 
         try:
-            import boto3
+            import boto3  # type: ignore[import-untyped]
 
             self.client = boto3.client("kms", region_name=region)
         except ImportError as e:
@@ -107,7 +107,7 @@ class AWSKMSClient(KMSClient):
             logger.error(f"AWS KMS encryption failed: {e}")
             raise
 
-    def decrypt(self, ciphertext: bytes, _key_id: str = None) -> bytes:
+    def decrypt(self, ciphertext: bytes, key_id: str | None = None) -> bytes:  # noqa: ARG002
         """Decrypt ciphertext using AWS KMS.
 
         Args:
@@ -169,7 +169,7 @@ class VaultKMSClient(KMSClient):
         self.provider = KMSProvider.VAULT
 
         try:
-            import hvac
+            import hvac  # type: ignore[import-untyped]
 
             self.client = hvac.Client(url=vault_url, token=token)
         except ImportError as e:
@@ -204,7 +204,7 @@ class VaultKMSClient(KMSClient):
             logger.error(f"Vault encryption failed: {e}")
             raise
 
-    def decrypt(self, ciphertext: bytes, key_id: str = None) -> bytes:
+    def decrypt(self, ciphertext: bytes, key_id: str | None = None) -> bytes:
         """Decrypt ciphertext using Vault.
 
         Args:
@@ -286,7 +286,10 @@ class AzureKMSClient(KMSClient):
         self.provider = KMSProvider.AZURE
 
         try:
-            from azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm
+            from azure.keyvault.keys.crypto import (  # type: ignore[import-untyped]
+                CryptographyClient,
+                EncryptionAlgorithm,
+            )
 
             self.CryptographyClient = CryptographyClient
             self.EncryptionAlgorithm = EncryptionAlgorithm
@@ -321,7 +324,7 @@ class AzureKMSClient(KMSClient):
             logger.error(f"Azure Key Vault encryption failed: {e}")
             raise
 
-    def decrypt(self, ciphertext: bytes, key_id: str = None) -> bytes:
+    def decrypt(self, ciphertext: bytes, key_id: str | None = None) -> bytes:
         """Decrypt ciphertext using Azure Key Vault.
 
         Args:
@@ -364,7 +367,7 @@ class AzureKMSClient(KMSClient):
             Exception: If rotation fails
         """
         try:
-            from azure.keyvault.keys import KeyClient
+            from azure.keyvault.keys import KeyClient  # type: ignore[import-untyped]
 
             key_client = KeyClient(vault_url=self.vault_url, credential=self.credential)
 
@@ -387,7 +390,7 @@ class LocalKMSClient(KMSClient):
     WARNING: Only for testing. Never use in production.
     """
 
-    def __init__(self, keys_dir: str = None):
+    def __init__(self, keys_dir: str | None = None):
         """Initialize local KMS client.
 
         Args:
@@ -426,7 +429,7 @@ class LocalKMSClient(KMSClient):
         f = Fernet(self.keys[key_id])
         return f.encrypt(plaintext)
 
-    def decrypt(self, ciphertext: bytes, key_id: str = None) -> bytes:
+    def decrypt(self, ciphertext: bytes, key_id: str | None = None) -> bytes:
         """Decrypt using Fernet.
 
         Args:
@@ -528,7 +531,7 @@ class KMSFactory:
     @staticmethod
     def get_or_create(
         provider: KMSProvider,
-        key: str = None,
+        key: str | None = None,
         **config: Any,
     ) -> KMSClient:
         """Get or create a cached KMS client.

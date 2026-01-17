@@ -254,7 +254,7 @@ class _SectionTracker:
     def _get_memory_usage_mb(self) -> float | None:
         """Get current memory usage (best effort)."""
         try:
-            import psutil
+            import psutil  # type: ignore[import-untyped]
             process = psutil.Process()
             return process.memory_info().rss / 1024 / 1024
         except ImportError:
@@ -266,7 +266,7 @@ class PerformanceBaseline:
 
     def __init__(self, baselines_file: Path):
         self.baselines_file = baselines_file
-        self.baselines: dict[str, dict[str, float]] = {}
+        self.baselines: dict[str, dict[str, Any]] = {}
         self._load_baselines()
 
     def _load_baselines(self):

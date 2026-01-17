@@ -4,15 +4,17 @@ Tests the StrategyComposer and StrategySequence classes for chaining
 multiple anonymization strategies sequentially.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+
 from confiture.core.anonymization.composer import (
+    CompositionConfig,
     StrategyComposer,
     StrategySequence,
-    CompositionConfig,
 )
-from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 from confiture.core.anonymization.registry import StrategyRegistry
+from confiture.core.anonymization.strategy import AnonymizationStrategy
 
 
 class TestCompositionConfig:
@@ -357,7 +359,7 @@ class TestStrategyComposerStrategyLoading:
         mock_strategy = Mock(spec=AnonymizationStrategy)
 
         with patch.object(StrategyRegistry, 'get', return_value=mock_strategy) as mock_get:
-            composer = StrategyComposer(config)
+            StrategyComposer(config)
 
             # Should extract base name 'name' and pass to registry
             mock_get.assert_called()

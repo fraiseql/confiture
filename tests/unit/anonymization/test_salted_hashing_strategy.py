@@ -11,8 +11,9 @@ Tests cover:
 """
 
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from confiture.core.anonymization.strategies.salted_hashing import (
     SaltedHashingConfig,

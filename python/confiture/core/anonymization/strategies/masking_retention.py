@@ -1,4 +1,4 @@
-"""Masking with retention anonymization strategy (Phase 2.2.1).
+"""Masking with retention anonymization strategy.
 
 Provides pattern-preserving anonymization that masks sensitive parts while
 retaining structure for testing. Useful when format/pattern information

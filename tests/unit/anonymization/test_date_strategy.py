@@ -1,7 +1,8 @@
 """Comprehensive tests for date masking anonymization strategy."""
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from confiture.core.anonymization.strategies.date import (
     DateMaskConfig,

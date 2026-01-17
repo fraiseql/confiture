@@ -89,7 +89,7 @@ class AddressStrategy(AnonymizationStrategy):
     config_type = AddressConfig
     strategy_name = "address"
 
-    def anonymize(self, value: str) -> str:
+    def anonymize(self, value: str | None) -> str | dict | None:
         """Anonymize an address value.
 
         Args:

@@ -9,9 +9,9 @@ Tests cover:
 - Edge cases and error handling
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
-from dataclasses import dataclass
 
 from confiture.core.anonymization.strategies.tokenization import (
     TokenizationConfig,

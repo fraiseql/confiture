@@ -1,4 +1,4 @@
-"""Phase 6 Enhanced Hook System.
+"""Enhanced Hook System.
 
 Provides:
 - Explicit hook execution semantics (sequential, parallel, DAG-based)

@@ -1,8 +1,8 @@
-"""Type-safe hook contexts for Phase 6 - Refined Architecture."""
+"""Type-safe hook contexts."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 from uuid import UUID, uuid4
 
@@ -131,7 +131,7 @@ class HookContext(Generic[T]):
         self.data: T = data  # Type-safe data
         self.execution_id = execution_id or uuid4()  # Correlation ID for tracing
         self.hook_id = hook_id or "unknown"
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(UTC)
         self.parent_execution_id: UUID | None = None  # For nested hooks
 
     def get_data(self) -> T:
@@ -141,4 +141,5 @@ class HookContext(Generic[T]):
     def add_metadata(self, key: str, value: Any) -> None:
         """Add metadata for observability."""
         if hasattr(self.data, "metadata") and isinstance(self.data.metadata, dict):
-            self.data.metadata[key] = value
+            metadata: dict[str, Any] = self.data.metadata  # type: ignore[union-attr]
+            metadata[key] = value

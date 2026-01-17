@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for Phase 6 Linting/Rule System.
+"""Comprehensive unit tests for Linting/Rule System.
 
 Tests cover:
 - Rule versioning and compatibility
@@ -11,12 +11,9 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.linting import (
     RuleLibraryComposer,
 )
-from confiture.core.linting.composer import ConflictResolution, ConflictType
 from confiture.core.linting.libraries import (
     GDPRLibrary,
     GeneralLibrary,
@@ -383,7 +380,7 @@ class TestRuleDisabling:
         """Test that critical rules are enabled by default."""
         library = HIPAALibrary()
 
-        critical_rules = [
+        [
             r for r in library.rules.values()
             if r.severity == LintSeverity.CRITICAL and not r.enabled_by_default
         ]

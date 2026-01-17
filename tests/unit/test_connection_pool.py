@@ -1,4 +1,4 @@
-"""Unit tests for connection pooling (Phase 1D).
+"""Unit tests for connection pooling.
 
 Tests for:
 - PoolConfig validation

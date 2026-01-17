@@ -9,13 +9,14 @@ Tests verify:
 """
 
 import pytest
-from confiture.scenarios.healthcare import HealthcareScenario
+
 from confiture.scenarios.compliance import (
-    RegulationType,
+    REGULATION_GUIDANCE,
     ComplianceVerifier,
     PersonalDataCategories,
-    REGULATION_GUIDANCE,
+    RegulationType,
 )
+from confiture.scenarios.healthcare import HealthcareScenario
 
 
 class TestComplianceFramework:
@@ -525,7 +526,7 @@ class TestComplianceBatchProcessing:
 
         assert len(anonymized) == len(sample_batch)
 
-        for original, anon in zip(sample_batch, anonymized):
+        for original, anon in zip(sample_batch, anonymized, strict=False):
             # IDs preserved
             assert anon["patient_id"] == original["patient_id"]
 
@@ -541,7 +542,7 @@ class TestComplianceBatchProcessing:
             sample_batch, RegulationType.GDPR
         )
 
-        for original, anon in zip(sample_batch, anonymized):
+        for original, anon in zip(sample_batch, anonymized, strict=False):
             result = HealthcareScenario.verify_compliance(
                 original, anon, RegulationType.GDPR
             )
@@ -554,7 +555,7 @@ class TestComplianceBatchProcessing:
         batch1 = HealthcareScenario.anonymize_batch(sample_batch, RegulationType.GDPR)
         batch2 = HealthcareScenario.anonymize_batch(sample_batch, RegulationType.GDPR)
 
-        for rec1, rec2 in zip(batch1, batch2):
+        for rec1, rec2 in zip(batch1, batch2, strict=False):
             assert rec1["patient_name"] == rec2["patient_name"]
             assert rec1["ssn"] == rec2["ssn"]
 

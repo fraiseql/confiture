@@ -173,6 +173,9 @@ class TestMigrateUpDryRun:
                     mock_migrator.get_pending_migrations.return_value = [
                         Path("db/migrations/001_init.py"),
                     ]
+                    mock_migrator.find_pending.return_value = [
+                        Path("db/migrations/001_init.py"),
+                    ]
                     mock_migrator.find_migration_files.return_value = [
                         Path("db/migrations/001_init.py"),
                     ]
@@ -187,10 +190,10 @@ class TestMigrateUpDryRun:
                             mock_get_class.return_value = mock_class
                             mock_load.return_value = MagicMock()
 
-                            # Execute with user confirmation 'y'
+                            # Execute with user confirmation 'y', --no-lock to skip locking
                             result = runner.invoke(
                                 app,
-                                ["migrate", "up", "--dry-run-execute"],
+                                ["migrate", "up", "--dry-run-execute", "--no-lock"],
                                 input="y\n",
                                 catch_exceptions=False,
                             )

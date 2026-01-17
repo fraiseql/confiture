@@ -4,8 +4,8 @@ import pytest
 
 from confiture.core.anonymization.strategies.custom import (
     CustomConfig,
-    CustomStrategy,
     CustomLambdaStrategy,
+    CustomStrategy,
 )
 
 
@@ -212,7 +212,10 @@ class TestCustomConfig:
 
     def test_custom_func(self):
         """Test custom function."""
-        func = lambda x: x
+
+        def func(x):
+            return x
+
         config = CustomConfig(seed=12345, func=func)
         assert config.func is func
 
@@ -228,7 +231,10 @@ class TestCustomConfig:
 
     def test_all_custom_values(self):
         """Test all custom values together."""
-        func = lambda x, seed: f"{seed}_{x}"
+
+        def func(x, seed):
+            return f"{seed}_{x}"
+
         config = CustomConfig(
             seed=12345,
             func=func,

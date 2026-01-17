@@ -4,17 +4,18 @@ Tests the DataSubjectRightsManager and related classes for fulfilling
 data subject rights requests (access, erasure, rectification, portability).
 """
 
-import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, Mock
 from uuid import UUID, uuid4
 
+import pytest
+
 from confiture.core.anonymization.data_subject_rights import (
-    RequestType,
-    RequestStatus,
     DataSubjectRequest,
     DataSubjectRightsManager,
+    RequestStatus,
+    RequestType,
 )
 
 

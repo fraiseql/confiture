@@ -53,6 +53,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg import sql
 
 from confiture.core.anonymization.security.kms_manager import KMSClient
 from confiture.core.anonymization.security.lineage import (
@@ -104,7 +105,7 @@ class ValidationResult:
     null_count: int = 0
     """Number of NULL values found."""
 
-    sample_values: list[Any] = None
+    sample_values: list[Any] | None = None
     """Sample of values that passed validation."""
 
     def __post_init__(self):
@@ -166,7 +167,7 @@ class AnonymizationContext:
     target_count: int | None = None
     """Row count after anonymization."""
 
-    stats: dict[str, Any] = None
+    stats: dict[str, Any] | None = None
     """Statistics collected during operation."""
 
     def __post_init__(self):
@@ -210,7 +211,7 @@ class AnonymizationResult:
     error_message: str | None = None
     """Error message if operation failed."""
 
-    warnings: list[str] = None
+    warnings: list[str] | None = None
     """List of warnings that occurred."""
 
     def __post_init__(self):
@@ -290,12 +291,15 @@ class DataValidator:
             # 2. Sample data and validate with strategy
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    f"""
-                    SELECT {column_name}, COUNT(*)
-                    FROM {table_name}
-                    GROUP BY {column_name}
+                    sql.SQL("""
+                    SELECT {column}, COUNT(*)
+                    FROM {table}
+                    GROUP BY {column}
                     LIMIT %s
-                """,
+                """).format(
+                        column=sql.Identifier(column_name),
+                        table=sql.Identifier(table_name),
+                    ),
                     (sample_size,),
                 )
                 rows = cursor.fetchall()
@@ -325,9 +329,12 @@ class DataValidator:
             # 3. Get total row count
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    f"SELECT COUNT(*) FROM {table_name}",
+                    sql.SQL("SELECT COUNT(*) FROM {}").format(
+                        sql.Identifier(table_name)
+                    ),
                 )
-                total_rows = cursor.fetchone()[0]
+                row = cursor.fetchone()
+                total_rows = row[0] if row else 0
 
             if total_rows == 0:
                 warnings.append(f"Table {table_name} is empty")
@@ -428,6 +435,8 @@ class DataGovernancePipeline:
                     f"Pre-validation failed: {'; '.join(validation.errors)}"
                 )
 
+            if context.stats is None:
+                context.stats = {}
             context.stats["validation_warnings"] = validation.warnings
             context.source_count = validation.rows_checked
 
@@ -579,7 +588,7 @@ class DataGovernancePipeline:
         # 4. Store tokens if reversible strategy
         # 5. Handle errors per row
 
-        # Placeholder: return 0 for now (real implementation in Phase 2.2)
+        # Placeholder: return 0 for now (TODO: implement actual batch processing)
         return context.rows_affected
 
     def _post_anonymization(

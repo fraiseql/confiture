@@ -1,4 +1,4 @@
-"""Unit tests for Phase 2.3 Compliance Automation & Reporting.
+"""Unit tests for Compliance Automation & Reporting.
 
 Tests for compliance reporting, breach notification, data subject rights,
 and regulatory requirement tracking.
@@ -10,9 +10,8 @@ Test Coverage:
 - Regulation-specific requirements
 """
 
+
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import Mock, MagicMock, patch
 
 # These tests are designed to work with the compliance module structure
 # Tests verify proper initialization and configuration
@@ -374,12 +373,6 @@ class TestDifferentialPrivacyCompliance:
 
     def test_epsilon_privacy_level_gdpr(self):
         """Test epsilon values for GDPR compliance."""
-        epsilon_levels = {
-            "weak": 10,        # Weak privacy
-            "reasonable": 1,   # Reasonable privacy
-            "strong": 0.1,     # Strong privacy
-            "very_strong": 0.01,  # Very strong privacy
-        }
         # GDPR typically requires epsilon <= 1
         recommended_epsilon = 1
         assert recommended_epsilon <= 1

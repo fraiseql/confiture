@@ -12,6 +12,7 @@ Focuses on:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from uuid import uuid4
 
 import pytest
@@ -19,16 +20,13 @@ import pytest
 from confiture.core.hooks import (
     Hook,
     HookContext,
-    HookExecutionStrategy,
     HookErrorStrategy,
+    HookExecutionStrategy,
     HookPhase,
     HookPhaseConfig,
     HookRegistry,
     HookResult,
     RetryConfig,
-)
-from confiture.core.hooks.observability import (
-    HookExecutionStatus,
 )
 
 
@@ -112,7 +110,7 @@ class TestParallelExecutionWithFailures:
             execution_id=uuid4(),
         )
 
-        result = await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
+        await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
         # Should have attempted to execute all hooks
         assert hook1.execution_count == 1
@@ -145,7 +143,7 @@ class TestParallelExecutionWithFailures:
         )
 
         # Should raise error due to FAIL_FAST
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - Hook errors wrapped in generic Exception
             await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
 
@@ -182,7 +180,7 @@ class TestSequentialExecutionRetry:
             execution_id=uuid4(),
         )
 
-        result = await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
+        await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
         # Hook should be attempted multiple times due to retry
         assert hook.execution_count >= 1
@@ -215,7 +213,7 @@ class TestDAGExecutionStrategy:
             execution_id=uuid4(),
         )
 
-        result = await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
+        await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
         # DAG strategy should fall back to sequential (per implementation)
         assert hook1.execution_count >= 0
@@ -241,10 +239,8 @@ class TestCircuitBreakerIntegration:
 
         # Execute multiple times to trigger circuit breaker
         for _ in range(6):
-            try:
+            with contextlib.suppress(Exception):
                 await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
-            except Exception:
-                pass
 
         # Circuit breaker should be open by now
         circuit_breaker = registry.circuit_breakers.get(hook.id)
@@ -312,7 +308,7 @@ class TestSequentialExecutionFailFast:
         )
 
         # Should raise error due to FAIL_FAST on first hook failure
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - Hook errors wrapped in generic Exception
             await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
 
@@ -338,7 +334,7 @@ class TestHookPriorityOrdering:
             execution_id=uuid4(),
         )
 
-        result = await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
+        await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
         # All hooks should execute
         assert hook1.execution_count == 1
@@ -405,7 +401,7 @@ class TestParallelSemaphoreLimit:
             execution_id=uuid4(),
         )
 
-        result = await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
+        await registry.trigger(HookPhase.BEFORE_ANALYZE_SCHEMA, context)
 
         # All hooks should eventually execute
         assert all(hook.execution_count == 1 for hook in hooks)

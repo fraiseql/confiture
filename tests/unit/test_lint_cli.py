@@ -8,7 +8,11 @@ from unittest.mock import ANY, MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.models.lint import LintReport, LintSeverity, Violation
+from confiture.core.linting.schema_linter import (
+    LintReport,
+    LintViolation,
+    RuleSeverity,
+)
 
 # Create test runner
 runner = CliRunner()
@@ -24,17 +28,8 @@ class TestLintCommand:
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
 
-        # Mock report with no violations
-        mock_report = LintReport(
-            violations=[],
-            schema_name="local",
-            tables_checked=5,
-            columns_checked=20,
-            errors_count=0,
-            warnings_count=0,
-            info_count=0,
-            execution_time_ms=100,
-        )
+        # Mock report with no violations (using schema_linter.LintReport format)
+        mock_report = LintReport(errors=[], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run command
@@ -50,16 +45,7 @@ class TestLintCommand:
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
 
-        mock_report = LintReport(
-            violations=[],
-            schema_name="production",
-            tables_checked=0,
-            columns_checked=0,
-            errors_count=0,
-            warnings_count=0,
-            info_count=0,
-            execution_time_ms=0,
-        )
+        mock_report = LintReport(errors=[], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run with --env
@@ -77,22 +63,15 @@ class TestLintCommand:
         mock_linter_class.return_value = mock_linter
 
         # Create report with errors
-        violation = Violation(
+        violation = LintViolation(
+            rule_id="pk_001",
             rule_name="PrimaryKeyRule",
-            severity=LintSeverity.ERROR,
+            severity=RuleSeverity.ERROR,
+            object_type="table",
+            object_name="users",
             message="Table 'users' missing PRIMARY KEY",
-            location="users",
         )
-        mock_report = LintReport(
-            violations=[violation],
-            schema_name="local",
-            tables_checked=1,
-            columns_checked=0,
-            errors_count=1,
-            warnings_count=0,
-            info_count=0,
-            execution_time_ms=50,
-        )
+        mock_report = LintReport(errors=[violation], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run command (fail_on_error defaults to True)
@@ -108,22 +87,15 @@ class TestLintCommand:
         mock_linter_class.return_value = mock_linter
 
         # Create report with warnings
-        violation = Violation(
+        violation = LintViolation(
+            rule_id="doc_001",
             rule_name="DocumentationRule",
-            severity=LintSeverity.WARNING,
+            severity=RuleSeverity.WARNING,
+            object_type="table",
+            object_name="users",
             message="Table 'users' missing documentation",
-            location="users",
         )
-        mock_report = LintReport(
-            violations=[violation],
-            schema_name="local",
-            tables_checked=1,
-            columns_checked=0,
-            errors_count=0,
-            warnings_count=1,
-            info_count=0,
-            execution_time_ms=50,
-        )
+        mock_report = LintReport(errors=[], warnings=[violation], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run with --fail-on-warning
@@ -141,22 +113,15 @@ class TestLintCommand:
         mock_linter_class.return_value = mock_linter
 
         # Create report with warnings
-        violation = Violation(
+        violation = LintViolation(
+            rule_id="doc_001",
             rule_name="DocumentationRule",
-            severity=LintSeverity.WARNING,
+            severity=RuleSeverity.WARNING,
+            object_type="table",
+            object_name="users",
             message="Table 'users' missing documentation",
-            location="users",
         )
-        mock_report = LintReport(
-            violations=[violation],
-            schema_name="local",
-            tables_checked=1,
-            columns_checked=0,
-            errors_count=0,
-            warnings_count=1,
-            info_count=0,
-            execution_time_ms=50,
-        )
+        mock_report = LintReport(errors=[], warnings=[violation], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run without --fail-on-warning (defaults to False)
@@ -171,16 +136,7 @@ class TestLintCommand:
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
 
-        mock_report = LintReport(
-            violations=[],
-            schema_name="local",
-            tables_checked=5,
-            columns_checked=20,
-            errors_count=0,
-            warnings_count=0,
-            info_count=0,
-            execution_time_ms=100,
-        )
+        mock_report = LintReport(errors=[], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run with --format json
@@ -196,23 +152,15 @@ class TestLintCommand:
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
 
-        violation = Violation(
+        violation = LintViolation(
+            rule_id="test_001",
             rule_name="TestRule",
-            severity=LintSeverity.ERROR,
+            severity=RuleSeverity.ERROR,
+            object_type="table",
+            object_name="test_table",
             message="Test message",
-            location="test_table",
-            suggested_fix="Test fix",
         )
-        mock_report = LintReport(
-            violations=[violation],
-            schema_name="local",
-            tables_checked=1,
-            columns_checked=0,
-            errors_count=1,
-            warnings_count=0,
-            info_count=0,
-            execution_time_ms=50,
-        )
+        mock_report = LintReport(errors=[violation], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run with --format csv
@@ -231,16 +179,7 @@ class TestLintCommand:
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
 
-        mock_report = LintReport(
-            violations=[],
-            schema_name="local",
-            tables_checked=0,
-            columns_checked=0,
-            errors_count=0,
-            warnings_count=0,
-            info_count=0,
-            execution_time_ms=0,
-        )
+        mock_report = LintReport(errors=[], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
 
         # Run with --output and --format json

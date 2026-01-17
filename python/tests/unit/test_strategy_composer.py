@@ -9,13 +9,12 @@ Tests for:
 """
 
 import pytest
+
 from confiture.core.anonymization.composer import (
-    StrategyComposer,
     CompositionConfig,
+    StrategyComposer,
     StrategySequence,
 )
-from confiture.core.anonymization.strategies.preserve import PreserveStrategy, PreserveConfig
-from confiture.core.anonymization.strategies.custom import CustomStrategy, CustomConfig
 
 
 class TestStrategyComposer:
@@ -50,7 +49,7 @@ class TestStrategyComposer:
         def add_suffix(value):
             return f"{value}_suffix" if isinstance(value, str) else value
 
-        config = CompositionConfig(
+        CompositionConfig(
             seed=12345,
             strategies=["custom", "custom"],
         )
@@ -85,7 +84,7 @@ class TestStrategyComposer:
             strategies=["preserve"],
             stop_on_none=True,
         )
-        composer = StrategyComposer(config)
+        StrategyComposer(config)
         # Preserve never returns None, so chain continues
 
     def test_composer_stop_on_error_disabled(self):

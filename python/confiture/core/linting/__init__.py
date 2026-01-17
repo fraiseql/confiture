@@ -1,4 +1,4 @@
-"""Phase 6 Rule Library System.
+"""Rule Library System.
 
 Provides:
 - Rule versioning with deprecation paths

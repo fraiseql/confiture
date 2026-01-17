@@ -7,7 +7,6 @@ Tests verify migration performance and safety with:
 4. Concurrent scenarios
 """
 
-import pytest
 import time
 
 
@@ -82,7 +81,7 @@ def test_bulk_insert_50k_rows(test_db_connection):
             FROM generate_series(1, 50000) i
         """)
         test_db_connection.commit()
-        duration = time.time() - start
+        time.time() - start
 
         # Verify
         cur.execute("SELECT COUNT(*) FROM load_50k")
@@ -191,7 +190,7 @@ def test_bulk_update_on_large_table(test_db_connection):
             UPDATE load_update SET doubled = value * 2
         """)
         test_db_connection.commit()
-        duration = time.time() - start
+        time.time() - start
 
         # Verify update
         cur.execute("SELECT COUNT(*) FROM load_update WHERE doubled > 0")
@@ -224,7 +223,7 @@ def test_bulk_delete_on_large_table(test_db_connection):
             DELETE FROM load_delete WHERE sequence_no > 25000
         """)
         test_db_connection.commit()
-        duration = time.time() - start
+        time.time() - start
 
         # Verify delete
         cur.execute("SELECT COUNT(*) FROM load_delete")
@@ -318,7 +317,7 @@ def test_view_on_large_table(test_db_connection):
             WHERE total > 1000000
             ORDER BY total DESC
         """)
-        results = cur.fetchall()
+        cur.fetchall()
         duration = time.time() - start
 
         assert duration < 10.0
@@ -373,7 +372,7 @@ def test_join_on_large_tables(test_db_connection):
             GROUP BY c.id, c.name
             LIMIT 100
         """)
-        results = cur.fetchall()
+        cur.fetchall()
         duration = time.time() - start
 
         assert duration < 10.0
@@ -399,7 +398,7 @@ def test_transaction_with_many_operations(test_db_connection):
                 INSERT INTO load_txn (id, value) VALUES (gen_random_uuid(), %s)
             """, (i * 1.5,))
         test_db_connection.commit()
-        duration = time.time() - start
+        time.time() - start
 
         # Verify all inserted
         cur.execute("SELECT COUNT(*) FROM load_txn")

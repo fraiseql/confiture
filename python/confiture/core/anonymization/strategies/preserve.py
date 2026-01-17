@@ -9,6 +9,7 @@ Useful for:
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
@@ -64,11 +65,11 @@ class PreserveStrategy(AnonymizationStrategy):
         """
         return value
 
-    def validate(self, _value) -> bool:
+    def validate(self, value: Any) -> bool:  # noqa: ARG002
         """Check if strategy can handle this value type.
 
         Args:
-            _value: Sample value to validate (unused, preserve accepts any)
+            value: Sample value to validate (unused, preserve accepts any)
 
         Returns:
             True (preserve accepts any value type)

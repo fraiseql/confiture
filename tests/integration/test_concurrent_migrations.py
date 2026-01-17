@@ -8,7 +8,6 @@ Requires a running PostgreSQL instance with test database.
 
 import threading
 import time
-from typing import Callable
 
 import psycopg
 import pytest
@@ -304,7 +303,7 @@ class TestLockRecovery:
         """Test that lock can be acquired and released multiple times."""
         lock = MigrationLock(test_db)
 
-        for i in range(5):
+        for _i in range(5):
             with lock.acquire():
                 assert lock.lock_held is True
             assert lock.lock_held is False

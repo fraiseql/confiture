@@ -1,4 +1,4 @@
-"""Salted hashing anonymization strategy (Phase 2.2.4).
+"""Salted hashing anonymization strategy.
 
 Provides irreversible anonymization using salted HMAC hashing. One-way
 operation that cannot be reversed, suitable for final anonymization.

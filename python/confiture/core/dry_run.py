@@ -1,4 +1,4 @@
-"""Migration dry-run mode for Phase 4 - test migrations in transaction.
+"""Migration dry-run mode - test migrations in transaction.
 
 This module provides dry-run capability for migrations, allowing operators to:
 - Test migrations without making permanent changes

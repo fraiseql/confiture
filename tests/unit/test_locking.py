@@ -3,8 +3,7 @@
 Tests the MigrationLock class and its PostgreSQL advisory lock integration.
 """
 
-import hashlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -362,7 +361,7 @@ class TestMigrationLock:
         """Test that default lock namespace is consistent."""
         # Should be first 32 bits of SHA256("confiture_migrations")
         expected_namespace = 1751936052
-        assert MigrationLock.DEFAULT_LOCK_NAMESPACE == expected_namespace
+        assert expected_namespace == MigrationLock.DEFAULT_LOCK_NAMESPACE
 
     def test_timeout_setting_applied(self):
         """Test that timeout setting is applied to statement_timeout."""

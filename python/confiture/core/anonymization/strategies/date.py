@@ -76,7 +76,7 @@ class DateMaskingStrategy(AnonymizationStrategy):
         "%d/%m/%Y %H:%M:%S",  # UK with time
     ]
 
-    def anonymize(self, value: str) -> str:
+    def anonymize(self, value: str | None) -> str | None:
         """Anonymize a date value.
 
         Args:

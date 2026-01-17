@@ -9,9 +9,7 @@ Tests cover:
 - Edge cases and error handling
 """
 
-import math
 import pytest
-from unittest.mock import patch
 
 from confiture.core.anonymization.strategies.differential_privacy import (
     DifferentialPrivacyConfig,

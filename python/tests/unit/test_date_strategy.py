@@ -10,8 +10,10 @@ Tests:
 - Invalid date handling
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from confiture.core.anonymization.strategies.date import (
     DateMaskConfig,
     DateMaskingStrategy,
@@ -171,12 +173,12 @@ class TestPreserveNone:
         config = DateMaskConfig(seed=12345, preserve="none", jitter_days=30)
         strategy = DateMaskingStrategy(config)
 
-        original_date = datetime(2020, 5, 15)
+        datetime(2020, 5, 15)
         result = strategy.anonymize("2020-05-15")
 
         # Parse result to verify it's a valid date
         parts = result.split("-")
-        year = int(parts[0])
+        int(parts[0])
         month = int(parts[1])
         day = int(parts[2])
 

@@ -12,7 +12,6 @@ Tests verify handling of:
 
 import pytest
 
-
 # ============================================================================
 # CATEGORY 1: Schema Conflicts (5 tests)
 # ============================================================================
@@ -29,7 +28,7 @@ def test_duplicate_table_name_conflict(test_db_connection):
         # Try to create same table (should fail without IF NOT EXISTS)
         try:
             cur.execute("CREATE TABLE conflict_test (id UUID PRIMARY KEY)")
-            assert False, "Should fail on duplicate table"
+            pytest.fail("Should fail on duplicate table")
         except Exception:
             test_db_connection.rollback()
 
@@ -81,7 +80,7 @@ def test_constraint_name_collision(test_db_connection):
                 ALTER TABLE child
                 ADD CONSTRAINT fk_test FOREIGN KEY (parent_id) REFERENCES parent(id)
             """)
-            assert False, "Should fail on duplicate constraint"
+            pytest.fail("Should fail on duplicate constraint")
         except Exception:
             test_db_connection.rollback()
 
@@ -101,7 +100,7 @@ def test_index_name_collision(test_db_connection):
         # Try to create same index (should fail)
         try:
             cur.execute("CREATE INDEX idx_email ON idx_test(email)")
-            assert False, "Should fail on duplicate index"
+            pytest.fail("Should fail on duplicate index")
         except Exception:
             test_db_connection.rollback()
 
@@ -446,7 +445,7 @@ def test_not_null_constraint_violation(test_db_connection):
             cur.execute("""
                 INSERT INTO not_null_test (id, required_field) VALUES (gen_random_uuid(), NULL)
             """)
-            assert False, "Should fail on NOT NULL violation"
+            pytest.fail("Should fail on NOT NULL violation")
         except Exception:
             test_db_connection.rollback()
 
@@ -475,7 +474,7 @@ def test_unique_constraint_violation(test_db_connection):
             cur.execute("""
                 INSERT INTO unique_test (id, email) VALUES (gen_random_uuid(), 'test@example.com')
             """)
-            assert False, "Should fail on UNIQUE violation"
+            pytest.fail("Should fail on UNIQUE violation")
         except Exception:
             test_db_connection.rollback()
 
@@ -501,7 +500,7 @@ def test_foreign_key_violation(test_db_connection):
             cur.execute("""
                 INSERT INTO fk_child (id, parent_id) VALUES (gen_random_uuid(), gen_random_uuid())
             """)
-            assert False, "Should fail on FK violation"
+            pytest.fail("Should fail on FK violation")
         except Exception:
             test_db_connection.rollback()
 
@@ -524,7 +523,7 @@ def test_check_constraint_violation(test_db_connection):
             cur.execute("""
                 INSERT INTO check_test (id, age) VALUES (gen_random_uuid(), 999)
             """)
-            assert False, "Should fail on CHECK violation"
+            pytest.fail("Should fail on CHECK violation")
         except Exception:
             test_db_connection.rollback()
 
@@ -549,7 +548,7 @@ def test_primary_key_violation(test_db_connection):
             cur.execute("""
                 INSERT INTO pk_test (id) VALUES (%s)
             """, (test_uuid,))
-            assert False, "Should fail on PK violation"
+            pytest.fail("Should fail on PK violation")
         except Exception:
             test_db_connection.rollback()
 

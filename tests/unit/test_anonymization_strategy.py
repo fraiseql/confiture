@@ -10,16 +10,16 @@ Tests cover:
 """
 
 import os
+
 import pytest
 
-from confiture.core.anonymization.strategy import (
-    StrategyConfig,
-    resolve_seed,
-    AnonymizationStrategy,
-)
 from confiture.core.anonymization.strategies.hash import (
     DeterministicHashConfig,
     DeterministicHashStrategy,
+)
+from confiture.core.anonymization.strategy import (
+    StrategyConfig,
+    resolve_seed,
 )
 
 

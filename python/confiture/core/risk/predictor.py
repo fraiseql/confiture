@@ -1,4 +1,4 @@
-"""Downtime prediction with confidence bounds - Phase 6."""
+"""Downtime prediction with confidence bounds."""
 from __future__ import annotations
 
 import logging

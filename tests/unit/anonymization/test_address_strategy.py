@@ -3,12 +3,12 @@
 import pytest
 
 from confiture.core.anonymization.strategies.address import (
-    AddressConfig,
-    AddressStrategy,
     SAMPLE_CITIES,
     SAMPLE_STREETS,
     STREET_TYPES,
     US_STATES,
+    AddressConfig,
+    AddressStrategy,
 )
 
 

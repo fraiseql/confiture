@@ -4,18 +4,14 @@ Tests the ComplianceReportGenerator and related classes for tracking
 compliance with multiple data protection regulations.
 """
 
-import pytest
 import json
 from datetime import datetime
-from unittest.mock import Mock, MagicMock, patch
-from uuid import uuid4
 
 from confiture.core.anonymization.compliance import (
-    Regulation,
-    ComplianceRequirement,
     ComplianceReport,
+    ComplianceRequirement,
+    Regulation,
 )
-from confiture.core.anonymization.security.lineage import DataLineageEntry
 
 
 class TestRegulation:
@@ -481,7 +477,7 @@ class TestComplianceReport:
         )
 
         # Each regulation: 2 out of 4 met = 50%
-        for regulation in regulations_data.keys():
+        for regulation in regulations_data:
             coverage = report.coverage_percentage(regulation)
             assert coverage == 50.0
 
@@ -591,7 +587,7 @@ class TestComplianceIntegration:
         )
 
         # All regulations should show 100% compliance
-        for regulation in regulations_and_reqs.keys():
+        for regulation in regulations_and_reqs:
             assert report.coverage_percentage(regulation) == 100.0
 
         # Total should also be 100%

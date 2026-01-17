@@ -10,7 +10,6 @@ Tests verify that:
 
 import pytest
 
-
 # ============================================================================
 # CATEGORY 1: Basic Rollback Operations (5 tests)
 # ============================================================================
@@ -402,7 +401,7 @@ def test_rollback_cascade_delete_handling(test_db_connection):
 
         # Count children before
         cur.execute("SELECT COUNT(*) FROM rb_cascade_child")
-        count_before = cur.fetchone()[0]
+        cur.fetchone()[0]
 
         # Verify CASCADE works (delete parent deletes children)
         cur.execute("DELETE FROM rb_cascade_parent WHERE id = %s", (parent_id,))
@@ -424,7 +423,7 @@ def test_rollback_fails_with_invalid_sql(test_db_connection):
     with test_db_connection.cursor() as cur:
         try:
             cur.execute("INVALID SQL THAT DOES NOT PARSE")
-            assert False, "Should fail on invalid SQL"
+            pytest.fail("Should fail on invalid SQL")
         except Exception:
             # Expected: rollback should happen
             test_db_connection.rollback()
@@ -513,7 +512,7 @@ def test_rollback_preserves_system_state(test_db_connection):
     with test_db_connection.cursor() as cur:
         # Get initial sequence values using pg_sequences (compatible with PostgreSQL 18)
         cur.execute("SELECT count(*) FROM pg_sequences")
-        initial_count = cur.fetchone()[0]
+        cur.fetchone()[0]
 
         # Create a table (may use sequences internally)
         cur.execute("DROP TABLE IF EXISTS rb_sys CASCADE;")

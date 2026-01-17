@@ -9,10 +9,9 @@ Tests:
 - Edge cases
 """
 
-import pytest
 from confiture.core.anonymization.strategies.ip_address import (
-    IPAddressStrategy,
     IPAddressConfig,
+    IPAddressStrategy,
 )
 
 

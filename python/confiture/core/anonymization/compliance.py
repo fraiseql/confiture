@@ -1,4 +1,4 @@
-"""Compliance automation and reporting for Phase 2.3.
+"""Compliance automation and reporting.
 
 Provides compliance reporting for 7 major regulations:
 - GDPR (General Data Protection Regulation - EU)

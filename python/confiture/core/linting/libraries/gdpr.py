@@ -1,4 +1,4 @@
-"""GDPR compliance rule library - Phase 6."""
+"""GDPR compliance rule library."""
 from __future__ import annotations
 
 from ..composer import RuleLibrary

@@ -3,21 +3,19 @@
 Tests the dry-run mode helpers for CLI integration.
 """
 
-import pytest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
-from io import StringIO
+from unittest.mock import Mock, patch
 
 from confiture.cli.dry_run import (
-    save_text_report,
-    save_json_report,
-    print_json_report,
-    show_report_summary,
     ask_dry_run_execute_confirmation,
-    extract_sql_statements_from_migration,
     display_dry_run_header,
+    extract_sql_statements_from_migration,
+    print_json_report,
+    save_json_report,
+    save_text_report,
+    show_report_summary,
 )
 
 
@@ -288,7 +286,7 @@ class TestExtractSqlStatementsFromMigration:
 
     def test_extract_sql_various_migrations(self):
         """Test extraction with various migration types."""
-        for i in range(5):
+        for _i in range(5):
             mock_migration = Mock()
             result = extract_sql_statements_from_migration(mock_migration)
             assert isinstance(result, list)

@@ -10,8 +10,6 @@ Tests measure:
 import re
 import time
 
-import pytest
-
 from confiture.core.linting import SchemaLinter
 
 # Pre-compiled regex patterns for performance testing
@@ -86,7 +84,7 @@ class TestLintingPerformance:
         # Use the existing test environment
         start = time.perf_counter()
         linter = SchemaLinter(env="test")
-        report = linter.lint()
+        linter.lint()
         elapsed = time.perf_counter() - start
 
         # Linting should be fast (< 100ms for typical schema)

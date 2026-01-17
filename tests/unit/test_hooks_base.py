@@ -7,13 +7,15 @@ Tests:
 - HookExecutor basic functionality
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, patch
+
 from confiture.core.hooks.base import (
-    HookError,
-    HookResult,
     Hook,
+    HookError,
     HookExecutor,
+    HookResult,
 )
 
 

@@ -422,7 +422,7 @@ class TestTextRedactionEdgeCases:
 
         result = strategy.anonymize("The email (john@example.com) was sent.")
         assert "john@example.com" not in result
-        assert "The email ([REDACTED]) was sent." == result
+        assert result == "The email ([REDACTED]) was sent."
 
     def test_multiline_text(self):
         """Test multiline text processing."""

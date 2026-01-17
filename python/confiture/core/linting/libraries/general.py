@@ -1,4 +1,4 @@
-"""General best practices rule library - Phase 6."""
+"""General best practices rule library."""
 from __future__ import annotations
 
 from ..composer import RuleLibrary

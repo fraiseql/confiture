@@ -1,4 +1,4 @@
-"""Tokenization anonymization strategy (Phase 2.2.2).
+"""Tokenization anonymization strategy.
 
 Provides reversible anonymization using tokens stored in encrypted token store.
 Original values are encrypted and stored securely, enabling reversal when needed.

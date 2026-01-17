@@ -4,16 +4,12 @@ Tests the governance system for anonymization workflows including context,
 validation, and lifecycle management.
 """
 
-import pytest
 import time
-from datetime import datetime
-from unittest.mock import Mock, MagicMock
-from uuid import uuid4
 
 from confiture.core.anonymization.governance import (
+    AnonymizationContext,
     GovernancePhase,
     ValidationResult,
-    AnonymizationContext,
 )
 
 
@@ -349,7 +345,7 @@ class TestGovernanceIntegration:
 
     def test_governance_phase_workflow(self):
         """Test workflow through all governance phases."""
-        context = AnonymizationContext(
+        AnonymizationContext(
             operation_id="op-workflow",
             table_name="sensitive_data",
             column_name="pii",
@@ -472,7 +468,7 @@ class TestGovernanceIntegration:
 
     def test_governance_phase_transitions(self):
         """Test valid governance phase transitions."""
-        context = AnonymizationContext(
+        AnonymizationContext(
             operation_id="op-transitions",
             table_name="data",
             column_name="col",

@@ -82,7 +82,7 @@ class TextRedactionStrategy(AnonymizationStrategy):
         super().__init__(config or TextRedactionConfig())
         self._compiled_patterns = self._compile_patterns()
 
-    def anonymize(self, value: str) -> str:
+    def anonymize(self, value: str | None) -> str | None:
         """Redact matching text patterns.
 
         Args:

@@ -155,7 +155,7 @@ class SchemaSnapshotter:
         return snapshot
 
     def _capture_table_schema(
-        self, cur: psycopg.cursor, schema_name: str, table_name: str
+        self, cur: psycopg.Cursor, schema_name: str, table_name: str
     ) -> TableSchema:
         """Capture schema for a single table.
 
