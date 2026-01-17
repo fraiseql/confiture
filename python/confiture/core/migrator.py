@@ -6,9 +6,15 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core.checksum import (
+    ChecksumConfig,
+    MigrationChecksumVerifier,
+    compute_checksum,
+)
 from confiture.core.connection import get_migration_class, load_migration_module
-from confiture.core.dry_run import DryRunExecutor
+from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
+from confiture.core.locking import LockConfig, MigrationLock
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
@@ -176,21 +182,27 @@ class Migrator:
             else:
                 raise MigrationError(f"Failed to initialize migrations table: {e}") from e
 
-    def apply(self, migration: Migration, force: bool = False) -> None:
+    def apply(
+        self,
+        migration: Migration,
+        force: bool = False,
+        migration_file: Path | None = None,
+    ) -> None:
         """Apply a migration and record it in the tracking table.
 
-        Uses savepoints for clean rollback on failure.
-        Executes hooks before and after DDL execution:
-        - BEFORE_VALIDATION: Pre-flight checks
-        - BEFORE_DDL: Data preparation
-        - AFTER_DDL: Data backfill (e.g., read model updates)
-        - AFTER_VALIDATION: Consistency verification
-        - CLEANUP: Final cleanup
-        - ON_ERROR: Error handlers (if migration fails)
+        For transactional migrations (default):
+        - Uses savepoints for clean rollback on failure
+        - Executes hooks before and after DDL execution
+
+        For non-transactional migrations (transactional=False):
+        - Runs in autocommit mode
+        - No automatic rollback on failure
+        - Required for CREATE INDEX CONCURRENTLY, etc.
 
         Args:
             migration: Migration instance to apply
             force: If True, skip the "already applied" check
+            migration_file: Path to migration file for checksum computation
 
         Raises:
             MigrationError: If migration fails or hooks fail
@@ -202,6 +214,24 @@ class Migrator:
                 f"Migration {migration.version} ({migration.name}) has already been applied"
             )
 
+        if migration.transactional:
+            self._apply_transactional(migration, already_applied, migration_file)
+        else:
+            self._apply_non_transactional(migration, already_applied, migration_file)
+
+    def _apply_transactional(
+        self,
+        migration: Migration,
+        already_applied: bool,
+        migration_file: Path | None = None,
+    ) -> None:
+        """Apply migration within a transaction using savepoints.
+
+        Args:
+            migration: Migration instance to apply
+            already_applied: Whether migration was already applied (force mode)
+            migration_file: Path to migration file for checksum computation
+        """
         savepoint_name = f"migration_{migration.version}"
         try:
             self._create_savepoint(savepoint_name)
@@ -215,7 +245,7 @@ class Migrator:
             # Only record the migration if it's not already applied
             # In force mode, we re-apply but don't re-record
             if not already_applied:
-                self._record_migration(migration, execution_time_ms)
+                self._record_migration(migration, execution_time_ms, migration_file)
             self._release_savepoint(savepoint_name)
 
             self.connection.commit()
@@ -229,6 +259,63 @@ class Migrator:
                 raise MigrationError(
                     f"Failed to apply migration {migration.version} ({migration.name}): {e}"
                 ) from e
+
+    def _apply_non_transactional(
+        self,
+        migration: Migration,
+        already_applied: bool,
+        migration_file: Path | None = None,
+    ) -> None:
+        """Apply migration in autocommit mode (no transaction).
+
+        WARNING: If this fails, manual cleanup may be required.
+
+        Args:
+            migration: Migration instance to apply
+            already_applied: Whether migration was already applied (force mode)
+            migration_file: Path to migration file for checksum computation
+        """
+        logger.warning(
+            f"Running migration {migration.version} in non-transactional mode. "
+            "Manual cleanup may be required on failure."
+        )
+
+        # Ensure any pending transaction is committed
+        self.connection.commit()
+
+        # Set autocommit mode
+        original_autocommit = self.connection.autocommit
+        self.connection.autocommit = True
+
+        try:
+            logger.debug(f"Executing DDL for migration {migration.version} (autocommit)")
+            start_time = time.perf_counter()
+            migration.up()
+            execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # Record migration (in autocommit, this commits immediately)
+            if not already_applied:
+                self._record_migration(migration, execution_time_ms, migration_file)
+
+            logger.info(
+                f"Successfully applied non-transactional migration "
+                f"{migration.version} ({migration.name})"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Non-transactional migration {migration.version} failed. "
+                "Manual cleanup may be required."
+            )
+            raise MigrationError(
+                f"Failed to apply non-transactional migration "
+                f"{migration.version} ({migration.name}): {e}. "
+                "Manual cleanup may be required."
+            ) from e
+
+        finally:
+            # Restore original autocommit setting
+            self.connection.autocommit = original_autocommit
 
     def _create_savepoint(self, name: str) -> None:
         """Create a savepoint for transaction rollback."""
@@ -250,34 +337,51 @@ class Migrator:
             # Savepoint rollback failed, do full rollback
             self.connection.rollback()
 
-    def _record_migration(self, migration: Migration, execution_time_ms: int) -> None:
-        """Record migration in tracking table."""
+    def _record_migration(
+        self,
+        migration: Migration,
+        execution_time_ms: int,
+        migration_file: Path | None = None,
+    ) -> None:
+        """Record migration in tracking table with checksum.
+
+        Args:
+            migration: Migration that was applied
+            execution_time_ms: Time taken to apply migration
+            migration_file: Path to migration file for checksum computation
+        """
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         slug = f"{migration.name}_{timestamp}"
 
+        # Compute checksum if file path provided
+        checksum = None
+        if migration_file is not None and migration_file.exists():
+            checksum = compute_checksum(migration_file)
+            logger.debug(f"Computed checksum for {migration.version}: {checksum[:16]}...")
+
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO confiture_migrations
-                    (slug, version, name, execution_time_ms)
-                VALUES (%s, %s, %s, %s)
+                    (slug, version, name, execution_time_ms, checksum)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
-                (slug, migration.version, migration.name, execution_time_ms),
+                (slug, migration.version, migration.name, execution_time_ms, checksum),
             )
 
     def rollback(self, migration: Migration) -> None:
         """Rollback a migration and remove it from tracking table.
 
-        This method:
-        1. Checks if migration was applied
-        2. Executes BEFORE_DDL hooks (for rollback cleanup prep)
-        3. Executes migration.down() within a transaction
-        4. Executes CLEANUP hooks (for rollback cleanup)
-        5. Removes migration record from tracking table
-        6. Commits transaction
-        7. Executes ON_ERROR hooks if rollback fails
+        For transactional migrations (default):
+        - Executes within a transaction with automatic rollback on failure
+        - Safe and consistent
+
+        For non-transactional migrations (transactional=False):
+        - Runs in autocommit mode
+        - No automatic rollback on failure
+        - Manual cleanup may be required
 
         Args:
             migration: Migration instance to rollback
@@ -292,6 +396,17 @@ class Migrator:
                 "has not been applied, cannot rollback"
             )
 
+        if migration.transactional:
+            self._rollback_transactional(migration)
+        else:
+            self._rollback_non_transactional(migration)
+
+    def _rollback_transactional(self, migration: Migration) -> None:
+        """Rollback a migration within a transaction.
+
+        Args:
+            migration: Migration instance to rollback
+        """
         try:
             # Execute down() method
             logger.debug(f"Executing rollback (down) for migration {migration.version}")
@@ -315,6 +430,60 @@ class Migrator:
             raise MigrationError(
                 f"Failed to rollback migration {migration.version} ({migration.name}): {e}"
             ) from e
+
+    def _rollback_non_transactional(self, migration: Migration) -> None:
+        """Rollback a migration in autocommit mode (no transaction).
+
+        WARNING: If this fails, manual cleanup may be required.
+
+        Args:
+            migration: Migration instance to rollback
+        """
+        logger.warning(
+            f"Rolling back migration {migration.version} in non-transactional mode. "
+            "Manual cleanup may be required on failure."
+        )
+
+        # Ensure any pending transaction is committed
+        self.connection.commit()
+
+        # Set autocommit mode
+        original_autocommit = self.connection.autocommit
+        self.connection.autocommit = True
+
+        try:
+            # Execute down() method
+            logger.debug(f"Executing rollback (down) for migration {migration.version} (autocommit)")
+            migration.down()
+
+            # Remove from tracking table
+            self._execute_sql(
+                """
+                DELETE FROM confiture_migrations
+                WHERE version = %s
+                """,
+                (migration.version,),
+            )
+
+            logger.info(
+                f"Successfully rolled back non-transactional migration "
+                f"{migration.version} ({migration.name})"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Non-transactional rollback of migration {migration.version} failed. "
+                "Manual cleanup may be required."
+            )
+            raise MigrationError(
+                f"Failed to rollback non-transactional migration "
+                f"{migration.version} ({migration.name}): {e}. "
+                "Manual cleanup may be required."
+            ) from e
+
+        finally:
+            # Restore original autocommit setting
+            self.connection.autocommit = original_autocommit
 
     def _is_applied(self, version: str) -> bool:
         """Check if migration version has been applied.
@@ -436,20 +605,91 @@ class Migrator:
         return version
 
     def migrate_up(
-        self, force: bool = False, migrations_dir: Path | None = None, target: str | None = None
+        self,
+        force: bool = False,
+        migrations_dir: Path | None = None,
+        target: str | None = None,
+        lock_config: LockConfig | None = None,
+        checksum_config: ChecksumConfig | None = None,
     ) -> list[str]:
         """Apply pending migrations up to target version.
+
+        Uses distributed locking to ensure only one migration process runs
+        at a time. This is critical for multi-pod Kubernetes deployments.
+
+        Optionally verifies checksums before running migrations to detect
+        unauthorized modifications to migration files.
 
         Args:
             force: If True, skip migration state checks and apply all migrations
             migrations_dir: Custom migrations directory (default: db/migrations)
             target: Target migration version (applies all if None)
+            lock_config: Locking configuration. If None, uses default (enabled,
+                30s timeout, blocking mode). Pass LockConfig(enabled=False)
+                to disable locking.
+            checksum_config: Checksum verification configuration. If None, uses
+                default (enabled, fail on mismatch). Pass
+                ChecksumConfig(enabled=False) to disable verification.
 
         Returns:
             List of applied migration versions
 
         Raises:
             MigrationError: If migration application fails
+            LockAcquisitionError: If lock cannot be acquired within timeout
+            ChecksumVerificationError: If checksum mismatch and behavior is FAIL
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> migrator.initialize()
+            >>> # Default: verify checksums, fail on mismatch
+            >>> applied = migrator.migrate_up()
+            >>>
+            >>> # Custom checksum behavior
+            >>> from confiture.core.checksum import ChecksumConfig, ChecksumMismatchBehavior
+            >>> applied = migrator.migrate_up(
+            ...     checksum_config=ChecksumConfig(
+            ...         on_mismatch=ChecksumMismatchBehavior.WARN
+            ...     )
+            ... )
+            >>>
+            >>> # Disable checksum verification
+            >>> applied = migrator.migrate_up(
+            ...     checksum_config=ChecksumConfig(enabled=False)
+            ... )
+        """
+        effective_migrations_dir = migrations_dir or Path("db/migrations")
+
+        # Verify checksums before running migrations (unless force mode)
+        if checksum_config is None:
+            checksum_config = ChecksumConfig()
+
+        if checksum_config.enabled and not force:
+            verifier = MigrationChecksumVerifier(self.connection, checksum_config)
+            verifier.verify_all(effective_migrations_dir)
+
+        # Create lock manager
+        lock = MigrationLock(self.connection, lock_config)
+
+        # Acquire lock and run migrations
+        with lock.acquire():
+            return self._migrate_up_internal(force, migrations_dir, target)
+
+    def _migrate_up_internal(
+        self,
+        force: bool = False,
+        migrations_dir: Path | None = None,
+        target: str | None = None,
+    ) -> list[str]:
+        """Internal implementation of migrate_up (called within lock).
+
+        Args:
+            force: If True, skip migration state checks
+            migrations_dir: Custom migrations directory
+            target: Target migration version
+
+        Returns:
+            List of applied migration versions
         """
         # Find migrations to apply
         if force:
@@ -458,6 +698,9 @@ class Migrator:
         else:
             # Normal mode: only apply pending migrations
             migrations_to_apply = self.find_pending(migrations_dir)
+
+        # Check for mixed transactional modes and warn
+        self._warn_mixed_transactional_modes(migrations_to_apply)
 
         applied_versions = []
 
@@ -473,13 +716,50 @@ class Migrator:
             if target and migration.version > target:
                 break
 
-            # Apply migration
-            self.apply(migration, force=force)
+            # Apply migration with file path for checksum computation
+            self.apply(migration, force=force, migration_file=migration_file)
             applied_versions.append(migration.version)
 
         return applied_versions
 
-    def dry_run(self, migration: Migration) -> "DryRunResult":  # noqa: F821
+    def _warn_mixed_transactional_modes(self, migration_files: list[Path]) -> None:
+        """Warn if batch contains both transactional and non-transactional migrations.
+
+        Mixed batches can be problematic because non-transactional migrations
+        cannot be automatically rolled back if a later transactional migration fails.
+
+        Args:
+            migration_files: List of migration files to check
+        """
+        if len(migration_files) <= 1:
+            return
+
+        transactional_migrations: list[str] = []
+        non_transactional_migrations: list[str] = []
+
+        for migration_file in migration_files:
+            module = load_migration_module(migration_file)
+            migration_class = get_migration_class(module)
+
+            # Check transactional attribute (default is True)
+            is_transactional = getattr(migration_class, "transactional", True)
+
+            if is_transactional:
+                transactional_migrations.append(migration_file.name)
+            else:
+                non_transactional_migrations.append(migration_file.name)
+
+        if transactional_migrations and non_transactional_migrations:
+            logger.warning(
+                "Batch contains both transactional and non-transactional migrations. "
+                "If a transactional migration fails after a non-transactional one succeeds, "
+                "manual cleanup of the non-transactional changes may be required.\n"
+                f"  Non-transactional: {', '.join(non_transactional_migrations)}\n"
+                f"  Transactional: {', '.join(transactional_migrations[:3])}"
+                f"{'...' if len(transactional_migrations) > 3 else ''}"
+            )
+
+    def dry_run(self, migration: Migration) -> DryRunResult:
         """Test a migration without making permanent changes.
 
         Executes the migration in dry-run mode using DryRunExecutor,

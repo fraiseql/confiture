@@ -26,7 +26,7 @@ dependencies = [
     "rich>=13.7.0",
     "pydantic>=2.5.0",
     "pyyaml>=6.0.1",
-    "psycopg[binary]>=3.1.0",
+    "psycopg[binary,pool]>=3.1.0",
     "sqlparse>=0.5.0",
     "cryptography>=42.0.0",
 ]
@@ -138,7 +138,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG", "S101"]  # Allow assert statements in tests
+# Allow assert statements and nested with statements in tests
+# SIM117: Nested with statements are often clearer in tests with many patches
+# SIM105: try-except-pass is acceptable for "expected to fail" test scenarios
+"tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
+"python/tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
 "python/confiture/cli/*" = ["ARG001"]  # Allow unused args in CLI callbacks
 
 [tool.ty.src]
@@ -155,9 +159,18 @@ root = ["python"]
 respect-type-ignore-comments = true
 
 [tool.ty.rules]
-# psycopg3 uses strict type requirements (LiteralString)
-# This is a pre-existing type strictness that doesn't affect runtime safety
-invalid-argument-type = "warn"
+# psycopg3 uses strict type requirements (LiteralString for SQL queries).
+# This library is designed to execute dynamic SQL from:
+# - Migration files (trusted developer content)
+# - Schema building (concatenated SQL files)
+# - SAVEPOINT/ROLLBACK commands (safe, controlled strings)
+# These are safe operations that can't be made type-safe without major refactoring.
+invalid-argument-type = "ignore"
+
+# Strategy configs use dynamic attribute access that the type checker can't verify.
+# The base StrategyConfig class is extended by subclasses with additional fields,
+# but the type system only sees the base class type in generic code.
+possibly-missing-attribute = "ignore"
 
 [dependency-groups]
 dev = [

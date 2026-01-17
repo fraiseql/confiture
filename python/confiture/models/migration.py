@@ -26,6 +26,18 @@ class Migration(ABC):
     - cleanup_hooks: Final cleanup operations
     - error_hooks: Error handlers during rollback
 
+    Transaction Control:
+        By default, migrations run inside a transaction with savepoints.
+        Set `transactional = False` for operations that cannot run in
+        a transaction, such as:
+        - CREATE INDEX CONCURRENTLY
+        - DROP INDEX CONCURRENTLY
+        - VACUUM
+        - REINDEX CONCURRENTLY
+
+        WARNING: Non-transactional migrations cannot be automatically
+        rolled back if they fail. Manual cleanup may be required.
+
     Example:
         >>> class CreateUsers(Migration):
         ...     version = "001"
@@ -53,6 +65,18 @@ class Migration(ABC):
         ...
         ...     def down(self):
         ...         self.execute('DROP TABLE analytics')
+
+    Example non-transactional (CREATE INDEX CONCURRENTLY):
+        >>> class AddSearchIndex(Migration):
+        ...     version = "015"
+        ...     name = "add_search_index"
+        ...     transactional = False  # Required for CONCURRENTLY
+        ...
+        ...     def up(self):
+        ...         self.execute('CREATE INDEX CONCURRENTLY idx_search ON products(name)')
+        ...
+        ...     def down(self):
+        ...         self.execute('DROP INDEX CONCURRENTLY IF EXISTS idx_search')
     """
 
     # Subclasses must define these
@@ -60,6 +84,7 @@ class Migration(ABC):
     name: str
 
     # Configuration attributes
+    transactional: bool = True  # Default: run in transaction with savepoints
     strict_mode: bool = False  # Default: lenient error handling
 
     # Hook attributes (optional, default to empty lists)

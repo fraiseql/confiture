@@ -18,10 +18,31 @@ class BuildConfig(BaseModel):
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
 
 
+class LockingConfig(BaseModel):
+    """Distributed locking configuration.
+
+    Controls how Confiture acquires locks to prevent concurrent migrations
+    in multi-pod Kubernetes deployments.
+
+    Attributes:
+        enabled: Whether locking is enabled (default: True)
+        timeout_ms: Lock acquisition timeout in milliseconds (default: 30000)
+    """
+
+    enabled: bool = True
+    timeout_ms: int = 30000  # 30 seconds default
+
+
 class MigrationConfig(BaseModel):
-    """Migration configuration options."""
+    """Migration configuration options.
+
+    Attributes:
+        strict_mode: Whether to fail on warnings/notices (default: False)
+        locking: Distributed locking configuration
+    """
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
+    locking: LockingConfig = Field(default_factory=LockingConfig)
 
 
 class DirectoryConfig(BaseModel):

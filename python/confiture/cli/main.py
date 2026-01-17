@@ -4,6 +4,7 @@ This module defines the main Typer application and all CLI commands.
 """
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -13,11 +14,83 @@ from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.linting import SchemaLinter
+from confiture.core.linting.schema_linter import (
+    LintConfig as LinterConfig,
+)
+from confiture.core.linting.schema_linter import (
+    LintReport as LinterReport,
+)
+from confiture.core.linting.schema_linter import (
+    RuleSeverity,
+)
 from confiture.core.migration_generator import MigrationGenerator
-from confiture.models.lint import LintConfig
+from confiture.models.lint import LintReport, LintSeverity, Violation
 
 # Valid output formats for linting
 LINT_FORMATS = ("table", "json", "csv")
+
+
+def _convert_linter_report(linter_report: LinterReport, schema_name: str = "schema") -> LintReport:
+    """Convert a schema_linter.LintReport to models.lint.LintReport.
+
+    Args:
+        linter_report: Report from SchemaLinter
+        schema_name: Name of schema being linted
+
+    Returns:
+        LintReport compatible with format_lint_report
+    """
+    violations = []
+
+    # Map RuleSeverity to LintSeverity
+    severity_map = {
+        RuleSeverity.ERROR: LintSeverity.ERROR,
+        RuleSeverity.WARNING: LintSeverity.WARNING,
+        RuleSeverity.INFO: LintSeverity.INFO,
+    }
+
+    # Convert all violations
+    for violation in linter_report.errors:
+        violations.append(
+            Violation(
+                rule_name=violation.rule_name,
+                severity=severity_map[violation.severity],
+                message=violation.message,
+                location=violation.object_name,
+            )
+        )
+
+    for violation in linter_report.warnings:
+        violations.append(
+            Violation(
+                rule_name=violation.rule_name,
+                severity=severity_map[violation.severity],
+                message=violation.message,
+                location=violation.object_name,
+            )
+        )
+
+    for violation in linter_report.info:
+        violations.append(
+            Violation(
+                rule_name=violation.rule_name,
+                severity=severity_map[violation.severity],
+                message=violation.message,
+                location=violation.object_name,
+            )
+        )
+
+    return LintReport(
+        violations=violations,
+        schema_name=schema_name,
+        tables_checked=0,  # Not tracked in linter
+        columns_checked=0,  # Not tracked in linter
+        errors_count=len(linter_report.errors),
+        warnings_count=len(linter_report.warnings),
+        info_count=len(linter_report.info),
+        execution_time_ms=0,  # Not tracked in linter
+    )
+
 
 # Create Typer app
 app = typer.Typer(
@@ -364,8 +437,8 @@ def lint(
             console.print(f"Valid formats: {', '.join(LINT_FORMATS)}")
             raise typer.Exit(1)
 
-        # Create linter configuration
-        config = LintConfig(
+        # Create linter configuration (use LinterConfig for the linter)
+        config = LinterConfig(
             enabled=True,
             fail_on_error=fail_on_error,
             fail_on_warning=fail_on_warning,
@@ -374,21 +447,26 @@ def lint(
         # Create linter and run linting
         console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
         linter = SchemaLinter(env=env, config=config)
-        report = linter.lint()
+        linter_report = linter.lint()
+
+        # Convert to model LintReport for formatting
+        report = _convert_linter_report(linter_report, schema_name=env)
 
         # Display results based on format
         if format_type == "table":
             format_lint_report(report, format_type="table", console=console)
         else:
             # JSON/CSV format: format and optionally save
+            # Cast format_type for type checker
+            fmt = "json" if format_type == "json" else "csv"
             formatted = format_lint_report(
                 report,
-                format_type=format_type,
+                format_type=fmt,
                 console=console,
             )
 
             if output:
-                save_report(report, output, format_type=format_type)
+                save_report(report, output, format_type=fmt)
                 console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
                 console.print(formatted)
@@ -532,6 +610,16 @@ def migrate_up(
         "--force",
         help="Force migration application, skipping state checks",
     ),
+    lock_timeout: int = typer.Option(
+        30000,
+        "--lock-timeout",
+        help="Lock acquisition timeout in milliseconds (default: 30000ms = 30s)",
+    ),
+    no_lock: bool = typer.Option(
+        False,
+        "--no-lock",
+        help="Disable migration locking (DANGEROUS in multi-pod environments)",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -541,6 +629,16 @@ def migrate_up(
         False,
         "--dry-run-execute",
         help="Execute migrations in SAVEPOINT for realistic testing (guaranteed rollback)",
+    ),
+    verify_checksums: bool = typer.Option(
+        True,
+        "--verify-checksums/--no-verify-checksums",
+        help="Verify migration file checksums before running (default: enabled)",
+    ),
+    on_checksum_mismatch: str = typer.Option(
+        "fail",
+        "--on-checksum-mismatch",
+        help="Behavior on checksum mismatch: fail, warn, ignore",
     ),
     verbose: bool = typer.Option(
         False,
@@ -565,6 +663,12 @@ def migrate_up(
 
     Applies all pending migrations up to the target version (or all if no target).
 
+    Uses distributed locking to ensure only one migration process runs at a time.
+    This is critical for Kubernetes/multi-pod deployments.
+
+    Verifies migration file checksums to detect unauthorized modifications.
+    Use --no-verify-checksums to skip verification.
+
     Use --dry-run for analysis without execution, or --dry-run-execute to test in SAVEPOINT.
     """
     from confiture.cli.dry_run import (
@@ -574,12 +678,19 @@ def migrate_up(
         save_json_report,
         save_text_report,
     )
+    from confiture.core.checksum import (
+        ChecksumConfig,
+        ChecksumMismatchBehavior,
+        ChecksumVerificationError,
+        MigrationChecksumVerifier,
+    )
     from confiture.core.connection import (
         create_connection,
         get_migration_class,
         load_config,
         load_migration_module,
     )
+    from confiture.core.locking import LockAcquisitionError, LockConfig, MigrationLock
     from confiture.core.migrator import Migrator
 
     try:
@@ -595,6 +706,15 @@ def migrate_up(
         # Validate format option
         if format_output not in ("text", "json"):
             console.print(f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]")
+            raise typer.Exit(1)
+
+        # Validate checksum mismatch option
+        valid_mismatch_behaviors = ("fail", "warn", "ignore")
+        if on_checksum_mismatch not in valid_mismatch_behaviors:
+            console.print(
+                f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
+                f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
+            )
             raise typer.Exit(1)
 
         # Load configuration
@@ -628,12 +748,47 @@ def migrate_up(
                 "[yellow]This may cause issues if applied incorrectly. Use with caution![/yellow]\n"
             )
 
+        # Show warning for no-lock mode
+        if no_lock:
+            console.print(
+                "[yellow]⚠️  Locking disabled - DANGEROUS in multi-pod environments![/yellow]"
+            )
+            console.print(
+                "[yellow]Concurrent migrations may cause race conditions or data corruption.[/yellow]\n"
+            )
+
         # Create database connection
         conn = create_connection(config_data)
 
         # Create migrator
         migrator = Migrator(connection=conn)
         migrator.initialize()
+
+        # Verify checksums before running migrations (unless force mode)
+        if verify_checksums and not force:
+            mismatch_behavior = ChecksumMismatchBehavior(on_checksum_mismatch)
+            checksum_config = ChecksumConfig(
+                enabled=True,
+                on_mismatch=mismatch_behavior,
+            )
+            verifier = MigrationChecksumVerifier(conn, checksum_config)
+
+            try:
+                mismatches = verifier.verify_all(migrations_dir)
+                if not mismatches:
+                    console.print("[cyan]🔐 Checksum verification passed[/cyan]\n")
+            except ChecksumVerificationError as e:
+                console.print("[red]❌ Checksum verification failed![/red]\n")
+                for m in e.mismatches:
+                    console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+                    console.print(f"    Expected: {m.expected[:16]}...")
+                    console.print(f"    Actual:   {m.actual[:16]}...")
+                console.print(
+                    "\n[yellow]💡 Tip: Use 'confiture verify --fix' to update checksums, "
+                    "or --no-verify-checksums to skip[/yellow]"
+                )
+                conn.close()
+                raise typer.Exit(1) from e
 
         # Find migrations to apply
         if force:
@@ -662,7 +817,7 @@ def migrate_up(
             display_dry_run_header("testing" if dry_run_execute else "analysis")
 
             # Build migration summary
-            migration_summary = {
+            migration_summary: dict[str, Any] = {
                 "migration_id": f"dry_run_{config.stem}",
                 "mode": "execute_and_analyze" if dry_run_execute else "analysis",
                 "statements_analyzed": len(migrations_to_apply),
@@ -746,41 +901,68 @@ def migrate_up(
                 conn.close()
                 raise typer.Exit(1) from e
 
-        # Apply migrations
+        # Configure locking
+        lock_config = LockConfig(
+            enabled=not no_lock,
+            timeout_ms=lock_timeout,
+        )
+
+        # Create lock manager
+        lock = MigrationLock(conn, lock_config)
+
+        # Apply migrations with distributed lock
         applied_count = 0
         failed_migration = None
         failed_exception = None
 
-        for migration_file in migrations_to_apply:
-            # Load migration module
-            module = load_migration_module(migration_file)
-            migration_class = get_migration_class(module)
+        try:
+            with lock.acquire():
+                if not no_lock:
+                    console.print("[cyan]🔒 Acquired migration lock[/cyan]\n")
 
-            # Create migration instance
-            migration = migration_class(connection=conn)
-            # Override strict_mode from CLI/config if not already set on class
-            if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
-                migration.strict_mode = effective_strict_mode
+                for migration_file in migrations_to_apply:
+                    # Load migration module
+                    module = load_migration_module(migration_file)
+                    migration_class = get_migration_class(module)
 
-            # Check target
-            if target and migration.version > target:
-                console.print(f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]")
-                break
+                    # Create migration instance
+                    migration = migration_class(connection=conn)
+                    # Override strict_mode from CLI/config if not already set on class
+                    if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
+                        migration.strict_mode = effective_strict_mode
 
-            # Apply migration
-            console.print(
-                f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
-            )
+                    # Check target
+                    if target and migration.version > target:
+                        console.print(f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]")
+                        break
 
-            try:
-                migrator.apply(migration, force=force)
-                console.print("[green]✅[/green]")
-                applied_count += 1
-            except Exception as e:
-                console.print("[red]❌[/red]")
-                failed_migration = migration
-                failed_exception = e
-                break
+                    # Apply migration
+                    console.print(
+                        f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+                    )
+
+                    try:
+                        migrator.apply(migration, force=force, migration_file=migration_file)
+                        console.print("[green]✅[/green]")
+                        applied_count += 1
+                    except Exception as e:
+                        console.print("[red]❌[/red]")
+                        failed_migration = migration
+                        failed_exception = e
+                        break
+
+        except LockAcquisitionError as e:
+            console.print(f"\n[red]❌ Failed to acquire migration lock: {e}[/red]")
+            if e.timeout:
+                console.print(
+                    f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
+                )
+            else:
+                console.print(
+                    "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
+                )
+            conn.close()
+            raise typer.Exit(1) from e
 
         # Handle results
         if failed_migration:
@@ -808,6 +990,9 @@ def migrate_up(
                 )
             conn.close()
 
+    except LockAcquisitionError:
+        # Already handled above
+        raise
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
@@ -1169,7 +1354,7 @@ def migrate_down(
             display_dry_run_header("analysis")
 
             # Build rollback summary
-            rollback_summary = {
+            rollback_summary: dict[str, Any] = {
                 "migration_id": f"dry_run_rollback_{config.stem}",
                 "mode": "analysis",
                 "statements_analyzed": len(versions_to_rollback),
@@ -1356,6 +1541,104 @@ def validate_profile(
         raise typer.Exit(1) from e
     except Exception as e:
         console.print(f"[red]❌ Error validating profile: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def verify(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file",
+    ),
+    fix: bool = typer.Option(
+        False,
+        "--fix",
+        help="Update stored checksums to match current files (dangerous)",
+    ),
+) -> None:
+    """Verify migration file integrity against stored checksums.
+
+    Compares SHA-256 checksums of migration files against the checksums
+    stored when migrations were applied. Detects if files have been
+    modified after application.
+
+    This helps prevent:
+    - Silent schema drift between environments
+    - Production/staging mismatches
+    - Debugging nightmares from modified migrations
+
+    Examples:
+        # Verify all migrations
+        confiture verify
+
+        # Verify with specific config
+        confiture verify --config db/environments/production.yaml
+
+        # Fix checksums (update stored to match current files)
+        confiture verify --fix
+    """
+    from confiture.core.checksum import (
+        ChecksumConfig,
+        ChecksumMismatchBehavior,
+        MigrationChecksumVerifier,
+    )
+    from confiture.core.connection import create_connection, load_config
+
+    try:
+        # Load config and connect
+        config_data = load_config(config)
+        conn = create_connection(config_data)
+
+        # Run verification (warn mode - we'll handle display)
+        verifier = MigrationChecksumVerifier(
+            conn,
+            ChecksumConfig(
+                enabled=True,
+                on_mismatch=ChecksumMismatchBehavior.WARN,
+            ),
+        )
+        mismatches = verifier.verify_all(migrations_dir)
+
+        if not mismatches:
+            console.print("[green]✅ All migration checksums verified![/green]")
+            conn.close()
+            return
+
+        # Display mismatches
+        console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
+
+        for m in mismatches:
+            console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+            console.print(f"    File: {m.file_path}")
+            console.print(f"    Expected: {m.expected[:16]}...")
+            console.print(f"    Actual:   {m.actual[:16]}...")
+            console.print()
+
+        if fix:
+            # Update checksums in database
+            console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
+            updated = verifier.update_all_checksums(migrations_dir)
+            console.print(f"[green]✅ Updated {updated} checksum(s)[/green]")
+        else:
+            console.print(
+                "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
+            )
+            conn.close()
+            raise typer.Exit(1)
+
+        conn.close()
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
 
 
