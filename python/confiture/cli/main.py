@@ -103,7 +103,7 @@ app = typer.Typer(
 console = Console()
 
 # Version
-__version__ = "2.2.0b1"
+__version__ = "0.3.5"
 
 
 def version_callback(value: bool) -> None:

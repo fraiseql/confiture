@@ -288,7 +288,7 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Current Version
 
-**v2.2.0b1** (Beta)
+**v0.3.5**
 
 > **⚠️ Beta Software**: Confiture has not yet been used in production. While the codebase includes comprehensive tests and documentation, real-world usage may reveal issues. Use with caution in production environments.
 

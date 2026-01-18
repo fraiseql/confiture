@@ -6,14 +6,14 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    2.2.0b1
+    0.3.5
 """
 
 from typing import Any
 
 from confiture.core.linting import SchemaLinter
 
-__version__ = "2.2.0b1"
+__version__ = "0.3.5"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel@fraiseql.com"
 
