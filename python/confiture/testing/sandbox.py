@@ -102,7 +102,7 @@ class MigrationSandbox:
         self._validator: DataValidator | None = None
         self._snapshotter: SchemaSnapshotter | None = None
 
-    def __enter__(self) -> "MigrationSandbox":
+    def __enter__(self) -> MigrationSandbox:
         """Enter the sandbox context.
 
         Creates connection (if URL provided) and starts transaction/savepoint.
@@ -155,7 +155,7 @@ class MigrationSandbox:
         finally:
             self._active = False
 
-    def load(self, name: str) -> "Migration":
+    def load(self, name: str) -> Migration:
         """Load and instantiate a migration.
 
         Args:
@@ -189,7 +189,7 @@ class MigrationSandbox:
         return migration_class(connection=self.connection)
 
     @property
-    def validator(self) -> "DataValidator":
+    def validator(self) -> DataValidator:
         """Get data validator for this sandbox.
 
         Returns:
@@ -205,7 +205,7 @@ class MigrationSandbox:
         return self._validator
 
     @property
-    def snapshotter(self) -> "SchemaSnapshotter":
+    def snapshotter(self) -> SchemaSnapshotter:
         """Get schema snapshotter for this sandbox.
 
         Returns:
@@ -223,7 +223,7 @@ class MigrationSandbox:
             self._snapshotter = SchemaSnapshotter(self.connection)
         return self._snapshotter
 
-    def capture_baseline(self) -> "DataBaseline":
+    def capture_baseline(self) -> DataBaseline:
         """Capture data baseline before migration.
 
         Convenience method that wraps validator.capture_baseline().
@@ -238,7 +238,7 @@ class MigrationSandbox:
         """
         return self.validator.capture_baseline()
 
-    def assert_no_data_loss(self, baseline: "DataBaseline") -> None:
+    def assert_no_data_loss(self, baseline: DataBaseline) -> None:
         """Assert no data was lost since baseline.
 
         Convenience method that wraps validator.no_data_loss() with assertion.

@@ -26,8 +26,9 @@ Example test file:
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -78,7 +79,7 @@ def confiture_migrations_dir() -> Path:
 def confiture_sandbox(
     confiture_db_url: str,
     confiture_migrations_dir: Path,
-) -> Generator["MigrationSandbox", None, None]:
+) -> Generator[MigrationSandbox, None, None]:
     """Provide a migration sandbox with automatic rollback.
 
     Creates a MigrationSandbox that automatically rolls back all changes
@@ -111,7 +112,7 @@ def confiture_sandbox(
 
 
 @pytest.fixture
-def confiture_validator(confiture_sandbox: "MigrationSandbox") -> "DataValidator":
+def confiture_validator(confiture_sandbox: MigrationSandbox) -> DataValidator:
     """Provide data validator from sandbox.
 
     Convenience fixture that extracts the validator from the sandbox.
@@ -128,7 +129,7 @@ def confiture_validator(confiture_sandbox: "MigrationSandbox") -> "DataValidator
 
 
 @pytest.fixture
-def confiture_snapshotter(confiture_sandbox: "MigrationSandbox") -> "SchemaSnapshotter":
+def confiture_snapshotter(confiture_sandbox: MigrationSandbox) -> SchemaSnapshotter:
     """Provide schema snapshotter from sandbox.
 
     Convenience fixture that extracts the snapshotter from the sandbox.
@@ -178,7 +179,7 @@ def migration_test(migration_name: str):
     def decorator(cls):
         # Create a migration fixture for this specific test class
         @pytest.fixture
-        def migration(self, confiture_sandbox: "MigrationSandbox"):
+        def migration(self, confiture_sandbox: MigrationSandbox):  # noqa: ARG001
             """Migration fixture injected by @migration_test decorator."""
             return confiture_sandbox.load(migration_name)
 
