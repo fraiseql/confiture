@@ -7,6 +7,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-01-18
+
+### Added - Developer Experience Improvements (Issue #7)
+
+**Migration Loader Utility** (`load_migration`):
+- Simple function to load migrations without importlib boilerplate
+- Support loading by full name: `load_migration("003_move_tables")`
+- Support loading by version prefix: `load_migration(version="003")`
+- Custom migrations directory support
+- Clear error messages with `MigrationNotFoundError` and `MigrationLoadError`
+
+**JSON Output for Status Command**:
+- New `--format json` flag for `migrate status` command
+- New `--output` / `-o` flag to save status to file
+- Structured JSON output with applied, pending, current version, and migration details
+- Machine-readable format for CI/CD integration
+
+**Baseline Command** (`migrate baseline`):
+- Mark migrations as applied without executing them
+- `--through` flag to mark all migrations up to a version
+- `--dry-run` support to preview what would be marked
+- Perfect for adopting confiture on existing databases
+- Records baseline operations with `execution_time_ms = 0`
+
+**SQL-Only Migration Files**:
+- **File pairs**: `.up.sql` / `.down.sql` files (no Python needed)
+- **Class attributes**: `SQLMigration` with `up_sql` / `down_sql` attributes
+- Automatic discovery alongside Python migrations
+- Full support for checksums, dry-run, and status tracking
+- Mixed Python + SQL migrations in same directory
+
+**Migration Testing Sandbox** (`MigrationSandbox`):
+- Context manager with automatic transaction rollback
+- Pre-loaded testing utilities (validator, snapshotter)
+- Works with URL (creates connection) or existing connection (uses savepoint)
+- Convenience methods: `capture_baseline()`, `assert_no_data_loss()`, `assert_constraints_valid()`
+- Direct SQL execution: `execute()` and `query()` methods
+
+**Pytest Plugin**:
+- Auto-registered via pytest11 entry point (works when confiture is installed)
+- Manual registration: `pytest_plugins = ["confiture.testing.pytest"]`
+- Fixtures: `confiture_sandbox`, `confiture_validator`, `confiture_snapshotter`
+- Overridable: `confiture_db_url`, `confiture_migrations_dir`
+- `@migration_test("003")` decorator for class-based migration tests
+
+**Top-Level Testing Imports**:
+- All fixtures importable from `confiture.testing`
+- `from confiture.testing import SchemaSnapshotter, DataValidator, MigrationRunner`
+- `from confiture.testing import load_migration, MigrationSandbox`
+- Backwards compatible with existing deep imports
+
+### New Files
+
+- `python/confiture/testing/loader.py` - Migration loader utility
+- `python/confiture/testing/sandbox.py` - MigrationSandbox context manager
+- `python/confiture/testing/pytest_plugin.py` - Pytest fixtures and plugin
+- `python/confiture/testing/pytest/__init__.py` - Pytest namespace exports
+- `python/confiture/models/sql_file_migration.py` - FileSQLMigration for .sql file pairs
+
+### Modified Files
+
+- `python/confiture/testing/__init__.py` - Top-level exports
+- `python/confiture/cli/main.py` - JSON status output, baseline command
+- `python/confiture/core/connection.py` - `load_migration_class()` for Python + SQL
+- `python/confiture/core/migrator.py` - SQL file discovery, `mark_applied()`
+- `python/confiture/models/__init__.py` - SQLMigration export
+- `python/confiture/models/migration.py` - SQLMigration class
+- `pyproject.toml` - pytest11 entry point
+
+### Example Usage
+
+**Load migrations easily**:
+```python
+from confiture.testing import load_migration
+
+Migration003 = load_migration("003_move_catalog_tables")
+# or by version:
+Migration003 = load_migration(version="003")
+```
+
+**JSON status output**:
+```bash
+confiture migrate status --format json
+# {"applied": ["001", "002"], "pending": ["003"], "current": "002", ...}
+
+confiture migrate status -f json -o status.json
+```
+
+**SQL-only migrations**:
+```
+db/migrations/
+├── 003_move_tables.up.sql
+├── 003_move_tables.down.sql
+```
+
+Or with Python class:
+```python
+class MoveTables(SQLMigration):
+    version = "003"
+    name = "move_tables"
+    up_sql = "ALTER TABLE foo SET SCHEMA bar;"
+    down_sql = "ALTER TABLE bar.foo SET SCHEMA public;"
+```
+
+**Baseline command**:
+```bash
+confiture migrate baseline --through 002
+# Marks 001, 002 as applied without executing
+```
+
+**Testing sandbox**:
+```python
+from confiture.testing import MigrationSandbox
+
+with MigrationSandbox(db_url) as sandbox:
+    migration = sandbox.load("003")
+    baseline = sandbox.capture_baseline()
+    migration.up()
+    sandbox.assert_no_data_loss(baseline)
+# Auto-rollback on exit
+```
+
+**Pytest plugin**:
+```python
+# conftest.py
+pytest_plugins = ["confiture.testing.pytest"]
+
+# test file
+def test_migration(confiture_sandbox):
+    migration = confiture_sandbox.load("003")
+    migration.up()
+    assert confiture_sandbox.validator.constraints_valid()
+```
+
+### Compatibility
+
+- ✅ All existing functionality preserved
+- ✅ No breaking changes
+- ✅ Backwards compatible imports
+- ✅ Python 3.11, 3.12, 3.13 supported
+
+### Closes
+
+- GitHub Issue #7: DX Improvements
+
 ## [0.4.0] - 2025-12-27
 
 ### Added - Phase 5: CLI Integration for Dry-Run Mode
@@ -394,6 +539,7 @@ Migrations to rollback: 2
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.3.6 | 2026-01-18 | DX improvements: migration loader, JSON status, baseline command, SQL migrations, testing sandbox, pytest plugin |
 | 0.3.2 | 2025-11-20 | --force flag for migrate up, troubleshooting guide, database_url support |
 | 0.3.0 | 2025-11-09 | Hexadecimal sorting, dynamic discovery, recursive directories |
 | 0.2.0 | 2025-11-09 | Production CI/CD, Trusted Publishing, Multi-platform wheels |
