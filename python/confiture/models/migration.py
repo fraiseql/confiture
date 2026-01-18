@@ -252,13 +252,9 @@ class SQLMigration(Migration):
 
         # Validate SQL attributes are defined
         if not hasattr(self.__class__, "up_sql") or self.__class__.up_sql is None:
-            raise TypeError(
-                f"{self.__class__.__name__} must define an 'up_sql' class attribute"
-            )
+            raise TypeError(f"{self.__class__.__name__} must define an 'up_sql' class attribute")
         if not hasattr(self.__class__, "down_sql") or self.__class__.down_sql is None:
-            raise TypeError(
-                f"{self.__class__.__name__} must define a 'down_sql' class attribute"
-            )
+            raise TypeError(f"{self.__class__.__name__} must define a 'down_sql' class attribute")
 
     def up(self) -> None:
         """Apply the migration by executing up_sql."""

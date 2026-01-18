@@ -79,9 +79,7 @@ def load_migration(
         migrations_dir = Path("db/migrations")
 
     if not migrations_dir.exists():
-        raise MigrationNotFoundError(
-            f"Migrations directory not found: {migrations_dir.absolute()}"
-        )
+        raise MigrationNotFoundError(f"Migrations directory not found: {migrations_dir.absolute()}")
 
     # Find the migration file
     migration_file: Path | None = None

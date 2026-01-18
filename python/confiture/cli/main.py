@@ -608,11 +608,13 @@ def migrate_status(
             else:
                 status = "unknown"
 
-            migrations_data.append({
-                "version": version,
-                "name": name,
-                "status": status,
-            })
+            migrations_data.append(
+                {
+                    "version": version,
+                    "name": name,
+                    "status": status,
+                }
+            )
 
         # Determine current version (highest applied)
         current_version = applied_list[-1] if applied_list else None
@@ -1322,7 +1324,9 @@ def migrate_baseline(
     try:
         if not config.exists():
             console.print(f"[red]❌ Config file not found: {config}[/red]")
-            console.print("[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]")
+            console.print(
+                "[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]"
+            )
             raise typer.Exit(1)
 
         if not migrations_dir.exists():

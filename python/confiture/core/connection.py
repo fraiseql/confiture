@@ -180,6 +180,5 @@ def load_migration_class(migration_file: Path) -> type:
         return FileSQLMigration.from_files(migration_file, down_file)
     else:
         raise MigrationError(
-            f"Unknown migration file type: {migration_file}\n"
-            f"Expected .py or .up.sql file"
+            f"Unknown migration file type: {migration_file}\nExpected .py or .up.sql file"
         )

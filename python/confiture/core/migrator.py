@@ -434,7 +434,9 @@ class Migrator:
             )
 
         self.connection.commit()
-        logger.info(f"Marked migration {migration.version} ({migration.name}) as applied ({reason})")
+        logger.info(
+            f"Marked migration {migration.version} ({migration.name}) as applied ({reason})"
+        )
 
         return migration.version
 

@@ -154,7 +154,7 @@ jobs:
           uv-cache-${{ runner.os }}-
     - name: Install ty (Astral type checker)
       run: |
-        uv tool install ty --with-requirements
+        uv tool install ty
     - name: Run ty type check on Python code
       run: uv run ty check python/confiture/
       timeout-minutes: 5
