@@ -65,6 +65,9 @@ FraiseQL = "https://github.com/fraiseql/fraiseql"
 [project.scripts]
 confiture = "confiture.cli.main:app"
 
+[project.entry-points."pytest11"]
+confiture = "confiture.testing.pytest_plugin"
+
 [build-system]
 requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"

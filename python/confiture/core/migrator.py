@@ -371,6 +371,73 @@ class Migrator:
                 (slug, migration.version, migration.name, execution_time_ms, checksum),
             )
 
+    def mark_applied(
+        self,
+        migration_file: Path,
+        reason: str = "baseline",
+    ) -> str:
+        """Mark a migration as applied without executing it.
+
+        Records the migration in the tracking table without running the up() method.
+        Useful for:
+        - Establishing a baseline when adopting confiture on an existing database
+        - Setting up a new environment from a backup
+        - Recovering from a failed migration state
+
+        Args:
+            migration_file: Path to migration file (.py or .up.sql)
+            reason: Reason for marking as applied (stored in notes)
+
+        Returns:
+            Version of the migration that was marked as applied
+
+        Raises:
+            MigrationError: If migration is already applied or cannot be loaded
+
+        Example:
+            >>> migrator.mark_applied(Path("db/migrations/001_create_users.py"))
+            "001"
+        """
+        from datetime import datetime
+
+        from confiture.core.connection import load_migration_class
+
+        # Load the migration class to get version and name
+        migration_class = load_migration_class(migration_file)
+
+        # Create a minimal instance just to read attributes
+        # We need to pass a connection but won't use it
+        migration = migration_class(connection=self.connection)
+
+        # Check if already applied
+        applied_versions = set(self.get_applied_versions())
+        if migration.version in applied_versions:
+            logger.info(f"Migration {migration.version} already applied, skipping")
+            return migration.version
+
+        # Generate slug with baseline marker
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        slug = f"{migration.name}_{timestamp}_baseline"
+
+        # Compute checksum
+        checksum = compute_checksum(migration_file)
+
+        # Record in tracking table with execution_time_ms = 0 (not executed)
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO confiture_migrations
+                    (slug, version, name, execution_time_ms, checksum)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (slug, migration.version, migration.name, 0, checksum),
+            )
+
+        self.connection.commit()
+        logger.info(f"Marked migration {migration.version} ({migration.name}) as applied ({reason})")
+
+        return migration.version
+
     def rollback(self, migration: Migration) -> None:
         """Rollback a migration and remove it from tracking table.
 
@@ -530,17 +597,23 @@ class Migrator:
     def find_migration_files(self, migrations_dir: Path | None = None) -> list[Path]:
         """Find all migration files in the migrations directory.
 
+        Discovers both Python migrations (.py) and SQL file migrations (.up.sql).
+        For SQL migrations, returns the .up.sql file path (the .down.sql is
+        inferred when loading).
+
         Args:
             migrations_dir: Optional custom migrations directory.
                            If None, uses db/migrations/ (default)
 
         Returns:
-            List of migration file paths, sorted by version number
+            List of migration file paths, sorted by version number.
+            Includes both .py files and .up.sql files.
 
         Example:
             >>> migrator = Migrator(connection=conn)
             >>> files = migrator.find_migration_files()
-            >>> # [Path("db/migrations/001_create_users.py"), ...]
+            >>> # [Path("db/migrations/001_create_users.py"),
+            >>> #  Path("db/migrations/002_add_posts.up.sql"), ...]
         """
         if migrations_dir is None:
             migrations_dir = Path("db") / "migrations"
@@ -549,13 +622,18 @@ class Migrator:
             return []
 
         # Find all .py files (excluding __pycache__, __init__.py)
-        migration_files = sorted(
-            [
-                f
-                for f in migrations_dir.glob("*.py")
-                if f.name != "__init__.py" and not f.name.startswith("_")
-            ]
-        )
+        py_files = [
+            f
+            for f in migrations_dir.glob("*.py")
+            if f.name != "__init__.py" and not f.name.startswith("_")
+        ]
+
+        # Find all .up.sql files (SQL migrations)
+        sql_files = list(migrations_dir.glob("*.up.sql"))
+
+        # Combine and sort by version
+        all_files = py_files + sql_files
+        migration_files = sorted(all_files, key=lambda f: self._version_from_filename(f.name))
 
         return migration_files
 
@@ -591,8 +669,9 @@ class Migrator:
     def _version_from_filename(self, filename: str) -> str:
         """Extract version from migration filename.
 
-        Migration files follow the format: {version}_{name}.py
-        Example: "001_create_users.py" -> "001"
+        Supports both Python and SQL migrations:
+        - Python: {version}_{name}.py -> "001_create_users.py" -> "001"
+        - SQL: {version}_{name}.up.sql -> "001_create_users.up.sql" -> "001"
 
         Args:
             filename: Migration filename
@@ -603,7 +682,15 @@ class Migrator:
         Example:
             >>> migrator._version_from_filename("042_add_column.py")
             "042"
+            >>> migrator._version_from_filename("042_add_column.up.sql")
+            "042"
         """
+        # Remove SQL file extensions if present
+        if filename.endswith(".up.sql"):
+            filename = filename[:-7]  # Remove ".up.sql"
+        elif filename.endswith(".down.sql"):
+            filename = filename[:-9]  # Remove ".down.sql"
+
         # Split on first underscore
         version = filename.split("_")[0]
         return version

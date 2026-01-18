@@ -18,6 +18,9 @@ class Migration(ABC):
     - Implement up() method for applying the migration
     - Implement down() method for rolling back the migration
 
+    Alternatively, for simple SQL-only migrations, subclass SQLMigration
+    and define `up_sql` and `down_sql` class attributes instead of methods.
+
     Migrations can optionally define hooks that execute before/after DDL:
     - before_validation_hooks: Pre-flight checks before migration
     - before_ddl_hooks: Data prep before structural changes
@@ -77,6 +80,14 @@ class Migration(ABC):
         ...
         ...     def down(self):
         ...         self.execute('DROP INDEX CONCURRENTLY IF EXISTS idx_search')
+
+    Example SQL-only migration (using SQLMigration):
+        >>> class MoveCatalogTables(SQLMigration):
+        ...     version = "003"
+        ...     name = "move_catalog_tables"
+        ...
+        ...     up_sql = "ALTER TABLE tenant.products SET SCHEMA catalog;"
+        ...     down_sql = "ALTER TABLE catalog.products SET SCHEMA tenant;"
     """
 
     # Subclasses must define these
@@ -178,3 +189,81 @@ class Migration(ABC):
         except Exception as e:
             # Wrap the error with SQL context
             raise SQLError(sql, params, e) from e
+
+
+class SQLMigration(Migration):
+    """Migration that executes SQL from class attributes.
+
+    A convenience class for simple SQL-only migrations that don't need
+    Python logic. Instead of implementing up() and down() methods,
+    define `up_sql` and `down_sql` class attributes.
+
+    This reduces boilerplate for simple schema changes while maintaining
+    full compatibility with the migration system (hooks, transactions, etc.).
+
+    Attributes:
+        up_sql: SQL to execute for the forward migration
+        down_sql: SQL to execute for the rollback
+
+    Example:
+        >>> class MoveCatalogTables(SQLMigration):
+        ...     version = "003"
+        ...     name = "move_catalog_tables"
+        ...
+        ...     up_sql = '''
+        ...         ALTER TABLE tenant.tb_datasupplier SET SCHEMA catalog;
+        ...         ALTER TABLE tenant.tb_product SET SCHEMA catalog;
+        ...     '''
+        ...
+        ...     down_sql = '''
+        ...         ALTER TABLE catalog.tb_datasupplier SET SCHEMA tenant;
+        ...         ALTER TABLE catalog.tb_product SET SCHEMA tenant;
+        ...     '''
+
+    Example with non-transactional mode:
+        >>> class AddConcurrentIndex(SQLMigration):
+        ...     version = "004"
+        ...     name = "add_concurrent_index"
+        ...     transactional = False
+        ...
+        ...     up_sql = "CREATE INDEX CONCURRENTLY idx_name ON users(name);"
+        ...     down_sql = "DROP INDEX CONCURRENTLY IF EXISTS idx_name;"
+
+    Note:
+        - Multi-statement SQL is supported (separate with semicolons)
+        - For complex migrations with conditional logic, use Migration base class
+        - Hooks are fully supported with SQLMigration
+    """
+
+    # Subclasses must define these
+    up_sql: str
+    down_sql: str
+
+    def __init__(self, connection: psycopg.Connection):
+        """Initialize SQL migration.
+
+        Args:
+            connection: psycopg3 database connection
+
+        Raises:
+            TypeError: If version, name, up_sql, or down_sql not defined
+        """
+        super().__init__(connection)
+
+        # Validate SQL attributes are defined
+        if not hasattr(self.__class__, "up_sql") or self.__class__.up_sql is None:
+            raise TypeError(
+                f"{self.__class__.__name__} must define an 'up_sql' class attribute"
+            )
+        if not hasattr(self.__class__, "down_sql") or self.__class__.down_sql is None:
+            raise TypeError(
+                f"{self.__class__.__name__} must define a 'down_sql' class attribute"
+            )
+
+    def up(self) -> None:
+        """Apply the migration by executing up_sql."""
+        self.execute(self.up_sql)
+
+    def down(self) -> None:
+        """Rollback the migration by executing down_sql."""
+        self.execute(self.down_sql)

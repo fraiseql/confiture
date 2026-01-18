@@ -130,3 +130,56 @@ def get_migration_class(module: ModuleType) -> type:
             return attr
 
     raise MigrationError(f"No Migration subclass found in {module}")
+
+
+def load_migration_class(migration_file: Path) -> type:
+    """Load a migration class from either Python or SQL file.
+
+    This is the main entry point for loading migrations. It handles:
+    - Python migrations (.py files) - loaded via importlib
+    - SQL file migrations (.up.sql files) - converted to FileSQLMigration
+
+    Args:
+        migration_file: Path to migration file (.py or .up.sql)
+
+    Returns:
+        Migration class (not instance)
+
+    Raises:
+        MigrationError: If migration cannot be loaded
+        FileNotFoundError: If SQL down file is missing
+
+    Example:
+        >>> # Python migration
+        >>> cls = load_migration_class(Path("db/migrations/001_create_users.py"))
+        >>> migration = cls(connection=conn)
+
+        >>> # SQL migration
+        >>> cls = load_migration_class(Path("db/migrations/002_add_posts.up.sql"))
+        >>> migration = cls(connection=conn)
+    """
+    if migration_file.suffix == ".py":
+        # Python migration
+        module = load_migration_module(migration_file)
+        return get_migration_class(module)
+    elif migration_file.name.endswith(".up.sql"):
+        # SQL file migration
+        from confiture.models.sql_file_migration import FileSQLMigration
+
+        # Find the matching .down.sql file
+        base_name = migration_file.name.replace(".up.sql", "")
+        down_file = migration_file.parent / f"{base_name}.down.sql"
+
+        if not down_file.exists():
+            raise MigrationError(
+                f"SQL migration {migration_file.name} has no matching .down.sql file.\n"
+                f"Expected: {down_file}\n"
+                f"Hint: Create {down_file.name} with the rollback SQL"
+            )
+
+        return FileSQLMigration.from_files(migration_file, down_file)
+    else:
+        raise MigrationError(
+            f"Unknown migration file type: {migration_file}\n"
+            f"Expected .py or .up.sql file"
+        )

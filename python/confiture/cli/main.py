@@ -505,26 +505,65 @@ def migrate_status(
         "-c",
         help="Configuration file (optional, to show applied status)",
     ),
+    output_format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table (default) or json",
+    ),
+    output_file: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file (useful with --format json)",
+    ),
 ) -> None:
     """Show migration status.
 
     If config is provided, shows which migrations are applied vs pending.
+
+    Examples:
+        confiture migrate status
+        confiture migrate status --format json
+        confiture migrate status -f json -o status.json
     """
     try:
+        # Validate output format
+        if output_format not in ("table", "json"):
+            console.print(f"[red]❌ Invalid format: {output_format}. Use 'table' or 'json'[/red]")
+            raise typer.Exit(1)
+
         if not migrations_dir.exists():
-            console.print("[yellow]No migrations directory found.[/yellow]")
-            console.print(f"Expected: {migrations_dir.absolute()}")
+            if output_format == "json":
+                result = {"error": f"Migrations directory not found: {migrations_dir.absolute()}"}
+                _output_json(result, output_file, console)
+            else:
+                console.print("[yellow]No migrations directory found.[/yellow]")
+                console.print(f"Expected: {migrations_dir.absolute()}")
             return
 
-        # Find migration files
-        migration_files = sorted(migrations_dir.glob("*.py"))
+        # Find migration files (both Python and SQL)
+        py_files = list(migrations_dir.glob("*.py"))
+        sql_files = list(migrations_dir.glob("*.up.sql"))
+        migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
 
         if not migration_files:
-            console.print("[yellow]No migrations found.[/yellow]")
+            if output_format == "json":
+                result = {
+                    "applied": [],
+                    "pending": [],
+                    "current": None,
+                    "total": 0,
+                    "migrations": [],
+                }
+                _output_json(result, output_file, console)
+            else:
+                console.print("[yellow]No migrations found.[/yellow]")
             return
 
         # Get applied migrations from database if config provided
-        applied_versions = set()
+        applied_versions: set[str] = set()
+        db_error: str | None = None
         if config and config.exists():
             try:
                 from confiture.core.connection import create_connection, load_config
@@ -537,47 +576,107 @@ def migrate_status(
                 applied_versions = set(migrator.get_applied_versions())
                 conn.close()
             except Exception as e:
-                console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
-                console.print("[yellow]Showing file list only (status unknown)[/yellow]\n")
+                db_error = str(e)
+                if output_format != "json":
+                    console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
+                    console.print("[yellow]Showing file list only (status unknown)[/yellow]\n")
 
-        # Display migrations in a table
-        table = Table(title="Migrations")
-        table.add_column("Version", style="cyan")
-        table.add_column("Name", style="green")
-        table.add_column("Status", style="yellow")
-
-        pending_count = 0
-        applied_count = 0
+        # Build migrations data
+        migrations_data: list[dict[str, str]] = []
+        applied_list: list[str] = []
+        pending_list: list[str] = []
 
         for migration_file in migration_files:
-            # Extract version and name from filename (e.g., "001_add_users.py")
-            parts = migration_file.stem.split("_", 1)
+            # Extract version and name from filename
+            # Python: "001_add_users.py" -> version="001", name="add_users"
+            # SQL: "001_add_users.up.sql" -> version="001", name="add_users"
+            base_name = migration_file.stem
+            if base_name.endswith(".up"):
+                base_name = base_name[:-3]  # Remove ".up" suffix
+            parts = base_name.split("_", 1)
             version = parts[0] if len(parts) > 0 else "???"
-            name = parts[1] if len(parts) > 1 else migration_file.stem
+            name = parts[1] if len(parts) > 1 else base_name
 
             # Determine status
             if applied_versions:
                 if version in applied_versions:
-                    status = "[green]✅ applied[/green]"
-                    applied_count += 1
+                    status = "applied"
+                    applied_list.append(version)
                 else:
-                    status = "[yellow]⏳ pending[/yellow]"
-                    pending_count += 1
+                    status = "pending"
+                    pending_list.append(version)
             else:
                 status = "unknown"
 
-            table.add_row(version, name, status)
+            migrations_data.append({
+                "version": version,
+                "name": name,
+                "status": status,
+            })
 
-        console.print(table)
-        console.print(f"\n📊 Total: {len(migration_files)} migrations", end="")
-        if applied_versions:
-            console.print(f" ({applied_count} applied, {pending_count} pending)")
+        # Determine current version (highest applied)
+        current_version = applied_list[-1] if applied_list else None
+
+        if output_format == "json":
+            result: dict[str, Any] = {
+                "applied": applied_list,
+                "pending": pending_list,
+                "current": current_version,
+                "total": len(migration_files),
+                "migrations": migrations_data,
+            }
+            if db_error:
+                result["warning"] = f"Could not connect to database: {db_error}"
+            _output_json(result, output_file, console)
         else:
-            console.print()
+            # Display migrations in a table
+            table = Table(title="Migrations")
+            table.add_column("Version", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Status", style="yellow")
+
+            for migration in migrations_data:
+                if migration["status"] == "applied":
+                    status_display = "[green]✅ applied[/green]"
+                elif migration["status"] == "pending":
+                    status_display = "[yellow]⏳ pending[/yellow]"
+                else:
+                    status_display = "unknown"
+
+                table.add_row(migration["version"], migration["name"], status_display)
+
+            console.print(table)
+            console.print(f"\n📊 Total: {len(migration_files)} migrations", end="")
+            if applied_versions:
+                console.print(f" ({len(applied_list)} applied, {len(pending_list)} pending)")
+            else:
+                console.print()
 
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
+        if output_format == "json":
+            result = {"error": str(e)}
+            _output_json(result, output_file, console)
+        else:
+            console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
+    """Output JSON data to file or console.
+
+    Args:
+        data: Data to output as JSON
+        output_file: Optional file to write to
+        console: Console for output
+    """
+    import json
+
+    json_str = json.dumps(data, indent=2)
+    if output_file:
+        output_file.write_text(json_str)
+        console.print(f"[green]✅ Output written to {output_file}[/green]")
+    else:
+        console.print(json_str)
 
 
 @migrate_app.command("up")
@@ -685,9 +784,8 @@ def migrate_up(
     )
     from confiture.core.connection import (
         create_connection,
-        get_migration_class,
         load_config,
-        load_migration_module,
+        load_migration_class,
     )
     from confiture.core.locking import LockAcquisitionError, LockConfig, MigrationLock
     from confiture.core.migrator import Migrator
@@ -836,8 +934,7 @@ def migrate_up(
             try:
                 # Collect migration information
                 for migration_file in migrations_to_apply:
-                    module = load_migration_module(migration_file)
-                    migration_class = get_migration_class(module)
+                    migration_class = load_migration_class(migration_file)
                     migration = migration_class(connection=conn)
 
                     migration_info = {
@@ -927,8 +1024,7 @@ def migrate_up(
 
                 for migration_file in migrations_to_apply:
                     # Load migration module
-                    module = load_migration_module(migration_file)
-                    migration_class = get_migration_class(module)
+                    migration_class = load_migration_class(migration_file)
 
                     # Create migration instance
                     migration = migration_class(connection=conn)
@@ -1183,6 +1279,146 @@ class {class_name}(Migration):
         raise typer.Exit(1) from e
 
 
+@migrate_app.command("baseline")
+def migrate_baseline(
+    through: str = typer.Option(
+        ...,
+        "--through",
+        "-t",
+        help="Mark all migrations through this version as applied",
+    ),
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file with database connection",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be marked without making changes",
+    ),
+) -> None:
+    """Mark migrations as applied without executing them.
+
+    Use this to establish a baseline when:
+    - Adopting confiture on an existing database
+    - Setting up a new environment from a backup
+    - Recovering from a failed migration state
+
+    Examples:
+        confiture migrate baseline --through 002
+        confiture migrate baseline -t 005 --dry-run
+        confiture migrate baseline -t 003 -c db/environments/production.yaml
+    """
+    from confiture.core.connection import create_connection, load_config
+    from confiture.core.migrator import Migrator
+
+    try:
+        if not config.exists():
+            console.print(f"[red]❌ Config file not found: {config}[/red]")
+            console.print("[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]")
+            raise typer.Exit(1)
+
+        if not migrations_dir.exists():
+            console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+            raise typer.Exit(1)
+
+        # Load config and create connection
+        config_data = load_config(config)
+        conn = create_connection(config_data)
+
+        # Initialize migrator
+        migrator = Migrator(connection=conn)
+        migrator.initialize()
+
+        # Find all migration files
+        all_migrations = migrator.find_migration_files(migrations_dir)
+
+        if not all_migrations:
+            console.print("[yellow]No migrations found.[/yellow]")
+            conn.close()
+            return
+
+        # Filter migrations up to and including the target version
+        migrations_to_mark: list[Path] = []
+        for migration_file in all_migrations:
+            version = migrator._version_from_filename(migration_file.name)
+            migrations_to_mark.append(migration_file)
+            if version == through:
+                break
+        else:
+            # Target version not found
+            console.print(f"[red]❌ Migration version '{through}' not found[/red]")
+            console.print("[yellow]Available versions:[/yellow]")
+            for mf in all_migrations[:10]:
+                v = migrator._version_from_filename(mf.name)
+                console.print(f"  • {v}")
+            if len(all_migrations) > 10:
+                console.print(f"  ... and {len(all_migrations) - 10} more")
+            conn.close()
+            raise typer.Exit(1)
+
+        # Get already applied versions
+        applied_versions = set(migrator.get_applied_versions())
+
+        # Show what will be done
+        console.print(f"\n[cyan]📋 Baseline: marking migrations through {through}[/cyan]\n")
+
+        if dry_run:
+            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+
+        marked_count = 0
+        skipped_count = 0
+
+        for migration_file in migrations_to_mark:
+            version = migrator._version_from_filename(migration_file.name)
+            # Extract name
+            base_name = migration_file.stem
+            if base_name.endswith(".up"):
+                base_name = base_name[:-3]
+            parts = base_name.split("_", 1)
+            name = parts[1] if len(parts) > 1 else base_name
+
+            if version in applied_versions:
+                console.print(f"  [dim]⏭️  {version} {name} (already applied)[/dim]")
+                skipped_count += 1
+            else:
+                if dry_run:
+                    console.print(f"  [cyan]📝 {version} {name} (would mark as applied)[/cyan]")
+                else:
+                    migrator.mark_applied(migration_file, reason="baseline")
+                    console.print(f"  [green]✅ {version} {name} (marked as applied)[/green]")
+                marked_count += 1
+
+        # Summary
+        console.print()
+        if dry_run:
+            console.print(
+                f"[cyan]📊 Would mark {marked_count} migration(s), "
+                f"skip {skipped_count} already applied[/cyan]"
+            )
+            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+        else:
+            console.print(
+                f"[green]✅ Marked {marked_count} migration(s) as applied, "
+                f"skipped {skipped_count} already applied[/green]"
+            )
+
+        conn.close()
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
 @migrate_app.command("diff")
 def migrate_diff(
     old_schema: Path = typer.Argument(..., help="Old schema file"),
@@ -1317,9 +1553,8 @@ def migrate_down(
     """
     from confiture.core.connection import (
         create_connection,
-        get_migration_class,
         load_config,
-        load_migration_module,
+        load_migration_class,
     )
     from confiture.core.migrator import Migrator
 
@@ -1391,9 +1626,8 @@ def migrate_down(
                 if not migration_file:
                     continue
 
-                # Load migration module
-                module = load_migration_module(migration_file)
-                migration_class = get_migration_class(module)
+                # Load migration class
+                migration_class = load_migration_class(migration_file)
 
                 migration = migration_class(connection=conn)
 
@@ -1463,8 +1697,7 @@ def migrate_down(
                 continue
 
             # Load migration module
-            module = load_migration_module(migration_file)
-            migration_class = get_migration_class(module)
+            migration_class = load_migration_class(migration_file)
 
             # Create migration instance
             migration = migration_class(connection=conn)
