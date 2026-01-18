@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from confiture.testing.loader import (
-    MigrationLoadError,
     MigrationNotFoundError,
     find_migration_by_version,
     load_migration,
