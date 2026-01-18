@@ -12,7 +12,7 @@ class TestPackageMetadata:
 
         assert __version__ is not None
         assert isinstance(__version__, str)
-        assert "0.3.2" in __version__
+        assert "2.2.0" in __version__
 
     def test_author_exists(self):
         """Test that __author__ is defined."""
