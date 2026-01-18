@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-01-18
+
+### Fixed
+
+**SQL-Only Migration Support in Testing Framework** (Issue #8):
+- `load_migration()` now automatically detects and loads SQL-only migrations
+- Searches for `.up.sql`/`.down.sql` file pairs when Python migration not found
+- `find_migration_by_version()` also updated to search both formats
+- Python migrations are still tried first for backwards compatibility
+
+### Added
+
+- 17 new unit tests for `load_migration()` covering all migration formats
+- Helpful error messages when `.down.sql` file is missing
+
+### Example
+
+```python
+from confiture.testing import load_migration
+
+# Both formats work now:
+Migration = load_migration("003_move_tables")  # Python or SQL auto-detected
+Migration = load_migration(version="003")       # Version lookup works too
+
+# SQL-only migrations are discovered automatically:
+# db/migrations/003_move_tables.up.sql
+# db/migrations/003_move_tables.down.sql
+```
+
+### Closes
+
+- GitHub Issue #8: load_migration() should support SQL-only migrations
+
 ## [0.3.6] - 2026-01-18
 
 ### Added - Developer Experience Improvements (Issue #7)
@@ -539,6 +572,7 @@ Migrations to rollback: 2
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.3.7 | 2026-01-18 | Fix: load_migration() now supports SQL-only migrations |
 | 0.3.6 | 2026-01-18 | DX improvements: migration loader, JSON status, baseline command, SQL migrations, testing sandbox, pytest plugin |
 | 0.3.2 | 2025-11-20 | --force flag for migrate up, troubleshooting guide, database_url support |
 | 0.3.0 | 2025-11-09 | Hexadecimal sorting, dynamic discovery, recursive directories |
