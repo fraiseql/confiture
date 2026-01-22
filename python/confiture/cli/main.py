@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.branch import branch_app
+from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.core.builder import SchemaBuilder
@@ -498,6 +499,9 @@ app.add_typer(branch_app, name="branch")
 
 # Add generate subcommand group (pgGit migration generation)
 app.add_typer(generate_app, name="generate")
+
+# Add coordinate subcommand group (multi-agent coordination)
+app.add_typer(coordinate_app, name="coordinate")
 
 
 @migrate_app.command("status")
