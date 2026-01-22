@@ -122,7 +122,7 @@ $ confiture build --env local
 
 **Features**:
 - Manages migration execution state
-- Tracks applied migrations in `confiture_migrations` table
+- Tracks applied migrations in `tb_confiture` table
 - Supports migration up and down
 - Handles dependency resolution
 
@@ -142,9 +142,9 @@ class Migrator:
         """Undo N most recent migrations"""
 ```
 
-**Storage**: Tracks state in `public.confiture_migrations` table:
+**Storage**: Tracks state in `public.tb_confiture` table:
 ```sql
-CREATE TABLE confiture_migrations (
+CREATE TABLE tb_confiture (
     version TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     applied_at TIMESTAMP NOT NULL,

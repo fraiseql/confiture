@@ -24,7 +24,7 @@ Common issues and solutions when using Confiture.
 
 3. Reset tracking (destructive):
    ```bash
-   psql -c "DROP TABLE IF EXISTS confiture_migrations CASCADE;"
+   psql -c "DROP TABLE IF EXISTS tb_confiture CASCADE;"
    confiture migrate up
    ```
 
@@ -42,12 +42,12 @@ Common issues and solutions when using Confiture.
 
 2. Check migration history:
    ```sql
-   SELECT * FROM confiture_migrations ORDER BY applied_at DESC;
+   SELECT * FROM tb_confiture ORDER BY applied_at DESC;
    ```
 
 3. Remove incorrect entry (careful!):
    ```sql
-   DELETE FROM confiture_migrations WHERE version = '005_add_email';
+   DELETE FROM tb_confiture WHERE version = '005_add_email';
    ```
 
 ### Migration rollback fails

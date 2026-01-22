@@ -218,7 +218,7 @@ from confiture.hooks import register_hook, HookContext
 
 # Metrics
 MIGRATIONS_TOTAL = Counter(
-    'confiture_migrations_total',
+    'tb_confiture_total',
     'Total migrations executed',
     ['environment', 'status']
 )
@@ -269,7 +269,7 @@ def record_failure(context: HookContext, error: Exception) -> None:
         "title": "Migration Success Rate",
         "type": "stat",
         "targets": [{
-          "expr": "sum(rate(confiture_migrations_total{status='success'}[1h])) / sum(rate(confiture_migrations_total[1h])) * 100"
+          "expr": "sum(rate(tb_confiture_total{status='success'}[1h])) / sum(rate(tb_confiture_total[1h])) * 100"
         }]
       },
       {

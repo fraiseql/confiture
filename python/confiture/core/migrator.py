@@ -15,6 +15,7 @@ from confiture.core.connection import get_migration_class, load_migration_module
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.locking import LockConfig, MigrationLock
+from confiture.core.preconditions import PreconditionValidator, PreconditionValidationError
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
@@ -25,7 +26,7 @@ class Migrator:
     """Executes database migrations and tracks their state.
 
     The Migrator class is responsible for:
-    - Creating and managing the confiture_migrations tracking table
+    - Creating and managing the tb_confiture tracking table
     - Applying migrations (running up() methods)
     - Rolling back migrations (running down() methods)
     - Recording execution time and checksums
@@ -66,15 +67,14 @@ class Migrator:
             raise SQLError(sql, params, e) from e
 
     def initialize(self) -> None:
-        """Create confiture_migrations tracking table with modern identity trinity.
+        """Create tb_confiture tracking table with Trinity pattern.
 
-        Identity pattern:
-        - id: Auto-incrementing BIGINT (internal, sequential)
-        - pk_migration: UUID (stable identifier, external APIs)
-        - slug: Human-readable (migration_name + timestamp)
+        Identity pattern (Trinity):
+        - id: UUID (external, stable identifier)
+        - pk_confiture: BIGINT (internal, sequential)
+        - slug: TEXT (human-readable reference)
 
         This method is idempotent - safe to call multiple times.
-        Handles migration from old table structure.
 
         Raises:
             MigrationError: If table creation fails
@@ -88,65 +88,18 @@ class Migrator:
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables
-                        WHERE table_name = 'confiture_migrations'
+                        WHERE table_name = 'tb_confiture'
                     )
                 """)
                 result = cursor.fetchone()
                 table_exists = result[0] if result else False
 
-            if table_exists:
-                # Check if we need to migrate old table structure
-                with self.connection.cursor() as cursor:
-                    cursor.execute("""
-                        SELECT EXISTS (
-                            SELECT FROM information_schema.columns
-                            WHERE table_name = 'confiture_migrations'
-                            AND column_name = 'pk_migration'
-                        )
-                    """)
-                    result = cursor.fetchone()
-                    has_new_structure = result[0] if result else False
-
-                if not has_new_structure:
-                    # Migrate old table structure to new trinity pattern
-                    self._execute_sql("""
-                        ALTER TABLE confiture_migrations
-                        ADD COLUMN pk_migration UUID DEFAULT uuid_generate_v4() UNIQUE,
-                        ADD COLUMN slug TEXT,
-                        ALTER COLUMN id SET DATA TYPE BIGINT,
-                        ALTER COLUMN applied_at SET DATA TYPE TIMESTAMPTZ
-                    """)
-
-                    # Generate slugs for existing migrations
-                    self._execute_sql("""
-                        UPDATE confiture_migrations
-                        SET slug = name || '_' || to_char(applied_at, 'YYYYMMDD_HH24MISS')
-                        WHERE slug IS NULL
-                    """)
-
-                    # Make slug NOT NULL and UNIQUE
-                    self._execute_sql("""
-                        ALTER TABLE confiture_migrations
-                        ALTER COLUMN slug SET NOT NULL,
-                        ADD CONSTRAINT confiture_migrations_slug_unique UNIQUE (slug)
-                    """)
-
-                    # Create new indexes
-                    self._execute_sql("""
-                        CREATE INDEX IF NOT EXISTS idx_confiture_migrations_pk_migration
-                            ON confiture_migrations(pk_migration)
-                    """)
-                    self._execute_sql("""
-                        CREATE INDEX IF NOT EXISTS idx_confiture_migrations_slug
-                            ON confiture_migrations(slug)
-                    """)
-
-            else:
-                # Create new table with trinity pattern
+            if not table_exists:
+                # Create new table with Trinity pattern
                 self._execute_sql("""
-                    CREATE TABLE confiture_migrations (
-                        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                        pk_migration UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
+                    CREATE TABLE tb_confiture (
+                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
                         slug TEXT NOT NULL UNIQUE,
                         version VARCHAR(255) NOT NULL UNIQUE,
                         name VARCHAR(255) NOT NULL,
@@ -158,20 +111,20 @@ class Migrator:
 
                 # Create indexes
                 self._execute_sql("""
-                    CREATE INDEX idx_confiture_migrations_pk_migration
-                        ON confiture_migrations(pk_migration)
+                    CREATE INDEX idx_tb_confiture_pk_confiture
+                        ON tb_confiture(pk_confiture)
                 """)
                 self._execute_sql("""
-                    CREATE INDEX idx_confiture_migrations_slug
-                        ON confiture_migrations(slug)
+                    CREATE INDEX idx_tb_confiture_slug
+                        ON tb_confiture(slug)
                 """)
                 self._execute_sql("""
-                    CREATE INDEX idx_confiture_migrations_version
-                        ON confiture_migrations(version)
+                    CREATE INDEX idx_tb_confiture_version
+                        ON tb_confiture(version)
                 """)
                 self._execute_sql("""
-                    CREATE INDEX idx_confiture_migrations_applied_at
-                        ON confiture_migrations(applied_at DESC)
+                    CREATE INDEX idx_tb_confiture_applied_at
+                        ON tb_confiture(applied_at DESC)
                 """)
 
             self.connection.commit()
@@ -187,6 +140,7 @@ class Migrator:
         migration: Migration,
         force: bool = False,
         migration_file: Path | None = None,
+        skip_preconditions: bool = False,
     ) -> None:
         """Apply a migration and record it in the tracking table.
 
@@ -199,13 +153,20 @@ class Migrator:
         - No automatic rollback on failure
         - Required for CREATE INDEX CONCURRENTLY, etc.
 
+        Precondition Validation:
+        - If migration defines up_preconditions, they are validated first
+        - If any precondition fails, the migration is aborted
+        - Use skip_preconditions=True to bypass validation (not recommended)
+
         Args:
             migration: Migration instance to apply
             force: If True, skip the "already applied" check
             migration_file: Path to migration file for checksum computation
+            skip_preconditions: If True, skip precondition validation (not recommended)
 
         Raises:
             MigrationError: If migration fails or hooks fail
+            PreconditionValidationError: If precondition validation fails
         """
         already_applied = self._is_applied(migration.version)
 
@@ -214,10 +175,54 @@ class Migrator:
                 f"Migration {migration.version} ({migration.name}) has already been applied"
             )
 
+        # Validate preconditions before applying
+        if not skip_preconditions:
+            self._validate_preconditions(
+                migration, direction="up", preconditions=migration.up_preconditions
+            )
+
         if migration.transactional:
             self._apply_transactional(migration, already_applied, migration_file)
         else:
             self._apply_non_transactional(migration, already_applied, migration_file)
+
+    def _validate_preconditions(
+        self,
+        migration: Migration,
+        direction: str,
+        preconditions: list,
+    ) -> None:
+        """Validate migration preconditions before execution.
+
+        Args:
+            migration: Migration being validated
+            direction: "up" or "down" for error messages
+            preconditions: List of preconditions to check
+
+        Raises:
+            PreconditionValidationError: If any precondition fails
+        """
+        if not preconditions:
+            return
+
+        logger.debug(
+            f"Validating {len(preconditions)} preconditions for migration "
+            f"{migration.version} ({direction})"
+        )
+
+        validator = PreconditionValidator(self.connection)
+        try:
+            validator.validate(
+                preconditions,
+                migration_version=migration.version,
+                migration_name=migration.name,
+            )
+            logger.debug(f"All preconditions passed for migration {migration.version}")
+        except PreconditionValidationError as e:
+            logger.error(
+                f"Precondition validation failed for migration {migration.version}: {e}"
+            )
+            raise
 
     def _apply_transactional(
         self,
@@ -364,7 +369,7 @@ class Migrator:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO confiture_migrations
+                INSERT INTO tb_confiture
                     (slug, version, name, execution_time_ms, checksum)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
@@ -426,7 +431,7 @@ class Migrator:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO confiture_migrations
+                INSERT INTO tb_confiture
                     (slug, version, name, execution_time_ms, checksum)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
@@ -440,7 +445,11 @@ class Migrator:
 
         return migration.version
 
-    def rollback(self, migration: Migration) -> None:
+    def rollback(
+        self,
+        migration: Migration,
+        skip_preconditions: bool = False,
+    ) -> None:
         """Rollback a migration and remove it from tracking table.
 
         For transactional migrations (default):
@@ -452,17 +461,30 @@ class Migrator:
         - No automatic rollback on failure
         - Manual cleanup may be required
 
+        Precondition Validation:
+        - If migration defines down_preconditions, they are validated first
+        - If any precondition fails, the rollback is aborted
+        - Use skip_preconditions=True to bypass validation (not recommended)
+
         Args:
             migration: Migration instance to rollback
+            skip_preconditions: If True, skip precondition validation (not recommended)
 
         Raises:
             MigrationError: If migration fails or was not applied
+            PreconditionValidationError: If precondition validation fails
         """
         # Check if applied
         if not self._is_applied(migration.version):
             raise MigrationError(
                 f"Migration {migration.version} ({migration.name}) "
                 "has not been applied, cannot rollback"
+            )
+
+        # Validate preconditions before rolling back
+        if not skip_preconditions:
+            self._validate_preconditions(
+                migration, direction="down", preconditions=migration.down_preconditions
             )
 
         if migration.transactional:
@@ -484,7 +506,7 @@ class Migrator:
             # Remove from tracking table
             self._execute_sql(
                 """
-                DELETE FROM confiture_migrations
+                DELETE FROM tb_confiture
                 WHERE version = %s
                 """,
                 (migration.version,),
@@ -532,7 +554,7 @@ class Migrator:
             # Remove from tracking table
             self._execute_sql(
                 """
-                DELETE FROM confiture_migrations
+                DELETE FROM tb_confiture
                 WHERE version = %s
                 """,
                 (migration.version,),
@@ -571,7 +593,7 @@ class Migrator:
             cursor.execute(
                 """
                 SELECT COUNT(*)
-                FROM confiture_migrations
+                FROM tb_confiture
                 WHERE version = %s
                 """,
                 (version,),
@@ -591,7 +613,7 @@ class Migrator:
         with self.connection.cursor() as cursor:
             cursor.execute("""
                 SELECT version
-                FROM confiture_migrations
+                FROM tb_confiture
                 ORDER BY applied_at ASC
             """)
             return [row[0] for row in cursor.fetchall()]
@@ -880,3 +902,42 @@ class Migrator:
         """
         executor = DryRunExecutor()
         return executor.run(self.connection, migration)
+
+    def check_preconditions(
+        self,
+        migration: Migration,
+        direction: str = "up",
+    ) -> tuple[bool, list[tuple[object, str]]]:
+        """Check migration preconditions without running the migration.
+
+        Useful for:
+        - CI/CD pipelines to verify preconditions before deployment
+        - Pre-flight validation in production
+        - Debugging precondition issues
+
+        Args:
+            migration: Migration instance to check
+            direction: "up" or "down" to specify which preconditions to check
+
+        Returns:
+            Tuple of (all_passed, failures):
+                - all_passed: True if all preconditions passed
+                - failures: List of (precondition, error_message) for failures
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> migration = MyMigration(connection=conn)
+            >>> passed, failures = migrator.check_preconditions(migration)
+            >>> if not passed:
+            ...     for precondition, error in failures:
+            ...         print(f"FAILED: {precondition}: {error}")
+        """
+        preconditions = (
+            migration.up_preconditions if direction == "up" else migration.down_preconditions
+        )
+
+        if not preconditions:
+            return (True, [])
+
+        validator = PreconditionValidator(self.connection)
+        return validator.check(preconditions)

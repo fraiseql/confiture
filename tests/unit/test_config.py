@@ -112,7 +112,7 @@ class TestEnvironmentDefaults:
 
         env = Environment.load("defaults", project_dir=temp_project_dir)
 
-        assert env.migration_table == "confiture_migrations"
+        assert env.migration_table == "tb_confiture"
 
     def test_default_exclude_dirs_empty(self, temp_project_dir: Path):
         """Should have empty exclude_dirs by default"""

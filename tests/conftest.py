@@ -136,7 +136,7 @@ def local_env_config(temp_project_dir: Path) -> Path:
         ),
         "include_dirs": ["db/schema"],
         "exclude_dirs": ["db/schema/99_deprecated"],
-        "migration_table": "confiture_migrations",
+        "migration_table": "tb_confiture",
         "auto_backup": True,
         "require_confirmation": False,
     }

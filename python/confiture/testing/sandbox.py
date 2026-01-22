@@ -12,10 +12,19 @@ Example:
     ...     assert sandbox.validator.constraints_valid()
     ...
     >>> # Auto-rollback at end of context
+
+Pre-state simulation (Issue #10):
+    >>> with MigrationSandbox(db_url) as sandbox:
+    ...     migration = sandbox.load("004_move_catalog_tables")
+    ...     sandbox.simulate_pre_state(migration)  # Runs DOWN to reconstruct pre-state
+    ...     migration.up()  # Now test the UP migration
+    ...     # Assertions...
 """
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +34,18 @@ if TYPE_CHECKING:
     from confiture.models.migration import Migration
     from confiture.testing.fixtures.data_validator import DataBaseline, DataValidator
     from confiture.testing.fixtures.schema_snapshotter import SchemaSnapshotter
+
+
+class PreStateSimulationError(Exception):
+    """Raised when pre-state simulation fails.
+
+    This typically happens when:
+    - The DOWN migration fails
+    - The migration has no reversible DOWN implementation
+    - The database state doesn't support running DOWN
+    """
+
+    pass
 
 
 class MigrationSandbox:
@@ -96,6 +117,10 @@ class MigrationSandbox:
         self._owns_connection = db_url is not None
         self._savepoint_name = "confiture_sandbox"
         self._active = False
+
+        # Pre-state simulation tracking
+        self._pre_state_simulated = False
+        self._simulated_migration: Migration | None = None
 
         self.migrations_dir = migrations_dir or Path("db/migrations")
         self.connection: psycopg.Connection = None  # type: ignore[assignment]
@@ -302,3 +327,172 @@ class MigrationSandbox:
         with self.connection.cursor() as cursor:
             cursor.execute(sql)
             return cursor.fetchall()
+
+    def simulate_pre_state(self, migration: Migration) -> None:
+        """Simulate the pre-migration state by running the DOWN migration.
+
+        This is useful when your local database is already in the post-migration
+        state (e.g., you've already applied the migration), but you want to test
+        the UP migration path.
+
+        The method runs the DOWN migration to reconstruct the pre-migration state,
+        allowing you to then test the UP migration.
+
+        WARNING: This modifies the database state. All changes will be rolled back
+        when the sandbox context exits.
+
+        Args:
+            migration: Migration instance to simulate pre-state for
+
+        Raises:
+            PreStateSimulationError: If DOWN migration fails
+
+        Example:
+            >>> with MigrationSandbox(db_url) as sandbox:
+            ...     migration = sandbox.load("004_move_catalog_tables")
+            ...
+            ...     # Local DB has tables in 'catalog' schema (post-migration state)
+            ...     # Simulate pre-state by running DOWN
+            ...     sandbox.simulate_pre_state(migration)
+            ...
+            ...     # Now tables are in 'tenant' schema (pre-migration state)
+            ...     # Test the UP migration
+            ...     migration.up()
+            ...
+            ...     # Verify tables moved to 'catalog' schema
+            ...     assert sandbox.table_exists("tb_datasupplier", schema="catalog")
+
+        Note:
+            This method tracks that pre-state was simulated. If the sandbox
+            needs to restore state (e.g., for cleanup), it can use this info.
+        """
+        if not self._active:
+            raise RuntimeError("Cannot simulate pre-state outside of sandbox context")
+
+        try:
+            migration.down()
+            self._pre_state_simulated = True
+            self._simulated_migration = migration
+        except Exception as e:
+            raise PreStateSimulationError(
+                f"Failed to simulate pre-state for migration "
+                f"{migration.version} ({migration.name}): {e}\n"
+                f"The DOWN migration failed. This could mean:\n"
+                f"  - The database is not in the expected post-migration state\n"
+                f"  - The DOWN migration has a bug\n"
+                f"  - The migration is not reversible"
+            ) from e
+
+    @contextmanager
+    def in_pre_state(self, migration: Migration) -> Generator[Migration, None, None]:
+        """Context manager for testing in pre-migration state.
+
+        A convenience wrapper around simulate_pre_state() that yields the migration
+        for testing. This is useful for clearly scoping the pre-state simulation.
+
+        Args:
+            migration: Migration instance to simulate pre-state for
+
+        Yields:
+            The same migration instance (for convenience)
+
+        Raises:
+            PreStateSimulationError: If DOWN migration fails
+
+        Example:
+            >>> with MigrationSandbox(db_url) as sandbox:
+            ...     migration = sandbox.load("004_move_catalog_tables")
+            ...
+            ...     with sandbox.in_pre_state(migration):
+            ...         # Database is now in pre-migration state
+            ...         migration.up()
+            ...
+            ...         # Verify migration worked
+            ...         assert sandbox.table_exists("tb_datasupplier", schema="catalog")
+        """
+        self.simulate_pre_state(migration)
+        try:
+            yield migration
+        finally:
+            # No explicit cleanup needed - sandbox rollback handles everything
+            pass
+
+    def table_exists(self, table: str, schema: str = "public") -> bool:
+        """Check if a table exists in the database.
+
+        Convenience method for assertions in tests.
+
+        Args:
+            table: Table name
+            schema: Schema name (default: "public")
+
+        Returns:
+            True if table exists, False otherwise
+
+        Example:
+            >>> assert sandbox.table_exists("users")
+            >>> assert sandbox.table_exists("products", schema="catalog")
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = %s AND table_name = %s
+                )
+                """,
+                (schema, table),
+            )
+            result = cursor.fetchone()
+            return result[0] if result else False
+
+    def column_exists(self, table: str, column: str, schema: str = "public") -> bool:
+        """Check if a column exists in a table.
+
+        Convenience method for assertions in tests.
+
+        Args:
+            table: Table name
+            column: Column name
+            schema: Schema name (default: "public")
+
+        Returns:
+            True if column exists, False otherwise
+
+        Example:
+            >>> assert sandbox.column_exists("users", "email")
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = %s
+                      AND table_name = %s
+                      AND column_name = %s
+                )
+                """,
+                (schema, table, column),
+            )
+            result = cursor.fetchone()
+            return result[0] if result else False
+
+    def get_row_count(self, table: str, schema: str = "public") -> int:
+        """Get the number of rows in a table.
+
+        Convenience method for assertions in tests.
+
+        Args:
+            table: Table name
+            schema: Schema name (default: "public")
+
+        Returns:
+            Number of rows in the table
+
+        Example:
+            >>> assert sandbox.get_row_count("users") == 10
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}"')  # noqa: S608
+            result = cursor.fetchone()
+            return result[0] if result else 0

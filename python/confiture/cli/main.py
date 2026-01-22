@@ -10,6 +10,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.branch import branch_app
+from confiture.cli.generate import generate_app
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
@@ -490,6 +492,12 @@ def lint(
 # Create migrate subcommand group
 migrate_app = typer.Typer(help="Migration commands")
 app.add_typer(migrate_app, name="migrate")
+
+# Add branch subcommand group (pgGit integration)
+app.add_typer(branch_app, name="branch")
+
+# Add generate subcommand group (pgGit migration generation)
+app.add_typer(generate_app, name="generate")
 
 
 @migrate_app.command("status")

@@ -118,7 +118,7 @@ database_url: {db_url}
             # Verify migration was tracked
             with test_db_connection.cursor() as cursor:
                 cursor.execute("""
-                    SELECT COUNT(*) FROM confiture_migrations
+                    SELECT COUNT(*) FROM tb_confiture
                     WHERE version = '001'
                 """)
                 count = cursor.fetchone()[0]
@@ -133,7 +133,7 @@ database_url: {db_url}
             # Verify migration tracking still exists (DROP SCHEMA doesn't remove it)
             with test_db_connection.cursor() as cursor:
                 cursor.execute("""
-                    SELECT COUNT(*) FROM confiture_migrations
+                    SELECT COUNT(*) FROM tb_confiture
                     WHERE version = '001'
                 """)
                 count = cursor.fetchone()[0]
@@ -238,7 +238,7 @@ database_url: {db_url}
             # Verify migration is tracked
             with clean_test_db.cursor() as cursor:
                 cursor.execute("""
-                    SELECT COUNT(*) FROM confiture_migrations
+                    SELECT COUNT(*) FROM tb_confiture
                     WHERE version = '001'
                 """)
                 count = cursor.fetchone()[0]
@@ -278,7 +278,7 @@ database_url: {db_url}
             # Verify migration is still tracked (force doesn't remove existing tracking)
             with clean_test_db.cursor() as cursor:
                 cursor.execute("""
-                    SELECT COUNT(*) FROM confiture_migrations
+                    SELECT COUNT(*) FROM tb_confiture
                     WHERE version = '001'
                 """)
                 count = cursor.fetchone()[0]

@@ -301,7 +301,7 @@ def check_database_health(connection: Any) -> dict[str, Any]:
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables
                     WHERE table_schema = 'public'
-                    AND table_name = 'confiture_migrations'
+                    AND table_name = 'tb_confiture'
                 )
             """)
             row = cur.fetchone()

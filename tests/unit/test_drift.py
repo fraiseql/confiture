@@ -330,7 +330,7 @@ class TestSchemaDriftDetector:
         expected = SchemaInfo(tables={})
         actual = SchemaInfo(
             tables={
-                "confiture_migrations": {"id": {"type": "integer"}},
+                "tb_confiture": {"id": {"type": "integer"}},
                 "confiture_version": {"version": {"type": "text"}},
             }
         )
