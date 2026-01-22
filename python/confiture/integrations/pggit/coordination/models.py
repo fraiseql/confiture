@@ -6,6 +6,7 @@ conflicts, and coordination state.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -122,6 +123,29 @@ class Intent:
             metadata=data.get("metadata", {}),
         )
 
+    def to_json(self, indent: int | None = 2) -> str:
+        """Convert to JSON string.
+
+        Args:
+            indent: JSON indentation level (None for compact)
+
+        Returns:
+            JSON string representation
+        """
+        return json.dumps(self.to_dict(), indent=indent)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> Intent:
+        """Create Intent from JSON string.
+
+        Args:
+            json_str: JSON string representation
+
+        Returns:
+            Intent object
+        """
+        return cls.from_dict(json.loads(json_str))
+
 
 @dataclass
 class ConflictReport:
@@ -185,6 +209,29 @@ class ConflictReport:
             resolution_notes=data.get("resolution_notes", ""),
             created_at=datetime.fromisoformat(data.get("created_at")) if isinstance(data.get("created_at"), str) else data.get("created_at", datetime.now()),
         )
+
+    def to_json(self, indent: int | None = 2) -> str:
+        """Convert to JSON string.
+
+        Args:
+            indent: JSON indentation level (None for compact)
+
+        Returns:
+            JSON string representation
+        """
+        return json.dumps(self.to_dict(), indent=indent)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> ConflictReport:
+        """Create ConflictReport from JSON string.
+
+        Args:
+            json_str: JSON string representation
+
+        Returns:
+            ConflictReport object
+        """
+        return cls.from_dict(json.loads(json_str))
 
 
 @dataclass

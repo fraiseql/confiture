@@ -11,6 +11,7 @@ This guide covers the `confiture coordinate` CLI commands and multi-agent develo
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
+- [JSON Output Format](#json-output-format)
 - [Workflows](#workflows)
 - [Conflict Resolution](#conflict-resolution)
 - [Best Practices](#best-practices)
@@ -339,6 +340,275 @@ confiture coordinate abandon \
 confiture coordinate abandon \
     --intent-id int_def456 \
     --reason "Replaced by different approach (see int_xyz789)"
+```
+
+---
+
+## JSON Output Format
+
+All `confiture coordinate` commands support machine-readable JSON output via the `--format json` option. This is useful for:
+- **CI/CD Integration**: Parse coordination status in automated workflows
+- **Monitoring Tools**: Track active schema changes and conflicts
+- **Custom Dashboards**: Build visualizations of multi-agent activity
+- **Script Integration**: Automate coordination workflows
+
+### JSON Output Examples
+
+#### Register Intent (JSON)
+
+```bash
+confiture coordinate register \
+    --agent-id claude-test \
+    --feature-name user_bio \
+    --schema-changes "ALTER TABLE users ADD COLUMN bio TEXT" \
+    --format json
+```
+
+**Output:**
+```json
+{
+  "intent": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "agent_id": "claude-test",
+    "feature_name": "user_bio",
+    "branch_name": "feature/user_bio_001",
+    "schema_changes": [
+      "ALTER TABLE users ADD COLUMN bio TEXT"
+    ],
+    "tables_affected": ["users"],
+    "estimated_duration_ms": 0,
+    "risk_level": "low",
+    "status": "registered",
+    "created_at": "2026-01-22T10:00:00",
+    "updated_at": "2026-01-22T10:00:00",
+    "conflicts_with": [],
+    "metadata": {}
+  },
+  "conflicts": []
+}
+```
+
+#### List Intents (JSON)
+
+```bash
+confiture coordinate list-intents --format json
+```
+
+**Output:**
+```json
+{
+  "total": 2,
+  "intents": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "agent_id": "claude-payments",
+      "feature_name": "stripe_integration",
+      "status": "in_progress",
+      "risk_level": "medium",
+      ...
+    },
+    {
+      "id": "660f9511-f39c-52e5-b827-557766551111",
+      "agent_id": "claude-analytics",
+      "feature_name": "reporting_tables",
+      "status": "registered",
+      "risk_level": "low",
+      ...
+    }
+  ]
+}
+```
+
+#### Check for Conflicts (JSON)
+
+```bash
+confiture coordinate check \
+    --agent-id claude-test \
+    --feature-name test_feature \
+    --schema-changes "ALTER TABLE users ADD COLUMN email_verified BOOLEAN" \
+    --format json
+```
+
+**Output (No Conflicts):**
+```json
+{
+  "conflicts_detected": 0,
+  "conflicts": []
+}
+```
+
+**Output (With Conflicts):**
+```json
+{
+  "conflicts_detected": 1,
+  "conflicts": [
+    {
+      "id": 0,
+      "intent_a": "550e8400-e29b-41d4-a716-446655440000",
+      "intent_b": "660f9511-f39c-52e5-b827-557766551111",
+      "conflict_type": "column",
+      "affected_objects": ["users.email_verified"],
+      "severity": "warning",
+      "resolution_suggestions": [
+        "Coordinate column naming with other agent",
+        "Consider using different column name or merging changes"
+      ],
+      "reviewed": false,
+      "reviewed_at": null,
+      "resolution_notes": "",
+      "created_at": "2026-01-22T10:05:00"
+    }
+  ]
+}
+```
+
+#### Get Intent Status (JSON)
+
+```bash
+confiture coordinate status \
+    --intent-id 550e8400-e29b-41d4-a716-446655440000 \
+    --format json
+```
+
+**Output:**
+```json
+{
+  "intent": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "agent_id": "claude-payments",
+    "feature_name": "stripe_integration",
+    "status": "in_progress",
+    ...
+  },
+  "conflicts": []
+}
+```
+
+#### List Conflicts (JSON)
+
+```bash
+confiture coordinate conflicts --format json
+```
+
+**Output:**
+```json
+{
+  "total_conflicted_intents": 1,
+  "conflicted_intents": [
+    {
+      "intent": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "agent_id": "claude-test",
+        "feature_name": "test_feature",
+        "status": "conflicted",
+        ...
+      },
+      "conflicts": [
+        {
+          "conflict_type": "table",
+          "affected_objects": ["users"],
+          "severity": "warning",
+          ...
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Resolve Conflict (JSON)
+
+```bash
+confiture coordinate resolve \
+    --conflict-id 42 \
+    --notes "Coordinated with team, applying sequentially" \
+    --format json
+```
+
+**Output:**
+```json
+{
+  "conflict_id": 42,
+  "resolved": true,
+  "resolution_notes": "Coordinated with team, applying sequentially"
+}
+```
+
+#### Abandon Intent (JSON)
+
+```bash
+confiture coordinate abandon \
+    --intent-id 550e8400-e29b-41d4-a716-446655440000 \
+    --reason "Feature cancelled" \
+    --format json
+```
+
+**Output:**
+```json
+{
+  "intent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "feature_name": "stripe_integration",
+  "status": "abandoned",
+  "reason": "Feature cancelled"
+}
+```
+
+### Parsing JSON in Scripts
+
+**Bash (using jq):**
+```bash
+# Get count of active intents
+active_count=$(confiture coordinate list-intents \
+  --status-filter in_progress \
+  --format json | jq '.total')
+
+# Check if specific agent has conflicts
+conflicts=$(confiture coordinate list-intents \
+  --agent-filter claude-payments \
+  --format json | jq '.intents[] | select(.status == "conflicted")')
+
+if [ -n "$conflicts" ]; then
+  echo "⚠️  claude-payments has conflicts!"
+fi
+```
+
+**Python:**
+```python
+import json
+import subprocess
+
+# Get all intents
+result = subprocess.run(
+    ["confiture", "coordinate", "list-intents", "--format", "json"],
+    capture_output=True,
+    text=True
+)
+data = json.loads(result.stdout)
+
+# Count intents by status
+from collections import Counter
+status_counts = Counter(intent["status"] for intent in data["intents"])
+print(f"In Progress: {status_counts['in_progress']}")
+print(f"Conflicted: {status_counts['conflicted']}")
+```
+
+**Node.js:**
+```javascript
+const { execSync } = require('child_process');
+
+// Get conflicts
+const output = execSync(
+  'confiture coordinate conflicts --format json',
+  { encoding: 'utf8' }
+);
+const data = JSON.parse(output);
+
+if (data.total_conflicted_intents > 0) {
+  console.log('⚠️  Conflicts detected:');
+  data.conflicted_intents.forEach(item => {
+    console.log(`  - ${item.intent.feature_name} (${item.intent.agent_id})`);
+  });
+}
 ```
 
 ---

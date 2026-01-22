@@ -42,6 +42,18 @@ coordinate_app = typer.Typer(
 console = Console()
 
 
+def _output_json(data: dict | list, pretty: bool = True) -> None:
+    """Output data as JSON.
+
+    Args:
+        data: Dictionary or list to output as JSON
+        pretty: Whether to pretty-print (indent) the JSON
+    """
+    import json
+    indent = 2 if pretty else None
+    print(json.dumps(data, indent=indent))
+
+
 def _get_connection(database_url: Optional[str] = None) -> psycopg.Connection:
     """Get database connection.
 
@@ -85,6 +97,9 @@ def register(
     ),
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
     metadata: Optional[str] = typer.Option(None, help="JSON metadata string"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """Register a new agent intention for schema changes.
 
@@ -138,32 +153,42 @@ def register(
             metadata=meta_dict,
         )
 
-        # Display result
-        table = Table(title="Intention Registered")
-        table.add_column("Property", style="cyan")
-        table.add_column("Value", style="green")
-
-        table.add_row("Intent ID", intent.id)
-        table.add_row("Agent", agent_id)
-        table.add_row("Feature", feature_name)
-        table.add_row("Branch", intent.branch_name)
-        table.add_row("Status", intent.status.value)
-        table.add_row("Risk Level", intent.risk_level.value)
-        table.add_row("Tables Affected", ", ".join(intent.tables_affected))
-
-        console.print(table)
-
-        # Show conflicts if any
+        # Get conflicts
         conflicts = registry.get_conflicts(intent.id)
-        if conflicts:
-            console.print(
-                f"\n[yellow]Warning:[/yellow] Found {len(conflicts)} conflict(s) with existing intentions:"
-            )
-            for conflict in conflicts:
+
+        # Display result
+        if format_output == "json":
+            output_data = {
+                "intent": intent.to_dict(),
+                "conflicts": [c.to_dict() for c in conflicts],
+            }
+            _output_json(output_data)
+        else:
+            # Text output
+            table = Table(title="Intention Registered")
+            table.add_column("Property", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Intent ID", intent.id)
+            table.add_row("Agent", agent_id)
+            table.add_row("Feature", feature_name)
+            table.add_row("Branch", intent.branch_name)
+            table.add_row("Status", intent.status.value)
+            table.add_row("Risk Level", intent.risk_level.value)
+            table.add_row("Tables Affected", ", ".join(intent.tables_affected))
+
+            console.print(table)
+
+            # Show conflicts if any
+            if conflicts:
                 console.print(
-                    f"  - {conflict.conflict_type.value}: {', '.join(conflict.affected_objects)} "
-                    f"[{conflict.severity.value}]"
+                    f"\n[yellow]Warning:[/yellow] Found {len(conflicts)} conflict(s) with existing intentions:"
                 )
+                for conflict in conflicts:
+                    console.print(
+                        f"  - {conflict.conflict_type.value}: {', '.join(conflict.affected_objects)} "
+                        f"[{conflict.severity.value}]"
+                    )
 
         conn.close()
 
@@ -179,6 +204,9 @@ def list_intents(
     ),
     agent_filter: Optional[str] = typer.Option(None, help="Filter by agent ID"),
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """List all registered intentions with optional filtering.
 
@@ -206,29 +234,40 @@ def list_intents(
         intents = registry.list_intents(status=intent_status, agent_id=agent_filter)
 
         if not intents:
-            console.print("[yellow]No intentions found matching filters[/yellow]")
+            if format_output == "json":
+                _output_json({"intents": []})
+            else:
+                console.print("[yellow]No intentions found matching filters[/yellow]")
+            conn.close()
             return
 
         # Display results
-        table = Table(title=f"Intentions ({len(intents)} total)")
-        table.add_column("ID", style="cyan", width=10)
-        table.add_column("Agent", style="green")
-        table.add_column("Feature", style="blue")
-        table.add_column("Status", style="yellow")
-        table.add_column("Risk", style="red")
-        table.add_column("Tables", style="magenta")
+        if format_output == "json":
+            output_data = {
+                "total": len(intents),
+                "intents": [intent.to_dict() for intent in intents],
+            }
+            _output_json(output_data)
+        else:
+            table = Table(title=f"Intentions ({len(intents)} total)")
+            table.add_column("ID", style="cyan", width=10)
+            table.add_column("Agent", style="green")
+            table.add_column("Feature", style="blue")
+            table.add_column("Status", style="yellow")
+            table.add_column("Risk", style="red")
+            table.add_column("Tables", style="magenta")
 
-        for intent in intents:
-            table.add_row(
-                intent.id[:8],
-                intent.agent_id,
-                intent.feature_name,
-                intent.status.value,
-                intent.risk_level.value,
-                ", ".join(intent.tables_affected) if intent.tables_affected else "-",
-            )
+            for intent in intents:
+                table.add_row(
+                    intent.id[:8],
+                    intent.agent_id,
+                    intent.feature_name,
+                    intent.status.value,
+                    intent.risk_level.value,
+                    ", ".join(intent.tables_affected) if intent.tables_affected else "-",
+                )
 
-        console.print(table)
+            console.print(table)
         conn.close()
 
     except Exception as e:
@@ -243,6 +282,9 @@ def check(
     schema_changes: str = typer.Option(..., help="DDL statements or SQL file path"),
     tables_affected: Optional[str] = typer.Option(None, help="Comma-separated table names"),
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """Check for conflicts with a proposed set of schema changes.
 
@@ -298,19 +340,26 @@ def check(
             all_conflicts.extend(conflicts)
 
         # Display results
-        if not all_conflicts:
-            console.print("[green]✓ No conflicts detected![/green]")
+        if format_output == "json":
+            output_data = {
+                "conflicts_detected": len(all_conflicts),
+                "conflicts": [c.to_dict() for c in all_conflicts],
+            }
+            _output_json(output_data)
         else:
-            console.print(f"\n[red]✗ Found {len(all_conflicts)} conflict(s):[/red]\n")
+            if not all_conflicts:
+                console.print("[green]✓ No conflicts detected![/green]")
+            else:
+                console.print(f"\n[red]✗ Found {len(all_conflicts)} conflict(s):[/red]\n")
 
-            for conflict in all_conflicts:
-                console.print(f"  Type: [yellow]{conflict.conflict_type.value}[/yellow]")
-                console.print(f"  Severity: [red]{conflict.severity.value}[/red]")
-                console.print(f"  Affected: {', '.join(conflict.affected_objects)}")
-                console.print(f"  Suggestions:")
-                for suggestion in conflict.resolution_suggestions:
-                    console.print(f"    - {suggestion}")
-                console.print()
+                for conflict in all_conflicts:
+                    console.print(f"  Type: [yellow]{conflict.conflict_type.value}[/yellow]")
+                    console.print(f"  Severity: [red]{conflict.severity.value}[/red]")
+                    console.print(f"  Affected: {', '.join(conflict.affected_objects)}")
+                    console.print(f"  Suggestions:")
+                    for suggestion in conflict.resolution_suggestions:
+                        console.print(f"    - {suggestion}")
+                    console.print()
 
         conn.close()
 
@@ -323,6 +372,9 @@ def check(
 def status(
     intent_id: str = typer.Option(..., help="Intention ID"),
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """Show detailed status of a specific intention.
 
@@ -335,39 +387,51 @@ def status(
 
         intent = registry.get_intent(intent_id)
         if not intent:
-            console.print(f"[red]Error:[/red] Intention not found: {intent_id}")
+            if format_output == "json":
+                _output_json({"error": "Intention not found", "intent_id": intent_id})
+            else:
+                console.print(f"[red]Error:[/red] Intention not found: {intent_id}")
             raise typer.Exit(1)
 
-        # Display intent details
-        console.print(f"\n[cyan]Intention: {intent.feature_name}[/cyan]\n")
-
-        table = Table(show_header=False, box=None)
-        table.add_column(style="cyan")
-        table.add_column(style="green")
-
-        table.add_row("ID", intent.id)
-        table.add_row("Agent", intent.agent_id)
-        table.add_row("Feature", intent.feature_name)
-        table.add_row("Branch", intent.branch_name)
-        table.add_row("Status", intent.status.value)
-        table.add_row("Risk Level", intent.risk_level.value)
-        table.add_row("Created", str(intent.created_at))
-        table.add_row("Updated", str(intent.updated_at))
-        table.add_row("Tables Affected", ", ".join(intent.tables_affected) if intent.tables_affected else "-")
-
-        console.print(table)
-
-        # Show conflicts if any
+        # Get conflicts
         conflicts = registry.get_conflicts(intent.id)
-        if conflicts:
-            console.print(f"\n[yellow]{len(conflicts)} Conflict(s):[/yellow]\n")
-            for i, conflict in enumerate(conflicts, 1):
-                console.print(
-                    f"  {i}. {conflict.conflict_type.value} [{conflict.severity.value}] "
-                    f"({', '.join(conflict.affected_objects)})"
-                )
-                if conflict.resolution_notes:
-                    console.print(f"     Notes: {conflict.resolution_notes}")
+
+        # Display intent details
+        if format_output == "json":
+            output_data = {
+                "intent": intent.to_dict(),
+                "conflicts": [c.to_dict() for c in conflicts],
+            }
+            _output_json(output_data)
+        else:
+            console.print(f"\n[cyan]Intention: {intent.feature_name}[/cyan]\n")
+
+            table = Table(show_header=False, box=None)
+            table.add_column(style="cyan")
+            table.add_column(style="green")
+
+            table.add_row("ID", intent.id)
+            table.add_row("Agent", intent.agent_id)
+            table.add_row("Feature", intent.feature_name)
+            table.add_row("Branch", intent.branch_name)
+            table.add_row("Status", intent.status.value)
+            table.add_row("Risk Level", intent.risk_level.value)
+            table.add_row("Created", str(intent.created_at))
+            table.add_row("Updated", str(intent.updated_at))
+            table.add_row("Tables Affected", ", ".join(intent.tables_affected) if intent.tables_affected else "-")
+
+            console.print(table)
+
+            # Show conflicts if any
+            if conflicts:
+                console.print(f"\n[yellow]{len(conflicts)} Conflict(s):[/yellow]\n")
+                for i, conflict in enumerate(conflicts, 1):
+                    console.print(
+                        f"  {i}. {conflict.conflict_type.value} [{conflict.severity.value}] "
+                        f"({', '.join(conflict.affected_objects)})"
+                    )
+                    if conflict.resolution_notes:
+                        console.print(f"     Notes: {conflict.resolution_notes}")
 
         conn.close()
 
@@ -379,6 +443,9 @@ def status(
 @coordinate_app.command()
 def conflicts(
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """List all detected conflicts between intentions.
 
@@ -393,24 +460,44 @@ def conflicts(
         conflicted = registry.list_intents(status=IntentStatus.CONFLICTED)
 
         if not conflicted:
-            console.print("[green]✓ No conflicts detected![/green]")
+            if format_output == "json":
+                _output_json({"conflicted_intents": []})
+            else:
+                console.print("[green]✓ No conflicts detected![/green]")
+            conn.close()
             return
 
-        console.print(f"\n[yellow]{len(conflicted)} Intention(s) with conflicts:[/yellow]\n")
-
+        # Gather all conflicts
+        all_conflicts_data = []
         for intent in conflicted:
-            console.print(f"  [cyan]{intent.feature_name}[/cyan] ({intent.agent_id})")
-
-            # Get conflicts for this intent
             intent_conflicts = registry.get_conflicts(intent.id)
-            for conflict in intent_conflicts:
-                severity_color = "red" if conflict.severity == ConflictSeverity.ERROR else "yellow"
-                open_tag = f"[{severity_color}]"
-                close_tag = f"[/{severity_color}]"
-                console.print(
-                    f"    - {conflict.conflict_type.value} {open_tag}{conflict.severity.value}{close_tag} "
-                    f"on {', '.join(conflict.affected_objects)}"
-                )
+            all_conflicts_data.append({
+                "intent": intent.to_dict(),
+                "conflicts": [c.to_dict() for c in intent_conflicts],
+            })
+
+        if format_output == "json":
+            output_data = {
+                "total_conflicted_intents": len(conflicted),
+                "conflicted_intents": all_conflicts_data,
+            }
+            _output_json(output_data)
+        else:
+            console.print(f"\n[yellow]{len(conflicted)} Intention(s) with conflicts:[/yellow]\n")
+
+            for intent in conflicted:
+                console.print(f"  [cyan]{intent.feature_name}[/cyan] ({intent.agent_id})")
+
+                # Get conflicts for this intent
+                intent_conflicts = registry.get_conflicts(intent.id)
+                for conflict in intent_conflicts:
+                    severity_color = "red" if conflict.severity == ConflictSeverity.ERROR else "yellow"
+                    open_tag = f"[{severity_color}]"
+                    close_tag = f"[/{severity_color}]"
+                    console.print(
+                        f"    - {conflict.conflict_type.value} {open_tag}{conflict.severity.value}{close_tag} "
+                        f"on {', '.join(conflict.affected_objects)}"
+                    )
 
         conn.close()
 
@@ -424,6 +511,9 @@ def resolve(
     conflict_id: int = typer.Option(..., help="Conflict ID"),
     notes: str = typer.Option(..., help="Resolution notes"),
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """Mark a conflict as reviewed and provide resolution notes.
 
@@ -438,8 +528,16 @@ def resolve(
 
         registry.resolve_conflict(conflict_id, reviewed=True, resolution_notes=notes)
 
-        console.print(f"[green]✓ Conflict {conflict_id} marked as resolved[/green]")
-        console.print(f"  Notes: {notes}")
+        if format_output == "json":
+            output_data = {
+                "conflict_id": conflict_id,
+                "resolved": True,
+                "resolution_notes": notes,
+            }
+            _output_json(output_data)
+        else:
+            console.print(f"[green]✓ Conflict {conflict_id} marked as resolved[/green]")
+            console.print(f"  Notes: {notes}")
 
         conn.close()
 
@@ -453,6 +551,9 @@ def abandon(
     intent_id: str = typer.Option(..., help="Intention ID"),
     reason: str = typer.Option(..., help="Reason for abandonment"),
     database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
 ) -> None:
     """Abandon an intention before completion.
 
@@ -472,9 +573,20 @@ def abandon(
 
         registry.mark_abandoned(intent_id, reason=reason)
 
-        console.print(f"[green]✓ Intention abandoned[/green]")
-        console.print(f"  Feature: {intent.feature_name}")
-        console.print(f"  Reason: {reason}")
+        if format_output == "json":
+            # Get updated intent to reflect new status
+            updated_intent = registry.get_intent(intent_id)
+            output_data = {
+                "intent_id": intent_id,
+                "feature_name": intent.feature_name,
+                "status": updated_intent.status.value if updated_intent else "abandoned",
+                "reason": reason,
+            }
+            _output_json(output_data)
+        else:
+            console.print(f"[green]✓ Intention abandoned[/green]")
+            console.print(f"  Feature: {intent.feature_name}")
+            console.print(f"  Reason: {reason}")
 
         conn.close()
 

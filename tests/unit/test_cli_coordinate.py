@@ -718,3 +718,392 @@ class TestCoordinateConnectionHandling:
                 os.environ["DATABASE_URL"] = old_db_url
             if old_confiture_url:
                 os.environ["CONFITURE_DB_URL"] = old_confiture_url
+
+
+class TestCoordinateJSONOutput:
+    """Tests for JSON output format in all coordinate commands."""
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_register_json_output(self, mock_registry_class, mock_get_connection):
+        """Should output JSON when --format json is specified."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        intent_id = str(uuid4())
+        mock_intent = Intent(
+            id=intent_id,
+            agent_id="claude-test",
+            feature_name="test_feature",
+            branch_name="feature/test_feature_001",
+            schema_changes=["ALTER TABLE users ADD COLUMN test TEXT"],
+            tables_affected=["users"],
+            status=IntentStatus.REGISTERED,
+            risk_level=RiskLevel.LOW,
+        )
+        mock_registry.register.return_value = mock_intent
+        mock_registry.get_conflicts.return_value = []
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "register",
+                "--agent-id",
+                "claude-test",
+                "--feature-name",
+                "test_feature",
+                "--schema-changes",
+                "ALTER TABLE users ADD COLUMN test TEXT",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "intent" in output
+        assert "conflicts" in output
+        assert output["intent"]["agent_id"] == "claude-test"
+        assert output["intent"]["feature_name"] == "test_feature"
+        assert len(output["conflicts"]) == 0
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_list_intents_json_output(self, mock_registry_class, mock_get_connection):
+        """Should output JSON list of intents."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        mock_intents = [
+            Intent(
+                id=str(uuid4()),
+                agent_id="claude-1",
+                feature_name="feature_1",
+                branch_name="feature/feature_1_001",
+                status=IntentStatus.REGISTERED,
+            ),
+            Intent(
+                id=str(uuid4()),
+                agent_id="claude-2",
+                feature_name="feature_2",
+                branch_name="feature/feature_2_001",
+                status=IntentStatus.IN_PROGRESS,
+            ),
+        ]
+        mock_registry.list_intents.return_value = mock_intents
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "list-intents",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "total" in output
+        assert "intents" in output
+        assert output["total"] == 2
+        assert len(output["intents"]) == 2
+        assert output["intents"][0]["agent_id"] == "claude-1"
+        assert output["intents"][1]["agent_id"] == "claude-2"
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_status_json_output(self, mock_registry_class, mock_get_connection):
+        """Should output JSON status for an intent."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        intent_id = str(uuid4())
+        mock_intent = Intent(
+            id=intent_id,
+            agent_id="claude-test",
+            feature_name="test_feature",
+            branch_name="feature/test_feature_001",
+            status=IntentStatus.IN_PROGRESS,
+        )
+        mock_registry.get_intent.return_value = mock_intent
+        mock_registry.get_conflicts.return_value = []
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "status",
+                "--intent-id",
+                intent_id,
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "intent" in output
+        assert "conflicts" in output
+        assert output["intent"]["id"] == intent_id
+        assert output["intent"]["status"] == "in_progress"
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_check_json_output_no_conflicts(self, mock_registry_class, mock_get_connection):
+        """Should output JSON check result with no conflicts."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        mock_registry.list_intents.return_value = []
+        mock_detector = MagicMock()
+        mock_detector.detect_conflicts.return_value = []
+        mock_registry._detector = mock_detector
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "check",
+                "--agent-id",
+                "claude-test",
+                "--feature-name",
+                "test_feature",
+                "--schema-changes",
+                "ALTER TABLE users ADD COLUMN test TEXT",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "conflicts_detected" in output
+        assert "conflicts" in output
+        assert output["conflicts_detected"] == 0
+        assert len(output["conflicts"]) == 0
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_check_json_output_with_conflicts(self, mock_registry_class, mock_get_connection):
+        """Should output JSON check result with conflicts."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        existing_intent = Intent(
+            id=str(uuid4()),
+            agent_id="claude-existing",
+            feature_name="existing_feature",
+            branch_name="feature/existing_001",
+            status=IntentStatus.IN_PROGRESS,
+        )
+        # Mock list_intents to return the intent once for IN_PROGRESS, empty for REGISTERED
+        mock_registry.list_intents.side_effect = [[], [existing_intent]]
+
+        mock_conflict = ConflictReport(
+            intent_a=str(uuid4()),
+            intent_b=str(uuid4()),
+            conflict_type=ConflictType.TABLE,
+            affected_objects=["users"],
+            severity=ConflictSeverity.WARNING,
+            resolution_suggestions=["Coordinate with other agent"],
+        )
+
+        mock_detector = MagicMock()
+        mock_detector.detect_conflicts.return_value = [mock_conflict]
+        mock_registry._detector = mock_detector
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "check",
+                "--agent-id",
+                "claude-test",
+                "--feature-name",
+                "test_feature",
+                "--schema-changes",
+                "ALTER TABLE users ADD COLUMN test TEXT",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert output["conflicts_detected"] == 1
+        assert len(output["conflicts"]) == 1
+        assert output["conflicts"][0]["conflict_type"] == "table"
+        assert output["conflicts"][0]["severity"] == "warning"
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_conflicts_json_output(self, mock_registry_class, mock_get_connection):
+        """Should output JSON list of conflicted intents."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        intent_id = str(uuid4())
+        mock_intent = Intent(
+            id=intent_id,
+            agent_id="claude-test",
+            feature_name="test_feature",
+            branch_name="feature/test_feature_001",
+            status=IntentStatus.CONFLICTED,
+        )
+        mock_registry.list_intents.return_value = [mock_intent]
+
+        mock_conflict = ConflictReport(
+            intent_a=intent_id,
+            intent_b=str(uuid4()),
+            conflict_type=ConflictType.COLUMN,
+            affected_objects=["users.email"],
+            severity=ConflictSeverity.ERROR,
+        )
+        mock_registry.get_conflicts.return_value = [mock_conflict]
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "conflicts",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "total_conflicted_intents" in output
+        assert "conflicted_intents" in output
+        assert output["total_conflicted_intents"] == 1
+        assert len(output["conflicted_intents"]) == 1
+        assert output["conflicted_intents"][0]["intent"]["id"] == intent_id
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_resolve_json_output(self, mock_registry_class, mock_get_connection):
+        """Should output JSON confirmation of conflict resolution."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        conflict_id = 42
+        notes = "Coordinated with team, applying changes sequentially"
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "resolve",
+                "--conflict-id",
+                str(conflict_id),
+                "--notes",
+                notes,
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "conflict_id" in output
+        assert "resolved" in output
+        assert "resolution_notes" in output
+        assert output["conflict_id"] == conflict_id
+        assert output["resolved"] is True
+        assert output["resolution_notes"] == notes
+
+    @patch("confiture.cli.coordinate._get_connection")
+    @patch("confiture.cli.coordinate.IntentRegistry")
+    def test_abandon_json_output(self, mock_registry_class, mock_get_connection):
+        """Should output JSON confirmation of intent abandonment."""
+        import json
+
+        mock_conn = MagicMock()
+        mock_get_connection.return_value = mock_conn
+
+        mock_registry = MagicMock()
+        mock_registry_class.return_value = mock_registry
+
+        intent_id = str(uuid4())
+        mock_intent = Intent(
+            id=intent_id,
+            agent_id="claude-test",
+            feature_name="test_feature",
+            branch_name="feature/test_feature_001",
+            status=IntentStatus.REGISTERED,
+        )
+        mock_registry.get_intent.return_value = mock_intent
+
+        # Mock updated intent with abandoned status
+        abandoned_intent = Intent(
+            id=intent_id,
+            agent_id="claude-test",
+            feature_name="test_feature",
+            branch_name="feature/test_feature_001",
+            status=IntentStatus.ABANDONED,
+        )
+        mock_registry.get_intent.side_effect = [mock_intent, abandoned_intent]
+
+        reason = "Feature cancelled by product team"
+
+        result = runner.invoke(
+            app,
+            [
+                "coordinate",
+                "abandon",
+                "--intent-id",
+                intent_id,
+                "--reason",
+                reason,
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert "intent_id" in output
+        assert "feature_name" in output
+        assert "status" in output
+        assert "reason" in output
+        assert output["intent_id"] == intent_id
+        assert output["feature_name"] == "test_feature"
+        assert output["status"] == "abandoned"
+        assert output["reason"] == reason
