@@ -7,7 +7,6 @@ before code is written.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from confiture.integrations.pggit.coordination.models import (
     ConflictReport,

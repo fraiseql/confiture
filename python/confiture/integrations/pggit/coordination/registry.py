@@ -18,7 +18,6 @@ from confiture.integrations.pggit.coordination.models import (
     ConflictType,
     Intent,
     IntentStatus,
-    IntentStatusChange,
     RiskLevel,
 )
 

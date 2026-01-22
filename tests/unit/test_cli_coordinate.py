@@ -7,7 +7,6 @@ including command parsing, validation, output formatting, and error handling.
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app

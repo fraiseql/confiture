@@ -13,12 +13,10 @@ even with many concurrent agents and large numbers of active intents.
 from __future__ import annotations
 
 import time
-from typing import List
 
 import pytest
 
 from confiture.integrations.pggit.coordination import (
-    ConflictDetector,
     Intent,
     IntentRegistry,
     IntentStatus,
@@ -145,7 +143,7 @@ class TestConflictDetectionPerformance:
     def test_simple_conflict_detection(self, benchmark_registry):
         """Simple: 2 intents, same table."""
         # Register first intent
-        intent1 = benchmark_registry.register(**create_sample_intent(
+        benchmark_registry.register(**create_sample_intent(
             "agent_1", "feature_1", "users", "email_verified"
         ))
 
@@ -340,7 +338,7 @@ class TestCLIResponseTime:
         intent = benchmark_registry.register(**create_sample_intent(
             "agent_1", "feature_1", "users"
         ))
-        conflicts = benchmark_registry.get_conflicts(intent.id)
+        benchmark_registry.get_conflicts(intent.id)
 
         elapsed = time.perf_counter() - start_time
 
@@ -374,7 +372,7 @@ class TestCLIResponseTime:
 
         # This is what the CLI command does
         retrieved = benchmark_registry.get_intent(intent.id)
-        conflicts = benchmark_registry.get_conflicts(intent.id)
+        benchmark_registry.get_conflicts(intent.id)
 
         elapsed = time.perf_counter() - start_time
 
@@ -397,7 +395,6 @@ class TestCLIResponseTime:
         active.extend(benchmark_registry.list_intents(status=IntentStatus.IN_PROGRESS))
 
         # Create temporary intent for checking
-        from confiture.integrations.pggit.coordination import Intent
         from uuid import uuid4
         temp_intent = Intent(
             id=str(uuid4()),
@@ -451,7 +448,7 @@ class TestScalabilitySummary:
 
         # Test 4: List all (61 total)
         start = time.perf_counter()
-        all_intents = benchmark_registry.list_intents()
+        benchmark_registry.list_intents()
         results["list 61 intents"] = time.perf_counter() - start
 
         # Test 5: Conflict detection with all active
@@ -459,7 +456,7 @@ class TestScalabilitySummary:
             "new_agent", "new_feature", "t1", "new_col"  # Conflicts with first
         ))
         start = time.perf_counter()
-        conflicts = benchmark_registry.get_conflicts(new_intent.id)
+        benchmark_registry.get_conflicts(new_intent.id)
         results["conflict detection (61 active)"] = time.perf_counter() - start
 
         # Print summary

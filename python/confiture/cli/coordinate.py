@@ -15,22 +15,17 @@ Commands:
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import psycopg
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from confiture.config.environment import DatabaseConfig
 from confiture.integrations.pggit.coordination import (
     ConflictSeverity,
-    ConflictType,
     IntentRegistry,
     IntentStatus,
-    RiskLevel,
 )
 
 # Create sub-app for coordinate commands
@@ -54,7 +49,7 @@ def _output_json(data: dict | list, pretty: bool = True) -> None:
     print(json.dumps(data, indent=indent))
 
 
-def _get_connection(database_url: Optional[str] = None) -> psycopg.Connection:
+def _get_connection(database_url: str | None = None) -> psycopg.Connection:
     """Get database connection.
 
     Args:
@@ -86,7 +81,7 @@ def register(
     schema_changes: str = typer.Option(
         ..., help="Comma-separated DDL statements or path to SQL file"
     ),
-    tables_affected: Optional[str] = typer.Option(
+    tables_affected: str | None = typer.Option(
         None, help="Comma-separated table names affected by changes"
     ),
     risk_level: str = typer.Option(
@@ -95,8 +90,8 @@ def register(
     estimated_hours: float = typer.Option(
         0, help="Estimated hours to complete"
     ),
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
-    metadata: Optional[str] = typer.Option(None, help="JSON metadata string"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
+    metadata: str | None = typer.Option(None, help="JSON metadata string"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -199,11 +194,11 @@ def register(
 
 @coordinate_app.command()
 def list_intents(
-    status_filter: Optional[str] = typer.Option(
+    status_filter: str | None = typer.Option(
         None, help="Filter by status (registered, in_progress, completed, merged, abandoned, conflicted)"
     ),
-    agent_filter: Optional[str] = typer.Option(None, help="Filter by agent ID"),
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    agent_filter: str | None = typer.Option(None, help="Filter by agent ID"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -280,8 +275,8 @@ def check(
     agent_id: str = typer.Option(..., help="Agent ID"),
     feature_name: str = typer.Option(..., help="Feature name"),
     schema_changes: str = typer.Option(..., help="DDL statements or SQL file path"),
-    tables_affected: Optional[str] = typer.Option(None, help="Comma-separated table names"),
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    tables_affected: str | None = typer.Option(None, help="Comma-separated table names"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -315,8 +310,9 @@ def check(
             tables_list = [t.strip() for t in tables_affected.split(",")]
 
         # Create a temporary intent for checking
-        from confiture.integrations.pggit.coordination import Intent
         from uuid import uuid4
+
+        from confiture.integrations.pggit.coordination import Intent
 
         temp_intent = Intent(
             id=str(uuid4()),
@@ -356,7 +352,7 @@ def check(
                     console.print(f"  Type: [yellow]{conflict.conflict_type.value}[/yellow]")
                     console.print(f"  Severity: [red]{conflict.severity.value}[/red]")
                     console.print(f"  Affected: {', '.join(conflict.affected_objects)}")
-                    console.print(f"  Suggestions:")
+                    console.print("  Suggestions:")
                     for suggestion in conflict.resolution_suggestions:
                         console.print(f"    - {suggestion}")
                     console.print()
@@ -371,7 +367,7 @@ def check(
 @coordinate_app.command()
 def status(
     intent_id: str = typer.Option(..., help="Intention ID"),
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -442,7 +438,7 @@ def status(
 
 @coordinate_app.command()
 def conflicts(
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -510,7 +506,7 @@ def conflicts(
 def resolve(
     conflict_id: int = typer.Option(..., help="Conflict ID"),
     notes: str = typer.Option(..., help="Resolution notes"),
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -550,7 +546,7 @@ def resolve(
 def abandon(
     intent_id: str = typer.Option(..., help="Intention ID"),
     reason: str = typer.Option(..., help="Reason for abandonment"),
-    database_url: Optional[str] = typer.Option(None, help="Database URL"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = typer.Option(
         "text", "--format", "-f", help="Output format: text or json"
     ),
@@ -584,7 +580,7 @@ def abandon(
             }
             _output_json(output_data)
         else:
-            console.print(f"[green]✓ Intention abandoned[/green]")
+            console.print("[green]✓ Intention abandoned[/green]")
             console.print(f"  Feature: {intent.feature_name}")
             console.print(f"  Reason: {reason}")
 
