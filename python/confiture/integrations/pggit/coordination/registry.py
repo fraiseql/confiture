@@ -514,34 +514,46 @@ class IntentRegistry:
 
     def _row_to_intent(self, row: Any) -> Intent:
         """Convert database row to Intent object."""
+        def _parse_json(value: Any) -> Any:
+            """Parse JSON value - handle both strings and already-parsed objects."""
+            if isinstance(value, str):
+                return json.loads(value)
+            return value
+
         return Intent(
             id=row[0],
             agent_id=row[1],
             feature_name=row[2],
             branch_name=row[3],
-            schema_changes=json.loads(row[4]),
-            tables_affected=json.loads(row[5]),
+            schema_changes=_parse_json(row[4]),
+            tables_affected=_parse_json(row[5]),
             estimated_duration_ms=row[6],
             risk_level=RiskLevel[row[7].upper()] if isinstance(row[7], str) else row[7],
             status=IntentStatus[row[8].upper()] if isinstance(row[8], str) else row[8],
             created_at=row[11],
             updated_at=row[12],
-            conflicts_with=json.loads(row[9]),
-            metadata=json.loads(row[10]),
+            conflicts_with=_parse_json(row[9]),
+            metadata=_parse_json(row[10]),
         )
 
     def _row_to_conflict(self, row: Any) -> ConflictReport:
         """Convert database row to ConflictReport object."""
+        def _parse_json(value: Any) -> Any:
+            """Parse JSON value - handle both strings and already-parsed objects."""
+            if isinstance(value, str):
+                return json.loads(value)
+            return value
+
         return ConflictReport(
             id=row[0],
             intent_a=row[1],
             intent_b=row[2],
             conflict_type=ConflictType[row[3].upper()] if isinstance(row[3], str) else row[3],
-            affected_objects=json.loads(row[4]),
+            affected_objects=_parse_json(row[4]),
             severity=ConflictSeverity[row[5].upper()] if isinstance(row[5], str) else row[5],
-            resolution_suggestions=json.loads(row[6]),
+            resolution_suggestions=_parse_json(row[6]),
             reviewed=row[7],
             reviewed_at=row[8],
             resolution_notes=row[9],
-            created_at=row[11],
+            created_at=row[10],
         )

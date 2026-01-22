@@ -56,10 +56,6 @@ class ConflictDetector:
         if intent_a.agent_id == intent_b.agent_id:
             return conflicts
 
-        # Already marked as conflicted
-        if intent_b.id in intent_a.conflicts_with:
-            return conflicts
-
         # Check table conflicts
         table_conflicts = self._detect_table_conflicts(intent_a, intent_b)
         conflicts.extend(table_conflicts)
