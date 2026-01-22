@@ -878,14 +878,241 @@ confiture migrate status --config production.yaml
 
 ---
 
+## `confiture coordinate` (Multi-Agent Coordination)
+
+Multi-agent coordination commands for safe parallel schema development. These commands enable multiple agents or team members to work on database schemas simultaneously with automatic conflict detection.
+
+### `confiture coordinate init`
+
+Initialize coordination database and tables.
+
+```bash
+confiture coordinate init --db-url postgresql://localhost/confiture_coord
+```
+
+**Options:**
+- `--db-url`: PostgreSQL connection URL for coordination database
+
+### `confiture coordinate register`
+
+Register an intention to make schema changes.
+
+```bash
+confiture coordinate register \
+    --agent-id alice \
+    --feature-name user_profiles \
+    --tables-affected users,profiles \
+    --schema-changes "ALTER TABLE users ADD COLUMN bio TEXT" \
+    --risk-level medium \
+    --estimated-hours 3
+```
+
+**Options:**
+- `--agent-id`: Unique identifier for the agent (required)
+- `--feature-name`: Name of the feature being implemented (required)
+- `--tables-affected`: Comma-separated list of tables (required)
+- `--schema-changes`: DDL statements to be executed (optional but recommended)
+- `--columns-affected`: Comma-separated list of columns (optional)
+- `--functions-affected`: Comma-separated list of functions (optional)
+- `--constraints-affected`: Comma-separated list of constraints (optional)
+- `--indexes-affected`: Comma-separated list of indexes (optional)
+- `--risk-level`: Risk level: low, medium, high, critical (default: medium)
+- `--estimated-hours`: Estimated completion time in hours (optional)
+- `--blocking`: Mark as blocking other work (default: false)
+- `--format`: Output format: text or json (default: text)
+
+**Returns:**
+- Intent ID for tracking
+- Allocated branch name
+- Detected conflicts (if any)
+
+### `confiture coordinate check`
+
+Check for conflicts before making changes.
+
+```bash
+confiture coordinate check \
+    --agent-id bob \
+    --tables-affected users
+```
+
+**Options:**
+- `--agent-id`: Your agent identifier (required)
+- `--tables-affected`: Tables you want to modify (required)
+- `--columns-affected`: Columns you want to modify (optional)
+- `--functions-affected`: Functions you want to modify (optional)
+- `--format`: Output format: text or json (default: text)
+
+**Returns:**
+- List of conflicts with other active intentions
+- Conflict severity (warning or error)
+- Suggestions for resolution
+
+### `confiture coordinate status`
+
+View status of all registered intentions.
+
+```bash
+# Human-readable output
+confiture coordinate status
+
+# JSON output for CI/CD
+confiture coordinate status --format json
+
+# Filter by agent
+confiture coordinate status --agent-id alice
+
+# Filter by status
+confiture coordinate status --status IN_PROGRESS
+```
+
+**Options:**
+- `--agent-id`: Filter by specific agent (optional)
+- `--status`: Filter by status: REGISTERED, IN_PROGRESS, COMPLETED, ABANDONED, CONFLICTED (optional)
+- `--intent-id`: Get specific intention details (optional)
+- `--format`: Output format: text or json (default: text)
+
+### `confiture coordinate complete`
+
+Mark an intention as completed.
+
+```bash
+confiture coordinate complete \
+    --intent-id int_abc123def456 \
+    --outcome success \
+    --notes "User profiles implemented and tested"
+```
+
+**Options:**
+- `--intent-id`: Intent ID to complete (required)
+- `--outcome`: Outcome: success, partial, failed (required)
+- `--notes`: Additional notes (optional)
+- `--merge-commit`: Git merge commit SHA (optional)
+
+### `confiture coordinate abandon`
+
+Abandon an intention (work not completed).
+
+```bash
+confiture coordinate abandon \
+    --intent-id int_abc123def456 \
+    --reason "Requirements changed"
+```
+
+**Options:**
+- `--intent-id`: Intent ID to abandon (required)
+- `--reason`: Reason for abandoning (required)
+
+### `confiture coordinate list`
+
+List all intentions with optional filtering.
+
+```bash
+# List all intentions
+confiture coordinate list
+
+# Filter by date range
+confiture coordinate list --since "2026-01-01" --until "2026-01-31"
+
+# Filter by agent
+confiture coordinate list --agent-id alice
+
+# JSON output
+confiture coordinate list --format json
+```
+
+**Options:**
+- `--agent-id`: Filter by agent (optional)
+- `--status`: Filter by status (optional)
+- `--since`: Show intentions since date (YYYY-MM-DD) (optional)
+- `--until`: Show intentions until date (YYYY-MM-DD) (optional)
+- `--format`: Output format: text or json (default: text)
+
+### `confiture coordinate conflicts`
+
+Show all active conflicts between intentions.
+
+```bash
+# View all conflicts
+confiture coordinate conflicts
+
+# JSON output for automation
+confiture coordinate conflicts --format json
+
+# Filter by severity
+confiture coordinate conflicts --severity error
+```
+
+**Options:**
+- `--severity`: Filter by severity: warning or error (optional)
+- `--format`: Output format: text or json (default: text)
+
+### JSON Output Format
+
+All coordination commands support `--format json` for CI/CD integration:
+
+```json
+{
+  "intent_id": "int_abc123def456",
+  "agent_id": "alice",
+  "feature_name": "user_profiles",
+  "status": "IN_PROGRESS",
+  "tables_affected": ["users", "profiles"],
+  "conflicts": [
+    {
+      "type": "table",
+      "severity": "warning",
+      "conflicting_intent_id": "int_xyz789",
+      "suggestion": "Coordinate with agent bob who is also working on 'users' table"
+    }
+  ],
+  "registered_at": "2026-01-22T10:30:00Z",
+  "allocated_branch": "feature/user_profiles_001"
+}
+```
+
+### Coordination Examples
+
+**Pre-merge conflict check in CI/CD:**
+
+```bash
+# In GitHub Actions
+confiture coordinate check \
+    --agent-id github-ci-${PR_NUMBER} \
+    --tables-affected $(git diff --name-only origin/main | grep 'db/schema' | xargs) \
+    --format json > conflicts.json
+
+if jq -e '.conflicts | length > 0' conflicts.json; then
+  echo "❌ Schema conflicts detected!"
+  exit 1
+fi
+```
+
+**Dashboard integration:**
+
+```bash
+# Get current status as JSON
+confiture coordinate status --format json > dashboard.json
+
+# Serve to monitoring dashboard
+curl -X POST https://dashboard.example.com/api/schema-status \
+    -H "Content-Type: application/json" \
+    -d @dashboard.json
+```
+
+**For detailed coordination workflows and best practices**, see **[Multi-Agent Coordination Guide](../guides/multi-agent-coordination.md)**.
+
+---
+
 ## Further Reading
 
 - **[Getting Started Guide](../getting-started.md)** - Step-by-step tutorial
+- **[Multi-Agent Coordination Guide](../guides/multi-agent-coordination.md)** - Complete coordination guide
 - **[Migration Decision Tree](../guides/migration-decision-tree.md)** - Choosing the right strategy
 - **[Configuration Reference](./configuration.md)** - Environment configuration
 - **[API Reference](../api/index.md)** - Python API documentation
 
 ---
 
-**Last Updated**: January 17, 2026
-**Version**: 1.0
+**Last Updated**: January 22, 2026
+**Version**: 1.1 (Added Multi-Agent Coordination)

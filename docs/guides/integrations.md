@@ -115,6 +115,254 @@ jobs:
 
 ---
 
+## Multi-Agent Coordination CI/CD
+
+Integrate coordination checks into your CI/CD pipeline to detect conflicts before merging.
+
+### Pre-Merge Conflict Detection
+
+Automatically check for schema conflicts on pull requests:
+
+```yaml
+# .github/workflows/schema-conflicts.yml
+name: Check Schema Conflicts
+
+on:
+  pull_request:
+    paths: ['db/schema/**']
+
+jobs:
+  check-conflicts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Extract modified tables
+        id: tables
+        run: |
+          # Get list of modified schema files
+          TABLES=$(git diff --name-only origin/${{ github.base_ref }} HEAD \
+            | grep 'db/schema' \
+            | xargs basename -a \
+            | sed 's/\.sql$//' \
+            | paste -sd "," -)
+          echo "tables=$TABLES" >> $GITHUB_OUTPUT
+
+      - name: Check coordination conflicts
+        if: steps.tables.outputs.tables != ''
+        env:
+          COORDINATION_DB_URL: ${{ secrets.COORDINATION_DB_URL }}
+        run: |
+          confiture coordinate check \
+            --agent-id "github-ci-pr-${{ github.event.pull_request.number }}" \
+            --tables-affected "${{ steps.tables.outputs.tables }}" \
+            --format json > conflicts.json
+
+          # Fail if conflicts detected
+          if jq -e '.conflicts | length > 0' conflicts.json; then
+            echo "❌ Schema conflicts detected:"
+            jq '.conflicts' conflicts.json
+            exit 1
+          else
+            echo "✅ No schema conflicts detected"
+          fi
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const conflicts = JSON.parse(fs.readFileSync('conflicts.json'));
+
+            let body = '## Schema Coordination Check\n\n';
+            if (conflicts.conflicts.length > 0) {
+              body += '⚠️ **Conflicts detected:**\n\n';
+              conflicts.conflicts.forEach(c => {
+                body += `- **${c.type}**: ${c.suggestion}\n`;
+              });
+            } else {
+              body += '✅ No schema conflicts detected!';
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+```
+
+### Register Intention on Branch Creation
+
+Automatically register coordination intentions when feature branches are created:
+
+```yaml
+# .github/workflows/register-intention.yml
+name: Register Schema Intention
+
+on:
+  create:
+    branches:
+      - 'feature/**'
+      - 'schema/**'
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Extract feature info
+        id: feature
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          FEATURE_NAME=$(echo "$BRANCH_NAME" | sed 's/^feature\///')
+          echo "name=$FEATURE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Register coordination intention
+        env:
+          COORDINATION_DB_URL: ${{ secrets.COORDINATION_DB_URL }}
+        run: |
+          confiture coordinate register \
+            --agent-id "${{ github.actor }}" \
+            --feature-name "${{ steps.feature.outputs.name }}" \
+            --risk-level medium \
+            --format json > intention.json
+
+          INTENT_ID=$(jq -r '.intent_id' intention.json)
+          echo "Registered intention: $INTENT_ID"
+```
+
+### Mark Complete on Merge
+
+Automatically mark intentions as complete when PRs are merged:
+
+```yaml
+# .github/workflows/complete-intention.yml
+name: Complete Schema Intention
+
+on:
+  pull_request:
+    types: [closed]
+    paths: ['db/schema/**']
+
+jobs:
+  complete:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find and complete intention
+        env:
+          COORDINATION_DB_URL: ${{ secrets.COORDINATION_DB_URL }}
+        run: |
+          # Find intention by agent and branch
+          INTENT_ID=$(confiture coordinate list \
+            --agent-id "${{ github.event.pull_request.user.login }}" \
+            --format json \
+            | jq -r ".[0].intent_id")
+
+          # Mark as complete
+          confiture coordinate complete \
+            --intent-id "$INTENT_ID" \
+            --outcome success \
+            --notes "Merged via PR #${{ github.event.pull_request.number }}" \
+            --merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+```
+
+### Dashboard Integration
+
+Export coordination status for dashboards:
+
+```yaml
+# .github/workflows/coordination-dashboard.yml
+name: Update Coordination Dashboard
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Export coordination status
+        env:
+          COORDINATION_DB_URL: ${{ secrets.COORDINATION_DB_URL }}
+        run: |
+          confiture coordinate status --format json > status.json
+          confiture coordinate conflicts --format json > conflicts.json
+
+      - name: Publish to dashboard
+        run: |
+          curl -X POST "${{ secrets.DASHBOARD_URL }}/api/coordination" \
+            -H "Authorization: Bearer ${{ secrets.DASHBOARD_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @status.json
+
+          curl -X POST "${{ secrets.DASHBOARD_URL }}/api/conflicts" \
+            -H "Authorization: Bearer ${{ secrets.DASHBOARD_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @conflicts.json
+```
+
+### GitLab CI Example
+
+```yaml
+# .gitlab-ci.yml
+schema-conflict-check:
+  stage: test
+  image: python:3.11
+  services:
+    - postgres:15
+  variables:
+    COORDINATION_DB_URL: $COORDINATION_DB_URL
+  before_script:
+    - pip install confiture
+  script:
+    - |
+      # Extract modified tables
+      TABLES=$(git diff --name-only $CI_MERGE_REQUEST_TARGET_BRANCH_SHA HEAD \
+        | grep 'db/schema' \
+        | xargs basename -a \
+        | sed 's/\.sql$//' \
+        | paste -sd "," -)
+
+      if [ -n "$TABLES" ]; then
+        confiture coordinate check \
+          --agent-id "gitlab-ci-mr-${CI_MERGE_REQUEST_IID}" \
+          --tables-affected "$TABLES" \
+          --format json > conflicts.json
+
+        if jq -e '.conflicts | length > 0' conflicts.json; then
+          echo "❌ Schema conflicts detected!"
+          exit 1
+        fi
+      fi
+  only:
+    - merge_requests
+  when: always
+```
+
+**[→ Full Multi-Agent Coordination Guide](multi-agent-coordination.md)**
+
+---
+
 ## Slack Integration
 
 ### Webhook Notifications
