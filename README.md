@@ -391,11 +391,20 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Current Version
 
-**v0.3.8** (Latest)
+**v0.3.9** (Latest) - January 27, 2026
 
-### ✨ What's New in v0.3.8
+### ✨ What's New in v0.3.9
 
-**Multi-Agent Coordination** (Production-Ready):
+**Migration File Validation & Auto-Fix**:
+- ✅ New `confiture migrate validate` command with auto-fix
+- ✅ Orphaned migration file detection (missing `.up.sql` suffix)
+- ✅ Safe auto-fix with `--fix-naming` flag
+- ✅ Dry-run preview mode with `--dry-run`
+- ✅ JSON output for CI/CD integration
+- ✅ Comprehensive "Migration Naming Best Practices" guide (500+ lines)
+- ✅ 8 new tests covering all scenarios
+
+**Previous Release - v0.3.8**: Multi-Agent Coordination (Production-Ready)
 - ✅ 7 CLI commands (`confiture coordinate register/check/status/complete/abandon/list/conflicts`)
 - ✅ Automatic conflict detection (table, column, function, constraint, index, timing)
 - ✅ JSON output for CI/CD integration

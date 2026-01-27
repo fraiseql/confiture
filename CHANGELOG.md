@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-01-27
+
+### Added - Migration File Validation and Auto-Fix
+
+**Migration Validation**:
+- `confiture migrate validate` - Comprehensive migration file validation command
+- Orphaned migration file detection (missing `.up.sql` suffix)
+- Auto-fix capability with `--fix-naming` flag
+- Dry-run preview mode with `--dry-run` flag
+- JSON output support for CI/CD integration
+- Safe file renaming (atomic operations, error handling)
+
+**Warnings in Existing Commands**:
+- `confiture migrate status` - Shows orphaned files in text and JSON output
+- `confiture migrate up` - Warns before applying migrations
+- `--strict` mode - Fail if orphaned files exist
+
+**New Migrator Methods**:
+- `find_orphaned_sql_files()` - Detect misnamed migration files
+- `fix_orphaned_sql_files()` - Safely rename files to match pattern
+
+**Documentation**:
+- New comprehensive guide: "Migration Naming Best Practices" (500+ lines)
+- Updated CLI reference with validate command documentation
+- Updated troubleshooting guide with orphaned files section
+- Updated incremental migrations guide with naming requirements
+- CI/CD pipeline integration examples
+- Real-world scenarios and troubleshooting FAQ
+
+### Features
+
+**Three Recognized Migration Patterns**:
+```
+{NNN}_{name}.py             # Python migrations
+{NNN}_{name}.up.sql         # Forward migrations
+{NNN}_{name}.down.sql       # Rollback migrations
+```
+
+**Auto-Fix Workflow**:
+```bash
+# Detect orphaned files
+confiture migrate validate
+
+# Preview fixes
+confiture migrate validate --fix-naming --dry-run
+
+# Apply fixes
+confiture migrate validate --fix-naming
+
+# CI/CD integration
+confiture migrate validate --format json
+```
+
+### Testing
+
+- 8 new tests for validate command (6 CLI + 2 Migrator)
+- Dry-run mode tests
+- JSON output tests
+- Auto-fix tests with content preservation
+- 2,660 unit tests passing
+- Full backward compatibility verified
+
+### Issue Resolution
+
+- Resolves [GitHub Issue #13](https://github.com/evoludigit/confiture/issues/13) - Migration Discovery Validation
+- Three-phase implementation:
+  - Phase 1: Detection and warnings
+  - Phase 2: Validation command with auto-fix
+  - Phase 3: Comprehensive documentation
+
+### Backward Compatibility
+
+- ✅ No breaking changes
+- ✅ All existing migrations continue to work
+- ✅ Warnings are non-blocking (informational only)
+- ✅ New features are opt-in
+- ✅ Full backward compatibility verified
+
 ## [0.3.8] - 2026-01-22
 
 ### Added - Multi-Agent Coordination System (Phase 4)
