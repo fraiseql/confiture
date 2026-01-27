@@ -47,6 +47,7 @@ from confiture.integrations.pggit.detection import (
 )
 from confiture.integrations.pggit.exceptions import (
     PgGitBranchError,
+    PgGitCheckoutError,
     PgGitError,
     PgGitMergeConflictError,
     PgGitNotAvailableError,
@@ -82,5 +83,6 @@ __all__ = [
     "PgGitNotAvailableError",
     "PgGitVersionError",
     "PgGitBranchError",
+    "PgGitCheckoutError",
     "PgGitMergeConflictError",
 ]
