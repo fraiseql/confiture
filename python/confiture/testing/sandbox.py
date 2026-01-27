@@ -493,6 +493,8 @@ class MigrationSandbox:
             >>> assert sandbox.get_row_count("users") == 10
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}"')  # noqa: S608
+            # Identifiers (schema and table) are quoted and come from internal test code
+            # This is safe as they are not user inputs but test fixture parameters
+            cursor.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}"')  # nosec B608 - Testing code, identifiers are quoted
             result = cursor.fetchone()
             return result[0] if result else 0
