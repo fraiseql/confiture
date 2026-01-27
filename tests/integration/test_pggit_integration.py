@@ -9,20 +9,20 @@ Tests will be skipped if pgGit is not available.
 
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import psycopg
 import pytest
 
 from confiture.integrations.pggit import (
-    PgGitClient,
     MigrationGenerator,
-    is_pggit_available,
-    get_pggit_version,
-    require_pggit,
-    PgGitNotAvailableError,
     PgGitBranchError,
+    PgGitCheckoutError,
+    PgGitClient,
+    get_pggit_version,
+    is_pggit_available,
+    require_pggit,
 )
 
 
@@ -203,7 +203,7 @@ class TestPgGitBranchWorkflow:
         assert status.current_branch == branch_name
 
         # 5. Get diff from main
-        diff = client.diff("main", branch_name)
+        _ = client.diff("main", branch_name)
         # Diff behavior depends on pgGit implementation
 
         # 6. Cleanup - drop table and branch
@@ -315,7 +315,7 @@ class TestPgGitErrorHandling:
 
     def test_checkout_nonexistent_branch_fails(self, pggit_client: PgGitClient):
         """Checking out a non-existent branch should fail."""
-        with pytest.raises(Exception):  # Could be PgGitCheckoutError or PgGitBranchError
+        with pytest.raises((PgGitCheckoutError, PgGitBranchError)):
             pggit_client.checkout("nonexistent_branch_12345")
 
     def test_delete_main_branch_fails(self, pggit_client: PgGitClient):

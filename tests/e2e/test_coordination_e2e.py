@@ -16,8 +16,6 @@ from __future__ import annotations
 import pytest
 
 from confiture.integrations.pggit.coordination import (
-    ConflictDetector,
-    ConflictSeverity,
     ConflictType,
     IntentRegistry,
     IntentStatus,
@@ -169,7 +167,7 @@ class TestConflictResolution:
     def test_column_conflict_resolution_workflow(self, registry):
         """Test workflow for resolving column conflicts."""
         # Agent A: Add email column
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="claude-users",
             feature_name="user_emails",
             schema_changes=["ALTER TABLE users ADD COLUMN email TEXT UNIQUE"],
@@ -280,7 +278,7 @@ class TestMultiAgentScenarios:
     def test_schema_reorganization_workflow(self, registry):
         """Test agents handling schema reorganization."""
         # Agent A: Add new organization table
-        schema_intent = registry.register(
+        _ = registry.register(
             agent_id="claude-schema",
             feature_name="org_structure",
             schema_changes=[
@@ -404,7 +402,7 @@ class TestConflictTypes:
 
     def test_function_redefinition_conflict(self, registry):
         """Detect when two agents modify the same function."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="claude-a",
             feature_name="calculate_total",
             schema_changes=[
@@ -435,7 +433,7 @@ class TestConflictTypes:
 
     def test_index_conflict_detection(self, registry):
         """Detect when two agents create overlapping indexes."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="claude-a",
             feature_name="email_index",
             schema_changes=[

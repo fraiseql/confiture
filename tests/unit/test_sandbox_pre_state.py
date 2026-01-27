@@ -4,12 +4,11 @@ Tests the simulate_pre_state() method and in_pre_state() context manager
 that allow testing UP migrations when the local database is ahead.
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
 from confiture.testing.sandbox import MigrationSandbox, PreStateSimulationError
-
 
 # =============================================================================
 # Test Fixtures

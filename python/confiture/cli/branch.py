@@ -37,7 +37,7 @@ def _get_pggit_client(config_path: Path):
     Raises:
         typer.Exit: If pgGit is not available
     """
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import create_connection
     from confiture.integrations.pggit import (
         PgGitClient,
         PgGitNotAvailableError,
@@ -45,7 +45,6 @@ def _get_pggit_client(config_path: Path):
     )
 
     # Load config and create connection
-    config_data = load_config(config_path)
     conn = create_connection(config_path)
 
     # Check if pgGit is available
@@ -275,16 +274,15 @@ def branch_delete(
         current = client.get_branch()
         if current and current.name == name:
             console.print("[red]Cannot delete the current branch.[/red]")
-            console.print(f"[yellow]Checkout a different branch first: confiture branch checkout main[/yellow]")
+            console.print("[yellow]Checkout a different branch first: confiture branch checkout main[/yellow]")
             conn.close()
             raise typer.Exit(1)
 
         # Confirm deletion
-        if not force:
-            if not typer.confirm(f"Delete branch '{name}'?"):
-                console.print("[yellow]Aborted.[/yellow]")
-                conn.close()
-                return
+        if not force and not typer.confirm(f"Delete branch '{name}'?"):
+            console.print("[yellow]Aborted.[/yellow]")
+            conn.close()
+            return
 
         console.print(f"[cyan]Deleting branch '{name}'...[/cyan]")
         client.delete_branch(name, force=force)

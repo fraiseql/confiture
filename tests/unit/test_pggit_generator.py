@@ -6,18 +6,15 @@ These tests do NOT require an actual PostgreSQL database with pgGit installed.
 
 from __future__ import annotations
 
-from datetime import datetime
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import tempfile
 
-import pytest
-
+from confiture.integrations.pggit.client import DiffEntry
 from confiture.integrations.pggit.generator import (
     GeneratedMigration,
     MigrationGenerator,
 )
-from confiture.integrations.pggit.client import DiffEntry
 
 
 class TestGeneratedMigration:
@@ -487,7 +484,7 @@ class TestMigrationGeneratorFileOutput:
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 output_dir = Path(tmpdir)
-                migrations = generator.generate_from_branch(
+                _ = generator.generate_from_branch(
                     "feature/test",
                     output_dir=output_dir,
                 )

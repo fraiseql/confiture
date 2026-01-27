@@ -69,7 +69,7 @@ class TestPgGitExceptions:
 
     def test_pggit_merge_conflict_error_truncates_many_conflicts(self):
         """PgGitMergeConflictError should truncate display for many conflicts."""
-        conflicts = [{"object_type": f"TABLE", "object_name": f"table_{i}"} for i in range(10)]
+        conflicts = [{"object_type": "TABLE", "object_name": f"table_{i}"} for i in range(10)]
         error = PgGitMergeConflictError("Many conflicts", conflicts=conflicts)
 
         # Should show first 5 and indicate more

@@ -6,11 +6,6 @@ These tests do NOT require a database - models and detection logic are tested in
 
 from __future__ import annotations
 
-from datetime import datetime
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from confiture.integrations.pggit.coordination import (
     ConflictDetector,
     ConflictReport,
@@ -456,7 +451,7 @@ class TestEnumValues:
 
     def test_risk_level_values(self):
         """RiskLevel should have required values."""
-        levels = [l.value for l in RiskLevel]
+        levels = [level.value for level in RiskLevel]
 
         assert "low" in levels
         assert "medium" in levels

@@ -10,21 +10,15 @@ These tests exercise the IntentRegistry database operations including:
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
-
 import pytest
 
 from confiture.integrations.pggit.coordination import (
-    ConflictDetector,
-    ConflictReport,
-    ConflictSeverity,
     ConflictType,
-    Intent,
     IntentRegistry,
     IntentStatus,
     RiskLevel,
 )
+
 
 @pytest.fixture
 def registry(test_db_connection):
@@ -148,7 +142,7 @@ class TestIntentRegistryBasicOperations:
             schema_changes=["ALTER TABLE t1 ADD COLUMN c1 TEXT"],
             tables_affected=["t1"],
         )
-        intent_b = registry.register(
+        _ = registry.register(
             agent_id="agent_b",
             feature_name="feature_b",
             schema_changes=["ALTER TABLE t2 ADD COLUMN c2 TEXT"],
@@ -344,7 +338,7 @@ class TestConflictDetectionAndStorage:
 
     def test_register_intent_stores_conflicts(self, registry):
         """Conflict reports should be stored in database."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="agent_a",
             feature_name="feature_a",
             schema_changes=["ALTER TABLE users ADD COLUMN stripe_id TEXT"],
@@ -389,7 +383,7 @@ class TestConflictDetectionAndStorage:
 
     def test_resolve_conflict_marks_reviewed(self, registry):
         """Resolving conflict should mark it as reviewed."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="agent_a",
             feature_name="feature_a",
             schema_changes=["ALTER TABLE users ADD COLUMN stripe_id TEXT"],
@@ -478,7 +472,7 @@ class TestMultiAgentScenarios:
 
     def test_no_conflict_different_agents_same_agent(self, registry):
         """Same agent modifying same table should not create conflicts."""
-        intent_1 = registry.register(
+        _ = registry.register(
             agent_id="agent_a",
             feature_name="feature_a",
             schema_changes=["ALTER TABLE users ADD COLUMN col_a TEXT"],
@@ -502,7 +496,7 @@ class TestConstraintAndIndexConflicts:
 
     def test_function_conflict_detection(self, registry):
         """Function conflicts should be detected and stored."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="agent_a",
             feature_name="feature_a",
             schema_changes=[
@@ -526,7 +520,7 @@ class TestConstraintAndIndexConflicts:
 
     def test_index_conflict_detection(self, registry):
         """Index conflicts should be detected."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="agent_a",
             feature_name="feature_a",
             schema_changes=["CREATE INDEX idx_users_email ON users(email)"],
@@ -609,7 +603,7 @@ class TestDatabasePersistence:
 
     def test_conflicts_survive_registry_recreation(self, registry, test_db_connection):
         """Conflict reports should survive registry recreation."""
-        intent_a = registry.register(
+        _ = registry.register(
             agent_id="agent_a",
             feature_name="feature_a",
             schema_changes=["ALTER TABLE users ADD COLUMN col_a TEXT"],

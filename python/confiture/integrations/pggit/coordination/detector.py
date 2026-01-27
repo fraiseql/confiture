@@ -251,14 +251,14 @@ class ConflictDetector:
     def _generate_suggestions(
         self,
         conflict: ConflictReport,
-        intent_a: Intent,
+        _intent_a: Intent,
         intent_b: Intent,
     ) -> list[str]:
         """Generate suggestions for resolving a conflict.
 
         Args:
             conflict: The conflict report
-            intent_a: First intent
+            _intent_a: First intent
             intent_b: Second intent
 
         Returns:

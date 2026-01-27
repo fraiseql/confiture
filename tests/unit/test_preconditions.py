@@ -4,7 +4,6 @@ Tests the precondition validation system that provides fail-fast behavior
 before migration execution.
 """
 
-from dataclasses import dataclass
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -16,10 +15,8 @@ from confiture.core.preconditions import (
     ConstraintExists,
     ConstraintNotExists,
     CustomSQL,
-    ForeignKeyExists,
     IndexExists,
     IndexNotExists,
-    Precondition,
     PreconditionError,
     PreconditionValidationError,
     PreconditionValidator,
@@ -31,7 +28,6 @@ from confiture.core.preconditions import (
     TableIsEmpty,
     TableNotExists,
 )
-
 
 # =============================================================================
 # Helper to create mock connections with specific query results

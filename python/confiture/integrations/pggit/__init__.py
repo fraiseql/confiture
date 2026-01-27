@@ -28,19 +28,6 @@ Example workflow:
     migrations = generator.generate_from_branch("feature/payments")
 """
 
-from confiture.integrations.pggit.detection import (
-    is_pggit_available,
-    get_pggit_version,
-    require_pggit,
-    MIN_PGGIT_VERSION,
-)
-from confiture.integrations.pggit.exceptions import (
-    PgGitError,
-    PgGitNotAvailableError,
-    PgGitVersionError,
-    PgGitBranchError,
-    PgGitMergeConflictError,
-)
 from confiture.integrations.pggit.client import PgGitClient
 from confiture.integrations.pggit.coordination import (
     ConflictDetector,
@@ -51,6 +38,19 @@ from confiture.integrations.pggit.coordination import (
     IntentRegistry,
     IntentStatus,
     RiskLevel,
+)
+from confiture.integrations.pggit.detection import (
+    MIN_PGGIT_VERSION,
+    get_pggit_version,
+    is_pggit_available,
+    require_pggit,
+)
+from confiture.integrations.pggit.exceptions import (
+    PgGitBranchError,
+    PgGitError,
+    PgGitMergeConflictError,
+    PgGitNotAvailableError,
+    PgGitVersionError,
 )
 from confiture.integrations.pggit.generator import (
     GeneratedMigration,

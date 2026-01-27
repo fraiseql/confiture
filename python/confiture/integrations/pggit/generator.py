@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from confiture.integrations.pggit.client import PgGitClient, Commit, DiffEntry
+from confiture.integrations.pggit.client import DiffEntry, PgGitClient
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -204,7 +204,7 @@ class MigrationGenerator:
         migrations = []
         grouped_changes = self._group_changes_by_type(diff)
 
-        for i, (obj_type, changes) in enumerate(grouped_changes.items()):
+        for i, (_, changes) in enumerate(grouped_changes.items()):
             migration = self._generate_migration_from_changes(
                 changes,
                 index=i,
@@ -386,7 +386,7 @@ class MigrationGenerator:
                 down_statements.insert(0, down_sql)
 
         # Determine name from changes
-        obj_types = set(c.object_type for c in changes)
+        obj_types = {c.object_type for c in changes}
         name_parts = [source_branch.split("/")[-1]]
         if len(obj_types) == 1:
             name_parts.append(list(obj_types)[0].lower())

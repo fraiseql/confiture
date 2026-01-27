@@ -40,7 +40,7 @@ def _get_generator(config_path: Path):
     Raises:
         typer.Exit: If pgGit is not available
     """
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import create_connection
     from confiture.integrations.pggit import (
         MigrationGenerator,
         PgGitNotAvailableError,
@@ -48,7 +48,6 @@ def _get_generator(config_path: Path):
     )
 
     # Load config and create connection
-    config_data = load_config(config_path)
     conn = create_connection(config_path)
 
     # Check if pgGit is available
@@ -116,7 +115,7 @@ def generate_from_branch(
         if combined:
             migration = generator.generate_combined(branch, base, output)
             if migration:
-                console.print(f"[green]Generated combined migration:[/green]")
+                console.print("[green]Generated combined migration:[/green]")
                 console.print(f"  File: {output / f'{migration.version}_{migration.name}.py'}")
                 console.print(f"  Changes: {migration.metadata.get('changes_count', 'N/A')}")
             else:
@@ -243,10 +242,9 @@ def show_diff(
         confiture generate diff feature/payments --show-sql
     """
     try:
-        from confiture.core.connection import create_connection, load_config
+        from confiture.core.connection import create_connection
         from confiture.integrations.pggit import PgGitClient, is_pggit_available
 
-        config_data = load_config(config)
         conn = create_connection(config)
 
         if not is_pggit_available(conn):

@@ -189,7 +189,7 @@ def register(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @coordinate_app.command()
@@ -223,7 +223,7 @@ def list_intents(
                     f"[red]Error:[/red] Invalid status: {status_filter}. "
                     "Valid options: registered, in_progress, completed, merged, abandoned, conflicted"
                 )
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
         # List intents
         intents = registry.list_intents(status=intent_status, agent_id=agent_filter)
@@ -267,7 +267,7 @@ def list_intents(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @coordinate_app.command()
@@ -361,7 +361,7 @@ def check(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @coordinate_app.command()
@@ -433,7 +433,7 @@ def status(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @coordinate_app.command()
@@ -499,7 +499,7 @@ def conflicts(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @coordinate_app.command()
@@ -539,7 +539,7 @@ def resolve(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @coordinate_app.command()
@@ -588,4 +588,4 @@ def abandon(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

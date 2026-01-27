@@ -15,9 +15,9 @@ from typing import TYPE_CHECKING, Any
 from confiture.integrations.pggit.detection import require_pggit
 from confiture.integrations.pggit.exceptions import (
     PgGitBranchError,
-    PgGitMergeConflictError,
-    PgGitCommitError,
     PgGitCheckoutError,
+    PgGitCommitError,
+    PgGitMergeConflictError,
 )
 
 if TYPE_CHECKING:
@@ -417,14 +417,14 @@ class PgGitClient:
 
     def log(
         self,
-        branch: str | None = None,
+        _branch: str | None = None,
         limit: int = 50,
     ) -> list[Commit]:
         """
         Get commit history.
 
         Args:
-            branch: Filter by branch (default: all branches)
+            _branch: Filter by branch (default: all branches)
             limit: Maximum number of commits to return
 
         Returns:
@@ -497,7 +497,7 @@ class PgGitClient:
                 raise PgGitMergeConflictError(
                     f"Merge conflict between '{source_branch}' and '{target_branch}'",
                     conflicts=conflicts,
-                )
+                ) from None
 
             raise PgGitBranchError(
                 f"Merge failed: {e}"
