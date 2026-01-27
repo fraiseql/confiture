@@ -199,7 +199,7 @@ jobs:
       env:
         CIBW_ARCHS: x86_64
         CIBW_BUILD: 'cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64'
-        CIBW_MANYLINUX_X86_64_IMAGE: 'manylinux_2_34'
+        CIBW_MANYLINUX_X86_64_IMAGE: 'quay.io/pypa/manylinux_2_28_x86_64:latest'
         # Enable forward compatibility for Python 3.14+ (uses stable ABI)
         PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"
 
