@@ -6,14 +6,21 @@ This directory contains detailed release notes for each version of Confiture.
 
 ### Latest Release
 
+- **[v0.3.9](./v0.3.9.md)** (January 27, 2026)
+  - Migration file validation and auto-fix
+  - Orphaned migration file detection
+  - New `confiture migrate validate` command
+  - Comprehensive migration naming best practices guide
+  - Safe file renaming with dry-run support
+
+### Previous Releases
+
 - **[v0.4.0](./v0.4.0.md)** (December 27, 2025)
   - CLI integration for dry-run mode
   - Dry-run analysis and SAVEPOINT testing
   - Multiple output formats (text, JSON, file)
   - 12 comprehensive tests, 0 linting issues
   - Production ready
-
-### Previous Releases
 
 - **[v0.3.2](./v0.3.2.md)** (November 20, 2025)
   - Force flag for migrate up command
