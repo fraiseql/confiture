@@ -11,7 +11,7 @@ class TestMigratorIntegration:
     """Integration tests for migration execution."""
 
     def test_migrator_creates_tracking_table(self, test_db_connection):
-        """Migrator should create confiture_migrations table if not exists."""
+        """Migrator should create tb_confiture table if not exists."""
         migrator = Migrator(connection=test_db_connection)
         migrator.initialize()
 
@@ -21,7 +21,7 @@ class TestMigratorIntegration:
                 SELECT EXISTS (
                     SELECT FROM pg_tables
                     WHERE schemaname = 'public'
-                    AND tablename = 'confiture_migrations'
+                    AND tablename = 'tb_confiture'
                 )
             """)
             exists = cursor.fetchone()[0]
@@ -55,7 +55,7 @@ class TestMigratorIntegration:
         with test_db_connection.cursor() as cursor:
             cursor.execute("""
                 SELECT version, name
-                FROM confiture_migrations
+                FROM tb_confiture
                 WHERE version = '001'
             """)
             result = cursor.fetchone()
@@ -78,7 +78,7 @@ class TestMigratorIntegration:
         # Cleanup
         with test_db_connection.cursor() as cursor:
             cursor.execute("DROP TABLE test_migration_table")
-            cursor.execute("DELETE FROM confiture_migrations WHERE version = '001'")
+            cursor.execute("DELETE FROM tb_confiture WHERE version = '001'")
         test_db_connection.commit()
 
     def test_apply_migration_records_execution_time(self, test_db_connection):
@@ -104,7 +104,7 @@ class TestMigratorIntegration:
         with test_db_connection.cursor() as cursor:
             cursor.execute("""
                 SELECT execution_time_ms
-                FROM confiture_migrations
+                FROM tb_confiture
                 WHERE version = '002'
             """)
             execution_time = cursor.fetchone()[0]
@@ -113,7 +113,7 @@ class TestMigratorIntegration:
 
         # Cleanup
         with test_db_connection.cursor() as cursor:
-            cursor.execute("DELETE FROM confiture_migrations WHERE version = '002'")
+            cursor.execute("DELETE FROM tb_confiture WHERE version = '002'")
         test_db_connection.commit()
 
     def test_rollback_migration(self, test_db_connection):
@@ -168,7 +168,7 @@ class TestMigratorIntegration:
         with test_db_connection.cursor() as cursor:
             cursor.execute("""
                 SELECT COUNT(*)
-                FROM confiture_migrations
+                FROM tb_confiture
                 WHERE version = '003'
             """)
             count = cursor.fetchone()[0]

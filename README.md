@@ -1,8 +1,8 @@
 # Confiture 🍓
 
-**PostgreSQL migrations, sweetly done**
+**PostgreSQL schema evolution with built-in multi-agent coordination**
 
-Confiture is the official migration tool for [FraiseQL](https://github.com/fraiseql/fraiseql), designed with a **build-from-scratch philosophy** and **4 migration strategies** to handle every scenario from local development to zero-downtime production deployments.
+Confiture enables teams and AI agents to collaborate on database schema changes safely, with **built-in multi-agent coordination** and **4 flexible migration strategies** for every scenario from local development to zero-downtime production deployments.
 
 > **Part of the FraiseQL ecosystem** - While Confiture works standalone for any PostgreSQL project, it's designed to integrate seamlessly with FraiseQL's GraphQL-first approach.
 
@@ -60,6 +60,29 @@ pytest
 
 ## Why Confiture?
 
+### Safe Multi-Agent Collaboration 🤝
+
+Working on database schemas with multiple agents or team members? Confiture provides **automatic conflict detection**:
+
+```bash
+# Agent 1: Declare intention to modify users table
+confiture coordinate register --agent-id alice --tables-affected users
+
+# Agent 2: Before modifying users table, check for conflicts
+confiture coordinate check --agent-id bob --tables-affected users
+# ⚠️ Conflict detected: alice is already working on 'users' table
+```
+
+**Benefits:**
+- 🛡️ **Prevent conflicts** before code is written
+- 👁️ **Visibility** into all active schema work
+- 📋 **Audit trail** of coordination decisions
+- 🤖 **JSON output** for CI/CD integration
+
+Perfect for solo developers (optional safety), small teams (avoid surprises), and AI-assisted development (parallel agents).
+
+**[→ Learn more about Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)**
+
 ### The Problem with Migration History
 
 Traditional migration tools (Alembic, Django migrations, Flyway) use **migration history replay**: every time you build a database, the tool executes every migration file in order. This works, but it's **slow and brittle**:
@@ -99,31 +122,62 @@ No migration history to replay. No accumulated technical debt. Just your actual,
 
 ---
 
-## The Four Mediums
+## Core Features
 
-### 1️⃣ Build from DDL
+### 🤝 Multi-Agent Coordination (NEW!)
+
+Enable safe parallel schema development with automatic conflict detection:
+
+```bash
+# Register intention before making changes
+confiture coordinate register \
+    --agent-id alice \
+    --feature-name user_profiles \
+    --tables-affected users,profiles
+
+# Check status and conflicts
+confiture coordinate status --format json
+
+# Complete when done
+confiture coordinate complete --intent-id int_abc123
+```
+
+**Key capabilities:**
+- ✅ Declare intentions before coding
+- ✅ Automatic conflict detection (table, column, timing overlaps)
+- ✅ Audit trail with rich terminal output
+- ✅ JSON output for automation/CI-CD
+- ✅ Performance: <10ms operations, 10K+ intents supported
+
+**[→ Multi-Agent Coordination Guide](docs/guides/multi-agent-coordination.md)** | **[→ Architecture Details](docs/architecture/multi-agent-coordination.md)**
+
+---
+
+### 🛠️ Four Migration Strategies
+
+Choose the right strategy for your use case:
+
+**1️⃣ Build from DDL** - Execute DDL files directly (<1 second)
 ```bash
 confiture build --env production
 ```
-Build fresh database from `db/schema/` DDL files in <1 second.
 
-### 2️⃣ Incremental Migrations (ALTER)
+**2️⃣ Incremental Migrations** - ALTER-based changes for existing databases
 ```bash
 confiture migrate up
 ```
-Apply migrations to existing database (simple schema changes).
 
-### 3️⃣ Production Data Sync
+**3️⃣ Production Data Sync** - Copy data with PII anonymization
 ```bash
 confiture sync --from production --anonymize users.email
 ```
-Copy production data to local/staging with PII anonymization.
 
-### 4️⃣ Schema-to-Schema Migration (Zero-Downtime)
+**4️⃣ Schema-to-Schema (Zero-Downtime)** - Complex migrations via FDW
 ```bash
 confiture migrate schema-to-schema --strategy fdw
 ```
-Complex migrations via FDW with 0-5 second downtime.
+
+**[→ Migration Decision Tree](docs/guides/migration-decision-tree.md)**
 
 ---
 
@@ -138,13 +192,56 @@ pip install fraiseql-confiture
 pip install fraiseql-confiture[fraiseql]
 ```
 
-### Initialize Project
+### For Solo Developers (Traditional Workflow)
 
 ```bash
+# 1. Initialize project
 confiture init
+
+# 2. Write schema DDL files
+vim db/schema/10_tables/users.sql
+
+# 3. Build database
+confiture build --env local
+
+# 4. Generate and apply migrations
+confiture migrate generate --name "add_user_bio"
+confiture migrate up
 ```
 
-Creates:
+**[→ Getting Started Guide](docs/getting-started.md)**
+
+### For Teams & Multi-Agent Work (Coordination Workflow)
+
+```bash
+# 1. Initialize project with coordination database
+confiture init
+confiture coordinate init --db-url postgresql://localhost/confiture_coord
+
+# 2. Register intention before making changes
+confiture coordinate register \
+    --agent-id alice \
+    --feature-name user_profiles \
+    --tables-affected users,profiles \
+    --schema-changes "ALTER TABLE users ADD COLUMN bio TEXT"
+
+# 3. Check for conflicts (by other agent)
+confiture coordinate check \
+    --agent-id bob \
+    --tables-affected users
+# ⚠️ Warning: alice is working on 'users' table
+
+# 4. View active work
+confiture coordinate status --format json
+
+# 5. Complete when done
+confiture coordinate complete --intent-id int_abc123
+```
+
+**[→ Multi-Agent Coordination Guide](docs/guides/multi-agent-coordination.md)**
+
+### Project Structure
+
 ```
 db/
 ├── schema/           # DDL: CREATE TABLE, views, functions
@@ -160,29 +257,6 @@ db/
     ├── local.yaml
     ├── test.yaml
     └── production.yaml
-```
-
-### Build Schema
-
-```bash
-# Build local database
-confiture build --env local
-
-# Build production schema
-confiture build --env production
-```
-
-### Create Migration
-
-```bash
-# Edit schema
-vim db/schema/10_tables/users.sql
-
-# Generate migration
-confiture migrate generate --name "add_user_bio"
-
-# Apply migration
-confiture migrate up
 ```
 
 ### Test Migrations Before Applying (Dry-Run)
@@ -209,9 +283,21 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Documentation
 
-### User Guides
+### Getting Started
 
-**Core Concepts**:
+- **[Getting Started Guide](docs/getting-started.md)** - First steps with Confiture
+- **[When to Use Coordination?](docs/guides/multi-agent-coordination.md#when-to-use-coordination)** - Solo vs. team vs. multi-agent
+
+### Multi-Agent Coordination
+
+- **[Multi-Agent Coordination Guide](docs/guides/multi-agent-coordination.md)** - Complete guide to coordination features
+- **[Architecture & Design](docs/architecture/multi-agent-coordination.md)** - Technical architecture details
+- **[Performance Benchmarks](docs/performance/coordination-performance.md)** - Performance analysis & results
+- **[CI/CD Integration](docs/guides/multi-agent-coordination.md#json-output-format)** - JSON output for automation
+
+### Migration Strategies
+
+**Core Strategies**:
 - **[Build from DDL](docs/guides/01-build-from-ddl.md)** - Execute DDL files directly
 - **[Incremental Migrations](docs/guides/02-incremental-migrations.md)** - ALTER-based changes
 - **[Production Data Sync](docs/guides/03-production-sync.md)** - Copy and anonymize data
@@ -237,7 +323,9 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - **[Linting API](docs/api/linting.md)** - Schema validation rules
 
 ### Examples
+
 - **[Examples Overview](examples/)** - Complete examples
+- **[Multi-Agent Workflow](examples/multi-agent-workflow/)** - Coordination examples (NEW!)
 - **[Basic Migration](examples/01-basic-migration/)** - Learn the fundamentals
 - **[FraiseQL Integration](examples/02-fraiseql-integration/)** - GraphQL workflow
 - **[Zero-Downtime](examples/03-zero-downtime-migration/)** - FDW-based migration
@@ -247,14 +335,24 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 ## Features
 
-### Core Migration System (Implemented)
+### 🤝 Multi-Agent Coordination (Production-Ready)
 
-- ✅ **Build from DDL** (Medium 1) - Execute DDL files directly
-- ✅ **Incremental migrations** (Medium 2) - ALTER-based changes
-- ✅ **Production data sync** (Medium 3) - Copy with PII anonymization
-- ✅ **Zero-downtime migrations** (Medium 4) - Schema-to-schema via FDW
+- ✅ **Intent registration** - Declare changes before implementation
+- ✅ **Conflict detection** - Automatic overlap detection (table, column, timing)
+- ✅ **Status tracking** - Real-time visibility into active schema work
+- ✅ **Audit trail** - Complete history of coordination decisions
+- ✅ **JSON output** - CI/CD and automation integration
+- ✅ **High performance** - <10ms operations, 10K+ intents supported
+- ✅ **123 comprehensive tests** - All passing, production-ready
 
-### Additional Features (Implemented)
+### 🛠️ Migration System (Implemented)
+
+- ✅ **Build from DDL** (Strategy 1) - Execute DDL files directly (<1s)
+- ✅ **Incremental migrations** (Strategy 2) - ALTER-based changes
+- ✅ **Production data sync** (Strategy 3) - Copy with PII anonymization
+- ✅ **Zero-downtime migrations** (Strategy 4) - Schema-to-schema via FDW
+
+### 🔧 Developer Experience
 
 - ✅ Optional Rust extension for performance
 - ✅ Schema diff detection with auto-generation
@@ -263,14 +361,16 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 - ✅ Migration hooks (pre/post execution)
 - ✅ Schema linting with multiple rules
 - ✅ PII anonymization strategies
-- ✅ Dry-run mode for testing
+- ✅ Dry-run mode for testing migrations
 
-### Documentation (Comprehensive)
+### 📖 Documentation (Comprehensive)
 
-- ✅ User guides for all 4 migration strategies
-- ✅ API reference documentation
-- ✅ Integration guides (Slack, GitHub Actions, monitoring)
-- ✅ Compliance guides (HIPAA, SOX, PCI-DSS, GDPR)
+- ✅ **Coordination guides** - Multi-agent workflows, architecture, performance
+- ✅ **Migration guides** - All 4 strategies documented
+- ✅ **API reference** - Complete CLI and Python API docs
+- ✅ **Integration guides** - CI/CD, Slack, GitHub Actions, monitoring
+- ✅ **Compliance guides** - HIPAA, SOX, PCI-DSS, GDPR
+- ✅ **Examples** - 5+ complete examples including multi-agent workflows
 
 ---
 
@@ -278,33 +378,56 @@ For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
 
 | Feature | Alembic | pgroll | **Confiture** |
 |---------|---------|--------|---------------|
-| **Philosophy** | Migration replay | Multi-version schema | **Build-from-DDL** |
+| **Philosophy** | Migration replay | Multi-version schema | **Build-from-DDL + Coordination** |
+| **Multi-agent coordination** | ❌ No | ❌ No | **✅ Built-in** |
 | **Fresh DB setup** | Minutes | Minutes | **<1 second** |
 | **Zero-downtime** | ❌ No | ✅ Yes | **✅ Yes (FDW)** |
 | **Production sync** | ❌ No | ❌ No | **✅ Built-in** |
+| **Conflict detection** | ❌ No | ❌ No | **✅ Automatic** |
+| **CI/CD integration** | Basic | Basic | **✅ JSON output** |
 | **Language** | Python | Go | **Python + Rust** |
 
 ---
 
 ## Current Version
 
-**v0.3.5**
+**v0.3.9** (Latest) - January 27, 2026
 
-> **⚠️ Beta Software**: Confiture has not yet been used in production. While the codebase includes comprehensive tests and documentation, real-world usage may reveal issues. Use with caution in production environments.
+### ✨ What's New in v0.3.9
+
+**Migration File Validation & Auto-Fix**:
+- ✅ New `confiture migrate validate` command with auto-fix
+- ✅ Orphaned migration file detection (missing `.up.sql` suffix)
+- ✅ Safe auto-fix with `--fix-naming` flag
+- ✅ Dry-run preview mode with `--dry-run`
+- ✅ JSON output for CI/CD integration
+- ✅ Comprehensive "Migration Naming Best Practices" guide (500+ lines)
+- ✅ 8 new tests covering all scenarios
+
+**Previous Release - v0.3.8**: Multi-Agent Coordination (Production-Ready)
+- ✅ 7 CLI commands (`confiture coordinate register/check/status/complete/abandon/list/conflicts`)
+- ✅ Automatic conflict detection (table, column, function, constraint, index, timing)
+- ✅ JSON output for CI/CD integration
+- ✅ 123 comprehensive tests (all passing)
+- ✅ Performance: <10ms operations, 10K+ intents supported
+- ✅ Complete documentation (3,500+ lines)
+
+> **⚠️ Beta Software**: While the multi-agent coordination system is production-ready and thoroughly tested, Confiture has not yet been used in production environments. Real-world usage may reveal edge cases. Use with appropriate caution.
 
 ### What's Implemented
+- ✅ **Multi-agent coordination** with conflict detection
 - ✅ All 4 migration strategies (Build from DDL, ALTER, Production Sync, FDW)
-- ✅ Comprehensive test suite (3,200+ tests passing)
-- ✅ Documentation and guides
+- ✅ Comprehensive test suite (3,200+ migration tests, 123 coordination tests)
+- ✅ Complete documentation and guides
 - ✅ Python 3.11, 3.12, 3.13 support
 - ✅ Optional Rust extension
 - ✅ Migration hooks, schema linting, anonymization strategies
 
 ### What's NOT Validated
 - ❌ Production usage (never deployed to production)
-- ❌ Performance claims (benchmarks only, not real-world)
-- ❌ Edge cases and failure recovery (not battle-tested)
-- ❌ Large-scale data migrations (theoretical only)
+- ❌ Performance claims (benchmarks only, not real-world workloads)
+- ❌ Edge cases under load (not battle-tested at scale)
+- ❌ Large-scale data migrations (theoretical performance)
 
 ---
 

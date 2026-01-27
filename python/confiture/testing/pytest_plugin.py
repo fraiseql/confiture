@@ -11,7 +11,7 @@ Usage:
 
 Available fixtures:
     - confiture_db_url: Database URL (override to customize)
-    - confiture_migrations_dir: Migrations directory (override to customize)
+    - tb_confiture_dir: Migrations directory (override to customize)
     - confiture_sandbox: MigrationSandbox with automatic rollback
     - confiture_validator: DataValidator from sandbox
     - confiture_snapshotter: SchemaSnapshotter from sandbox
@@ -60,13 +60,13 @@ def confiture_db_url() -> str:
 
 
 @pytest.fixture
-def confiture_migrations_dir() -> Path:
+def tb_confiture_dir() -> Path:
     """Provide migrations directory for testing.
 
     Override this fixture to use a custom migrations directory:
 
         @pytest.fixture
-        def confiture_migrations_dir():
+        def tb_confiture_dir():
             return Path("custom/migrations")
 
     Returns:
@@ -78,7 +78,7 @@ def confiture_migrations_dir() -> Path:
 @pytest.fixture
 def confiture_sandbox(
     confiture_db_url: str,
-    confiture_migrations_dir: Path,
+    tb_confiture_dir: Path,
 ) -> Generator[MigrationSandbox, None, None]:
     """Provide a migration sandbox with automatic rollback.
 
@@ -104,7 +104,7 @@ def confiture_sandbox(
     try:
         with MigrationSandbox(
             db_url=confiture_db_url,
-            migrations_dir=confiture_migrations_dir,
+            migrations_dir=tb_confiture_dir,
         ) as sandbox:
             yield sandbox
     except Exception as e:

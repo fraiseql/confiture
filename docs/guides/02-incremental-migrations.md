@@ -48,6 +48,30 @@ confiture migrate up --dry-run
 
 ## Creating Migrations
 
+### Naming Requirements
+
+Confiture has strict naming conventions for migration files. All migration filenames must follow one of these patterns:
+
+```
+{NNN}_{name}.py             # Python migrations
+{NNN}_{name}.up.sql         # Forward migrations (SQL)
+{NNN}_{name}.down.sql       # Rollback migrations (SQL)
+```
+
+**Important**: Files like `001_add_email.sql` (without `.up.sql`) are **silently ignored**!
+
+**Examples**:
+```
+001_create_users.py         ✅ Correct
+002_add_email.up.sql        ✅ Correct
+002_add_email.down.sql      ✅ Correct
+003_add_phone.sql           ❌ WRONG - missing .up suffix!
+```
+
+**See** [Migration Naming Best Practices](migration-naming-best-practices.md) for complete guidelines.
+
+### Python Migrations
+
 ```python
 # db/migrations/002_add_user_bio.py
 """Add bio column to users table"""
@@ -68,6 +92,46 @@ class AddUserBio(Migration):
             ALTER TABLE users DROP COLUMN bio
         """)
 ```
+
+### SQL Migrations
+
+```sql
+-- db/migrations/002_add_user_bio.up.sql
+-- Add bio column to users table
+
+ALTER TABLE users ADD COLUMN bio TEXT;
+```
+
+```sql
+-- db/migrations/002_add_user_bio.down.sql
+-- Remove bio column from users table
+
+ALTER TABLE users DROP COLUMN IF EXISTS bio;
+```
+
+**Note**: Both `.up.sql` and `.down.sql` files are needed for reversible migrations.
+
+---
+
+## Validating Migration Names
+
+Use `confiture migrate validate` to check that all migration files are properly named:
+
+```bash
+# Check for orphaned files
+confiture migrate validate
+
+# Auto-fix naming issues
+confiture migrate validate --fix-naming
+
+# Preview without making changes
+confiture migrate validate --fix-naming --dry-run
+```
+
+This catches common mistakes like:
+- Missing `.up.sql` suffix: `001_schema.sql`
+- Wrong suffix: `001_schema.sql` instead of `.up.sql`
+- Inconsistent version numbers: `001_add_email.up.sql` and `002_add_email.down.sql`
 
 ---
 

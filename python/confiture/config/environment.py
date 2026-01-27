@@ -45,6 +45,32 @@ class MigrationConfig(BaseModel):
     locking: LockingConfig = Field(default_factory=LockingConfig)
 
 
+class PgGitConfig(BaseModel):
+    """pgGit integration configuration.
+
+    pgGit provides Git-like version control for PostgreSQL schemas.
+    This is intended for DEVELOPMENT and STAGING databases only.
+    Do NOT enable pgGit on production databases.
+
+    Attributes:
+        enabled: Whether pgGit integration is enabled (default: False)
+        auto_init: Automatically initialize pgGit if extension exists but not initialized
+        default_branch: Default branch name for new repositories (default: "main")
+        auto_commit: Automatically commit schema changes after migrations
+        commit_message_template: Template for auto-commit messages
+        require_branch: Require being on a branch before making schema changes
+        protected_branches: Branches that cannot be deleted or force-pushed
+    """
+
+    enabled: bool = False
+    auto_init: bool = True
+    default_branch: str = "main"
+    auto_commit: bool = False
+    commit_message_template: str = "Migration: {migration_name}"
+    require_branch: bool = False
+    protected_branches: list[str] = Field(default_factory=lambda: ["main", "master"])
+
+
 class DirectoryConfig(BaseModel):
     """Directory configuration with pattern matching."""
 
@@ -129,17 +155,20 @@ class Environment(BaseModel):
         auto_backup: Whether to automatically backup before migrations
         require_confirmation: Whether to require user confirmation for risky operations
         build: Build configuration options
+        migration: Migration configuration options
+        pggit: pgGit integration configuration (development/staging only)
     """
 
     name: str
     database_url: str
     include_dirs: list[str | DirectoryConfig]
     exclude_dirs: list[str] = Field(default_factory=list)
-    migration_table: str = "confiture_migrations"
+    migration_table: str = "tb_confiture"
     auto_backup: bool = True
     require_confirmation: bool = True
     build: BuildConfig = Field(default_factory=BuildConfig)
     migration: MigrationConfig = Field(default_factory=MigrationConfig)
+    pggit: PgGitConfig = Field(default_factory=PgGitConfig)
 
     @property
     def database(self) -> DatabaseConfig:

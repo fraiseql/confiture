@@ -23,6 +23,28 @@ from confiture.core.hooks import (
     PerformanceTrace,
     RetryConfig,
 )
+from confiture.core.preconditions import (
+    ColumnExists,
+    ColumnNotExists,
+    ColumnType,
+    ConstraintExists,
+    ConstraintNotExists,
+    CustomSQL,
+    ForeignKeyExists,
+    IndexExists,
+    IndexNotExists,
+    Precondition,
+    PreconditionError,
+    PreconditionValidationError,
+    PreconditionValidator,
+    RowCountEquals,
+    RowCountGreaterThan,
+    SchemaExists,
+    SchemaNotExists,
+    TableExists,
+    TableIsEmpty,
+    TableNotExists,
+)
 
 __all__ = [
     # Dry-run mode
@@ -48,4 +70,32 @@ __all__ = [
     "HookExecutionTracer",
     "ExecutionDAG",
     "PerformanceTrace",
+    # Preconditions - Base
+    "Precondition",
+    "PreconditionValidator",
+    "PreconditionError",
+    "PreconditionValidationError",
+    # Preconditions - Table checks
+    "TableExists",
+    "TableNotExists",
+    "TableIsEmpty",
+    # Preconditions - Column checks
+    "ColumnExists",
+    "ColumnNotExists",
+    "ColumnType",
+    # Preconditions - Constraint checks
+    "ConstraintExists",
+    "ConstraintNotExists",
+    "ForeignKeyExists",
+    # Preconditions - Index checks
+    "IndexExists",
+    "IndexNotExists",
+    # Preconditions - Schema checks
+    "SchemaExists",
+    "SchemaNotExists",
+    # Preconditions - Row count checks
+    "RowCountEquals",
+    "RowCountGreaterThan",
+    # Preconditions - Custom SQL
+    "CustomSQL",
 ]

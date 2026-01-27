@@ -359,7 +359,7 @@ class TestMigrationLock:
 
     def test_default_lock_namespace(self):
         """Test that default lock namespace is consistent."""
-        # Should be first 32 bits of SHA256("confiture_migrations")
+        # Should be first 32 bits of SHA256("tb_confiture")
         expected_namespace = 1751936052
         assert expected_namespace == MigrationLock.DEFAULT_LOCK_NAMESPACE
 

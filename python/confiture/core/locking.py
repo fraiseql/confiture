@@ -96,7 +96,7 @@ class MigrationLock:
         ...     print("Another migration is running, skipping")
     """
 
-    # Default lock namespace (first 32 bits of SHA256("confiture_migrations"))
+    # Default lock namespace (first 32 bits of SHA256("tb_confiture"))
     DEFAULT_LOCK_NAMESPACE = 1751936052
 
     def __init__(

@@ -143,7 +143,7 @@ class SchemaDriftDetector:
 
     # Tables to always ignore
     SYSTEM_TABLES = {
-        "confiture_migrations",
+        "tb_confiture",
         "confiture_version",
         "confiture_audit_log",
     }

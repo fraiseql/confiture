@@ -249,7 +249,7 @@ class MigrationChecksumVerifier:
         with self.connection.cursor() as cur:
             cur.execute("""
                 SELECT version, name, checksum
-                FROM confiture_migrations
+                FROM tb_confiture
                 ORDER BY version
             """)
             return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
@@ -322,7 +322,7 @@ class MigrationChecksumVerifier:
         with self.connection.cursor() as cur:
             cur.execute(
                 """
-                UPDATE confiture_migrations
+                UPDATE tb_confiture
                 SET checksum = %s
                 WHERE version = %s
             """,

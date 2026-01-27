@@ -7,6 +7,7 @@ import psycopg
 
 if TYPE_CHECKING:
     from confiture.core.hooks import Hook
+    from confiture.core.preconditions import Precondition
 
 
 class Migration(ABC):
@@ -20,6 +21,13 @@ class Migration(ABC):
 
     Alternatively, for simple SQL-only migrations, subclass SQLMigration
     and define `up_sql` and `down_sql` class attributes instead of methods.
+
+    Migrations can optionally define preconditions for fail-fast validation:
+    - up_preconditions: Checks before applying the migration (up)
+    - down_preconditions: Checks before rolling back the migration (down)
+
+    Preconditions are validated BEFORE the migration runs. If any fail,
+    the migration is aborted with a clear error message.
 
     Migrations can optionally define hooks that execute before/after DDL:
     - before_validation_hooks: Pre-flight checks before migration
@@ -88,6 +96,30 @@ class Migration(ABC):
         ...
         ...     up_sql = "ALTER TABLE tenant.products SET SCHEMA catalog;"
         ...     down_sql = "ALTER TABLE catalog.products SET SCHEMA tenant;"
+
+    Example with preconditions (fail-fast validation):
+        >>> from confiture.core.preconditions import TableExists, TableNotExists
+        >>>
+        >>> class MoveCatalogTables(Migration):
+        ...     version = "004"
+        ...     name = "move_catalog_tables"
+        ...
+        ...     # Validated BEFORE migration runs
+        ...     up_preconditions = [
+        ...         TableExists("tb_datasupplier", schema="tenant"),
+        ...         TableNotExists("tb_datasupplier", schema="catalog"),
+        ...     ]
+        ...
+        ...     down_preconditions = [
+        ...         TableExists("tb_datasupplier", schema="catalog"),
+        ...         TableNotExists("tb_datasupplier", schema="tenant"),
+        ...     ]
+        ...
+        ...     def up(self):
+        ...         self.execute("ALTER TABLE tenant.tb_datasupplier SET SCHEMA catalog")
+        ...
+        ...     def down(self):
+        ...         self.execute("ALTER TABLE catalog.tb_datasupplier SET SCHEMA tenant")
     """
 
     # Subclasses must define these
@@ -97,6 +129,11 @@ class Migration(ABC):
     # Configuration attributes
     transactional: bool = True  # Default: run in transaction with savepoints
     strict_mode: bool = False  # Default: lenient error handling
+
+    # Precondition attributes (optional, default to empty lists)
+    # Validated before migration execution - fail fast if not satisfied
+    up_preconditions: list["Precondition"] = []
+    down_preconditions: list["Precondition"] = []
 
     # Hook attributes (optional, default to empty lists)
     before_validation_hooks: list["Hook"] = []
