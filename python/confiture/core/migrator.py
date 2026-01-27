@@ -702,6 +702,65 @@ class Migrator:
         orphaned = all_sql_files - expected_files
         return sorted(orphaned, key=lambda f: f.name)
 
+    def fix_orphaned_sql_files(
+        self, migrations_dir: Path | None = None, dry_run: bool = False
+    ) -> dict[str, list[str]]:
+        """Rename orphaned SQL files to match the expected naming pattern.
+
+        For each orphaned file {NNN}_{name}.sql, renames it to {NNN}_{name}.up.sql
+        (assuming it's a forward migration).
+
+        Args:
+            migrations_dir: Optional custom migrations directory.
+                           If None, uses db/migrations/ (default)
+            dry_run: If True, return what would be renamed without making changes
+
+        Returns:
+            Dictionary with:
+            - 'renamed': List of tuples (old_name, new_name) for successfully renamed files
+            - 'errors': List of tuples (filename, error_message) for failures
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> result = migrator.fix_orphaned_sql_files(dry_run=False)
+            >>> print(f"Renamed: {result['renamed']}")
+            Renamed: [('001_create_users.sql', '001_create_users.up.sql')]
+        """
+        if migrations_dir is None:
+            migrations_dir = Path("db") / "migrations"
+
+        if not migrations_dir.exists():
+            return {"renamed": [], "errors": []}
+
+        orphaned_files = self.find_orphaned_sql_files(migrations_dir)
+        renamed: list[tuple[str, str]] = []
+        errors: list[tuple[str, str]] = []
+
+        for orphaned_file in orphaned_files:
+            # Suggest renaming by adding .up suffix before .sql
+            # Example: 001_create_users.sql -> 001_create_users.up.sql
+            old_name = orphaned_file.name
+            new_name = f"{orphaned_file.stem}.up.sql"
+            new_path = orphaned_file.parent / new_name
+
+            try:
+                if not dry_run:
+                    # Check if target already exists
+                    if new_path.exists():
+                        errors.append((old_name, f"Target file already exists: {new_name}"))
+                        continue
+
+                    # Rename the file
+                    orphaned_file.rename(new_path)
+                    logger.info(f"Renamed migration file: {old_name} -> {new_name}")
+
+                renamed.append((old_name, new_name))
+            except Exception as e:
+                errors.append((old_name, str(e)))
+                logger.error(f"Failed to rename {old_name}: {e}")
+
+        return {"renamed": renamed, "errors": errors}
+
     def find_pending(self, migrations_dir: Path | None = None) -> list[Path]:
         """Find migrations that have not been applied yet.
 

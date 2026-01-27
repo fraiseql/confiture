@@ -1807,6 +1807,158 @@ def migrate_down(
         raise typer.Exit(1) from e
 
 
+@migrate_app.command("validate")
+def migrate_validate(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    fix_naming: bool = typer.Option(
+        False,
+        "--fix-naming",
+        help="Automatically rename orphaned migration files to match naming convention",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview changes without actually renaming files",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text (default) or json",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file",
+    ),
+) -> None:
+    """Validate migration file naming conventions.
+
+    Checks for .sql files that don't match the expected naming pattern.
+
+    Confiture only recognizes:
+    - {NNN}_{name}.up.sql (forward migrations)
+    - {NNN}_{name}.down.sql (rollback migrations)
+    - {NNN}_{name}.py (Python class migrations)
+
+    Examples:
+        # Check for orphaned files
+        confiture migrate validate
+
+        # Preview what would be fixed
+        confiture migrate validate --fix-naming --dry-run
+
+        # Auto-fix orphaned file names
+        confiture migrate validate --fix-naming
+
+        # Output as JSON
+        confiture migrate validate --format json
+    """
+    try:
+        # Validate output format
+        if format_output not in ("text", "json"):
+            console.print(
+                f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]"
+            )
+            raise typer.Exit(1)
+
+        if not migrations_dir.exists():
+            if format_output == "json":
+                result = {"error": f"Migrations directory not found: {migrations_dir.absolute()}"}
+                _output_json(result, output_file, console)
+            else:
+                console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+            raise typer.Exit(1)
+
+        # Use Migrator to find and optionally fix orphaned files
+        from unittest.mock import Mock
+
+        from confiture.core.migrator import Migrator
+
+        mock_conn = Mock()
+        migrator = Migrator(connection=mock_conn)
+
+        # Find orphaned files
+        orphaned_files = migrator.find_orphaned_sql_files(migrations_dir)
+
+        if not orphaned_files:
+            if format_output == "json":
+                result = {
+                    "status": "ok",
+                    "message": "No orphaned migration files found",
+                    "fixed": [],
+                    "errors": [],
+                }
+                _output_json(result, output_file, console)
+            else:
+                console.print("[green]✅ No orphaned migration files found[/green]")
+            return
+
+        # If fix_naming is requested, fix the files
+        if fix_naming:
+            # --dry-run takes precedence
+            is_dry_run = dry_run
+            result = migrator.fix_orphaned_sql_files(migrations_dir, dry_run=is_dry_run)
+
+            if format_output == "json":
+                output_dict: dict[str, Any] = {
+                    "status": "fixed" if not is_dry_run else "preview",
+                    "fixed": result.get("renamed", []),
+                    "errors": result.get("errors", []),
+                }
+                _output_json(output_dict, output_file, console)
+            else:
+                # Text output
+                if is_dry_run:
+                    console.print("[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]")
+                else:
+                    console.print("[green]✅ Fixed orphaned migration files:[/green]")
+
+                for old_name, new_name in result.get("renamed", []):
+                    console.print(f"  • {old_name} → {new_name}")
+
+                if result.get("errors"):
+                    console.print("[red]Errors:[/red]")
+                    for filename, error_msg in result.get("errors", []):
+                        console.print(f"  ❌ {filename}: {error_msg}")
+
+        else:
+            # Just report the orphaned files (don't fix)
+            if format_output == "json":
+                output_dict = {
+                    "status": "issues_found",
+                    "orphaned_files": [f.name for f in orphaned_files],
+                }
+                _output_json(output_dict, output_file, console)
+            else:
+                console.print("[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
+                console.print("[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]")
+
+                for orphaned_file in orphaned_files:
+                    suggested_name = f"{orphaned_file.stem}.up.sql"
+                    console.print(f"  • {orphaned_file.name} → rename to: {suggested_name}")
+
+                console.print()
+                console.print("[cyan]To automatically fix these files, run:[/cyan]")
+                console.print("[cyan]  confiture migrate validate --fix-naming[/cyan]")
+                console.print()
+                console.print("[cyan]Or preview the changes first with:[/cyan]")
+                console.print("[cyan]  confiture migrate validate --fix-naming --dry-run[/cyan]")
+
+    except Exception as e:
+        if format_output == "json":
+            result = {"error": str(e)}
+            _output_json(result, output_file, console)
+        else:
+            console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
 @app.command()
 def validate_profile(
     path: Path = typer.Argument(
