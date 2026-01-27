@@ -6,6 +6,60 @@ Common issues and solutions when using Confiture.
 
 ## Migration Issues
 
+### Orphaned migration files (silently ignored)
+
+**Cause**: Migration files don't match the expected naming pattern and are silently ignored by Confiture.
+
+**Problem**: Files like `001_initial_schema.sql` or `002_add_columns.sql` (without `.up.sql` suffix) are skipped:
+
+```bash
+$ ls db/migrations/
+001_initial_schema.sql       ❌ SILENTLY IGNORED
+002_add_columns.sql          ❌ SILENTLY IGNORED
+003_add_indexes.up.sql       ✅ RECOGNIZED
+```
+
+When you apply migrations, only 003 is applied, but your code expects changes from 001 and 002, causing:
+- Schema mismatches
+- Application crashes
+- Data inconsistencies
+
+**Solutions**:
+
+1. **Validate and auto-fix**:
+   ```bash
+   # Check for orphaned files
+   confiture migrate validate
+
+   # Preview fixes
+   confiture migrate validate --fix-naming --dry-run
+
+   # Actually fix the files
+   confiture migrate validate --fix-naming
+   ```
+
+2. **Manual rename**:
+   ```bash
+   # Rename file with proper suffix
+   mv db/migrations/001_initial_schema.sql db/migrations/001_initial_schema.up.sql
+   mv db/migrations/002_add_columns.sql db/migrations/002_add_columns.up.sql
+   ```
+
+3. **Verify all migrations are recognized**:
+   ```bash
+   confiture migrate status
+   # Should show all migration files you created
+   ```
+
+**Prevention**:
+- Always use `.up.sql` and `.down.sql` suffixes for SQL migrations
+- Add migration validation to your CI/CD pipeline
+- Use `confiture migrate validate` before committing
+
+**See**: [Migration Naming Best Practices](docs/guides/migration-naming-best-practices.md)
+
+---
+
 ### "No pending migrations" after schema changes
 
 **Cause**: Migration tracking is out of sync with actual schema.

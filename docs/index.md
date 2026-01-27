@@ -137,6 +137,9 @@ confiture migrate up
 - [Production Data Sync](guides/03-production-sync.md) - Copy and anonymize data
 - [Schema-to-Schema](guides/04-schema-to-schema.md) - Zero-downtime via FDW
 
+### Migration File Management
+- [Migration Naming Best Practices](guides/migration-naming-best-practices.md) - Naming conventions and validation
+
 ### Advanced Topics
 - [Dry-Run Mode](guides/dry-run.md) - Test migrations safely
 - [Hooks](guides/hooks.md) - Before/after migration hooks

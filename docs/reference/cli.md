@@ -688,6 +688,167 @@ confiture migrate down --steps 3
 
 ---
 
+### `confiture migrate validate`
+
+Validate and fix migration file naming conventions.
+
+Confiture only recognizes `.sql` files that match the expected naming pattern. This command helps identify and fix misnamed migration files that would be silently ignored.
+
+#### Usage
+
+```bash
+confiture migrate validate [OPTIONS]
+```
+
+#### Options
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--migrations-dir` | - | Path | `db/migrations` | Directory containing migration files |
+| `--fix-naming` | - | Flag | `False` | Automatically rename orphaned migration files to match naming convention |
+| `--dry-run` | - | Flag | `False` | Preview changes without actually renaming files |
+| `--format` | `-f` | Text | `text` | Output format: `text` (default) or `json` |
+| `--output` | `-o` | Path | None | Save output to file |
+
+#### Examples
+
+```bash
+# Check for orphaned files
+confiture migrate validate
+
+# Preview what would be fixed
+confiture migrate validate --fix-naming --dry-run
+
+# Auto-fix orphaned file names
+confiture migrate validate --fix-naming
+
+# Output as JSON for CI/CD integration
+confiture migrate validate --format json
+confiture migrate validate --fix-naming --format json
+```
+
+#### Recognized Migration File Patterns
+
+Confiture only applies migrations that match these patterns:
+
+```
+✅ RECOGNIZED PATTERNS:
+{NNN}_{name}.py           # Python class migration
+{NNN}_{name}.up.sql       # Forward migration (SQL)
+{NNN}_{name}.down.sql     # Rollback migration (SQL)
+
+Examples:
+001_create_users.py
+002_add_email.up.sql
+002_add_email.down.sql
+003_create_posts.py
+
+❌ NOT RECOGNIZED (Will be ignored):
+001_create_users.sql      # Missing .up suffix
+002_add_email.sql         # Missing .up suffix
+```
+
+#### Orphaned Files Detection
+
+The validator scans for `.sql` files that don't match the expected pattern and warns about them:
+
+```bash
+$ confiture migrate validate
+⚠️  WARNING: Orphaned migration files detected
+These SQL files exist but won't be applied by Confiture:
+  • 001_initial_schema.sql → rename to: 001_initial_schema.up.sql
+  • 002_add_columns.sql → rename to: 002_add_columns.up.sql
+
+To automatically fix these files, run:
+  confiture migrate validate --fix-naming
+```
+
+#### Auto-Fix Capability
+
+The `--fix-naming` flag automatically renames orphaned files to match the naming convention:
+
+```bash
+$ confiture migrate validate --fix-naming
+✅ Fixed orphaned migration files:
+  • 001_initial_schema.sql → 001_initial_schema.up.sql
+  • 002_add_columns.sql → 002_add_columns.up.sql
+```
+
+**Important**: Files are renamed to `.up.sql` (forward migrations). For rollback migrations, rename to `.down.sql` manually.
+
+#### Dry-Run Preview
+
+Use `--dry-run` to preview changes before applying them:
+
+```bash
+$ confiture migrate validate --fix-naming --dry-run
+📋 DRY-RUN: Would fix the following orphaned files:
+  • 001_users.sql → 001_users.up.sql
+  • 002_posts.sql → 002_posts.up.sql
+
+# Files are NOT renamed during dry-run
+```
+
+#### JSON Output for CI/CD
+
+Output as JSON for programmatic access:
+
+```bash
+# Check for orphaned files
+$ confiture migrate validate --format json
+{
+  "status": "issues_found",
+  "orphaned_files": [
+    "001_initial_schema.sql",
+    "002_add_columns.sql"
+  ]
+}
+
+# Auto-fix and report results
+$ confiture migrate validate --fix-naming --format json
+{
+  "status": "fixed",
+  "fixed": [
+    ["001_initial_schema.sql", "001_initial_schema.up.sql"],
+    ["002_add_columns.sql", "002_add_columns.up.sql"]
+  ],
+  "errors": []
+}
+```
+
+#### Safety Guarantees
+
+- **Content preserved**: File contents are never modified, only filenames
+- **No data loss**: Files are renamed, not deleted
+- **Atomic operations**: Rename is atomic (all-or-nothing)
+- **Error handling**: Reports specific errors for failures (e.g., target file exists)
+
+#### Why This Matters
+
+Silently ignored migration files create a dangerous scenario:
+
+```
+1. Developer writes migration: 001_add_users_table.sql (forgot .up suffix)
+2. confiture scans migrations: Doesn't match pattern, silently skips
+3. No error or warning: Developer thinks migration is discoverable
+4. Deploy to production: Code expects new schema, database is old
+5. Application crashes: Schema mismatch causes failures
+```
+
+**Solution**: Use `confiture migrate validate` in your CI/CD pipeline to catch these issues early.
+
+#### Integration with Other Commands
+
+The `migrate status` and `migrate up` commands automatically warn about orphaned files:
+
+```bash
+$ confiture migrate status
+⚠️  WARNING: Orphaned migration files detected
+  • 001_schema.sql → rename to: 001_schema.up.sql
+```
+
+---
+
 ## Error Handling
 
 ### Common Errors and Solutions
