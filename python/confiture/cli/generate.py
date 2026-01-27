@@ -201,7 +201,9 @@ def preview_generation(
 
         console.print(table)
         console.print(f"\n[dim]Total changes: {len(changes)}[/dim]")
-        console.print("\n[dim]Run 'confiture generate from-branch' to generate migration files.[/dim]")
+        console.print(
+            "\n[dim]Run 'confiture generate from-branch' to generate migration files.[/dim]"
+        )
 
         conn.close()
 
@@ -266,10 +268,14 @@ def show_diff(
             op = entry.operation
             op_color = {"CREATE": "green", "ALTER": "yellow", "DROP": "red"}.get(op, "white")
 
-            console.print(f"[{op_color}]{op}[/{op_color}] {entry.object_type} [bold]{entry.object_name}[/bold]")
+            console.print(
+                f"[{op_color}]{op}[/{op_color}] {entry.object_type} [bold]{entry.object_name}[/bold]"
+            )
 
             if show_sql and entry.new_ddl:
-                console.print(f"[dim]  {entry.new_ddl[:200]}{'...' if len(entry.new_ddl) > 200 else ''}[/dim]")
+                console.print(
+                    f"[dim]  {entry.new_ddl[:200]}{'...' if len(entry.new_ddl) > 200 else ''}[/dim]"
+                )
 
         console.print(f"\n[dim]Total: {len(diff)} change(s)[/dim]")
 

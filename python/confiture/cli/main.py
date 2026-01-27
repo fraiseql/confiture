@@ -722,9 +722,7 @@ def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:
     all_sql_files = set(migrations_dir.glob("*.sql"))
 
     # Find all properly named migration files
-    expected_files = set(migrations_dir.glob("*.up.sql")) | set(
-        migrations_dir.glob("*.down.sql")
-    )
+    expected_files = set(migrations_dir.glob("*.up.sql")) | set(migrations_dir.glob("*.down.sql"))
 
     # Orphaned files are SQL files that don't match the expected pattern
     orphaned = all_sql_files - expected_files
@@ -746,13 +744,13 @@ def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) 
         suggested_name = f"{orphaned_file.stem}.up.sql"
         console.print(f"  • {orphaned_file.name} → rename to: {suggested_name}")
 
-    console.print("\n[yellow]Confiture only recognizes migration files with these patterns:[/yellow]")
+    console.print(
+        "\n[yellow]Confiture only recognizes migration files with these patterns:[/yellow]"
+    )
     console.print("[yellow]  • {NNN}_{name}.up.sql   (forward migrations)[/yellow]")
     console.print("[yellow]  • {NNN}_{name}.down.sql (rollback migrations)[/yellow]")
     console.print("[yellow]  • {NNN}_{name}.py       (Python class migrations)[/yellow]")
-    console.print(
-        "[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]"
-    )
+    console.print("[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]")
 
 
 @migrate_app.command("up")
@@ -1862,9 +1860,7 @@ def migrate_validate(
     try:
         # Validate output format
         if format_output not in ("text", "json"):
-            console.print(
-                f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]"
-            )
+            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
             raise typer.Exit(1)
 
         if not migrations_dir.exists():
@@ -1915,7 +1911,9 @@ def migrate_validate(
             else:
                 # Text output
                 if is_dry_run:
-                    console.print("[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]")
+                    console.print(
+                        "[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]"
+                    )
                 else:
                     console.print("[green]✅ Fixed orphaned migration files:[/green]")
 
@@ -1937,7 +1935,9 @@ def migrate_validate(
                 _output_json(output_dict, output_file, console)
             else:
                 console.print("[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
-                console.print("[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]")
+                console.print(
+                    "[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]"
+                )
 
                 for orphaned_file in orphaned_files:
                     suggested_name = f"{orphaned_file.stem}.up.sql"

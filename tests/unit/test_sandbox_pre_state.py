@@ -356,6 +356,8 @@ class TestPreStateSimulationError:
 
         error_msg = str(exc_info.value)
         # Should contain helpful hints
-        assert "not in the expected post-migration state" in error_msg or \
-               "DOWN migration has a bug" in error_msg or \
-               "migration is not reversible" in error_msg
+        assert (
+            "not in the expected post-migration state" in error_msg
+            or "DOWN migration has a bug" in error_msg
+            or "migration is not reversible" in error_msg
+        )

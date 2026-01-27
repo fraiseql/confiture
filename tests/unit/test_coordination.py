@@ -235,7 +235,9 @@ class TestConflictDetectorFunctionConflicts:
         intent_a = Intent(
             agent_id="agent_a",
             feature_name="feature_a",
-            schema_changes=["CREATE FUNCTION calculate_total() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL"],
+            schema_changes=[
+                "CREATE FUNCTION calculate_total() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL"
+            ],
             tables_affected=[],
         )
 
@@ -280,7 +282,11 @@ class TestConflictDetectorSuggestions:
 
         # Suggestions should mention both agents
         suggestions_text = " ".join(conflicts[0].resolution_suggestions)
-        assert "auth" in suggestions_text or "agent_b" in suggestions_text or "coordinate" in suggestions_text.lower()
+        assert (
+            "auth" in suggestions_text
+            or "agent_b" in suggestions_text
+            or "coordinate" in suggestions_text.lower()
+        )
 
     def test_generate_column_conflict_suggestions(self):
         """Should generate urgent suggestions for column conflicts."""
@@ -309,7 +315,11 @@ class TestConflictDetectorSuggestions:
         suggestions = column_conflicts[0].resolution_suggestions
         # Column conflicts should have urgent language
         suggestions_text = " ".join(suggestions).lower()
-        assert "high" in suggestions_text or "urgent" in suggestions_text or "coordinate" in suggestions_text
+        assert (
+            "high" in suggestions_text
+            or "urgent" in suggestions_text
+            or "coordinate" in suggestions_text
+        )
 
 
 class TestConflictDetectorParsing:

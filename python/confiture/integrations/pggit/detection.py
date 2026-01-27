@@ -160,8 +160,7 @@ def require_pggit(
 
     if version is None:
         raise PgGitVersionError(
-            "Could not determine pgGit version. "
-            "The extension may be corrupted or incompatible."
+            "Could not determine pgGit version. The extension may be corrupted or incompatible."
         )
 
     if version < min_version:

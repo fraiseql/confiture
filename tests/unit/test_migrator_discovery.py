@@ -195,10 +195,14 @@ class AddEmail(Migration):
 
         # Create orphaned SQL files (missing .up/.down suffix)
         (migrations_dir / "001_initial_schema.sql").write_text("CREATE TABLE users (id INT);")
-        (migrations_dir / "002_add_columns.sql").write_text("ALTER TABLE users ADD COLUMN email TEXT;")
+        (migrations_dir / "002_add_columns.sql").write_text(
+            "ALTER TABLE users ADD COLUMN email TEXT;"
+        )
 
         # Create properly named SQL files
-        (migrations_dir / "003_add_indexes.up.sql").write_text("CREATE INDEX idx_users_email ON users(email);")
+        (migrations_dir / "003_add_indexes.up.sql").write_text(
+            "CREATE INDEX idx_users_email ON users(email);"
+        )
         (migrations_dir / "003_add_indexes.down.sql").write_text("DROP INDEX idx_users_email;")
 
         import os

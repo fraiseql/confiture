@@ -219,9 +219,7 @@ class Migrator:
             )
             logger.debug(f"All preconditions passed for migration {migration.version}")
         except PreconditionValidationError as e:
-            logger.error(
-                f"Precondition validation failed for migration {migration.version}: {e}"
-            )
+            logger.error(f"Precondition validation failed for migration {migration.version}: {e}")
             raise
 
     def _apply_transactional(

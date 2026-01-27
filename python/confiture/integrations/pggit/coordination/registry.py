@@ -513,6 +513,7 @@ class IntentRegistry:
 
     def _row_to_intent(self, row: Any) -> Intent:
         """Convert database row to Intent object."""
+
         def _parse_json(value: Any) -> Any:
             """Parse JSON value - handle both strings and already-parsed objects."""
             if isinstance(value, str):
@@ -537,6 +538,7 @@ class IntentRegistry:
 
     def _row_to_conflict(self, row: Any) -> ConflictReport:
         """Convert database row to ConflictReport object."""
+
         def _parse_json(value: Any) -> Any:
             """Parse JSON value - handle both strings and already-parsed objects."""
             if isinstance(value, str):

@@ -449,9 +449,7 @@ class TestCoordinateStatusCommand:
         mock_registry.get_intent.return_value = intent
         mock_registry.get_conflicts.return_value = []
 
-        result = runner.invoke(
-            app, ["coordinate", "status", "--intent-id", intent_id]
-        )
+        result = runner.invoke(app, ["coordinate", "status", "--intent-id", intent_id])
 
         assert result.exit_code == 0
         assert "test_feature" in result.stdout
@@ -470,9 +468,7 @@ class TestCoordinateStatusCommand:
         mock_registry.get_intent.return_value = None
 
         intent_id = str(uuid4())
-        result = runner.invoke(
-            app, ["coordinate", "status", "--intent-id", intent_id]
-        )
+        result = runner.invoke(app, ["coordinate", "status", "--intent-id", intent_id])
 
         assert result.exit_code == 1
         assert "not found" in result.stdout
@@ -511,9 +507,7 @@ class TestCoordinateStatusCommand:
         )
         mock_registry.get_conflicts.return_value = [conflict]
 
-        result = runner.invoke(
-            app, ["coordinate", "status", "--intent-id", intent_id]
-        )
+        result = runner.invoke(app, ["coordinate", "status", "--intent-id", intent_id])
 
         assert result.exit_code == 0
         assert "Conflict" in result.stdout

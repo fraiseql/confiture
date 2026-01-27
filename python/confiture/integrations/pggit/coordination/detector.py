@@ -29,11 +29,21 @@ class ConflictDetector:
 
     def __init__(self):
         """Initialize conflict detector."""
-        self._table_pattern = re.compile(r"(?:CREATE|ALTER|DROP)\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
-        self._column_pattern = re.compile(r"ALTER\s+TABLE\s+(\w+)\s+(?:ADD|DROP)\s+COLUMN\s+(\w+)", re.IGNORECASE)
-        self._constraint_pattern = re.compile(r"(?:ADD|DROP)\s+(?:PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|DEFAULT)", re.IGNORECASE)
-        self._function_pattern = re.compile(r"(?:CREATE|ALTER|DROP)\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
-        self._index_pattern = re.compile(r"(?:CREATE|DROP)\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
+        self._table_pattern = re.compile(
+            r"(?:CREATE|ALTER|DROP)\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)", re.IGNORECASE
+        )
+        self._column_pattern = re.compile(
+            r"ALTER\s+TABLE\s+(\w+)\s+(?:ADD|DROP)\s+COLUMN\s+(\w+)", re.IGNORECASE
+        )
+        self._constraint_pattern = re.compile(
+            r"(?:ADD|DROP)\s+(?:PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|DEFAULT)", re.IGNORECASE
+        )
+        self._function_pattern = re.compile(
+            r"(?:CREATE|ALTER|DROP)\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?(\w+)", re.IGNORECASE
+        )
+        self._index_pattern = re.compile(
+            r"(?:CREATE|DROP)\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+EXISTS\s+)?(\w+)", re.IGNORECASE
+        )
 
     def detect_conflicts(
         self,
@@ -77,7 +87,9 @@ class ConflictDetector:
 
         # Add suggestions to all conflicts
         for conflict in conflicts:
-            conflict.resolution_suggestions = self._generate_suggestions(conflict, intent_a, intent_b)
+            conflict.resolution_suggestions = self._generate_suggestions(
+                conflict, intent_a, intent_b
+            )
 
         return conflicts
 
@@ -197,8 +209,12 @@ class ConflictDetector:
         overlapping_tables = tables_a & tables_b
 
         if overlapping_tables:
-            has_constraint_a = any(self._constraint_pattern.search(change) for change in intent_a.schema_changes)
-            has_constraint_b = any(self._constraint_pattern.search(change) for change in intent_b.schema_changes)
+            has_constraint_a = any(
+                self._constraint_pattern.search(change) for change in intent_a.schema_changes
+            )
+            has_constraint_b = any(
+                self._constraint_pattern.search(change) for change in intent_b.schema_changes
+            )
 
             if has_constraint_a and has_constraint_b:
                 conflict = ConflictReport(
@@ -267,27 +283,41 @@ class ConflictDetector:
         suggestions: list[str] = []
 
         if conflict.conflict_type == ConflictType.TABLE:
-            suggestions.append(f"Both agents are modifying tables: {', '.join(conflict.affected_objects)}")
-            suggestions.append(f"Consider coordinating with {intent_b.agent_id} ({intent_b.feature_name})")
+            suggestions.append(
+                f"Both agents are modifying tables: {', '.join(conflict.affected_objects)}"
+            )
+            suggestions.append(
+                f"Consider coordinating with {intent_b.agent_id} ({intent_b.feature_name})"
+            )
             suggestions.append("You could apply changes sequentially or divide responsibilities")
 
         elif conflict.conflict_type == ConflictType.COLUMN:
-            suggestions.append(f"Both agents are modifying columns: {', '.join(conflict.affected_objects)}")
+            suggestions.append(
+                f"Both agents are modifying columns: {', '.join(conflict.affected_objects)}"
+            )
             suggestions.append("This is a high-priority conflict - coordinate immediately")
             suggestions.append("Consider combining your changes into a single migration")
 
         elif conflict.conflict_type == ConflictType.FUNCTION:
-            suggestions.append(f"Both agents are modifying functions: {', '.join(conflict.affected_objects)}")
+            suggestions.append(
+                f"Both agents are modifying functions: {', '.join(conflict.affected_objects)}"
+            )
             suggestions.append("Coordinate to avoid function signature conflicts")
-            suggestions.append("One agent should update the function, the other should adjust calls")
+            suggestions.append(
+                "One agent should update the function, the other should adjust calls"
+            )
 
         elif conflict.conflict_type == ConflictType.INDEX:
-            suggestions.append(f"Both agents are creating indexes on: {', '.join(conflict.affected_objects)}")
+            suggestions.append(
+                f"Both agents are creating indexes on: {', '.join(conflict.affected_objects)}"
+            )
             suggestions.append("Consider having one agent create indexes for both features")
             suggestions.append("This is low priority if different index strategies are used")
 
         elif conflict.conflict_type == ConflictType.CONSTRAINT:
-            suggestions.append(f"Both agents are modifying constraints on: {', '.join(conflict.affected_objects)}")
+            suggestions.append(
+                f"Both agents are modifying constraints on: {', '.join(conflict.affected_objects)}"
+            )
             suggestions.append("Coordinate to ensure constraint compatibility")
             suggestions.append("Test merge carefully to catch constraint violations")
 
@@ -295,7 +325,9 @@ class ConflictDetector:
         if len(suggestions) == 0:
             suggestions.append("Coordinate with the other agent on timing and scope")
 
-        suggestions.append(f"Severity: {conflict.severity.value} - {'Proceed with caution' if conflict.severity == ConflictSeverity.ERROR else 'Can proceed with coordination'}")
+        suggestions.append(
+            f"Severity: {conflict.severity.value} - {'Proceed with caution' if conflict.severity == ConflictSeverity.ERROR else 'Can proceed with coordination'}"
+        )
 
         return suggestions
 

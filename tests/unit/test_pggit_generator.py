@@ -59,7 +59,7 @@ class TestGeneratedMigration:
             assert "class AddUsersTable(Migration):" in content
             assert "CREATE TABLE users" in content
             assert "DROP TABLE IF EXISTS users" in content
-            assert "version = \"20250115143022_001\"" in content
+            assert 'version = "20250115143022_001"' in content
 
     def test_render_includes_metadata(self):
         """Generated file should include metadata comments."""
@@ -129,9 +129,7 @@ class TestMigrationGeneratorInitialization:
         """MigrationGenerator should initialize with pgGit client."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
 
@@ -145,9 +143,7 @@ class TestMigrationGeneratorInitialization:
         """Should expose client property."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
 
@@ -163,9 +159,7 @@ class TestMigrationGeneratorGeneration:
         """Should return empty list when no diff."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = []
             mock_client_class.return_value = mock_client
@@ -180,9 +174,7 @@ class TestMigrationGeneratorGeneration:
         """Should generate migrations for changes."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = [
                 DiffEntry(
@@ -206,9 +198,7 @@ class TestMigrationGeneratorGeneration:
         """Should return None when no diff."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = []
             mock_client_class.return_value = mock_client
@@ -222,9 +212,7 @@ class TestMigrationGeneratorGeneration:
         """Should generate single combined migration."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = [
                 DiffEntry(
@@ -255,9 +243,7 @@ class TestMigrationGeneratorGeneration:
         """Should generate migration from diff list."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ):
+        with patch("confiture.integrations.pggit.generator.PgGitClient"):
             generator = MigrationGenerator(mock_conn)
 
             diff = [
@@ -279,9 +265,7 @@ class TestMigrationGeneratorGeneration:
         """Should return preview of changes."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = [
                 DiffEntry(
@@ -466,9 +450,7 @@ class TestMigrationGeneratorFileOutput:
         """Should write files when output_dir provided."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = [
                 DiffEntry(
@@ -501,9 +483,7 @@ class TestMigrationGeneratorFileOutput:
         """Should write combined file when output_dir provided."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.generator.PgGitClient"
-        ) as mock_client_class:
+        with patch("confiture.integrations.pggit.generator.PgGitClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.diff.return_value = [
                 DiffEntry(

@@ -101,7 +101,9 @@ class TestTableNotExists:
 
     def test_table_not_exists_passes_when_table_missing(self):
         """TableNotExists should pass when table is not found."""
-        mock_conn = create_mock_connection({"information_schema.tables": [True]})  # NOT EXISTS returns True
+        mock_conn = create_mock_connection(
+            {"information_schema.tables": [True]}
+        )  # NOT EXISTS returns True
         precondition = TableNotExists("users_backup")
 
         passed, message = precondition.check(mock_conn)
@@ -111,7 +113,9 @@ class TestTableNotExists:
 
     def test_table_not_exists_fails_when_table_found(self):
         """TableNotExists should fail when table exists."""
-        mock_conn = create_mock_connection({"information_schema.tables": [False]})  # NOT EXISTS returns False
+        mock_conn = create_mock_connection(
+            {"information_schema.tables": [False]}
+        )  # NOT EXISTS returns False
         precondition = TableNotExists("users")
 
         passed, message = precondition.check(mock_conn)
@@ -465,9 +469,7 @@ class TestCustomSQL:
         passed, message = precondition.check(mock_conn)
 
         assert passed is True
-        mock_cursor.execute.assert_called_once_with(
-            "SELECT COUNT(*) > %s FROM users", (5,)
-        )
+        mock_cursor.execute.assert_called_once_with("SELECT COUNT(*) > %s FROM users", (5,))
 
 
 # =============================================================================
@@ -480,10 +482,12 @@ class TestPreconditionValidator:
 
     def test_check_returns_all_passed_when_all_pass(self):
         """Validator check() should return (True, []) when all pass."""
-        mock_conn = create_mock_connection({
-            "information_schema.tables": [True],
-            "information_schema.columns": [True],
-        })
+        mock_conn = create_mock_connection(
+            {
+                "information_schema.tables": [True],
+                "information_schema.columns": [True],
+            }
+        )
         validator = PreconditionValidator(mock_conn)
 
         preconditions = [
@@ -528,9 +532,7 @@ class TestPreconditionValidator:
         preconditions = [TableExists("nonexistent_table")]
 
         with pytest.raises(PreconditionValidationError) as exc_info:
-            validator.validate(
-                preconditions, migration_version="003", migration_name="test"
-            )
+            validator.validate(preconditions, migration_version="003", migration_name="test")
 
         assert "preconditions failed" in str(exc_info.value).lower()
         assert len(exc_info.value.failures) == 1

@@ -96,7 +96,9 @@ class Intent:
             "schema_changes": self.schema_changes,
             "tables_affected": self.tables_affected,
             "estimated_duration_ms": self.estimated_duration_ms,
-            "risk_level": self.risk_level.value if isinstance(self.risk_level, RiskLevel) else self.risk_level,
+            "risk_level": self.risk_level.value
+            if isinstance(self.risk_level, RiskLevel)
+            else self.risk_level,
             "status": self.status.value if isinstance(self.status, IntentStatus) else self.status,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
@@ -115,10 +117,18 @@ class Intent:
             schema_changes=data.get("schema_changes", []),
             tables_affected=data.get("tables_affected", []),
             estimated_duration_ms=data.get("estimated_duration_ms", 0),
-            risk_level=RiskLevel[data.get("risk_level", "LOW").upper()] if isinstance(data.get("risk_level"), str) else data.get("risk_level", RiskLevel.LOW),
-            status=IntentStatus[data.get("status", "REGISTERED").upper()] if isinstance(data.get("status"), str) else data.get("status", IntentStatus.REGISTERED),
-            created_at=datetime.fromisoformat(data.get("created_at")) if isinstance(data.get("created_at"), str) else data.get("created_at", datetime.now()),
-            updated_at=datetime.fromisoformat(data.get("updated_at")) if isinstance(data.get("updated_at"), str) else data.get("updated_at", datetime.now()),
+            risk_level=RiskLevel[data.get("risk_level", "LOW").upper()]
+            if isinstance(data.get("risk_level"), str)
+            else data.get("risk_level", RiskLevel.LOW),
+            status=IntentStatus[data.get("status", "REGISTERED").upper()]
+            if isinstance(data.get("status"), str)
+            else data.get("status", IntentStatus.REGISTERED),
+            created_at=datetime.fromisoformat(data.get("created_at"))
+            if isinstance(data.get("created_at"), str)
+            else data.get("created_at", datetime.now()),
+            updated_at=datetime.fromisoformat(data.get("updated_at"))
+            if isinstance(data.get("updated_at"), str)
+            else data.get("updated_at", datetime.now()),
             conflicts_with=data.get("conflicts_with", []),
             metadata=data.get("metadata", {}),
         )
@@ -183,9 +193,13 @@ class ConflictReport:
             "id": self.id,
             "intent_a": self.intent_a,
             "intent_b": self.intent_b,
-            "conflict_type": self.conflict_type.value if isinstance(self.conflict_type, ConflictType) else self.conflict_type,
+            "conflict_type": self.conflict_type.value
+            if isinstance(self.conflict_type, ConflictType)
+            else self.conflict_type,
             "affected_objects": self.affected_objects,
-            "severity": self.severity.value if isinstance(self.severity, ConflictSeverity) else self.severity,
+            "severity": self.severity.value
+            if isinstance(self.severity, ConflictSeverity)
+            else self.severity,
             "resolution_suggestions": self.resolution_suggestions,
             "reviewed": self.reviewed,
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
@@ -200,14 +214,22 @@ class ConflictReport:
             id=data.get("id", 0),
             intent_a=data.get("intent_a", ""),
             intent_b=data.get("intent_b", ""),
-            conflict_type=ConflictType[data.get("conflict_type", "TABLE").upper()] if isinstance(data.get("conflict_type"), str) else data.get("conflict_type", ConflictType.TABLE),
+            conflict_type=ConflictType[data.get("conflict_type", "TABLE").upper()]
+            if isinstance(data.get("conflict_type"), str)
+            else data.get("conflict_type", ConflictType.TABLE),
             affected_objects=data.get("affected_objects", []),
-            severity=ConflictSeverity[data.get("severity", "WARNING").upper()] if isinstance(data.get("severity"), str) else data.get("severity", ConflictSeverity.WARNING),
+            severity=ConflictSeverity[data.get("severity", "WARNING").upper()]
+            if isinstance(data.get("severity"), str)
+            else data.get("severity", ConflictSeverity.WARNING),
             resolution_suggestions=data.get("resolution_suggestions", []),
             reviewed=data.get("reviewed", False),
-            reviewed_at=datetime.fromisoformat(data.get("reviewed_at")) if isinstance(data.get("reviewed_at"), str) else data.get("reviewed_at"),
+            reviewed_at=datetime.fromisoformat(data.get("reviewed_at"))
+            if isinstance(data.get("reviewed_at"), str)
+            else data.get("reviewed_at"),
             resolution_notes=data.get("resolution_notes", ""),
-            created_at=datetime.fromisoformat(data.get("created_at")) if isinstance(data.get("created_at"), str) else data.get("created_at", datetime.now()),
+            created_at=datetime.fromisoformat(data.get("created_at"))
+            if isinstance(data.get("created_at"), str)
+            else data.get("created_at", datetime.now()),
         )
 
     def to_json(self, indent: int | None = 2) -> str:
@@ -258,8 +280,12 @@ class IntentStatusChange:
         """Convert to dictionary for serialization."""
         return {
             "intent_id": self.intent_id,
-            "old_status": self.old_status.value if self.old_status and isinstance(self.old_status, IntentStatus) else self.old_status,
-            "new_status": self.new_status.value if isinstance(self.new_status, IntentStatus) else self.new_status,
+            "old_status": self.old_status.value
+            if self.old_status and isinstance(self.old_status, IntentStatus)
+            else self.old_status,
+            "new_status": self.new_status.value
+            if isinstance(self.new_status, IntentStatus)
+            else self.new_status,
             "reason": self.reason,
             "changed_by": self.changed_by,
             "changed_at": self.changed_at.isoformat(),

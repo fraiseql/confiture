@@ -45,6 +45,7 @@ def _output_json(data: dict | list, pretty: bool = True) -> None:
         pretty: Whether to pretty-print (indent) the JSON
     """
     import json
+
     indent = 2 if pretty else None
     print(json.dumps(data, indent=indent))
 
@@ -84,17 +85,11 @@ def register(
     tables_affected: str | None = typer.Option(
         None, help="Comma-separated table names affected by changes"
     ),
-    risk_level: str = typer.Option(
-        "low", help="Risk assessment: low, medium, or high"
-    ),
-    estimated_hours: float = typer.Option(
-        0, help="Estimated hours to complete"
-    ),
+    risk_level: str = typer.Option("low", help="Risk assessment: low, medium, or high"),
+    estimated_hours: float = typer.Option(0, help="Estimated hours to complete"),
     database_url: str | None = typer.Option(None, help="Database URL"),
     metadata: str | None = typer.Option(None, help="JSON metadata string"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """Register a new agent intention for schema changes.
 
@@ -195,13 +190,12 @@ def register(
 @coordinate_app.command()
 def list_intents(
     status_filter: str | None = typer.Option(
-        None, help="Filter by status (registered, in_progress, completed, merged, abandoned, conflicted)"
+        None,
+        help="Filter by status (registered, in_progress, completed, merged, abandoned, conflicted)",
     ),
     agent_filter: str | None = typer.Option(None, help="Filter by agent ID"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """List all registered intentions with optional filtering.
 
@@ -277,9 +271,7 @@ def check(
     schema_changes: str = typer.Option(..., help="DDL statements or SQL file path"),
     tables_affected: str | None = typer.Option(None, help="Comma-separated table names"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """Check for conflicts with a proposed set of schema changes.
 
@@ -368,9 +360,7 @@ def check(
 def status(
     intent_id: str = typer.Option(..., help="Intention ID"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """Show detailed status of a specific intention.
 
@@ -414,7 +404,10 @@ def status(
             table.add_row("Risk Level", intent.risk_level.value)
             table.add_row("Created", str(intent.created_at))
             table.add_row("Updated", str(intent.updated_at))
-            table.add_row("Tables Affected", ", ".join(intent.tables_affected) if intent.tables_affected else "-")
+            table.add_row(
+                "Tables Affected",
+                ", ".join(intent.tables_affected) if intent.tables_affected else "-",
+            )
 
             console.print(table)
 
@@ -439,9 +432,7 @@ def status(
 @coordinate_app.command()
 def conflicts(
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """List all detected conflicts between intentions.
 
@@ -467,10 +458,12 @@ def conflicts(
         all_conflicts_data = []
         for intent in conflicted:
             intent_conflicts = registry.get_conflicts(intent.id)
-            all_conflicts_data.append({
-                "intent": intent.to_dict(),
-                "conflicts": [c.to_dict() for c in intent_conflicts],
-            })
+            all_conflicts_data.append(
+                {
+                    "intent": intent.to_dict(),
+                    "conflicts": [c.to_dict() for c in intent_conflicts],
+                }
+            )
 
         if format_output == "json":
             output_data = {
@@ -487,7 +480,9 @@ def conflicts(
                 # Get conflicts for this intent
                 intent_conflicts = registry.get_conflicts(intent.id)
                 for conflict in intent_conflicts:
-                    severity_color = "red" if conflict.severity == ConflictSeverity.ERROR else "yellow"
+                    severity_color = (
+                        "red" if conflict.severity == ConflictSeverity.ERROR else "yellow"
+                    )
                     open_tag = f"[{severity_color}]"
                     close_tag = f"[/{severity_color}]"
                     console.print(
@@ -507,9 +502,7 @@ def resolve(
     conflict_id: int = typer.Option(..., help="Conflict ID"),
     notes: str = typer.Option(..., help="Resolution notes"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """Mark a conflict as reviewed and provide resolution notes.
 
@@ -547,9 +540,7 @@ def abandon(
     intent_id: str = typer.Option(..., help="Intention ID"),
     reason: str = typer.Option(..., help="Reason for abandonment"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json"
-    ),
+    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
 ) -> None:
     """Abandon an intention before completion.
 

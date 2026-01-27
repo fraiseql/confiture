@@ -256,7 +256,9 @@ def get_sql_migration_version(up_file: Path) -> str:
     return parts[0] if parts else "???"
 
 
-def load_preconditions_from_yaml(yaml_file: Path) -> tuple[list["Precondition"], list["Precondition"]]:
+def load_preconditions_from_yaml(
+    yaml_file: Path,
+) -> tuple[list["Precondition"], list["Precondition"]]:
     """Load preconditions from a YAML sidecar file.
 
     The YAML file should have the following structure:
@@ -360,9 +362,7 @@ def load_preconditions_from_yaml(yaml_file: Path) -> tuple[list["Precondition"],
             try:
                 preconditions.append(precondition_class(**item))
             except TypeError as e:
-                raise ValueError(
-                    f"Invalid arguments for {precondition_type}: {e}"
-                ) from e
+                raise ValueError(f"Invalid arguments for {precondition_type}: {e}") from e
 
         return preconditions
 

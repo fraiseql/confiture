@@ -202,7 +202,9 @@ class TestConflictResolution:
         # Verify the specific conflict was marked resolved
         # Re-fetch all conflicts
         updated_conflicts = registry.get_conflicts(intent_b.id)
-        resolved_conflict = next((c for c in updated_conflicts if c.id == conflict_id_to_resolve), None)
+        resolved_conflict = next(
+            (c for c in updated_conflicts if c.id == conflict_id_to_resolve), None
+        )
         assert resolved_conflict is not None
         assert resolved_conflict.reviewed is True
         assert "coordinated" in resolved_conflict.resolution_notes.lower()
@@ -360,7 +362,9 @@ class TestStatusTrackingAndAudit:
         )
 
         # Transition through lifecycle
-        registry.mark_in_progress(intent.id, reason="Developer started work", changed_by="claude-test")
+        registry.mark_in_progress(
+            intent.id, reason="Developer started work", changed_by="claude-test"
+        )
         registry.mark_completed(intent.id, reason="All changes applied", changed_by="claude-test")
         registry.mark_merged(intent.id, reason="Merged to main branch", changed_by="system")
 

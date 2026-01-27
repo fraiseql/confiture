@@ -415,7 +415,9 @@ class MigrationGenerator:
         if entry.operation == "DROP":
             return f"DROP {entry.object_type} IF EXISTS {entry.object_name}"
         elif entry.operation in ("CREATE", "ALTER"):
-            return f"-- {entry.operation} {entry.object_type} {entry.object_name} (DDL not captured)"
+            return (
+                f"-- {entry.operation} {entry.object_type} {entry.object_name} (DDL not captured)"
+            )
 
         return f"-- Unknown operation: {entry.operation} {entry.object_type} {entry.object_name}"
 
@@ -428,7 +430,9 @@ class MigrationGenerator:
             # Reverse of DROP is recreate (need old DDL)
             if entry.old_ddl:
                 return entry.old_ddl.strip()
-            return f"-- Cannot reverse DROP {entry.object_type} {entry.object_name} (no DDL captured)"
+            return (
+                f"-- Cannot reverse DROP {entry.object_type} {entry.object_name} (no DDL captured)"
+            )
         elif entry.operation == "ALTER":
             # Reverse of ALTER needs old DDL
             if entry.old_ddl:

@@ -274,7 +274,9 @@ def branch_delete(
         current = client.get_branch()
         if current and current.name == name:
             console.print("[red]Cannot delete the current branch.[/red]")
-            console.print("[yellow]Checkout a different branch first: confiture branch checkout main[/yellow]")
+            console.print(
+                "[yellow]Checkout a different branch first: confiture branch checkout main[/yellow]"
+            )
             conn.close()
             raise typer.Exit(1)
 
@@ -330,7 +332,9 @@ def branch_status(
                 if change.change_type == "added":
                     console.print(f"  [green]+ {change.object_type}: {change.object_name}[/green]")
                 elif change.change_type == "modified":
-                    console.print(f"  [yellow]~ {change.object_type}: {change.object_name}[/yellow]")
+                    console.print(
+                        f"  [yellow]~ {change.object_type}: {change.object_name}[/yellow]"
+                    )
                 elif change.change_type == "deleted":
                     console.print(f"  [red]- {change.object_type}: {change.object_name}[/red]")
                 else:
@@ -506,9 +510,13 @@ def branch_merge(
             if result.conflicts:
                 console.print(f"\n[yellow]Conflicts detected ({len(result.conflicts)}):[/yellow]")
                 for conflict in result.conflicts:
-                    console.print(f"  - {conflict.get('object_type', 'UNKNOWN')}: {conflict.get('object_name', 'unknown')}")
+                    console.print(
+                        f"  - {conflict.get('object_type', 'UNKNOWN')}: {conflict.get('object_name', 'unknown')}"
+                    )
 
-                console.print("\n[dim]Resolve conflicts manually or abort with 'confiture branch merge-abort'[/dim]")
+                console.print(
+                    "\n[dim]Resolve conflicts manually or abort with 'confiture branch merge-abort'[/dim]"
+                )
 
             conn.close()
             raise typer.Exit(1)

@@ -48,6 +48,7 @@ def pggit_client(pggit_connection: psycopg.Connection) -> PgGitClient:
 @pytest.fixture
 def clean_pggit_branches(pggit_client: PgGitClient):
     """Clean up any test branches before and after tests."""
+
     def cleanup():
         try:
             branches = pggit_client.list_branches()

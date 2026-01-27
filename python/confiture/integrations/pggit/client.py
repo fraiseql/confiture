@@ -279,9 +279,7 @@ class PgGitClient:
                 return result[0] if result else f"Switched to {branch_name}"
         except Exception as e:
             self._connection.rollback()
-            raise PgGitCheckoutError(
-                f"Failed to checkout branch '{branch_name}': {e}"
-            ) from e
+            raise PgGitCheckoutError(f"Failed to checkout branch '{branch_name}': {e}") from e
 
     def get_current_branch(self) -> str:
         """
@@ -292,9 +290,7 @@ class PgGitClient:
         """
         try:
             with self._connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT current_setting('pggit.current_branch', true)"
-                )
+                cursor.execute("SELECT current_setting('pggit.current_branch', true)")
                 result = cursor.fetchone()
                 return result[0] if result and result[0] else "main"
         except Exception:
@@ -314,14 +310,17 @@ class PgGitClient:
             PgGitBranchError: If branch doesn't exist
         """
         with self._connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     name,
                     status::text,
                     created_at
                 FROM pggit.branches
                 WHERE name = %s
-            """, (name,))
+            """,
+                (name,),
+            )
             result = cursor.fetchone()
 
             if not result:
@@ -349,12 +348,15 @@ class PgGitClient:
 
         with self._connection.cursor() as cursor:
             if status:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT name, status::text, created_at
                     FROM pggit.branches
                     WHERE status = %s::pggit.branch_status
                     ORDER BY created_at DESC
-                """, (status,))
+                """,
+                    (status,),
+                )
             else:
                 cursor.execute("""
                     SELECT name, status::text, created_at
@@ -431,10 +433,13 @@ class PgGitClient:
             List of Commit objects (most recent first)
         """
         with self._connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM pggit.log(%s)
                 LIMIT %s
-            """, (limit, limit))
+            """,
+                (limit, limit),
+            )
 
             return [
                 Commit(
@@ -499,9 +504,7 @@ class PgGitClient:
                     conflicts=conflicts,
                 ) from None
 
-            raise PgGitBranchError(
-                f"Merge failed: {e}"
-            ) from e
+            raise PgGitBranchError(f"Merge failed: {e}") from e
 
     def _get_conflicts(self) -> list[dict[str, Any]]:
         """Get list of unresolved merge conflicts."""
@@ -544,7 +547,8 @@ class PgGitClient:
             custom_ddl: Custom DDL if resolution is 'custom'
         """
         with self._connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE pggit.merge_conflicts
                 SET resolved = true,
                     resolution = %s,
@@ -555,7 +559,9 @@ class PgGitClient:
                         END
                     )
                 WHERE object_name = %s AND resolved = false
-            """, (resolution, custom_ddl, resolution, object_name))
+            """,
+                (resolution, custom_ddl, resolution, object_name),
+            )
             self._connection.commit()
 
     def abort_merge(self) -> None:
@@ -586,9 +592,12 @@ class PgGitClient:
             List of DiffEntry objects describing changes
         """
         with self._connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM pggit.diff_schemas(%s, %s)
-            """, (from_ref, to_ref))
+            """,
+                (from_ref, to_ref),
+            )
 
             return [
                 DiffEntry(
@@ -628,9 +637,9 @@ class PgGitClient:
                 }
 
                 if component == "Tracking":
-                    info.tracking_enabled = (status == "enabled")
+                    info.tracking_enabled = status == "enabled"
                 elif component == "Deployment Mode":
-                    info.deployment_mode = (status == "active")
+                    info.deployment_mode = status == "active"
 
         return info
 
@@ -656,10 +665,13 @@ class PgGitClient:
             List of history entries
         """
         with self._connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM pggit.get_history(%s, %s)
                 LIMIT %s
-            """, (object_name, object_type, limit))
+            """,
+                (object_name, object_type, limit),
+            )
 
             return [
                 {
@@ -683,9 +695,12 @@ class PgGitClient:
             Version info dict or None if not tracked
         """
         with self._connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM pggit.get_version(%s)
-            """, (object_name,))
+            """,
+                (object_name,),
+            )
             result = cursor.fetchone()
 
             if not result:

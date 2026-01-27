@@ -159,9 +159,7 @@ class TestPgGitDetection:
         # First call for is_pggit_available, second for version
         mock_cursor.fetchone.side_effect = [(True,), ("0.1.5",)]
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=True
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=True):
             result = get_pggit_version(mock_conn)
 
         assert result == (0, 1, 5)
@@ -170,9 +168,7 @@ class TestPgGitDetection:
         """get_pggit_version should return None when pgGit not installed."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=False
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=False):
             result = get_pggit_version(mock_conn)
 
         assert result is None
@@ -181,9 +177,7 @@ class TestPgGitDetection:
         """require_pggit should raise PgGitNotAvailableError when missing."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=False
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=False):
             with pytest.raises(PgGitNotAvailableError, match="not installed"):
                 require_pggit(mock_conn)
 
@@ -191,9 +185,7 @@ class TestPgGitDetection:
         """require_pggit should raise PgGitVersionError when version too old."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=True
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=True):
             with patch(
                 "confiture.integrations.pggit.detection.get_pggit_version",
                 return_value=(0, 0, 1),
@@ -205,9 +197,7 @@ class TestPgGitDetection:
         """require_pggit should return version tuple when requirements met."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=True
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=True):
             with patch(
                 "confiture.integrations.pggit.detection.get_pggit_version",
                 return_value=(0, 2, 0),
@@ -457,9 +447,7 @@ class TestPgGitInfoFunction:
         mock_cursor.fetchall.return_value = [("objects",), ("branches",)]
         mock_cursor.fetchone.return_value = (42,)
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=True
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=True):
             with patch(
                 "confiture.integrations.pggit.detection.get_pggit_version",
                 return_value=(0, 1, 2),
@@ -480,9 +468,7 @@ class TestPgGitInfoFunction:
         """get_pggit_info should return None when pgGit not installed."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=False
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=False):
             info = get_pggit_info(mock_conn)
 
         assert info is None
@@ -499,9 +485,7 @@ class TestPgGitInitialized:
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         mock_cursor.fetchone.return_value = (True,)
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=True
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=True):
             result = is_pggit_initialized(mock_conn)
 
         assert result is True
@@ -510,9 +494,7 @@ class TestPgGitInitialized:
         """is_pggit_initialized should return False when pgGit not installed."""
         mock_conn = MagicMock()
 
-        with patch(
-            "confiture.integrations.pggit.detection.is_pggit_available", return_value=False
-        ):
+        with patch("confiture.integrations.pggit.detection.is_pggit_available", return_value=False):
             result = is_pggit_initialized(mock_conn)
 
         assert result is False
