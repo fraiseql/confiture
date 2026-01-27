@@ -15,7 +15,7 @@ from confiture.core.connection import get_migration_class, load_migration_module
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.locking import LockConfig, MigrationLock
-from confiture.core.preconditions import PreconditionValidator, PreconditionValidationError
+from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
@@ -660,6 +660,47 @@ class Migrator:
         migration_files = sorted(all_files, key=lambda f: self._version_from_filename(f.name))
 
         return migration_files
+
+    def find_orphaned_sql_files(self, migrations_dir: Path | None = None) -> list[Path]:
+        """Find .sql files that don't match the expected naming pattern.
+
+        Confiture only recognizes:
+        - {NNN}_{name}.up.sql (forward migrations)
+        - {NNN}_{name}.down.sql (rollback migrations)
+
+        Files like {NNN}_{name}.sql (without .up/.down) are silently ignored
+        by the migration discovery and should be renamed.
+
+        Args:
+            migrations_dir: Optional custom migrations directory.
+                           If None, uses db/migrations/ (default)
+
+        Returns:
+            List of orphaned .sql file paths, sorted by name.
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> orphaned = migrator.find_orphaned_sql_files()
+            >>> # [Path("db/migrations/001_create_users.sql"),
+            >>> #  Path("db/migrations/002_add_columns.sql")]
+        """
+        if migrations_dir is None:
+            migrations_dir = Path("db") / "migrations"
+
+        if not migrations_dir.exists():
+            return []
+
+        # Find all .sql files
+        all_sql_files = set(migrations_dir.glob("*.sql"))
+
+        # Find all properly named migration files
+        expected_files = set(migrations_dir.glob("*.up.sql")) | set(
+            migrations_dir.glob("*.down.sql")
+        )
+
+        # Orphaned files are SQL files that don't match the expected pattern
+        orphaned = all_sql_files - expected_files
+        return sorted(orphaned, key=lambda f: f.name)
 
     def find_pending(self, migrations_dir: Path | None = None) -> list[Path]:
         """Find migrations that have not been applied yet.

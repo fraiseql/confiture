@@ -188,3 +188,69 @@ class AddEmail(Migration):
             assert migration_files == []
         finally:
             os.chdir(original_cwd)
+
+    def test_find_orphaned_sql_files(self, temp_project_dir):
+        """Should detect .sql files that don't match the naming pattern."""
+        migrations_dir = temp_project_dir / "db" / "migrations"
+
+        # Create orphaned SQL files (missing .up/.down suffix)
+        (migrations_dir / "001_initial_schema.sql").write_text("CREATE TABLE users (id INT);")
+        (migrations_dir / "002_add_columns.sql").write_text("ALTER TABLE users ADD COLUMN email TEXT;")
+
+        # Create properly named SQL files
+        (migrations_dir / "003_add_indexes.up.sql").write_text("CREATE INDEX idx_users_email ON users(email);")
+        (migrations_dir / "003_add_indexes.down.sql").write_text("DROP INDEX idx_users_email;")
+
+        import os
+
+        original_cwd = os.getcwd()
+        os.chdir(temp_project_dir)
+
+        try:
+            mock_conn = Mock()
+            migrator = Migrator(connection=mock_conn)
+
+            orphaned = migrator.find_orphaned_sql_files()
+
+            # Should find 2 orphaned files
+            assert len(orphaned) == 2
+            assert orphaned[0].name == "001_initial_schema.sql"
+            assert orphaned[1].name == "002_add_columns.sql"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_find_orphaned_sql_files_none(self, temp_project_dir):
+        """Should return empty list when all SQL files are properly named."""
+        migrations_dir = temp_project_dir / "db" / "migrations"
+
+        # Create only properly named files
+        (migrations_dir / "001_create_users.up.sql").write_text("CREATE TABLE users (id INT);")
+        (migrations_dir / "001_create_users.down.sql").write_text("DROP TABLE users;")
+        (migrations_dir / "002_add_email.py").write_text("""
+from confiture.models.migration import Migration
+
+class AddEmail(Migration):
+    version = "002"
+    name = "add_email"
+
+    def up(self):
+        pass
+
+    def down(self):
+        pass
+""")
+
+        import os
+
+        original_cwd = os.getcwd()
+        os.chdir(temp_project_dir)
+
+        try:
+            mock_conn = Mock()
+            migrator = Migrator(connection=mock_conn)
+
+            orphaned = migrator.find_orphaned_sql_files()
+
+            assert orphaned == []
+        finally:
+            os.chdir(original_cwd)

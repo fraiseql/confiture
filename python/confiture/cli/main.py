@@ -559,6 +559,9 @@ def migrate_status(
         sql_files = list(migrations_dir.glob("*.up.sql"))
         migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
 
+        # Check for orphaned SQL files that don't match the naming pattern
+        orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
+
         if not migration_files:
             if output_format == "json":
                 result = {
@@ -568,9 +571,13 @@ def migrate_status(
                     "total": 0,
                     "migrations": [],
                 }
+                if orphaned_sql_files:
+                    result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
                 _output_json(result, output_file, console)
             else:
                 console.print("[yellow]No migrations found.[/yellow]")
+                if orphaned_sql_files:
+                    _print_orphaned_files_warning(orphaned_sql_files, console)
             return
 
         # Get applied migrations from database if config provided
@@ -641,6 +648,8 @@ def migrate_status(
             }
             if db_error:
                 result["warning"] = f"Could not connect to database: {db_error}"
+            if orphaned_sql_files:
+                result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
             _output_json(result, output_file, console)
         else:
             # Display migrations in a table
@@ -665,6 +674,10 @@ def migrate_status(
                 console.print(f" ({len(applied_list)} applied, {len(pending_list)} pending)")
             else:
                 console.print()
+
+            # Warn about orphaned files
+            if orphaned_sql_files:
+                _print_orphaned_files_warning(orphaned_sql_files, console)
 
     except Exception as e:
         if output_format == "json":
@@ -691,6 +704,55 @@ def _output_json(data: dict[str, Any], output_file: Path | None, console: Consol
         console.print(f"[green]✅ Output written to {output_file}[/green]")
     else:
         console.print(json_str)
+
+
+def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:
+    """Find .sql files that don't match the expected naming pattern.
+
+    Args:
+        migrations_dir: Directory to search for migrations
+
+    Returns:
+        List of orphaned .sql file paths
+    """
+    if not migrations_dir.exists():
+        return []
+
+    # Find all .sql files
+    all_sql_files = set(migrations_dir.glob("*.sql"))
+
+    # Find all properly named migration files
+    expected_files = set(migrations_dir.glob("*.up.sql")) | set(
+        migrations_dir.glob("*.down.sql")
+    )
+
+    # Orphaned files are SQL files that don't match the expected pattern
+    orphaned = all_sql_files - expected_files
+    return sorted(orphaned, key=lambda f: f.name)
+
+
+def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) -> None:
+    """Print a warning about orphaned migration files.
+
+    Args:
+        orphaned_files: List of orphaned migration file paths
+        console: Console for output
+    """
+    console.print("\n[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
+    console.print("[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]")
+
+    for orphaned_file in orphaned_files:
+        # Suggest the rename
+        suggested_name = f"{orphaned_file.stem}.up.sql"
+        console.print(f"  • {orphaned_file.name} → rename to: {suggested_name}")
+
+    console.print("\n[yellow]Confiture only recognizes migration files with these patterns:[/yellow]")
+    console.print("[yellow]  • {NNN}_{name}.up.sql   (forward migrations)[/yellow]")
+    console.print("[yellow]  • {NNN}_{name}.down.sql (rollback migrations)[/yellow]")
+    console.print("[yellow]  • {NNN}_{name}.py       (Python class migrations)[/yellow]")
+    console.print(
+        "[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]"
+    )
 
 
 @migrate_app.command("up")
@@ -924,6 +986,15 @@ def migrate_up(
             console.print(
                 f"[cyan]📦 Found {len(migrations_to_apply)} pending migration(s)[/cyan]\n"
             )
+
+        # Check for orphaned migration files
+        orphaned_files = _find_orphaned_sql_files(migrations_dir)
+        if orphaned_files:
+            _print_orphaned_files_warning(orphaned_files, console)
+            if effective_strict_mode:
+                console.print("\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]")
+                conn.close()
+                raise typer.Exit(1)
 
         # Handle dry-run modes
         if dry_run or dry_run_execute:
