@@ -5,9 +5,9 @@ Tests the CLI integration of git-aware schema validation.
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typer.testing import CliRunner
 
 import pytest
+from typer.testing import CliRunner
 
 from confiture.cli.main import app
 
@@ -24,7 +24,6 @@ class TestCliGitValidation:
     def test_migrate_validate_check_drift_requires_git_repo(self, runner: CliRunner):
         """Test that --check-drift requires a git repository."""
         import os
-        import subprocess
 
         with TemporaryDirectory() as tmpdir:
             # Create a non-git directory with a test file
