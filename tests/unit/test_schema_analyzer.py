@@ -584,7 +584,7 @@ class TestSchemaAnalyzerIntegration:
         analyzer = SchemaAnalyzer(db_connection)
         info = analyzer.get_schema_info()
 
-        # Should have at least the confiture_migrations table
+        # Should have at least the tb_confiture table
         assert isinstance(info, SchemaInfo)
         assert isinstance(info.tables, dict)
         assert isinstance(info.indexes, dict)

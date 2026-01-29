@@ -55,7 +55,7 @@ db/generated/
 *.sqlite
 *.sql.bak
 
-# Rust (Phase 2)
+# Rust
 target/
 Cargo.lock
 
@@ -72,3 +72,13 @@ site/
 *_ANALYSIS.md
 RUST_BINDINGS.md
 SEED_DATA_ANALYSIS.md
+*SUMMARY*.txt
+*SUMMARY*.md
+*_COMPLETE.md
+*_IMPACT.md
+*_ASSESSMENT.md
+ISSUE_*_FIX*.md
+.plan.md
+.phase*.md
+TRINITY_*.md
+DOCUMENTATION_DELIVERABLES.txt

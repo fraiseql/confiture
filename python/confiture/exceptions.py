@@ -190,3 +190,30 @@ class SQLError(ConfiturError):
 
         message = " | ".join(message_parts)
         super().__init__(message)
+
+
+# Re-export precondition exceptions for convenience
+# These are defined in confiture.core.preconditions but users may want to
+# import them from confiture.exceptions
+from confiture.core.preconditions import (  # noqa: E402
+    PreconditionError,
+    PreconditionValidationError,
+)
+
+# Re-export sandbox exceptions
+from confiture.testing.sandbox import PreStateSimulationError  # noqa: E402
+
+__all__ = [
+    "ConfiturError",
+    "ConfigurationError",
+    "MigrationError",
+    "SchemaError",
+    "SyncError",
+    "DifferError",
+    "ValidationError",
+    "RollbackError",
+    "SQLError",
+    "PreconditionError",
+    "PreconditionValidationError",
+    "PreStateSimulationError",
+]

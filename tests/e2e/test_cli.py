@@ -336,7 +336,7 @@ database:
         # Cleanup
         with test_db_connection.cursor() as cursor:
             cursor.execute("DROP TABLE IF EXISTS cli_test_table")
-            cursor.execute("DELETE FROM confiture_migrations WHERE version = '001'")
+            cursor.execute("DELETE FROM tb_confiture WHERE version = '001'")
         test_db_connection.commit()
 
     def test_up_with_no_pending_migrations(self, tmp_path, test_db_connection):

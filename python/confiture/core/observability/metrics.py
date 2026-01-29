@@ -23,7 +23,7 @@ class MigrationMetrics:
     """Prometheus metrics for migrations.
 
     Exposes metrics when prometheus_client is installed:
-    - confiture_migrations_total (counter)
+    - tb_confiture_total (counter)
     - confiture_migration_duration_seconds (histogram)
     - confiture_migration_errors_total (counter)
     - confiture_migration_last_success_timestamp (gauge)
@@ -60,7 +60,7 @@ class MigrationMetrics:
 
             # Define metrics
             self._migrations_total = Counter(
-                "confiture_migrations_total",
+                "tb_confiture_total",
                 "Total number of migrations executed",
                 ["version", "name", "status"],
                 registry=self._registry,
