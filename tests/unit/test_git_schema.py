@@ -19,23 +19,18 @@ class TestGitSchemaBuilder:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -55,17 +50,12 @@ class TestGitSchemaBuilder:
             (schema_dir / "02_posts.sql").write_text("CREATE TABLE posts (id INT);")
 
             # Commit
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Initial schema"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Build schema from HEAD
@@ -82,23 +72,18 @@ class TestGitSchemaBuilder:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -115,20 +100,14 @@ class TestGitSchemaBuilder:
             schema_dir = repo_path / "db" / "schema"
             schema_dir.mkdir(parents=True)
             (schema_dir / "01_base.sql").write_text("-- Base\nCREATE TABLE base (id INT);")
-            (schema_dir / "02_derived.sql").write_text("-- Derived\nCREATE TABLE derived (base_id INT);")
+            (schema_dir / "02_derived.sql").write_text(
+                "-- Derived\nCREATE TABLE derived (base_id INT);"
+            )
 
             # Commit
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Build and verify order
@@ -148,23 +127,18 @@ class TestGitSchemaBuilder:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config with empty schema dir
@@ -182,17 +156,9 @@ class TestGitSchemaBuilder:
 
             # Create initial commit
             (repo_path / "README.md").write_text("# Test")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Build schema
@@ -213,23 +179,18 @@ class TestGitSchemaDiffer:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -246,32 +207,16 @@ class TestGitSchemaDiffer:
             schema_dir = repo_path / "db" / "schema"
             schema_dir.mkdir(parents=True)
             (schema_dir / "01_users.sql").write_text("CREATE TABLE users (id INT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Second commit: add posts table
             (schema_dir / "02_posts.sql").write_text("CREATE TABLE posts (id INT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Add posts"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Add posts"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Compare refs
@@ -288,23 +233,18 @@ class TestGitSchemaDiffer:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -321,32 +261,19 @@ class TestGitSchemaDiffer:
             schema_dir = repo_path / "db" / "schema"
             schema_dir.mkdir(parents=True)
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Change only whitespace
             (schema_dir / "users.sql").write_text("CREATE TABLE users (  id INT  );")
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Whitespace"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Compare refs
@@ -364,23 +291,18 @@ class TestGitSchemaDiffer:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -397,34 +319,19 @@ class TestGitSchemaDiffer:
             schema_dir = repo_path / "db" / "schema"
             schema_dir.mkdir(parents=True)
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Add real DDL change (new column)
-            (schema_dir / "users.sql").write_text(
-                "CREATE TABLE users (id INT, email TEXT);"
-            )
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT, email TEXT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Add email column"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Compare refs

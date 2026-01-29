@@ -75,15 +75,11 @@ class GitSchemaBuilder:
 
         # Process each include config in order
         for include_config in self.schema_builder.include_configs:
-            schema_parts.extend(
-                self._build_from_include_at_ref(ref, include_config)
-            )
+            schema_parts.extend(self._build_from_include_at_ref(ref, include_config))
 
         return "\n".join(schema_parts)
 
-    def _build_from_include_at_ref(
-        self, ref: str, include_config: dict[str, Any]
-    ) -> list[str]:
+    def _build_from_include_at_ref(self, ref: str, include_config: dict[str, Any]) -> list[str]:
         """Build schema from single include path at ref.
 
         Discovers files matching include patterns and retrieves from git.
@@ -129,9 +125,7 @@ class GitSchemaBuilder:
 
         return schema_parts
 
-    def _get_files_at_ref(
-        self, ref: str, directory: Path, recursive: bool
-    ) -> list[Path]:
+    def _get_files_at_ref(self, ref: str, directory: Path, recursive: bool) -> list[Path]:
         """Get list of SQL files at ref in directory.
 
         Uses git ls-tree to list files without fetching them all.
@@ -166,14 +160,10 @@ class GitSchemaBuilder:
                 timeout=30,
             )
         except subprocess.TimeoutExpired as e:
-            raise GitError(
-                f"Git command timed out listing files at '{ref}': {e}"
-            ) from e
+            raise GitError(f"Git command timed out listing files at '{ref}': {e}") from e
 
         if result.returncode != 0:
-            raise GitError(
-                f"Failed to list files at '{ref}': {result.stderr.strip()}"
-            )
+            raise GitError(f"Failed to list files at '{ref}': {result.stderr.strip()}")
 
         files: list[Path] = []
         for line in result.stdout.strip().split("\n"):
@@ -220,9 +210,7 @@ class GitSchemaDiffer:
         self.builder = GitSchemaBuilder(env, self.repo_path)
         self.differ = SchemaDiffer()
 
-    def compare_refs(
-        self, base_ref: str, target_ref: str = "HEAD"
-    ) -> SchemaDiff:
+    def compare_refs(self, base_ref: str, target_ref: str = "HEAD") -> SchemaDiff:
         """Compare schemas between two git refs.
 
         Args:

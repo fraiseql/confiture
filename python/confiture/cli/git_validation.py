@@ -23,8 +23,7 @@ def validate_git_flags_in_repo() -> GitRepository:
     repo = GitRepository()
     if not repo.is_git_repo():
         raise NotAGitRepositoryError(
-            "Git validation requires a git repository. "
-            "Current directory is not a git repository."
+            "Git validation requires a git repository. Current directory is not a git repository."
         )
     return repo
 
@@ -120,15 +119,11 @@ def validate_migration_accompaniment(
             if not report.has_ddl_changes:
                 console.print("[green]✅ No DDL changes detected[/green]")
             elif report.is_valid:
-                console.print(
-                    "[green]✅ DDL changes accompanied by migrations[/green]"
-                )
+                console.print("[green]✅ DDL changes accompanied by migrations[/green]")
                 console.print(f"   Changes: {len(report.ddl_changes)}")
                 console.print(f"   Migrations: {len(report.new_migration_files)}")
             else:
-                console.print(
-                    "[red]❌ DDL changes without migration files[/red]"
-                )
+                console.print("[red]❌ DDL changes without migration files[/red]")
                 console.print(f"   Changes: {len(report.ddl_changes)}")
                 console.print("   DDL changes found but no migrations added")
 

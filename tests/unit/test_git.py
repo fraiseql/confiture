@@ -21,12 +21,8 @@ class TestGitRepository:
             repo_path = Path(tmpdir)
             # Initialize git repo
             import subprocess
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
 
             git_repo = GitRepository(repo_path)
             assert git_repo.is_git_repo() is True
@@ -44,39 +40,31 @@ class TestGitRepository:
             import subprocess
 
             # Initialize git repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create and commit a file
             test_file = repo_path / "test.sql"
             test_file.write_text("CREATE TABLE users (id INT);")
             subprocess.run(
-                ["git", "add", "test.sql"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "add", "test.sql"], cwd=repo_path, check=True, capture_output=True
             )
             subprocess.run(
                 ["git", "commit", "-m", "Initial commit"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             git_repo = GitRepository(repo_path)
@@ -90,39 +78,31 @@ class TestGitRepository:
             import subprocess
 
             # Initialize git repo with initial commit
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create initial commit
             readme = repo_path / "README.md"
             readme.write_text("# Test")
             subprocess.run(
-                ["git", "add", "README.md"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "add", "README.md"], cwd=repo_path, check=True, capture_output=True
             )
             subprocess.run(
                 ["git", "commit", "-m", "Initial commit"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             git_repo = GitRepository(repo_path)
@@ -136,54 +116,36 @@ class TestGitRepository:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # First commit
             (repo_path / "file1.sql").write_text("CREATE TABLE users (id INT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Second commit with change
             (repo_path / "file1.sql").write_text("CREATE TABLE users (id INT, email TEXT);")
             (repo_path / "file2.sql").write_text("CREATE TABLE posts (id INT);")
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Add email column and posts table"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             git_repo = GitRepository(repo_path)
@@ -201,38 +163,25 @@ class TestGitRepository:
             import subprocess
 
             # Initialize repo with initial commit
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Initial commit
             (repo_path / "README.md").write_text("# Test")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Create and stage files
@@ -242,7 +191,7 @@ class TestGitRepository:
                 ["git", "add", "file1.sql", "file2.sql"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             git_repo = GitRepository(repo_path)
@@ -267,38 +216,25 @@ class TestGitRepository:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create initial commit
             (repo_path / "README.md").write_text("# Test")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             git_repo = GitRepository(repo_path)

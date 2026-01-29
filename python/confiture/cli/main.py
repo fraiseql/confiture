@@ -1995,7 +1995,12 @@ def migrate_validate(
             # Check if all checks passed (for text output)
             if drift_passed and accompaniment_passed:
                 if format_output == "json":
-                    result = {"status": "passed", "checks": ["drift", "accompaniment"] if (check_drift and require_migration) else (["drift"] if check_drift else ["accompaniment"])}
+                    result = {
+                        "status": "passed",
+                        "checks": ["drift", "accompaniment"]
+                        if (check_drift and require_migration)
+                        else (["drift"] if check_drift else ["accompaniment"]),
+                    }
                     _output_json(result, output_file, console)
                 else:
                     console.print("[green]✅ All git validation checks passed[/green]")

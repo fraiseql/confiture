@@ -20,23 +20,18 @@ class TestMigrationAccompanimentChecker:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -55,37 +50,22 @@ class TestMigrationAccompanimentChecker:
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
             migrations_dir = repo_path / "db" / "migrations"
             migrations_dir.mkdir()
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Add DDL change and migration
-            (schema_dir / "users.sql").write_text(
-                "CREATE TABLE users (id INT, email TEXT);"
-            )
+            (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT, email TEXT);")
             (migrations_dir / "001_add_email.up.sql").write_text(
                 "ALTER TABLE users ADD COLUMN email TEXT;"
             )
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Add email column"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Check accompaniment
@@ -103,23 +83,18 @@ class TestMigrationAccompanimentChecker:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -138,34 +113,19 @@ class TestMigrationAccompanimentChecker:
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
             migrations_dir = repo_path / "db" / "migrations"
             migrations_dir.mkdir()
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Add DDL change WITHOUT migration
-            (schema_dir / "users.sql").write_text(
-                "CREATE TABLE users (id INT, email TEXT);"
-            )
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT, email TEXT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Add email column"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Check accompaniment
@@ -183,23 +143,18 @@ class TestMigrationAccompanimentChecker:
             import subprocess
 
             # Initialize repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
@@ -218,32 +173,19 @@ class TestMigrationAccompanimentChecker:
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
             migrations_dir = repo_path / "db" / "migrations"
             migrations_dir.mkdir()
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Make change that's not DDL (e.g., docs)
             (repo_path / "README.md").write_text("# Updated docs")
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Update docs"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Check accompaniment

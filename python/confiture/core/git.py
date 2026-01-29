@@ -74,9 +74,7 @@ class GitRepository:
             >>> content = repo.get_file_at_ref(Path("db/schema/users.sql"), "origin/main")
         """
         if not self.is_git_repo():
-            raise NotAGitRepositoryError(
-                f"Not a git repository: {self.repo_path}"
-            )
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
         # Convert Path to forward slashes for git show command
         file_path_str = file_path.as_posix()
@@ -91,9 +89,7 @@ class GitRepository:
                 timeout=30,
             )
         except subprocess.TimeoutExpired as e:
-            raise GitError(
-                f"Git command timed out retrieving '{file_path}' from '{ref}'"
-            ) from e
+            raise GitError(f"Git command timed out retrieving '{file_path}' from '{ref}'") from e
 
         if result.returncode != 0:
             error_msg = result.stderr.strip()
@@ -111,9 +107,7 @@ class GitRepository:
 
         return result.stdout
 
-    def get_changed_files(
-        self, base_ref: str, target_ref: str = "HEAD"
-    ) -> list[Path]:
+    def get_changed_files(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
         """Get list of files changed between two refs.
 
         Args:
@@ -136,9 +130,7 @@ class GitRepository:
             db/migrations/001_add_users.up.sql
         """
         if not self.is_git_repo():
-            raise NotAGitRepositoryError(
-                f"Not a git repository: {self.repo_path}"
-            )
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
         # Get list of changed files (both added and modified)
         try:
@@ -150,9 +142,7 @@ class GitRepository:
                 timeout=30,
             )
         except subprocess.TimeoutExpired as e:
-            raise GitError(
-                f"Git command timed out comparing '{base_ref}' to '{target_ref}'"
-            ) from e
+            raise GitError(f"Git command timed out comparing '{base_ref}' to '{target_ref}'") from e
 
         if result.returncode != 0:
             error_msg = result.stderr.strip()
@@ -184,9 +174,7 @@ class GitRepository:
             db/schema/users.sql
         """
         if not self.is_git_repo():
-            raise NotAGitRepositoryError(
-                f"Not a git repository: {self.repo_path}"
-            )
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
         try:
             result = subprocess.run(

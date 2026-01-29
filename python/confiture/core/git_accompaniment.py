@@ -87,9 +87,7 @@ class MigrationAccompanimentChecker:
             target_ref=target_ref,
         )
 
-    def _get_new_migrations(
-        self, base_ref: str, target_ref: str = "HEAD"
-    ) -> list[Path]:
+    def _get_new_migrations(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
         """Get list of new migration files between refs.
 
         Searches for migration files (*.up.sql) that are new or modified

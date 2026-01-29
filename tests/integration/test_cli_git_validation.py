@@ -89,32 +89,25 @@ class TestCliGitValidation:
             repo_path = Path(tmpdir)
 
             # Initialize git repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create minimal confiture config
             config_dir = repo_path / "db" / "environments"
             config_dir.mkdir(parents=True)
             (config_dir / "local.yaml").write_text(
-                "database_url: postgresql://localhost/test\n"
-                "include_dirs:\n"
-                "  - path: db/schema\n"
+                "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
             )
 
             # Create schema directory
@@ -124,17 +117,9 @@ class TestCliGitValidation:
             migrations_dir.mkdir()
 
             # Initial commit
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Change to repo and run validation
@@ -147,7 +132,8 @@ class TestCliGitValidation:
                         "migrate",
                         "validate",
                         "--check-drift",
-                        "--base-ref", "HEAD",  # Compare HEAD to itself (no drift)
+                        "--base-ref",
+                        "HEAD",  # Compare HEAD to itself (no drift)
                     ],
                     catch_exceptions=False,
                 )
@@ -171,32 +157,25 @@ class TestMigrationAccompanimentCLI:
             repo_path = Path(tmpdir)
 
             # Initialize git repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
             config_dir = repo_path / "db" / "environments"
             config_dir.mkdir(parents=True)
             (config_dir / "local.yaml").write_text(
-                "database_url: postgresql://localhost/test\n"
-                "include_dirs:\n"
-                "  - path: db/schema\n"
+                "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
             )
 
             # Initial commit
@@ -204,32 +183,19 @@ class TestMigrationAccompanimentCLI:
             schema_dir.mkdir()
             migrations_dir = repo_path / "db" / "migrations"
             migrations_dir.mkdir()
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Add DDL change WITHOUT migration
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Add users table"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Change to repo and run validation
@@ -242,13 +208,18 @@ class TestMigrationAccompanimentCLI:
                         "migrate",
                         "validate",
                         "--require-migration",
-                        "--base-ref", "HEAD~1",
+                        "--base-ref",
+                        "HEAD~1",
                     ],
                     catch_exceptions=False,
                 )
 
                 # Should fail because DDL has no migration
-                assert result.exit_code != 0 or "invalid" in result.stdout.lower() or "missing" in result.stdout.lower()
+                assert (
+                    result.exit_code != 0
+                    or "invalid" in result.stdout.lower()
+                    or "missing" in result.stdout.lower()
+                )
             finally:
                 os.chdir(old_cwd)
 
@@ -261,32 +232,25 @@ class TestMigrationAccompanimentCLI:
             repo_path = Path(tmpdir)
 
             # Initialize git repo
-            subprocess.run(
-                ["git", "init"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@test.com"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "Test User"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Create confiture config
             config_dir = repo_path / "db" / "environments"
             config_dir.mkdir(parents=True)
             (config_dir / "local.yaml").write_text(
-                "database_url: postgresql://localhost/test\n"
-                "include_dirs:\n"
-                "  - path: db/schema\n"
+                "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
             )
 
             # Initial commit
@@ -294,35 +258,20 @@ class TestMigrationAccompanimentCLI:
             schema_dir.mkdir()
             migrations_dir = repo_path / "db" / "migrations"
             migrations_dir.mkdir()
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "Initial"],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
+                ["git", "commit", "-m", "Initial"], cwd=repo_path, check=True, capture_output=True
             )
 
             # Add DDL change WITH migration
             (schema_dir / "users.sql").write_text("CREATE TABLE users (id INT);")
-            (migrations_dir / "001_add_users.up.sql").write_text(
-                "CREATE TABLE users (id INT);"
-            )
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
+            (migrations_dir / "001_add_users.up.sql").write_text("CREATE TABLE users (id INT);")
+            subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Add users table with migration"],
                 cwd=repo_path,
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
 
             # Change to repo and run validation
@@ -335,7 +284,8 @@ class TestMigrationAccompanimentCLI:
                         "migrate",
                         "validate",
                         "--require-migration",
-                        "--base-ref", "HEAD~1",
+                        "--base-ref",
+                        "HEAD~1",
                     ],
                     catch_exceptions=False,
                 )
