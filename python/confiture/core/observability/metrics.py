@@ -54,7 +54,7 @@ class MigrationMetrics:
     def _initialize_metrics(self) -> None:
         """Initialize Prometheus metrics."""
         try:
-            from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+            from prometheus_client import REGISTRY, Counter, Gauge, Histogram  # type: ignore[import]
 
             self._registry = REGISTRY
 
@@ -108,7 +108,7 @@ class MigrationMetrics:
             return
 
         try:
-            from prometheus_client import start_http_server
+            from prometheus_client import start_http_server  # type: ignore[import]
 
             start_http_server(self.config.port)
             logger.info(f"Prometheus metrics server started on port {self.config.port}")

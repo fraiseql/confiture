@@ -150,7 +150,8 @@ class TableExists(Precondition):
                 """,
                 (self.schema, self.table),
             )
-            exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            exists = result[0] if result else False
             return (exists, f"Table {self.schema}.{self.table} exists")
 
     def __str__(self) -> str:
@@ -182,7 +183,8 @@ class TableNotExists(Precondition):
                 """,
                 (self.schema, self.table),
             )
-            not_exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            not_exists = result[0] if result else False
             return (not_exists, f"Table {self.schema}.{self.table} does not exist")
 
     def __str__(self) -> str:
@@ -220,7 +222,8 @@ class ColumnExists(Precondition):
                 """,
                 (self.schema, self.table, self.column),
             )
-            exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            exists = result[0] if result else False
             return (exists, f"Column {self.schema}.{self.table}.{self.column} exists")
 
     def __str__(self) -> str:
@@ -252,7 +255,8 @@ class ColumnNotExists(Precondition):
                 """,
                 (self.schema, self.table, self.column),
             )
-            not_exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            not_exists = result[0] if result else False
             return (
                 not_exists,
                 f"Column {self.schema}.{self.table}.{self.column} does not exist",
@@ -355,7 +359,8 @@ class ConstraintExists(Precondition):
                 """,
                 (self.schema, self.table, self.constraint),
             )
-            exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            exists = result[0] if result else False
             return (
                 exists,
                 f"Constraint {self.constraint} on {self.schema}.{self.table} exists",
@@ -390,7 +395,8 @@ class ConstraintNotExists(Precondition):
                 """,
                 (self.schema, self.table, self.constraint),
             )
-            not_exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            not_exists = result[0] if result else False
             return (
                 not_exists,
                 f"Constraint {self.constraint} on {self.schema}.{self.table} does not exist",
@@ -445,7 +451,8 @@ class ForeignKeyExists(Precondition):
                     self.references_column,
                 ),
             )
-            exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            exists = result[0] if result else False
             return (
                 exists,
                 f"FK {self.schema}.{self.table}.{self.column} -> "
@@ -489,7 +496,8 @@ class IndexExists(Precondition):
                 """,
                 (self.schema, self.table, self.index),
             )
-            exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            exists = result[0] if result else False
             return (exists, f"Index {self.index} on {self.schema}.{self.table} exists")
 
     def __str__(self) -> str:
@@ -521,7 +529,8 @@ class IndexNotExists(Precondition):
                 """,
                 (self.schema, self.table, self.index),
             )
-            not_exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            not_exists = result[0] if result else False
             return (
                 not_exists,
                 f"Index {self.index} on {self.schema}.{self.table} does not exist",
@@ -558,7 +567,8 @@ class SchemaExists(Precondition):
                 """,
                 (self.schema,),
             )
-            exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            exists = result[0] if result else False
             return (exists, f"Schema {self.schema} exists")
 
     def __str__(self) -> str:
@@ -586,7 +596,8 @@ class SchemaNotExists(Precondition):
                 """,
                 (self.schema,),
             )
-            not_exists = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            not_exists = result[0] if result else False
             return (not_exists, f"Schema {self.schema} does not exist")
 
     def __str__(self) -> str:
@@ -616,7 +627,8 @@ class RowCountEquals(Precondition):
             cursor.execute(
                 f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # noqa: S608
             )
-            actual_count = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            actual_count = result[0] if result else 0
             matches = actual_count == self.expected_count
             return (
                 matches,
@@ -645,7 +657,8 @@ class RowCountGreaterThan(Precondition):
             cursor.execute(
                 f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # noqa: S608
             )
-            actual_count = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            actual_count = result[0] if result else 0
             matches = actual_count > self.min_count
             return (
                 matches,
@@ -673,7 +686,8 @@ class TableIsEmpty(Precondition):
             cursor.execute(
                 f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # noqa: S608
             )
-            count = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            count = result[0] if result else 0
             is_empty = count == 0
             return (is_empty, f"Table {self.schema}.{self.table} is empty (rows: {count})")
 

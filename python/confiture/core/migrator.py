@@ -3,6 +3,7 @@
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 import psycopg
 
@@ -702,7 +703,7 @@ class Migrator:
 
     def fix_orphaned_sql_files(
         self, migrations_dir: Path | None = None, dry_run: bool = False
-    ) -> dict[str, list[str]]:
+    ) -> dict[str, list[tuple[str, str]]]:
         """Rename orphaned SQL files to match the expected naming pattern.
 
         For each orphaned file {NNN}_{name}.sql, renames it to {NNN}_{name}.up.sql
@@ -1005,7 +1006,7 @@ class Migrator:
         self,
         migration: Migration,
         direction: str = "up",
-    ) -> tuple[bool, list[tuple[object, str]]]:
+    ) -> tuple[bool, list[tuple[Any, str]]]:
         """Check migration preconditions without running the migration.
 
         Useful for:

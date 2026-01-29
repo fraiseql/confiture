@@ -407,7 +407,8 @@ class IntentRegistry:
                 "SELECT COUNT(*) FROM tb_pggit_intent WHERE branch_name LIKE %s",
                 (f"{base_name}%",),
             )
-            count = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            count = result[0] if result else 0
 
         if count == 0:
             return base_name

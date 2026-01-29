@@ -284,10 +284,11 @@ class ConnectionPool:
         if self._pool is None:
             return PoolStats(pool_size=0, pool_available=0, requests_waiting=0)
 
+        stats = self._pool.get_stats()
         return PoolStats(
-            pool_size=self._pool.get_stats().pool_size,
-            pool_available=self._pool.get_stats().pool_available,
-            requests_waiting=self._pool.get_stats().requests_waiting,
+            pool_size=stats["pool_size"],  # type: ignore[index]
+            pool_available=stats["pool_available"],  # type: ignore[index]
+            requests_waiting=stats["requests_waiting"],  # type: ignore[index]
         )
 
     def check_health(self) -> bool:

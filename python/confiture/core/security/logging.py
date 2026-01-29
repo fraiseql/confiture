@@ -6,6 +6,7 @@ information from log messages, preventing accidental credential exposure.
 
 import logging
 import re
+from collections.abc import MutableMapping
 from typing import Any
 
 from confiture.core.security.validation import sanitize_log_message
@@ -71,7 +72,7 @@ class SecureLoggerAdapter(logging.LoggerAdapter):
         # Message will be sanitized before logging
     """
 
-    def process(self, msg: str, kwargs: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    def process(self, msg: Any, kwargs: MutableMapping[str, Any]) -> tuple[Any, MutableMapping[str, Any]]:
         """Process the logging message to sanitize sensitive data.
 
         Args:

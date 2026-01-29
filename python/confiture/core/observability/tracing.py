@@ -51,10 +51,10 @@ class MigrationTracer:
     def _initialize_tracer(self) -> None:
         """Initialize OpenTelemetry tracer."""
         try:
-            from opentelemetry import trace
-            from opentelemetry.sdk.resources import Resource
-            from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry import trace  # type: ignore[import]
+            from opentelemetry.sdk.resources import Resource  # type: ignore[import]
+            from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import]
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore[import]
 
             # Create resource
             resource = Resource.create(
@@ -70,7 +70,7 @@ class MigrationTracer:
             # Add exporter if endpoint configured
             if self.config.endpoint:
                 try:
-                    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (  # type: ignore[import]
                         OTLPSpanExporter,
                     )
 
@@ -154,7 +154,7 @@ class MigrationTracer:
             return
 
         try:
-            from opentelemetry import trace
+            from opentelemetry import trace  # type: ignore[import]
 
             span.set_status(trace.Status(trace.StatusCode.ERROR))
             span.record_exception(error)
@@ -172,7 +172,7 @@ class MigrationTracer:
             return
 
         try:
-            from opentelemetry import trace
+            from opentelemetry import trace  # type: ignore[import]
 
             span.set_attribute("duration_ms", duration_ms)
             span.set_status(trace.Status(trace.StatusCode.OK))
