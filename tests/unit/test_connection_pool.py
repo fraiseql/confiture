@@ -258,10 +258,11 @@ class TestConnectionPoolStats:
     def test_get_stats(self, mock_pool_class):
         """Test getting pool statistics."""
         mock_pool = MagicMock()
-        mock_stats = MagicMock()
-        mock_stats.pool_size = 10
-        mock_stats.pool_available = 7
-        mock_stats.requests_waiting = 0
+        mock_stats = {
+            "pool_size": 10,
+            "pool_available": 7,
+            "requests_waiting": 0,
+        }
         mock_pool.get_stats.return_value = mock_stats
         mock_pool_class.return_value = mock_pool
 

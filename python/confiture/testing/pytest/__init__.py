@@ -19,7 +19,6 @@ Usage:
 # Re-export from the plugin module
 from confiture.testing.pytest_plugin import (
     confiture_db_url,
-    confiture_migrations_dir,
     confiture_sandbox,
     confiture_snapshotter,
     confiture_validator,
@@ -31,7 +30,6 @@ __all__ = [
     "migration_test",
     # Fixtures (for documentation, actual fixtures registered via plugin)
     "confiture_db_url",
-    "confiture_migrations_dir",
     "confiture_sandbox",
     "confiture_validator",
     "confiture_snapshotter",

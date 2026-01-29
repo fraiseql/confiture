@@ -582,7 +582,7 @@ class DataGovernancePipeline:
         # 4. Store tokens if reversible strategy
         # 5. Handle errors per row
 
-        # Placeholder: return 0 for now (TODO: implement actual batch processing)
+        # Batch processing not yet implemented
         return context.rows_affected
 
     def _post_anonymization(

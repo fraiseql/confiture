@@ -61,7 +61,7 @@ class GracefulShutdown:
         """
         self._should_stop = False
         self._state = ShutdownState.RUNNING
-        self._cleanup_handlers: list[Callable[[ShutdownContext], None]] = []
+        self._cleanup_handlers: list[tuple[int, Callable[[ShutdownContext], None]]] = []
         self._current_operation: str | None = None
         self._migration_in_progress: str | None = None
         self._timeout = timeout

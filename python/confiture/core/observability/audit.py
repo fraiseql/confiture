@@ -277,6 +277,7 @@ class AuditTrail:
                 params,
             )
 
+            assert cur.description is not None
             columns = [desc[0] for desc in cur.description]
             return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
 
@@ -305,6 +306,7 @@ class AuditTrail:
                 (limit,),
             )
 
+            assert cur.description is not None
             columns = [desc[0] for desc in cur.description]
             return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
 

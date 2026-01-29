@@ -61,11 +61,12 @@ from confiture.testing.loader import (
 )
 
 # Migration sandbox
-from confiture.testing.sandbox import MigrationSandbox
+from confiture.testing.sandbox import MigrationSandbox, PreStateSimulationError
 
 __all__ = [
     # Migration sandbox (context manager for testing)
     "MigrationSandbox",
+    "PreStateSimulationError",
     # Migration loader (most commonly used)
     "load_migration",
     "find_migration_by_version",

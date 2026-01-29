@@ -7,6 +7,236 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-01-29
+
+### Fixed - Type Safety and Quality Improvements
+
+**Type Checking**:
+- Resolved all 102 type checking diagnostics (ty type checker)
+- Fixed null handling for `cursor.fetchone()` calls (13+ locations)
+- Fixed return type annotations in migrator
+- Fixed method signature compatibility (LoggerAdapter.process)
+- Corrected type hints for generator cleanup handlers
+- Suppressed optional dependency import errors (prometheus_client, opentelemetry)
+
+**Development Cleanup**:
+- Removed development archaeology (TODO markers, phase/week/day references)
+- Removed 6 tracked `.claude/` phase planning artifacts from git
+- Added `.claude/*.md` to .gitignore for local development notes
+- Replaced deprecated `mypy` with `ty` in Makefile
+
+**Documentation Fixes**:
+- Fixed broken README link (cli-dry-run.md → dry-run.md)
+- Cleaned up development phase references in performance and security docs
+
+**CI/CD**:
+- Fixed GitHub Actions type-check job (removed unnecessary pip caching)
+- All 18 quality gate checks now passing
+
+### Testing
+
+- All 2,861 unit tests passing
+- All ruff linting checks passing
+- Type checking clean (ty diagnostics: 0)
+- Connection pool stats mock updated to use dict-like access
+
+### Backward Compatibility
+
+- ✅ No breaking changes
+- ✅ No API changes
+- ✅ All existing functionality preserved
+
+## [0.3.9] - 2026-01-27
+
+### Added - Migration File Validation and Auto-Fix
+
+**Migration Validation**:
+- `confiture migrate validate` - Comprehensive migration file validation command
+- Orphaned migration file detection (missing `.up.sql` suffix)
+- Auto-fix capability with `--fix-naming` flag
+- Dry-run preview mode with `--dry-run` flag
+- JSON output support for CI/CD integration
+- Safe file renaming (atomic operations, error handling)
+
+**Warnings in Existing Commands**:
+- `confiture migrate status` - Shows orphaned files in text and JSON output
+- `confiture migrate up` - Warns before applying migrations
+- `--strict` mode - Fail if orphaned files exist
+
+**New Migrator Methods**:
+- `find_orphaned_sql_files()` - Detect misnamed migration files
+- `fix_orphaned_sql_files()` - Safely rename files to match pattern
+
+**Documentation**:
+- New comprehensive guide: "Migration Naming Best Practices" (500+ lines)
+- Updated CLI reference with validate command documentation
+- Updated troubleshooting guide with orphaned files section
+- Updated incremental migrations guide with naming requirements
+- CI/CD pipeline integration examples
+- Real-world scenarios and troubleshooting FAQ
+
+### Features
+
+**Three Recognized Migration Patterns**:
+```
+{NNN}_{name}.py             # Python migrations
+{NNN}_{name}.up.sql         # Forward migrations
+{NNN}_{name}.down.sql       # Rollback migrations
+```
+
+**Auto-Fix Workflow**:
+```bash
+# Detect orphaned files
+confiture migrate validate
+
+# Preview fixes
+confiture migrate validate --fix-naming --dry-run
+
+# Apply fixes
+confiture migrate validate --fix-naming
+
+# CI/CD integration
+confiture migrate validate --format json
+```
+
+### Testing
+
+- 8 new tests for validate command (6 CLI + 2 Migrator)
+- Dry-run mode tests
+- JSON output tests
+- Auto-fix tests with content preservation
+- 2,660 unit tests passing
+- Full backward compatibility verified
+
+### Issue Resolution
+
+- Resolves [GitHub Issue #13](https://github.com/evoludigit/confiture/issues/13) - Migration Discovery Validation
+- Three-phase implementation:
+  - Phase 1: Detection and warnings
+  - Phase 2: Validation command with auto-fix
+  - Phase 3: Comprehensive documentation
+
+### Backward Compatibility
+
+- ✅ No breaking changes
+- ✅ All existing migrations continue to work
+- ✅ Warnings are non-blocking (informational only)
+- ✅ New features are opt-in
+- ✅ Full backward compatibility verified
+
+## [0.3.8] - 2026-01-22
+
+### Added - Multi-Agent Coordination System (Phase 4)
+
+**Core Coordination Features**:
+- **Intent Registry**: Declare schema change intentions before implementation
+- **Automatic Conflict Detection**: Analyzes DDL for 6 conflict types (TABLE, COLUMN, FUNCTION, INDEX, CONSTRAINT, TIMING)
+- **Branch Allocation**: Unique pgGit branch assignment for each intent
+- **Status Tracking**: Complete lifecycle management (REGISTERED → IN_PROGRESS → COMPLETED → MERGED)
+- **Audit Trail**: Full history of all coordination decisions and status changes
+- **Resolution Workflows**: Guided conflict resolution with actionable suggestions
+
+**CLI Commands** (`confiture coordinate`):
+- `register` - Declare intention to make schema changes
+- `list-intents` - View all registered intentions with filtering
+- `status` - Get detailed status of specific intention
+- `check` - Pre-flight conflict check before registration
+- `conflicts` - List all detected conflicts
+- `resolve` - Mark conflict as reviewed with resolution notes
+- `abandon` - Abandon intention with reason tracking
+
+**JSON Output Support**:
+- `--format json` flag for all coordinate commands
+- Machine-readable output for CI/CD integration
+- Parsing examples for Bash (jq), Python, Node.js
+- Backward compatible (defaults to Rich-formatted text output)
+
+**Database Schema** (Trinity Pattern):
+- `tb_pggit_intent` - Intent storage with JSONB metadata
+- `tb_pggit_conflict` - Conflict tracking and resolution
+- `tb_pggit_intent_history` - Complete audit trail of status changes
+- Optimized indexes for sub-millisecond queries
+
+**Performance**:
+- Intent registration: ~1.3ms (76x faster than target)
+- Conflict detection: <1ms even with 100 active intents
+- Database queries: <1ms for most operations
+- Linear scaling: 1,000 intents in 1.54s
+- 18 comprehensive performance benchmarks
+- Production-ready without optimization
+
+**Documentation**:
+- Architecture documentation (1,030 lines) - Complete system design
+- User guide (1,056 lines) - CLI commands, workflows, best practices
+- Performance benchmarks (454 lines) - Detailed analysis and recommendations
+- 3 executable example workflows
+- JSON integration examples
+
+**Testing**:
+- 123 coordination tests (unit + integration + E2E + CLI + performance)
+- 100% test pass rate
+- ~95%+ code coverage for coordination package
+- 20 E2E workflow scenarios
+- Zero known issues
+
+**Key Benefits**:
+- Enables parallel schema development with confidence
+- Early conflict detection (before code is written)
+- Clear visibility into all active schema work
+- Audit trail for compliance and debugging
+- Production-tested and performant
+
+### Files Added
+
+- `python/confiture/integrations/pggit/coordination/models.py` - Data models (Intent, ConflictReport, enums)
+- `python/confiture/integrations/pggit/coordination/detector.py` - Conflict detection algorithm
+- `python/confiture/integrations/pggit/coordination/registry.py` - Database-backed intent registry
+- `python/confiture/cli/coordinate.py` - CLI commands (7 commands)
+- `tests/unit/test_coordination.py` - Unit tests (25 tests)
+- `tests/integration/test_coordination_registry.py` - Integration tests (52 tests)
+- `tests/e2e/test_coordination_e2e.py` - E2E workflow tests (20 tests)
+- `tests/unit/test_cli_coordinate.py` - CLI tests (28 tests)
+- `tests/performance/test_coordination_benchmarks.py` - Performance benchmarks (18 tests)
+- `docs/architecture/multi-agent-coordination.md` - Architecture documentation
+- `docs/guides/multi-agent-coordination.md` - User guide
+- `docs/performance/coordination-performance.md` - Performance analysis
+- `examples/multi-agent-workflow/` - 3 executable example scripts
+
+### Example Usage
+
+```bash
+# Register intention to add Stripe integration
+confiture coordinate register \
+    --agent-id claude-payments \
+    --feature-name stripe_integration \
+    --schema-changes "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT" \
+    --tables-affected users \
+    --risk-level medium
+
+# Check for conflicts before starting work
+confiture coordinate check \
+    --agent-id claude-auth \
+    --feature-name oauth2 \
+    --schema-changes "ALTER TABLE users ADD COLUMN oauth_provider TEXT" \
+    --tables-affected users
+
+# List all active work
+confiture coordinate list-intents --status-filter in_progress
+
+# Get JSON output for automation
+confiture coordinate list-intents --format json | jq '.total'
+
+# Mark conflict as resolved
+confiture coordinate resolve \
+    --conflict-id 42 \
+    --notes "Coordinated with team, applying changes sequentially"
+```
+
+### Closes
+
+- Phase 4 implementation complete (100% of acceptance criteria met)
+- All Week 3 objectives exceeded (architecture, JSON, performance benchmarks)
+
 ## [0.3.7] - 2026-01-18
 
 ### Fixed

@@ -23,7 +23,7 @@ class MigrationMetrics:
     """Prometheus metrics for migrations.
 
     Exposes metrics when prometheus_client is installed:
-    - confiture_migrations_total (counter)
+    - tb_confiture_total (counter)
     - confiture_migration_duration_seconds (histogram)
     - confiture_migration_errors_total (counter)
     - confiture_migration_last_success_timestamp (gauge)
@@ -54,13 +54,18 @@ class MigrationMetrics:
     def _initialize_metrics(self) -> None:
         """Initialize Prometheus metrics."""
         try:
-            from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+            from prometheus_client import (  # type: ignore[import]
+                REGISTRY,
+                Counter,
+                Gauge,
+                Histogram,
+            )
 
             self._registry = REGISTRY
 
             # Define metrics
             self._migrations_total = Counter(
-                "confiture_migrations_total",
+                "tb_confiture_total",
                 "Total number of migrations executed",
                 ["version", "name", "status"],
                 registry=self._registry,
@@ -108,7 +113,7 @@ class MigrationMetrics:
             return
 
         try:
-            from prometheus_client import start_http_server
+            from prometheus_client import start_http_server  # type: ignore[import]
 
             start_http_server(self.config.port)
             logger.info(f"Prometheus metrics server started on port {self.config.port}")

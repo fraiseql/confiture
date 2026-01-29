@@ -179,7 +179,7 @@ format: ## Format code with ruff
 
 type-check: ## Run type checking
 	@echo "$(BLUE)Running type checking...$(NC)"
-	@-$(UV) run mypy python/confiture/ 2>/dev/null || echo "Note: Full type checking requires mypy configuration"
+	@$(UV) run ty check python/confiture/
 
 ################################################################################
 # BUILD & DOCUMENTATION

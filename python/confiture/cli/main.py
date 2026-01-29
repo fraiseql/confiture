@@ -10,6 +10,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.branch import branch_app
+from confiture.cli.coordinate import coordinate_app
+from confiture.cli.generate import generate_app
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
@@ -103,7 +106,7 @@ app = typer.Typer(
 console = Console()
 
 # Version
-__version__ = "0.3.5"
+__version__ = "0.3.9"
 
 
 def version_callback(value: bool) -> None:
@@ -491,6 +494,15 @@ def lint(
 migrate_app = typer.Typer(help="Migration commands")
 app.add_typer(migrate_app, name="migrate")
 
+# Add branch subcommand group (pgGit integration)
+app.add_typer(branch_app, name="branch")
+
+# Add generate subcommand group (pgGit migration generation)
+app.add_typer(generate_app, name="generate")
+
+# Add coordinate subcommand group (multi-agent coordination)
+app.add_typer(coordinate_app, name="coordinate")
+
 
 @migrate_app.command("status")
 def migrate_status(
@@ -547,6 +559,9 @@ def migrate_status(
         sql_files = list(migrations_dir.glob("*.up.sql"))
         migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
 
+        # Check for orphaned SQL files that don't match the naming pattern
+        orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
+
         if not migration_files:
             if output_format == "json":
                 result = {
@@ -556,9 +571,13 @@ def migrate_status(
                     "total": 0,
                     "migrations": [],
                 }
+                if orphaned_sql_files:
+                    result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
                 _output_json(result, output_file, console)
             else:
                 console.print("[yellow]No migrations found.[/yellow]")
+                if orphaned_sql_files:
+                    _print_orphaned_files_warning(orphaned_sql_files, console)
             return
 
         # Get applied migrations from database if config provided
@@ -629,6 +648,8 @@ def migrate_status(
             }
             if db_error:
                 result["warning"] = f"Could not connect to database: {db_error}"
+            if orphaned_sql_files:
+                result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
             _output_json(result, output_file, console)
         else:
             # Display migrations in a table
@@ -654,6 +675,10 @@ def migrate_status(
             else:
                 console.print()
 
+            # Warn about orphaned files
+            if orphaned_sql_files:
+                _print_orphaned_files_warning(orphaned_sql_files, console)
+
     except Exception as e:
         if output_format == "json":
             result = {"error": str(e)}
@@ -678,7 +703,55 @@ def _output_json(data: dict[str, Any], output_file: Path | None, console: Consol
         output_file.write_text(json_str)
         console.print(f"[green]✅ Output written to {output_file}[/green]")
     else:
-        console.print(json_str)
+        # Use print() instead of console.print() to avoid Rich wrapping long lines
+        print(json_str)
+
+
+def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:
+    """Find .sql files that don't match the expected naming pattern.
+
+    Args:
+        migrations_dir: Directory to search for migrations
+
+    Returns:
+        List of orphaned .sql file paths
+    """
+    if not migrations_dir.exists():
+        return []
+
+    # Find all .sql files
+    all_sql_files = set(migrations_dir.glob("*.sql"))
+
+    # Find all properly named migration files
+    expected_files = set(migrations_dir.glob("*.up.sql")) | set(migrations_dir.glob("*.down.sql"))
+
+    # Orphaned files are SQL files that don't match the expected pattern
+    orphaned = all_sql_files - expected_files
+    return sorted(orphaned, key=lambda f: f.name)
+
+
+def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) -> None:
+    """Print a warning about orphaned migration files.
+
+    Args:
+        orphaned_files: List of orphaned migration file paths
+        console: Console for output
+    """
+    console.print("\n[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
+    console.print("[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]")
+
+    for orphaned_file in orphaned_files:
+        # Suggest the rename
+        suggested_name = f"{orphaned_file.stem}.up.sql"
+        console.print(f"  • {orphaned_file.name} → rename to: {suggested_name}")
+
+    console.print(
+        "\n[yellow]Confiture only recognizes migration files with these patterns:[/yellow]"
+    )
+    console.print("[yellow]  • {NNN}_{name}.up.sql   (forward migrations)[/yellow]")
+    console.print("[yellow]  • {NNN}_{name}.down.sql (rollback migrations)[/yellow]")
+    console.print("[yellow]  • {NNN}_{name}.py       (Python class migrations)[/yellow]")
+    console.print("[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]")
 
 
 @migrate_app.command("up")
@@ -912,6 +985,15 @@ def migrate_up(
             console.print(
                 f"[cyan]📦 Found {len(migrations_to_apply)} pending migration(s)[/cyan]\n"
             )
+
+        # Check for orphaned migration files
+        orphaned_files = _find_orphaned_sql_files(migrations_dir)
+        if orphaned_files:
+            _print_orphaned_files_warning(orphaned_files, console)
+            if effective_strict_mode:
+                console.print("\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]")
+                conn.close()
+                raise typer.Exit(1)
 
         # Handle dry-run modes
         if dry_run or dry_run_execute:
@@ -1722,6 +1804,446 @@ def migrate_down(
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@migrate_app.command("validate")
+def migrate_validate(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    fix_naming: bool = typer.Option(
+        False,
+        "--fix-naming",
+        help="Automatically rename orphaned migration files to match naming convention",
+    ),
+    idempotent: bool = typer.Option(
+        False,
+        "--idempotent",
+        help="Validate that migrations are idempotent (can be safely re-run)",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview changes without actually renaming files",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text (default) or json",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file",
+    ),
+) -> None:
+    """Validate migration file naming conventions and idempotency.
+
+    Checks for .sql files that don't match the expected naming pattern.
+    With --idempotent, also validates that SQL statements are idempotent.
+
+    Confiture only recognizes:
+    - {NNN}_{name}.up.sql (forward migrations)
+    - {NNN}_{name}.down.sql (rollback migrations)
+    - {NNN}_{name}.py (Python class migrations)
+
+    Idempotent SQL patterns include:
+    - CREATE TABLE IF NOT EXISTS
+    - CREATE INDEX IF NOT EXISTS
+    - CREATE OR REPLACE FUNCTION/VIEW
+    - DROP TABLE IF EXISTS
+
+    Examples:
+        # Check for orphaned files
+        confiture migrate validate
+
+        # Validate idempotency of all migrations
+        confiture migrate validate --idempotent
+
+        # Preview what would be fixed
+        confiture migrate validate --fix-naming --dry-run
+
+        # Auto-fix orphaned file names
+        confiture migrate validate --fix-naming
+
+        # Output as JSON
+        confiture migrate validate --format json
+    """
+    try:
+        # Validate output format
+        if format_output not in ("text", "json"):
+            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
+            raise typer.Exit(1)
+
+        if not migrations_dir.exists():
+            if format_output == "json":
+                result = {"error": f"Migrations directory not found: {migrations_dir.absolute()}"}
+                _output_json(result, output_file, console)
+            else:
+                console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+            raise typer.Exit(1)
+
+        # Handle idempotency validation
+        if idempotent:
+            _validate_idempotency(migrations_dir, format_output, output_file)
+            return
+
+        # Use Migrator to find and optionally fix orphaned files
+        from unittest.mock import Mock
+
+        from confiture.core.migrator import Migrator
+
+        mock_conn = Mock()
+        migrator = Migrator(connection=mock_conn)
+
+        # Find orphaned files
+        orphaned_files = migrator.find_orphaned_sql_files(migrations_dir)
+
+        if not orphaned_files:
+            if format_output == "json":
+                result = {
+                    "status": "ok",
+                    "message": "No orphaned migration files found",
+                    "fixed": [],
+                    "errors": [],
+                }
+                _output_json(result, output_file, console)
+            else:
+                console.print("[green]✅ No orphaned migration files found[/green]")
+            return
+
+        # If fix_naming is requested, fix the files
+        if fix_naming:
+            # --dry-run takes precedence
+            is_dry_run = dry_run
+            result = migrator.fix_orphaned_sql_files(migrations_dir, dry_run=is_dry_run)
+
+            if format_output == "json":
+                output_dict: dict[str, Any] = {
+                    "status": "fixed" if not is_dry_run else "preview",
+                    "fixed": result.get("renamed", []),
+                    "errors": result.get("errors", []),
+                }
+                _output_json(output_dict, output_file, console)
+            else:
+                # Text output
+                if is_dry_run:
+                    console.print(
+                        "[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]"
+                    )
+                else:
+                    console.print("[green]✅ Fixed orphaned migration files:[/green]")
+
+                for old_name, new_name in result.get("renamed", []):
+                    console.print(f"  • {old_name} → {new_name}")
+
+                if result.get("errors"):
+                    console.print("[red]Errors:[/red]")
+                    for filename, error_msg in result.get("errors", []):
+                        console.print(f"  ❌ {filename}: {error_msg}")
+
+        else:
+            # Just report the orphaned files (don't fix)
+            if format_output == "json":
+                output_dict = {
+                    "status": "issues_found",
+                    "orphaned_files": [f.name for f in orphaned_files],
+                }
+                _output_json(output_dict, output_file, console)
+            else:
+                console.print("[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
+                console.print(
+                    "[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]"
+                )
+
+                for orphaned_file in orphaned_files:
+                    suggested_name = f"{orphaned_file.stem}.up.sql"
+                    console.print(f"  • {orphaned_file.name} → rename to: {suggested_name}")
+
+                console.print()
+                console.print("[cyan]To automatically fix these files, run:[/cyan]")
+                console.print("[cyan]  confiture migrate validate --fix-naming[/cyan]")
+                console.print()
+                console.print("[cyan]Or preview the changes first with:[/cyan]")
+                console.print("[cyan]  confiture migrate validate --fix-naming --dry-run[/cyan]")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        if format_output == "json":
+            result = {"error": str(e)}
+            _output_json(result, output_file, console)
+        else:
+            console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+def _validate_idempotency(
+    migrations_dir: Path,
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Validate idempotency of SQL migration files.
+
+    Args:
+        migrations_dir: Directory containing migration files
+        format_output: Output format (text or json)
+        output_file: Optional file to save output to
+    """
+    from confiture.core.idempotency import IdempotencyValidator
+
+    validator = IdempotencyValidator()
+
+    # Find all SQL migration files
+    sql_files = list(migrations_dir.glob("*.up.sql"))
+    sql_files.sort()
+
+    if not sql_files:
+        if format_output == "json":
+            result: dict[str, Any] = {
+                "status": "ok",
+                "message": "No migration files found",
+                "violations": [],
+            }
+            _output_json(result, output_file, console)
+        else:
+            console.print("[green]✅ No migration files found to validate[/green]")
+        return
+
+    # Validate all files
+    combined_report = validator.validate_directory(migrations_dir, pattern="*.up.sql")
+
+    if format_output == "json":
+        result = combined_report.to_dict()
+        result["status"] = "issues_found" if combined_report.has_violations else "ok"
+        _output_json(result, output_file, console)
+        if combined_report.has_violations:
+            raise typer.Exit(1)
+    else:
+        if not combined_report.has_violations:
+            console.print("[green]✅ All migrations are idempotent[/green]")
+            console.print(f"   Scanned {combined_report.files_scanned} file(s)")
+            return
+
+        # Display violations
+        console.print(
+            f"[red]❌ Found {combined_report.violation_count} idempotency violation(s)[/red]\n"
+        )
+
+        # Group violations by file
+        violations_by_file: dict[str, list[Any]] = {}
+        for violation in combined_report.violations:
+            file_path = violation.file_path
+            if file_path not in violations_by_file:
+                violations_by_file[file_path] = []
+            violations_by_file[file_path].append(violation)
+
+        for file_path, violations in violations_by_file.items():
+            file_name = Path(file_path).name
+            console.print(f"[yellow]{file_name}[/yellow]")
+            for v in violations:
+                console.print(f"  Line {v.line_number}: {v.pattern.value}")
+                console.print(
+                    f"    [dim]{v.sql_snippet[:60]}...[/dim]"
+                    if len(v.sql_snippet) > 60
+                    else f"    [dim]{v.sql_snippet}[/dim]"
+                )
+                console.print(f"    💡 {v.suggestion}")
+            console.print()
+
+        console.print("[cyan]To auto-fix these issues, run:[/cyan]")
+        console.print(
+            f"[cyan]  confiture migrate fix --idempotent --migrations-dir {migrations_dir}[/cyan]"
+        )
+
+        raise typer.Exit(1)
+
+
+@migrate_app.command("fix")
+def migrate_fix(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    idempotent: bool = typer.Option(
+        False,
+        "--idempotent",
+        help="Fix non-idempotent SQL statements",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview changes without modifying files",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text (default) or json",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file",
+    ),
+) -> None:
+    """Auto-fix migration files.
+
+    Transforms non-idempotent SQL statements into their idempotent equivalents.
+
+    Transformations applied:
+    - CREATE TABLE → CREATE TABLE IF NOT EXISTS
+    - CREATE INDEX → CREATE INDEX IF NOT EXISTS
+    - CREATE FUNCTION → CREATE OR REPLACE FUNCTION
+    - DROP TABLE → DROP TABLE IF EXISTS
+    - And more...
+
+    Examples:
+        # Preview fixes without modifying files
+        confiture migrate fix --idempotent --dry-run
+
+        # Apply fixes to all migration files
+        confiture migrate fix --idempotent
+
+        # Output as JSON
+        confiture migrate fix --idempotent --dry-run --format json
+    """
+    try:
+        # Validate output format
+        if format_output not in ("text", "json"):
+            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
+            raise typer.Exit(1)
+
+        if not migrations_dir.exists():
+            if format_output == "json":
+                result: dict[str, Any] = {
+                    "error": f"Migrations directory not found: {migrations_dir.absolute()}"
+                }
+                _output_json(result, output_file, console)
+            else:
+                console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+            raise typer.Exit(1)
+
+        if not idempotent:
+            console.print(
+                "[yellow]⚠️  No fix type specified. Use --idempotent to fix idempotency issues.[/yellow]"
+            )
+            return
+
+        _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        if format_output == "json":
+            result = {"error": str(e)}
+            _output_json(result, output_file, console)
+        else:
+            console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+def _fix_idempotency(
+    migrations_dir: Path,
+    dry_run: bool,
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Fix idempotency issues in SQL migration files.
+
+    Args:
+        migrations_dir: Directory containing migration files
+        dry_run: If True, preview changes without modifying files
+        format_output: Output format (text or json)
+        output_file: Optional file to save output to
+    """
+    from confiture.core.idempotency import IdempotencyFixer
+
+    fixer = IdempotencyFixer()
+
+    # Find all SQL migration files
+    sql_files = list(migrations_dir.glob("*.up.sql"))
+    sql_files.sort()
+
+    if not sql_files:
+        if format_output == "json":
+            result: dict[str, Any] = {
+                "status": "ok",
+                "message": "No migration files found",
+                "files": [],
+            }
+            _output_json(result, output_file, console)
+        else:
+            console.print("[green]✅ No migration files found to fix[/green]")
+        return
+
+    # Process each file
+    files_changed: list[dict[str, Any]] = []
+
+    for sql_file in sql_files:
+        original_content = sql_file.read_text()
+        fixed_content = fixer.fix(original_content)
+
+        if fixed_content != original_content:
+            # Get list of changes for reporting
+            changes = fixer.dry_run(original_content)
+
+            file_info: dict[str, Any] = {
+                "file": sql_file.name,
+                "changes": [
+                    {
+                        "pattern": c.pattern.value,
+                        "original": c.original[:50] + "..." if len(c.original) > 50 else c.original,
+                        "suggested_fix": c.suggested_fix[:50] + "..."
+                        if len(c.suggested_fix) > 50
+                        else c.suggested_fix,
+                        "line": c.line_number,
+                    }
+                    for c in changes
+                ],
+            }
+            files_changed.append(file_info)
+
+            if not dry_run:
+                sql_file.write_text(fixed_content)
+
+    # Output results
+    if format_output == "json":
+        result = {
+            "status": "fixed" if not dry_run and files_changed else "preview" if dry_run else "ok",
+            "files": files_changed,
+            "total_files_changed": len(files_changed),
+        }
+        _output_json(result, output_file, console)
+    else:
+        if not files_changed:
+            console.print("[green]✅ All migrations are already idempotent[/green]")
+            return
+
+        if dry_run:
+            console.print("[cyan]📋 DRY-RUN: Would apply the following fixes:[/cyan]\n")
+        else:
+            console.print("[green]✅ Applied idempotency fixes:[/green]\n")
+
+        for file_info in files_changed:
+            console.print(f"[yellow]{file_info['file']}[/yellow]")
+            for change in file_info["changes"]:
+                console.print(f"  Line {change['line']}: {change['pattern']}")
+                console.print(f"    - {change['original']}")
+                console.print(f"    + {change['suggested_fix']}")
+            console.print()
+
+        if dry_run:
+            console.print(f"[cyan]Would fix {len(files_changed)} file(s)[/cyan]")
+            console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
+        else:
+            console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
 
 
 @app.command()

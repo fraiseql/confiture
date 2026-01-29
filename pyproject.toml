@@ -1,14 +1,25 @@
 [project]
 name = "fraiseql-confiture"
-version = "0.3.7"
-description = "PostgreSQL migrations, sweetly done 🍓"
+version = "0.3.9"
+description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "evoludigit", email = "lionel.hamayon@evolution-digitale.fr"}
 ]
-keywords = ["postgresql", "migration", "database", "schema", "ddl"]
+keywords = [
+    "postgresql",
+    "migration",
+    "database",
+    "schema",
+    "ddl",
+    "coordination",
+    "multi-agent",
+    "collaboration",
+    "conflict-detection",
+    "ai-agents",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -19,6 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Version Control",
 ]
 
 dependencies = [
@@ -52,7 +64,6 @@ dev = [
 
 fraiseql = [
     # FraiseQL integration (requires Python 3.13+)
-    # Will be enabled in Phase 1 Milestone 1.14
 ]
 
 [project.urls]

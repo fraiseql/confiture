@@ -136,7 +136,7 @@ class MigrationRunner:
                 cur.execute(
                     """
                     SELECT slug
-                    FROM confiture_migrations
+                    FROM tb_confiture
                     ORDER BY applied_at ASC
                     """
                 )
