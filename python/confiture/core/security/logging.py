@@ -72,7 +72,9 @@ class SecureLoggerAdapter(logging.LoggerAdapter):
         # Message will be sanitized before logging
     """
 
-    def process(self, msg: Any, kwargs: MutableMapping[str, Any]) -> tuple[Any, MutableMapping[str, Any]]:
+    def process(
+        self, msg: Any, kwargs: MutableMapping[str, Any]
+    ) -> tuple[Any, MutableMapping[str, Any]]:
         """Process the logging message to sanitize sensitive data.
 
         Args:
