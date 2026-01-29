@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-01-29
+
+### Added - Git-Aware Schema Validation
+
+**New Commands and Flags**:
+- `confiture migrate validate --check-drift` - Detect schema differences between git refs
+- `confiture migrate validate --require-migration` - Ensure DDL changes have corresponding migration files
+- `confiture migrate validate --base-ref <ref>` - Compare against specific git reference (branch, tag, commit)
+- `confiture migrate validate --since <ref>` - Alias for `--base-ref`
+- `confiture migrate validate --staged` - Validate only staged files (pre-commit hook mode)
+
+**New Core Modules**:
+- `GitRepository` class - Interface to git operations via subprocess
+  - `get_file_at_ref()` - Retrieve file content from specific git refs
+  - `get_changed_files()` - List files changed between git refs
+  - `get_staged_files()` - List currently staged files
+  - `is_git_repo()` - Check if in git repository
+- `GitSchemaBuilder` class - Build schemas from files at specific git refs
+- `GitSchemaDiffer` class - Compare schemas between refs
+- `MigrationAccompanimentChecker` class - Validate DDL changes have migration files
+- `MigrationAccompanimentReport` data model - Structured validation results
+
+**Use Cases**:
+- Pre-commit hooks for schema validation (<500ms for staged files)
+- GitHub Actions CI/CD pipelines
+- GitLab CI integration
+- Code review gates (prevent merging without proper migrations)
+- Local development validation
+
+**Features**:
+- Schema drift detection - Find untracked schema changes
+- Migration enforcement - Require migration files for every DDL change
+- Flexible git references - Compare against branches, tags, commits, relative refs (HEAD~10)
+- Performance optimized - <500ms for pre-commit, <5s for full repo
+- JSON output support for CI/CD automation
+- Text and JSON output formats
+- Proper exit codes (0: pass, 1: validation failed, 2: error)
+
+**Documentation**:
+- Comprehensive user guide: docs/guides/git-aware-validation.md (850+ lines)
+  - Quick start examples
+  - 4 detailed use case sections (pre-commit, GitHub Actions, GitLab CI, code review)
+  - Complete command reference
+  - Decision tree for choosing right flags
+  - 4 detailed common scenarios with solutions
+  - Performance tips for large repositories
+  - Complete troubleshooting guide
+  - API reference with Python code examples
+  - Best practices and glossary
+- Updated CLI reference with all git-aware validation flags
+- Updated getting-started guide with validation section and 5-minute pre-commit setup
+- Updated README.md with feature announcement
+- Updated docs/index.md with guide links
+
+### Quality & Testing
+
+**Test Coverage**:
+- 24 comprehensive tests (unit + integration)
+- GitRepository: 8 unit tests for all git operations
+- Schema building: 6 unit tests for building and comparing schemas
+- Migration validation: 5 unit tests for accompaniment checking
+- CLI integration: 5 integration tests for flag combinations
+- 100% coverage for new modules
+
+**Code Quality**:
+- Full type hints throughout (Python 3.11+ union syntax)
+- Complete docstrings with examples
+- All linting passes (ruff)
+- All type checking passes (ty)
+- Proper error handling with timeouts on all git operations
+- No new dependencies added
+
+**Security**:
+- Input validation on all git operations
+- Subprocess timeout protection (10-30 seconds)
+- No command injection (list-based args, no shell=True)
+- No hardcoded credentials or secrets
+
+### Backward Compatibility
+
+- ✅ No breaking changes
+- ✅ All new flags are optional
+- ✅ All new features are additive
+- ✅ Existing `confiture migrate validate` behavior unchanged
+
 ## [0.3.10] - 2026-01-29
 
 ### Fixed - Type Safety and Quality Improvements
