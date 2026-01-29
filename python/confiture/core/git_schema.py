@@ -5,6 +5,7 @@ Enables schema validation against git refs for drift detection.
 """
 
 from pathlib import Path
+from typing import Any
 
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
@@ -80,17 +81,23 @@ class GitSchemaBuilder:
 
         return "\n".join(schema_parts)
 
-    def _build_from_include_at_ref(self, ref: str, include_config: dict) -> list[str]:
+    def _build_from_include_at_ref(
+        self, ref: str, include_config: dict[str, Any]
+    ) -> list[str]:
         """Build schema from single include path at ref.
 
         Discovers files matching include patterns and retrieves from git.
 
         Args:
-            ref: Git reference
-            include_config: Include directory configuration dict
+            ref: Git reference (commit hash, branch name, tag, etc.)
+            include_config: Include directory configuration dict with keys:
+                - path: Directory path (e.g., "db/schema")
+                - recursive: Whether to search recursively (bool)
+                - include: Include patterns (list[str])
+                - exclude: Exclude patterns (list[str])
 
         Returns:
-            List of file contents in order
+            List of file contents in deterministic (alphabetical) order
         """
         include_path = include_config["path"]
         recursive = include_config["recursive"]
@@ -136,29 +143,49 @@ class GitSchemaBuilder:
 
         Returns:
             List of SQL file paths
+
+        Raises:
+            GitError: If git command fails
         """
         import subprocess
 
+        from confiture.exceptions import GitError
+
+        # Build git command
+        cmd = ["git", "ls-tree", ref, "--", directory.as_posix()]
+        if recursive:
+            cmd.insert(2, "-r")
+
         # Use git ls-tree to list files
-        result = subprocess.run(
-            ["git", "ls-tree", "-r" if recursive else "", ref, "--", directory.as_posix()],
-            cwd=self.repo_path,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(
+                f"Git command timed out listing files at '{ref}': {e}"
+            ) from e
+
+        if result.returncode != 0:
+            raise GitError(
+                f"Failed to list files at '{ref}': {result.stderr.strip()}"
+            )
 
         files: list[Path] = []
-        if result.returncode == 0:
-            for line in result.stdout.strip().split("\n"):
-                if not line:
-                    continue
-                # Parse ls-tree output: mode type hash path
-                parts = line.split("\t")
-                if len(parts) == 2:
-                    path_str = parts[1]
-                    path = Path(path_str)
-                    if path.suffix == ".sql":
-                        files.append(path)
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            # Parse ls-tree output: mode type hash path
+            parts = line.split("\t")
+            if len(parts) == 2:
+                path_str = parts[1]
+                path = Path(path_str)
+                if path.suffix == ".sql":
+                    files.append(path)
 
         return files
 

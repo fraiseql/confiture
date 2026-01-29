@@ -147,13 +147,14 @@ class TestCliGitValidation:
                         "migrate",
                         "validate",
                         "--check-drift",
+                        "--base-ref", "HEAD",  # Compare HEAD to itself (no drift)
                     ],
                     catch_exceptions=False,
                 )
 
-                # Should not fail with git error
-                # (may fail for other reasons like orphaned files, but not git setup)
-                assert "git" not in result.stdout.lower() or "✅" in result.stdout
+                # Should succeed - no drift when comparing to self
+                # Output should say no changes detected
+                assert result.exit_code == 0 or "no schema" in result.stdout.lower()
             finally:
                 os.chdir(old_cwd)
 
