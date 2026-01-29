@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-01-29
+
+### Fixed - Type Safety and Quality Improvements
+
+**Type Checking**:
+- Resolved all 102 type checking diagnostics (ty type checker)
+- Fixed null handling for `cursor.fetchone()` calls (13+ locations)
+- Fixed return type annotations in migrator
+- Fixed method signature compatibility (LoggerAdapter.process)
+- Corrected type hints for generator cleanup handlers
+- Suppressed optional dependency import errors (prometheus_client, opentelemetry)
+
+**Development Cleanup**:
+- Removed development archaeology (TODO markers, phase/week/day references)
+- Removed 6 tracked `.claude/` phase planning artifacts from git
+- Added `.claude/*.md` to .gitignore for local development notes
+- Replaced deprecated `mypy` with `ty` in Makefile
+
+**Documentation Fixes**:
+- Fixed broken README link (cli-dry-run.md → dry-run.md)
+- Cleaned up development phase references in performance and security docs
+
+**CI/CD**:
+- Fixed GitHub Actions type-check job (removed unnecessary pip caching)
+- All 18 quality gate checks now passing
+
+### Testing
+
+- All 2,861 unit tests passing
+- All ruff linting checks passing
+- Type checking clean (ty diagnostics: 0)
+- Connection pool stats mock updated to use dict-like access
+
+### Backward Compatibility
+
+- ✅ No breaking changes
+- ✅ No API changes
+- ✅ All existing functionality preserved
+
 ## [0.3.9] - 2026-01-27
 
 ### Added - Migration File Validation and Auto-Fix
