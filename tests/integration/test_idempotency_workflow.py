@@ -161,9 +161,7 @@ class TestIdempotencyWorkflow:
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 
-        (migrations_dir / "001_create_users.up.sql").write_text(
-            "CREATE TABLE users (id INT);"
-        )
+        (migrations_dir / "001_create_users.up.sql").write_text("CREATE TABLE users (id INT);")
 
         result = runner.invoke(
             app,
@@ -217,6 +215,7 @@ class TestIdempotencyWorkflow:
         )
 
         import json
+
         output = json.loads(result.stdout)
 
         # Should find all 4 violations
@@ -232,9 +231,7 @@ class TestIdempotencyWorkflow:
         migrations_dir.mkdir(parents=True)
 
         # Non-idempotent migration
-        (migrations_dir / "001_create_users.up.sql").write_text(
-            "CREATE TABLE users (id INT);"
-        )
+        (migrations_dir / "001_create_users.up.sql").write_text("CREATE TABLE users (id INT);")
 
         result = runner.invoke(
             app,
