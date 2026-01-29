@@ -54,7 +54,12 @@ class MigrationMetrics:
     def _initialize_metrics(self) -> None:
         """Initialize Prometheus metrics."""
         try:
-            from prometheus_client import REGISTRY, Counter, Gauge, Histogram  # type: ignore[import]
+            from prometheus_client import (  # type: ignore[import]
+                REGISTRY,
+                Counter,
+                Gauge,
+                Histogram,
+            )
 
             self._registry = REGISTRY
 
