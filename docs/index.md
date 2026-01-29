@@ -141,6 +141,7 @@ confiture migrate up
 - [Migration Naming Best Practices](guides/migration-naming-best-practices.md) - Naming conventions and validation
 
 ### Advanced Topics
+- [Git-Aware Schema Validation](guides/git-aware-validation.md) - Pre-commit hooks and CI/CD validation (NEW!)
 - [Dry-Run Mode](guides/dry-run.md) - Test migrations safely
 - [Hooks](guides/hooks.md) - Before/after migration hooks
 - [Anonymization](guides/anonymization.md) - Custom data masking

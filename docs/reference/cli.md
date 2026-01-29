@@ -849,6 +849,304 @@ $ confiture migrate status
 
 ---
 
+### `confiture migrate validate` - Git-Aware Schema Validation
+
+Enable automatic validation of database schema changes using git history. Perfect for CI/CD pipelines, pre-commit hooks, and code review gates.
+
+#### Git-Aware Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--check-drift` | Flag | `False` | Detect schema differences between git refs |
+| `--require-migration` | Flag | `False` | Ensure DDL changes have migration files |
+| `--base-ref` | String | `origin/main` | Reference point for comparison (branch, tag, or commit) |
+| `--since` | String | None | Alias for `--base-ref` (e.g., `--since origin/dev`) |
+| `--staged` | Flag | `False` | Only validate staged files (pre-commit hook mode) |
+
+#### Examples
+
+**Check for schema drift against main branch:**
+
+```bash
+# Compare current schema against origin/main
+confiture migrate validate --check-drift --base-ref origin/main
+
+# Output on drift detected:
+# ⚠️  Schema differences detected
+#   • ADD_TABLE posts
+#   • ADD_COLUMN users.bio
+```
+
+**Require migration files for DDL changes:**
+
+```bash
+# Validate that schema changes have corresponding migrations
+confiture migrate validate --require-migration --base-ref origin/main
+
+# Output if missing migration:
+# ❌ DDL changes without migration files
+#    Changes: 1
+#    DDL changes found but no migrations added
+```
+
+**Both checks together (recommended):**
+
+```bash
+confiture migrate validate \
+  --check-drift \
+  --require-migration \
+  --base-ref origin/main
+```
+
+**Pre-commit hook validation (staged files only):**
+
+```bash
+# Validate only currently staged changes
+confiture migrate validate --check-drift --require-migration --staged
+
+# This is fast (<500ms) and perfect for pre-commit hooks
+```
+
+**Compare against different references:**
+
+```bash
+# Against a tag
+confiture migrate validate --check-drift --base-ref v1.5.0
+
+# Against a commit
+confiture migrate validate --check-drift --base-ref HEAD~10
+
+# Against a different branch
+confiture migrate validate --check-drift --base-ref origin/develop
+```
+
+**JSON output for CI/CD:**
+
+```bash
+confiture migrate validate \
+  --check-drift \
+  --require-migration \
+  --base-ref origin/main \
+  --format json \
+  --output validation-report.json
+
+# Output: Machine-parseable JSON for CI systems
+```
+
+#### Output Examples
+
+**Text format (default):**
+
+```
+Schema Validation Report
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Git Drift Check (origin/main → HEAD)
+  Status: ✅ PASSED
+  Schema Changes: 0
+
+Migration Accompaniment Check
+  DDL Changes: No
+  New Migrations: -
+  Status: ✅ VALID
+
+Overall Result: ✅ PASSED
+```
+
+**With detected issues:**
+
+```
+Schema Validation Report
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Git Drift Check (origin/main → HEAD)
+  Status: ⚠️  ISSUES FOUND
+  Schema Changes: 2
+    • ADD_TABLE posts
+    • ADD_COLUMN users.bio
+
+Migration Accompaniment Check
+  DDL Changes: Yes
+  New Migrations: No (0 files)
+  Status: ❌ INVALID
+
+Overall Result: ❌ FAILED
+```
+
+#### Use Cases
+
+**1. Local Development (Pre-Commit Hook)**
+
+```yaml
+# .pre-commit-config.yaml
+- repo: local
+  hooks:
+    - id: confiture-validate
+      name: Validate schema changes
+      entry: confiture migrate validate --check-drift --require-migration --staged
+      language: system
+      pass_filenames: false
+      stages: [commit]
+```
+
+**2. CI/CD Pipeline (GitHub Actions)**
+
+```yaml
+name: Validate Schema
+
+on: [pull_request, push]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Validate schema
+        run: |
+          confiture migrate validate \
+            --check-drift \
+            --require-migration \
+            --base-ref origin/main
+```
+
+**3. Code Review Gate (Bash Script)**
+
+```bash
+#!/bin/bash
+set -e
+
+if ! confiture migrate validate \
+    --check-drift \
+    --require-migration \
+    --base-ref origin/main; then
+  echo "❌ Schema validation failed"
+  echo "You must:"
+  echo "  1. Add missing migration files, or"
+  echo "  2. Update schema files to match migrations"
+  exit 1
+fi
+
+echo "✅ Schema validation passed"
+```
+
+#### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Validation passed - no issues found |
+| `1` | Validation failed - schema issues detected |
+| `2` | Error - git not found or invalid configuration |
+
+#### Common Scenarios
+
+**Scenario 1: I modified schema but forgot a migration**
+
+```bash
+# Modified db/schema/users.sql but didn't create migration
+confiture migrate validate --require-migration --base-ref origin/main
+
+# Output:
+# ❌ DDL changes without migration files
+
+# Fix: Create migration file
+touch db/migrations/001_add_email_column.up.sql
+git add db/migrations/001_add_email_column.up.sql
+confiture migrate validate --require-migration
+# ✅ Now passes
+```
+
+**Scenario 2: I want to ensure my PR doesn't introduce drift**
+
+```bash
+confiture migrate validate --check-drift --base-ref origin/main
+
+# Detects structural DDL differences
+# Ignores whitespace and comment-only changes
+# Prevents untracked schema changes in code review
+```
+
+**Scenario 3: My git command is hanging**
+
+```bash
+# Use a more recent base to limit diff
+confiture migrate validate --check-drift --base-ref HEAD~10
+
+# Or use a specific branch
+confiture migrate validate --check-drift --base-ref origin/develop
+```
+
+#### Performance Tips
+
+**For pre-commit hooks (must be <500ms):**
+- Use `--staged` flag to validate only changed files
+- Run only on commit stage, not on other stages
+
+**For CI/CD (should be <5s):**
+- Use recent base refs (e.g., `origin/main` instead of `v1.0.0`)
+- Limit to recent commits with `--base-ref HEAD~50` if needed
+
+**For large repositories:**
+- Use more recent refs to reduce diff scope
+- Consider running in CI only, not on every local commit
+
+#### Troubleshooting
+
+**"Not a git repository" error:**
+
+```bash
+# Solution 1: Initialize git
+git init
+cd /path/to/git/root
+confiture migrate validate --check-drift
+
+# Solution 2: Run from git repo root
+cd /path/to/project
+confiture migrate validate --check-drift
+```
+
+**"Invalid git reference" error:**
+
+```bash
+# List available branches
+git branch -a
+
+# Fetch latest from remote
+git fetch origin
+
+# Use correct branch name
+confiture migrate validate --check-drift --base-ref origin/main
+```
+
+**"Command timed out" error:**
+
+```bash
+# Use more recent base
+confiture migrate validate --check-drift --base-ref HEAD~10
+
+# Or check git repo health
+git fsck
+
+# Or fetch fresh data
+git fetch origin
+```
+
+#### Detailed Documentation
+
+For comprehensive guide including decision trees, integration examples, and best practices, see **[Git-Aware Schema Validation Guide](../guides/git-aware-validation.md)**.
+
+---
+
 ## Error Handling
 
 ### Common Errors and Solutions
