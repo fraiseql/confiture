@@ -64,7 +64,6 @@ dev = [
 
 fraiseql = [
     # FraiseQL integration (requires Python 3.13+)
-    # Will be enabled in Phase 1 Milestone 1.14
 ]
 
 [project.urls]

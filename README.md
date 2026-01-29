@@ -277,7 +277,7 @@ confiture migrate up --dry-run --format json --output report.json
 confiture migrate down --dry-run --steps 2
 ```
 
-For more details, see **[Dry-Run Guide](docs/guides/cli-dry-run.md)**.
+For more details, see **[Dry-Run Guide](docs/guides/dry-run.md)**.
 
 ---
 

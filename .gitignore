@@ -67,6 +67,9 @@ site/
 .development/
 .phases/
 
+# Claude development artifacts
+.claude/*.md
+
 # Internal development notes (do not commit)
 *ANALYSIS*.md
 *_ANALYSIS.md

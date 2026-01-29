@@ -94,11 +94,9 @@ def extract_sql_statements_from_migration(migration_class) -> list[str]:
     Returns:
         List of SQL statement strings (may be approximate/incomplete)
     """
-    # This is a placeholder - in Day 2 implementation, we would:
-    # 1. Create a migration instance with a mock connection
-    # 2. Track calls to self.execute()
-    # 3. Extract the SQL statements
-    # For now, return empty list - actual implementation in Day 2
+    # SQL extraction from migration classes requires a mock connection
+    # that intercepts self.execute() calls to capture statements.
+    # Not yet implemented - returns empty list.
     return []
 
 

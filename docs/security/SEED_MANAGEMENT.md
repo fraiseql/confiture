@@ -630,7 +630,7 @@ pytest tests/unit/test_anonymization_*.py -v
 **Questions about seed management?**
 - Review `docs/security/THREAT_MODEL.md` for security details
 - Check `docs/security/GDPR_ARTICLE_30.md` for compliance requirements
-- See `WEEK_0_DAY_1_SUMMARY.md` for implementation details
+
 
 **Found a security issue?**
 - Contact: [Security contact info]

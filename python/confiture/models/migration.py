@@ -218,7 +218,6 @@ class Migration(ABC):
                 # In strict mode, we could check for warnings here
                 # For now, this is a placeholder for future enhancement
                 if self.strict_mode:
-                    # TODO: Implement warning detection
                     # PostgreSQL notices are sent via connection.notices
                     # or through a notice handler
                     pass
