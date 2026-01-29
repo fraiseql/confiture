@@ -294,6 +294,195 @@ Output:
 
 ---
 
+## Git-Aware Schema Validation
+
+Once your schema and migrations are in git, you can enable automatic validation to catch schema drift and ensure migrations accompany all DDL changes.
+
+### Why Validate with Git?
+
+Git-aware validation helps you:
+
+- **Catch schema drift early** - Prevent untracked schema changes before they reach production
+- **Enforce migrations** - Ensure every DDL change has a corresponding migration file
+- **Automate code review** - Gate PRs until schema is properly validated
+- **Prevent mistakes** - Catch forgotten migration files before deployment
+
+### Quick Validation Setup
+
+**1. Check for schema drift (did the schema change without a migration?):**
+
+```bash
+confiture migrate validate --check-drift --base-ref origin/main
+```
+
+**2. Require migrations (did all DDL changes get migrations?):**
+
+```bash
+confiture migrate validate --require-migration --base-ref origin/main
+```
+
+**3. Both checks together (recommended):**
+
+```bash
+confiture migrate validate \
+  --check-drift \
+  --require-migration \
+  --base-ref origin/main
+```
+
+### Pre-Commit Hook Setup (5 minutes)
+
+Validate schema changes before every commit:
+
+**1. Install pre-commit:**
+
+```bash
+pip install pre-commit
+```
+
+**2. Create `.pre-commit-config.yaml`:**
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: confiture-validate
+        name: Validate schema changes
+        entry: confiture migrate validate --check-drift --require-migration --staged
+        language: system
+        pass_filenames: false
+        stages: [commit]
+```
+
+**3. Install the hook:**
+
+```bash
+pre-commit install
+```
+
+**4. Test it:**
+
+```bash
+# Modify schema without adding migration
+echo "ALTER TABLE users ADD COLUMN phone TEXT;" >> db/schema/10_tables/users.sql
+git add db/schema/10_tables/users.sql
+
+# Try to commit - should fail!
+git commit -m "Add phone column"
+# ❌ confiture-validate failed
+# Commits cannot be created when there are staged files with missing migrations
+```
+
+**5. Fix and retry:**
+
+```bash
+# Add migration file
+echo "ALTER TABLE users ADD COLUMN phone TEXT;" > db/migrations/003_add_phone.up.sql
+git add db/migrations/003_add_phone.up.sql
+
+# Commit now succeeds
+git commit -m "Add phone column with migration"
+# ✅ confiture-validate passed
+```
+
+### CI/CD Integration (GitHub Actions)
+
+Add validation to your CI pipeline:
+
+**`.github/workflows/validate-schema.yml`:**
+
+```yaml
+name: Validate Schema
+
+on: [pull_request, push]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Full history for comparison
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Confiture
+        run: pip install confiture
+
+      - name: Validate schema changes
+        run: |
+          confiture migrate validate \
+            --check-drift \
+            --require-migration \
+            --base-ref origin/main
+```
+
+Now all PRs will be gated until schema changes pass validation!
+
+### Common Validation Scenarios
+
+**Scenario 1: Compare against a tag**
+
+```bash
+confiture migrate validate --check-drift --base-ref v1.0.0
+```
+
+**Scenario 2: Compare last 10 commits**
+
+```bash
+confiture migrate validate --check-drift --base-ref HEAD~10
+```
+
+**Scenario 3: Validate only staged changes (pre-commit mode)**
+
+```bash
+confiture migrate validate --check-drift --require-migration --staged
+```
+
+**Scenario 4: JSON output for CI/CD integration**
+
+```bash
+confiture migrate validate \
+  --check-drift \
+  --require-migration \
+  --base-ref origin/main \
+  --format json \
+  --output validation-report.json
+```
+
+### Troubleshooting Validation
+
+**Validation failing with "missing migration"?**
+
+```bash
+# 1. Check what files changed
+git diff origin/main --name-only | grep db/schema
+
+# 2. Create migrations for each change
+confiture migrate generate add_new_column
+
+# 3. Rerun validation
+confiture migrate validate --require-migration --base-ref origin/main
+```
+
+**Validation failing with "schema drift detected"?**
+
+```bash
+# Either:
+# Option A: Add changed schema to a migration
+confiture migrate generate update_schema
+
+# Option B: Update schema files to match migrations
+# (Edit db/schema files to match db/migrations/)
+```
+
+For more details, see the [Git-Aware Schema Validation Guide](../guides/git-aware-validation.md).
+
+---
+
 ## Multi-Agent Coordination Workflow
 
 When working with multiple agents or team members on schema changes, use Confiture's coordination system to prevent conflicts.

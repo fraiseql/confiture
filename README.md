@@ -181,6 +181,44 @@ confiture migrate schema-to-schema --strategy fdw
 
 ---
 
+### 🔍 Git-Aware Schema Validation (NEW!)
+
+Catch schema drift and enforce migration accompaniment before merging:
+
+```bash
+# Detect schema drift against main branch
+confiture migrate validate --check-drift --base-ref origin/main
+
+# Ensure DDL changes have corresponding migrations
+confiture migrate validate --require-migration --base-ref origin/main
+
+# Perfect for pre-commit hooks and CI/CD pipelines
+confiture migrate validate --check-drift --require-migration --staged
+```
+
+**Key capabilities:**
+- ✅ Detect untracked schema changes in code review
+- ✅ Enforce migration files for every DDL change
+- ✅ Pre-commit hook support (<500ms for staged files)
+- ✅ CI/CD integration with JSON output
+- ✅ Works with any git ref (branches, tags, commits)
+
+**Typical CI/CD workflow:**
+
+```yaml
+# GitHub Actions
+- name: Validate schema changes
+  run: |
+    confiture migrate validate \
+      --check-drift \
+      --require-migration \
+      --base-ref origin/main
+```
+
+**[→ Git-Aware Validation Guide](docs/guides/git-aware-validation.md)** | **[→ CLI Reference](docs/reference/cli.md)**
+
+---
+
 ## Quick Start
 
 ### Installation
