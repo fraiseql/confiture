@@ -9,7 +9,6 @@ from pathlib import Path
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.git import GitRepository
-from confiture.models.git import MigrationAccompanimentReport
 from confiture.models.schema import SchemaDiff
 
 
