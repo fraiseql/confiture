@@ -1823,6 +1823,31 @@ def migrate_validate(
         "--idempotent",
         help="Validate that migrations are idempotent (can be safely re-run)",
     ),
+    check_drift: bool = typer.Option(
+        False,
+        "--check-drift",
+        help="Validate schema against git refs for drift detection",
+    ),
+    require_migration: bool = typer.Option(
+        False,
+        "--require-migration",
+        help="Ensure DDL changes have corresponding migration files",
+    ),
+    base_ref: str = typer.Option(
+        "origin/main",
+        "--base-ref",
+        help="Base git reference for comparison (default: origin/main)",
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help="Shortcut for --base-ref",
+    ),
+    staged: bool = typer.Option(
+        False,
+        "--staged",
+        help="Only validate staged files (pre-commit hook mode)",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -1841,10 +1866,12 @@ def migrate_validate(
         help="Save output to file",
     ),
 ) -> None:
-    """Validate migration file naming conventions and idempotency.
+    """Validate migration file naming conventions, idempotency, and git integrity.
 
     Checks for .sql files that don't match the expected naming pattern.
     With --idempotent, also validates that SQL statements are idempotent.
+    With --check-drift, validates schema against git refs for drift detection.
+    With --require-migration, ensures DDL changes have migration files.
 
     Confiture only recognizes:
     - {NNN}_{name}.up.sql (forward migrations)
@@ -1864,8 +1891,14 @@ def migrate_validate(
         # Validate idempotency of all migrations
         confiture migrate validate --idempotent
 
-        # Preview what would be fixed
-        confiture migrate validate --fix-naming --dry-run
+        # Check schema drift against main branch
+        confiture migrate validate --check-drift --base-ref origin/main
+
+        # Require migration files for DDL changes
+        confiture migrate validate --require-migration --base-ref origin/main
+
+        # Pre-commit hook: validate staged changes
+        confiture migrate validate --check-drift --require-migration --staged
 
         # Auto-fix orphaned file names
         confiture migrate validate --fix-naming
@@ -1878,6 +1911,98 @@ def migrate_validate(
         if format_output not in ("text", "json"):
             console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
             raise typer.Exit(1)
+
+        # Handle git validation flags
+        if check_drift or require_migration or staged:
+            from confiture.cli.git_validation import (
+                validate_git_drift,
+                validate_migration_accompaniment,
+                validate_git_flags_in_repo,
+            )
+
+            # Override base_ref with since if provided
+            effective_base_ref = since or base_ref
+
+            # Validate we're in a git repo
+            try:
+                validate_git_flags_in_repo()
+            except Exception as e:
+                if format_output == "json":
+                    result = {"error": str(e)}
+                    _output_json(result, output_file, console)
+                else:
+                    console.print(f"[red]❌ {e}[/red]")
+                raise typer.Exit(2) from e
+
+            # Run git drift check
+            drift_passed = True
+            if check_drift:
+                try:
+                    drift_result = validate_git_drift(
+                        env="local",
+                        base_ref=effective_base_ref,
+                        target_ref="HEAD" if not staged else "HEAD",
+                        console=console,
+                        format_output=format_output,
+                    )
+                    if not drift_result.get("passed"):
+                        drift_passed = False
+                        if format_output == "json":
+                            result = {
+                                "status": "failed",
+                                "check": "drift",
+                                **drift_result,
+                            }
+                            _output_json(result, output_file, console)
+                            raise typer.Exit(1)
+                except Exception as e:
+                    if format_output == "json":
+                        result = {"error": f"Drift check failed: {e}"}
+                        _output_json(result, output_file, console)
+                    else:
+                        console.print(f"[red]❌ Drift check failed: {e}[/red]")
+                    raise typer.Exit(1) from e
+
+            # Run migration accompaniment check
+            accompaniment_passed = True
+            if require_migration:
+                try:
+                    acc_result = validate_migration_accompaniment(
+                        env="local",
+                        base_ref=effective_base_ref,
+                        target_ref="HEAD" if not staged else "HEAD",
+                        console=console,
+                        format_output=format_output,
+                    )
+                    if not acc_result.get("is_valid"):
+                        accompaniment_passed = False
+                        if format_output == "json":
+                            result = {
+                                "status": "failed",
+                                "check": "accompaniment",
+                                **acc_result,
+                            }
+                            _output_json(result, output_file, console)
+                            raise typer.Exit(1)
+                except Exception as e:
+                    if format_output == "json":
+                        result = {"error": f"Accompaniment check failed: {e}"}
+                        _output_json(result, output_file, console)
+                    else:
+                        console.print(f"[red]❌ Accompaniment check failed: {e}[/red]")
+                    raise typer.Exit(1) from e
+
+            # Check if all checks passed (for text output)
+            if drift_passed and accompaniment_passed:
+                if format_output == "json":
+                    result = {"status": "passed", "checks": ["drift", "accompaniment"] if (check_drift and require_migration) else (["drift"] if check_drift else ["accompaniment"])}
+                    _output_json(result, output_file, console)
+                else:
+                    console.print("[green]✅ All git validation checks passed[/green]")
+                return
+            else:
+                # At least one check failed in text mode
+                raise typer.Exit(1)
 
         if not migrations_dir.exists():
             if format_output == "json":

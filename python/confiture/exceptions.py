@@ -192,6 +192,35 @@ class SQLError(ConfiturError):
         super().__init__(message)
 
 
+class GitError(ConfiturError):
+    """Git operation error
+
+    Raised when:
+    - Git command fails (invalid ref, file not found, etc.)
+    - Git not installed or available
+    - Git repository operations fail
+
+    Example:
+        >>> raise GitError("Invalid git reference 'nonexistent_ref'")
+    """
+
+    pass
+
+
+class NotAGitRepositoryError(GitError):
+    """Directory is not a git repository
+
+    Raised when:
+    - Attempting git operations in non-git directory
+    - .git directory not found
+
+    Example:
+        >>> raise NotAGitRepositoryError("Not a git repository: /tmp/not-git")
+    """
+
+    pass
+
+
 # Re-export precondition exceptions for convenience
 # These are defined in confiture.core.preconditions but users may want to
 # import them from confiture.exceptions
@@ -213,6 +242,8 @@ __all__ = [
     "ValidationError",
     "RollbackError",
     "SQLError",
+    "GitError",
+    "NotAGitRepositoryError",
     "PreconditionError",
     "PreconditionValidationError",
     "PreStateSimulationError",
