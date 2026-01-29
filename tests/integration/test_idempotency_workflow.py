@@ -3,7 +3,6 @@
 from pathlib import Path
 from textwrap import dedent
 
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app

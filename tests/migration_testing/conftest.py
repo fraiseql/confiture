@@ -26,6 +26,10 @@ def test_db_connection() -> Generator:
 
     conn = psycopg.connect(db_url)
     try:
+        # Ensure required extensions are available for schema tests
+        with conn.cursor() as cur:
+            cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
+            conn.commit()
         yield conn
     finally:
         conn.close()

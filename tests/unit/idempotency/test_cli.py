@@ -1,9 +1,7 @@
 """Tests for idempotency CLI integration."""
 
 from pathlib import Path
-from textwrap import dedent
 
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -150,7 +148,7 @@ class TestIdempotencyValidateCLI:
             "CREATE TABLE users (id INT PRIMARY KEY);"
         )
 
-        result = runner.invoke(
+        runner.invoke(
             app,
             [
                 "migrate",
