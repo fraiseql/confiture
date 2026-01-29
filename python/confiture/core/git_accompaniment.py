@@ -93,7 +93,8 @@ class MigrationAccompanimentChecker:
         """Get list of new migration files between refs.
 
         Searches for migration files (*.up.sql) that are new or modified
-        between the base and target refs.
+        between the base and target refs. Only matches files in db/migrations/
+        directory to avoid false positives.
 
         Args:
             base_ref: Base git reference
@@ -109,11 +110,17 @@ class MigrationAccompanimentChecker:
         # Get all changed files between refs
         changed_files = self.git_repo.get_changed_files(base_ref, target_ref)
 
-        # Filter to migration files (typically in db/migrations/)
+        # Filter to migration files in db/migrations/ directory
+        # Migration files must be: {NNN}_{name}.up.sql or {NNN}_{name}.down.sql
         migration_files: list[Path] = []
         for file_path in changed_files:
-            # Check if file is in migrations directory and is an up migration
-            if "migrations" in file_path.parts and file_path.name.endswith(".up.sql"):
+            # Check strict path: db/migrations/{NNN}_{name}.up.sql
+            if (
+                len(file_path.parts) >= 2
+                and file_path.parts[0] == "db"
+                and file_path.parts[1] == "migrations"
+                and file_path.name.endswith(".up.sql")
+            ):
                 migration_files.append(file_path)
 
         return migration_files

@@ -42,12 +42,16 @@ class GitRepository:
         Returns:
             True if .git directory exists, False otherwise.
         """
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=self.repo_path,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            return False
         return result.returncode == 0
 
     def get_file_at_ref(self, file_path: Path, ref: str) -> str | None:
@@ -78,12 +82,18 @@ class GitRepository:
         file_path_str = file_path.as_posix()
         git_ref_path = f"{ref}:{file_path_str}"
 
-        result = subprocess.run(
-            ["git", "show", git_ref_path],
-            cwd=self.repo_path,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["git", "show", git_ref_path],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(
+                f"Git command timed out retrieving '{file_path}' from '{ref}'"
+            ) from e
 
         if result.returncode != 0:
             error_msg = result.stderr.strip()
@@ -131,12 +141,18 @@ class GitRepository:
             )
 
         # Get list of changed files (both added and modified)
-        result = subprocess.run(
-            ["git", "diff", "--name-only", f"{base_ref}...{target_ref}"],
-            cwd=self.repo_path,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_ref}...{target_ref}"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(
+                f"Git command timed out comparing '{base_ref}' to '{target_ref}'"
+            ) from e
 
         if result.returncode != 0:
             error_msg = result.stderr.strip()
@@ -172,12 +188,16 @@ class GitRepository:
                 f"Not a git repository: {self.repo_path}"
             )
 
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
-            cwd=self.repo_path,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError("Git command timed out getting staged files") from e
 
         if result.returncode != 0:
             error_msg = result.stderr.strip()
