@@ -1916,8 +1916,8 @@ def migrate_validate(
         if check_drift or require_migration or staged:
             from confiture.cli.git_validation import (
                 validate_git_drift,
-                validate_migration_accompaniment,
                 validate_git_flags_in_repo,
+                validate_migration_accompaniment,
             )
 
             # Override base_ref with since if provided
