@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from confiture.core.seed_validation.prep_seed.models import PrepSeedReport
 from confiture.core.seed_validation.prep_seed.orchestrator import (
     OrchestrationConfig,
@@ -78,11 +80,8 @@ class TestPrepSeedOrchestratorBasics:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        try:
+        with pytest.raises(ValueError, match="database_url"):
             orchestrator.run()
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "database_url" in str(e)
 
     def test_orchestrator_requires_database_for_level_5(self) -> None:
         """Orchestrator raises ValueError if database_url missing for level 5."""
@@ -95,11 +94,8 @@ class TestPrepSeedOrchestratorBasics:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        try:
+        with pytest.raises(ValueError, match="database_url"):
             orchestrator.run()
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "database_url" in str(e)
 
 
 class TestParseSchemaFiles:
@@ -278,11 +274,8 @@ class TestLevel4Integration:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        try:
+        with pytest.raises(ValueError, match="database_url"):
             orchestrator.run()
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "database_url" in str(e)
 
     def test_level_4_returns_empty_violations_without_functions(
         self,
@@ -317,11 +310,8 @@ class TestLevel5Integration:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        try:
+        with pytest.raises(ValueError, match="database_url"):
             orchestrator.run()
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "database_url" in str(e)
 
     def test_level_5_returns_empty_violations_without_seeds(
         self,

@@ -9,8 +9,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pytest
 import psycopg
+import pytest
 
 from confiture.core.seed_validation.prep_seed.models import (
     PrepSeedPattern,

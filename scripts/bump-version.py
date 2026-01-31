@@ -143,7 +143,7 @@ def bump_version(new_version: str) -> None:
         print("  1. Review changes: git diff")
         print(f"  2. Commit: git commit -m 'chore: bump version to {new_version}'")
         print(f"  3. Tag: git tag v{new_version}")
-        print(f"  4. Push: git push && git push --tags")
+        print("  4. Push: git push && git push --tags")
     else:
         print("❌ No files were updated")
         sys.exit(1)
