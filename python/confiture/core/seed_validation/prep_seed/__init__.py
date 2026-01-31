@@ -36,6 +36,10 @@ from confiture.core.seed_validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.core.seed_validation.prep_seed.orchestrator import (
+    OrchestrationConfig,
+    PrepSeedOrchestrator,
+)
 
 __all__ = [
     # Models
@@ -49,6 +53,9 @@ __all__ = [
     "Level3ResolutionValidator",
     "Level4RuntimeValidator",
     "Level5ExecutionValidator",
+    # Orchestrator
+    "OrchestrationConfig",
+    "PrepSeedOrchestrator",
     # Schema utilities
     "SchemaMapping",
     "TableDefinition",

@@ -14,6 +14,7 @@ from confiture.cli.branch import branch_app
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
 from confiture.cli.lint_formatter import format_lint_report, save_report
+from confiture.cli.seed import seed_app
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.linting import SchemaLinter
@@ -502,6 +503,9 @@ app.add_typer(generate_app, name="generate")
 
 # Add coordinate subcommand group (multi-agent coordination)
 app.add_typer(coordinate_app, name="coordinate")
+
+# Add seed subcommand group (seed validation)
+app.add_typer(seed_app, name="seed")
 
 
 @migrate_app.command("status")
