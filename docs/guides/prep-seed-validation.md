@@ -1,5 +1,7 @@
 # Prep-Seed Validation Guide
 
+> **✅ All 5 Levels Fully Implemented**: As of v0.3.13, all validation levels (1-5) are fully integrated in the `PrepSeedOrchestrator`. Levels 4-5 now work with real databases for runtime and execution validation.
+
 ## Overview
 
 The **prep-seed pattern** is a sophisticated data seeding strategy used when transforming UUID foreign keys into BIGINT integer keys. This guide explains how to validate your prep-seed implementation using Confiture's 5-level validation system.
@@ -116,15 +118,21 @@ confiture seed validate --prep-seed --level 3
 **What it checks:**
 - Tables exist in target database
 - Column types match expectations
-- Dry-run resolution without loading data
+- **Dry-run resolution without loading data** (using SAVEPOINT for safety)
 - No SQL errors in resolution logic
 
 **When to use:** CI/CD (requires database)
+
+**Status:** ✅ **Fully Implemented in v0.3.13+**
+- Real database connections
+- Safe SAVEPOINT-based dry-runs (no data persists)
+- Proper error handling and reporting
 
 **Example violations:**
 ```
 ❌ Table catalog.tb_x not found in database
 ❌ Column catalog.tb_x.fk_org_id type is INT, expected BIGINT
+❌ Resolution function fn_resolve_tb_x execution failed: <error>
 ```
 
 **Command:**
@@ -132,18 +140,36 @@ confiture seed validate --prep-seed --level 3
 confiture seed validate --prep-seed --level 4 --database-url postgresql://localhost/test
 ```
 
+**Python:**
+```python
+config = OrchestrationConfig(
+    max_level=4,
+    seeds_dir=Path("db/seeds/prep"),
+    schema_dir=Path("db/schema"),
+    database_url="postgresql://localhost/test",
+)
+orchestrator = PrepSeedOrchestrator(config)
+report = orchestrator.run()
+```
+
 ---
 
 ### Level 5: Full Execution 🧪 (~30s)
 
 **What it checks:**
-- Actual seed data loads into prep_seed tables
-- Resolution functions execute successfully
+- **Actual seed data loads** into prep_seed tables
+- **Resolution functions execute successfully**
 - Final data is valid (no NULLs where not allowed)
 - Constraints satisfied (UNIQUE, FOREIGN KEY)
 - Referential integrity maintained
 
 **When to use:** CI/CD, integration tests (requires real database)
+
+**Status:** ✅ **Fully Implemented in v0.3.13+**
+- Real database connections with transaction isolation
+- Automatic rollback (validation doesn't persist data)
+- Comprehensive constraint checking
+- Two modes: standard (fast) and comprehensive (thorough)
 
 **Example violations:**
 ```
@@ -154,8 +180,98 @@ confiture seed validate --prep-seed --level 4 --database-url postgresql://localh
 
 **Command:**
 ```bash
+# Standard mode (faster, checks NULL FKs and duplicates)
 confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
+
+# Comprehensive mode (slower, checks all constraints)
+confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test --comprehensive
 ```
+
+**Python:**
+```python
+config = OrchestrationConfig(
+    max_level=5,
+    seeds_dir=Path("db/seeds/prep"),
+    schema_dir=Path("db/schema"),
+    database_url="postgresql://localhost/test",
+    level_5_mode="comprehensive",  # Check all constraints
+)
+orchestrator = PrepSeedOrchestrator(config)
+report = orchestrator.run()
+
+# Check for CRITICAL violations
+critical = [v for v in report.violations if v.severity == "CRITICAL"]
+if critical:
+    print(f"❌ {len(critical)} critical violations found")
+    for v in critical:
+        print(f"  - {v.message}")
+```
+
+---
+
+## Using the Orchestrator (v0.3.13+)
+
+For programmatic access to the validation system, use the `PrepSeedOrchestrator`:
+
+### Python API
+
+```python
+from pathlib import Path
+from confiture.core.seed_validation.prep_seed.orchestrator import (
+    OrchestrationConfig,
+    PrepSeedOrchestrator,
+)
+
+# Configure validation
+config = OrchestrationConfig(
+    max_level=5,  # Run all 5 levels
+    seeds_dir=Path("db/seeds/prep"),
+    schema_dir=Path("db/schema"),
+    database_url="postgresql://localhost/test_db",
+    prep_seed_schema="prep_seed",
+    catalog_schema="catalog",
+    level_5_mode="comprehensive",  # Check all constraints
+    stop_on_critical=True,  # Stop on first CRITICAL violation
+)
+
+# Run validation
+orchestrator = PrepSeedOrchestrator(config)
+report = orchestrator.run()
+
+# Check results
+if report.has_violations:
+    for violation in report.violations:
+        print(f"[{violation.severity}] {violation.message}")
+        print(f"  File: {violation.file_path}:{violation.line_number}")
+        if violation.suggestion:
+            print(f"  Suggestion: {violation.suggestion}")
+```
+
+### Configuration Options
+
+```python
+OrchestrationConfig(
+    max_level: int,                      # 1-5: which levels to run
+    seeds_dir: Path,                     # Path to seed files
+    schema_dir: Path,                    # Path to schema files
+
+    # Optional
+    database_url: str | None = None,     # Required for levels 4-5
+    stop_on_critical: bool = True,       # Stop on CRITICAL violations
+    show_progress: bool = True,          # Show progress indicators
+
+    # Schema configuration
+    prep_seed_schema: str = "prep_seed",      # Schema for prep-seed tables
+    catalog_schema: str = "catalog",          # Schema for final tables
+    tables_to_validate: list[str] | None = None,  # Specific tables (optional)
+    level_5_mode: str = "standard",      # "standard" or "comprehensive"
+)
+```
+
+### Level 5 Modes
+
+- **standard** (faster): Checks NULL FKs and duplicate identifiers
+- **comprehensive** (slower): Also checks NOT NULL, CHECK, and FK constraints
 
 ---
 

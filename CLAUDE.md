@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.3.10
-**Last Updated**: January 2026
+**Version**: 0.3.13
+**Last Updated**: January 31, 2026
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -309,6 +309,154 @@ uv run pytest tests/unit/test_builder.py::test_find_sql_files -v
 
 ---
 
+## 🌱 Prep-Seed Validation (v0.3.13+)
+
+Confiture includes a comprehensive **5-level prep-seed validation system** for catching data transformation issues before deployment.
+
+### Overview
+
+The prep-seed pattern transforms UUID-based foreign keys into BIGINT keys using resolution functions. The validation system catches common issues:
+- ❌ Seed files targeting wrong schemas (Level 1)
+- ❌ Schema mapping mismatches (Level 2)
+- ❌ Schema drift in resolution functions (Level 3)
+- ❌ Missing tables/columns at runtime (Level 4)
+- ❌ NULL FKs and constraint violations after execution (Level 5)
+
+### Quick Usage
+
+```python
+from pathlib import Path
+from confiture.core.seed_validation.prep_seed.orchestrator import (
+    OrchestrationConfig,
+    PrepSeedOrchestrator,
+)
+
+# Configure validation
+config = OrchestrationConfig(
+    max_level=5,  # Run all levels
+    seeds_dir=Path("db/seeds/prep"),
+    schema_dir=Path("db/schema"),
+    database_url="postgresql://localhost/test",  # Required for levels 4-5
+    level_5_mode="comprehensive",  # Check all constraints
+)
+
+# Run validation
+orchestrator = PrepSeedOrchestrator(config)
+report = orchestrator.run()
+
+# Check results
+if report.has_violations:
+    for v in report.violations:
+        print(f"[{v.severity}] {v.message}")
+```
+
+### Validation Levels
+
+| Level | Type | Speed | Use Case | Database |
+|-------|------|-------|----------|----------|
+| 1 | Seed files | ~1s | Pre-commit | ✗ |
+| 2 | Schema consistency | ~2s | Pre-commit | ✗ |
+| 3 | Resolution functions | ~3s | Pre-commit | ✗ |
+| 4 | Runtime compatibility | ~10s | CI/CD | ✓ |
+| 5 | Full execution | ~30s | Integration tests | ✓ |
+
+### Configuration Options
+
+```python
+OrchestrationConfig(
+    # Required
+    max_level: int,              # 1-5: which levels to run
+    seeds_dir: Path,             # Location of seed files
+    schema_dir: Path,            # Location of schema files
+
+    # Optional
+    database_url: str | None = None,      # Required for levels 4-5
+    stop_on_critical: bool = True,        # Halt on CRITICAL violations
+    show_progress: bool = True,           # Show progress indicators
+
+    # Schema customization
+    prep_seed_schema: str = "prep_seed",   # Schema for prep tables
+    catalog_schema: str = "catalog",       # Schema for final tables
+    tables_to_validate: list[str] | None = None,  # Specific tables
+    level_5_mode: str = "standard",       # "standard" or "comprehensive"
+)
+```
+
+### Example: CI/CD Integration
+
+```bash
+#!/bin/bash
+
+# Static validation (no database, ~5s)
+python -c "
+from pathlib import Path
+from confiture.core.seed_validation.prep_seed.orchestrator import (
+    OrchestrationConfig,
+    PrepSeedOrchestrator,
+)
+
+config = OrchestrationConfig(
+    max_level=3,
+    seeds_dir=Path('db/seeds/prep'),
+    schema_dir=Path('db/schema'),
+)
+orchestrator = PrepSeedOrchestrator(config)
+report = orchestrator.run()
+
+if report.has_violations:
+    print('❌ Static validation failed')
+    exit(1)
+"
+
+# Full validation with database (~40s)
+python -c "
+import os
+from pathlib import Path
+from confiture.core.seed_validation.prep_seed.orchestrator import (
+    OrchestrationConfig,
+    PrepSeedOrchestrator,
+)
+
+config = OrchestrationConfig(
+    max_level=5,
+    seeds_dir=Path('db/seeds/prep'),
+    schema_dir=Path('db/schema'),
+    database_url=os.environ['DATABASE_URL'],
+    level_5_mode='comprehensive',
+    stop_on_critical=True,
+)
+orchestrator = PrepSeedOrchestrator(config)
+report = orchestrator.run()
+
+# Fail on CRITICAL violations
+critical_count = len([v for v in report.violations if v.severity == 'CRITICAL'])
+if critical_count > 0:
+    print(f'❌ {critical_count} critical violations found')
+    exit(1)
+"
+
+echo "✅ All seed validation passed"
+```
+
+### Testing
+
+Unit tests for the orchestrator:
+```bash
+uv run pytest tests/unit/seed_validation/prep_seed/test_orchestrator.py -v
+```
+
+Integration tests with database:
+```bash
+uv run pytest tests/integration/test_orchestrator_integration.py -v
+```
+
+### See Also
+
+- **[Prep-Seed Validation Guide](./docs/guides/prep-seed-validation.md)** - Comprehensive guide
+- **[Example: Prep-Seed Project](./examples/06-prep-seed-validation)** - Working example
+
+---
+
 ## 🚀 Development Workflow
 
 ### Setting Up
@@ -604,7 +752,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### Beta (v0.3.10)
+### Beta (v0.3.13)
 
 > **⚠️ Not Production-Tested**: All features below are implemented and have passing tests, but have never been used in a real production environment.
 
@@ -614,15 +762,23 @@ Closes #123
 - ✅ Production sync (Medium 3) - Copy data with PII anonymization
 - ✅ Zero-downtime migrations (Medium 4) - Schema-to-schema via FDW
 - ✅ Schema diff detection
+- ✅ **Prep-seed validation (v0.3.13)** - 5-level validation orchestrator with full Level 4-5 support
 - ✅ CLI with rich terminal output
 - ✅ Migration hooks
 - ✅ Schema linting
 - ✅ Anonymization strategies
 
+**Seed Validation Features** (NEW):
+- ✅ Level 1-3: Static analysis (pre-commit safe)
+- ✅ Level 4: Runtime validation with SAVEPOINT dry-runs
+- ✅ Level 5: Full execution with transaction rollback
+- ✅ Comprehensive & standard modes
+- ✅ Catches NULL FKs, constraint violations, schema drift
+
 **Test Metrics**:
-- **Tests**: 3,200+ passing
+- **Tests**: 3,200+ passing (including 22 new orchestrator tests + 86 seed validation tests)
 - **Python Support**: 3.11, 3.12, 3.13
-- **Documentation**: Comprehensive
+- **Documentation**: Comprehensive (with orchestrator guide)
 
 **Not Validated**:
 - ❌ Production usage
@@ -692,17 +848,26 @@ except psycopg.OperationalError as e:
 
 ## 📊 Implementation Metrics
 
-- ✅ **Test Coverage**: 3,200+ tests passing
-- ✅ **CLI Commands**: 8 implemented (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`)
-- ✅ **Documentation**: Comprehensive guides + API references
-- ✅ **Examples**: 5 example scenarios
+- ✅ **Test Coverage**: 3,200+ tests passing (including seed validation orchestrator)
+- ✅ **CLI Commands**: 8 implemented (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`, `seed validate`)
+- ✅ **Documentation**: Comprehensive guides + API references + seed validation guide
+- ✅ **Examples**: 5+ example scenarios (plus prep-seed example)
+- ✅ **Validation System**: 5-level orchestrator with full database support
 - ✅ **CI/CD**: Multi-platform wheel building, quality gates
 - ✅ **Python Support**: 3.11, 3.12, 3.13 tested
+
+**Seed Validation Metrics**:
+- ✅ 86 seed validation unit tests
+- ✅ 22 orchestrator integration tests
+- ✅ All 5 validation levels implemented
+- ✅ Database connection & transaction handling
+- ✅ Comprehensive error reporting
 
 **Not Yet Measured in Production**:
 - ❓ Actual build speed under real conditions
 - ❓ Rust extension performance gains
 - ❓ Reliability over time
+- ❓ Validation performance at scale
 
 ---
 
