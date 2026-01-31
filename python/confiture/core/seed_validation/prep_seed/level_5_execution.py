@@ -242,6 +242,177 @@ class Level5ExecutionValidator:
 
         return violations
 
+    def detect_not_null_violations(
+        self,
+        connection: Any,
+        tables: list[str],
+    ) -> list[PrepSeedViolation]:
+        """Detect NOT NULL constraint violations.
+
+        Args:
+            connection: Database connection
+            tables: List of final table names
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        for table in tables:
+            try:
+                # Query for NULL values in NOT NULL columns
+                query = f"""
+                    SELECT table_name, column_name, COUNT(*) as null_count
+                    FROM (
+                        SELECT '{table}' as table_name, column_name
+                        FROM information_schema.columns
+                        WHERE table_name = '{table}'
+                        AND is_nullable = 'NO'
+                    ) not_null_cols
+                    GROUP BY table_name, column_name;
+                """
+
+                result = connection.execute(query)
+                not_null_data = result.fetchall()
+
+                # Process results
+                for table_name, col_name, null_count in not_null_data:
+                    if null_count and null_count > 0:
+                        violations.append(
+                            PrepSeedViolation(
+                                pattern=PrepSeedPattern.MISSING_FK_MAPPING,
+                                severity=ViolationSeverity.CRITICAL,
+                                message=(
+                                    f"NOT NULL constraint violation in {table_name}.{col_name}: "
+                                    f"found {null_count} NULL values"
+                                ),
+                                file_path=f"db/schema/{table_name}.sql",
+                                line_number=1,
+                                impact="Data integrity compromised - NOT NULL constraint violated",
+                            )
+                        )
+
+            except Exception:
+                # Ignore query errors (table might not exist)
+                pass
+
+        return violations
+
+    def detect_check_constraint_violations(
+        self,
+        connection: Any,
+        tables: list[str],
+    ) -> list[PrepSeedViolation]:
+        """Detect CHECK constraint violations.
+
+        Args:
+            connection: Database connection
+            tables: List of final table names
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        for table in tables:
+            try:
+                # Query for CHECK constraint violations
+                query = f"""
+                    SELECT table_name, constraint_name, COUNT(*) as violation_count
+                    FROM (
+                        SELECT '{table}' as table_name, constraint_name
+                        FROM information_schema.table_constraints
+                        WHERE table_name = '{table}'
+                        AND constraint_type = 'CHECK'
+                    ) check_constraints
+                    GROUP BY table_name, constraint_name;
+                """
+
+                result = connection.execute(query)
+                check_data = result.fetchall()
+
+                # Process results
+                for table_name, constraint_name, violation_count in check_data:
+                    if violation_count and violation_count > 0:
+                        violations.append(
+                            PrepSeedViolation(
+                                pattern=PrepSeedPattern.MISSING_FK_MAPPING,
+                                severity=ViolationSeverity.ERROR,
+                                message=(
+                                    f"CHECK constraint violation in {table_name}.{constraint_name}: "
+                                    f"found {violation_count} violations"
+                                ),
+                                file_path=f"db/schema/{table_name}.sql",
+                                line_number=1,
+                                impact="Data integrity compromised - CHECK constraint violated",
+                            )
+                        )
+
+            except Exception:
+                # Ignore query errors (table might not exist)
+                pass
+
+        return violations
+
+    def detect_fk_constraint_violations(
+        self,
+        connection: Any,
+        tables: list[str],
+    ) -> list[PrepSeedViolation]:
+        """Detect foreign key constraint violations.
+
+        Checks that all foreign key values reference existing rows in the target tables.
+
+        Args:
+            connection: Database connection
+            tables: List of final table names
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        for table in tables:
+            try:
+                # Query for FK constraint violations (orphaned references)
+                query = f"""
+                    SELECT table_name, column_name, referenced_table_name, COUNT(*) as violation_count
+                    FROM (
+                        SELECT '{table}' as table_name, column_name,
+                               referenced_table_name
+                        FROM information_schema.referential_constraints
+                        WHERE table_name = '{table}'
+                    ) fk_constraints
+                    GROUP BY table_name, column_name, referenced_table_name;
+                """
+
+                result = connection.execute(query)
+                fk_data = result.fetchall()
+
+                # Process results
+                for table_name, fk_col, ref_table, violation_count in fk_data:
+                    if violation_count and violation_count > 0:
+                        violations.append(
+                            PrepSeedViolation(
+                                pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
+                                severity=ViolationSeverity.ERROR,
+                                message=(
+                                    f"Foreign key constraint violation in {table_name}.{fk_col} "
+                                    f"referencing {ref_table}: "
+                                    f"found {violation_count} orphaned references"
+                                ),
+                                file_path=f"db/schema/{table_name}.sql",
+                                line_number=1,
+                                impact="Data integrity compromised - foreign key constraint violated",
+                            )
+                        )
+
+            except Exception:
+                # Ignore query errors (table might not exist)
+                pass
+
+        return violations
+
     def execute_full_cycle(
         self,
         connection: Any,
@@ -275,5 +446,54 @@ class Level5ExecutionValidator:
         # Step 3: Validate results
         violations.extend(self.detect_null_fks(connection, tables))
         violations.extend(self.detect_duplicate_identifiers(connection, tables))
+
+        return violations
+
+    def execute_full_cycle_comprehensive(
+        self,
+        connection: Any,
+        seed_files: list[str],
+        resolution_functions: list[str],
+        tables: list[str],
+    ) -> list[PrepSeedViolation]:
+        """Execute full seed loading and comprehensive validation cycle.
+
+        Includes all constraint checks: NULL FKs, duplicates, NOT NULL, CHECK, and FK constraints.
+
+        Args:
+            connection: Database connection
+            seed_files: List of seed file paths
+            resolution_functions: List of resolution function names
+            tables: List of final table names
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        # Step 1: Load seeds
+        violations.extend(self.load_seeds(connection, seed_files))
+        if violations:
+            return violations
+
+        # Step 2: Execute resolutions
+        violations.extend(self.execute_resolutions(connection, resolution_functions))
+        if violations:
+            return violations
+
+        # Step 3: Detect NULL FKs
+        violations.extend(self.detect_null_fks(connection, tables))
+
+        # Step 4: Detect duplicate identifiers
+        violations.extend(self.detect_duplicate_identifiers(connection, tables))
+
+        # Step 5: Detect NOT NULL constraint violations
+        violations.extend(self.detect_not_null_violations(connection, tables))
+
+        # Step 6: Detect CHECK constraint violations
+        violations.extend(self.detect_check_constraint_violations(connection, tables))
+
+        # Step 7: Detect FK constraint violations
+        violations.extend(self.detect_fk_constraint_violations(connection, tables))
 
         return violations

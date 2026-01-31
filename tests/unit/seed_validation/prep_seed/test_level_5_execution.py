@@ -247,3 +247,170 @@ class TestLevel5ExecutionValidator:
 
         # Should succeed completely
         assert len(violations) == 0
+
+
+class TestLevel5ConstraintValidation:
+    """Test comprehensive constraint validation in Level 5."""
+
+    def test_detects_not_null_constraint_violation(self) -> None:
+        """Detects NOT NULL constraint violations."""
+        validator = Level5ExecutionValidator()
+
+        # Mock database with NOT NULL violations
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        # Returns: (table, column, count_nulls)
+        mock_result.fetchall.return_value = [
+            ("tb_product", "name", 3),  # 3 NULL values in required field
+            ("tb_product", "created_at", 1),  # 1 NULL in created_at
+        ]
+
+        mock_conn.execute.return_value = mock_result
+
+        violations = validator.detect_not_null_violations(
+            connection=mock_conn,
+            tables=["tb_product"],
+        )
+
+        # Should detect NOT NULL violations
+        assert len(violations) > 0
+        assert any(
+            "NOT NULL" in v.message for v in violations
+        )
+        assert all(
+            v.severity == ViolationSeverity.CRITICAL
+            for v in violations
+        )
+
+    def test_detects_check_constraint_violation(self) -> None:
+        """Detects CHECK constraint violations."""
+        validator = Level5ExecutionValidator()
+
+        # Mock database with CHECK constraint violations
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        # Returns: (table, constraint, count_violations)
+        mock_result.fetchall.return_value = [
+            ("tb_product", "price_positive", 5),  # 5 rows with price <= 0
+            ("tb_order", "qty_gt_zero", 2),  # 2 rows with qty <= 0
+        ]
+
+        mock_conn.execute.return_value = mock_result
+
+        violations = validator.detect_check_constraint_violations(
+            connection=mock_conn,
+            tables=["tb_product", "tb_order"],
+        )
+
+        # Should detect CHECK violations
+        assert len(violations) > 0
+        assert any(
+            "CHECK" in v.message for v in violations
+        )
+
+    def test_detects_foreign_key_constraint_violation(self) -> None:
+        """Detects foreign key constraint violations."""
+        validator = Level5ExecutionValidator()
+
+        # Mock database with FK violations (pointing to non-existent rows)
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        # Returns: (table, fk_column, referenced_table, count_violations)
+        mock_result.fetchall.return_value = [
+            ("tb_product", "fk_manufacturer", "tb_manufacturer", 3),
+            ("tb_order", "fk_customer", "tb_customer", 1),
+        ]
+
+        mock_conn.execute.return_value = mock_result
+
+        violations = validator.detect_fk_constraint_violations(
+            connection=mock_conn,
+            tables=["tb_product", "tb_order"],
+        )
+
+        # Should detect FK violations
+        assert len(violations) > 0
+        assert any(
+            "foreign key" in v.message.lower()
+            for v in violations
+        )
+
+    def test_passes_when_all_constraints_satisfied(self) -> None:
+        """Passes when all constraints are satisfied."""
+        validator = Level5ExecutionValidator()
+
+        # Mock database with no violations
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []  # No violations
+
+        mock_conn.execute.return_value = mock_result
+
+        # All constraint checks should pass
+        not_null_violations = validator.detect_not_null_violations(
+            connection=mock_conn,
+            tables=["tb_product"],
+        )
+        assert len(not_null_violations) == 0
+
+        check_violations = validator.detect_check_constraint_violations(
+            connection=mock_conn,
+            tables=["tb_product"],
+        )
+        assert len(check_violations) == 0
+
+        fk_violations = validator.detect_fk_constraint_violations(
+            connection=mock_conn,
+            tables=["tb_product"],
+        )
+        assert len(fk_violations) == 0
+
+    def test_comprehensive_execution_with_constraint_checks(self) -> None:
+        """Full execution with comprehensive constraint validation."""
+        validator = Level5ExecutionValidator()
+
+        # Mock file operations
+        with patch("pathlib.Path.exists") as mock_exists, \
+             patch("pathlib.Path.read_text") as mock_read_text:
+            mock_exists.return_value = True
+            mock_read_text.return_value = (
+                "INSERT INTO prep_seed.tb_product (id) VALUES ('uuid-1');"
+            )
+
+            # Mock database
+            mock_conn = MagicMock()
+
+            # Setup results for each check
+            mock_load = MagicMock()
+            mock_exec = MagicMock()
+            mock_exec.fetchall.return_value = [("tb_product", 10)]
+            mock_null_fk = MagicMock()
+            mock_null_fk.fetchall.return_value = []  # No NULL FKs
+            mock_dup = MagicMock()
+            mock_dup.fetchall.return_value = []  # No duplicates
+            mock_not_null = MagicMock()
+            mock_not_null.fetchall.return_value = []  # No NOT NULL violations
+            mock_check = MagicMock()
+            mock_check.fetchall.return_value = []  # No CHECK violations
+            mock_fk = MagicMock()
+            mock_fk.fetchall.return_value = []  # No FK violations
+
+            mock_conn.execute.side_effect = [
+                mock_load,      # Load seeds
+                mock_exec,      # Execute resolutions
+                mock_null_fk,   # Check NULL FKs
+                mock_dup,       # Check duplicates
+                mock_not_null,  # Check NOT NULL
+                mock_check,     # Check CHECK constraints
+                mock_fk,        # Check FK constraints
+            ]
+
+            violations = validator.execute_full_cycle_comprehensive(
+                connection=mock_conn,
+                seed_files=["db/seeds/prep/test.sql"],
+                resolution_functions=["fn_resolve_tb_product"],
+                tables=["tb_product"],
+            )
+
+            # All checks should pass
+            assert len(violations) == 0
