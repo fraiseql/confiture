@@ -64,10 +64,13 @@ class TestPrepSeedCLI:
         """Test that help text includes prep-seed flags."""
         result = cli_runner.invoke(app, ["seed", "validate", "--help"])
         assert result.exit_code == 0
-        assert "--prep-seed" in result.stdout
-        assert "--level" in result.stdout or "-l" in result.stdout
-        assert "--static-only" in result.stdout
-        assert "--full-execution" in result.stdout
+        # Strip ANSI color codes for assertions
+        import re
+        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        assert "--prep-seed" in clean_output
+        assert "--level" in clean_output or "-l" in clean_output
+        assert "--static-only" in clean_output
+        assert "--full-execution" in clean_output
 
     def test_prep_seed_flag_enables_validation(
         self,
