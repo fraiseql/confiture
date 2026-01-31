@@ -1,6 +1,6 @@
 """Auto-fixer for prep_seed violations.
 
-Cycle 7: Implements auto-fixes for schema drift and other correctable issues.
+Implements auto-fixes for schema drift and other correctable issues.
 """
 
 from __future__ import annotations

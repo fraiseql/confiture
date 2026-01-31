@@ -14,11 +14,6 @@ from confiture.core.seed_validation.models import (
 )
 
 
-# ============================================================================
-# Cycle 1: ValidationPattern Enum Tests
-# ============================================================================
-
-
 class TestSeedValidationPattern:
     """Test SeedValidationPattern enum."""
 
@@ -50,11 +45,6 @@ class TestSeedValidationPattern:
     def test_double_semicolon_not_fixable(self) -> None:
         """Test that DOUBLE_SEMICOLON is not fixable."""
         assert SeedValidationPattern.DOUBLE_SEMICOLON.fix_available is False
-
-
-# ============================================================================
-# Cycle 2: SeedViolation Model Tests
-# ============================================================================
 
 
 class TestSeedViolation:
@@ -131,11 +121,6 @@ class TestSeedViolation:
         assert data["file_path"] == "seeds.sql"
         assert "suggestion" in data
         assert "fix_available" in data
-
-
-# ============================================================================
-# Cycle 3: SeedValidationReport Model Tests
-# ============================================================================
 
 
 class TestSeedValidationReport:
@@ -233,9 +218,6 @@ class TestSeedValidationReport:
         assert "0 violations" in str_repr
 
 
-# ============================================================================
-# Cycle 4: Pattern Detection - Double Semicolons
-# ============================================================================
 
 
 class TestDoublesemicolonDetection:
@@ -275,9 +257,6 @@ class TestDoublesemicolonDetection:
         assert not any(i.pattern == SeedValidationPattern.DOUBLE_SEMICOLON for i in issues)
 
 
-# ============================================================================
-# Cycle 5: Pattern Detection - DDL in Seeds
-# ============================================================================
 
 
 class TestDDLDetection:
@@ -324,9 +303,6 @@ class TestDDLDetection:
         assert not any(i.pattern == SeedValidationPattern.NON_INSERT_STATEMENT for i in issues)
 
 
-# ============================================================================
-# Cycle 6: Pattern Detection - Missing ON CONFLICT
-# ============================================================================
 
 
 class TestMissingOnConflictDetection:
@@ -363,9 +339,6 @@ class TestMissingOnConflictDetection:
         assert not any(i.pattern == SeedValidationPattern.MISSING_ON_CONFLICT for i in issues)
 
 
-# ============================================================================
-# Phase 2: Core Validator Tests
-# ============================================================================
 
 
 class TestSeedValidator:
@@ -453,9 +426,6 @@ class TestSeedValidator:
         )
 
 
-# ============================================================================
-# Phase 3: Database Validator Tests
-# ============================================================================
 
 
 class TestDatabaseSeedValidator:
@@ -484,9 +454,6 @@ class TestDatabaseSeedValidator:
         assert report.files_scanned == 1
 
 
-# ============================================================================
-# Phase 4: Auto-Fix Tests
-# ============================================================================
 
 
 class TestAutoFix:
