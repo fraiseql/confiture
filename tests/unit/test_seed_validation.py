@@ -216,8 +216,6 @@ class TestSeedValidationReport:
         assert "0 violations" in str_repr
 
 
-
-
 class TestDoublesemicolonDetection:
     """Test detection of double semicolons in seed files."""
 
@@ -253,8 +251,6 @@ class TestDoublesemicolonDetection:
         sql = "INSERT INTO users VALUES (1, 'test');"
         issues = detect_seed_issues(sql)
         assert not any(i.pattern == SeedValidationPattern.DOUBLE_SEMICOLON for i in issues)
-
-
 
 
 class TestDDLDetection:
@@ -301,8 +297,6 @@ class TestDDLDetection:
         assert not any(i.pattern == SeedValidationPattern.NON_INSERT_STATEMENT for i in issues)
 
 
-
-
 class TestMissingOnConflictDetection:
     """Test detection of INSERT without ON CONFLICT."""
 
@@ -335,8 +329,6 @@ class TestMissingOnConflictDetection:
         sql = "INSERT INTO users (id, name) VALUES (1, 'test') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;"
         issues = detect_seed_issues(sql)
         assert not any(i.pattern == SeedValidationPattern.MISSING_ON_CONFLICT for i in issues)
-
-
 
 
 class TestSeedValidator:
@@ -386,7 +378,9 @@ class TestSeedValidator:
         from confiture.core.seed_validation.validator import SeedValidator
 
         # Create multiple seed files
-        (tmp_path / "001_users.sql").write_text("INSERT INTO users (id) VALUES (1) ON CONFLICT DO NOTHING;")
+        (tmp_path / "001_users.sql").write_text(
+            "INSERT INTO users (id) VALUES (1) ON CONFLICT DO NOTHING;"
+        )
         (tmp_path / "002_products.sql").write_text("INSERT INTO products VALUES (1);;")
 
         validator = SeedValidator()
@@ -412,18 +406,13 @@ class TestSeedValidator:
         """Test that ignored patterns don't appear in violations."""
         from confiture.core.seed_validation.validator import SeedValidator
 
-        validator = SeedValidator(
-            ignore_patterns=[SeedValidationPattern.DOUBLE_SEMICOLON]
-        )
+        validator = SeedValidator(ignore_patterns=[SeedValidationPattern.DOUBLE_SEMICOLON])
         sql = "INSERT INTO users VALUES (1);;"
         report = validator.validate_sql(sql, file_path="test.sql")
         # Should not have DOUBLE_SEMICOLON violation
         assert not any(
-            v.pattern == SeedValidationPattern.DOUBLE_SEMICOLON
-            for v in report.violations
+            v.pattern == SeedValidationPattern.DOUBLE_SEMICOLON for v in report.violations
         )
-
-
 
 
 class TestDatabaseSeedValidator:
@@ -450,8 +439,6 @@ class TestDatabaseSeedValidator:
         # Should not raise, just return no violations
         report = validator.validate_sql(sql, file_path="test.sql")
         assert report.files_scanned == 1
-
-
 
 
 class TestAutoFix:

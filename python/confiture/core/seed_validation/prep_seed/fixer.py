@@ -52,9 +52,7 @@ class PrepSeedFixer:
             Dictionary mapping file paths to number of fixes applied
         """
         # Group violations by file
-        violations_by_file: dict[str, list[PrepSeedViolation]] = defaultdict(
-            list
-        )
+        violations_by_file: dict[str, list[PrepSeedViolation]] = defaultdict(list)
         for violation in violations:
             if violation.fix_available:
                 violations_by_file[violation.file_path].append(violation)
@@ -72,15 +70,10 @@ class PrepSeedFixer:
 
                 # Apply fixes
                 for violation in file_violations:
-                    if (
-                        violation.pattern.name
-                        == "SCHEMA_DRIFT_IN_RESOLVER"
-                    ):
+                    if violation.pattern.name == "SCHEMA_DRIFT_IN_RESOLVER":
                         # Extract schema info from violation
                         # This is a simple fix for schema drift
-                        content = self.fix_schema_drift_from_message(
-                            content, violation.message
-                        )
+                        content = self.fix_schema_drift_from_message(content, violation.message)
 
                 # Count fixes applied
                 fix_count = 0

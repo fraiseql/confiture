@@ -154,21 +154,16 @@ class Level1SeedValidator:
                 # Check if it looks like it should be a UUID
                 # Either: has hyphens (indicates UUID attempt), or looks like hex
                 looks_like_uuid = "-" in value or (
-                    len(value) >= 32
-                    and all(c in "0123456789abcdefABCDEF-" for c in value)
+                    len(value) >= 32 and all(c in "0123456789abcdefABCDEF-" for c in value)
                 )
 
-                if (
-                    looks_like_uuid
-                    and not self.VALID_UUID_PATTERN.match(value)
-                ):
+                if looks_like_uuid and not self.VALID_UUID_PATTERN.match(value):
                     violations.append(
                         PrepSeedViolation(
                             pattern=PrepSeedPattern.INVALID_UUID_FORMAT,
                             severity=ViolationSeverity.ERROR,
                             message=(
-                                f"Invalid UUID format: '{value}' "
-                                f"(expected: 8-4-4-4-12 hex digits)"
+                                f"Invalid UUID format: '{value}' (expected: 8-4-4-4-12 hex digits)"
                             ),
                             file_path=file_path,
                             line_number=line_number,

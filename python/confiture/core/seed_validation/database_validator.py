@@ -47,9 +47,7 @@ class DatabaseSeedValidator(SeedValidator):
         self.connection_string = connection_string
         self.schema_info: dict | None = None
 
-    def validate_sql(
-        self, sql: str, file_path: str = "<string>"
-    ) -> SeedValidationReport:
+    def validate_sql(self, sql: str, file_path: str = "<string>") -> SeedValidationReport:
         """Validate SQL with database-aware checks.
 
         Performs static validation first, then database validation if
@@ -73,9 +71,7 @@ class DatabaseSeedValidator(SeedValidator):
 
         return report
 
-    def _validate_with_database(
-        self, _sql: str, file_path: str
-    ) -> SeedValidationReport:
+    def _validate_with_database(self, _sql: str, file_path: str) -> SeedValidationReport:
         """Perform database-aware validation.
 
         Args:

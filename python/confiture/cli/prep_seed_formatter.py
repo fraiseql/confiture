@@ -88,8 +88,7 @@ def output_table(
             }.get(severity, "white")
 
             console.print(
-                f"\n[{severity_color}]{severity.name}[/{severity_color}] "
-                f"({len(violations)} found)"
+                f"\n[{severity_color}]{severity.name}[/{severity_color}] ({len(violations)} found)"
             )
 
             table = Table(show_header=True, header_style="bold")
@@ -99,9 +98,7 @@ def output_table(
             table.add_column("Message", style="white")
 
             # Mark fixable violations
-            for violation in sorted(
-                violations, key=lambda v: (v.file_path, v.line_number)
-            ):
+            for violation in sorted(violations, key=lambda v: (v.file_path, v.line_number)):
                 pattern_text = violation.pattern.name
                 if violation.fix_available:
                     pattern_text += " ✓"

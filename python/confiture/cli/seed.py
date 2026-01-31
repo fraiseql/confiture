@@ -53,8 +53,7 @@ def _validate_prep_seed(
     # Validate database_url requirement
     if max_level >= 4 and not database_url:
         console.print(
-            "[red]✗ Database URL required for levels 4-5. "
-            "Use --database-url or --static-only[/red]"
+            "[red]✗ Database URL required for levels 4-5. Use --database-url or --static-only[/red]"
         )
         raise typer.Exit(2)
 
@@ -310,9 +309,7 @@ def validate(
                 table.add_column("Issue", style="yellow")
                 table.add_column("Suggestion", style="green")
 
-                for violation in sorted(
-                    all_violations, key=lambda v: (v.file_path, v.line_number)
-                ):
+                for violation in sorted(all_violations, key=lambda v: (v.file_path, v.line_number)):
                     table.add_row(
                         violation.file_path,
                         str(violation.line_number),

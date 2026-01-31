@@ -80,11 +80,7 @@ class SeedViolation:
 
     def __str__(self) -> str:
         """Format violation for human-readable output."""
-        snippet = (
-            f"{self.sql_snippet[:50]}..."
-            if len(self.sql_snippet) > 50
-            else self.sql_snippet
-        )
+        snippet = f"{self.sql_snippet[:50]}..." if len(self.sql_snippet) > 50 else self.sql_snippet
         return f"{self.file_path}:{self.line_number} - {self.pattern.name}: {snippet}"
 
     def to_dict(self) -> dict[str, Any]:

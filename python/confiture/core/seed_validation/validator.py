@@ -46,9 +46,7 @@ class SeedValidator:
         """
         self.ignore_patterns = set(ignore_patterns) if ignore_patterns else set()
 
-    def validate_sql(
-        self, sql: str, file_path: str = "<string>"
-    ) -> SeedValidationReport:
+    def validate_sql(self, sql: str, file_path: str = "<string>") -> SeedValidationReport:
         """Validate SQL content for seed data issues.
 
         Args:

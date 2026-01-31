@@ -274,13 +274,8 @@ class TestLevel5ConstraintValidation:
 
         # Should detect NOT NULL violations
         assert len(violations) > 0
-        assert any(
-            "NOT NULL" in v.message for v in violations
-        )
-        assert all(
-            v.severity == ViolationSeverity.CRITICAL
-            for v in violations
-        )
+        assert any("NOT NULL" in v.message for v in violations)
+        assert all(v.severity == ViolationSeverity.CRITICAL for v in violations)
 
     def test_detects_check_constraint_violation(self) -> None:
         """Detects CHECK constraint violations."""
@@ -304,9 +299,7 @@ class TestLevel5ConstraintValidation:
 
         # Should detect CHECK violations
         assert len(violations) > 0
-        assert any(
-            "CHECK" in v.message for v in violations
-        )
+        assert any("CHECK" in v.message for v in violations)
 
     def test_detects_foreign_key_constraint_violation(self) -> None:
         """Detects foreign key constraint violations."""
@@ -330,10 +323,7 @@ class TestLevel5ConstraintValidation:
 
         # Should detect FK violations
         assert len(violations) > 0
-        assert any(
-            "foreign key" in v.message.lower()
-            for v in violations
-        )
+        assert any("foreign key" in v.message.lower() for v in violations)
 
     def test_passes_when_all_constraints_satisfied(self) -> None:
         """Passes when all constraints are satisfied."""
@@ -370,12 +360,12 @@ class TestLevel5ConstraintValidation:
         validator = Level5ExecutionValidator()
 
         # Mock file operations
-        with patch("pathlib.Path.exists") as mock_exists, \
-             patch("pathlib.Path.read_text") as mock_read_text:
+        with (
+            patch("pathlib.Path.exists") as mock_exists,
+            patch("pathlib.Path.read_text") as mock_read_text,
+        ):
             mock_exists.return_value = True
-            mock_read_text.return_value = (
-                "INSERT INTO prep_seed.tb_product (id) VALUES ('uuid-1');"
-            )
+            mock_read_text.return_value = "INSERT INTO prep_seed.tb_product (id) VALUES ('uuid-1');"
 
             # Mock database
             mock_conn = MagicMock()
@@ -396,13 +386,13 @@ class TestLevel5ConstraintValidation:
             mock_fk.fetchall.return_value = []  # No FK violations
 
             mock_conn.execute.side_effect = [
-                mock_load,      # Load seeds
-                mock_exec,      # Execute resolutions
-                mock_null_fk,   # Check NULL FKs
-                mock_dup,       # Check duplicates
+                mock_load,  # Load seeds
+                mock_exec,  # Execute resolutions
+                mock_null_fk,  # Check NULL FKs
+                mock_dup,  # Check duplicates
                 mock_not_null,  # Check NOT NULL
-                mock_check,     # Check CHECK constraints
-                mock_fk,        # Check FK constraints
+                mock_check,  # Check CHECK constraints
+                mock_fk,  # Check FK constraints
             ]
 
             violations = validator.execute_full_cycle_comprehensive(

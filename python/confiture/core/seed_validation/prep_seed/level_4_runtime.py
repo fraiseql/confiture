@@ -164,9 +164,7 @@ class Level4RuntimeValidator:
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                     severity=ViolationSeverity.ERROR,
-                    message=(
-                        f"Resolution function {func_name} execution failed: {str(e)}"
-                    ),
+                    message=(f"Resolution function {func_name} execution failed: {str(e)}"),
                     file_path=f"db/schema/functions/{func_name}.sql",
                     line_number=1,
                     impact="Resolution cannot execute",

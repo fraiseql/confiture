@@ -140,9 +140,7 @@ class PrepSeedOrchestrator:
         for file_path in sql_files:
             try:
                 content = file_path.read_text()
-                file_violations = validator.validate_seed_file(
-                    content, str(file_path)
-                )
+                file_violations = validator.validate_seed_file(content, str(file_path))
                 violations.extend(file_violations)
             except OSError:
                 # Skip files that can't be read
@@ -169,9 +167,7 @@ class PrepSeedOrchestrator:
             try:
                 content = file_path.read_text()
                 func_name = file_path.stem
-                file_violations = validator.validate_function(
-                    func_name, content
-                )
+                file_violations = validator.validate_function(func_name, content)
                 violations.extend(file_violations)
             except OSError:
                 pass
@@ -206,10 +202,7 @@ class PrepSeedOrchestrator:
         if not self.config.stop_on_critical:
             return False
 
-        return any(
-            v.severity == ViolationSeverity.CRITICAL
-            for v in report.violations
-        )
+        return any(v.severity == ViolationSeverity.CRITICAL for v in report.violations)
 
     def _record_scanned_files_level1(self, report: PrepSeedReport) -> None:
         """Record scanned files from Level 1 to report."""

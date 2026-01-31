@@ -256,9 +256,7 @@ class TestPrepSeedOrchestrator:
         schema_dir = tmp_path / "db" / "schema"
         schema_dir.mkdir(parents=True)
         (schema_dir / "table.sql").write_text("CREATE TABLE tb_x (id BIGINT);")
-        (schema_dir / "fn_resolve_x.sql").write_text(
-            "CREATE FUNCTION fn_resolve_x() AS $$$$;"
-        )
+        (schema_dir / "fn_resolve_x.sql").write_text("CREATE FUNCTION fn_resolve_x() AS $$$$;")
 
         config = OrchestrationConfig(
             max_level=3,

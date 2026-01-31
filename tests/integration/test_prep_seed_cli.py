@@ -66,6 +66,7 @@ class TestPrepSeedCLI:
         assert result.exit_code == 0
         # Strip ANSI color codes for assertions
         import re
+
         clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
         assert "--prep-seed" in clean_output
         assert "--level" in clean_output or "-l" in clean_output
