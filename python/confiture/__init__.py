@@ -13,7 +13,7 @@ from typing import Any
 
 from confiture.core.linting import SchemaLinter
 
-__version__ = "0.3.13"
+__version__ = "0.3.14"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 

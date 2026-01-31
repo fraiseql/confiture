@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.3.13
+**Version**: 0.3.14
 **Last Updated**: January 31, 2026
 **Current Status**: Beta (Not Yet Production-Tested)
 
@@ -902,7 +902,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: January 31, 2026
-**Version**: 0.3.13 (Not Production-Tested)
+**Version**: 0.3.14 (Not Production-Tested)
 
 ---
 
