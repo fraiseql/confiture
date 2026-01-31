@@ -104,6 +104,7 @@ def prep_seed_schema(test_db: object) -> None:
     conn.commit()
 
 
+@pytest.mark.integration
 class TestOrchestratorLevel4:
     """Test Level 4: Runtime validation with database."""
 
@@ -196,6 +197,7 @@ class TestOrchestratorLevel4:
         assert isinstance(violations, list)
 
 
+@pytest.mark.integration
 class TestOrchestratorLevel5:
     """Test Level 5: Full execution validation."""
 
@@ -384,6 +386,7 @@ class TestOrchestratorLevel5:
         assert count_before == count_after
 
 
+@pytest.mark.integration
 class TestOrchestratorFullCycle:
     """Test running multiple levels in sequence."""
 
