@@ -1,664 +1,160 @@
 # Confiture 🍓
 
-**PostgreSQL schema evolution with built-in multi-agent coordination**
+**PostgreSQL migrations with multi-agent coordination and 4 flexible strategies**
 
-Confiture enables teams and AI agents to collaborate on database schema changes safely, with **built-in multi-agent coordination** and **4 flexible migration strategies** for every scenario from local development to zero-downtime production deployments.
+Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent conflict detection. Production data sync with PII anonymization.
 
-> **Part of the FraiseQL ecosystem** - While Confiture works standalone for any PostgreSQL project, it's designed to integrate seamlessly with FraiseQL's GraphQL-first approach.
-
-## Status & Quality
-
-[![PyPI version](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
-[![Python Support](https://img.shields.io/pypi/pyversions/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
-[![PostgreSQL 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-[![CI/CD](https://img.shields.io/github/actions/workflow/status/fraiseql/confiture/publish.yml?label=CI%2FCD&logo=github)](https://github.com/fraiseql/confiture/actions)
-[![Tests](https://img.shields.io/badge/tests-3400%2B-brightgreen)](https://github.com/fraiseql/confiture/tree/main/tests)
-[![Code Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/fraiseql/confiture)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-
-[![Type Checked](https://img.shields.io/badge/type%20checker-ty-blue)](https://github.com/astral-sh/ty)
-[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
-[![Rust Extension](https://img.shields.io/badge/Extension-Rust-orange?logo=rust)](https://www.rust-lang.org/)
-[![Status: Beta](https://img.shields.io/badge/status-Beta-yellow)](https://github.com/fraiseql/confiture)
-[![Part of FraiseQL](https://img.shields.io/badge/Part%20of-FraiseQL-ff69b4)](https://github.com/fraiseql/fraiseql)
-
----
-
-## 🍓 Part of the FraiseQL Ecosystem
-
-**confiture** accelerates PostgreSQL schema evolution across the FraiseQL stack:
-
-### **Server Stack (PostgreSQL + Python/Rust)**
-
-| Tool | Purpose | Status | Performance Gain |
-|------|---------|--------|------------------|
-| **[pg_tviews](https://github.com/fraiseql/pg_tviews)** | Incremental materialized views | Beta | **100-500× faster** |
-| **[jsonb_delta](https://github.com/evoludigit/jsonb_delta)** | JSONB surgical updates | Stable | **2-7× faster** |
-| **[pgGit](https://pggit.dev)** | Database version control | Stable | Git for databases |
-| **[confiture](https://github.com/fraiseql/confiture)** | PostgreSQL migrations | **Beta** | **300-600× faster** (theoretical) |
-| **[fraiseql](https://fraiseql.dev)** | GraphQL framework | Stable | **7-10× faster** |
-| **[fraiseql-data](https://github.com/fraiseql/fraiseql-seed)** | Seed data generation | Phase 6 | Auto-dependency resolution |
-
-### **Client Libraries (TypeScript/JavaScript)**
-
-| Library | Purpose | Framework Support |
-|---------|---------|-------------------|
-| **[graphql-cascade](https://github.com/graphql-cascade/graphql-cascade)** | Automatic cache invalidation | Apollo, React Query, Relay, URQL |
-
-**How confiture fits:**
-- **Build from DDL** → Fresh DB in <1s for **fraiseql** GraphQL testing
-- **pgGit** automatically tracks confiture migrations
-- Manage **pg_tviews** schema evolution with 4 migration strategies
-- **fraiseql-data** seeds the schema confiture built
-
-**Intended workflow:**
-```bash
-# Build schema from DDL files
-confiture build --env test
-
-# Seed test data
-fraiseql-data add tb_user --count 100
-
-# Run GraphQL tests
-pytest
-```
+[![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
+[![Tests](https://img.shields.io/badge/tests-4000%2B-brightgreen)](https://github.com/fraiseql/confiture)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
+[![PostgreSQL 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue)](https://www.postgresql.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
 ## Why Confiture?
 
-### Safe Multi-Agent Collaboration 🤝
+**Problem**: Traditional migration tools replay every migration on every build (slow, brittle, maintains technical debt).
 
-Working on database schemas with multiple agents or team members? Confiture provides **automatic conflict detection**:
+**Solution**: DDL files are the single source of truth. Just execute your schema once. Fresh databases in <1 second.
 
-```bash
-# Agent 1: Declare intention to modify users table
-confiture coordinate register --agent-id alice --tables-affected users
-
-# Agent 2: Before modifying users table, check for conflicts
-confiture coordinate check --agent-id bob --tables-affected users
-# ⚠️ Conflict detected: alice is already working on 'users' table
-```
-
-**Benefits:**
-- 🛡️ **Prevent conflicts** before code is written
-- 👁️ **Visibility** into all active schema work
-- 📋 **Audit trail** of coordination decisions
-- 🤖 **JSON output** for CI/CD integration
-
-Perfect for solo developers (optional safety), small teams (avoid surprises), and AI-assisted development (parallel agents).
-
-**[→ Learn more about Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)**
-
-### The Problem with Migration History
-
-Traditional migration tools (Alembic, Django migrations, Flyway) use **migration history replay**: every time you build a database, the tool executes every migration file in order. This works, but it's **slow and brittle**:
-
-- **Slow**: Fresh database builds take 5-10 minutes (replaying hundreds of operations)
-- **Brittle**: One broken migration breaks everything - your database history is fragile
-- **Complicated**: Developers maintain two things: current schema AND migration history
-- **Messy**: Technical debt accumulates as migrations pile up over months/years
-
-### The Confiture Approach
-
-Confiture flips the model: **DDL source files are the single source of truth**. To build a database:
-
-1. Read all `.sql` files in `db/schema/`
-2. Execute them once (in order)
-3. Done ✅
-
-No migration history to replay. No accumulated technical debt. Just your actual, current schema. **Fresh databases in <1 second.**
-
-### Intended Advantages Over Alembic
-
-| Feature | Confiture | Alembic | Notes |
-|---------|-----------|---------|-------|
-| **Fresh DB setup** | Direct DDL execution | Migration replay | Theoretically faster |
-| **Zero-downtime migrations** | Via FDW (planned) | Not built-in | Not yet production-tested |
-| **Production data sync** | Built-in (with PII anonymization) | Not available | Not yet production-tested |
-| **Schema diffs** | Auto-generated | Manual | Implemented |
-| **Conceptual simplicity** | DDL-first | Migration-first | Different philosophy |
-
-### What's Implemented
-
-- ✅ **4 migration strategies** (Build from DDL, ALTER, Production Sync, FDW)
-- ✅ **Python + optional Rust extension**
-- ✅ **PII anonymization strategies**
-- ✅ **Comprehensive test suite** (3,200+ tests)
-- ⚠️ **Not yet used in production** - Beta software
-
----
-
-## Core Features
-
-### 🌱 Prep-Seed Validation System (NEW in v0.3.13!)
-
-Validate seed data and resolution functions at 5 progressive levels:
-
-```bash
-# Levels 1-3: Static analysis (no database needed)
-confiture seed validate --level 3
-
-# Levels 4-5: Database validation (with SAVEPOINT safety)
-confiture seed validate --level 5 --database-url postgresql://localhost/test
-```
-
-**Benefits:**
-- 🔍 Catch NULL FK errors before production
-- 🎯 Validate resolution function mappings
-- 🔄 Static analysis safe for pre-commit hooks
-- 🗄️ Full execution validation with transaction rollback
-- ⚡ Perfect for CI/CD pipelines
-
-**[→ Seed Validation Guide](docs/guides/prep-seed-validation.md)**
-
----
-
-### 🤝 Multi-Agent Coordination (Production-Ready)
-
-Enable safe parallel schema development with automatic conflict detection:
-
-```bash
-# Register intention before making changes
-confiture coordinate register \
-    --agent-id alice \
-    --feature-name user_profiles \
-    --tables-affected users,profiles
-
-# Check status and conflicts
-confiture coordinate status --format json
-
-# Complete when done
-confiture coordinate complete --intent-id int_abc123
-```
-
-**Key capabilities:**
-- ✅ Declare intentions before coding
-- ✅ Automatic conflict detection (table, column, timing overlaps)
-- ✅ Audit trail with rich terminal output
-- ✅ JSON output for automation/CI-CD
-- ✅ Performance: <10ms operations, 10K+ intents supported
-
-**[→ Multi-Agent Coordination Guide](docs/guides/multi-agent-coordination.md)** | **[→ Architecture Details](docs/architecture/multi-agent-coordination.md)**
-
----
-
-### 🛠️ Four Migration Strategies
-
-Choose the right strategy for your use case:
-
-**1️⃣ Build from DDL** - Execute DDL files directly (<1 second)
-```bash
-confiture build --env production
-```
-
-**2️⃣ Incremental Migrations** - ALTER-based changes for existing databases
-```bash
-confiture migrate up
-```
-
-**3️⃣ Production Data Sync** - Copy data with PII anonymization
-```bash
-confiture sync --from production --anonymize users.email
-```
-
-**4️⃣ Schema-to-Schema (Zero-Downtime)** - Complex migrations via FDW
-```bash
-confiture migrate schema-to-schema --strategy fdw
-```
-
-**[→ Migration Decision Tree](docs/guides/migration-decision-tree.md)**
-
----
-
-### 🔍 Git-Aware Schema Validation (NEW!)
-
-Catch schema drift and enforce migration accompaniment before merging:
-
-```bash
-# Detect schema drift against main branch
-confiture migrate validate --check-drift --base-ref origin/main
-
-# Ensure DDL changes have corresponding migrations
-confiture migrate validate --require-migration --base-ref origin/main
-
-# Perfect for pre-commit hooks and CI/CD pipelines
-confiture migrate validate --check-drift --require-migration --staged
-```
-
-**Key capabilities:**
-- ✅ Detect untracked schema changes in code review
-- ✅ Enforce migration files for every DDL change
-- ✅ Pre-commit hook support (<500ms for staged files)
-- ✅ CI/CD integration with JSON output
-- ✅ Works with any git ref (branches, tags, commits)
-
-**Typical CI/CD workflow:**
-
-```yaml
-# GitHub Actions
-- name: Validate schema changes
-  run: |
-    confiture migrate validate \
-      --check-drift \
-      --require-migration \
-      --base-ref origin/main
-```
-
-**[→ Git-Aware Validation Guide](docs/guides/git-aware-validation.md)** | **[→ CLI Reference](docs/reference/cli.md)**
+**Multi-Agent Safe**: Automatic conflict detection prevents teams and agents from stepping on each other.
 
 ---
 
 ## Quick Start
 
 ### Installation
-
 ```bash
 pip install fraiseql-confiture
-
-# Or with FraiseQL integration
-pip install fraiseql-confiture[fraiseql]
 ```
 
-### For Solo Developers (Traditional Workflow)
-
+### Basic Usage
 ```bash
-# 1. Initialize project
+# Initialize project
 confiture init
 
-# 2. Write schema DDL files
+# Write schema DDL files
 vim db/schema/10_tables/users.sql
 
-# 3. Build database
+# Build database (<1 second)
 confiture build --env local
 
-# 4. Generate and apply migrations
-confiture migrate generate --name "add_user_bio"
+# Generate and apply migrations
+confiture migrate generate --name "add_bio"
 confiture migrate up
 ```
 
-**[→ Getting Started Guide](docs/getting-started.md)**
-
-### For Teams & Multi-Agent Work (Coordination Workflow)
-
+### Team Workflow (Multi-Agent)
 ```bash
-# 1. Initialize project with coordination database
-confiture init
-confiture coordinate init --db-url postgresql://localhost/confiture_coord
+# Register intention before making changes
+confiture coordinate register --agent-id alice --tables-affected users
 
-# 2. Register intention before making changes
-confiture coordinate register \
-    --agent-id alice \
-    --feature-name user_profiles \
-    --tables-affected users,profiles \
-    --schema-changes "ALTER TABLE users ADD COLUMN bio TEXT"
+# Check for conflicts (by other agent)
+confiture coordinate check --agent-id bob --tables-affected users
+# ⚠️ Conflict: alice is working on 'users'
 
-# 3. Check for conflicts (by other agent)
-confiture coordinate check \
-    --agent-id bob \
-    --tables-affected users
-# ⚠️ Warning: alice is working on 'users' table
-
-# 4. View active work
-confiture coordinate status --format json
-
-# 5. Complete when done
+# Complete when done
 confiture coordinate complete --intent-id int_abc123
 ```
 
-**[→ Multi-Agent Coordination Guide](docs/guides/multi-agent-coordination.md)**
+---
 
-### Project Structure
+## Core Features
 
-```
-db/
-├── schema/           # DDL: CREATE TABLE, views, functions
-│   ├── 00_common/
-│   ├── 10_tables/
-│   └── 20_views/
-├── seeds/            # INSERT: Environment-specific test data
-│   ├── common/
-│   ├── development/
-│   └── test/
-├── migrations/       # Generated migration files
-└── environments/     # Environment configurations
-    ├── local.yaml
-    ├── test.yaml
-    └── production.yaml
-```
+### 🛠️ Four Migration Strategies
 
-### Test Migrations Before Applying (Dry-Run)
+| Strategy | Use Case | Command |
+|----------|----------|---------|
+| **Build from DDL** | Fresh DBs, testing | `confiture build --env local` |
+| **Incremental** | Existing databases | `confiture migrate up` |
+| **Production Sync** | Copy prod data (with anonymization) | `confiture sync --from production --anonymize users.email` |
+| **Zero-Downtime** | Complex migrations via FDW | `confiture migrate schema-to-schema` |
 
-Analyze migrations without executing them:
+### 🤝 Multi-Agent Coordination
+- ✅ Automatic conflict detection
+- ✅ Intent registration and tracking
+- ✅ JSON output for CI/CD
+- ✅ <10ms per operation
 
-```bash
-# Analyze pending migrations
-confiture migrate up --dry-run
+### 🌱 Prep-Seed Validation (v0.3.13+)
+- ✅ 5-level validation (static → full execution)
+- ✅ Catch NULL FKs before production
+- ✅ Pre-commit safe (Levels 1-3)
+- ✅ Database validation with SAVEPOINT safety
 
-# Test in SAVEPOINT (guaranteed rollback)
-confiture migrate up --dry-run-execute
+### 🔍 Git-Aware Validation
+- ✅ Detect schema drift vs. main branch
+- ✅ Enforce migrations for DDL changes
+- ✅ Pre-commit hook support
 
-# Save analysis to file
-confiture migrate up --dry-run --format json --output report.json
-
-# Analyze rollback impact
-confiture migrate down --dry-run --steps 2
-```
-
-For more details, see **[Dry-Run Guide](docs/guides/dry-run.md)**.
+### 🔧 Developer Experience
+- ✅ Dry-run mode (analyze before applying)
+- ✅ Migration hooks (pre/post)
+- ✅ Schema linting
+- ✅ PII anonymization
+- ✅ Optional Rust extension
+- ✅ Python 3.11, 3.12, 3.13
 
 ---
 
 ## Documentation
 
-### Getting Started
+**Getting Started**: [docs/getting-started.md](docs/getting-started.md)
 
-- **[Getting Started Guide](docs/getting-started.md)** - First steps with Confiture
-- **[When to Use Coordination?](docs/guides/multi-agent-coordination.md#when-to-use-coordination)** - Solo vs. team vs. multi-agent
+**Guides**:
+- [Build from DDL](docs/guides/01-build-from-ddl.md)
+- [Incremental Migrations](docs/guides/02-incremental-migrations.md)
+- [Production Data Sync](docs/guides/03-production-sync.md)
+- [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
+- [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)
+- [Prep-Seed Validation](docs/guides/prep-seed-validation.md)
+- [Migration Decision Tree](docs/guides/migration-decision-tree.md)
+- [Dry-Run Mode](docs/guides/dry-run.md)
 
-### Multi-Agent Coordination
+**API Reference**: [docs/reference/](docs/reference/)
 
-- **[Multi-Agent Coordination Guide](docs/guides/multi-agent-coordination.md)** - Complete guide to coordination features
-- **[Architecture & Design](docs/architecture/multi-agent-coordination.md)** - Technical architecture details
-- **[Performance Benchmarks](docs/performance/coordination-performance.md)** - Performance analysis & results
-- **[CI/CD Integration](docs/guides/multi-agent-coordination.md#json-output-format)** - JSON output for automation
-
-### Migration Strategies
-
-**Core Strategies**:
-- **[Build from DDL](docs/guides/01-build-from-ddl.md)** - Execute DDL files directly
-- **[Incremental Migrations](docs/guides/02-incremental-migrations.md)** - ALTER-based changes
-- **[Production Data Sync](docs/guides/03-production-sync.md)** - Copy and anonymize data
-- **[Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)** - Schema-to-schema via FDW
-- **[Migration Decision Tree](docs/guides/migration-decision-tree.md)** - Choose the right strategy
-
-**Advanced**:
-- **[Dry-Run Mode](docs/guides/dry-run.md)** - Test migrations before applying
-- **[Migration Hooks](docs/guides/hooks.md)** - Execute custom logic before/after migrations
-- **[Anonymization](docs/guides/anonymization.md)** - PII data masking strategies
-- **[Compliance](docs/guides/compliance.md)** - HIPAA, SOX, PCI-DSS, GDPR
-- **[Integrations](docs/guides/integrations.md)** - Slack, GitHub Actions, monitoring
-
-### API Reference
-
-- **[CLI Reference](docs/reference/cli.md)** - All commands documented
-- **[Configuration](docs/reference/configuration.md)** - Environment configuration
-- **[Schema Builder API](docs/api/builder.md)** - Building schemas programmatically
-- **[Migrator API](docs/api/migrator.md)** - Migration execution
-- **[Syncer API](docs/api/syncer.md)** - Production data sync
-- **[Hook API](docs/api/hooks.md)** - Migration lifecycle hooks
-- **[Anonymization API](docs/api/anonymization.md)** - PII data masking
-- **[Linting API](docs/api/linting.md)** - Schema validation rules
-
-### Examples
-
-- **[Examples Overview](examples/)** - Complete examples
-- **[Prep-Seed Validation](examples/06-prep-seed-validation/)** - Seed validation workflow (NEW!)
-- **[Multi-Agent Workflow](examples/multi-agent-workflow/)** - Coordination examples
-- **[Basic Migration](examples/01-basic-migration/)** - Learn the fundamentals
-- **[FraiseQL Integration](examples/02-fraiseql-integration/)** - GraphQL workflow
-- **[Zero-Downtime](examples/03-zero-downtime-migration/)** - FDW-based migration
-- **[Production Sync](examples/04-production-sync-anonymization/)** - PII anonymization
+**Examples**: [examples/](examples/)
 
 ---
 
-## Features
+## Project Status
 
-### 🌱 Prep-Seed Validation (NEW - v0.3.13)
+✅ **v0.3.13** (Latest - January 31, 2026)
 
-- ✅ **5-level validation system** - From file syntax to full execution
-- ✅ **Static analysis** (Levels 1-3) - Pre-commit safe, no database needed
-- ✅ **Database validation** (Levels 4-5) - SAVEPOINT-based dry-runs, transaction rollback
-- ✅ **Schema parsing** - Automatic table detection from DDL files
-- ✅ **Resolution functions** - Validate function mappings and execution
-- ✅ **Constraint validation** - NULL FK detection, dependency tracking
-- ✅ **86 seed validation tests** - All passing, comprehensive coverage
-- ✅ **Complete example project** - Ready to use and extend
+**What's Implemented**:
+- ✅ All 4 migration strategies
+- ✅ Multi-agent coordination (production-ready, 123+ tests)
+- ✅ Prep-seed validation (5 levels, 86+ tests)
+- ✅ Git-aware schema validation
+- ✅ Schema diff detection
+- ✅ CLI with rich output
+- ✅ Comprehensive tests (4,000+)
+- ✅ Complete documentation
 
-### 🤝 Multi-Agent Coordination (Production-Ready)
-
-- ✅ **Intent registration** - Declare changes before implementation
-- ✅ **Conflict detection** - Automatic overlap detection (table, column, timing)
-- ✅ **Status tracking** - Real-time visibility into active schema work
-- ✅ **Audit trail** - Complete history of coordination decisions
-- ✅ **JSON output** - CI/CD and automation integration
-- ✅ **High performance** - <10ms operations, 10K+ intents supported
-- ✅ **123 comprehensive tests** - All passing, production-ready
-
-### 🛠️ Migration System (Implemented)
-
-- ✅ **Build from DDL** (Strategy 1) - Execute DDL files directly (<1s)
-- ✅ **Incremental migrations** (Strategy 2) - ALTER-based changes
-- ✅ **Production data sync** (Strategy 3) - Copy with PII anonymization
-- ✅ **Zero-downtime migrations** (Strategy 4) - Schema-to-schema via FDW
-
-### 🔧 Developer Experience
-
-- ✅ Optional Rust extension for performance
-- ✅ Schema diff detection with auto-generation
-- ✅ CLI with rich terminal output
-- ✅ Multi-environment configuration
-- ✅ Migration hooks (pre/post execution)
-- ✅ Schema linting with multiple rules
-- ✅ PII anonymization strategies
-- ✅ Dry-run mode for testing migrations
-
-### 📖 Documentation (Comprehensive)
-
-- ✅ **Coordination guides** - Multi-agent workflows, architecture, performance
-- ✅ **Migration guides** - All 4 strategies documented
-- ✅ **API reference** - Complete CLI and Python API docs
-- ✅ **Integration guides** - CI/CD, Slack, GitHub Actions, monitoring
-- ✅ **Compliance guides** - HIPAA, SOX, PCI-DSS, GDPR
-- ✅ **Examples** - 5+ complete examples including multi-agent workflows
-
----
-
-## Comparison
-
-| Feature | Alembic | pgroll | **Confiture** |
-|---------|---------|--------|---------------|
-| **Philosophy** | Migration replay | Multi-version schema | **Build-from-DDL + Coordination** |
-| **Multi-agent coordination** | ❌ No | ❌ No | **✅ Built-in** |
-| **Seed validation** | ❌ No | ❌ No | **✅ 5-level system** |
-| **Fresh DB setup** | Minutes | Minutes | **<1 second** |
-| **Zero-downtime** | ❌ No | ✅ Yes | **✅ Yes (FDW)** |
-| **Production sync** | ❌ No | ❌ No | **✅ Built-in** |
-| **Conflict detection** | ❌ No | ❌ No | **✅ Automatic** |
-| **Pre-commit safe** | ✅ Basic | ❌ No | **✅ Levels 1-3** |
-| **CI/CD integration** | Basic | Basic | **✅ JSON output** |
-| **Language** | Python | Go | **Python + Rust** |
-
----
-
-## Current Version
-
-**v0.3.13** (Latest) - January 31, 2026
-
-### ✨ What's New in v0.3.13 - Prep-Seed Validation System (NEW!)
-
-**🌱 Complete 5-Level Seed Validation**:
-- ✅ **Level 1**: Seed file validation (syntax checking)
-- ✅ **Level 2**: Schema consistency validation (static DDL analysis)
-- ✅ **Level 3**: Resolution function validation (function mapping)
-- ✅ **Level 4**: Runtime validation (database connection, SAVEPOINT dry-runs)
-- ✅ **Level 5**: Full execution validation (transaction rollback)
-- ✅ Catch data flow issues before deployment (like the PrintOptim backend bug!)
-- ✅ 22 orchestrator unit tests + 86 total seed validation tests
-- ✅ Complete documentation with working examples
-- ✅ `PrepSeedOrchestrator` for orchestrating all levels
-
-**Features:**
-- 🔍 Static analysis (Levels 1-3) safe for pre-commit hooks
-- 🗄️ Database validation (Levels 4-5) with SAVEPOINT safety
-- 🔄 Automatic schema parsing from DDL files
-- 🎯 Resolution function discovery and validation
-- ✅ NULL FK detection and constraint validation
-
-**[→ Prep-Seed Validation Guide](docs/guides/prep-seed-validation.md)** | **[→ Example Project](examples/06-prep-seed-validation/)**
-
-### Previous Release - v0.3.9
-**Migration File Validation & Auto-Fix**:
-- ✅ New `confiture migrate validate` command with auto-fix
-- ✅ Orphaned migration file detection
-- ✅ Safe auto-fix with `--fix-naming` flag
-- ✅ Dry-run preview mode
-- ✅ JSON output for CI/CD integration
-
-### Earlier Release - v0.3.8
-**Multi-Agent Coordination (Production-Ready)**:
-- ✅ 7 CLI commands for coordination
-- ✅ Automatic conflict detection
-- ✅ 123 comprehensive tests (all passing)
-- ✅ Performance: <10ms operations, 10K+ intents supported
-
-> **⚠️ Beta Software**: While the multi-agent coordination system is production-ready and thoroughly tested, Confiture has not yet been used in production environments. Real-world usage may reveal edge cases. Use with appropriate caution.
-
-### What's Implemented ✅
-
-**Core Features (Battle-Tested)**:
-- ✅ **Multi-agent coordination** (123 tests)
-- ✅ **Prep-seed validation system** (86 tests) - All 5 levels
-- ✅ All 4 migration strategies (Build from DDL, ALTER, Production Sync, FDW)
-- ✅ Schema diff detection and auto-generation
-- ✅ CLI with rich terminal output
-
-**Developer Features**:
-- ✅ Python 3.11, 3.12, 3.13 support
-- ✅ Optional Rust extension for performance
-- ✅ Migration hooks (pre/post execution)
-- ✅ Schema linting with multiple rules
-- ✅ PII anonymization strategies
-- ✅ Dry-run mode for testing migrations
-- ✅ Pre-commit hook support
-
-**Documentation & Testing**:
-- ✅ Comprehensive test suite (3,400+ tests, 70% coverage)
-- ✅ Complete documentation and guides
-- ✅ 6+ example projects
-- ✅ API reference (Python + CLI)
-
-### What's NOT Yet Production-Validated ⚠️
-
-- ❌ Production usage (never deployed to real production systems)
-- ❌ Performance claims (benchmarks only, not real-world workloads)
-- ❌ Edge cases under load (not battle-tested at scale with millions of rows)
-- ❌ Large-scale data migrations (theoretical performance only)
-
-**Recommendation**: Use in staging/development, validate in your environment before production.
+**⚠️ Beta Software**: All features implemented and tested, but not yet used in production. Use in staging/development first.
 
 ---
 
 ## Contributing
 
-Contributions welcome! We'd love your help making Confiture even better.
-
-**Quick Start**:
 ```bash
-# Clone repository
 git clone https://github.com/fraiseql/confiture.git
 cd confiture
-
-# Install dependencies (includes Rust build)
 uv sync --all-extras
-
-# Build Rust extension
-uv run maturin develop
-
-# Run tests
-uv run pytest --cov=confiture
-
-# Format code
-uv run ruff format .
-
-# Type checking
-uv run mypy python/confiture/
+uv run pytest
 ```
 
-**Resources**:
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contributing guidelines
-- **[CLAUDE.md](CLAUDE.md)** - AI-assisted development guide
-- **[PHASES.md](PHASES.md)** - Detailed roadmap
-
-**What to contribute**:
-- 🐛 Bug fixes
-- ✨ New features
-- 📖 Documentation improvements
-- 💡 New examples
-- 🧪 Test coverage improvements
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## Author
+## Author & License
 
 **Vibe-engineered by [Lionel Hamayon](https://github.com/LionelHamayon)** 🍓
 
-Confiture was crafted with care as the migration tool for the FraiseQL ecosystem, combining the elegance of Python with the performance of Rust, and the sweetness of strawberry jam.
-
----
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-Copyright (c) 2025 Lionel Hamayon
-
----
-
-## Acknowledgments
-
-- Inspired by printoptim_backend's build-from-scratch approach
-- Built for [FraiseQL](https://github.com/fraiseql/fraiseql) GraphQL framework
-- Influenced by pgroll, Alembic, and Reshape
-- Developed with AI-assisted vibe engineering ✨
-
----
-
-## FraiseQL Ecosystem
-
-Confiture is part of the FraiseQL family:
-
-- **[FraiseQL](https://github.com/fraiseql/fraiseql)** - Modern GraphQL framework for Python
-- **[Confiture](https://github.com/fraiseql/confiture)** - PostgreSQL migration tool (you are here)
-
----
-
-## Quick Reference
-
-### Installation
-```bash
-pip install fraiseql-confiture>=0.3.13
-```
-
-### Quick Start
-```bash
-# Initialize project
-confiture init
-
-# Build database
-confiture build --env local
-
-# Validate seeds
-confiture seed validate --level 5
-
-# Check for coordination conflicts
-confiture coordinate check --tables users,posts
-```
-
-### Essential Links
-- 📦 **[PyPI Package](https://pypi.org/project/fraiseql-confiture/)**
-- 📚 **[Getting Started](docs/getting-started.md)**
-- 🌱 **[Seed Validation Guide](docs/guides/prep-seed-validation.md)**
-- 🤝 **[Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)**
-- 🔄 **[Migration Strategies](docs/guides/migration-decision-tree.md)**
-- 💬 **[GitHub Issues](https://github.com/fraiseql/confiture/issues)**
+MIT License - Copyright (c) 2025 Lionel Hamayon
 
 ---
 
 *Making jam from strawberries, one migration at a time.* 🍓→🍯
-
-*Vibe-engineered with ❤️ by Lionel Hamayon*
-
-Copyright (c) 2025 Lionel Hamayon • MIT License • Part of [FraiseQL](https://github.com/fraiseql/fraiseql)
