@@ -5,12 +5,10 @@ Tests for data models, pattern detection, and validation logic.
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed_validation.models import (
     SeedValidationPattern,
-    SeedViolation,
     SeedValidationReport,
+    SeedViolation,
 )
 
 
