@@ -901,8 +901,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: January 2026
-**Version**: 0.3.10 (Not Production-Tested)
+**Last Updated**: January 31, 2026
+**Version**: 0.3.13 (Not Production-Tested)
 
 ---
 
