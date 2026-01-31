@@ -40,13 +40,12 @@ def main() -> int:
 
     # Get level from command line (default: 5)
     max_level = 5
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--level" and len(sys.argv) > 2:
-            try:
-                max_level = int(sys.argv[2])
-            except ValueError:
-                print(f"❌ Invalid level: {sys.argv[2]}")
-                return 1
+    if len(sys.argv) > 1 and sys.argv[1] == "--level" and len(sys.argv) > 2:
+        try:
+            max_level = int(sys.argv[2])
+        except ValueError:
+            print(f"❌ Invalid level: {sys.argv[2]}")
+            return 1
 
     # Configure orchestrator
     script_dir = Path(__file__).parent
