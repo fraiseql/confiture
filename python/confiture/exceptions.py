@@ -4,6 +4,10 @@ All exceptions raised by Confiture inherit from ConfiturError.
 This allows users to catch all Confiture-specific errors with a single except clause.
 """
 
+from typing import Any
+
+from confiture.models.error import ErrorSeverity
+
 
 class ConfiturError(Exception):
     """Base exception for all Confiture errors
@@ -16,9 +20,82 @@ class ConfiturError(Exception):
         except ConfiturError as e:
             # Handle any Confiture error
             pass
+
+    Supports optional error codes for structured error handling:
+
+        try:
+            confiture.build()
+        except ConfiturError as e:
+            if e.error_code == "CONFIG_001":
+                # Handle missing configuration
+                pass
+
+    Attributes:
+        error_code: Machine-readable error code (e.g., "CONFIG_001")
+        severity: Error severity level (INFO, WARNING, ERROR, CRITICAL)
+        context: Additional context dict for error details
+        resolution_hint: Optional suggestion for resolving the error
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        """Initialize ConfiturError with optional error code support.
+
+        Args:
+            message: Human-readable error message
+            error_code: Optional machine-readable error code
+            severity: Optional error severity (defaults to ERROR)
+            context: Optional dict with error context
+            resolution_hint: Optional hint on how to resolve the error
+        """
+        super().__init__(message)
+        self.error_code = error_code
+        self.severity = severity or ErrorSeverity.ERROR
+        self.context = context or {}
+        self.resolution_hint = resolution_hint
+
+    def to_dict(self) -> dict[str, Any]:
+        """Get machine-readable representation of the error.
+
+        Returns:
+            Dict with error_code, severity, message, context, resolution_hint
+
+        Example:
+            >>> error = ConfiturError("test", error_code="CONFIG_001")
+            >>> error.to_dict()
+            {'error_code': 'CONFIG_001', 'severity': 'error', 'message': 'test', ...}
+        """
+        return {
+            "error_code": self.error_code,
+            "severity": self.severity.value,
+            "message": str(self),
+            "context": self.context,
+            "resolution_hint": self.resolution_hint,
+        }
+
+    @property
+    def exit_code(self) -> int:
+        """Get the process exit code for this error.
+
+        Returns exit code from error code registry if error_code is set,
+        otherwise returns 1 (generic error).
+
+        Returns:
+            Exit code (0-10)
+        """
+        if self.error_code:
+            from confiture.core.error_codes import ERROR_CODE_REGISTRY
+
+            definition = ERROR_CODE_REGISTRY.get(self.error_code)
+            return definition.exit_code
+        return 1
 
 
 class ConfigurationError(ConfiturError):
@@ -56,8 +133,19 @@ class MigrationError(ConfiturError):
         message: str,
         version: str | None = None,
         migration_name: str | None = None,
-    ):
-        super().__init__(message)
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code,
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
         self.version = version
         self.migration_name = migration_name
 
@@ -167,7 +255,12 @@ class SQLError(ConfiturError):
         sql: str,
         params: tuple[str, ...] | None,
         original_error: Exception,
-    ):
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
         self.sql = sql
         self.params = params
         self.original_error = original_error
@@ -189,7 +282,13 @@ class SQLError(ConfiturError):
         message_parts.append(f"Error: {original_error}")
 
         message = " | ".join(message_parts)
-        super().__init__(message)
+        super().__init__(
+            message,
+            error_code=error_code,
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class GitError(ConfiturError):

@@ -17,6 +17,7 @@ from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.seed import seed_app
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
+from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import (
     LintConfig as LinterConfig,
@@ -266,8 +267,8 @@ Documentation: https://github.com/evoludigit/confiture
         console.print("  3. Run 'confiture migrate diff' to detect changes")
 
     except Exception as e:
-        console.print(f"[red]❌ Error initializing project: {e}[/red]")
-        raise typer.Exit(1) from e
+        print_error_to_console(e)
+        raise typer.Exit(handle_cli_error(e)) from e
 
 
 @app.command()
@@ -367,12 +368,12 @@ def build(
         console.print("  • Or use: confiture migrate up")
 
     except FileNotFoundError as e:
-        console.print(f"[red]❌ File not found: {e}[/red]")
+        print_error_to_console(e)
         console.print("\n💡 Tip: Run 'confiture init' to create project structure")
-        raise typer.Exit(1) from e
+        raise typer.Exit(handle_cli_error(e)) from e
     except Exception as e:
-        console.print(f"[red]❌ Error building schema: {e}[/red]")
-        raise typer.Exit(1) from e
+        print_error_to_console(e)
+        raise typer.Exit(handle_cli_error(e)) from e
 
 
 @app.command()
@@ -483,12 +484,12 @@ def lint(
             raise typer.Exit(1)
 
     except FileNotFoundError as e:
-        console.print(f"[red]❌ File not found: {e}[/red]")
+        print_error_to_console(e)
         console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
-        raise typer.Exit(1) from e
+        raise typer.Exit(handle_cli_error(e)) from e
     except Exception as e:
-        console.print(f"[red]❌ Error linting schema: {e}[/red]")
-        raise typer.Exit(1) from e
+        print_error_to_console(e)
+        raise typer.Exit(handle_cli_error(e)) from e
 
 
 # Create migrate subcommand group
