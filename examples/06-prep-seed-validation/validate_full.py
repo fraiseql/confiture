@@ -116,8 +116,7 @@ def main() -> int:
                 print()
 
         # Exit with failure if critical
-        critical = [v for v in report.violations
-                    if v.severity == ViolationSeverity.CRITICAL]
+        critical = [v for v in report.violations if v.severity == ViolationSeverity.CRITICAL]
         if critical:
             print(f"❌ Validation failed: {len(critical)} critical violations")
             return 1

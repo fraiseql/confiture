@@ -129,9 +129,7 @@ class TestParseSchemaFiles:
 
         # Create a simple SQL file with a table definition
         sql_file = schema_dir / "tb_manufacturer.sql"
-        sql_file.write_text(
-            "CREATE TABLE catalog.tb_manufacturer (id UUID, name TEXT);"
-        )
+        sql_file.write_text("CREATE TABLE catalog.tb_manufacturer (id UUID, name TEXT);")
 
         config = OrchestrationConfig(
             max_level=2,
@@ -144,9 +142,7 @@ class TestParseSchemaFiles:
         prep_seed_tables, catalog_tables = orchestrator._parse_schema_files()
 
         # Should have parsed the table
-        assert "tb_manufacturer" in catalog_tables or prep_seed_tables or len(
-            catalog_tables
-        ) >= 0
+        assert "tb_manufacturer" in catalog_tables or prep_seed_tables or len(catalog_tables) >= 0
 
 
 class TestDiscoverResolutionFunctions:
@@ -230,19 +226,13 @@ class TestLevel2Integration:
         # Create a prep_seed table definition
         prep_seed_file = schema_dir / "prep_seed" / "tb_test.sql"
         prep_seed_file.parent.mkdir(parents=True)
-        prep_seed_file.write_text(
-            "CREATE TABLE prep_seed.tb_test (id UUID, fk_test_id BIGINT);"
-        )
+        prep_seed_file.write_text("CREATE TABLE prep_seed.tb_test (id UUID, fk_test_id BIGINT);")
 
         # Create a catalog table definition with trinity pattern
         catalog_file = schema_dir / "catalog" / "tb_test.sql"
         catalog_file.parent.mkdir(parents=True)
         catalog_file.write_text(
-            "CREATE TABLE catalog.tb_test ("
-            "  id UUID, "
-            "  pk_test BIGINT, "
-            "  fk_test BIGINT"
-            ");"
+            "CREATE TABLE catalog.tb_test (  id UUID,   pk_test BIGINT,   fk_test BIGINT);"
         )
 
         config = OrchestrationConfig(

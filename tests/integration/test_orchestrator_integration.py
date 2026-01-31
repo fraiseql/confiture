@@ -135,9 +135,7 @@ class TestOrchestratorLevel4:
 
         # Should detect missing table
         assert len(violations) > 0
-        assert any(
-            v.severity == ViolationSeverity.ERROR for v in violations
-        )
+        assert any(v.severity == ViolationSeverity.ERROR for v in violations)
 
     def test_level_4_connects_to_database(
         self,
@@ -322,9 +320,7 @@ class TestOrchestratorLevel5:
 
         # Should detect NULL FK
         null_fk_violations = [
-            v
-            for v in violations
-            if v.pattern == PrepSeedPattern.NULL_FK_AFTER_RESOLUTION
+            v for v in violations if v.pattern == PrepSeedPattern.NULL_FK_AFTER_RESOLUTION
         ]
         assert len(null_fk_violations) > 0
 
@@ -370,9 +366,7 @@ class TestOrchestratorLevel5:
 
         # Check before validation
         conn_before = psycopg.connect(test_db_url)
-        result_before = conn_before.execute(
-            "SELECT COUNT(*) FROM catalog.tb_manufacturer"
-        )
+        result_before = conn_before.execute("SELECT COUNT(*) FROM catalog.tb_manufacturer")
         count_before = result_before.fetchone()[0]
         conn_before.close()
 
@@ -382,9 +376,7 @@ class TestOrchestratorLevel5:
 
         # Check after validation (should be unchanged due to rollback)
         conn_after = psycopg.connect(test_db_url)
-        result_after = conn_after.execute(
-            "SELECT COUNT(*) FROM catalog.tb_manufacturer"
-        )
+        result_after = conn_after.execute("SELECT COUNT(*) FROM catalog.tb_manufacturer")
         count_after = result_after.fetchone()[0]
         conn_after.close()
 
