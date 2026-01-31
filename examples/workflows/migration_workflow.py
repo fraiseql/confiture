@@ -6,7 +6,6 @@ Demonstrates how to use Phase 1-3 systems together for a safe migration:
 - Phase 3: Retry and recovery with workflow orchestration
 """
 
-from confiture.workflows.retry import RetryPolicy, with_retry
 from confiture.workflows.orchestrator import Workflow
 
 

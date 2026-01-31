@@ -1,7 +1,6 @@
 """Error decision trees for agent-driven error handling."""
 
 
-
 class DecisionTree:
     """Decision tree for error classification and action selection."""
 
