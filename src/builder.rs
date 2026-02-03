@@ -2,6 +2,16 @@
 //!
 //! This module provides 10-50x faster schema building compared to Python
 //! by using parallel file I/O and pre-allocated string buffers.
+//!
+//! ## Newline Handling
+//!
+//! The builder ensures POSIX-compliant output by:
+//! - Adding newlines between file content and separators (loop check)
+//! - Ensuring final output ends with newline (defensive check)
+//! - Preventing SQL parsing issues from files without trailing newlines
+//!
+//! This matches Python fallback behavior and prevents issues with
+//! PL/pgSQL functions using dollar-quoted strings ($$...$$).
 
 #![allow(clippy::useless_conversion)]
 
@@ -70,6 +80,13 @@ pub fn build_schema(files: Vec<String>) -> PyResult<String> {
         if !content.ends_with('\n') {
             output.push('\n');
         }
+    }
+
+    // Defensive: Ensure final output ends with newline per POSIX standard.
+    // Files without trailing newlines are common in generated code
+    // and large refactors. This prevents SQL parsing issues.
+    if !output.ends_with('\n') {
+        output.push('\n');
     }
 
     Ok(output)
@@ -177,5 +194,48 @@ mod tests {
 
         // Should add trailing newlines
         assert!(result.ends_with("\n\n") || result.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_multiple_files_without_trailing_newlines() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let file1 = temp_dir.path().join("file1.sql");
+        let file2 = temp_dir.path().join("file2.sql");
+        let file3 = temp_dir.path().join("file3.sql");
+
+        // Write files WITHOUT trailing newlines (edge case)
+        fs::write(&file1, "CREATE TABLE users (id INT);").unwrap();
+        fs::write(
+            &file2,
+            "CREATE FUNCTION test() RETURNS INT AS $$ BEGIN RETURN 1; END $$;",
+        )
+        .unwrap();
+        fs::write(&file3, "INSERT INTO users VALUES (1);").unwrap();
+
+        let result = build_schema(vec![
+            file1.to_str().unwrap().to_string(),
+            file2.to_str().unwrap().to_string(),
+            file3.to_str().unwrap().to_string(),
+        ])
+        .unwrap();
+
+        // Output must end with exactly one newline per POSIX standard
+        assert!(result.ends_with('\n'), "Output should end with newline");
+        assert!(
+            !result.ends_with("\n\n"),
+            "Output should not end with double newline"
+        );
+
+        // Last statement should be followed by single newline
+        assert!(
+            result.trim_end().ends_with(';'),
+            "Last statement should end with semicolon"
+        );
+
+        // Verify all files are present
+        assert!(result.contains("CREATE TABLE users"));
+        assert!(result.contains("CREATE FUNCTION test"));
+        assert!(result.contains("INSERT INTO users"));
     }
 }

@@ -285,6 +285,44 @@ database_url: postgresql://localhost/test
         # Should add newline
         assert schema.endswith("\n")
 
+    def test_build_multiple_files_without_trailing_newlines(self, tmp_path):
+        """Test multiple files without trailing newlines produce valid output."""
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Create 3 files without trailing newlines
+        (schema_dir / "01_file1.sql").write_text("CREATE TABLE users (id INT);")
+        (schema_dir / "02_file2.sql").write_text(
+            "CREATE FUNCTION test() RETURNS INT AS $$ BEGIN RETURN 1; END $$;"
+        )
+        (schema_dir / "03_file3.sql").write_text("INSERT INTO users VALUES (1);")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema = builder.build()
+
+        # Output should end with exactly one newline per POSIX standard
+        assert schema.endswith("\n"), "Output should end with newline"
+        assert not schema.endswith("\n\n"), "Output should not end with double newline"
+
+        # Last statement should be followed by single newline
+        assert schema.strip().endswith(";"), "Last statement should end with semicolon"
+
+        # Verify all files are present
+        assert "CREATE TABLE users" in schema
+        assert "CREATE FUNCTION test" in schema
+        assert "INSERT INTO users" in schema
+
     def test_build_with_multiple_include_dirs(self, tmp_path):
         """Test building with multiple include directories."""
         schema_dir = tmp_path / "db" / "schema"
@@ -337,3 +375,129 @@ database_url: postgresql://localhost/test
         # Should contain relative path in file header
         assert "File:" in schema
         assert "test.sql" in schema
+
+    def test_build_empty_file_handling(self, tmp_path):
+        """Test build handles empty files correctly."""
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Create empty file and regular file
+        (schema_dir / "01_empty.sql").write_text("")
+        (schema_dir / "02_regular.sql").write_text("CREATE TABLE test (id INT);")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema = builder.build()
+
+        # Output must end with newline
+        assert schema.endswith("\n"), "Output should end with newline"
+        assert not schema.endswith("\n\n\n"), "Should not have excessive newlines"
+
+    def test_build_whitespace_only_file(self, tmp_path):
+        """Test build handles whitespace-only files correctly."""
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Whitespace-only file
+        (schema_dir / "01_whitespace.sql").write_text("   \n")
+        (schema_dir / "02_regular.sql").write_text("CREATE TABLE test (id INT);")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema = builder.build()
+
+        # Output must end with exactly one newline
+        assert schema.endswith("\n"), "Output should end with newline"
+        assert not schema.endswith("\n\n\n"), "Should not have excessive newlines"
+
+    def test_build_mixed_trailing_newlines(self, tmp_path):
+        """Test build with mixed file newline endings."""
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Mix of files with and without trailing newlines
+        (schema_dir / "01_with_newline.sql").write_text("CREATE TABLE t1 (id INT);\n")
+        (schema_dir / "02_without_newline.sql").write_text("CREATE TABLE t2 (id INT);")
+        (schema_dir / "03_with_newline.sql").write_text("CREATE TABLE t3 (id INT);\n")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema = builder.build()
+
+        # Output must end with exactly one newline
+        assert schema.endswith("\n"), "Output should end with newline"
+        assert not schema.endswith("\n\n"), "Output should not end with double newline"
+
+        # All tables should be present
+        assert "CREATE TABLE t1" in schema
+        assert "CREATE TABLE t2" in schema
+        assert "CREATE TABLE t3" in schema
+
+    def test_build_dollar_quoted_functions(self, tmp_path):
+        """Test build with PL/pgSQL functions using dollar-quoted strings."""
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # PL/pgSQL function with dollar-quoted string (no trailing newline)
+        plpgsql_func = """CREATE FUNCTION test_func() RETURNS INT AS $$
+BEGIN
+  RETURN 1;
+END
+$$ LANGUAGE plpgsql;"""
+
+        (schema_dir / "01_tables.sql").write_text("CREATE TABLE test (id INT);")
+        (schema_dir / "02_function.sql").write_text(plpgsql_func)
+        (schema_dir / "03_trigger.sql").write_text("CREATE TRIGGER test_trigger BEFORE INSERT ON test FOR EACH ROW EXECUTE FUNCTION test_func();")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema = builder.build()
+
+        # Output must end with exactly one newline
+        assert schema.endswith("\n"), "Output should end with newline"
+
+        # All statements should be present
+        assert "CREATE TABLE test" in schema
+        assert "CREATE FUNCTION test_func" in schema
+        assert "LANGUAGE plpgsql" in schema
+        assert "CREATE TRIGGER test_trigger" in schema
