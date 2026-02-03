@@ -9,9 +9,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 # Thread-local context var for storing current context
-_context_var: ContextVar[Optional["AgentContext"]] = ContextVar(
-    "agent_context", default=None
-)
+_context_var: ContextVar[Optional["AgentContext"]] = ContextVar("agent_context", default=None)
 
 
 @dataclass

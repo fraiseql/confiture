@@ -1,7 +1,5 @@
 """Tests for error decision trees."""
 
-import pytest
-
 from confiture.workflows.decisions import DecisionTree
 
 

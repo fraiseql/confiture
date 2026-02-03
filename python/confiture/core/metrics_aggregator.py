@@ -62,9 +62,7 @@ class MetricsAggregator:
 
         # Simple filter implementation
         if time_window:
-            count = self.metrics.count_since(
-                time_window, code=code, category=category
-            )
+            count = self.metrics.count_since(time_window, code=code, category=category)
             result["results"]["count"] = count
         else:
             if code:

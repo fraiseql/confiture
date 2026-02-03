@@ -477,7 +477,9 @@ $$ LANGUAGE plpgsql;"""
 
         (schema_dir / "01_tables.sql").write_text("CREATE TABLE test (id INT);")
         (schema_dir / "02_function.sql").write_text(plpgsql_func)
-        (schema_dir / "03_trigger.sql").write_text("CREATE TRIGGER test_trigger BEFORE INSERT ON test FOR EACH ROW EXECUTE FUNCTION test_func();")
+        (schema_dir / "03_trigger.sql").write_text(
+            "CREATE TRIGGER test_trigger BEFORE INSERT ON test FOR EACH ROW EXECUTE FUNCTION test_func();"
+        )
 
         config_dir = tmp_path / "db" / "environments"
         config_dir.mkdir(parents=True)

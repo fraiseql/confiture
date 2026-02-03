@@ -1,8 +1,6 @@
 """Tests for workflow orchestration."""
 
-import pytest
-
-from confiture.workflows.orchestrator import Workflow, WorkflowResult
+from confiture.workflows.orchestrator import Workflow
 
 
 class TestWorkflowExecution:

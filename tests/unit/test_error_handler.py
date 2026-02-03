@@ -3,8 +3,6 @@
 Tests error formatting and exit code handling for CLI output.
 """
 
-import pytest
-
 from confiture.core.error_handler import format_error_for_cli, handle_cli_error
 from confiture.exceptions import (
     ConfigurationError,
@@ -143,7 +141,7 @@ class TestHandleCliError:
         """Test that different error codes map to correct exit codes."""
         test_cases = [
             ("CONFIG_001", 2),  # Configuration error
-            ("MIGR_100", 3),    # Migration error
+            ("MIGR_100", 3),  # Migration error
             ("SCHEMA_200", 4),  # Schema error
         ]
 

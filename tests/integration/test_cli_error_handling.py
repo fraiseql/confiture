@@ -4,9 +4,6 @@ Tests that CLI commands use the error handler and exit with correct codes.
 """
 
 import subprocess
-from pathlib import Path
-
-import pytest
 
 
 class TestCliExitCodes:

@@ -4,16 +4,13 @@ Tests the ErrorMetrics class for tracking and aggregating error statistics
 by category, severity, and error code.
 """
 
-from datetime import datetime, timedelta
-
-import pytest
+from datetime import timedelta
 
 from confiture.core.metrics import ErrorMetrics
 from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
     MigrationError,
-    SQLError,
 )
 
 
@@ -169,9 +166,7 @@ class TestTimestampTracking:
         metrics = ErrorMetrics()
         error = ConfiturError("Test")
 
-        before = datetime.utcnow()
         metrics.record(error)
-        after = datetime.utcnow()
 
         # Should have recorded the error
         assert metrics.total_count() == 1

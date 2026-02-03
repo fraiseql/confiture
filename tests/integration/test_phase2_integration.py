@@ -3,14 +3,12 @@
 Tests the integration of logging, metrics, and context with Phase 1 error codes.
 """
 
-from io import StringIO
 import json
+from io import StringIO
 
-import pytest
-
+from confiture.core.context import AgentContext, get_context
 from confiture.core.logging import StructuredLogger
 from confiture.core.metrics import ErrorMetrics
-from confiture.core.context import AgentContext, set_context, get_context
 from confiture.core.metrics_aggregator import MetricsAggregator
 from confiture.exceptions import ConfigurationError, MigrationError
 

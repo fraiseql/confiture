@@ -4,8 +4,6 @@ Tests the AgentContext for tracking workflow state, request IDs, and
 operation context throughout error handling.
 """
 
-import pytest
-
 from confiture.core.context import AgentContext, get_context, set_context
 
 

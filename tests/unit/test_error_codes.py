@@ -4,8 +4,6 @@ This module tests the error code system that enables deterministic
 error handling for agent workflows.
 """
 
-from dataclasses import dataclass
-
 import pytest
 
 from confiture.core.error_codes import (
@@ -13,7 +11,7 @@ from confiture.core.error_codes import (
     ErrorCodeDefinition,
     ErrorCodeRegistry,
 )
-from confiture.exceptions import ConfigurationError, MigrationError, SQLError
+from confiture.exceptions import ConfigurationError
 from confiture.models.error import ErrorSeverity
 
 

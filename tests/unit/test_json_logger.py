@@ -4,13 +4,10 @@ Tests the StructuredLogger for JSON-formatted error logging with context,
 error codes, severity levels, and timestamps.
 """
 
-from datetime import datetime
-from io import StringIO
 import json
+from io import StringIO
 
-import pytest
-
-from confiture.core.logging import StructuredLogger, LogOutput, LogLevel
+from confiture.core.logging import LogLevel, StructuredLogger
 from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
@@ -119,10 +116,8 @@ class TestJsonErrorLogging:
         output = StringIO()
         logger = StructuredLogger(output=output)
 
-        before = datetime.utcnow().isoformat()
         error = ConfiturError("Test")
         logger.log_error(error)
-        after = datetime.utcnow().isoformat()
 
         log_line = output.getvalue().strip()
         json_data = json.loads(log_line)

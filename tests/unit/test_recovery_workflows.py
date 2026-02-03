@@ -3,14 +3,12 @@
 Tests recovery strategies for each error code category.
 """
 
-import pytest
-
+from confiture.exceptions import ConfigurationError, MigrationError
 from confiture.workflows.recovery import (
-    RecoveryHandler,
     RecoveryAction,
+    RecoveryHandler,
     get_recovery_handler,
 )
-from confiture.exceptions import ConfigurationError, MigrationError
 
 
 class TestRecoveryAction:

@@ -3,13 +3,11 @@
 Tests complete workflow pipelines with Phase 1-3 integration.
 """
 
-import pytest
-
-from confiture.workflows.retry import RetryPolicy, with_retry
-from confiture.workflows.recovery import get_recovery_handler
-from confiture.workflows.orchestrator import Workflow
+from confiture.exceptions import ConfigurationError
 from confiture.workflows.decisions import DecisionTree
-from confiture.exceptions import ConfigurationError, MigrationError
+from confiture.workflows.orchestrator import Workflow
+from confiture.workflows.recovery import get_recovery_handler
+from confiture.workflows.retry import RetryPolicy, with_retry
 
 
 class TestPhase3Integration:

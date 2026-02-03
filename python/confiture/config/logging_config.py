@@ -39,9 +39,7 @@ class LoggingConfig:
 
     level: Literal["debug", "info", "warning", "error"] = "info"
     format: Literal["json", "text"] = "json"
-    outputs: list[OutputConfig] = field(
-        default_factory=lambda: [OutputConfig(type="stdout")]
-    )
+    outputs: list[OutputConfig] = field(default_factory=lambda: [OutputConfig(type="stdout")])
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     include_context: bool = True
     include_timestamp: bool = True

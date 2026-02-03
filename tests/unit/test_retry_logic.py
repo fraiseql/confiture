@@ -4,15 +4,14 @@ Tests the RetryPolicy and retry mechanism for handling transient failures
 with exponential backoff and jitter.
 """
 
-import time
 from datetime import datetime, timedelta
 
 import pytest
 
 from confiture.workflows.retry import (
+    RetryExhausted,
     RetryPolicy,
     with_retry,
-    RetryExhausted,
 )
 
 
@@ -141,17 +140,17 @@ class TestRetryDecorator:
     def test_retry_with_custom_max_attempts(self) -> None:
         """Test retry with different max_attempts values."""
         for max_attempts in [1, 2, 5]:
-            attempts = [0]
+            attempt_count = [0]
 
             @with_retry(RetryPolicy(max_attempts=max_attempts, initial_delay=0.01))
-            def fails_always():
-                attempts[0] += 1
+            def fails_always() -> None:
+                attempt_count[0] += 1  # noqa: B023 - intentional loop var capture via list
                 raise ValueError("fail")
 
             with pytest.raises(RetryExhausted):
                 fails_always()
 
-            assert attempts[0] == max_attempts
+            assert attempt_count[0] == max_attempts
 
 
 class TestRetryWithDeadline:
