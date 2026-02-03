@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.3.14
-**Last Updated**: January 31, 2026
+**Version**: 0.3.15
+**Last Updated**: February 3, 2026
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -776,9 +776,9 @@ Closes #123
 - ✅ Catches NULL FKs, constraint violations, schema drift
 
 **Test Metrics**:
-- **Tests**: 3,200+ passing (including 22 new orchestrator tests + 86 seed validation tests)
+- **Tests**: 3,170+ passing
 - **Python Support**: 3.11, 3.12, 3.13
-- **Documentation**: Comprehensive (with orchestrator guide)
+- **Documentation**: Comprehensive with guides and API references
 
 **Not Validated**:
 - ❌ Production usage
@@ -901,8 +901,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: January 31, 2026
-**Version**: 0.3.14 (Not Production-Tested)
+**Last Updated**: February 3, 2026
+**Version**: 0.3.15 (Not Production-Tested)
 
 ---
 

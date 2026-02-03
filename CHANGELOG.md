@@ -5,9 +5,21 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.13] - 2026-01-31
+## [0.3.15] - 2026-02-03
+
+### Fixed
+
+- **Rust Schema Builder Trailing Newline Bug** - Fixed issue where SQL files without trailing newlines could produce invalid SQL when concatenated
+  - Added defensive check to ensure final output always ends with newline per POSIX standard
+  - Prevents SQL parsing issues with PL/pgSQL dollar-quoted functions (`$$...$$`)
+  - Handles edge cases: empty files, whitespace-only files, mixed newline scenarios
+  - Added 8 comprehensive edge case tests to catch similar issues
+  - Rust and Python implementations now have identical behavior for all file variations
+  - Particularly important for large codebases with auto-generated SQL files (e.g., 376+ files)
 
 ## [0.3.14] - 2026-01-31
+
+## [0.3.13] - 2026-01-31
 
 ## [Unreleased]
 
