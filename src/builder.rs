@@ -66,10 +66,18 @@ pub fn build_schema(files: Vec<String>) -> PyResult<String> {
         // Add file content
         output.push_str(&content);
 
-        // Ensure newline at end
+        // Ensure newline at end (POSIX convention)
+        // This is critical for proper SQL concatenation
         if !content.ends_with('\n') {
             output.push('\n');
         }
+    }
+
+    // Ensure the entire output ends with a newline (POSIX standard)
+    // This prevents issues where the last file without a newline causes
+    // the schema to not end properly
+    if !output.ends_with('\n') {
+        output.push('\n');
     }
 
     Ok(output)
@@ -177,5 +185,40 @@ mod tests {
 
         // Should add trailing newlines
         assert!(result.ends_with("\n\n") || result.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_build_schema_multiple_files_without_newlines() {
+        // Regression test: Ensure files without trailing newlines don't break concatenation
+        let temp_dir = TempDir::new().unwrap();
+
+        let file1 = temp_dir.path().join("01_function.sql");
+        let file2 = temp_dir.path().join("02_insert.sql");
+        let file3 = temp_dir.path().join("03_grant.sql");
+
+        // All files WITHOUT trailing newlines (common with generated code)
+        fs::write(&file1, "CREATE OR REPLACE FUNCTION test() AS $$\nBEGIN\n  RETURN 1;\nEND;\n$$;").unwrap();
+        fs::write(&file2, "INSERT INTO test VALUES (1), (2), (3);").unwrap();
+        fs::write(&file3, "GRANT SELECT ON test TO public;").unwrap();
+
+        let result = build_schema(vec![
+            file1.to_str().unwrap().to_string(),
+            file2.to_str().unwrap().to_string(),
+            file3.to_str().unwrap().to_string(),
+        ])
+        .unwrap();
+
+        // Check structure is maintained
+        assert!(result.contains("CREATE OR REPLACE FUNCTION test()"));
+        assert!(result.contains("INSERT INTO test VALUES"));
+        assert!(result.contains("GRANT SELECT ON test"));
+
+        // Verify proper separation
+        let fn_end = result.find("$$;").unwrap();
+        let insert_start = result.find("INSERT INTO").unwrap();
+        assert!(fn_end < insert_start);
+
+        // Ensure final newline exists
+        assert!(result.ends_with('\n'));
     }
 }
