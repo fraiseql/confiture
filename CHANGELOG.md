@@ -5,6 +5,44 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.16] - 2026-02-04
+
+### Added
+
+- **Enhanced `confiture migrate generate` Command** - Critical safety validations and agent-friendly features
+  - **Safety Validations**: Duplicate version detection, file existence checks, name conflict detection, concurrent creation protection with file locking
+  - **Agent-Friendly Features**: JSON output format (`--format json`), dry-run mode (`--dry-run`), verbose debugging (`--verbose`)
+  - **Comprehensive Testing**: 32 new tests (17 unit + 15 integration), 100% passing with no regressions
+  - **Documentation**: Complete guide with examples for all features, safety patterns, and CI/CD automation
+
+### Details
+
+**Validation Safety**:
+- Detects duplicate version numbers and warns users
+- Prevents accidental file overwrites
+- Detects same migration name in different versions
+- File locking prevents race conditions in CI/CD pipelines
+
+**Agent Features**:
+- `--format json` outputs structured JSON for programmatic parsing
+- `--dry-run` previews migration without creating files
+- `--verbose` shows version calculation and directory scanning details
+
+**Quality**:
+- 17 new unit tests for validation logic
+- 15 new integration tests for CLI features
+- 431 migration-related tests passing
+- 3,248 unit tests with zero regressions
+- All linting checks pass
+
+**Documentation**:
+- New "Generating Migration Files" section in incremental migrations guide
+- Examples for dry-run, verbose, and JSON modes
+- Safety features documentation
+- CI/CD automation patterns
+
+**Backward Compatibility**: ✅ 100% backward compatible - text output remains default
+
 ## [0.3.15] - 2026-02-03
 
 ### Fixed
