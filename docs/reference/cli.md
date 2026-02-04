@@ -102,6 +102,14 @@ confiture build [OPTIONS]
 | `--project-dir` | - | Path | `.` | Project directory containing `db/` folder |
 | `--show-hash` | - | Flag | `false` | Display schema content hash after build |
 | `--schema-only` | - | Flag | `false` | Build schema only, exclude seed data |
+| `--validate-comments` | - | Flag | from env config | Override: enable comment validation |
+| `--no-validate-comments` | - | Flag | from env config | Override: disable comment validation |
+| `--fail-on-unclosed` | - | Flag | from env config | Override: fail on unclosed block comments |
+| `--no-fail-on-unclosed` | - | Flag | from env config | Override: don't fail on unclosed comments |
+| `--fail-on-spillover` | - | Flag | from env config | Override: fail on comment spillover |
+| `--no-fail-on-spillover` | - | Flag | from env config | Override: don't fail on spillover |
+| `--separator-style` | - | String | from env config | Override separator style (block_comment, line_comment, mysql, custom) |
+| `--separator-template` | - | String | from env config | Custom separator template with {file_path} placeholder |
 
 ### How It Works
 
@@ -135,6 +143,64 @@ confiture build --schema-only
 # Build from different project directory
 confiture build --project-dir /path/to/project
 ```
+
+### Comment Validation Flags
+
+Override environment configuration for SQL comment validation:
+
+```bash
+# Enable comment validation (catches concatenation errors)
+confiture build --validate-comments
+
+# Disable comment validation
+confiture build --no-validate-comments
+
+# Strict validation: fail on unclosed block comments
+confiture build --validate-comments --fail-on-unclosed
+
+# Strict validation: fail if comment spills into next file
+confiture build --validate-comments --fail-on-spillover
+
+# Comprehensive validation
+confiture build --validate-comments --fail-on-unclosed --fail-on-spillover
+```
+
+**When to use:**
+- Use `--validate-comments` in CI/CD to catch schema concatenation issues early
+- Use `--no-validate-comments` for legacy schemas with known comment issues
+- Use `--fail-on-*` flags for strict production builds
+
+### Separator Style Flags
+
+Configure how files are separated in concatenated output:
+
+```bash
+# Block comment separators (safest, default)
+confiture build --separator-style block_comment
+# Result: /* File: db/schema/01_tables.sql */
+
+# Line comment separators (faster, less visible)
+confiture build --separator-style line_comment
+# Result: -- File: db/schema/01_tables.sql
+
+# MySQL-compatible separators
+confiture build --separator-style mysql
+
+# Custom separators with template
+confiture build --separator-style custom --separator-template "\n/* {file_path} */\n"
+
+# Override just the template (uses custom style if configured)
+confiture build --separator-template "\n/* ===== {file_path} ===== */\n"
+```
+
+**Available styles:**
+- `block_comment` - SQL block comments (/* ... */) - safest, most visible
+- `line_comment` - SQL line comments (--) - faster, less visible
+- `mysql` - MySQL-compatible separators
+- `custom` - Custom template (requires `--separator-template`)
+
+**Template placeholders:**
+- `{file_path}` - Relative path to the SQL file
 
 ### Output Format
 
@@ -188,6 +254,32 @@ database:
 - **CI/CD**: Build test databases quickly
 - **Disaster recovery**: Recreate production schema
 - **Documentation**: Generate single-file schema snapshot
+
+### CI/CD Patterns
+
+**Strict build for CI/CD:**
+```bash
+# Validate comments and use safe separators
+confiture build --env ci --validate-comments --separator-style block_comment
+```
+
+**Production build (trust CI validation):**
+```bash
+# Skip validation for speed, but keep safe separators
+confiture build --env production --no-validate-comments --separator-style block_comment
+```
+
+**Local development (permissive):**
+```bash
+# No validation, faster build
+confiture build --env local --no-validate-comments
+```
+
+**Legacy schema support:**
+```bash
+# Disable strict checks for compatibility
+confiture build --env legacy --no-validate-comments --no-fail-on-unclosed --no-fail-on-spillover
+```
 
 ---
 

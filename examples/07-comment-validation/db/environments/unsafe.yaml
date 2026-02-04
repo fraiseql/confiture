@@ -1,0 +1,10 @@
+name: unsafe
+database_url: "postgresql://localhost/example_comment_unsafe"
+include_dirs:
+  - db/schema
+
+build:
+  validate_comments:
+    enabled: false  # UNSAFE! No comment validation
+  separators:
+    style: block_comment

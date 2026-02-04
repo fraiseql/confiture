@@ -476,11 +476,59 @@ confiture lint --env local
 confiture build --env local
 ```
 
-### Disable Validation
+Uses validation settings from `db/environments/local.yaml`.
+
+### Override Validation Settings
+
+You can override environment config with CLI flags:
+
+#### Enable/Disable Comment Validation
 
 ```bash
-# Note: validation is controlled by config, not CLI flags (yet)
-# Edit your environment config instead
+# Enable validation (override config)
+confiture build --validate-comments
+
+# Disable validation (override config)
+confiture build --no-validate-comments
+```
+
+#### Control Failure Behavior
+
+```bash
+# Fail on unclosed block comments
+confiture build --validate-comments --fail-on-unclosed
+
+# Fail on comment spillover (comments spanning files)
+confiture build --validate-comments --fail-on-spillover
+
+# Both strict checks
+confiture build --validate-comments --fail-on-unclosed --fail-on-spillover
+```
+
+#### Override Separator Style
+
+```bash
+# Use block comment separators (safest)
+confiture build --separator-style block_comment
+
+# Use line comment separators (faster)
+confiture build --separator-style line_comment
+
+# Use custom separators
+confiture build --separator-style custom --separator-template "\n/* {file_path} */\n"
+```
+
+### CI/CD Examples
+
+```bash
+# Strict validation for CI/CD builds
+confiture build --env ci --validate-comments --fail-on-unclosed --fail-on-spillover
+
+# Production build (trust CI validation, skip for speed)
+confiture build --env production --no-validate-comments
+
+# Development (permissive)
+confiture build --env local --no-validate-comments
 ```
 
 ### Run Specific Environment

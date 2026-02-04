@@ -1,0 +1,12 @@
+name: local
+database_url: "postgresql://localhost/example_comment_local"
+include_dirs:
+  - db/schema
+
+build:
+  validate_comments:
+    enabled: true  # Validation enabled for local
+    fail_on_unclosed_blocks: true
+    fail_on_spillover: true
+  separators:
+    style: block_comment

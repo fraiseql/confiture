@@ -5,6 +5,44 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.17] - 2026-02-04
+
+### Added
+
+- **CLI Flags for Comment Validation & File Separators** - Issue #28
+  - **Comment Validation Flags**: `--validate-comments`, `--no-validate-comments`, `--fail-on-unclosed`, `--fail-on-spillover`
+  - **Separator Style Flags**: `--separator-style` (block_comment, line_comment, mysql, custom), `--separator-template`
+  - **CLI Flag Overrides**: All flags override environment config when provided, with visual confirmation
+  - **Comprehensive Testing**: 13 new unit tests covering all flag combinations and edge cases
+  - **Documentation**: Updated CLI reference with new flags, added CI/CD patterns, enhanced build-validation guide
+  - **Example Project**: New `examples/07-comment-validation/` with README and automated test scenarios
+
+### Details
+
+**Features**:
+- Comment validation can now be toggled per-build with `--validate-comments` / `--no-validate-comments`
+- Stricter modes: `--fail-on-unclosed` and `--fail-on-spillover` for production builds
+- Separator style can be overridden: `--separator-style block_comment|line_comment|mysql|custom`
+- Custom separator templates: `--separator-template "\\n/* {file_path} */\\n"`
+- Visual confirmation when CLI flags override config
+
+**Testing**:
+- 13 new unit tests for CLI flag behavior
+- 12 integration tests for validation pipeline
+- 3,748 total tests passing
+- All flag combinations tested
+- Invalid input validation tested
+
+**Documentation**:
+- CLI reference updated with complete options table
+- Comment Validation Flags section with 6 examples
+- Separator Style Flags section with 4 examples
+- CI/CD Patterns section showing production workflows
+- Build validation guide enhanced with CLI override examples
+- Example project demonstrates real-world scenarios
+
+**Backward Compatibility**: ✅ 100% backward compatible - all flags optional, environment config as default
+
 ## [0.3.16] - 2026-02-04
 
 ### Added

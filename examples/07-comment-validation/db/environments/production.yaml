@@ -1,0 +1,12 @@
+name: production
+database_url: "postgresql://prod.example.com/database"
+include_dirs:
+  - db/schema
+
+build:
+  validate_comments:
+    enabled: true  # Always validate in production
+    fail_on_unclosed_blocks: true
+    fail_on_spillover: true
+  separators:
+    style: block_comment  # Safest, most visible

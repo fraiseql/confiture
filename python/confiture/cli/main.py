@@ -301,6 +301,31 @@ def build(
         "--schema-only",
         help="Build schema only, exclude seed data",
     ),
+    validate_comments: bool | None = typer.Option(
+        None,
+        "--validate-comments/--no-validate-comments",
+        help="Override: enable/disable comment validation",
+    ),
+    fail_on_unclosed: bool | None = typer.Option(
+        None,
+        "--fail-on-unclosed/--no-fail-on-unclosed",
+        help="Override: fail on unclosed block comments",
+    ),
+    fail_on_spillover: bool | None = typer.Option(
+        None,
+        "--fail-on-spillover/--no-fail-on-spillover",
+        help="Override: fail on comment spillover into next file",
+    ),
+    separator_style: str | None = typer.Option(
+        None,
+        "--separator-style",
+        help="Override separator style: block_comment, line_comment, mysql, custom",
+    ),
+    separator_template: str | None = typer.Option(
+        None,
+        "--separator-template",
+        help="Custom separator template with {file_path} placeholder",
+    ),
 ) -> None:
     """Build complete schema from DDL files.
 
@@ -310,10 +335,23 @@ def build(
 
     The build process:
     1. Reads environment configuration (db/environments/{env}.yaml)
-    2. Discovers all .sql files in configured include_dirs
-    3. Concatenates files in alphabetical order
-    4. Adds metadata headers (environment, file count, timestamp)
-    5. Writes to output file (default: db/generated/schema_{env}.sql)
+    2. Validates SQL comments (optional, catches concatenation errors)
+    3. Discovers all .sql files in configured include_dirs
+    4. Concatenates files in alphabetical order
+    5. Adds file separators (configurable style)
+    6. Adds metadata headers (environment, file count, timestamp)
+    7. Writes to output file (default: db/generated/schema_{env}.sql)
+
+    Comment Validation:
+    Detects unclosed block comments that would corrupt concatenated schemas.
+    By default uses environment config, but can be overridden with --validate-comments.
+
+    File Separators:
+    Controls how files are separated in concatenated output. Available styles:
+    - block_comment: SQL block comments (/* ... */) - default, safest
+    - line_comment: SQL line comments (--) - faster, less visible
+    - mysql: MySQL-compatible separators
+    - custom: Use custom template with {file_path} placeholder
 
     Examples:
         # Build local environment schema
@@ -325,12 +363,79 @@ def build(
         # Custom output location
         confiture build --output /tmp/schema.sql
 
+        # Enable comment validation
+        confiture build --validate-comments
+
+        # Use block comment separators (safest)
+        confiture build --separator-style block_comment
+
+        # Custom separators
+        confiture build --separator-style custom --separator-template "\\n/* {file_path} */\\n"
+
         # Show hash for change detection
         confiture build --show-hash
     """
     try:
         # Create schema builder
         builder = SchemaBuilder(env=env, project_dir=project_dir)
+
+        # Apply CLI overrides for comment validation
+        if validate_comments is not None:
+            builder.env_config.build.validate_comments.enabled = validate_comments
+        if fail_on_unclosed is not None:
+            builder.env_config.build.validate_comments.fail_on_unclosed_blocks = fail_on_unclosed
+        if fail_on_spillover is not None:
+            builder.env_config.build.validate_comments.fail_on_spillover = fail_on_spillover
+
+        # Apply CLI overrides for separator style
+        if separator_style is not None:
+            # Validate separator style
+            valid_styles = ["block_comment", "line_comment", "mysql", "custom"]
+            if separator_style not in valid_styles:
+                console.print(f"[red]❌ Invalid separator style: {separator_style}[/red]")
+                console.print(f"   Valid options: {', '.join(valid_styles)}")
+                raise typer.Exit(1)
+            builder.env_config.build.separators.style = separator_style
+
+        # Apply custom template if provided
+        if separator_template is not None:
+            builder.env_config.build.separators.custom_template = separator_template
+
+        # Validate custom template requirement
+        if (
+            separator_style == "custom"
+            and not separator_template
+            and not builder.env_config.build.separators.custom_template
+        ):
+            console.print("[red]❌ Custom separator style requires --separator-template[/red]")
+            raise typer.Exit(1)
+
+        # Show overrides if any were applied
+        overrides_applied = any(
+            [
+                validate_comments is not None,
+                fail_on_unclosed is not None,
+                fail_on_spillover is not None,
+                separator_style is not None,
+                separator_template is not None,
+            ]
+        )
+        if overrides_applied:
+            console.print("[cyan]📝 Configuration overrides applied:[/cyan]")
+            if validate_comments is not None:
+                console.print(f"  • Comment validation: {validate_comments}")
+            if fail_on_unclosed is not None:
+                console.print(f"  • Fail on unclosed blocks: {fail_on_unclosed}")
+            if fail_on_spillover is not None:
+                console.print(f"  • Fail on spillover: {fail_on_spillover}")
+            if separator_style is not None:
+                console.print(f"  • Separator style: {separator_style}")
+            if separator_template is not None:
+                console.print(
+                    f"  • Custom template: {separator_template[:50]}..."
+                    if len(separator_template or "") > 50
+                    else f"  • Custom template: {separator_template}"
+                )
 
         # Override to exclude seeds if --schema-only is specified
         if schema_only:
