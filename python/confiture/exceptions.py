@@ -320,6 +320,68 @@ class NotAGitRepositoryError(GitError):
     pass
 
 
+class MigrationConflictError(MigrationError):
+    """Migration version or name conflicts detected
+
+    Raised when:
+    - Multiple migration files have the same version number
+    - Multiple migration files have the same name with different versions
+    - Migration generation would create conflicts
+
+    Attributes:
+        conflicting_files: List of Path objects for conflicting files
+    """
+
+    def __init__(
+        self,
+        message: str,
+        conflicting_files: list | None = None,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "MIGRATION_003",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+        self.conflicting_files = conflicting_files or []
+
+
+class MigrationOverwriteError(MigrationError):
+    """Migration file would be overwritten
+
+    Raised when:
+    - Attempting to create migration file that already exists
+    - No --force flag provided
+
+    Attributes:
+        filepath: Path to existing file that would be overwritten
+    """
+
+    def __init__(
+        self,
+        filepath: Any,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            f"Migration file already exists: {filepath.name}",
+            error_code=error_code or "MIGRATION_004",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint or "Use --force flag to overwrite existing file",
+        )
+        self.filepath = filepath
+
+
 # Re-export precondition exceptions for convenience
 # These are defined in confiture.core.preconditions but users may want to
 # import them from confiture.exceptions
@@ -335,6 +397,8 @@ __all__ = [
     "ConfiturError",
     "ConfigurationError",
     "MigrationError",
+    "MigrationConflictError",
+    "MigrationOverwriteError",
     "SchemaError",
     "SyncError",
     "DifferError",
