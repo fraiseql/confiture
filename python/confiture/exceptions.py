@@ -382,6 +382,42 @@ class MigrationOverwriteError(MigrationError):
         self.filepath = filepath
 
 
+class SeedError(ConfiturError):
+    """Seed file execution error
+
+    Raised when:
+    - Seed file cannot be loaded
+    - Seed SQL execution fails
+    - Seed file contains invalid commands (BEGIN/COMMIT/ROLLBACK)
+    - Savepoint operations fail
+
+    Attributes:
+        seed_file: Path to seed file that failed (if applicable)
+        sql_error: Original SQL error (if applicable)
+    """
+
+    def __init__(
+        self,
+        message: str,
+        seed_file: str | None = None,
+        sql_error: Exception | None = None,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code,
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+        self.seed_file = seed_file
+        self.sql_error = sql_error
+
+
 # Re-export precondition exceptions for convenience
 # These are defined in confiture.core.preconditions but users may want to
 # import them from confiture.exceptions
@@ -407,6 +443,7 @@ __all__ = [
     "SQLError",
     "GitError",
     "NotAGitRepositoryError",
+    "SeedError",
     "PreconditionError",
     "PreconditionValidationError",
     "PreStateSimulationError",
