@@ -78,6 +78,24 @@ class BuildConfig(BaseModel):
     lint: BuildLintConfig = Field(default_factory=BuildLintConfig)
 
 
+class SeedConfig(BaseModel):
+    """Seed data application configuration.
+
+    Controls how seed files are executed (concatenated vs sequential).
+    Sequential mode executes each file independently within its own savepoint,
+    avoiding PostgreSQL parser limits for large files (650+ rows).
+
+    Attributes:
+        execution_mode: Execution strategy ("concatenate" | "sequential")
+        continue_on_error: Continue applying files if one fails (default: False)
+        transaction_mode: Transaction isolation ("savepoint" | "transaction")
+    """
+
+    execution_mode: str = "concatenate"  # "concatenate" | "sequential"
+    continue_on_error: bool = False
+    transaction_mode: str = "savepoint"  # "savepoint" | "transaction"
+
+
 class LockingConfig(BaseModel):
     """Distributed locking configuration.
 
@@ -217,6 +235,7 @@ class Environment(BaseModel):
         build: Build configuration options
         migration: Migration configuration options
         pggit: pgGit integration configuration (development/staging only)
+        seed: Seed data application configuration
     """
 
     name: str
@@ -229,6 +248,7 @@ class Environment(BaseModel):
     build: BuildConfig = Field(default_factory=BuildConfig)
     migration: MigrationConfig = Field(default_factory=MigrationConfig)
     pggit: PgGitConfig = Field(default_factory=PgGitConfig)
+    seed: SeedConfig = Field(default_factory=SeedConfig)
 
     @property
     def database(self) -> DatabaseConfig:
