@@ -3,6 +3,7 @@
 This module defines the main Typer application and all CLI commands.
 """
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -1308,10 +1309,46 @@ def migrate_generate(
         "--migrations-dir",
         help="Migrations directory",
     ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite existing migration file if it exists",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be generated without creating files",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show version calculation and scanning details",
+    ),
 ) -> None:
-    """Generate a new migration file.
+    """Generate a new migration file with auto-incrementing version number.
 
-    Creates an empty migration template with the given name.
+    Creates an empty migration template with the given name. The version number
+    is automatically calculated by scanning existing migrations and incrementing
+    the highest version found.
+
+    Version Numbering:
+        Versions are 3-digit zero-padded (001, 002, ..., 999).
+        Next version = highest existing version + 1.
+        Gaps in numbering are preserved.
+
+    Examples:
+        confiture migrate generate add_user_email
+        confiture migrate generate add_user_email --dry-run
+        confiture migrate generate add_user_email --format json
+        confiture migrate generate add_user_email --verbose
+        confiture migrate generate add_user_email --force
     """
     try:
         # Ensure migrations directory exists
@@ -1320,8 +1357,49 @@ def migrate_generate(
         # Generate migration file template
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # For empty migration, create a template manually
+        # Collect warnings
+        warnings = []
+
+        # Verbose mode: show scanning info
+        if verbose:
+            console.print("[cyan]🔍 Scanning migrations directory...[/cyan]")
+            console.print(f"  Directory: {migrations_dir.absolute()}")
+
+            migration_files = sorted(migrations_dir.glob("*.py"))
+            console.print(f"  Found {len(migration_files)} migration files:")
+
+            for f in migration_files:
+                version_str = f.name.split("_")[0]
+                console.print(f"    - {f.name} (version: {version_str})")
+
+        # Check for duplicate versions
+        duplicates = generator._validate_versions()
+        if duplicates:
+            warning_msg = f"Duplicate versions detected: {', '.join(duplicates.keys())}"
+            warnings.append(warning_msg)
+            if format_output == "text":
+                console.print(f"[yellow]⚠️  Warning: {warning_msg}[/yellow]")
+
+        # Check for name conflicts
+        name_conflicts = generator._check_name_conflict(name)
+        if name_conflicts:
+            warning_msg = f"Migration name '{name}' already exists in other versions"
+            warnings.append(warning_msg)
+            if format_output == "text":
+                console.print(f"[yellow]⚠️  Warning: {warning_msg}[/yellow]")
+                for f in name_conflicts:
+                    console.print(f"    - {f.name}")
+
+        # Calculate next version
         version = generator._get_next_version()
+
+        if verbose:
+            console.print(f"\n  Highest version: {version[:-1] if int(version) > 1 else '000'}")
+            console.print(f"  Next version: {version}")
+            console.print(f"  Target file: {version}_{name}.py")
+            console.print()
+
+        # Generate class name and file path
         class_name = generator._to_class_name(name)
         filename = f"{version}_{name}.py"
         filepath = migrations_dir / filename
@@ -1356,15 +1434,90 @@ class {class_name}(Migration):
         pass
 '''
 
-        filepath.write_text(template)
+        # Dry-run mode: show preview and exit
+        if dry_run:
+            if format_output == "json":
+                output = {
+                    "status": "dry_run",
+                    "version": version,
+                    "name": name,
+                    "filepath": str(filepath.absolute()),
+                    "class_name": class_name,
+                    "template": template,
+                    "warnings": warnings,
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                console.print("[cyan]🔍 Dry-run mode - no files will be created[/cyan]\n")
+                console.print("Would create migration:")
+                console.print(f"  Version: {version}")
+                console.print(f"  Name: {name}")
+                console.print(f"  Class: {class_name}")
+                console.print(f"  File: {filepath.absolute()}")
+                console.print("\n[dim]Template preview:[/dim]")
+                console.print("[dim]" + "─" * 60 + "[/dim]")
+                console.print(template)
+                console.print("[dim]" + "─" * 60 + "[/dim]")
+            return
 
-        console.print("[green]✅ Migration generated successfully![/green]")
-        # Use plain print to avoid Rich wrapping long paths
-        print(f"\n📄 File: {filepath.absolute()}")
-        console.print("\n✏️  Edit the migration file to add your SQL statements.")
+        # Check if file exists
+        if filepath.exists() and not force:
+            if format_output == "json":
+                output = {
+                    "status": "error",
+                    "error": "file_exists",
+                    "message": f"Migration file already exists: {filepath.name}",
+                    "filepath": str(filepath.absolute()),
+                    "resolution": "Use --force flag to overwrite existing file",
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                console.print("[red]❌ Error: Migration file already exists:[/red]")
+                console.print(f"  {filepath.absolute()}")
+                console.print("\n[yellow]Use --force to overwrite[/yellow]")
+            raise typer.Exit(1)
 
+        # Warn if overwriting
+        if filepath.exists() and force and format_output == "text":
+            console.print(f"[yellow]⚠️  Overwriting existing file: {filepath.name}[/yellow]")
+
+        # Write file (with lock protection)
+        lock_fd = generator._acquire_migration_lock()
+        try:
+            filepath.write_text(template)
+        finally:
+            generator._release_migration_lock(lock_fd)
+
+        # Output success message
+        if format_output == "json":
+            output = {
+                "status": "success",
+                "version": version,
+                "name": name,
+                "filepath": str(filepath.absolute()),
+                "class_name": class_name,
+                "migrations_dir": str(migrations_dir.absolute()),
+                "next_available_version": version,
+                "warnings": warnings,
+            }
+            print(json.dumps(output, indent=2))
+        else:
+            console.print("[green]✅ Migration generated successfully![/green]")
+            print(f"\n📄 File: {filepath.absolute()}")
+            console.print("\n✏️  Edit the migration file to add your SQL statements.")
+
+    except typer.Exit:
+        raise
     except Exception as e:
-        console.print(f"[red]❌ Error generating migration: {e}[/red]")
+        if format_output == "json":
+            output = {
+                "status": "error",
+                "error": "generation_failed",
+                "message": str(e),
+            }
+            print(json.dumps(output, indent=2))
+        else:
+            console.print(f"[red]❌ Error generating migration: {e}[/red]")
         raise typer.Exit(1) from e
 
 
