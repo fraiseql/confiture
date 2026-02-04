@@ -43,12 +43,39 @@ class SeparatorConfig(BaseModel):
     custom_template: str | None = None
 
 
+class BuildLintConfig(BaseModel):
+    """SQL linting configuration for schema builder.
+
+    Runs schema validation during build to catch issues early.
+
+    Attributes:
+        enabled: Whether to lint schema (default: False - disabled by default)
+        fail_on_error: Fail build if linting errors found (default: True)
+        fail_on_warning: Fail build if linting warnings found (default: False)
+        rules: List of linting rules to apply
+    """
+
+    enabled: bool = False  # Default: disabled (opt-in)
+    fail_on_error: bool = True
+    fail_on_warning: bool = False
+    rules: list[str] = Field(
+        default_factory=lambda: [
+            "naming_convention",
+            "primary_key",
+            "documentation",
+            "missing_index",
+            "security",
+        ]
+    )
+
+
 class BuildConfig(BaseModel):
     """Build configuration options."""
 
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
     validate_comments: CommentValidationConfig = Field(default_factory=CommentValidationConfig)
     separators: SeparatorConfig = Field(default_factory=SeparatorConfig)
+    lint: BuildLintConfig = Field(default_factory=BuildLintConfig)
 
 
 class LockingConfig(BaseModel):
