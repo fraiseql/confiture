@@ -4,8 +4,6 @@ Tests duplicate version detection, file existence checks, name conflicts,
 and concurrent creation protection.
 """
 
-import pytest
-
 from confiture.core.migration_generator import MigrationGenerator
 
 
