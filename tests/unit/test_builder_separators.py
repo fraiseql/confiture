@@ -161,9 +161,7 @@ class TestSeparatorWithSpecialPaths:
         """Test separator with nested directory path"""
         builder = SchemaBuilder(env="local")
 
-        sep = builder._get_separator_for_file(
-            Path("db/schema/10_tables/public/users.sql")
-        )
+        sep = builder._get_separator_for_file(Path("db/schema/10_tables/public/users.sql"))
 
         # Should include full file path
         assert "users.sql" in sep or "public" in sep

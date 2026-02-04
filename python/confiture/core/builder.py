@@ -358,9 +358,7 @@ class SchemaBuilder:
         if errors and config.fail_on_unclosed_blocks:
             should_fail = True
             for error in errors:
-                error_messages.append(
-                    f"  {error.file_path}:{error.line_number} - {error.message}"
-                )
+                error_messages.append(f"  {error.file_path}:{error.line_number} - {error.message}")
 
         if spillovers and config.fail_on_spillover:
             should_fail = True
@@ -464,10 +462,7 @@ class SchemaBuilder:
         # Use Rust extension if available (10-50x faster)
         # Note: Rust extension uses line_comment separator style
         # If a different style is configured, fall back to Python
-        use_rust = (
-            HAS_RUST
-            and self.env_config.build.separators.style == "line_comment"
-        )
+        use_rust = HAS_RUST and self.env_config.build.separators.style == "line_comment"
 
         if use_rust:
             try:

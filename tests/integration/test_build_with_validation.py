@@ -509,4 +509,4 @@ build:
 
         # Different separator styles
         assert "/*" in schema_local  # block_comment
-        assert "--" in schema_prod   # line_comment
+        assert "--" in schema_prod  # line_comment

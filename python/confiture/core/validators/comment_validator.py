@@ -38,10 +38,7 @@ class CommentViolation:
 
     def __str__(self) -> str:
         """Format violation as string"""
-        return (
-            f"{self.file_path}:{self.line_number} "
-            f"[{self.severity.value.upper()}] {self.message}"
-        )
+        return f"{self.file_path}:{self.line_number} [{self.severity.value.upper()}] {self.message}"
 
 
 class CommentValidator:
@@ -123,9 +120,7 @@ class CommentValidator:
 
         return violations
 
-    def validate_files(
-        self, files_and_content: dict[Path, str]
-    ) -> list[CommentViolation]:
+    def validate_files(self, files_and_content: dict[Path, str]) -> list[CommentViolation]:
         """Validate multiple SQL files
 
         Args:

@@ -15,9 +15,7 @@ class TestBuilderLinting:
         schema_dir.mkdir(parents=True)
 
         # Poor schema without docstring (would fail linting)
-        (schema_dir / "01_tables.sql").write_text(
-            "CREATE TABLE users (id INT PRIMARY KEY);"
-        )
+        (schema_dir / "01_tables.sql").write_text("CREATE TABLE users (id INT PRIMARY KEY);")
 
         env_config_dir = tmp_path / "db" / "environments"
         env_config_dir.mkdir(parents=True)
