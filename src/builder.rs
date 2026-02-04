@@ -197,7 +197,11 @@ mod tests {
         let file3 = temp_dir.path().join("03_grant.sql");
 
         // All files WITHOUT trailing newlines (common with generated code)
-        fs::write(&file1, "CREATE OR REPLACE FUNCTION test() AS $$\nBEGIN\n  RETURN 1;\nEND;\n$$;").unwrap();
+        fs::write(
+            &file1,
+            "CREATE OR REPLACE FUNCTION test() AS $$\nBEGIN\n  RETURN 1;\nEND;\n$$;",
+        )
+        .unwrap();
         fs::write(&file2, "INSERT INTO test VALUES (1), (2), (3);").unwrap();
         fs::write(&file3, "GRANT SELECT ON test TO public;").unwrap();
 
