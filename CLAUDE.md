@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.3.18
+**Version**: 0.4.0
 **Last Updated**: February 4, 2026
 **Current Status**: Beta (Not Yet Production-Tested)
 
@@ -864,11 +864,21 @@ except psycopg.OperationalError as e:
 - ✅ Database connection & transaction handling
 - ✅ Comprehensive error reporting
 
+**Sequential Seed Execution Metrics (v0.4.0)**:
+- ✅ 29 new seed execution tests (5 config + 7 discovery + 8 executor + 9 workflow)
+- ✅ Real database integration testing
+- ✅ 650+ row batch execution verified
+- ✅ Savepoint isolation verified
+- ✅ Error recovery and rollback tested
+- ✅ Continue-on-error mode tested
+- ✅ Complex SQL support verified
+
 **Not Yet Measured in Production**:
 - ❓ Actual build speed under real conditions
 - ❓ Rust extension performance gains
 - ❓ Reliability over time
 - ❓ Validation performance at scale
+- ❓ Sequential seed execution at scale (>1M rows)
 
 ---
 
@@ -902,8 +912,15 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: February 3, 2026
-**Version**: 0.3.15 (Not Production-Tested)
+**Last Updated**: February 4, 2026
+**Version**: 0.4.0 (Not Production-Tested)
+
+**Recent Major Update (v0.4.0)**:
+- Sequential seed file execution (Phase 9)
+- Per-file savepoint isolation
+- 650+ row file support (parser limit solved)
+- Continue-on-error mode
+- 29 new tests + comprehensive documentation
 
 ---
 

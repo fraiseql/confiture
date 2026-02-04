@@ -5,7 +5,7 @@
 Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent conflict detection. Production data sync with PII anonymization.
 
 [![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
-[![Tests](https://img.shields.io/badge/tests-3800%2B-brightgreen)](https://github.com/fraiseql/confiture)
+[![Tests](https://img.shields.io/badge/tests-4100%2B-brightgreen)](https://github.com/fraiseql/confiture)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![PostgreSQL 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue)](https://www.postgresql.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -125,19 +125,21 @@ confiture coordinate complete --intent-id int_abc123
 
 ## Project Status
 
-✅ **v0.4.0-dev** (In Development - February 4, 2026)
+✅ **v0.4.0** (February 4, 2026) - RELEASED
 
-**Recent Addition (Phase 9)**:
-- ✅ Sequential seed execution (solves PostgreSQL parser limits on large files)
+**Phase 9 Addition (v0.4.0)**:
+- ✅ Sequential seed execution (solves PostgreSQL parser limits on 650+ row files)
 - ✅ Per-file savepoint isolation for error recovery
 - ✅ Continue-on-error mode for partial seeding
 - ✅ 29 new tests for seed workflow
+- ✅ Comprehensive documentation with 8 examples
+- ✅ Real database integration testing
 
 **What's Implemented**:
 - ✅ All 4 migration strategies
-- ✅ Sequential seed execution (NEW)
+- ✅ Sequential seed execution with savepoints (NEW in v0.4.0)
 - ✅ Multi-agent coordination (production-ready, 123+ tests)
-- ✅ Prep-seed validation (5 levels, 86+ tests)
+- ✅ Prep-seed validation (5 levels, 98+ tests)
 - ✅ Git-aware schema validation
 - ✅ Schema diff detection
 - ✅ CLI with rich output
