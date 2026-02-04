@@ -77,7 +77,11 @@ confiture coordinate complete --intent-id int_abc123
 - ✅ JSON output for CI/CD
 - ✅ <10ms per operation
 
-### 🌱 Prep-Seed Validation (v0.3.13+)
+### 🌱 Seed Data Management
+- ✅ Sequential execution (solves PostgreSQL parser limits on 650+ row files)
+- ✅ Per-file savepoint isolation for error recovery
+- ✅ Continue-on-error mode (skip failed files)
+- ✅ Prep-seed validation (5-level orchestrator)
 - ✅ 5-level validation (static → full execution)
 - ✅ Catch NULL FKs before production
 - ✅ Pre-commit safe (Levels 1-3)
@@ -107,6 +111,7 @@ confiture coordinate complete --intent-id int_abc123
 - [Incremental Migrations](docs/guides/02-incremental-migrations.md)
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
+- [Sequential Seed Execution](docs/guides/sequential-seed-execution.md) ⭐ NEW
 - [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)
 - [Prep-Seed Validation](docs/guides/prep-seed-validation.md)
 - [Migration Decision Tree](docs/guides/migration-decision-tree.md)
@@ -120,16 +125,23 @@ confiture coordinate complete --intent-id int_abc123
 
 ## Project Status
 
-✅ **v0.3.13** (Latest - January 31, 2026)
+✅ **v0.4.0-dev** (In Development - February 4, 2026)
+
+**Recent Addition (Phase 9)**:
+- ✅ Sequential seed execution (solves PostgreSQL parser limits on large files)
+- ✅ Per-file savepoint isolation for error recovery
+- ✅ Continue-on-error mode for partial seeding
+- ✅ 29 new tests for seed workflow
 
 **What's Implemented**:
 - ✅ All 4 migration strategies
+- ✅ Sequential seed execution (NEW)
 - ✅ Multi-agent coordination (production-ready, 123+ tests)
 - ✅ Prep-seed validation (5 levels, 86+ tests)
 - ✅ Git-aware schema validation
 - ✅ Schema diff detection
 - ✅ CLI with rich output
-- ✅ Comprehensive tests (4,000+)
+- ✅ Comprehensive tests (4,100+)
 - ✅ Complete documentation
 
 **⚠️ Beta Software**: All features implemented and tested, but not yet used in production. Use in staging/development first.
