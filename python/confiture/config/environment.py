@@ -12,10 +12,28 @@ from pydantic import BaseModel, Field, field_validator
 from confiture.exceptions import ConfigurationError
 
 
+class CommentValidationConfig(BaseModel):
+    """Comment validation configuration for schema builder.
+
+    Detects unclosed block comments in SQL files that would corrupt
+    concatenated schemas.
+
+    Attributes:
+        enabled: Whether to validate comments (default: True)
+        fail_on_unclosed_blocks: Fail if unclosed block comments found (default: True)
+        fail_on_spillover: Fail if file ends inside unclosed comment (default: True)
+    """
+
+    enabled: bool = True
+    fail_on_unclosed_blocks: bool = True
+    fail_on_spillover: bool = True
+
+
 class BuildConfig(BaseModel):
     """Build configuration options."""
 
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
+    validate_comments: CommentValidationConfig = Field(default_factory=CommentValidationConfig)
 
 
 class LockingConfig(BaseModel):

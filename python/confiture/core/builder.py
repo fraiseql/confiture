@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
+from confiture.core.validators import CommentValidator
 from confiture.exceptions import SchemaError
 
 # Try to import Rust extension for 10-50x performance boost
@@ -315,6 +316,63 @@ class SchemaBuilder:
             # Default alphabetical sort
             return sorted(filtered_files)
 
+    def _validate_comments(self, files: list[Path]) -> None:
+        """Validate SQL files for unclosed block comments
+
+        This method is called before concatenation to catch errors early
+        that would corrupt the schema.
+
+        Args:
+            files: List of SQL files to validate
+
+        Raises:
+            SchemaError: If validation fails and configured to fail
+        """
+        config = self.env_config.build.validate_comments
+
+        if not config.enabled:
+            return
+
+        # Read all files and validate
+        files_and_content = {}
+        for file in files:
+            try:
+                files_and_content[file] = file.read_text(encoding="utf-8")
+            except Exception as e:
+                raise SchemaError(f"Error reading {file}: {e}") from e
+
+        # Run validator
+        validator = CommentValidator()
+        violations = validator.validate_files(files_and_content)
+
+        if not violations:
+            return
+
+        # Process violations based on configuration
+        errors = [v for v in violations if v.violation_type == "unclosed"]
+        spillovers = [v for v in violations if v.violation_type == "spillover"]
+
+        should_fail = False
+        error_messages = []
+
+        if errors and config.fail_on_unclosed_blocks:
+            should_fail = True
+            for error in errors:
+                error_messages.append(
+                    f"  {error.file_path}:{error.line_number} - {error.message}"
+                )
+
+        if spillovers and config.fail_on_spillover:
+            should_fail = True
+            for spillover in spillovers:
+                error_messages.append(
+                    f"  {spillover.file_path}:{spillover.line_number} - {spillover.message}"
+                )
+
+        if should_fail:
+            msg = "Comment validation failed:\n" + "\n".join(error_messages)
+            raise SchemaError(msg)
+
     def build(self, output_path: Path | None = None) -> str:
         """Build schema by concatenating DDL files
 
@@ -339,6 +397,9 @@ class SchemaBuilder:
             >>> print(f"Generated {len(schema)} bytes")
         """
         files = self.find_sql_files()
+
+        # Pre-build validation: check for unclosed comments
+        self._validate_comments(files)
 
         # Generate header
         header = self._generate_header(len(files))
