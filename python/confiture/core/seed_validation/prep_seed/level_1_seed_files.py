@@ -4,6 +4,7 @@ Cycles 1-3: Validates seed files for:
 - Correct schema target (prep_seed, not final tables)
 - FK column naming (_id suffix required)
 - UUID format validation
+- UNION query type consistency
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ class Level1SeedValidator:
     - Seeds target prep_seed schema, not final tables
     - FK columns use _id suffix
     - UUID format in seed data
+    - UNION queries have consistent column types (Issue #29)
 
     Example:
         >>> validator = Level1SeedValidator()
@@ -69,6 +71,9 @@ class Level1SeedValidator:
 
         # Check UUID format
         violations.extend(self._validate_uuid_format(sql, file_path))
+
+        # Check UNION type consistency
+        violations.extend(self._validate_union_type_consistency(sql, file_path))
 
         return violations
 
@@ -174,3 +179,171 @@ class Level1SeedValidator:
                     )
 
         return violations
+
+    def _validate_union_type_consistency(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
+        """Check UNION queries have consistent column types.
+
+        Detects cases where UNION branches have type mismatches, particularly:
+        - NULL vs NULL::type (most common from Issue #29)
+        - Untyped vs typed literals
+
+        Args:
+            sql: SQL content of seed file
+            file_path: Path to seed file for error reporting
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        # Pre-filter: Skip if no UNION keyword (fast path)
+        if not re.search(r"\bUNION\s+(?:ALL\s+)?", sql, re.IGNORECASE):
+            return violations
+
+        # Find all UNION query blocks
+        # Pattern: SELECT ... UNION [ALL] SELECT ...
+        union_pattern = r"(?:INSERT\s+INTO\s+\w+\.\w+\s*\([^)]*\)\s+)?(SELECT\s+[^;]+?\s+UNION\s+(?:ALL\s+)?SELECT\s+[^;]+)"
+        for match in re.finditer(union_pattern, sql, re.IGNORECASE | re.DOTALL):
+            full_query = match.group(1) if match.lastindex >= 1 else match.group(0)
+            line_number = sql[: match.start()].count("\n") + 1
+
+            # Extract branches: split by UNION or UNION ALL
+            branches = re.split(r"\s+UNION\s+(?:ALL\s+)?", full_query, flags=re.IGNORECASE)
+
+            if len(branches) < 2:
+                continue
+
+            # Extract columns from each branch
+            base_columns = self._extract_select_columns_from_text(branches[0])
+
+            for branch_num, branch in enumerate(branches[1:], start=2):
+                branch_columns = self._extract_select_columns_from_text(branch)
+
+                # Check column count
+                if len(base_columns) != len(branch_columns):
+                    violations.append(
+                        PrepSeedViolation(
+                            pattern=PrepSeedPattern.UNION_TYPE_MISMATCH,
+                            severity=ViolationSeverity.ERROR,
+                            message=(
+                                f"UNION branch {branch_num} has {len(branch_columns)} columns "
+                                f"but base branch has {len(base_columns)} columns"
+                            ),
+                            file_path=file_path,
+                            line_number=line_number,
+                            impact="PostgreSQL will reject: 'each UNION query must have same number of columns'",
+                            fix_available=False,
+                            suggestion="Ensure all UNION branches have same column count",
+                        )
+                    )
+                    continue
+
+                # Check type consistency for each column
+                for col_idx, (base_col, branch_col) in enumerate(
+                    zip(base_columns, branch_columns, strict=True), start=1
+                ):
+                    type_issue = self._detect_type_mismatch(base_col, branch_col)
+
+                    if type_issue:
+                        violations.append(
+                            PrepSeedViolation(
+                                pattern=PrepSeedPattern.UNION_TYPE_MISMATCH,
+                                severity=ViolationSeverity.ERROR,
+                                message=(
+                                    f"UNION branch {branch_num} column {col_idx}: {type_issue}"
+                                ),
+                                file_path=file_path,
+                                line_number=line_number,
+                                impact="PostgreSQL will reject: 'UNION types cannot be matched'",
+                                fix_available=True,
+                                suggestion=f"Change '{branch_col.strip()}' to '{base_col.strip()}' for type consistency",
+                            )
+                        )
+
+        return violations
+
+    def _extract_select_columns_from_text(self, select_clause: str) -> list[str]:
+        """Extract column expressions from a SELECT clause text.
+
+        Args:
+            select_clause: Text of SELECT clause (e.g., "SELECT col1, NULL::type, col2")
+
+        Returns:
+            List of column expression strings
+        """
+        # Remove leading/trailing whitespace
+        clause = select_clause.strip()
+
+        # Remove SELECT keyword
+        clause = re.sub(r"^\s*SELECT\s+", "", clause, flags=re.IGNORECASE)
+
+        # Remove FROM and everything after
+        clause = re.sub(
+            r"\s+(FROM|WHERE|GROUP|HAVING|ORDER|LIMIT).*$",
+            "",
+            clause,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        # Split by comma, respecting nested parentheses
+        columns: list[str] = []
+        current_col: list[str] = []
+        paren_depth = 0
+
+        for char in clause:
+            if char == "(":
+                paren_depth += 1
+                current_col.append(char)
+            elif char == ")":
+                paren_depth -= 1
+                current_col.append(char)
+            elif char == "," and paren_depth == 0:
+                # Column separator
+                col_text = "".join(current_col).strip()
+                if col_text:
+                    columns.append(col_text)
+                current_col = []
+            else:
+                current_col.append(char)
+
+        # Add final column
+        col_text = "".join(current_col).strip()
+        if col_text:
+            columns.append(col_text)
+
+        return columns
+
+    def _detect_type_mismatch(self, col1: str, col2: str) -> str | None:
+        """Detect type inconsistency between two column expressions.
+
+        Focus on Issue #29 pattern: NULL vs NULL::type
+
+        Args:
+            col1: Column expression from base branch
+            col2: Column expression from comparison branch
+
+        Returns:
+            Description of mismatch if found, None if consistent
+        """
+        col1_clean = col1.strip()
+        col2_clean = col2.strip()
+
+        # Pattern: NULL vs NULL::type
+        null_pattern = r"^NULL(?:::(\w+(?:\(\d+(?:,\s*\d+)?\))?))?$"
+        match1 = re.match(null_pattern, col1_clean, re.IGNORECASE)
+        match2 = re.match(null_pattern, col2_clean, re.IGNORECASE)
+
+        if match1 and match2:
+            type1 = match1.group(1)  # None if untyped NULL
+            type2 = match2.group(1)
+
+            # One typed, one untyped
+            if (type1 is None) != (type2 is None):
+                typed = type1 or type2
+                return f"NULL type mismatch: 'NULL' vs 'NULL::{typed}'"
+
+            # Both typed but different types
+            if type1 and type2 and type1.lower() != type2.lower():
+                return f"NULL type mismatch: 'NULL::{type1}' vs 'NULL::{type2}'"
+
+        return None  # No mismatch detected

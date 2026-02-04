@@ -40,6 +40,9 @@ class PrepSeedPattern(Enum):
     INVALID_UUID_FORMAT = "INVALID_UUID_FORMAT"
     """Invalid UUID format in seed data."""
 
+    UNION_TYPE_MISMATCH = "UNION_TYPE_MISMATCH"
+    """UNION query has inconsistent column types across branches."""
+
     NULL_FK_AFTER_RESOLUTION = "NULL_FK_AFTER_RESOLUTION"
     """Resolution produced NULL foreign keys when non-NULL expected."""
 
@@ -71,6 +74,9 @@ class PrepSeedPattern(Enum):
             ),
             PrepSeedPattern.INVALID_FK_NAMING: ("FK column in prep_seed missing _id suffix"),
             PrepSeedPattern.INVALID_UUID_FORMAT: ("Invalid UUID format in seed data"),
+            PrepSeedPattern.UNION_TYPE_MISMATCH: (
+                "UNION query has inconsistent column types (e.g., NULL vs NULL::timestamp)"
+            ),
             PrepSeedPattern.NULL_FK_AFTER_RESOLUTION: (
                 "NULL foreign keys in final table after resolution"
             ),

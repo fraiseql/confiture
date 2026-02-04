@@ -134,3 +134,116 @@ class TestLevel1SeedValidator:
         # Should detect: invalid FK naming (no _id), invalid UUID
         assert PrepSeedPattern.INVALID_FK_NAMING in patterns
         assert PrepSeedPattern.INVALID_UUID_FORMAT in patterns
+
+    def test_detects_union_null_type_mismatch(self) -> None:
+        """Detects NULL vs NULL::type mismatch in UNION."""
+        seed_sql = """
+        INSERT INTO prep_seed.tb_events (id, created_at)
+        SELECT '01511131-0000-0000-0000-000000000001'::uuid, NULL::timestamp
+        UNION ALL
+        SELECT '01511131-0000-0000-0000-000000000002'::uuid, NULL;
+        """
+
+        validator = Level1SeedValidator()
+        violations = validator.validate_seed_file(
+            sql=seed_sql,
+            file_path="db/seeds/prep/events.sql",
+        )
+
+        # Should detect UNION type mismatch
+        union_violations = [
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_TYPE_MISMATCH
+        ]
+        assert len(union_violations) == 1
+        assert "NULL::timestamp" in union_violations[0].message
+        assert "column 2" in union_violations[0].message
+
+    def test_detects_union_all_variant(self) -> None:
+        """Detects mismatches in UNION ALL (not just UNION)."""
+        seed_sql = """
+        INSERT INTO prep_seed.tb_test (id, val)
+        SELECT 1, NULL::int
+        UNION ALL
+        SELECT 2, NULL;
+        """
+
+        validator = Level1SeedValidator()
+        violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
+
+        union_violations = [
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_TYPE_MISMATCH
+        ]
+        assert len(union_violations) == 1
+
+    def test_passes_union_with_consistent_types(self) -> None:
+        """Valid UNION with consistent NULL types passes."""
+        seed_sql = """
+        INSERT INTO prep_seed.tb_events (id, created_at)
+        SELECT '01511131-0000-0000-0000-000000000001'::uuid, NULL::timestamp
+        UNION ALL
+        SELECT '01511131-0000-0000-0000-000000000002'::uuid, NULL::timestamp;
+        """
+
+        validator = Level1SeedValidator()
+        violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
+
+        # Should have no UNION violations
+        union_violations = [
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_TYPE_MISMATCH
+        ]
+        assert len(union_violations) == 0
+
+    def test_detects_multiple_union_branches(self) -> None:
+        """Detects mismatches across 3+ UNION branches."""
+        seed_sql = """
+        INSERT INTO prep_seed.tb_test (id, val)
+        SELECT 1, NULL::int
+        UNION ALL
+        SELECT 2, NULL
+        UNION ALL
+        SELECT 3, NULL::int;
+        """
+
+        validator = Level1SeedValidator()
+        violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
+
+        # Should detect branch 2's mismatch (compared to branch 1)
+        union_violations = [
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_TYPE_MISMATCH
+        ]
+        assert len(union_violations) == 1
+        assert "branch 2" in union_violations[0].message
+
+    def test_skips_non_union_queries(self) -> None:
+        """Non-UNION queries are skipped (performance check)."""
+        seed_sql = """
+        INSERT INTO prep_seed.tb_test (id, name)
+        VALUES (1, 'test1'), (2, 'test2'), (3, 'test3');
+        """
+
+        validator = Level1SeedValidator()
+        violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
+
+        # Should have no UNION violations
+        union_violations = [
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_TYPE_MISMATCH
+        ]
+        assert len(union_violations) == 0
+
+    def test_detects_union_column_count_mismatch(self) -> None:
+        """Detects when UNION branches have different column counts."""
+        seed_sql = """
+        INSERT INTO prep_seed.tb_test (id, val1, val2)
+        SELECT 1, NULL::int, NULL::text
+        UNION ALL
+        SELECT 2, NULL::int;
+        """
+
+        validator = Level1SeedValidator()
+        violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
+
+        union_violations = [
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_TYPE_MISMATCH
+        ]
+        assert len(union_violations) == 1
+        assert "column" in union_violations[0].message.lower()
