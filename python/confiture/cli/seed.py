@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
+from confiture.core.seed_applier import SeedApplier
 from confiture.core.seed_validation import SeedFixer, SeedValidator
 from confiture.core.seed_validation.prep_seed import (
     OrchestrationConfig,
@@ -331,4 +332,116 @@ def validate(
         raise
     except Exception as e:
         console.print(f"[red]✗ Error during validation: {e}[/red]")
+        raise typer.Exit(2) from e
+
+
+@seed_app.command("apply")
+def apply(
+    seeds_dir: Path = typer.Option(
+        Path("db/seeds"),
+        "--seeds-dir",
+        help="Directory containing seed files",
+    ),
+    env: str = typer.Option(
+        "local",
+        "--env",
+        help="Environment name (for context and database URL lookup)",
+    ),
+    sequential: bool = typer.Option(
+        False,
+        "--sequential",
+        help="Apply files sequentially instead of concatenating (solves parser limits)",
+    ),
+    continue_on_error: bool = typer.Option(
+        False,
+        "--continue-on-error",
+        help="Continue applying remaining files if one fails",
+    ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        help="Database URL (if not loading from environment config)",
+    ),
+) -> None:
+    """Apply seed files to database.
+
+    By default, seed files are concatenated into a single SQL stream.
+    Use --sequential to apply each file independently within a savepoint,
+    which solves PostgreSQL parser limits for large files (650+ rows).
+
+    Examples:
+        # Concatenate mode (default)
+        confiture seed apply --env local
+
+        # Sequential mode (for large seed files)
+        confiture seed apply --env local --sequential
+
+        # Continue on error (skip failed files)
+        confiture seed apply --env local --sequential --continue-on-error
+
+        # Use explicit database URL
+        confiture seed apply --sequential --database-url postgresql://localhost/mydb
+    """
+    try:
+        if not sequential:
+            console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
+            console.print("[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
+            raise typer.Exit(0)
+
+        # Verify seeds directory exists
+        if not seeds_dir.exists():
+            console.print(f"[red]✗ Seeds directory not found: {seeds_dir}[/red]")
+            raise typer.Exit(2)
+
+        # Get database connection
+        if database_url:
+            # Use provided URL directly
+            from confiture.core.connection import create_connection
+
+            try:
+                connection = create_connection(database_url)
+            except Exception as e:
+                console.print(f"[red]✗ Failed to connect to database: {e}[/red]")
+                raise typer.Exit(2) from e
+        else:
+            # Load from environment config
+            try:
+                from confiture.config.environment import Environment
+
+                env_config = Environment.load(env)
+                from confiture.core.connection import create_connection
+
+                connection = create_connection(env_config.database_url)
+            except Exception as e:
+                console.print(f"[red]✗ Failed to load environment {env}: {e}[/red]")
+                raise typer.Exit(2) from e
+
+        # Apply seeds sequentially
+        try:
+            applier = SeedApplier(
+                seeds_dir=seeds_dir,
+                env=env,
+                connection=connection,
+                console=console,
+            )
+            result = applier.apply_sequential(continue_on_error=continue_on_error)
+
+            # Exit with error if files failed and not continuing
+            if result.failed > 0 and not continue_on_error:
+                raise typer.Exit(1)
+
+            # Close connection
+            connection.close()
+
+            console.print("[green]✓ Seed application complete[/green]")
+            raise typer.Exit(0)
+
+        except Exception as e:
+            console.print(f"[red]✗ Seed application failed: {e}[/red]")
+            raise typer.Exit(2) from e
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
         raise typer.Exit(2) from e
