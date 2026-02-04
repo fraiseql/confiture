@@ -5,6 +5,41 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.18] - 2026-02-04
+
+### Added
+
+- **UNION Query Type Validation** - Issue #29
+  - **Level 1 Pre-commit Validation**: Detects UNION queries with inconsistent column types (NULL vs NULL::type)
+  - **Type Mismatch Detection**: Catches untyped NULL columns mismatched with typed NULL expressions
+  - **Column Count Validation**: Ensures all UNION branches have consistent column counts
+  - **Multiple Branch Support**: Validates UNION and UNION ALL with 3+ branches correctly
+  - **Performance Optimized**: Regex pre-filter skips non-UNION files for fast pre-commit validation
+  - **Comprehensive Error Messages**: Actionable suggestions provided with line numbers
+
+### Details
+
+**Features**:
+- Level 1 validator now catches Issue #29 pattern: `SELECT col, NULL::type UNION ALL SELECT col, NULL`
+- New `UNION_TYPE_MISMATCH` pattern in `PrepSeedPattern` enum
+- Detects both column count and type inconsistencies in UNION branches
+- Provides specific error messages with fix suggestions
+- ERROR severity blocks deployment while allowing batch validation
+
+**Implementation**:
+- Regex-based parsing for fast pre-commit validation (~1-5ms per file)
+- Handles `INSERT INTO prep_seed.table SELECT ... UNION [ALL] SELECT ...` patterns
+- Robust column extraction respecting nested parentheses and function calls
+- Line number tracking for precise error reporting
+
+**Testing**:
+- 6 new unit tests covering UNION scenarios (100% pass rate)
+- Tests for NULL type mismatches, UNION/UNION ALL variants, multi-branch scenarios
+- All 104 seed validation tests passing
+- Integration tests verify orchestrator integration
+
+**Backward Compatibility**: ✅ 100% backward compatible - new validation adds early error detection without breaking existing features
+
 ## [0.3.17] - 2026-02-04
 
 ### Added

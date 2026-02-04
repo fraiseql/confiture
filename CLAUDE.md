@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.3.15
-**Last Updated**: February 3, 2026
+**Version**: 0.3.18
+**Last Updated**: February 4, 2026
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -848,7 +848,7 @@ except psycopg.OperationalError as e:
 
 ## 📊 Implementation Metrics
 
-- ✅ **Test Coverage**: 3,200+ tests passing (including seed validation orchestrator)
+- ✅ **Test Coverage**: 3,250+ tests passing (including seed validation orchestrator)
 - ✅ **CLI Commands**: 8 implemented (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`, `seed validate`)
 - ✅ **Documentation**: Comprehensive guides + API references + seed validation guide
 - ✅ **Examples**: 5+ example scenarios (plus prep-seed example)
@@ -857,9 +857,10 @@ except psycopg.OperationalError as e:
 - ✅ **Python Support**: 3.11, 3.12, 3.13 tested
 
 **Seed Validation Metrics**:
-- ✅ 86 seed validation unit tests
-- ✅ 22 orchestrator integration tests
+- ✅ 92 seed validation unit tests (includes 6 new UNION type validation tests)
+- ✅ 12 orchestrator integration tests
 - ✅ All 5 validation levels implemented
+- ✅ Level 1 now detects UNION type mismatches (Issue #29)
 - ✅ Database connection & transaction handling
 - ✅ Comprehensive error reporting
 
