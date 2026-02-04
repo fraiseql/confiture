@@ -373,6 +373,63 @@ class SchemaBuilder:
             msg = "Comment validation failed:\n" + "\n".join(error_messages)
             raise SchemaError(msg)
 
+    def _get_separator_for_file(self, file_path: Path) -> str:
+        """Generate file separator for schema builder
+
+        Creates a visual separator between concatenated SQL files.
+        Style is configurable (block_comment, line_comment, mysql, custom).
+
+        Args:
+            file_path: Path to the file being separated
+
+        Returns:
+            Separator string with newlines
+
+        Raises:
+            SchemaError: If separator style is invalid
+        """
+        style = self.env_config.build.separators.style
+
+        # Convert to relative path if absolute
+        try:
+            if file_path.is_absolute():
+                rel_path = file_path.relative_to(self.base_dir)
+            else:
+                rel_path = file_path
+        except (ValueError, AttributeError):
+            rel_path = file_path
+
+        # Block comment style (recommended, immune to spillover)
+        if style == "block_comment":
+            sep = "/* " + "=" * 42 + "\n"
+            sep += f" * File: {rel_path}\n"
+            sep += " * " + "=" * 42 + " */\n"
+            return "\n" + sep + "\n"
+
+        # Line comment style (backward compatible)
+        elif style == "line_comment":
+            sep = "-- " + "=" * 42 + "\n"
+            sep += f"-- File: {rel_path}\n"
+            sep += "-- " + "=" * 42 + "\n"
+            return "\n" + sep + "\n"
+
+        # MySQL style
+        elif style == "mysql":
+            sep = "# " + "=" * 42 + "\n"
+            sep += f"# File: {rel_path}\n"
+            sep += "# " + "=" * 42 + "\n"
+            return "\n" + sep + "\n"
+
+        # Custom style
+        elif style == "custom":
+            if not self.env_config.build.separators.custom_template:
+                raise SchemaError("Custom separator style requires custom_template")
+            template = self.env_config.build.separators.custom_template
+            return "\n" + template.format(file_path=rel_path) + "\n"
+
+        else:
+            raise SchemaError(f"Invalid separator style: {style}")
+
     def build(self, output_path: Path | None = None) -> str:
         """Build schema by concatenating DDL files
 
@@ -405,7 +462,14 @@ class SchemaBuilder:
         header = self._generate_header(len(files))
 
         # Use Rust extension if available (10-50x faster)
-        if HAS_RUST:
+        # Note: Rust extension uses line_comment separator style
+        # If a different style is configured, fall back to Python
+        use_rust = (
+            HAS_RUST
+            and self.env_config.build.separators.style == "line_comment"
+        )
+
+        if use_rust:
             try:
                 # Build file content using Rust
                 file_paths = [str(f) for f in files]
@@ -445,13 +509,8 @@ class SchemaBuilder:
         # Concatenate all files
         for file in files:
             try:
-                # Relative path for header
-                rel_path = file.relative_to(self.base_dir)
-
-                # Add file separator
-                parts.append("\n-- ============================================\n")
-                parts.append(f"-- File: {rel_path}\n")
-                parts.append("-- ============================================\n\n")
+                # Add file separator (uses configured style)
+                parts.append(self._get_separator_for_file(file))
 
                 # Add file content
                 content = file.read_text(encoding="utf-8")

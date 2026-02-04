@@ -29,11 +29,26 @@ class CommentValidationConfig(BaseModel):
     fail_on_spillover: bool = True
 
 
+class SeparatorConfig(BaseModel):
+    """File separator configuration for schema builder.
+
+    Controls the style of separators between concatenated SQL files.
+
+    Attributes:
+        style: Separator style (block_comment, line_comment, mysql, custom)
+        custom_template: Custom template for separators (only used if style=custom)
+    """
+
+    style: str = "block_comment"  # Options: block_comment, line_comment, mysql, custom
+    custom_template: str | None = None
+
+
 class BuildConfig(BaseModel):
     """Build configuration options."""
 
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
     validate_comments: CommentValidationConfig = Field(default_factory=CommentValidationConfig)
+    separators: SeparatorConfig = Field(default_factory=SeparatorConfig)
 
 
 class LockingConfig(BaseModel):
