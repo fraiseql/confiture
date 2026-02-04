@@ -113,6 +113,111 @@ ALTER TABLE users DROP COLUMN IF EXISTS bio;
 
 ---
 
+## Generating Migration Files
+
+Use `confiture migrate generate` to create a new migration template with auto-incrementing version numbers:
+
+```bash
+# Basic usage - creates 001_add_users.py
+confiture migrate generate add_users
+
+# Preview before creating (dry-run mode)
+confiture migrate generate add_users_table --dry-run
+
+# Show version calculation details
+confiture migrate generate add_email_column --verbose
+
+# JSON output for automation/agents
+confiture migrate generate add_phone --format json
+```
+
+### Version Numbering
+
+The command automatically:
+- Scans existing migrations to find the highest version
+- Increments by 1 and zero-pads to 3 digits (001, 002, ..., 999)
+- Preserves gaps in numbering (001, 003, 005 → next is 006)
+
+### Advanced Options
+
+#### Dry-Run Mode
+
+Preview the migration without creating any files:
+
+```bash
+confiture migrate generate add_users --dry-run
+# Output:
+# 🔍 Dry-run mode - no files will be created
+#
+# Would create migration:
+#   Version: 001
+#   Name: add_users
+#   Class: AddUsers
+#   File: /path/to/db/migrations/001_add_users.py
+#
+# [Template preview...]
+```
+
+#### Verbose Mode
+
+Show directory scanning and version calculation:
+
+```bash
+confiture migrate generate add_email --verbose
+# Output:
+# 🔍 Scanning migrations directory...
+#   Directory: /path/to/db/migrations
+#   Found 2 migration files:
+#     - 001_add_users.py (version: 001)
+#     - 002_add_posts.py (version: 002)
+#   Highest version: 002
+#   Next version: 003
+#   Target file: 003_add_email.py
+```
+
+#### JSON Output (for Automation)
+
+Output structured JSON for parsing by scripts or CI/CD:
+
+```bash
+confiture migrate generate add_email --format json
+```
+
+Returns:
+```json
+{
+  "status": "success",
+  "version": "003",
+  "name": "add_email",
+  "filepath": "/path/to/db/migrations/003_add_email.py",
+  "class_name": "AddEmail",
+  "migrations_dir": "/path/to/db/migrations",
+  "warnings": [],
+  "next_available_version": "003"
+}
+```
+
+### Safety Features
+
+Confiture validates migration generation for safety:
+
+1. **Duplicate Version Detection** - Warns if multiple files have same version
+2. **Name Conflict Detection** - Warns if same name exists in different versions
+3. **Concurrent Generation Protection** - File locking prevents race conditions in CI/CD
+
+Example with warnings:
+
+```bash
+$ confiture migrate generate add_users
+⚠️  Warning: Duplicate versions detected: 003, 005
+⚠️  Warning: Migration name 'add_users' already exists in other versions
+    - 001_add_users.py
+    - 002_add_users.py
+✅ Migration generated successfully!
+```
+
+---
+
 ## Validating Migration Names
 
 Use `confiture migrate validate` to check that all migration files are properly named:

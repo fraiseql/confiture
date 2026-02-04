@@ -4,8 +4,10 @@ This module generates Python migration files from SchemaDiff objects.
 Each migration file contains up() and down() methods with the necessary SQL.
 """
 
+import fcntl
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from confiture.models.schema import SchemaChange, SchemaDiff
 
@@ -84,6 +86,97 @@ class MigrationGenerator:
         except ValueError:
             # If we can't parse version, start over
             return "001"
+
+    def _validate_versions(self) -> dict[str, list[Path]]:
+        """Validate migration versions for duplicates.
+
+        Returns:
+            Dict mapping version numbers to list of files with that version.
+            Empty dict if no duplicates exist.
+        """
+        version_map: dict[str, list[Path]] = {}
+
+        if not self.migrations_dir.exists():
+            return {}
+
+        for migration_file in self.migrations_dir.glob("*.py"):
+            try:
+                version = migration_file.name.split("_")[0]
+                if version not in version_map:
+                    version_map[version] = []
+                version_map[version].append(migration_file)
+            except IndexError:
+                # Ignore malformed filenames
+                continue
+
+        # Filter to only duplicates
+        duplicates = {v: files for v, files in version_map.items() if len(files) > 1}
+        return duplicates
+
+    def _check_name_conflict(self, name: str) -> list[Path]:
+        """Check if migration name already exists with different version.
+
+        Args:
+            name: Migration name to check
+
+        Returns:
+            List of files with same name but different version
+        """
+        if not self.migrations_dir.exists():
+            return []
+
+        conflicts = []
+        for migration_file in self.migrations_dir.glob(f"*_{name}.py"):
+            conflicts.append(migration_file)
+
+        return conflicts
+
+    def _check_file_exists(self, filepath: Path) -> bool:
+        """Check if a file already exists.
+
+        Args:
+            filepath: Path to check
+
+        Returns:
+            True if file exists, False otherwise
+        """
+        return filepath.exists()
+
+    def _acquire_migration_lock(self) -> Any:
+        """Acquire lock for migration generation.
+
+        Returns:
+            Lock file handle (must be released with _release_migration_lock)
+
+        Raises:
+            IOError: If lock cannot be acquired (another process has it)
+        """
+        lock_file = self.migrations_dir / ".migration_lock"
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_file.touch(exist_ok=True)
+
+        lock_fd = open(lock_file)  # noqa: SIM115 - File lock requires open handle
+
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_fd
+        except OSError as e:
+            lock_fd.close()
+            raise OSError(
+                "Another migration generation is in progress. "
+                "Wait for other process to complete or remove .migration_lock"
+            ) from e
+
+    def _release_migration_lock(self, lock_fd: Any) -> None:
+        """Release migration lock.
+
+        Args:
+            lock_fd: Lock file handle from _acquire_migration_lock
+        """
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            lock_fd.close()
 
     def _generate_migration_code(self, diff: SchemaDiff, version: str, name: str) -> str:
         """Generate Python migration code.
