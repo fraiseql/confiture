@@ -283,8 +283,8 @@ class TestMigrateGenerateForceFlag:
             ["migrate", "generate", "--help"],
         )
 
-        # Should mention force flag
-        assert "--force" in result.stdout
+        # Should mention force flag (check for substring that avoids ANSI color codes)
+        assert "force" in result.stdout.lower()
 
 
 class TestMigrateGenerateValidationWarnings:
