@@ -81,7 +81,7 @@ class TestMigrationBase:
         mock_conn = Mock()
 
         # Missing down() - ABC prevents instantiation
-        with pytest.raises(TypeError, match="abstract method down"):
+        with pytest.raises(TypeError, match="abstract method.*down"):
 
             class MissingDownMigration(Migration):
                 version = "001"
@@ -93,7 +93,7 @@ class TestMigrationBase:
             MissingDownMigration(connection=mock_conn)
 
         # Missing up() - ABC prevents instantiation
-        with pytest.raises(TypeError, match="abstract method up"):
+        with pytest.raises(TypeError, match="abstract method.*up"):
 
             class MissingUpMigration(Migration):
                 version = "001"

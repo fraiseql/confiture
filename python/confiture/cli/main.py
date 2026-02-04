@@ -440,6 +440,9 @@ def build(
         # Override to exclude seeds if --schema-only is specified
         if schema_only:
             builder.include_dirs = [d for d in builder.include_dirs if "seed" not in str(d).lower()]
+            builder.include_configs = [
+                cfg for cfg in builder.include_configs if "seed" not in str(cfg["path"]).lower()
+            ]
             # Recalculate base_dir after filtering
             if builder.include_dirs:
                 builder.base_dir = builder._find_common_parent(builder.include_dirs)
