@@ -670,8 +670,12 @@ class TestSchemaBuilderSchemaOnly:
         (schema_dir / "00_common").mkdir(parents=True)
         (seeds_dir / "common").mkdir(parents=True)
 
-        (schema_dir / "00_common" / "ext.sql").write_text("-- extensions\nCREATE EXTENSION pgcrypto;")
-        (seeds_dir / "common" / "users.sql").write_text("-- seed data\nINSERT INTO users VALUES (1);")
+        (schema_dir / "00_common" / "ext.sql").write_text(
+            "-- extensions\nCREATE EXTENSION pgcrypto;"
+        )
+        (seeds_dir / "common" / "users.sql").write_text(
+            "-- seed data\nINSERT INTO users VALUES (1);"
+        )
 
         config_dir = base_dir / "environments"
         config_dir.mkdir(parents=True)

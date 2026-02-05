@@ -4,7 +4,6 @@ Tests the --sequential flag which applies seed files sequentially to the databas
 after building the schema, avoiding PostgreSQL parser limits for large seed files.
 """
 
-
 import pytest
 from typer.testing import CliRunner
 
@@ -81,9 +80,7 @@ database_url: postgresql://localhost/test
         (schema_dir / "00_common" / "tables.sql").write_text(
             "CREATE TABLE users (id BIGINT PRIMARY KEY);"
         )
-        (seeds_dir / "common" / "01_users.sql").write_text(
-            "INSERT INTO users VALUES (1);"
-        )
+        (seeds_dir / "common" / "01_users.sql").write_text("INSERT INTO users VALUES (1);")
 
         config_dir = base_dir / "environments"
         config_dir.mkdir(parents=True)
@@ -263,9 +260,7 @@ database_url: postgresql://localhost/test
         (schema_dir / "00_common" / "tables.sql").write_text(
             "CREATE TABLE users (id BIGINT PRIMARY KEY);"
         )
-        (seeds_dir / "common" / "users.sql").write_text(
-            "INSERT INTO users VALUES (1);"
-        )
+        (seeds_dir / "common" / "users.sql").write_text("INSERT INTO users VALUES (1);")
 
         config_dir = base_dir / "environments"
         config_dir.mkdir(parents=True)
