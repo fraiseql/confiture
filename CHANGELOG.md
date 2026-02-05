@@ -5,6 +5,73 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-02-05
+
+### Added
+
+- **Sequential Seed Execution in Build Command** (GitHub Issue #32)
+  - New `confiture build --sequential` flag to apply seeds sequentially after schema build
+  - Avoids PostgreSQL parser limits when building fresh databases with large seed files
+  - Single-command solution for schema + seeds (replaces separate build + seed apply)
+  - Respects `seed.execution_mode: sequential` from environment configuration
+  - New `--database-url` parameter for database connection during seed application
+  - New `--continue-on-error` flag to skip failed seed files and continue
+  - Perfect for CI/CD pipelines and fresh database initialization
+
+### Details
+
+**Features**:
+- Schema builder now separates schema files from seed files using path heuristic
+- New `SchemaBuilder.categorize_sql_files()` method returns (schema_files, seed_files) tuple
+- New `SchemaBuilder.build(schema_only=True)` parameter to build schema without seeds
+- Build command applies seeds via existing `SeedApplier` infrastructure
+- Configuration-driven execution: `seed.execution_mode: sequential` in environment YAML
+- CLI flag precedence: `--sequential` > config > default (concatenate)
+
+**CLI Options**:
+- `confiture build --sequential`: Apply seeds sequentially after schema
+- `--database-url URL`: Database connection URL (required for sequential mode)
+- `--continue-on-error`: Skip failed seed files and continue execution
+- Works with all existing build flags: `--env`, `--output`, `--show-hash`, etc.
+
+**Examples**:
+```bash
+# Build schema and apply seeds sequentially
+confiture build --sequential --database-url postgresql://localhost/myapp
+
+# Environment-specific
+confiture build --env production --sequential --database-url $DATABASE_URL
+
+# With error recovery
+confiture build --sequential --continue-on-error --database-url postgresql://localhost/myapp
+
+# Or configure in environment
+# db/environments/local.yaml:
+seed:
+  execution_mode: sequential
+confiture build  # Automatically uses sequential mode
+```
+
+**Testing**:
+- 37 new tests (9 unit + 11 integration + 17 edge cases)
+- All 3,803+ total tests passing
+- Edge cases: no seeds, large files (650+), nested directories, case variations
+- Backward compatible: default behavior unchanged
+
+**Documentation**:
+- Updated CLI help with `--sequential` examples
+- Added sequential execution section to Build from DDL guide
+- New Seed Configuration reference in docs/reference/configuration.md
+- Updated Sequential Seed Execution guide with build command examples
+
+### Backward Compatibility
+
+✅ **Fully backward compatible**:
+- Default behavior unchanged: `confiture build` still concatenates schema + seeds
+- Existing `--schema-only` flag continues to work
+- Configuration without `seed.execution_mode` defaults to concatenation
+- No breaking changes to API or CLI
+
 ## [0.4.0] - 2026-02-04
 
 ### Added

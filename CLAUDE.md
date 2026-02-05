@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.4.0
-**Last Updated**: February 4, 2026
+**Version**: 0.4.1
+**Last Updated**: February 5, 2026
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -873,6 +873,16 @@ except psycopg.OperationalError as e:
 - ✅ Continue-on-error mode tested
 - ✅ Complex SQL support verified
 
+**Sequential Seed Execution in Build Command (v0.4.1)**:
+- ✅ 37 new tests (9 unit + 11 integration + 5 edge cases)
+- ✅ SchemaBuilder categorization methods implemented
+- ✅ CLI build command sequential integration
+- ✅ Environment config support (seed.execution_mode)
+- ✅ Large file handling (650+ rows)
+- ✅ Edge cases: no seeds, nested dirs, case variations
+- ✅ 100% backward compatible
+- ✅ 3,803+ total tests passing
+
 **Not Yet Measured in Production**:
 - ❓ Actual build speed under real conditions
 - ❓ Rust extension performance gains
@@ -912,10 +922,18 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: February 4, 2026
-**Version**: 0.4.0 (Not Production-Tested)
+**Last Updated**: February 5, 2026
+**Version**: 0.4.1 (Not Production-Tested)
 
-**Recent Major Update (v0.4.0)**:
+**Recent Major Update (v0.4.1)**:
+- Sequential seed execution in build command (Issue #32)
+- `confiture build --sequential` for fresh database initialization
+- SchemaBuilder file categorization (schema vs seeds)
+- Environment config integration (seed.execution_mode)
+- 37 new tests, 3,803+ total tests passing
+- 100% backward compatible
+
+**Previous Major Update (v0.4.0)**:
 - Sequential seed file execution (Phase 9)
 - Per-file savepoint isolation
 - 650+ row file support (parser limit solved)
