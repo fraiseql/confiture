@@ -27,6 +27,8 @@ Sequential execution applies each seed file **independently within its own savep
 
 ### Enable Sequential Execution
 
+#### Via `confiture seed apply` (dedicated command)
+
 ```bash
 # Apply seed files sequentially
 confiture seed apply --sequential --env local
@@ -37,6 +39,28 @@ confiture seed apply --sequential --continue-on-error
 # With explicit database URL
 confiture seed apply --sequential --database-url postgresql://localhost/mydb
 ```
+
+#### Via `confiture build --sequential` (recommended for CI/CD)
+
+Build schema and apply seeds sequentially in a single command:
+
+```bash
+# Build schema from DDL files, then apply seeds sequentially
+confiture build --sequential --database-url postgresql://localhost/mydb
+
+# With specific environment
+confiture build --env production --sequential --database-url $DATABASE_URL
+
+# Continue on error (skip failed seed files)
+confiture build --sequential --continue-on-error --database-url postgresql://localhost/mydb
+```
+
+**Benefits of `build --sequential`:**
+- ✅ Single command for schema + seeds
+- ✅ Clean output formatting
+- ✅ Suitable for CI/CD pipelines
+- ✅ Respects `execution_mode: sequential` in config
+- ✅ Perfect for fresh database initialization
 
 ### Configuration
 

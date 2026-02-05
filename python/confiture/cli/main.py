@@ -30,6 +30,7 @@ from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.core.seed_applier import SeedApplier
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 # Valid output formats for linting
@@ -326,6 +327,21 @@ def build(
         "--separator-template",
         help="Custom separator template with {file_path} placeholder",
     ),
+    sequential: bool = typer.Option(
+        False,
+        "--sequential",
+        help="Apply seed files sequentially after schema build (avoids parser limits)",
+    ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        help="Database connection URL (required for --sequential)",
+    ),
+    continue_on_error: bool = typer.Option(
+        False,
+        "--continue-on-error",
+        help="Continue applying seed files if one fails (only with --sequential)",
+    ),
 ) -> None:
     """Build complete schema from DDL files.
 
@@ -374,6 +390,12 @@ def build(
 
         # Show hash for change detection
         confiture build --show-hash
+
+        # Apply seeds sequentially (avoids parser limits with large seed files)
+        confiture build --sequential --database-url postgresql://localhost/myapp
+
+        # Continue on error when applying seeds
+        confiture build --sequential --continue-on-error --database-url postgresql://localhost/myapp
     """
     try:
         # Create schema builder
@@ -453,19 +475,87 @@ def build(
             output_dir.mkdir(parents=True, exist_ok=True)
             output = output_dir / f"schema_{env}.sql"
 
-        # Build schema
+        # Determine if we should apply seeds sequentially
+        apply_sequential = sequential or (
+            builder.env_config.seed
+            and builder.env_config.seed.execution_mode == "sequential"
+        )
+
+        # Build schema (with or without seeds)
         console.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
-        sql_files = builder.find_sql_files()
-        console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+        if apply_sequential:
+            # Build schema only, seeds will be applied separately
+            schema = builder.build(output_path=output, schema_only=True)
+            sql_files = builder.find_sql_files()
+            schema_file_count = len([f for f in sql_files if not any(
+                p.lower() in ("seed", "seeds") for p in f.parts
+            )])
+        else:
+            # Build schema with seeds
+            sql_files = builder.find_sql_files()
+            schema = builder.build(output_path=output)
+            schema_file_count = len(sql_files)
 
-        schema = builder.build(output_path=output)
+        console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
 
         # Success message
         console.print("[green]✅ Schema built successfully![/green]")
         console.print(f"\n📁 Output: {output.absolute()}")
         console.print(f"📏 Size: {len(schema):,} bytes")
-        console.print(f"📊 Files: {len(sql_files)}")
+        console.print(f"📊 Files: {schema_file_count}")
+
+        # Apply seeds sequentially if requested
+        if apply_sequential:
+            console.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
+
+            # Get database URL (from CLI or config)
+            db_url = database_url or builder.env_config.database_url
+            if not db_url:
+                console.print("[red]❌ Database URL required for --sequential mode[/red]")
+                console.print("   Provide via --database-url or in environment config")
+                raise typer.Exit(1)
+
+            # Import psycopg here to connect to database
+            try:
+                import psycopg
+
+                connection = psycopg.connect(db_url)
+            except Exception as e:
+                console.print(f"[red]❌ Failed to connect to database: {e}[/red]")
+                raise typer.Exit(1) from e
+
+            try:
+                # Get seeds directory (parent of first seed file)
+                schema_files, seed_files = builder.categorize_sql_files()
+                if seed_files:
+                    seeds_dir = seed_files[0].parent.parent
+
+                    # Apply seeds
+                    applier = SeedApplier(
+                        seeds_dir=seeds_dir,
+                        env=env,
+                        connection=connection,
+                        console=console,
+                    )
+                    result = applier.apply_sequential(continue_on_error=continue_on_error)
+
+                    console.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
+                    if result.failed > 0:
+                        console.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
+                        if not continue_on_error:
+                            raise typer.Exit(1)
+                else:
+                    console.print("[yellow]⚠️  No seed files found[/yellow]")
+
+                connection.close()
+            except typer.Exit:
+                connection.close()
+                raise
+            except Exception as e:
+                connection.close()
+                console.print(f"[red]❌ Seed application failed: {e}[/red]")
+                raise typer.Exit(1) from e
 
         # Show hash if requested
         if show_hash:

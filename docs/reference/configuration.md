@@ -298,6 +298,64 @@ build:
 
 ---
 
+## Seed Configuration
+
+### `seed`
+
+**Type**: Object
+**Required**: No
+**Description**: Seed data execution configuration
+
+```yaml
+seed:
+  execution_mode: sequential
+```
+
+**Options**:
+
+#### `execution_mode`
+
+**Type**: string
+**Default**: `concatenate`
+**Values**: `concatenate`, `sequential`
+**Description**: How seed files are executed
+
+```yaml
+# Default: concatenate all seed files into single SQL stream
+seed:
+  execution_mode: concatenate
+
+# Sequential: apply each seed file separately within a savepoint
+seed:
+  execution_mode: sequential
+```
+
+**When to use sequential**:
+- Seed files have 500+ INSERT statements
+- You need per-file error isolation
+- Large seed files would fail with concatenation
+- Parser limit errors occur
+
+**Sequential benefits**:
+- ✅ Avoids PostgreSQL parser limits
+- ✅ Per-file error handling
+- ✅ Fresh parser state for each file
+- ✅ Continue-on-error support
+
+**Usage**:
+
+```bash
+# With config: seed.execution_mode: sequential
+confiture build --sequential --database-url postgresql://localhost/mydb
+
+# Or explicitly
+confiture seed apply --sequential --env local
+```
+
+**See [Sequential Seed Execution](../guides/sequential-seed-execution.md)** for complete guide.
+
+---
+
 ## Optional Fields
 
 ### `exclude_dirs`

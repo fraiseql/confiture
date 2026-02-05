@@ -147,6 +147,24 @@ Rust extension may not be installed. Reinstall with: `pip install confiture`
 
 ---
 
+## Large Seed Files (Sequential Mode)
+
+If your seed files have 650+ INSERT statements, use **sequential execution** to avoid PostgreSQL parser limits:
+
+```bash
+# Build schema and apply seeds sequentially
+confiture build --sequential --database-url postgresql://localhost/myapp
+
+# Or configure in your environment
+# db/environments/local.yaml
+seed:
+  execution_mode: sequential
+```
+
+See [Sequential Seed File Execution](./sequential-seed-execution.md) for details.
+
+---
+
 ## See Also
 
 - [Incremental Migrations](./02-incremental-migrations.md) - For existing databases

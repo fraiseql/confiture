@@ -371,6 +371,48 @@ class SchemaBuilder:
             msg = "Comment validation failed:\n" + "\n".join(error_messages)
             raise SchemaError(msg)
 
+    def _is_seed_file(self, file_path: Path) -> bool:
+        """Check if file is a seed file based on path.
+
+        Files are considered seeds if their path contains 'seed' or 'seeds'
+        as a directory component.
+
+        Args:
+            file_path: Path to check
+
+        Returns:
+            True if file is in a seed/seeds directory
+        """
+        parts = [part.lower() for part in file_path.parts]
+        return "seed" in parts or "seeds" in parts
+
+    def categorize_sql_files(self) -> tuple[list[Path], list[Path]]:
+        """Categorize SQL files into schema and seed files.
+
+        Uses path heuristic to identify seeds: files are seeds if their path
+        contains 'seed' or 'seeds' as a directory component.
+
+        Returns:
+            Tuple of (schema_files, seed_files)
+
+        Example:
+            >>> builder = SchemaBuilder(env="local")
+            >>> schema_files, seed_files = builder.categorize_sql_files()
+            >>> print(f"Schema: {len(schema_files)}, Seeds: {len(seed_files)}")
+            Schema: 15, Seeds: 8
+        """
+        all_files = self.find_sql_files()
+        schema_files = []
+        seed_files = []
+
+        for file in all_files:
+            if self._is_seed_file(file):
+                seed_files.append(file)
+            else:
+                schema_files.append(file)
+
+        return schema_files, seed_files
+
     def _get_separator_for_file(self, file_path: Path) -> str:
         """Generate file separator for schema builder
 
@@ -428,7 +470,7 @@ class SchemaBuilder:
         else:
             raise SchemaError(f"Invalid separator style: {style}")
 
-    def build(self, output_path: Path | None = None) -> str:
+    def build(self, output_path: Path | None = None, schema_only: bool = False) -> str:
         """Build schema by concatenating DDL files
 
         Generates a complete schema file by concatenating all SQL files in
@@ -439,6 +481,7 @@ class SchemaBuilder:
 
         Args:
             output_path: Optional path to write schema file. If None, only returns content.
+            schema_only: If True, exclude seed files. Default False (include all files).
 
         Returns:
             Generated schema content as string
@@ -450,8 +493,16 @@ class SchemaBuilder:
             >>> builder = SchemaBuilder(env="local")
             >>> schema = builder.build(output_path=Path("schema.sql"))
             >>> print(f"Generated {len(schema)} bytes")
+
+            >>> # Build schema without seeds
+            >>> schema = builder.build(schema_only=True)
         """
         files = self.find_sql_files()
+
+        # Filter to schema-only files if requested
+        if schema_only:
+            schema_files, _ = self.categorize_sql_files()
+            files = schema_files
 
         # Pre-build validation: check for unclosed comments
         self._validate_comments(files)

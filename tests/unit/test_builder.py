@@ -509,3 +509,288 @@ database_url: postgresql://localhost/test
 
         # Hashes should differ
         assert hash1 != hash2
+
+
+class TestSchemaBuilderCategorization:
+    """Test SQL file categorization (schema vs seeds)."""
+
+    def test_categorize_sql_files_all_schema(self, tmp_path):
+        """Should categorize all schema files correctly."""
+        schema_dir = tmp_path / "db" / "schema"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (schema_dir / "10_tables").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "extensions.sql").write_text("CREATE EXTENSION")
+        (schema_dir / "10_tables" / "users.sql").write_text("CREATE TABLE users")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema_files, seed_files = builder.categorize_sql_files()
+
+        assert len(schema_files) == 2
+        assert len(seed_files) == 0
+        assert any("extensions.sql" in str(f) for f in schema_files)
+        assert any("users.sql" in str(f) for f in schema_files)
+
+    def test_categorize_sql_files_all_seeds(self, tmp_path):
+        """Should categorize all seed files correctly."""
+        seeds_dir = tmp_path / "db" / "seeds"
+        (seeds_dir / "common").mkdir(parents=True)
+
+        (seeds_dir / "common" / "users.sql").write_text("INSERT INTO users")
+        (seeds_dir / "common" / "posts.sql").write_text("INSERT INTO posts")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {seeds_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema_files, seed_files = builder.categorize_sql_files()
+
+        assert len(schema_files) == 0
+        assert len(seed_files) == 2
+        assert any("users.sql" in str(f) for f in seed_files)
+        assert any("posts.sql" in str(f) for f in seed_files)
+
+    def test_categorize_sql_files_mixed(self, tmp_path):
+        """Should categorize mixed schema and seed files."""
+        base_dir = tmp_path / "db"
+        schema_dir = base_dir / "schema"
+        seeds_dir = base_dir / "seeds"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (schema_dir / "10_tables").mkdir(parents=True)
+        (seeds_dir / "common").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "extensions.sql").write_text("CREATE EXTENSION")
+        (schema_dir / "10_tables" / "users.sql").write_text("CREATE TABLE users")
+        (seeds_dir / "common" / "users.sql").write_text("INSERT INTO users")
+
+        config_dir = base_dir / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+  - {seeds_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema_files, seed_files = builder.categorize_sql_files()
+
+        assert len(schema_files) == 2
+        assert len(seed_files) == 1
+        assert any("10_tables" in str(f) for f in schema_files)
+        assert any("seeds" in str(f) for f in seed_files)
+
+    def test_categorize_sql_files_nested_seeds(self, tmp_path):
+        """Should detect nested seed directories."""
+        schema_dir = tmp_path / "db" / "schema"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (schema_dir / "seeds" / "dev").mkdir(parents=True)
+        (schema_dir / "10_tables").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "ext.sql").write_text("CREATE EXTENSION")
+        (schema_dir / "seeds" / "dev" / "data.sql").write_text("INSERT")
+        (schema_dir / "10_tables" / "users.sql").write_text("CREATE TABLE")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema_files, seed_files = builder.categorize_sql_files()
+
+        assert len(schema_files) == 2
+        assert len(seed_files) == 1
+        assert any("seeds/dev" in str(f) for f in seed_files)
+
+    def test_categorize_sql_files_plural_seed(self, tmp_path):
+        """Should detect 'seed' directory (singular)."""
+        schema_dir = tmp_path / "db" / "schema"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (schema_dir / "seed").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "ext.sql").write_text("CREATE EXTENSION")
+        (schema_dir / "seed" / "data.sql").write_text("INSERT")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema_files, seed_files = builder.categorize_sql_files()
+
+        assert len(schema_files) == 1
+        assert len(seed_files) == 1
+        assert any("seed/data.sql" in str(f) for f in seed_files)
+
+
+class TestSchemaBuilderSchemaOnly:
+    """Test schema-only build mode."""
+
+    def test_build_schema_only_true_excludes_seeds(self, tmp_path):
+        """Should exclude seeds when schema_only=True."""
+        base_dir = tmp_path / "db"
+        schema_dir = base_dir / "schema"
+        seeds_dir = base_dir / "seeds"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (seeds_dir / "common").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "ext.sql").write_text("-- extensions\nCREATE EXTENSION pgcrypto;")
+        (seeds_dir / "common" / "users.sql").write_text("-- seed data\nINSERT INTO users VALUES (1);")
+
+        config_dir = base_dir / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+  - {seeds_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+
+        # Build with schema_only=True
+        schema_only = builder.build(schema_only=True)
+
+        # Should contain schema
+        assert "CREATE EXTENSION pgcrypto" in schema_only
+        # Should NOT contain seeds
+        assert "INSERT INTO users" not in schema_only
+
+    def test_build_schema_only_false_includes_seeds(self, tmp_path):
+        """Should include seeds when schema_only=False (default)."""
+        base_dir = tmp_path / "db"
+        schema_dir = base_dir / "schema"
+        seeds_dir = base_dir / "seeds"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (seeds_dir / "common").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "ext.sql").write_text("CREATE EXTENSION pgcrypto;")
+        (seeds_dir / "common" / "users.sql").write_text("INSERT INTO users VALUES (1);")
+
+        config_dir = base_dir / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+  - {seeds_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+
+        # Build with schema_only=False (default)
+        schema_all = builder.build(schema_only=False)
+
+        # Should contain both schema and seeds
+        assert "CREATE EXTENSION pgcrypto" in schema_all
+        assert "INSERT INTO users" in schema_all
+
+    def test_build_default_includes_seeds(self, tmp_path):
+        """Build without schema_only parameter should include seeds (backward compatibility)."""
+        base_dir = tmp_path / "db"
+        schema_dir = base_dir / "schema"
+        seeds_dir = base_dir / "seeds"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (seeds_dir / "common").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "ext.sql").write_text("CREATE EXTENSION pgcrypto;")
+        (seeds_dir / "common" / "users.sql").write_text("INSERT INTO users VALUES (1);")
+
+        config_dir = base_dir / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+  - {seeds_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+
+        # Build without any parameter (default behavior)
+        schema_default = builder.build()
+
+        # Should contain both schema and seeds (backward compatible)
+        assert "CREATE EXTENSION pgcrypto" in schema_default
+        assert "INSERT INTO users" in schema_default
+
+    def test_build_schema_only_true_different_from_false(self, tmp_path):
+        """Schema-only and full build should produce different output."""
+        base_dir = tmp_path / "db"
+        schema_dir = base_dir / "schema"
+        seeds_dir = base_dir / "seeds"
+        (schema_dir / "00_common").mkdir(parents=True)
+        (seeds_dir / "common").mkdir(parents=True)
+
+        (schema_dir / "00_common" / "ext.sql").write_text("CREATE EXTENSION pgcrypto;")
+        (seeds_dir / "common" / "users.sql").write_text("INSERT INTO users VALUES (1);")
+
+        config_dir = base_dir / "environments"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "test.yaml"
+        config_file.write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+  - {seeds_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+
+        schema_only = builder.build(schema_only=True)
+        schema_all = builder.build(schema_only=False)
+
+        # Full build should be longer (has seeds)
+        assert len(schema_all) > len(schema_only)
+
+        # Schema-only should not contain seed data
+        assert "INSERT INTO users" not in schema_only
+        # Full build should contain both
+        assert "INSERT INTO users" in schema_all
