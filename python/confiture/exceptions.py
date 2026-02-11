@@ -344,7 +344,7 @@ class MigrationConflictError(MigrationError):
     ) -> None:
         super().__init__(
             message,
-            error_code=error_code or "MIGRATION_003",
+            error_code=error_code or "MIGR_106",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint,

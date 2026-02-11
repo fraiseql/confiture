@@ -110,7 +110,7 @@ app = typer.Typer(
 console = Console()
 
 # Version
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 
 def version_callback(value: bool) -> None:
@@ -765,6 +765,11 @@ def migrate_status(
         # Check for orphaned SQL files that don't match the naming pattern
         orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
 
+        # Check for duplicate migration versions (warning only)
+        from confiture.core.migrator import find_duplicate_migration_versions as _status_find
+
+        duplicate_versions = _status_find(migrations_dir)
+
         if not migration_files:
             if output_format == "json":
                 result = {
@@ -853,6 +858,10 @@ def migrate_status(
                 result["warning"] = f"Could not connect to database: {db_error}"
             if orphaned_sql_files:
                 result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
+            if duplicate_versions:
+                result["duplicate_versions"] = {
+                    v: [f.name for f in files] for v, files in duplicate_versions.items()
+                }
             _output_json(result, output_file, console)
         else:
             # Display migrations in a table
@@ -877,6 +886,10 @@ def migrate_status(
                 console.print(f" ({len(applied_list)} applied, {len(pending_list)} pending)")
             else:
                 console.print()
+
+            # Warn about duplicate versions
+            if duplicate_versions:
+                _print_duplicate_versions_warning(duplicate_versions, console)
 
             # Warn about orphaned files
             if orphaned_sql_files:
@@ -931,6 +944,29 @@ def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:
     # Orphaned files are SQL files that don't match the expected pattern
     orphaned = all_sql_files - expected_files
     return sorted(orphaned, key=lambda f: f.name)
+
+
+def _print_duplicate_versions_warning(
+    duplicate_versions: dict[str, list[Path]], console: Console
+) -> None:
+    """Print a warning about duplicate migration versions.
+
+    Args:
+        duplicate_versions: Dict mapping version to list of conflicting files
+        console: Console for output
+    """
+    console.print("\n[yellow]⚠️  WARNING: Duplicate migration versions detected[/yellow]")
+    console.print("[yellow]Multiple migration files share the same version number:[/yellow]")
+
+    for version, files in sorted(duplicate_versions.items()):
+        console.print(f"\n  Version {version}:")
+        for f in files:
+            console.print(f"    • {f.name}")
+
+    console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+    console.print(
+        "[yellow]   Use 'confiture migrate generate' to auto-assign the next version.[/yellow]"
+    )
 
 
 def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) -> None:
@@ -1093,6 +1129,25 @@ def migrate_up(
                 f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
             )
             raise typer.Exit(1)
+
+        # Check for duplicate migration versions (hard block, no DB needed)
+        from confiture.core.migrator import find_duplicate_migration_versions
+
+        _up_duplicates = find_duplicate_migration_versions(migrations_dir)
+        if _up_duplicates:
+            console.print(
+                "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
+            )
+            console.print("[red]Multiple migration files share the same version number:[/red]\n")
+            for version, files in sorted(_up_duplicates.items()):
+                console.print(f"  Version {version}:")
+                for f in files:
+                    console.print(f"    • {f.name}")
+            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+            console.print(
+                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
+            )
+            raise typer.Exit(3)
 
         # Load configuration
         config_data = load_config(config)
@@ -1380,6 +1435,8 @@ def migrate_up(
                 )
             conn.close()
 
+    except typer.Exit:
+        raise
     except LockAcquisitionError:
         # Already handled above
         raise
@@ -1569,10 +1626,12 @@ def migrate_generate(
                 version_str = f.name.split("_")[0]
                 console.print(f"    - {f.name} (version: {version_str})")
 
-        # Check for duplicate versions
-        duplicates = generator._validate_versions()
+        # Check for duplicate versions (covers both .py and .up.sql files)
+        from confiture.core.migrator import find_duplicate_migration_versions as _gen_find
+
+        duplicates = _gen_find(migrations_dir)
         if duplicates:
-            warning_msg = f"Duplicate versions detected: {', '.join(duplicates.keys())}"
+            warning_msg = f"Duplicate versions detected: {', '.join(sorted(duplicates.keys()))}"
             warnings.append(warning_msg)
             if format_output == "text":
                 console.print(f"[yellow]⚠️  Warning: {warning_msg}[/yellow]")
@@ -1769,6 +1828,25 @@ def migrate_baseline(
         if not migrations_dir.exists():
             console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
             raise typer.Exit(1)
+
+        # Check for duplicate migration versions (hard block, no DB needed)
+        from confiture.core.migrator import find_duplicate_migration_versions as _baseline_find
+
+        _baseline_duplicates = _baseline_find(migrations_dir)
+        if _baseline_duplicates:
+            console.print(
+                "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
+            )
+            console.print("[red]Multiple migration files share the same version number:[/red]\n")
+            for version, files in sorted(_baseline_duplicates.items()):
+                console.print(f"  Version {version}:")
+                for f in files:
+                    console.print(f"    • {f.name}")
+            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+            console.print(
+                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
+            )
+            raise typer.Exit(3)
 
         # Load config and create connection
         config_data = load_config(config)
@@ -2377,16 +2455,45 @@ def migrate_validate(
             _validate_idempotency(migrations_dir, format_output, output_file)
             return
 
-        # Use Migrator to find and optionally fix orphaned files
+        # Use Migrator to find orphaned files (needs instance for method)
         from unittest.mock import Mock
 
-        from confiture.core.migrator import Migrator
+        from confiture.core.migrator import Migrator, find_duplicate_migration_versions
 
         mock_conn = Mock()
         migrator = Migrator(connection=mock_conn)
 
+        # Check for duplicate migration versions (hard error)
+        duplicate_versions = find_duplicate_migration_versions(migrations_dir)
+
         # Find orphaned files
         orphaned_files = migrator.find_orphaned_sql_files(migrations_dir)
+
+        if duplicate_versions:
+            if format_output == "json":
+                result = {
+                    "status": "issues_found",
+                    "duplicate_versions": {
+                        v: [f.name for f in files] for v, files in duplicate_versions.items()
+                    },
+                }
+                if orphaned_files:
+                    result["orphaned_files"] = [f.name for f in orphaned_files]
+                _output_json(result, output_file, console)
+            else:
+                console.print("[red]❌ Duplicate migration versions detected[/red]")
+                console.print(
+                    "[red]Multiple migration files share the same version number:[/red]\n"
+                )
+                for version, files in sorted(duplicate_versions.items()):
+                    console.print(f"  Version {version}:")
+                    for f in files:
+                        console.print(f"    • {f.name}")
+                console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+                console.print(
+                    "[yellow]   Use 'confiture migrate generate' to auto-assign the next version.[/yellow]"
+                )
+            raise typer.Exit(1)
 
         if not orphaned_files:
             if format_output == "json":

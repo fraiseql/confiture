@@ -23,6 +23,56 @@ from confiture.models.migration import Migration
 logger = logging.getLogger(__name__)
 
 
+def _version_from_migration_filename(filename: str) -> str:
+    """Extract version prefix from a migration filename.
+
+    Args:
+        filename: Migration filename (e.g., "001_create_users.py")
+
+    Returns:
+        Version string (e.g., "001")
+    """
+    if filename.endswith(".up.sql"):
+        filename = filename[:-7]
+    elif filename.endswith(".down.sql"):
+        filename = filename[:-9]
+    return filename.split("_")[0]
+
+
+def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Path]]:
+    """Find migration files that share the same version prefix.
+
+    Standalone function (no Migrator instance needed). Scans .py and .up.sql
+    files, groups by version prefix, returns only versions with >1 file.
+
+    Args:
+        migrations_dir: Directory containing migration files
+
+    Returns:
+        Dict mapping version strings to lists of conflicting file paths.
+        Empty dict if no duplicates exist or directory doesn't exist.
+    """
+    if not migrations_dir.exists():
+        return {}
+
+    py_files = [
+        f
+        for f in migrations_dir.glob("*.py")
+        if f.name != "__init__.py" and not f.name.startswith("_")
+    ]
+    sql_files = list(migrations_dir.glob("*.up.sql"))
+    all_files = py_files + sql_files
+
+    version_map: dict[str, list[Path]] = {}
+    for f in all_files:
+        version = _version_from_migration_filename(f.name)
+        version_map.setdefault(version, []).append(f)
+
+    return {
+        v: sorted(files, key=lambda p: p.name) for v, files in version_map.items() if len(files) > 1
+    }
+
+
 class Migrator:
     """Executes database migrations and tracks their state.
 
@@ -659,6 +709,30 @@ class Migrator:
         migration_files = sorted(all_files, key=lambda f: self._version_from_filename(f.name))
 
         return migration_files
+
+    def find_duplicate_versions(self, migrations_dir: Path | None = None) -> dict[str, list[Path]]:
+        """Find migration files that share the same version prefix.
+
+        Groups migration files by version prefix and returns only versions
+        with more than one file. This detects conflicts that would cause
+        a UNIQUE constraint violation on tb_confiture.version at apply time.
+
+        Args:
+            migrations_dir: Optional custom migrations directory.
+                           If None, uses db/migrations/ (default)
+
+        Returns:
+            Dict mapping version strings to lists of conflicting file paths.
+            Empty dict if no duplicates exist.
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> dupes = migrator.find_duplicate_versions()
+            >>> # {"001": [Path("001_a.py"), Path("001_b.up.sql")]}
+        """
+        if migrations_dir is None:
+            migrations_dir = Path("db") / "migrations"
+        return find_duplicate_migration_versions(migrations_dir)
 
     def find_orphaned_sql_files(self, migrations_dir: Path | None = None) -> list[Path]:
         """Find .sql files that don't match the expected naming pattern.

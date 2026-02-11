@@ -248,6 +248,15 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=0,
             resolution_hint="Your database schema is up to date",
         ),
+        ErrorCodeDefinition(
+            code="MIGR_106",
+            message_template="Duplicate migration version: {version}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint="Multiple migration files share the same version number. "
+            "Rename files to use unique version prefixes. "
+            "Run 'confiture migrate validate' to see all duplicates.",
+        ),
     ]
 
     for code in migr_codes:
