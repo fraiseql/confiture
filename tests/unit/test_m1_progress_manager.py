@@ -100,7 +100,20 @@ class TestProgressManagerCreation:
                 return True
 
         monkeypatch.setattr(sys, "stdout", MockStdout())
-        monkeypatch.delenv("CI", raising=False)
+
+        # Clear all CI environment variables
+        for var in [
+            "CI",
+            "GITHUB_ACTIONS",
+            "GITLAB_CI",
+            "CIRCLECI",
+            "BUILD_ID",
+            "BUILD_NUMBER",
+            "RUN_ID",
+            "TRAVIS",
+            "JENKINS_URL",
+        ]:
+            monkeypatch.delenv(var, raising=False)
 
         manager = ProgressManager()  # Auto-detect
         assert manager.enabled
