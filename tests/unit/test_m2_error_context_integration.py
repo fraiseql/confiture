@@ -6,9 +6,9 @@ Tests error context detection and formatting with various exception types.
 import pytest
 
 from confiture.core.error_context import (
-    get_error_context,
-    format_error_with_context,
     ERROR_CONTEXTS,
+    format_error_with_context,
+    get_error_context,
 )
 from confiture.core.error_handler import _detect_error_context, print_error_to_console
 from confiture.exceptions import (
@@ -180,7 +180,7 @@ class TestErrorContextFormatting:
 
     def test_format_all_error_contexts(self):
         """Verify all error contexts can be formatted."""
-        for code in ERROR_CONTEXTS.keys():
+        for code in ERROR_CONTEXTS:
             output = format_error_with_context(code)
             assert "❌" in output
             assert "CAUSE:" in output

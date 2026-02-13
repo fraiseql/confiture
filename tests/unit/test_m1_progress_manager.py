@@ -3,7 +3,6 @@
 Tests the ProgressManager utility for displaying progress during operations.
 """
 
-import pytest
 
 from confiture.core.progress import ProgressManager, _is_ci_environment, progress_bar
 
@@ -262,25 +261,25 @@ class TestProgressManagerIntegration:
         """Test typical workflow with progress disabled."""
         with ProgressManager(show_progress=False) as manager:
             task = manager.add_task("Processing items...", total=100)
-            for i in range(100):
+            for _ in range(100):
                 manager.update(task, 1)
 
     def test_typical_workflow_enabled(self):
         """Test typical workflow with progress enabled."""
         with ProgressManager(show_progress=True) as manager:
             task = manager.add_task("Processing items...", total=10)
-            for i in range(10):
+            for _ in range(10):
                 manager.update(task, 1)
 
     def test_multiple_tasks_workflow(self):
         """Test workflow with multiple sequential tasks."""
         with ProgressManager(show_progress=True) as manager:
             task1 = manager.add_task("Phase 1...", total=5)
-            for i in range(5):
+            for _ in range(5):
                 manager.update(task1, 1)
 
             task2 = manager.add_task("Phase 2...", total=3)
-            for i in range(3):
+            for _ in range(3):
                 manager.update(task2, 1)
 
 
@@ -289,7 +288,6 @@ class TestProgressManagerSchemaBuilder:
 
     def test_builder_accepts_progress_manager(self, tmp_path):
         """Verify SchemaBuilder.build() accepts progress parameter."""
-        from pathlib import Path
         from confiture.core.builder import SchemaBuilder
 
         # Create minimal schema structure
@@ -319,7 +317,6 @@ class TestProgressManagerSchemaBuilder:
 
     def test_builder_build_without_progress(self, tmp_path):
         """Verify SchemaBuilder.build() works without progress parameter."""
-        from pathlib import Path
         from confiture.core.builder import SchemaBuilder
 
         # Create minimal schema structure
@@ -348,7 +345,6 @@ class TestProgressManagerSchemaBuilder:
 
     def test_builder_progress_multiple_files(self, tmp_path):
         """Verify progress tracking works with multiple files."""
-        from pathlib import Path
         from confiture.core.builder import SchemaBuilder
 
         # Create schema structure with multiple files
