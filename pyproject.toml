@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "0.4.2"
+version = "0.4.3.1"
 description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
