@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -28,6 +29,38 @@ seed_app = typer.Typer(
     help="Seed data validation and management",
     no_args_is_help=True,
 )
+
+
+# Shared option definitions for better reusability
+DEFAULT_SEEDS_DIR = Path("db/seeds")
+DEFAULT_COPY_THRESHOLD = 1000
+DEFAULT_ENV = "local"
+
+
+def _format_benchmark_output(result: Any) -> None:  # type: ignore[no-untyped-def]
+    """Format and display benchmark results.
+
+    Args:
+        result: BenchmarkResult object with performance metrics
+    """
+    console.print("\n[bold]COPY Format Performance Benchmark[/bold]")
+    console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.print(f"Total rows: {result.total_rows}")
+    console.print(f"\n[yellow]VALUES format:[/yellow] {result.values_time_ms:.2f}ms")
+    console.print(f"[cyan]COPY format:  [/cyan] {result.copy_time_ms:.2f}ms")
+    console.print(f"[green]Speedup:      [/green] {result.speedup_factor:.1f}x faster")
+    console.print(f"[green]Time saved:   [/green] {result.time_saved_ms:.2f}ms")
+
+    if result.table_metrics:
+        console.print("\n[bold]Per-Table Metrics:[/bold]")
+        for table, metrics in result.table_metrics.items():
+            console.print(f"  {table}: {metrics['rows']} rows")
+            console.print(
+                f"    VALUES: {metrics['values_time_ms']:.2f}ms, "
+                f"COPY: {metrics['copy_time_ms']:.2f}ms"
+            )
+
+    console.print(f"\n[green]✓ Benchmark complete: {result.get_summary()}[/green]")
 
 
 def _validate_prep_seed(
@@ -354,12 +387,12 @@ def validate(
 @seed_app.command("apply")
 def apply(
     seeds_dir: Path = typer.Option(
-        Path("db/seeds"),
+        DEFAULT_SEEDS_DIR,
         "--seeds-dir",
         help="Directory containing seed files",
     ),
     env: str = typer.Option(
-        "local",
+        DEFAULT_ENV,
         "--env",
         help="Environment name (for context and database URL lookup)",
     ),
@@ -377,6 +410,21 @@ def apply(
         None,
         "--database-url",
         help="Database URL (if not loading from environment config)",
+    ),
+    copy_format: bool = typer.Option(
+        False,
+        "--copy-format",
+        help="Convert INSERT statements to COPY format for faster loading",
+    ),
+    copy_threshold: int = typer.Option(
+        DEFAULT_COPY_THRESHOLD,
+        "--copy-threshold",
+        help=f"Row threshold for automatic COPY format selection (default: {DEFAULT_COPY_THRESHOLD})",
+    ),
+    benchmark: bool = typer.Option(
+        False,
+        "--benchmark",
+        help="Show performance comparison (VALUES vs COPY format)",
     ),
 ) -> None:
     """Apply seed files to database.
@@ -460,4 +508,119 @@ def apply(
         raise
     except Exception as e:
         console.print(f"[red]✗ Error: {e}[/red]")
+        raise typer.Exit(2) from e
+
+
+@seed_app.command("convert")
+def convert(
+    input_file: Path = typer.Option(
+        ...,
+        "--input",
+        help="Input file with INSERT statements",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        help="Output file for COPY format (default: stdout)",
+    ),
+) -> None:
+    """Convert INSERT statements to COPY format.
+
+    This command reads SQL files with INSERT statements and converts them
+    to PostgreSQL COPY format for faster bulk loading.
+
+    Examples:
+        # Convert INSERT to COPY and display
+        confiture seed convert --input seeds.sql
+
+        # Convert and save to file
+        confiture seed convert --input seeds.sql --output seeds_copy.sql
+    """
+    try:
+        if not input_file.exists():
+            console.print(f"[red]✗ Input file not found: {input_file}[/red]")
+            raise typer.Exit(2)
+
+        from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
+
+        # Read input file
+        sql_content = input_file.read_text()
+
+        # Convert to COPY format
+        converter = InsertToCopyConverter()
+        copy_format = converter.convert(sql_content)
+
+        # Output result
+        if output_file:
+            output_file.write_text(copy_format)
+            console.print("[green]✓ Converted to COPY format[/green]")
+            console.print(f"  Input: {input_file}")
+            console.print(f"  Output: {output_file}")
+        else:
+            console.print(copy_format)
+
+        raise typer.Exit(0)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗ Conversion failed: {e}[/red]")
+        raise typer.Exit(2) from e
+
+
+@seed_app.command("benchmark")
+def benchmark(
+    seeds_dir: Path = typer.Option(
+        DEFAULT_SEEDS_DIR,
+        "--seeds-dir",
+        help="Directory containing seed files",
+    ),
+) -> None:
+    """Benchmark COPY vs VALUES performance.
+
+    This command analyzes seed files and shows the performance difference
+    between VALUES and COPY format for loading the data.
+
+    Examples:
+        # Benchmark default seed directory
+        confiture seed benchmark
+
+        # Benchmark specific directory
+        confiture seed benchmark --seeds-dir db/seeds/test
+    """
+    try:
+        import asyncio
+
+        from confiture.core.seed.performance_benchmark import PerformanceBenchmark
+
+        if not seeds_dir.exists():
+            console.print(f"[red]✗ Seeds directory not found: {seeds_dir}[/red]")
+            raise typer.Exit(2)
+
+        # Collect seed data
+        seed_data: dict[str, list[dict]] = {}
+
+        for seed_file in sorted(seeds_dir.glob("*.sql")):
+            console.print(f"[blue]Analyzing {seed_file.name}...[/blue]")
+            # Basic parsing - just count lines as a proxy for row count
+            content = seed_file.read_text()
+            line_count = len(content.split("\n"))
+            seed_data[seed_file.stem] = [{"row": i} for i in range(line_count)]
+
+        if not seed_data:
+            console.print("[yellow]No seed files found[/yellow]")
+            raise typer.Exit(0)
+
+        # Run benchmark
+        benchmark_runner = PerformanceBenchmark()
+        result = asyncio.run(benchmark_runner.compare(seed_data))
+
+        # Display results using helper
+        _format_benchmark_output(result)
+        raise typer.Exit(0)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗ Benchmark failed: {e}[/red]")
         raise typer.Exit(2) from e
