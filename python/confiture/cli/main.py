@@ -1422,6 +1422,9 @@ def migrate_up(
         # Create lock manager
         lock = MigrationLock(conn, lock_config)
 
+        # Import ProgressManager for progress tracking
+        from confiture.core.progress import ProgressManager
+
         # Apply migrations with distributed lock
         applied_count = 0
         failed_migration = None
@@ -1432,37 +1435,44 @@ def migrate_up(
                 if not no_lock:
                     console.print("[cyan]🔒 Acquired migration lock[/cyan]\n")
 
-                for migration_file in migrations_to_apply:
-                    # Load migration module
-                    migration_class = load_migration_class(migration_file)
-
-                    # Create migration instance
-                    migration = migration_class(connection=conn)
-                    # Override strict_mode from CLI/config if not already set on class
-                    if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
-                        migration.strict_mode = effective_strict_mode
-
-                    # Check target
-                    if target and migration.version > target:
-                        console.print(
-                            f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]"
-                        )
-                        break
-
-                    # Apply migration
-                    console.print(
-                        f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+                # Use progress manager for migration application
+                with ProgressManager() as progress:
+                    apply_task = progress.add_task(
+                        "Applying migrations...", total=len(migrations_to_apply)
                     )
 
-                    try:
-                        migrator.apply(migration, force=force, migration_file=migration_file)
-                        console.print("[green]✅[/green]")
-                        applied_count += 1
-                    except Exception as e:
-                        console.print("[red]❌[/red]")
-                        failed_migration = migration
-                        failed_exception = e
-                        break
+                    for migration_file in migrations_to_apply:
+                        # Load migration module
+                        migration_class = load_migration_class(migration_file)
+
+                        # Create migration instance
+                        migration = migration_class(connection=conn)
+                        # Override strict_mode from CLI/config if not already set on class
+                        if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
+                            migration.strict_mode = effective_strict_mode
+
+                        # Check target
+                        if target and migration.version > target:
+                            console.print(
+                                f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]"
+                            )
+                            break
+
+                        # Apply migration
+                        console.print(
+                            f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+                        )
+
+                        try:
+                            migrator.apply(migration, force=force, migration_file=migration_file)
+                            console.print("[green]✅[/green]")
+                            applied_count += 1
+                            progress.update(apply_task, advance=1)
+                        except Exception as e:
+                            console.print("[red]❌[/red]")
+                            failed_migration = migration
+                            failed_exception = e
+                            break
 
         except LockAcquisitionError as e:
             print_error_to_console(e)
