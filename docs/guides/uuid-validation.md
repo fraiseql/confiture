@@ -6,7 +6,7 @@
 
 ## Overview
 
-UUID validation is a comprehensive system for detecting malformed UUIDs and validating seed-specific UUID patterns in seed data files. This guide covers the three UUID patterns found in production seed files and how to validate them.
+UUID validation is a comprehensive system for detecting malformed UUIDs and validating seed-specific UUID patterns in seed data files. This guide covers the three UUID patterns commonly found in seed data and how to validate them.
 
 ## Three UUID Patterns
 
@@ -54,33 +54,33 @@ Hierarchical UUIDs that encode the table structure within their format. Used in 
 
 **Examples**:
 
-Read seed (backend organizational units):
+Read seed (backend dimension data):
 ```sql
 -- Schema entity: 014211, Directory: 21, No function/scenario
-INSERT INTO prep_seed.tb_organizational_unit_info (id, name)
-VALUES ('01421121-0000-0000-0000-000000000001', 'Headquarters');
+INSERT INTO prep_seed.tb_dimension_data (id, name)
+VALUES ('01421121-0000-0000-0000-000000000001', 'Dimension Record 1');
 ```
 
-Test function with scenario (backend products):
+Test function with scenario (backend fact data):
 ```sql
 -- Schema entity: 031211, Directory: 21, Function: 4211, Scenario: 1
-INSERT INTO prep_seed.tb_product_info (id, sku)
-VALUES ('03121121-4211-1000-0000-000000000001', 'TEST-SKU-001');
+INSERT INTO prep_seed.tb_fact_data (id, code)
+VALUES ('03121121-4211-1000-0000-000000000001', 'TEST-FACT-001');
 ```
 
 Same entity, different environments:
 ```sql
 -- Backend: Directory 21
-INSERT INTO prep_seed.tb_organizational_unit_info (id, name)
-VALUES ('01421121-0000-0000-0000-000000000001', 'Unit1');
+INSERT INTO prep_seed.tb_dimension_data (id, name)
+VALUES ('01421121-0000-0000-0000-000000000001', 'Record1');
 
 -- Frontend: Directory 31 (same entity 014211)
-INSERT INTO prep_seed.tb_organizational_unit_info (id, name)
-VALUES ('01421131-0000-0000-0000-000000000001', 'Unit1');
+INSERT INTO prep_seed.tb_dimension_data (id, name)
+VALUES ('01421131-0000-0000-0000-000000000001', 'Record1');
 
 -- Common: Directory 11 (same entity 014211)
-INSERT INTO prep_seed.tb_organizational_unit_info (id, name)
-VALUES ('01421111-0000-0000-0000-000000000001', 'Unit1');
+INSERT INTO prep_seed.tb_dimension_data (id, name)
+VALUES ('01421111-0000-0000-0000-000000000001', 'Record1');
 ```
 
 ### 3. Test Placeholder UUIDs (5% of data)
@@ -134,7 +134,7 @@ dir_extractor = DirectoryExtractor()
 seed_validator = SeedEnumeratedValidator()
 
 # Extract schema context from file path
-seed_path = Path("db/2_seed_backend/21_write_side/214_dim/.../014211_tb.sql")
+seed_path = Path("db/2_seed_backend/21_write_side/214_dim/2142_category/21421_subcategory/214211_tb_data.sql")
 schema_entity = schema_extractor.extract_schema_entity(seed_path)  # "014211"
 directory = dir_extractor.extract_directory(seed_path)  # "21"
 
@@ -207,22 +207,22 @@ confiture seed validate \
   --output uuid-report.json
 ```
 
-## Real PrintOptim Examples
+## Example Seed Structure
 
 ### Backend Seeds (db/2_seed_backend/)
 
 **Directory**: `21_write_side`
 
 ```sql
--- Read seed: Organizational units
-INSERT INTO prep_seed.tb_organizational_unit_info (id, name, parent_id) VALUES
-  ('01421121-0000-0000-0000-000000000001', 'Headquarters', NULL),
-  ('01421121-0000-0000-0000-000000000002', 'Engineering', '01421121-0000-0000-0000-000000000001');
+-- Read seed: Reference data for backend
+INSERT INTO prep_seed.tb_reference_data (id, code, name, status) VALUES
+  ('01421121-0000-0000-0000-000000000001', 'REF-001', 'Reference 1', 'active'),
+  ('01421121-0000-0000-0000-000000000002', 'REF-002', 'Reference 2', 'active');
 
--- Test data: Product variants (function 4211, scenario 1)
-INSERT INTO prep_seed.tb_product_variant (id, product_id, sku) VALUES
-  ('03121121-4211-1000-0000-000000000001', '03121121-0000-0000-0000-000000000001', 'TEST-VAR-001'),
-  ('03121121-4211-1000-0000-000000000002', '03121121-0000-0000-0000-000000000001', 'TEST-VAR-002');
+-- Test data: Variant scenarios (function 4211, scenario 1)
+INSERT INTO prep_seed.tb_variant_data (id, reference_id, code, name) VALUES
+  ('03121121-4211-1000-0000-000000000001', '03121121-0000-0000-0000-000000000001', 'VAR-001', 'Variant 1'),
+  ('03121121-4211-1000-0000-000000000002', '03121121-0000-0000-0000-000000000001', 'VAR-002', 'Variant 2');
 ```
 
 ### Frontend Seeds (db/3_seed_frontend/)
@@ -230,10 +230,10 @@ INSERT INTO prep_seed.tb_product_variant (id, product_id, sku) VALUES
 **Directory**: `31_write_side` (same entities as backend, different directory)
 
 ```sql
--- Same organizational units in frontend seed
-INSERT INTO prep_seed.tb_organizational_unit_info (id, name, parent_id) VALUES
-  ('01421131-0000-0000-0000-000000000001', 'Headquarters', NULL),
-  ('01421131-0000-0000-0000-000000000002', 'Sales', '01421131-0000-0000-0000-000000000001');
+-- Same reference data in frontend seed
+INSERT INTO prep_seed.tb_reference_data (id, code, name, status) VALUES
+  ('01421131-0000-0000-0000-000000000001', 'REF-001', 'Reference 1', 'active'),
+  ('01421131-0000-0000-0000-000000000002', 'REF-002', 'Reference 2', 'active');
 ```
 
 ### Common Seeds (db/1_seed_common/)
@@ -242,9 +242,9 @@ INSERT INTO prep_seed.tb_organizational_unit_info (id, name, parent_id) VALUES
 
 ```sql
 -- Shared reference data
-INSERT INTO prep_seed.tb_currency_codes (id, code, name) VALUES
-  ('01421111-0000-0000-0000-000000000001', 'USD', 'US Dollar'),
-  ('01421111-0000-0000-0000-000000000002', 'EUR', 'Euro');
+INSERT INTO prep_seed.tb_common_codes (id, code, name) VALUES
+  ('01421111-0000-0000-0000-000000000001', 'CODE-001', 'Common Code 1'),
+  ('01421111-0000-0000-0000-000000000002', 'CODE-002', 'Common Code 2');
 ```
 
 ## Architecture

@@ -247,26 +247,26 @@ class TestSeedPatternValidationIntegration:
         assert seed_enum.is_valid_pattern(uuid_enum, schema_entity, directory)
         assert test_placeholder.is_valid_pattern(uuid_placeholder)
 
-    def test_real_printoptim_backend_examples(self):
-        """Test with real PrintOptim backend examples."""
+    def test_backend_seed_enumerated_examples(self):
+        """Test seed enumerated validation with backend seed examples."""
         seed_enum = SeedEnumeratedValidator()
 
-        # Real organizational unit from backend
+        # Backend reference data without function
         assert seed_enum.is_valid_pattern("01421121-0000-0000-0000-000000000001", "014211", "21")
 
-        # Real example with function (test data)
+        # Backend example with test function and scenario
         assert seed_enum.is_valid_pattern("01421121-4211-1000-0000-000000000001", "014211", "21")
 
-    def test_real_printoptim_frontend_examples(self):
-        """Test with real PrintOptim frontend examples."""
+    def test_frontend_seed_enumerated_examples(self):
+        """Test seed enumerated validation with frontend seed examples."""
         seed_enum = SeedEnumeratedValidator()
 
-        # Frontend catalog with directory 31
+        # Frontend reference data with directory 31
         assert seed_enum.is_valid_pattern("01312131-0000-0000-0000-000000000001", "013121", "31")
 
-    def test_real_printoptim_common_examples(self):
-        """Test with real PrintOptim common seed examples."""
+    def test_common_seed_enumerated_examples(self):
+        """Test seed enumerated validation with common seed examples."""
         seed_enum = SeedEnumeratedValidator()
 
-        # Common seed with directory 11
+        # Common seed data with directory 11
         assert seed_enum.is_valid_pattern("01421111-0000-0000-0000-000000000001", "014211", "11")

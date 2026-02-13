@@ -197,7 +197,7 @@ db/schema/
 
 ## Real-World Example: Enterprise Project
 
-Based on printoptim_backend pattern (without business specifics):
+Example of a scalable three-level directory structure for large projects:
 
 ```
 db/
@@ -628,7 +628,7 @@ See working examples in the repository:
 
 - **[examples/basic/](../examples/basic/)**: Simple blog schema
 - **[examples/fraiseql/](../examples/fraiseql/)**: FraiseQL integration
-- **Reference**: printoptim_backend uses enterprise 3-level pattern
+- **Complex projects**: Use three-level directory pattern (shown above)
 
 ---
 

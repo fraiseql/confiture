@@ -117,33 +117,33 @@ class TestUUIDPatternDetection:
         pattern_type = detector.detect_type("01421121-0000-0000-0000")
         assert pattern_type is None
 
-    def test_detection_with_context_printoptim_backend(self):
-        """Test detection with PrintOptim backend context."""
+    def test_detection_with_backend_seed_context(self):
+        """Test pattern detection with backend seed context."""
         detector = UUIDPatternDetector()
 
-        # Real backend seed enumerated
+        # Backend seed enumerated UUID
         uuid = "01421121-0000-0000-0000-000000000001"
         pattern_type = detector.detect_type(
             uuid, schema_entity="014211", directory="21", is_seed_file=True
         )
         assert pattern_type == UUIDPatternType.SEED_ENUMERATED
 
-    def test_detection_with_context_printoptim_frontend(self):
-        """Test detection with PrintOptim frontend context."""
+    def test_detection_with_frontend_seed_context(self):
+        """Test pattern detection with frontend seed context."""
         detector = UUIDPatternDetector()
 
-        # Real frontend seed enumerated
+        # Frontend seed enumerated UUID
         uuid = "01312131-0000-0000-0000-000000000001"
         pattern_type = detector.detect_type(
             uuid, schema_entity="013121", directory="31", is_seed_file=True
         )
         assert pattern_type == UUIDPatternType.SEED_ENUMERATED
 
-    def test_detection_with_context_printoptim_common(self):
-        """Test detection with PrintOptim common seed context."""
+    def test_detection_with_common_seed_context(self):
+        """Test pattern detection with common seed context."""
         detector = UUIDPatternDetector()
 
-        # Real common seed enumerated
+        # Common seed enumerated UUID
         uuid = "01421111-0000-0000-0000-000000000001"
         pattern_type = detector.detect_type(
             uuid, schema_entity="014211", directory="11", is_seed_file=True

@@ -76,21 +76,21 @@ class TestUUIDValidationDocExamples:
         uuid = "22222222-2222-2222-2222-222222222222"
         assert validator.is_valid_pattern(uuid)
 
-    def test_printoptim_product_uuid_examples_are_valid(self) -> None:
-        """Test PrintOptim product examples from documentation."""
+    def test_fact_data_uuid_examples_are_valid(self) -> None:
+        """Test fact data examples from documentation."""
         validator = SeedEnumeratedValidator()
 
-        # Product entity: 014311, Backend directory: 21
+        # Fact data entity: 014311, Backend directory: 21
         assert validator.is_valid_pattern("01431121-0000-0000-0000-000000000001", "014311", "21")
 
-        # Product variant with test function 4321, scenario 2
+        # Fact data variant with test function 4321, scenario 2
         assert validator.is_valid_pattern("01431121-4321-2000-0000-000000000001", "014311", "21")
 
-    def test_printoptim_currency_codes_example_is_valid(self) -> None:
-        """Test PrintOptim currency codes example (common seed)."""
+    def test_common_codes_example_is_valid(self) -> None:
+        """Test common codes example from documentation."""
         validator = SeedEnumeratedValidator()
 
-        # Currency codes entity (example), common directory: 11
+        # Common codes entity (example), common directory: 11
         uuid = "01421111-0000-0000-0000-000000000001"
         schema_entity = "014211"
         directory = "11"
@@ -111,9 +111,9 @@ class TestUUIDValidationDocExamples:
         """Test multi-row INSERT UUID extraction."""
         validator = UUIDValidator()
 
-        sql = """INSERT INTO tb_organizational_unit_info (id, name, parent_id) VALUES
-          ('01421121-0000-0000-0000-000000000001', 'Headquarters', NULL),
-          ('01421121-0000-0000-0000-000000000002', 'Engineering', '01421121-0000-0000-0000-000000000001');"""
+        sql = """INSERT INTO tb_reference_data (id, name, parent_id) VALUES
+          ('01421121-0000-0000-0000-000000000001', 'Record1', NULL),
+          ('01421121-0000-0000-0000-000000000002', 'Record2', '01421121-0000-0000-0000-000000000001');"""
 
         uuids = validator.extract_uuid_literals(sql)
 

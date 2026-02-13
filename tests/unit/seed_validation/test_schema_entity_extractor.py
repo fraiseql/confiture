@@ -153,24 +153,24 @@ class TestDirectoryExtractor:
         assert directory == "21"
 
 
-class TestExtractorsWithRealPrintOptimPaths:
-    """Test extractors with real PrintOptim file paths."""
+class TestExtractorsWithMultipleSeedLevels:
+    """Test extractors with file paths across different seed environments."""
 
-    def test_real_printoptim_organizational_unit_backend(self):
-        """Test with real PrintOptim organizational unit in backend."""
+    def test_backend_seed_extraction(self):
+        """Test extraction from backend seed path."""
         schema_extractor = SchemaEntityExtractor()
         dir_extractor = DirectoryExtractor()
 
         path = Path(
             "db/2_seed_backend/21_write_side/214_dim/2142_org/"
-            "21421_organizational_unit/214211_tb_organizational_unit_info.sql"
+            "21421_organizational_unit/214211_tb_reference_data.sql"
         )
 
         assert schema_extractor.extract_schema_entity(path) == "014211"
         assert dir_extractor.extract_directory(path) == "21"
 
-    def test_real_printoptim_product_frontend(self):
-        """Test with real PrintOptim product in frontend."""
+    def test_frontend_seed_extraction(self):
+        """Test extraction from frontend seed path."""
         schema_extractor = SchemaEntityExtractor()
         dir_extractor = DirectoryExtractor()
 
@@ -183,8 +183,8 @@ class TestExtractorsWithRealPrintOptimPaths:
         assert schema_extractor.extract_schema_entity(path) == "013121"
         assert dir_extractor.extract_directory(path) == "31"
 
-    def test_real_printoptim_multiple_scenarios(self):
-        """Test extraction consistency across seed levels."""
+    def test_extraction_consistency_across_seed_levels(self):
+        """Test extraction consistency across different seed environments."""
         schema_extractor = SchemaEntityExtractor()
         dir_extractor = DirectoryExtractor()
 
