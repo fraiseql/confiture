@@ -367,6 +367,17 @@ def build(
       confiture migrate up      - Apply incremental migrations instead
       confiture seed validate   - Validate seed data separately
       confiture lint            - Check schema against best practices
+
+    OPTIONS:
+      CORE: --env, --output
+        Essential options for basic usage
+
+      ADVANCED: --show-hash, --schema-only, --separator-style, --separator-template
+        Optional parameters for customizing output format
+
+      SEEDS & VALIDATION: --sequential, --database-url, --continue-on-error,
+                         --validate-comments, --fail-on-unclosed, --fail-on-spillover
+        For applying seeds after build and controlling validation behavior
     """
     try:
         # Create schema builder
@@ -605,6 +616,13 @@ def lint(
       confiture build       - Build schema from DDL files
       confiture migrate up  - Apply migrations
       confiture schema-to-schema - Compare and sync schemas
+
+    OPTIONS:
+      CORE: --env, --format, --output
+        What to lint and how to report results
+
+      SEVERITY: --fail-on-error, --fail-on-warning
+        Control exit behavior based on issue severity
     """
     try:
         # Validate format option
@@ -1083,6 +1101,19 @@ def migrate_up(
       confiture migrate down        - Rollback migrations
       confiture migrate status      - View migration history
       confiture migrate generate    - Create new migration template
+
+    OPTIONS:
+      CORE: --target
+        Which migration version to apply (default: all pending)
+
+      DRY-RUN: --dry-run, --dry-run-execute, --verbose, --format, --output
+        Analyze migrations before executing, with optional SAVEPOINT testing
+
+      SAFETY: --verify-checksums, --on-checksum-mismatch, --strict, --no-lock, --lock-timeout
+        Control verification and locking behavior for production safety
+
+      ADVANCED: --force
+        Skip safety checks (use with caution in production)
     """
     from confiture.cli.dry_run import (
         ask_dry_run_execute_confirmation,
@@ -2125,6 +2156,16 @@ def migrate_down(
       confiture migrate up       - Apply migrations forward
       confiture migrate status   - View migration history
       confiture migrate validate - Check migration integrity
+
+    OPTIONS:
+      CORE: --steps
+        How many migrations to rollback (default: 1)
+
+      DRY-RUN: --dry-run, --verbose, --format, --output
+        Analyze rollback without executing, with detailed reports
+
+      OUTPUT: --format, --output
+        Control report format and destination
     """
     from confiture.core.connection import (
         create_connection,

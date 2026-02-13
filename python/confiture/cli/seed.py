@@ -239,6 +239,19 @@ def validate(
       confiture seed apply     - Load seeds into database
       confiture seed convert   - Transform INSERT to COPY format
       confiture seed benchmark - Compare VALUES vs COPY performance
+
+    OPTIONS:
+      CORE: --seeds-dir, --mode, --format, --output
+        What to validate, how to validate, and how to report
+
+      PREP-SEED: --prep-seed, --level, --static-only, --full-execution
+        Enable prep-seed pattern validation with 5 validation levels
+
+      AUTO-FIX: --fix, --dry-run
+        Automatically fix detected issues (with dry-run preview)
+
+      ADVANCED: --env, --all-envs, --database-url, --uuid-validation
+        Multi-environment validation and advanced pattern checking
     """
     try:
         # Handle prep-seed validation if requested
@@ -441,6 +454,19 @@ def apply(
       confiture seed validate - Check seed data quality
       confiture seed convert  - Transform INSERT to COPY format
       confiture build         - Build schema, optionally apply seeds
+
+    OPTIONS:
+      CORE: --env, --sequential
+        Environment and execution mode (sequential solves 650+ row limits)
+
+      DATABASE: --database-url
+        Explicit database URL (overrides environment config)
+
+      PERFORMANCE: --copy-format, --copy-threshold, --benchmark
+        Use faster COPY format, control when it's selected, show benchmarks
+
+      ERROR-HANDLING: --continue-on-error
+        Skip failed files and continue (for --sequential only)
     """
     try:
         if not sequential:
