@@ -497,18 +497,22 @@ def build(
         # Build schema (with or without seeds)
         console.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
-        if apply_sequential:
-            # Build schema only, seeds will be applied separately
-            schema = builder.build(output_path=output, schema_only=True)
-            sql_files = builder.find_sql_files()
-            schema_file_count = len(
-                [f for f in sql_files if not any(p.lower() in ("seed", "seeds") for p in f.parts)]
-            )
-        else:
-            # Build schema with seeds
-            sql_files = builder.find_sql_files()
-            schema = builder.build(output_path=output)
-            schema_file_count = len(sql_files)
+        # Import ProgressManager for progress tracking
+        from confiture.core.progress import ProgressManager
+
+        with ProgressManager() as progress:
+            if apply_sequential:
+                # Build schema only, seeds will be applied separately
+                schema = builder.build(output_path=output, schema_only=True, progress=progress)
+                sql_files = builder.find_sql_files()
+                schema_file_count = len(
+                    [f for f in sql_files if not any(p.lower() in ("seed", "seeds") for p in f.parts)]
+                )
+            else:
+                # Build schema with seeds
+                sql_files = builder.find_sql_files()
+                schema = builder.build(output_path=output, progress=progress)
+                schema_file_count = len(sql_files)
 
         console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
 

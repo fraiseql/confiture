@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
+from confiture.core.progress import ProgressManager
 from confiture.core.validators import CommentValidator
 from confiture.exceptions import SchemaError
 
@@ -470,7 +471,12 @@ class SchemaBuilder:
         else:
             raise SchemaError(f"Invalid separator style: {style}")
 
-    def build(self, output_path: Path | None = None, schema_only: bool = False) -> str:
+    def build(
+        self,
+        output_path: Path | None = None,
+        schema_only: bool = False,
+        progress: ProgressManager | None = None,
+    ) -> str:
         """Build schema by concatenating DDL files
 
         Generates a complete schema file by concatenating all SQL files in
@@ -482,6 +488,7 @@ class SchemaBuilder:
         Args:
             output_path: Optional path to write schema file. If None, only returns content.
             schema_only: If True, exclude seed files. Default False (include all files).
+            progress: Optional ProgressManager for displaying build progress
 
         Returns:
             Generated schema content as string
@@ -496,19 +503,44 @@ class SchemaBuilder:
 
             >>> # Build schema without seeds
             >>> schema = builder.build(schema_only=True)
+
+            >>> # With progress tracking
+            >>> with ProgressManager() as pm:
+            ...     schema = builder.build(progress=pm)
         """
+        # Phase 1: Discovery
+        discover_task = None
+        if progress:
+            discover_task = progress.add_task("Discovering SQL files...", total=None)
+
         files = self.find_sql_files()
+
+        if progress and discover_task is not None:
+            progress.update(discover_task, len(files))
 
         # Filter to schema-only files if requested
         if schema_only:
             schema_files, _ = self.categorize_sql_files()
             files = schema_files
 
+        # Phase 2: Validation
+        validate_task = None
+        if progress:
+            validate_task = progress.add_task("Validating comments...", total=len(files))
+
         # Pre-build validation: check for unclosed comments
         self._validate_comments(files)
 
+        if progress and validate_task is not None:
+            progress.finish_task(validate_task)
+
         # Generate header
         header = self._generate_header(len(files))
+
+        # Phase 3: Processing
+        process_task = None
+        if progress:
+            process_task = progress.add_task("Processing files...", total=len(files))
 
         # Use Rust extension if available (10-50x faster)
         # Note: Rust extension uses line_comment separator style
@@ -525,10 +557,18 @@ class SchemaBuilder:
                 schema = self._add_headers_and_separators(header, files, content)
             except Exception:
                 # Fallback to Python if Rust fails
-                schema = self._build_python(header, files)
+                schema = self._build_python(header, files, progress=progress)
         else:
             # Pure Python implementation (fallback)
-            schema = self._build_python(header, files)
+            schema = self._build_python(header, files, progress=progress)
+
+        if progress and process_task is not None:
+            progress.finish_task(process_task)
+
+        # Phase 4: Writing
+        write_task = None
+        if progress:
+            write_task = progress.add_task("Writing output...", total=1)
 
         # Write to file if requested
         if output_path:
@@ -538,14 +578,23 @@ class SchemaBuilder:
             except Exception as e:
                 raise SchemaError(f"Error writing schema to {output_path}: {e}") from e
 
+        if progress and write_task is not None:
+            progress.update(write_task, 1)
+
         return schema
 
-    def _build_python(self, header: str, files: list[Path]) -> str:
+    def _build_python(
+        self,
+        header: str,
+        files: list[Path],
+        progress: ProgressManager | None = None,
+    ) -> str:
         """Pure Python implementation of schema building (fallback)
 
         Args:
             header: Schema header
             files: List of SQL files to concatenate
+            progress: Optional ProgressManager for tracking progress
 
         Returns:
             Complete schema content
@@ -565,6 +614,10 @@ class SchemaBuilder:
                 # Ensure newline at end
                 if not content.endswith("\n"):
                     parts.append("\n")
+
+                # Update progress
+                if progress:
+                    progress.update(None, advance=1)
 
             except Exception as e:
                 raise SchemaError(f"Error reading {file}: {e}") from e

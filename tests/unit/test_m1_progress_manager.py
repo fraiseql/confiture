@@ -282,3 +282,100 @@ class TestProgressManagerIntegration:
             task2 = manager.add_task("Phase 2...", total=3)
             for i in range(3):
                 manager.update(task2, 1)
+
+
+class TestProgressManagerSchemaBuilder:
+    """Test ProgressManager integration with SchemaBuilder."""
+
+    def test_builder_accepts_progress_manager(self, tmp_path):
+        """Verify SchemaBuilder.build() accepts progress parameter."""
+        from pathlib import Path
+        from confiture.core.builder import SchemaBuilder
+
+        # Create minimal schema structure
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Create a test SQL file
+        sql_file = schema_dir / "01_tables.sql"
+        sql_file.write_text("CREATE TABLE test (id INT);")
+
+        # Create environment config
+        env_dir = tmp_path / "db" / "environments"
+        env_dir.mkdir(parents=True)
+        config_file = env_dir / "local.yaml"
+        config_file.write_text(
+            "name: test\n"
+            "database_url: postgresql://localhost/test\n"
+            "include_dirs:\n"
+            "  - db/schema\n"
+        )
+
+        # Build with progress manager
+        builder = SchemaBuilder(env="local", project_dir=tmp_path)
+        with ProgressManager(show_progress=False) as progress:
+            schema = builder.build(progress=progress)
+            assert "CREATE TABLE test" in schema
+
+    def test_builder_build_without_progress(self, tmp_path):
+        """Verify SchemaBuilder.build() works without progress parameter."""
+        from pathlib import Path
+        from confiture.core.builder import SchemaBuilder
+
+        # Create minimal schema structure
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Create a test SQL file
+        sql_file = schema_dir / "01_tables.sql"
+        sql_file.write_text("CREATE TABLE test (id INT);")
+
+        # Create environment config
+        env_dir = tmp_path / "db" / "environments"
+        env_dir.mkdir(parents=True)
+        config_file = env_dir / "local.yaml"
+        config_file.write_text(
+            "name: test\n"
+            "database_url: postgresql://localhost/test\n"
+            "include_dirs:\n"
+            "  - db/schema\n"
+        )
+
+        # Build without progress manager (backward compatibility)
+        builder = SchemaBuilder(env="local", project_dir=tmp_path)
+        schema = builder.build()
+        assert "CREATE TABLE test" in schema
+
+    def test_builder_progress_multiple_files(self, tmp_path):
+        """Verify progress tracking works with multiple files."""
+        from pathlib import Path
+        from confiture.core.builder import SchemaBuilder
+
+        # Create schema structure with multiple files
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        # Create multiple SQL files
+        for i in range(3):
+            sql_file = schema_dir / f"{i:02d}_tables.sql"
+            sql_file.write_text(f"CREATE TABLE table{i} (id INT);")
+
+        # Create environment config
+        env_dir = tmp_path / "db" / "environments"
+        env_dir.mkdir(parents=True)
+        config_file = env_dir / "local.yaml"
+        config_file.write_text(
+            "name: test\n"
+            "database_url: postgresql://localhost/test\n"
+            "include_dirs:\n"
+            "  - db/schema\n"
+        )
+
+        # Build with progress manager
+        builder = SchemaBuilder(env="local", project_dir=tmp_path)
+        with ProgressManager(show_progress=False) as progress:
+            schema = builder.build(progress=progress)
+
+            # Verify all files included
+            for i in range(3):
+                assert f"CREATE TABLE table{i}" in schema
