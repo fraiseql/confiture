@@ -39,7 +39,8 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
     """Create database connection from configuration.
 
     Args:
-        config: Configuration dictionary with 'database' section, 'database_url', or DatabaseConfig instance
+        config: Database URL string, configuration dictionary with 'database' section,
+                'database_url' key, or DatabaseConfig instance
 
     Returns:
         PostgreSQL connection
@@ -50,6 +51,10 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
     from confiture.config.environment import DatabaseConfig
 
     try:
+        # Handle string database URL
+        if isinstance(config, str):
+            return psycopg.connect(config)
+
         # Handle DatabaseConfig instance
         if isinstance(config, DatabaseConfig):
             config_dict = config.to_dict()
