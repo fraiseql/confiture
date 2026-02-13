@@ -86,11 +86,7 @@ def example_2_foreign_key_violation():
 
     schema_context = {
         "users": {"required": True},
-        "orders": {
-            "columns": {
-                "customer_id": {"foreign_key": ("users", "id")}
-            }
-        },
+        "orders": {"columns": {"customer_id": {"foreign_key": ("users", "id")}}},
     }
 
     report = validator.validate(seed_data, schema_context)
@@ -254,13 +250,7 @@ def example_7_cli_interface():
         ]
     }
 
-    schema_context = {
-        "users": {
-            "columns": {
-                "email": {"unique": True}
-            }
-        }
-    }
+    schema_context = {"users": {"columns": {"email": {"unique": True}}}}
 
     result = cli.validate(seed_data, schema_context)
     print(result.format_output())
@@ -286,13 +276,7 @@ def example_8_json_output():
         ]
     }
 
-    schema_context = {
-        "users": {
-            "columns": {
-                "email": {"required": True}
-            }
-        }
-    }
+    schema_context = {"users": {"columns": {"email": {"required": True}}}}
 
     result = cli.validate(seed_data, schema_context)
     print(result.format_output())
@@ -328,11 +312,7 @@ def example_9_multiple_violations():
                 "name": {"required": True},
             },
         },
-        "orders": {
-            "columns": {
-                "customer_id": {"foreign_key": ("users", "id")}
-            }
-        },
+        "orders": {"columns": {"customer_id": {"foreign_key": ("users", "id")}}},
         "roles": {"required": True},  # Completeness error
     }
 

@@ -37,8 +37,7 @@ def _detect_error_context(error: Exception) -> str | None:
 
     # Database connection errors
     if isinstance(error, ConfigurationError) and any(
-        keyword in error_msg
-        for keyword in ["connection", "connect", "database", "postgresql"]
+        keyword in error_msg for keyword in ["connection", "connect", "database", "postgresql"]
     ):
         if "permission" in error_msg or "denied" in error_msg:
             return "DB_PERMISSION_DENIED"
@@ -58,9 +57,7 @@ def _detect_error_context(error: Exception) -> str | None:
         return "MIGRATION_CONFLICT"
 
     # Seed validation errors
-    if isinstance(error, SeedError) and (
-        "validation" in error_msg or "validate" in error_msg
-    ):
+    if isinstance(error, SeedError) and ("validation" in error_msg or "validate" in error_msg):
         return "SEED_VALIDATION_FAILED"
 
     # SQL syntax errors
@@ -78,30 +75,21 @@ def _detect_error_context(error: Exception) -> str | None:
         return "SQL_SYNTAX_ERROR"
 
     # Table already exists
-    if "already exists" in error_msg and (
-        "table" in error_msg or "relation" in error_msg
-    ):
+    if "already exists" in error_msg and ("table" in error_msg or "relation" in error_msg):
         return "TABLE_ALREADY_EXISTS"
 
     # Foreign key constraint
-    if any(
-        keyword in error_msg
-        for keyword in ["foreign key", "constraint", "violate"]
-    ):
+    if any(keyword in error_msg for keyword in ["foreign key", "constraint", "violate"]):
         return "FOREIGN_KEY_CONSTRAINT"
 
     # Disk space issues
     if any(
-        keyword in error_msg
-        for keyword in ["no space", "disk full", "out of space", "disk space"]
+        keyword in error_msg for keyword in ["no space", "disk full", "out of space", "disk space"]
     ):
         return "INSUFFICIENT_DISK_SPACE"
 
     # Lock timeout
-    if any(
-        keyword in error_msg
-        for keyword in ["lock timeout", "timeout", "deadlock"]
-    ):
+    if any(keyword in error_msg for keyword in ["lock timeout", "timeout", "deadlock"]):
         return "LOCK_TIMEOUT"
 
     return None

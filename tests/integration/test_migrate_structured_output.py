@@ -67,14 +67,20 @@ class TestMigrateUpStructuredOutput:
 
         # Since we don't have a real database, we expect this to fail at connection
         # But it should accept the --format option
-        result = runner.invoke(app, [
-            "migrate",
-            "up",
-            "--config", str(sample_config),
-            "--migrations-dir", str(sample_migrations_dir),
-            "--format", "json",
-            "--dry-run",  # Use dry-run to avoid database requirement
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "up",
+                "--config",
+                str(sample_config),
+                "--migrations-dir",
+                str(sample_migrations_dir),
+                "--format",
+                "json",
+                "--dry-run",  # Use dry-run to avoid database requirement
+            ],
+        )
 
         # Should at least get past option parsing
         # (might fail due to missing database, but option should be accepted)
@@ -88,14 +94,20 @@ class TestMigrateUpStructuredOutput:
 
         runner = CliRunner()
 
-        result = runner.invoke(app, [
-            "migrate",
-            "up",
-            "--config", str(sample_config),
-            "--migrations-dir", str(sample_migrations_dir),
-            "--format", "csv",
-            "--dry-run",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "up",
+                "--config",
+                str(sample_config),
+                "--migrations-dir",
+                str(sample_migrations_dir),
+                "--format",
+                "csv",
+                "--dry-run",
+            ],
+        )
 
         # Should at least get past option parsing
         assert "--format" not in result.stdout or "Error" in result.stdout or result.exit_code == 0
@@ -111,18 +123,27 @@ class TestMigrateUpStructuredOutput:
         with TemporaryDirectory() as tmpdir:
             output_file = Path(tmpdir) / "migration_result.json"
 
-            result = runner.invoke(app, [
-                "migrate",
-                "up",
-                "--config", str(sample_config),
-                "--migrations-dir", str(sample_migrations_dir),
-                "--format", "json",
-                "--output", str(output_file),
-                "--dry-run",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "up",
+                    "--config",
+                    str(sample_config),
+                    "--migrations-dir",
+                    str(sample_migrations_dir),
+                    "--format",
+                    "json",
+                    "--output",
+                    str(output_file),
+                    "--dry-run",
+                ],
+            )
 
             # Should accept the option
-            assert "--output" not in result.stdout or "Error" in result.stdout or result.exit_code == 0
+            assert (
+                "--output" not in result.stdout or "Error" in result.stdout or result.exit_code == 0
+            )
 
 
 class TestMigrateUpFormatterIntegration:

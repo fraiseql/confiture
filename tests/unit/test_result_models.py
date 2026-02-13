@@ -4,7 +4,6 @@ Validates BuildResult, MigrateUpResult, and related dataclasses
 used for structured output (JSON/CSV).
 """
 
-
 from confiture.models.results import BuildResult, MigrateUpResult, MigrationApplied
 
 

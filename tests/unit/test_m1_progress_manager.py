@@ -3,7 +3,6 @@
 Tests the ProgressManager utility for displaying progress during operations.
 """
 
-
 from confiture.core.progress import ProgressManager, _is_ci_environment, progress_bar
 
 
@@ -303,10 +302,7 @@ class TestProgressManagerSchemaBuilder:
         env_dir.mkdir(parents=True)
         config_file = env_dir / "local.yaml"
         config_file.write_text(
-            "name: test\n"
-            "database_url: postgresql://localhost/test\n"
-            "include_dirs:\n"
-            "  - db/schema\n"
+            "name: test\ndatabase_url: postgresql://localhost/test\ninclude_dirs:\n  - db/schema\n"
         )
 
         # Build with progress manager
@@ -332,10 +328,7 @@ class TestProgressManagerSchemaBuilder:
         env_dir.mkdir(parents=True)
         config_file = env_dir / "local.yaml"
         config_file.write_text(
-            "name: test\n"
-            "database_url: postgresql://localhost/test\n"
-            "include_dirs:\n"
-            "  - db/schema\n"
+            "name: test\ndatabase_url: postgresql://localhost/test\ninclude_dirs:\n  - db/schema\n"
         )
 
         # Build without progress manager (backward compatibility)
@@ -361,10 +354,7 @@ class TestProgressManagerSchemaBuilder:
         env_dir.mkdir(parents=True)
         config_file = env_dir / "local.yaml"
         config_file.write_text(
-            "name: test\n"
-            "database_url: postgresql://localhost/test\n"
-            "include_dirs:\n"
-            "  - db/schema\n"
+            "name: test\ndatabase_url: postgresql://localhost/test\ninclude_dirs:\n  - db/schema\n"
         )
 
         # Build with progress manager

@@ -81,9 +81,7 @@ def format_text(result: MigrateUpResult, console: Console) -> None:
         console.print(f"[red]❌ Migration failed: {result.error}[/red]")
         if result.migrations_applied:
             count = len(result.migrations_applied)
-            console.print(
-                f"\n[yellow]⚠️ {count} migration(s) were applied before failure[/yellow]"
-            )
+            console.print(f"\n[yellow]⚠️ {count} migration(s) were applied before failure[/yellow]")
 
 
 def format_migrate_down_result(

@@ -172,8 +172,7 @@ class TestErrorContextFormatting:
     def test_custom_message_override(self):
         """Test custom message override."""
         output = format_error_with_context(
-            "DB_CONNECTION_FAILED",
-            custom_message="Failed to connect to prod database"
+            "DB_CONNECTION_FAILED", custom_message="Failed to connect to prod database"
         )
         assert "Failed to connect to prod database" in output
         assert "CAUSE:" in output

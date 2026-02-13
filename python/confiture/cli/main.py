@@ -861,7 +861,9 @@ def migrate_status(
     try:
         # Validate output format
         if output_format not in ("table", "json", "csv"):
-            console.print(f"[red]❌ Invalid format: {output_format}. Use 'table', 'json', or 'csv'[/red]")
+            console.print(
+                f"[red]❌ Invalid format: {output_format}. Use 'table', 'json', or 'csv'[/red]"
+            )
             raise typer.Exit(1)
 
         if not migrations_dir.exists():
@@ -2639,7 +2641,9 @@ def migrate_validate(
     try:
         # Validate output format
         if format_output not in ("text", "json", "csv"):
-            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]")
+            console.print(
+                f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]"
+            )
             raise typer.Exit(1)
 
         # Handle git validation flags

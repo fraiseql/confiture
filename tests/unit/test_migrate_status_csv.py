@@ -81,7 +81,7 @@ class TestMigrateStatusCSV:
             rows = [
                 ["001", "add_users_and_roles", "applied"],
                 ["002", "fix,bug", "pending"],  # Contains comma
-                ['003', 'add_"quoted"', "applied"],  # Contains quotes
+                ["003", 'add_"quoted"', "applied"],  # Contains quotes
             ]
 
             save_csv(headers, rows, output_file)
