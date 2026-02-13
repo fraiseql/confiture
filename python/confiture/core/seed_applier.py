@@ -29,6 +29,20 @@ class ApplyResult:
     failed: int = 0
     failed_files: list[str] = field(default_factory=list)
 
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "total": self.total,
+            "succeeded": self.succeeded,
+            "failed": self.failed,
+            "failed_files": self.failed_files,
+            "success": self.failed == 0,
+        }
+
 
 class SeedApplier:
     """Orchestrates seed file discovery and execution.
