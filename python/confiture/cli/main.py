@@ -1405,7 +1405,7 @@ def migrate_up(
                 # Continue to actual execution below
 
             except Exception as e:
-                console.print(f"\n[red]❌ Dry-run analysis failed: {e}[/red]")
+                print_error_to_console(e)
                 conn.close()
                 raise typer.Exit(1) from e
 
@@ -1461,7 +1461,7 @@ def migrate_up(
                         break
 
         except LockAcquisitionError as e:
-            console.print(f"\n[red]❌ Failed to acquire migration lock: {e}[/red]")
+            print_error_to_console(e)
             if e.timeout:
                 console.print(
                     f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
@@ -1509,7 +1509,7 @@ def migrate_up(
         # Already handled above
         raise
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(1) from e
 
 
