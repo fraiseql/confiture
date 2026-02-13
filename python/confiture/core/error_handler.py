@@ -63,6 +63,47 @@ def _detect_error_context(error: Exception) -> str | None:
     ):
         return "SEED_VALIDATION_FAILED"
 
+    # SQL syntax errors
+    if any(
+        keyword in error_msg
+        for keyword in [
+            "syntax error",
+            "syntax",
+            "invalid syntax",
+            "unexpected token",
+            "parse error",
+            "at ';'",
+        ]
+    ):
+        return "SQL_SYNTAX_ERROR"
+
+    # Table already exists
+    if "already exists" in error_msg and (
+        "table" in error_msg or "relation" in error_msg
+    ):
+        return "TABLE_ALREADY_EXISTS"
+
+    # Foreign key constraint
+    if any(
+        keyword in error_msg
+        for keyword in ["foreign key", "constraint", "violate"]
+    ):
+        return "FOREIGN_KEY_CONSTRAINT"
+
+    # Disk space issues
+    if any(
+        keyword in error_msg
+        for keyword in ["no space", "disk full", "out of space", "disk space"]
+    ):
+        return "INSUFFICIENT_DISK_SPACE"
+
+    # Lock timeout
+    if any(
+        keyword in error_msg
+        for keyword in ["lock timeout", "timeout", "deadlock"]
+    ):
+        return "LOCK_TIMEOUT"
+
     return None
 
 

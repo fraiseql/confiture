@@ -144,6 +144,92 @@ ERROR_CONTEXTS = {
         ],
         docs_url="https://docs.confiture.dev/seeds#validation",
     ),
+    "SQL_SYNTAX_ERROR": ErrorContext(
+        error_code="SQL_SYNTAX_ERROR",
+        message="SQL syntax error in migration or schema",
+        cause="One or more SQL statements contain syntax errors",
+        solutions=[
+            "Review the SQL file at the specified location",
+            "Check for common issues: missing semicolons, unclosed parentheses",
+            "Validate SQL syntax using: psql -f file.sql --check",
+            "Use a SQL editor with syntax highlighting to identify errors",
+            "Test SQL statements in psql before adding to migrations",
+        ],
+        examples=[
+            "psql -U postgres -d mydb -f migration.sql",
+            "psql --echo-errors -f migration.sql",
+        ],
+        docs_url="https://docs.confiture.dev/troubleshooting#syntax-errors",
+    ),
+    "TABLE_ALREADY_EXISTS": ErrorContext(
+        error_code="TABLE_ALREADY_EXISTS",
+        message="Table already exists in database",
+        cause="Migration or schema tries to create a table that already exists",
+        solutions=[
+            "Use CREATE TABLE IF NOT EXISTS instead of CREATE TABLE",
+            "Check if migration has already been applied: confiture migrate status",
+            "If migration was partial, use confiture migrate rollback",
+            "Review migration order to avoid duplicate creates",
+        ],
+        examples=[
+            "confiture migrate status",
+            "CREATE TABLE IF NOT EXISTS users (...)",
+            "confiture migrate rollback --version 001",
+        ],
+        docs_url="https://docs.confiture.dev/troubleshooting#already-exists",
+    ),
+    "FOREIGN_KEY_CONSTRAINT": ErrorContext(
+        error_code="FOREIGN_KEY_CONSTRAINT",
+        message="Foreign key constraint violation",
+        cause="Data violates foreign key constraints (missing referenced row)",
+        solutions=[
+            "Verify referenced table and column exist",
+            "Check data in seed files matches references",
+            "Load parent table data before child table",
+            "Use DEFERRABLE INITIALLY DEFERRED for circular references",
+            "Disable constraints temporarily if needed: ALTER TABLE ... DISABLE TRIGGER ALL",
+        ],
+        examples=[
+            "confiture seed validate --format json",
+            "ALTER TABLE orders DISABLE TRIGGER ALL;",
+            "ALTER TABLE orders ENABLE TRIGGER ALL;",
+        ],
+        docs_url="https://docs.confiture.dev/seeds#constraints",
+    ),
+    "INSUFFICIENT_DISK_SPACE": ErrorContext(
+        error_code="INSUFFICIENT_DISK_SPACE",
+        message="Insufficient disk space for operation",
+        cause="Database or filesystem is out of space",
+        solutions=[
+            "Check available disk space: df -h",
+            "Check PostgreSQL data directory: du -sh /var/lib/postgresql/",
+            "Clean up old backups or unused data",
+            "Free up disk space before retrying operation",
+            "For large operations, consider splitting into smaller batches",
+        ],
+        examples=[
+            "df -h /var/lib/postgresql/",
+            "du -sh /var/lib/postgresql/*/base/*",
+        ],
+        docs_url="https://docs.confiture.dev/troubleshooting#disk-space",
+    ),
+    "LOCK_TIMEOUT": ErrorContext(
+        error_code="LOCK_TIMEOUT",
+        message="Lock acquisition timeout",
+        cause="Another operation is holding locks on tables (migration conflict)",
+        solutions=[
+            "Check active database connections: SELECT * FROM pg_stat_activity;",
+            "Increase lock timeout: SET lock_timeout = '10s';",
+            "Terminate blocking connections: SELECT pg_terminate_backend(pid);",
+            "Retry migration after other operations complete",
+            "Use --skip-lock-check flag if appropriate for your use case",
+        ],
+        examples=[
+            "confiture migrate up --timeout 30s",
+            "psql -c \"SELECT * FROM pg_stat_activity WHERE state = 'active';\"",
+        ],
+        docs_url="https://docs.confiture.dev/troubleshooting#locks",
+    ),
 }
 
 
