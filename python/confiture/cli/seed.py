@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
+from confiture.core.error_handler import print_error_to_console
 from confiture.core.seed_applier import SeedApplier
 from confiture.core.seed_validation import SeedFixer, SeedValidator
 from confiture.core.seed_validation.prep_seed import (
@@ -132,7 +133,7 @@ def _validate_prep_seed(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Prep-seed validation error: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(2) from e
 
 
@@ -387,7 +388,7 @@ def validate(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Error during validation: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(2) from e
 
 
@@ -533,7 +534,7 @@ def apply(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Error: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(2) from e
 
 
