@@ -106,3 +106,35 @@ class MigrateUpResult:
             "warnings": self.warnings,
             "error": self.error,
         }
+
+
+@dataclass
+class MigrateDownResult:
+    """Result of migrate down operation.
+
+    Tracks which migrations were rolled back, total execution time,
+    and any warnings or errors that occurred.
+    """
+
+    success: bool
+    migrations_rolled_back: list[MigrationApplied]
+    total_execution_time_ms: int
+    checksums_verified: bool = True
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "success": self.success,
+            "migrations_rolled_back": [m.to_dict() for m in self.migrations_rolled_back],
+            "count": len(self.migrations_rolled_back),
+            "total_execution_time_ms": self.total_execution_time_ms,
+            "checksums_verified": self.checksums_verified,
+            "warnings": self.warnings,
+            "error": self.error,
+        }
