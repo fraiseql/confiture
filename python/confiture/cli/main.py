@@ -3,6 +3,7 @@
 This module defines the main Typer application and all CLI commands.
 """
 
+import difflib
 import json
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,37 @@ from confiture.models.lint import LintReport, LintSeverity, Violation
 
 # Valid output formats for linting
 LINT_FORMATS = ("table", "json", "csv")
+
+# Common command names for "Did you mean?" suggestions
+COMMON_COMMANDS = [
+    "init",
+    "build",
+    "migrate",
+    "lint",
+    "seed",
+    "branch",
+    "generate",
+    "coordinate",
+    "migrate-up",
+    "migrate-down",
+    "migrate-status",
+    "migrate-validate",
+]
+
+
+def _get_suggestion(unknown_command: str) -> str | None:
+    """Get "Did you mean?" suggestion for unknown command.
+
+    Uses difflib to find similar commands (75% similarity threshold).
+
+    Args:
+        unknown_command: The command user tried to run
+
+    Returns:
+        Suggested command if match found (>75% similarity), None otherwise
+    """
+    matches = difflib.get_close_matches(unknown_command, COMMON_COMMANDS, n=1, cutoff=0.75)
+    return matches[0] if matches else None
 
 
 def _convert_linter_report(linter_report: LinterReport, schema_name: str = "schema") -> LintReport:
