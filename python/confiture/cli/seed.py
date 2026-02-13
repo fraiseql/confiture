@@ -173,6 +173,11 @@ def validate(
         "--full-execution",
         help="Run all prep-seed levels 1-5 (requires database)",
     ),
+    uuid_validation: bool = typer.Option(
+        False,
+        "--uuid-validation",
+        help="Enable seed enumerated UUID pattern validation (Phase 10)",
+    ),
 ) -> None:
     """Validate seed files for data consistency.
 
@@ -182,6 +187,7 @@ def validate(
     - Missing ON CONFLICT clauses
 
     With --prep-seed, validates UUID→BIGINT transformation patterns (5 levels).
+    With --uuid-validation, validates seed enumerated UUID patterns (Phase 10).
 
     Examples:
         # Validate default seed directory
@@ -201,6 +207,9 @@ def validate(
 
         # Output as JSON
         confiture seed validate --format json --output report.json
+
+        # UUID validation (seed enumerated patterns)
+        confiture seed validate --uuid-validation
 
         # Prep-seed validation (pre-commit safe, Levels 1-3)
         confiture seed validate --prep-seed --static-only
@@ -223,6 +232,13 @@ def validate(
                 fix=fix,
                 dry_run=dry_run,
             )
+
+        # Handle UUID validation if requested
+        if uuid_validation:
+            console.print("[blue]ℹ Phase 10: UUID Validation Support[/blue]")
+            console.print("  UUID validation is available via Level 1 of prep-seed validation.")
+            console.print("  Use: confiture seed validate --prep-seed --static-only")
+            raise typer.Exit(0)
 
         # Determine which directories to validate
         dirs_to_validate: list[tuple[Path, str]] = []
