@@ -47,6 +47,17 @@ class TestBasicInsertParsing:
 
         assert "(id, name, email)" in result
 
+    def test_parses_schema_qualified_table_name(self) -> None:
+        """Test parsing INSERT with schema-qualified table name (Issue #37)."""
+        converter = InsertToCopyConverter()
+        insert_sql = "INSERT INTO prep_seed.tb_machine (id, name) VALUES (1, 'Machine1');"
+
+        result = converter.convert(insert_sql)
+
+        assert "COPY prep_seed.tb_machine" in result
+        assert "1\tMachine1" in result
+        assert "\\." in result
+
 
 class TestDataTypeHandling:
     """Test handling of various data types in INSERT values."""
