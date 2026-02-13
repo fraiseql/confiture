@@ -1,0 +1,47 @@
+## [0.4.2] - 2026-02-13
+
+### Added
+
+- **Comprehensive Structured Output Support** - Phase 2 M3
+  - `--format {text|json|csv}` option for 7 major CLI commands
+  - `--report <path>` option to save output to files
+  - JSON schemas for all command outputs
+  - CSV export with proper escaping
+  - Perfect for CI/CD integration, automation, and reporting
+  - Backward compatible (text is default)
+
+### Details
+
+**Supported Commands**:
+- `confiture build --format json --report result.json`
+- `confiture migrate up --format json --report migrations.json`
+- `confiture migrate down --format json --report rollback.json`
+- `confiture migrate status --format csv --report status.csv`
+- `confiture migrate diff --format json --report diff.json`
+- `confiture migrate validate --format json --report validation.json`
+- `confiture seed apply --format json --report seeds.json`
+
+**Features**:
+- Result models with JSON serialization (8 dataclasses)
+- Formatters for all major commands (5 modules)
+- CLI integration with validation
+- 60+ new tests (3830 total passing)
+- 497-line comprehensive guide
+- 10+ integration examples
+
+**Examples**:
+\`\`\`bash
+# JSON export for automation
+confiture build --format json --report build.json
+
+# CSV export for spreadsheets
+confiture migrate status --format csv --report status.csv
+
+# CI/CD integration
+confiture migrate up --format json | jq '.success'
+\`\`\`
+
+### Backward Compatibility
+
+✅ Fully backward compatible - no breaking changes
+

@@ -8,9 +8,91 @@ from typing import Any
 
 from rich.console import Console
 
+from confiture.core.error_context import format_error_with_context
 from confiture.exceptions import ConfiturError
 
 console = Console()
+
+
+def _detect_error_context(error: Exception) -> str | None:
+    """Detect error context code from exception type and message.
+
+    Maps specific error types and patterns to error context codes for
+    enhanced error messages with solutions.
+
+    Args:
+        error: The exception to analyze
+
+    Returns:
+        Error context code if matched, None otherwise
+    """
+    from confiture.exceptions import (
+        ConfigurationError,
+        MigrationConflictError,
+        SchemaError,
+        SeedError,
+    )
+
+    error_msg = str(error).lower()
+
+    # Database connection errors
+    if isinstance(error, ConfigurationError) and any(
+        keyword in error_msg for keyword in ["connection", "connect", "database", "postgresql"]
+    ):
+        if "permission" in error_msg or "denied" in error_msg:
+            return "DB_PERMISSION_DENIED"
+        return "DB_CONNECTION_FAILED"
+
+    # File not found errors
+    if isinstance(error, (SchemaError, FileNotFoundError)):
+        if "seeds" in error_msg or "seed" in error_msg:
+            return "SEEDS_DIR_NOT_FOUND"
+        if "migration" in error_msg:
+            return "MIGRATIONS_DIR_NOT_FOUND"
+        if "schema" in error_msg:
+            return "SCHEMA_DIR_NOT_FOUND"
+
+    # Migration conflicts
+    if isinstance(error, MigrationConflictError):
+        return "MIGRATION_CONFLICT"
+
+    # Seed validation errors
+    if isinstance(error, SeedError) and ("validation" in error_msg or "validate" in error_msg):
+        return "SEED_VALIDATION_FAILED"
+
+    # SQL syntax errors
+    if any(
+        keyword in error_msg
+        for keyword in [
+            "syntax error",
+            "syntax",
+            "invalid syntax",
+            "unexpected token",
+            "parse error",
+            "at ';'",
+        ]
+    ):
+        return "SQL_SYNTAX_ERROR"
+
+    # Table already exists
+    if "already exists" in error_msg and ("table" in error_msg or "relation" in error_msg):
+        return "TABLE_ALREADY_EXISTS"
+
+    # Foreign key constraint
+    if any(keyword in error_msg for keyword in ["foreign key", "constraint", "violate"]):
+        return "FOREIGN_KEY_CONSTRAINT"
+
+    # Disk space issues
+    if any(
+        keyword in error_msg for keyword in ["no space", "disk full", "out of space", "disk space"]
+    ):
+        return "INSUFFICIENT_DISK_SPACE"
+
+    # Lock timeout
+    if any(keyword in error_msg for keyword in ["lock timeout", "timeout", "deadlock"]):
+        return "LOCK_TIMEOUT"
+
+    return None
 
 
 def format_error_for_cli(error: ConfiturError) -> str:
@@ -97,9 +179,21 @@ def handle_cli_error(error: Exception) -> int:
 def print_error_to_console(error: Exception) -> None:
     """Print an error to the console with Rich formatting.
 
+    Tries to detect specific error contexts and provide enhanced error
+    messages with solutions. Falls back to standard formatting if no
+    context is detected.
+
     Args:
         error: The exception to print
     """
+    # Try to detect and use enhanced error context
+    error_context = _detect_error_context(error)
+    if error_context:
+        formatted = format_error_with_context(error_context, str(error))
+        console.print(formatted)
+        return
+
+    # Fall back to standard error formatting
     if isinstance(error, ConfiturError):
         formatted = format_error_for_cli(error)
         console.print(formatted)

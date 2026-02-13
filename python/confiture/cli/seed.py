@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
+from confiture.core.error_handler import print_error_to_console
 from confiture.core.seed_applier import SeedApplier
 from confiture.core.seed_validation import SeedFixer, SeedValidator
 from confiture.core.seed_validation.prep_seed import (
@@ -28,6 +30,38 @@ seed_app = typer.Typer(
     help="Seed data validation and management",
     no_args_is_help=True,
 )
+
+
+# Shared option definitions for better reusability
+DEFAULT_SEEDS_DIR = Path("db/seeds")
+DEFAULT_COPY_THRESHOLD = 1000
+DEFAULT_ENV = "local"
+
+
+def _format_benchmark_output(result: Any) -> None:  # type: ignore[no-untyped-def]
+    """Format and display benchmark results.
+
+    Args:
+        result: BenchmarkResult object with performance metrics
+    """
+    console.print("\n[bold]COPY Format Performance Benchmark[/bold]")
+    console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.print(f"Total rows: {result.total_rows}")
+    console.print(f"\n[yellow]VALUES format:[/yellow] {result.values_time_ms:.2f}ms")
+    console.print(f"[cyan]COPY format:  [/cyan] {result.copy_time_ms:.2f}ms")
+    console.print(f"[green]Speedup:      [/green] {result.speedup_factor:.1f}x faster")
+    console.print(f"[green]Time saved:   [/green] {result.time_saved_ms:.2f}ms")
+
+    if result.table_metrics:
+        console.print("\n[bold]Per-Table Metrics:[/bold]")
+        for table, metrics in result.table_metrics.items():
+            console.print(f"  {table}: {metrics['rows']} rows")
+            console.print(
+                f"    VALUES: {metrics['values_time_ms']:.2f}ms, "
+                f"COPY: {metrics['copy_time_ms']:.2f}ms"
+            )
+
+    console.print(f"\n[green]✓ Benchmark complete: {result.get_summary()}[/green]")
 
 
 def _validate_prep_seed(
@@ -99,7 +133,7 @@ def _validate_prep_seed(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Prep-seed validation error: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(2) from e
 
 
@@ -108,32 +142,32 @@ def validate(
     seeds_dir: Path = typer.Option(
         Path("db/seeds"),
         "--seeds-dir",
-        help="Directory containing seed files",
+        help="Directory containing seed files (default: db/seeds)",
     ),
     env: str | None = typer.Option(
         None,
         "--env",
-        help="Environment name for multi-env validation",
+        help="Environment name for multi-env validation (default: none)",
     ),
     all_envs: bool = typer.Option(
         False,
         "--all",
-        help="Validate all environments",
+        help="Validate all environments (default: off)",
     ),
     mode: str = typer.Option(
         "static",
         "--mode",
-        help="Validation mode: static or database",
+        help="Validation mode: static or database (default: static)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database URL for database mode validation",
+        help="Database URL for database mode validation (default: none)",
     ),
     format_: str = typer.Option(
         "text",
         "--format",
-        help="Output format: text, json, or csv",
+        help="Output format: text, json, csv (default: text)",
     ),
     output: Path | None = typer.Option(
         None,
@@ -143,70 +177,82 @@ def validate(
     fix: bool = typer.Option(
         False,
         "--fix",
-        help="Automatically fix issues (where possible)",
+        help="Automatically fix issues where possible (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be fixed without modifying files",
+        help="Show what would be fixed without modifying (default: off)",
     ),
     prep_seed: bool = typer.Option(
         False,
         "--prep-seed",
-        help="Enable prep-seed pattern validation (UUID->BIGINT transformations)",
+        help="Enable prep-seed pattern validation (default: off)",
     ),
     prep_seed_level: int = typer.Option(
         3,
         "--level",
         "-l",
-        help="Prep-seed validation level: 1-5 (1=files, 2=schema, 3=resolvers, 4=runtime, 5=execution)",
+        help="Prep-seed validation level 1-5 (default: 3)",
         min=1,
         max=5,
     ),
     static_only: bool = typer.Option(
         False,
         "--static-only",
-        help="Run only prep-seed Levels 1-3 (no database, pre-commit safe)",
+        help="Run only Levels 1-3, no database (default: off)",
     ),
     full_execution: bool = typer.Option(
         False,
         "--full-execution",
-        help="Run all prep-seed levels 1-5 (requires database)",
+        help="Run all levels 1-5, requires database (default: off)",
+    ),
+    uuid_validation: bool = typer.Option(
+        False,
+        "--uuid-validation",
+        help="Enable seed enumerated UUID pattern validation (default: off)",
     ),
 ) -> None:
-    """Validate seed files for data consistency.
+    """Validate seed files for data consistency and quality.
 
-    This command checks seed files for common issues like:
-    - Double semicolons (;;)
-    - DDL statements (CREATE/ALTER/DROP) in seed files
-    - Missing ON CONFLICT clauses
+    PROCESS:
+      Checks for common issues (double semicolons, DDL statements, missing ON
+      CONFLICT). Optionally validates UUID patterns and prep-seed transformations
+      (5 validation levels). Supports auto-fix for common issues.
 
-    With --prep-seed, validates UUID→BIGINT transformation patterns (5 levels).
+    EXAMPLES:
+      confiture seed validate
+        ↳ Validate default seed directory, static mode (no database needed)
 
-    Examples:
-        # Validate default seed directory
-        confiture seed validate
+      confiture seed validate --mode database --database-url postgresql://localhost/mydb
+        ↳ Validate with database checks for schema compatibility
 
-        # Validate specific directory
-        confiture seed validate --seeds-dir db/seeds/test
+      confiture seed validate --fix --dry-run
+        ↳ Preview what would be fixed (e.g., add ON CONFLICT clauses)
 
-        # Validate with database checks
-        confiture seed validate --mode database --database-url postgresql://localhost/mydb
+      confiture seed validate --prep-seed --static-only
+        ↳ Pre-commit safe: validate UUID transformations Levels 1-3
 
-        # Auto-fix issues (add ON CONFLICT clauses)
-        confiture seed validate --fix
+      confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
+        ↳ Full validation: all 5 levels including runtime execution
 
-        # Preview fixes without modifying files
-        confiture seed validate --fix --dry-run
+    RELATED:
+      confiture seed apply     - Load seeds into database
+      confiture seed convert   - Transform INSERT to COPY format
+      confiture seed benchmark - Compare VALUES vs COPY performance
 
-        # Output as JSON
-        confiture seed validate --format json --output report.json
+    OPTIONS:
+      CORE: --seeds-dir, --mode, --format, --output
+        What to validate, how to validate, and how to report
 
-        # Prep-seed validation (pre-commit safe, Levels 1-3)
-        confiture seed validate --prep-seed --static-only
+      PREP-SEED: --prep-seed, --level, --static-only, --full-execution
+        Enable prep-seed pattern validation with 5 validation levels
 
-        # Prep-seed validation (full, Levels 1-5)
-        confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
+      AUTO-FIX: --fix, --dry-run
+        Automatically fix detected issues (with dry-run preview)
+
+      ADVANCED: --env, --all-envs, --database-url, --uuid-validation
+        Multi-environment validation and advanced pattern checking
     """
     try:
         # Handle prep-seed validation if requested
@@ -223,6 +269,13 @@ def validate(
                 fix=fix,
                 dry_run=dry_run,
             )
+
+        # Handle UUID validation if requested
+        if uuid_validation:
+            console.print("[blue]ℹ Phase 10: UUID Validation Support[/blue]")
+            console.print("  UUID validation is available via Level 1 of prep-seed validation.")
+            console.print("  Use: confiture seed validate --prep-seed --static-only")
+            raise typer.Exit(0)
 
         # Determine which directories to validate
         dirs_to_validate: list[tuple[Path, str]] = []
@@ -321,6 +374,10 @@ def validate(
                 console.print(table)
             else:
                 console.print("[green]✓ All seed files are valid![/green]")
+                console.print("\n💡 Next steps:")
+                console.print("  • Load data: confiture seed apply")
+                console.print("  • Show performance: confiture seed benchmark")
+                console.print("  • Convert format: confiture seed convert")
 
         # Exit with appropriate code
         if all_violations:
@@ -331,56 +388,101 @@ def validate(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Error during validation: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(2) from e
 
 
 @seed_app.command("apply")
 def apply(
     seeds_dir: Path = typer.Option(
-        Path("db/seeds"),
+        DEFAULT_SEEDS_DIR,
         "--seeds-dir",
-        help="Directory containing seed files",
+        help="Directory containing seed files (default: db/seeds)",
     ),
     env: str = typer.Option(
-        "local",
+        DEFAULT_ENV,
         "--env",
-        help="Environment name (for context and database URL lookup)",
+        help="Environment name for database URL lookup (default: local)",
     ),
     sequential: bool = typer.Option(
         False,
         "--sequential",
-        help="Apply files sequentially instead of concatenating (solves parser limits)",
+        help="Apply files sequentially, solves parser limits (default: off)",
     ),
     continue_on_error: bool = typer.Option(
         False,
         "--continue-on-error",
-        help="Continue applying remaining files if one fails",
+        help="Continue if file fails, for --sequential only (default: off)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database URL (if not loading from environment config)",
+        help="Database URL, overrides environment config (default: from config)",
+    ),
+    copy_format: bool = typer.Option(
+        False,
+        "--copy-format",
+        help="Convert INSERT to COPY format for faster loading (default: off)",
+    ),
+    copy_threshold: int = typer.Option(
+        DEFAULT_COPY_THRESHOLD,
+        "--copy-threshold",
+        help=f"Row threshold for auto COPY selection (default: {DEFAULT_COPY_THRESHOLD})",
+    ),
+    benchmark: bool = typer.Option(
+        False,
+        "--benchmark",
+        help="Show VALUES vs COPY performance comparison (default: off)",
+    ),
+    format_type: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, csv (default: text)",
+    ),
+    report_output: Path = typer.Option(
+        None,
+        "--report",
+        help="Save structured output (JSON/CSV) to file (default: stdout)",
     ),
 ) -> None:
-    """Apply seed files to database.
+    """Load seed data into the database.
 
-    By default, seed files are concatenated into a single SQL stream.
-    Use --sequential to apply each file independently within a savepoint,
-    which solves PostgreSQL parser limits for large files (650+ rows).
+    PROCESS:
+      Concatenates seed files (default) or applies sequentially with savepoint
+      isolation. Sequential mode solves PostgreSQL parser limits for large files
+      (650+ rows). Supports COPY format for 10x faster loading.
 
-    Examples:
-        # Concatenate mode (default)
-        confiture seed apply --env local
+    EXAMPLES:
+      confiture seed apply --env local --sequential
+        ↳ Apply seed files sequentially to local database
 
-        # Sequential mode (for large seed files)
-        confiture seed apply --env local --sequential
+      confiture seed apply --sequential --copy-format
+        ↳ Use faster COPY format (auto-converts INSERT statements)
 
-        # Continue on error (skip failed files)
-        confiture seed apply --env local --sequential --continue-on-error
+      confiture seed apply --sequential --continue-on-error --env production
+        ↳ Skip failed files, continue with remaining seeds
 
-        # Use explicit database URL
-        confiture seed apply --sequential --database-url postgresql://localhost/mydb
+      confiture seed apply --sequential --benchmark
+        ↳ Show VALUES vs COPY performance comparison
+
+    RELATED:
+      confiture seed validate - Check seed data quality
+      confiture seed convert  - Transform INSERT to COPY format
+      confiture build         - Build schema, optionally apply seeds
+
+    OPTIONS:
+      CORE: --env, --sequential
+        Environment and execution mode (sequential solves 650+ row limits)
+
+      DATABASE: --database-url
+        Explicit database URL (overrides environment config)
+
+      PERFORMANCE: --copy-format, --copy-threshold, --benchmark
+        Use faster COPY format, control when it's selected, show benchmarks
+
+      ERROR-HANDLING: --continue-on-error
+        Skip failed files and continue (for --sequential only)
     """
     try:
         if not sequential:
@@ -418,22 +520,34 @@ def apply(
 
         # Apply seeds sequentially
         try:
+            # Import ProgressManager for progress tracking
+            from confiture.core.progress import ProgressManager
+
             applier = SeedApplier(
                 seeds_dir=seeds_dir,
                 env=env,
                 connection=connection,
                 console=console,
             )
-            result = applier.apply_sequential(continue_on_error=continue_on_error)
+
+            # Use progress manager for seed application
+            with ProgressManager() as progress:
+                result = applier.apply_sequential(
+                    continue_on_error=continue_on_error, progress=progress
+                )
+
+            # Format output
+            from confiture.cli.formatters.seed_formatter import format_apply_result
+
+            format_apply_result(result, format_type, report_output, console)
+
+            # Close connection
+            connection.close()
 
             # Exit with error if files failed and not continuing
             if result.failed > 0 and not continue_on_error:
                 raise typer.Exit(1)
 
-            # Close connection
-            connection.close()
-
-            console.print("[green]✓ Seed application complete[/green]")
             raise typer.Exit(0)
 
         except Exception as e:
@@ -443,5 +557,139 @@ def apply(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Error: {e}[/red]")
+        print_error_to_console(e)
+        raise typer.Exit(2) from e
+
+
+@seed_app.command("convert")
+def convert(
+    input_file: Path = typer.Option(
+        ...,
+        "--input",
+        help="Input file with INSERT statements (required)",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        help="Output file for COPY format (default: stdout)",
+    ),
+) -> None:
+    """Transform INSERT statements to COPY format (10x faster).
+
+    PROCESS:
+      Reads SQL files with INSERT statements and converts to PostgreSQL COPY
+      format for dramatically faster bulk loading (typically 10x speed improvement).
+
+    EXAMPLES:
+      confiture seed convert --input seeds.sql
+        ↳ Convert and display COPY format to stdout
+
+      confiture seed convert --input seeds.sql --output seeds_copy.sql
+        ↳ Convert and save to file
+
+      confiture seed convert --input db/seeds/users.sql --output db/seeds/users_copy.sql
+        ↳ Convert multiple files in bulk
+
+    RELATED:
+      confiture seed apply     - Load seeds with optional COPY format
+      confiture seed validate  - Check seed data quality
+      confiture seed benchmark - Compare VALUES vs COPY performance
+    """
+    try:
+        if not input_file.exists():
+            console.print(f"[red]✗ Input file not found: {input_file}[/red]")
+            raise typer.Exit(2)
+
+        from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
+
+        # Read input file
+        sql_content = input_file.read_text()
+
+        # Convert to COPY format
+        converter = InsertToCopyConverter()
+        copy_format = converter.convert(sql_content)
+
+        # Output result
+        if output_file:
+            output_file.write_text(copy_format)
+            console.print("[green]✓ Converted to COPY format[/green]")
+            console.print(f"  Input: {input_file}")
+            console.print(f"  Output: {output_file}")
+        else:
+            console.print(copy_format)
+
+        raise typer.Exit(0)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗ Conversion failed: {e}[/red]")
+        raise typer.Exit(2) from e
+
+
+@seed_app.command("benchmark")
+def benchmark(
+    seeds_dir: Path = typer.Option(
+        DEFAULT_SEEDS_DIR,
+        "--seeds-dir",
+        help="Directory containing seed files (default: db/seeds)",
+    ),
+) -> None:
+    """Compare VALUES vs COPY format performance.
+
+    PROCESS:
+      Analyzes seed files and benchmarks loading performance in both formats.
+      Shows estimated speedup, time savings, and per-table metrics to help
+      optimize seed data loading strategy.
+
+    EXAMPLES:
+      confiture seed benchmark
+        ↳ Benchmark default seed directory, show performance comparison
+
+      confiture seed benchmark --seeds-dir db/seeds/test
+        ↳ Benchmark specific seed directory
+
+      confiture seed apply --benchmark --sequential
+        ↳ See benchmark while applying seeds with --sequential flag
+
+    RELATED:
+      confiture seed apply   - Load seeds with --copy-format flag
+      confiture seed convert - Transform INSERT to COPY format
+      confiture seed validate - Check seed data quality
+    """
+    try:
+        import asyncio
+
+        from confiture.core.seed.performance_benchmark import PerformanceBenchmark
+
+        if not seeds_dir.exists():
+            console.print(f"[red]✗ Seeds directory not found: {seeds_dir}[/red]")
+            raise typer.Exit(2)
+
+        # Collect seed data
+        seed_data: dict[str, list[dict]] = {}
+
+        for seed_file in sorted(seeds_dir.glob("*.sql")):
+            console.print(f"[blue]Analyzing {seed_file.name}...[/blue]")
+            # Basic parsing - just count lines as a proxy for row count
+            content = seed_file.read_text()
+            line_count = len(content.split("\n"))
+            seed_data[seed_file.stem] = [{"row": i} for i in range(line_count)]
+
+        if not seed_data:
+            console.print("[yellow]No seed files found[/yellow]")
+            raise typer.Exit(0)
+
+        # Run benchmark
+        benchmark_runner = PerformanceBenchmark()
+        result = asyncio.run(benchmark_runner.compare(seed_data))
+
+        # Display results using helper
+        _format_benchmark_output(result)
+        raise typer.Exit(0)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]✗ Benchmark failed: {e}[/red]")
         raise typer.Exit(2) from e

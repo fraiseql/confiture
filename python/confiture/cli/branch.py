@@ -71,13 +71,13 @@ def branch_list(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     format_output: str = typer.Option(
         "table",
         "--format",
         "-f",
-        help="Output format: table or json",
+        help="Output format: table or json (default: table)",
     ),
 ) -> None:
     """List all schema branches.
@@ -156,18 +156,18 @@ def branch_create(
     checkout: bool = typer.Option(
         True,
         "--checkout/--no-checkout",
-        help="Checkout the new branch after creation",
+        help="Checkout new branch after creation (default: on)",
     ),
     copy_data: bool = typer.Option(
         True,
         "--copy-data/--no-copy-data",
-        help="Copy data from parent branch",
+        help="Copy data from parent branch (default: on)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
 ) -> None:
     """Create a new schema branch.

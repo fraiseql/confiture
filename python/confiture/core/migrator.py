@@ -17,6 +17,7 @@ from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.locking import LockConfig, MigrationLock
 from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
+from confiture.core.progress import ProgressManager
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
@@ -899,6 +900,7 @@ class Migrator:
         target: str | None = None,
         lock_config: LockConfig | None = None,
         checksum_config: ChecksumConfig | None = None,
+        progress: ProgressManager | None = None,
     ) -> list[str]:
         """Apply pending migrations up to target version.
 
@@ -918,6 +920,7 @@ class Migrator:
             checksum_config: Checksum verification configuration. If None, uses
                 default (enabled, fail on mismatch). Pass
                 ChecksumConfig(enabled=False) to disable verification.
+            progress: Optional ProgressManager for displaying migration progress
 
         Returns:
             List of applied migration versions
@@ -933,20 +936,16 @@ class Migrator:
             >>> # Default: verify checksums, fail on mismatch
             >>> applied = migrator.migrate_up()
             >>>
-            >>> # Custom checksum behavior
-            >>> from confiture.core.checksum import ChecksumConfig, ChecksumMismatchBehavior
-            >>> applied = migrator.migrate_up(
-            ...     checksum_config=ChecksumConfig(
-            ...         on_mismatch=ChecksumMismatchBehavior.WARN
-            ...     )
-            ... )
-            >>>
-            >>> # Disable checksum verification
-            >>> applied = migrator.migrate_up(
-            ...     checksum_config=ChecksumConfig(enabled=False)
-            ... )
+            >>> # With progress tracking
+            >>> with ProgressManager() as pm:
+            ...     applied = migrator.migrate_up(progress=pm)
         """
         effective_migrations_dir = migrations_dir or Path("db/migrations")
+
+        # Phase 1: Verification
+        verify_task = None
+        if progress:
+            verify_task = progress.add_task("Verifying checksums...", total=None)
 
         # Verify checksums before running migrations (unless force mode)
         if checksum_config is None:
@@ -956,18 +955,22 @@ class Migrator:
             verifier = MigrationChecksumVerifier(self.connection, checksum_config)
             verifier.verify_all(effective_migrations_dir)
 
+        if progress and verify_task is not None:
+            progress.finish_task(verify_task)
+
         # Create lock manager
         lock = MigrationLock(self.connection, lock_config)
 
         # Acquire lock and run migrations
         with lock.acquire():
-            return self._migrate_up_internal(force, migrations_dir, target)
+            return self._migrate_up_internal(force, migrations_dir, target, progress=progress)
 
     def _migrate_up_internal(
         self,
         force: bool = False,
         migrations_dir: Path | None = None,
         target: str | None = None,
+        progress: ProgressManager | None = None,
     ) -> list[str]:
         """Internal implementation of migrate_up (called within lock).
 
@@ -975,10 +978,16 @@ class Migrator:
             force: If True, skip migration state checks
             migrations_dir: Custom migrations directory
             target: Target migration version
+            progress: Optional ProgressManager for tracking progress
 
         Returns:
             List of applied migration versions
         """
+        # Phase 1: Discovery
+        discover_task = None
+        if progress:
+            discover_task = progress.add_task("Discovering migrations...", total=None)
+
         # Find migrations to apply
         if force:
             # In force mode, apply all migrations regardless of state
@@ -987,8 +996,16 @@ class Migrator:
             # Normal mode: only apply pending migrations
             migrations_to_apply = self.find_pending(migrations_dir)
 
+        if progress and discover_task is not None:
+            progress.update(discover_task, len(migrations_to_apply))
+
         # Check for mixed transactional modes and warn
         self._warn_mixed_transactional_modes(migrations_to_apply)
+
+        # Phase 2: Application
+        apply_task = None
+        if progress:
+            apply_task = progress.add_task("Applying migrations...", total=len(migrations_to_apply))
 
         applied_versions = []
 
@@ -1007,6 +1024,13 @@ class Migrator:
             # Apply migration with file path for checksum computation
             self.apply(migration, force=force, migration_file=migration_file)
             applied_versions.append(migration.version)
+
+            # Update progress
+            if progress and apply_task is not None:
+                progress.update(apply_task, advance=1)
+
+        if progress and apply_task is not None:
+            progress.finish_task(apply_task)
 
         return applied_versions
 

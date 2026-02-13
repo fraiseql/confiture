@@ -3,6 +3,7 @@
 This module defines the main Typer application and all CLI commands.
 """
 
+import difflib
 import json
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,37 @@ from confiture.models.lint import LintReport, LintSeverity, Violation
 
 # Valid output formats for linting
 LINT_FORMATS = ("table", "json", "csv")
+
+# Common command names for "Did you mean?" suggestions
+COMMON_COMMANDS = [
+    "init",
+    "build",
+    "migrate",
+    "lint",
+    "seed",
+    "branch",
+    "generate",
+    "coordinate",
+    "migrate-up",
+    "migrate-down",
+    "migrate-status",
+    "migrate-validate",
+]
+
+
+def _get_suggestion(unknown_command: str) -> str | None:
+    """Get "Did you mean?" suggestion for unknown command.
+
+    Uses difflib to find similar commands (75% similarity threshold).
+
+    Args:
+        unknown_command: The command user tried to run
+
+    Returns:
+        Suggested command if match found (>75% similarity), None otherwise
+    """
+    matches = difflib.get_close_matches(unknown_command, COMMON_COMMANDS, n=1, cutoff=0.75)
+    return matches[0] if matches else None
 
 
 def _convert_linter_report(linter_report: LinterReport, schema_name: str = "schema") -> LintReport:
@@ -279,7 +311,7 @@ def build(
         "local",
         "--env",
         "-e",
-        help="Environment to build (references db/environments/{env}.yaml)",
+        help="Environment to build (default: local)",
     ),
     output: Path = typer.Option(
         None,
@@ -295,107 +327,103 @@ def build(
     show_hash: bool = typer.Option(
         False,
         "--show-hash",
-        help="Display schema hash after build",
+        help="Display schema hash after build (default: off)",
     ),
     schema_only: bool = typer.Option(
         False,
         "--schema-only",
-        help="Build schema only, exclude seed data",
+        help="Build schema only, exclude seed data (default: off)",
     ),
     validate_comments: bool | None = typer.Option(
         None,
         "--validate-comments/--no-validate-comments",
-        help="Override: enable/disable comment validation",
+        help="Enable/disable comment validation (default: from config)",
     ),
     fail_on_unclosed: bool | None = typer.Option(
         None,
         "--fail-on-unclosed/--no-fail-on-unclosed",
-        help="Override: fail on unclosed block comments",
+        help="Fail on unclosed block comments (default: from config)",
     ),
     fail_on_spillover: bool | None = typer.Option(
         None,
         "--fail-on-spillover/--no-fail-on-spillover",
-        help="Override: fail on comment spillover into next file",
+        help="Fail on comment spillover into next file (default: from config)",
     ),
     separator_style: str | None = typer.Option(
         None,
         "--separator-style",
-        help="Override separator style: block_comment, line_comment, mysql, custom",
+        help="Separator style: block_comment, line_comment, mysql, custom (default: from config)",
     ),
     separator_template: str | None = typer.Option(
         None,
         "--separator-template",
-        help="Custom separator template with {file_path} placeholder",
+        help="Custom separator template with {file_path} placeholder (default: none)",
     ),
     sequential: bool = typer.Option(
         False,
         "--sequential",
-        help="Apply seed files sequentially after schema build (avoids parser limits)",
+        help="Apply seed files sequentially after build (default: off)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database connection URL (required for --sequential)",
+        help="Database connection URL (required for --sequential, default: from config)",
     ),
     continue_on_error: bool = typer.Option(
         False,
         "--continue-on-error",
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
+    format_type: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, csv (default: text)",
+    ),
+    report_output: Path = typer.Option(
+        None,
+        "--report",
+        help="Save structured output (JSON/CSV) to file (default: stdout)",
+    ),
 ) -> None:
-    """Build complete schema from DDL files.
+    """Build complete schema from DDL files in one fast operation.
 
-    This command builds a complete schema by concatenating all SQL files
-    from the db/schema/ directory in deterministic order. This is the
-    fastest way to create or recreate a database from scratch.
+    PROCESS:
+      Concatenates all SQL files from db/schema/ in deterministic order, validates
+      comments (optional), adds separators, and writes the complete schema. Fastest
+      way to create or recreate a database from scratch.
 
-    The build process:
-    1. Reads environment configuration (db/environments/{env}.yaml)
-    2. Validates SQL comments (optional, catches concatenation errors)
-    3. Discovers all .sql files in configured include_dirs
-    4. Concatenates files in alphabetical order
-    5. Adds file separators (configurable style)
-    6. Adds metadata headers (environment, file count, timestamp)
-    7. Writes to output file (default: db/generated/schema_{env}.sql)
+    EXAMPLES:
+      confiture build
+        ↳ Build local environment, output to db/generated/schema_local.sql
 
-    Comment Validation:
-    Detects unclosed block comments that would corrupt concatenated schemas.
-    By default uses environment config, but can be overridden with --validate-comments.
+      confiture build --env production --show-hash
+        ↳ Build production environment and show schema hash for change detection
 
-    File Separators:
-    Controls how files are separated in concatenated output. Available styles:
-    - block_comment: SQL block comments (/* ... */) - default, safest
-    - line_comment: SQL line comments (--) - faster, less visible
-    - mysql: MySQL-compatible separators
-    - custom: Use custom template with {file_path} placeholder
+      confiture build --sequential --database-url postgresql://localhost/myapp
+        ↳ Build schema AND apply seed files sequentially (solves 650+ row limits)
 
-    Examples:
-        # Build local environment schema
-        confiture build
+      confiture build --validate-comments --fail-on-unclosed
+        ↳ Enable comment validation to catch concatenation errors
 
-        # Build for specific environment
-        confiture build --env production
+    RELATED:
+      confiture migrate up      - Apply incremental migrations instead
+      confiture seed validate   - Validate seed data separately
+      confiture lint            - Check schema against best practices
 
-        # Custom output location
-        confiture build --output /tmp/schema.sql
+    OPTIONS:
+      CORE: --env, --output
+        Essential options for basic usage
 
-        # Enable comment validation
-        confiture build --validate-comments
+      ADVANCED: --show-hash, --schema-only, --separator-style, --separator-template
+        Optional parameters for customizing output format
 
-        # Use block comment separators (safest)
-        confiture build --separator-style block_comment
+      STRUCTURED OUTPUT: --format, --report
+        Export results in JSON/CSV format for automation and integration
 
-        # Custom separators
-        confiture build --separator-style custom --separator-template "\\n/* {file_path} */\\n"
-
-        # Show hash for change detection
-        confiture build --show-hash
-
-        # Apply seeds sequentially (avoids parser limits with large seed files)
-        confiture build --sequential --database-url postgresql://localhost/myapp
-
-        # Continue on error when applying seeds
-        confiture build --sequential --continue-on-error --database-url postgresql://localhost/myapp
+      SEEDS & VALIDATION: --sequential, --database-url, --continue-on-error,
+                         --validate-comments, --fail-on-unclosed, --fail-on-spillover
+        For applying seeds after build and controlling validation behavior
     """
     try:
         # Create schema builder
@@ -483,26 +511,31 @@ def build(
         # Build schema (with or without seeds)
         console.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
-        if apply_sequential:
-            # Build schema only, seeds will be applied separately
-            schema = builder.build(output_path=output, schema_only=True)
-            sql_files = builder.find_sql_files()
-            schema_file_count = len(
-                [f for f in sql_files if not any(p.lower() in ("seed", "seeds") for p in f.parts)]
-            )
-        else:
-            # Build schema with seeds
-            sql_files = builder.find_sql_files()
-            schema = builder.build(output_path=output)
-            schema_file_count = len(sql_files)
+        # Import ProgressManager for progress tracking
+        from confiture.core.progress import ProgressManager
+
+        with ProgressManager() as progress:
+            if apply_sequential:
+                # Build schema only, seeds will be applied separately
+                schema = builder.build(output_path=output, schema_only=True, progress=progress)
+                sql_files = builder.find_sql_files()
+                schema_file_count = len(
+                    [
+                        f
+                        for f in sql_files
+                        if not any(p.lower() in ("seed", "seeds") for p in f.parts)
+                    ]
+                )
+            else:
+                # Build schema with seeds
+                sql_files = builder.find_sql_files()
+                schema = builder.build(output_path=output, progress=progress)
+                schema_file_count = len(sql_files)
 
         console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
 
-        # Success message
-        console.print("[green]✅ Schema built successfully![/green]")
-        console.print(f"\n📁 Output: {output.absolute()}")
-        console.print(f"📏 Size: {len(schema):,} bytes")
-        console.print(f"📊 Files: {schema_file_count}")
+        # Track seed files applied (will be updated if sequential)
+        seed_files_applied = 0
 
         # Apply seeds sequentially if requested
         if apply_sequential:
@@ -539,6 +572,7 @@ def build(
                     )
                     result = applier.apply_sequential(continue_on_error=continue_on_error)
 
+                    seed_files_applied = result.succeeded
                     console.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
                     if result.failed > 0:
                         console.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
@@ -557,19 +591,77 @@ def build(
                 raise typer.Exit(1) from e
 
         # Show hash if requested
+        schema_hash = None
         if show_hash:
             schema_hash = builder.compute_hash()
-            console.print(f"🔐 Hash: {schema_hash}")
 
-        console.print("\n💡 Next steps:")
-        console.print(f"  • Apply schema: psql -f {output}")
-        console.print("  • Or use: confiture migrate up")
+        # Validate format_type
+        if format_type not in ("text", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {format_type}. Use text, json, or csv[/red]")
+            raise typer.Exit(1)
+
+        # Create and format build result
+        from confiture.cli.formatters.build_formatter import format_build_result
+        from confiture.models.results import BuildResult
+
+        build_result = BuildResult(
+            success=True,
+            files_processed=schema_file_count,
+            schema_size_bytes=len(schema),
+            output_path=str(output.absolute()),
+            hash=schema_hash,
+            execution_time_ms=0,  # Could track this if needed
+            seed_files_applied=seed_files_applied,
+        )
+
+        # Format and output result
+        format_build_result(build_result, format_type, report_output, console)
+
+        # Show next steps only for text format
+        if format_type == "text":
+            console.print("\n💡 Next steps:")
+            console.print(f"  • Apply schema: psql -f {output}")
+            console.print("  • Or use: confiture migrate up")
 
     except FileNotFoundError as e:
+        # Try to format error result if format was specified
+        try:
+            from confiture.cli.formatters.build_formatter import format_build_result
+            from confiture.models.results import BuildResult
+
+            error_result = BuildResult(
+                success=False,
+                files_processed=0,
+                schema_size_bytes=0,
+                output_path="",
+                error=str(e),
+            )
+            if format_type != "text":
+                format_build_result(error_result, format_type, report_output, console)
+        except Exception:
+            pass
+
         print_error_to_console(e)
         console.print("\n💡 Tip: Run 'confiture init' to create project structure")
         raise typer.Exit(handle_cli_error(e)) from e
     except Exception as e:
+        # Try to format error result if format was specified
+        try:
+            from confiture.cli.formatters.build_formatter import format_build_result
+            from confiture.models.results import BuildResult
+
+            error_result = BuildResult(
+                success=False,
+                files_processed=0,
+                schema_size_bytes=0,
+                output_path="",
+                error=str(e),
+            )
+            if format_type != "text":
+                format_build_result(error_result, format_type, report_output, console)
+        except Exception:
+            pass
+
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e
 
@@ -580,7 +672,7 @@ def lint(
         "local",
         "--env",
         "-e",
-        help="Environment to lint (references db/environments/{env}.yaml)",
+        help="Environment to lint (default: local)",
     ),
     project_dir: Path = typer.Option(
         Path("."),
@@ -591,47 +683,56 @@ def lint(
         "table",
         "--format",
         "-f",
-        help="Output format (table, json, csv)",
+        help="Output format: table, json, csv (default: table)",
     ),
     output: Path = typer.Option(
         None,
         "--output",
         "-o",
-        help="Output file path (only with json/csv format)",
+        help="Output file path (default: stdout, only with json/csv)",
     ),
     fail_on_error: bool = typer.Option(
         True,
         "--fail-on-error",
-        help="Exit with code 1 if errors found",
+        help="Exit with code 1 if errors found (default: on)",
     ),
     fail_on_warning: bool = typer.Option(
         False,
         "--fail-on-warning",
-        help="Exit with code 1 if warnings found (stricter)",
+        help="Exit with code 1 if warnings found (default: off, stricter)",
     ),
 ) -> None:
-    """Lint schema against best practices.
+    """Validate schema against best practices.
 
-    Validates the schema against 6 built-in linting rules:
-    - Naming conventions (snake_case)
-    - Primary keys on all tables
-    - Documentation (COMMENT on tables)
-    - Multi-tenant identifier columns
-    - Indexes on foreign keys
-    - Security best practices (passwords, tokens, secrets)
+    PROCESS:
+      Checks schema against 6 rules: naming conventions (snake_case), primary
+      keys on all tables, documentation, multi-tenant columns, FK indexes, and
+      security (no passwords/secrets). Results in table or JSON format.
 
-    Examples:
-        # Lint local environment, display as table
-        confiture lint
+    EXAMPLES:
+      confiture lint
+        ↳ Lint local environment, display results as table
 
-        # Lint production environment, output as JSON
-        confiture lint --env production --format json
+      confiture lint --env production
+        ↳ Lint production environment
 
-        # Save results to file
-        confiture lint --format json --output lint-report.json
+      confiture lint --format json --output report.json
+        ↳ Save linting report to JSON file
 
-        # Strict mode: fail on warnings
-        confiture lint --fail-on-warning
+      confiture lint --fail-on-warning
+        ↳ Exit with error code if any warnings found (strict mode)
+
+    RELATED:
+      confiture build       - Build schema from DDL files
+      confiture migrate up  - Apply migrations
+      confiture schema-to-schema - Compare and sync schemas
+
+    OPTIONS:
+      CORE: --env, --format, --output
+        What to lint and how to report results
+
+      SEVERITY: --fail-on-error, --fail-on-warning
+        Control exit behavior based on issue severity
     """
     try:
         # Validate format option
@@ -712,40 +813,57 @@ def migrate_status(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         None,
         "--config",
         "-c",
-        help="Configuration file (optional, to show applied status)",
+        help="Configuration file (default: none, optional for applied status)",
     ),
     output_format: str = typer.Option(
         "table",
         "--format",
         "-f",
-        help="Output format: table (default) or json",
+        help="Output format: table or json (default: table)",
     ),
     output_file: Path = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file (useful with --format json)",
+        help="Save output to file (default: stdout, useful with json)",
     ),
 ) -> None:
-    """Show migration status.
+    """Show migration status and history.
 
-    If config is provided, shows which migrations are applied vs pending.
+    PROCESS:
+      Lists all migrations and their status (applied or pending). With --config,
+      connects to database and shows which migrations are applied vs pending.
 
-    Examples:
-        confiture migrate status
-        confiture migrate status --format json
-        confiture migrate status -f json -o status.json
+    EXAMPLES:
+      confiture migrate status
+        ↳ List all migrations and their status
+
+      confiture migrate status --config db/environments/prod.yaml
+        ↳ Show applied vs pending migrations in production database
+
+      confiture migrate status --format json
+        ↳ Output as JSON for scripting
+
+      confiture migrate status --format json --output migrations.json
+        ↳ Save status report to file
+
+    RELATED:
+      confiture migrate up       - Apply pending migrations
+      confiture migrate down     - Rollback applied migrations
+      confiture migrate generate - Create new migration
     """
     try:
         # Validate output format
-        if output_format not in ("table", "json"):
-            console.print(f"[red]❌ Invalid format: {output_format}. Use 'table' or 'json'[/red]")
+        if output_format not in ("table", "json", "csv"):
+            console.print(
+                f"[red]❌ Invalid format: {output_format}. Use 'table', 'json', or 'csv'[/red]"
+            )
             raise typer.Exit(1)
 
         if not migrations_dir.exists():
@@ -863,6 +981,15 @@ def migrate_status(
                     v: [f.name for f in files] for v, files in duplicate_versions.items()
                 }
             _output_json(result, output_file, console)
+        elif output_format == "csv":
+            # CSV output with migration list
+            from confiture.cli.formatters.common import handle_output
+
+            csv_data = (
+                ["version", "name", "status"],
+                [[m["version"], m["name"], m["status"]] for m in migrations_data],
+            )
+            handle_output("csv", {}, csv_data, output_file, console)
         else:
             # Display migrations in a table
             table = Table(title="Migrations")
@@ -899,6 +1026,14 @@ def migrate_status(
         if output_format == "json":
             result = {"error": str(e)}
             _output_json(result, output_file, console)
+        elif output_format == "csv":
+            from confiture.cli.formatters.common import handle_output
+
+            csv_data = (
+                ["error"],
+                [[str(e)]],
+            )
+            handle_output("csv", {}, csv_data, output_file, console)
         else:
             console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
@@ -998,90 +1133,116 @@ def migrate_up(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     target: str = typer.Option(
         None,
         "--target",
         "-t",
-        help="Target migration version (applies all if not specified)",
+        help="Target migration version (default: applies all pending)",
     ),
     strict: bool = typer.Option(
         False,
         "--strict",
-        help="Enable strict mode (fail on warnings)",
+        help="Enable strict mode, fail on warnings (default: off)",
     ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Force migration application, skipping state checks",
+        help="Force application, skip state checks (default: off)",
     ),
     lock_timeout: int = typer.Option(
         30000,
         "--lock-timeout",
-        help="Lock acquisition timeout in milliseconds (default: 30000ms = 30s)",
+        help="Lock timeout in milliseconds (default: 30000ms)",
     ),
     no_lock: bool = typer.Option(
         False,
         "--no-lock",
-        help="Disable migration locking (DANGEROUS in multi-pod environments)",
+        help="Disable migration locking (default: off, DANGEROUS in multi-pod)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Analyze migrations without executing (metadata queries only)",
+        help="Analyze without executing (default: off)",
     ),
     dry_run_execute: bool = typer.Option(
         False,
         "--dry-run-execute",
-        help="Execute migrations in SAVEPOINT for realistic testing (guaranteed rollback)",
+        help="Execute in SAVEPOINT for testing (default: off, guaranteed rollback)",
     ),
     verify_checksums: bool = typer.Option(
         True,
         "--verify-checksums/--no-verify-checksums",
-        help="Verify migration file checksums before running (default: enabled)",
+        help="Verify migration checksums before running (default: on)",
     ),
     on_checksum_mismatch: str = typer.Option(
         "fail",
         "--on-checksum-mismatch",
-        help="Behavior on checksum mismatch: fail, warn, ignore",
+        help="Checksum mismatch behavior: fail, warn, ignore (default: fail)",
     ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
         "-v",
-        help="Show detailed analysis in dry-run report",
+        help="Show detailed analysis in dry-run (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Report format (text or json)",
+        help="Report format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save report to file",
+        help="Save report to file (default: stdout)",
     ),
 ) -> None:
-    """Apply pending migrations.
+    """Apply pending migrations to the database.
 
-    Applies all pending migrations up to the target version (or all if no target).
+    PROCESS:
+      Applies pending migrations in order, with distributed locking to prevent
+      concurrent runs. Verifies checksums to detect unauthorized changes. Use
+      --dry-run to analyze, or --dry-run-execute to test in a SAVEPOINT.
 
-    Uses distributed locking to ensure only one migration process runs at a time.
-    This is critical for Kubernetes/multi-pod deployments.
+    EXAMPLES:
+      confiture migrate up
+        ↳ Apply all pending migrations
 
-    Verifies migration file checksums to detect unauthorized modifications.
-    Use --no-verify-checksums to skip verification.
+      confiture migrate up --target 003
+        ↳ Apply migrations up to version 003
 
-    Use --dry-run for analysis without execution, or --dry-run-execute to test in SAVEPOINT.
+      confiture migrate up --dry-run
+        ↳ Analyze migrations without executing
+
+      confiture migrate up --strict --no-verify-checksums
+        ↳ Strict mode with warnings treated as errors, skip checksum validation
+
+    RELATED:
+      confiture migrate down        - Rollback migrations
+      confiture migrate status      - View migration history
+      confiture migrate generate    - Create new migration template
+
+    OPTIONS:
+      CORE: --target
+        Which migration version to apply (default: all pending)
+
+      DRY-RUN: --dry-run, --dry-run-execute, --verbose, --format, --output
+        Analyze migrations before executing, with optional SAVEPOINT testing
+
+      SAFETY: --verify-checksums, --on-checksum-mismatch, --strict, --no-lock, --lock-timeout
+        Control verification and locking behavior for production safety
+
+      ADVANCED: --force
+        Skip safety checks (use with caution in production)
     """
     from confiture.cli.dry_run import (
         ask_dry_run_execute_confirmation,
@@ -1341,7 +1502,7 @@ def migrate_up(
                 # Continue to actual execution below
 
             except Exception as e:
-                console.print(f"\n[red]❌ Dry-run analysis failed: {e}[/red]")
+                print_error_to_console(e)
                 conn.close()
                 raise typer.Exit(1) from e
 
@@ -1354,50 +1515,83 @@ def migrate_up(
         # Create lock manager
         lock = MigrationLock(conn, lock_config)
 
+        # Import ProgressManager for progress tracking
         # Apply migrations with distributed lock
+        import time
+
+        from confiture.cli.formatters.migrate_formatter import format_migrate_up_result
+        from confiture.core.progress import ProgressManager
+        from confiture.models.results import MigrateUpResult, MigrationApplied
+
         applied_count = 0
         failed_migration = None
         failed_exception = None
+        migrations_applied = []
+        total_execution_time_ms = 0
 
         try:
             with lock.acquire():
                 if not no_lock:
                     console.print("[cyan]🔒 Acquired migration lock[/cyan]\n")
 
-                for migration_file in migrations_to_apply:
-                    # Load migration module
-                    migration_class = load_migration_class(migration_file)
-
-                    # Create migration instance
-                    migration = migration_class(connection=conn)
-                    # Override strict_mode from CLI/config if not already set on class
-                    if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
-                        migration.strict_mode = effective_strict_mode
-
-                    # Check target
-                    if target and migration.version > target:
-                        console.print(
-                            f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]"
-                        )
-                        break
-
-                    # Apply migration
-                    console.print(
-                        f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+                # Use progress manager for migration application
+                with ProgressManager() as progress:
+                    apply_task = progress.add_task(
+                        "Applying migrations...", total=len(migrations_to_apply)
                     )
 
-                    try:
-                        migrator.apply(migration, force=force, migration_file=migration_file)
-                        console.print("[green]✅[/green]")
-                        applied_count += 1
-                    except Exception as e:
-                        console.print("[red]❌[/red]")
-                        failed_migration = migration
-                        failed_exception = e
-                        break
+                    for migration_file in migrations_to_apply:
+                        # Load migration module
+                        migration_class = load_migration_class(migration_file)
+
+                        # Create migration instance
+                        migration = migration_class(connection=conn)
+                        # Override strict_mode from CLI/config if not already set on class
+                        if effective_strict_mode and not getattr(
+                            migration_class, "strict_mode", False
+                        ):
+                            migration.strict_mode = effective_strict_mode
+
+                        # Check target
+                        if target and migration.version > target:
+                            console.print(
+                                f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]"
+                            )
+                            break
+
+                        # Apply migration
+                        console.print(
+                            f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]",
+                            end=" ",
+                        )
+
+                        try:
+                            start_time = time.time()
+                            migrator.apply(migration, force=force, migration_file=migration_file)
+                            execution_time_ms = int((time.time() - start_time) * 1000)
+                            total_execution_time_ms += execution_time_ms
+
+                            console.print("[green]✅[/green]")
+                            applied_count += 1
+
+                            # Track successful migration
+                            migrations_applied.append(
+                                MigrationApplied(
+                                    version=migration.version,
+                                    name=migration.name,
+                                    execution_time_ms=execution_time_ms,
+                                    rows_affected=0,  # Not easily tracked, so default to 0
+                                )
+                            )
+                            progress.update(apply_task, advance=1)
+                        except Exception as e:
+                            console.print("[red]❌[/red]")
+                            failed_migration = migration
+                            failed_exception = e
+                            break
 
         except LockAcquisitionError as e:
-            console.print(f"\n[red]❌ Failed to acquire migration lock: {e}[/red]")
+            print_error_to_console(e)
             if e.timeout:
                 console.print(
                     f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
@@ -1411,28 +1605,51 @@ def migrate_up(
 
         # Handle results
         if failed_migration:
-            console.print("\n[red]❌ Migration failed![/red]")
-            if applied_count > 0:
-                console.print(
-                    f"[yellow]⚠️  {applied_count} migration(s) were applied successfully before the failure.[/yellow]"
-                )
+            # Create error result
+            error_result = MigrateUpResult(
+                success=False,
+                migrations_applied=migrations_applied,
+                total_execution_time_ms=total_execution_time_ms,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                error=str(failed_exception),
+            )
 
-            # Show detailed error information
-            _show_migration_error_details(failed_migration, failed_exception, applied_count)
+            # Format output if not text (text format handled above)
+            if format_output != "text":
+                format_migrate_up_result(error_result, format_output, output_file, console)
+            else:
+                # Show detailed error information for text format
+                _show_migration_error_details(failed_migration, failed_exception, applied_count)
+
             conn.close()
             raise typer.Exit(1)
         else:
-            if force:
-                console.print(
-                    f"\n[green]✅ Force mode: Successfully applied {applied_count} migration(s)![/green]"
-                )
-                console.print(
-                    "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
-                )
-            else:
-                console.print(
-                    f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]"
-                )
+            # Create success result
+            success_result = MigrateUpResult(
+                success=True,
+                migrations_applied=migrations_applied,
+                total_execution_time_ms=total_execution_time_ms,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                warnings=["Force mode enabled"] if force else [],
+            )
+
+            # Format output
+            format_migrate_up_result(success_result, format_output, output_file, console)
+
+            # Show next steps for text format only
+            if format_output == "text":
+                if force:
+                    console.print(
+                        "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
+                    )
+                else:
+                    console.print("\n💡 Next steps:")
+                    console.print("  • Verify: confiture migrate status")
+                    console.print("  • Validate: confiture lint")
+                    console.print("  • Load data: confiture seed apply")
+
             conn.close()
 
     except typer.Exit:
@@ -1441,7 +1658,7 @@ def migrate_up(
         # Already handled above
         raise
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
+        print_error_to_console(e)
         raise typer.Exit(1) from e
 
 
@@ -1561,48 +1778,55 @@ def migrate_generate(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Output format: text or json",
+        help="Output format: text or json (default: text)",
     ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Overwrite existing migration file if it exists",
+        help="Overwrite existing migration file (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be generated without creating files",
+        help="Show what would be generated without creating (default: off)",
     ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
         "-v",
-        help="Show version calculation and scanning details",
+        help="Show version calculation details (default: off)",
     ),
 ) -> None:
-    """Generate a new migration file with auto-incrementing version number.
+    """Generate a new migration file with auto-incrementing version.
 
-    Creates an empty migration template with the given name. The version number
-    is automatically calculated by scanning existing migrations and incrementing
-    the highest version found.
+    PROCESS:
+      Creates an empty migration template with auto-calculated version number.
+      Scans existing migrations and increments the highest version (3-digit
+      zero-padded: 001, 002, ..., 999). Gaps in numbering are preserved.
 
-    Version Numbering:
-        Versions are 3-digit zero-padded (001, 002, ..., 999).
-        Next version = highest existing version + 1.
-        Gaps in numbering are preserved.
+    EXAMPLES:
+      confiture migrate generate add_user_email
+        ↳ Create migration template, auto-version to 001 (or next available)
 
-    Examples:
-        confiture migrate generate add_user_email
-        confiture migrate generate add_user_email --dry-run
-        confiture migrate generate add_user_email --format json
-        confiture migrate generate add_user_email --verbose
-        confiture migrate generate add_user_email --force
+      confiture migrate generate add_payment_column --verbose
+        ↳ Show version calculation and scanning details
+
+      confiture migrate generate stripe_integration --dry-run
+        ↳ Preview what would be created without writing files
+
+      confiture migrate generate hotfix --force
+        ↳ Overwrite existing migration file if it exists
+
+    RELATED:
+      confiture migrate up      - Apply the generated migration
+      confiture migrate status  - View all migrations
+      confiture migrate diff    - Compare schema files
     """
     try:
         # Ensure migrations directory exists
@@ -1761,6 +1985,10 @@ class {class_name}(Migration):
             console.print("[green]✅ Migration generated successfully![/green]")
             print(f"\n📄 File: {filepath.absolute()}")
             console.print("\n✏️  Edit the migration file to add your SQL statements.")
+            console.print("\n💡 Next steps:")
+            console.print("  • Edit file and add SQL")
+            console.print("  • Apply: confiture migrate up")
+            console.print("  • Or verify first: confiture migrate up --dry-run")
 
     except typer.Exit:
         raise
@@ -1783,36 +2011,49 @@ def migrate_baseline(
         ...,
         "--through",
         "-t",
-        help="Mark all migrations through this version as applied",
+        help="Mark all migrations through this version as applied (required)",
     ),
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file with database connection",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be marked without making changes",
+        help="Show what would be marked without making changes (default: off)",
     ),
 ) -> None:
-    """Mark migrations as applied without executing them.
+    """Mark migrations as applied without running them.
 
-    Use this to establish a baseline when:
-    - Adopting confiture on an existing database
-    - Setting up a new environment from a backup
-    - Recovering from a failed migration state
+    PROCESS:
+      Marks migrations as applied in the database without executing the SQL.
+      Useful for establishing a baseline when adopting confiture on existing
+      databases, setting up from backups, or recovering from failed states.
 
-    Examples:
-        confiture migrate baseline --through 002
-        confiture migrate baseline -t 005 --dry-run
-        confiture migrate baseline -t 003 -c db/environments/production.yaml
+    EXAMPLES:
+      confiture migrate baseline --through 002
+        ↳ Mark migrations 001-002 as applied
+
+      confiture migrate baseline --through 005 --dry-run
+        ↳ Preview what would be marked, without making changes
+
+      confiture migrate baseline -t 003 -c db/environments/production.yaml
+        ↳ Mark through version 003 in production database
+
+      confiture migrate baseline -t 010 --force
+        ↳ Force marking without state checks
+
+    RELATED:
+      confiture migrate up       - Apply migrations normally
+      confiture migrate status   - View migration history
+      confiture migrate diff     - Compare schema versions
     """
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator
@@ -1945,24 +2186,58 @@ def migrate_diff(
     generate: bool = typer.Option(
         False,
         "--generate",
-        help="Generate migration from diff",
+        help="Generate migration from diff (default: off)",
     ),
     name: str = typer.Option(
         None,
         "--name",
-        help="Migration name (required with --generate)",
+        help="Migration name (default: none, required with --generate)",
     ),
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
+    ),
+    format_type: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, or csv (default: text)",
+    ),
+    report_file: Path | None = typer.Option(
+        None,
+        "--report",
+        "-o",
+        help="Save report to file (default: stdout)",
     ),
 ) -> None:
-    """Compare two schema files and show differences.
+    """Compare two schema files and identify differences.
 
-    Optionally generate a migration file from the diff.
+    PROCESS:
+      Compares old and new schema files, shows additions/modifications/removals.
+      Optionally generates a migration file from the detected differences.
+
+    EXAMPLES:
+      confiture migrate diff schema_old.sql schema_new.sql
+        ↳ Show all differences between two schemas
+
+      confiture migrate diff schema_old.sql schema_new.sql --generate --name add_payments
+        ↳ Generate migration file from differences
+
+      confiture migrate diff db/generated/schema_local.sql db/schema/production.sql
+        ↳ Compare local schema with production target
+
+    RELATED:
+      confiture migrate generate - Create migration template
+      confiture migrate validate - Check migration integrity
+      confiture build             - Build schema from DDL files
     """
     try:
+        # Validate format
+        if format_type not in ("text", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {format_type}. Use text, json, or csv[/red]")
+            raise typer.Exit(1)
+
         # Validate files exist
         if not old_schema.exists():
             console.print(f"[red]❌ Old schema file not found: {old_schema}[/red]")
@@ -1980,25 +2255,14 @@ def migrate_diff(
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
 
-        # Display diff
-        if not diff.has_changes():
-            console.print("[green]✅ No changes detected. Schemas are identical.[/green]")
-            return
+        # Convert changes to SchemaChange objects
+        from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
+        from confiture.models.results import MigrateDiffResult, SchemaChange
 
-        console.print("[cyan]📊 Schema differences detected:[/cyan]\n")
+        changes = [SchemaChange(change.type, str(change)) for change in diff.changes]
+        migration_file_name = None
 
-        # Display changes in a table
-        table = Table()
-        table.add_column("Type", style="yellow")
-        table.add_column("Details", style="white")
-
-        for change in diff.changes:
-            table.add_row(change.type, str(change))
-
-        console.print(table)
-        console.print(f"\n📈 Total changes: {len(diff.changes)}")
-
-        # Generate migration if requested
+        # Handle migration generation if requested
         if generate:
             if not name:
                 console.print("[red]❌ Migration name is required when using --generate[/red]")
@@ -2013,11 +2277,29 @@ def migrate_diff(
             # Generate migration
             generator = MigrationGenerator(migrations_dir=migrations_dir)
             migration_file = generator.generate(diff, name=name)
+            migration_file_name = migration_file.name
 
-            console.print(f"\n[green]✅ Migration generated: {migration_file.name}[/green]")
+        # Create result and format output
+        result = MigrateDiffResult(
+            success=True,
+            has_changes=diff.has_changes(),
+            changes=changes,
+            migration_generated=generate and migration_file_name is not None,
+            migration_file=migration_file_name,
+        )
+
+        format_migrate_diff_result(result, format_type, report_file, console)
 
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
+        from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
+        from confiture.models.results import MigrateDiffResult
+
+        result = MigrateDiffResult(
+            success=False,
+            has_changes=False,
+            error=str(e),
+        )
+        format_migrate_diff_result(result, format_type, report_file, console)
         raise typer.Exit(1) from e
 
 
@@ -2026,49 +2308,77 @@ def migrate_down(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     steps: int = typer.Option(
         1,
         "--steps",
         "-n",
-        help="Number of migrations to rollback",
+        help="Number of migrations to rollback (default: 1)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Analyze rollback without executing",
+        help="Analyze rollback without executing (default: off)",
     ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
         "-v",
-        help="Show detailed analysis in dry-run report",
+        help="Show detailed analysis in dry-run (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Report format (text or json)",
+        help="Report format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save report to file",
+        help="Save report to file (default: stdout)",
     ),
 ) -> None:
-    """Rollback applied migrations.
+    """Rollback previously applied migrations.
 
-    Rolls back the last N applied migrations (default: 1).
+    PROCESS:
+      Rolls back the last N applied migrations (default: 1), reverting schema
+      changes. Use --dry-run to analyze without executing.
 
-    Use --dry-run to analyze rollback without executing.
+    EXAMPLES:
+      confiture migrate down
+        ↳ Rollback the last applied migration
+
+      confiture migrate down --steps 3
+        ↳ Rollback the last 3 migrations
+
+      confiture migrate down --dry-run
+        ↳ Analyze rollback without executing
+
+      confiture migrate down --verbose --format json
+        ↳ Detailed analysis in JSON format
+
+    RELATED:
+      confiture migrate up       - Apply migrations forward
+      confiture migrate status   - View migration history
+      confiture migrate validate - Check migration integrity
+
+    OPTIONS:
+      CORE: --steps
+        How many migrations to rollback (default: 1)
+
+      DRY-RUN: --dry-run, --verbose, --format, --output
+        Analyze rollback without executing, with detailed reports
+
+      OUTPUT: --format, --output
+        Control report format and destination
     """
     from confiture.core.connection import (
         create_connection,
@@ -2244,27 +2554,27 @@ def migrate_validate(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     fix_naming: bool = typer.Option(
         False,
         "--fix-naming",
-        help="Automatically rename orphaned migration files to match naming convention",
+        help="Auto-rename orphaned files to match convention (default: off)",
     ),
     idempotent: bool = typer.Option(
         False,
         "--idempotent",
-        help="Validate that migrations are idempotent (can be safely re-run)",
+        help="Validate migrations are idempotent, can re-run (default: off)",
     ),
     check_drift: bool = typer.Option(
         False,
         "--check-drift",
-        help="Validate schema against git refs for drift detection",
+        help="Validate schema against git refs for drift (default: off)",
     ),
     require_migration: bool = typer.Option(
         False,
         "--require-migration",
-        help="Ensure DDL changes have corresponding migration files",
+        help="Ensure DDL changes have migration files (default: off)",
     ),
     base_ref: str = typer.Option(
         "origin/main",
@@ -2274,66 +2584,55 @@ def migrate_validate(
     since: str | None = typer.Option(
         None,
         "--since",
-        help="Shortcut for --base-ref",
+        help="Shortcut for --base-ref (default: none)",
     ),
     staged: bool = typer.Option(
         False,
         "--staged",
-        help="Only validate staged files (pre-commit hook mode)",
+        help="Validate staged files only, pre-commit mode (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Preview changes without actually renaming files",
+        help="Preview changes without renaming (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Output format: text (default) or json",
+        help="Output format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file",
+        help="Save output to file (default: stdout)",
     ),
 ) -> None:
-    """Validate migration file naming conventions, idempotency, and git integrity.
+    """Validate migration files follow naming and quality conventions.
 
-    Checks for .sql files that don't match the expected naming pattern.
-    With --idempotent, also validates that SQL statements are idempotent.
-    With --check-drift, validates schema against git refs for drift detection.
-    With --require-migration, ensures DDL changes have migration files.
+    PROCESS:
+      Checks for orphaned files, validates naming pattern ({NNN}_{name}.sql),
+      optionally verifies idempotency, checks for schema drift, and ensures DDL
+      changes have corresponding migration files.
 
-    Confiture only recognizes:
-    - {NNN}_{name}.up.sql (forward migrations)
-    - {NNN}_{name}.down.sql (rollback migrations)
-    - {NNN}_{name}.py (Python class migrations)
+    EXAMPLES:
+      confiture migrate validate
+        ↳ Check for orphaned files not matching naming pattern
 
-    Idempotent SQL patterns include:
-    - CREATE TABLE IF NOT EXISTS
-    - CREATE INDEX IF NOT EXISTS
-    - CREATE OR REPLACE FUNCTION/VIEW
-    - DROP TABLE IF EXISTS
+      confiture migrate validate --idempotent
+        ↳ Also validate all migrations are idempotent (safe to re-run)
 
-    Examples:
-        # Check for orphaned files
-        confiture migrate validate
+      confiture migrate validate --check-drift --staged
+        ↳ Pre-commit: check staged files for schema drift
 
-        # Validate idempotency of all migrations
-        confiture migrate validate --idempotent
+      confiture migrate validate --require-migration --base-ref origin/main --fix-naming
+        ↳ Ensure all DDL changes have migrations, auto-fix file names
 
-        # Check schema drift against main branch
-        confiture migrate validate --check-drift --base-ref origin/main
-
-        # Require migration files for DDL changes
-        confiture migrate validate --require-migration --base-ref origin/main
-
-        # Pre-commit hook: validate staged changes
-        confiture migrate validate --check-drift --require-migration --staged
-
-        # Auto-fix orphaned file names
+    RELATED:
+      confiture migrate generate - Create new migration file
+      confiture migrate fix      - Auto-fix non-idempotent migrations
+      confiture migrate status   - View migration history
         confiture migrate validate --fix-naming
 
         # Output as JSON
@@ -2341,8 +2640,10 @@ def migrate_validate(
     """
     try:
         # Validate output format
-        if format_output not in ("text", "json"):
-            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
+        if format_output not in ("text", "json", "csv"):
+            console.print(
+                f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]"
+            )
             raise typer.Exit(1)
 
         # Handle git validation flags
@@ -2660,51 +2961,52 @@ def migrate_fix(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     idempotent: bool = typer.Option(
         False,
         "--idempotent",
-        help="Fix non-idempotent SQL statements",
+        help="Fix non-idempotent SQL statements (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Preview changes without modifying files",
+        help="Preview changes without modifying files (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Output format: text (default) or json",
+        help="Output format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file",
+        help="Save output to file (default: stdout)",
     ),
 ) -> None:
-    """Auto-fix migration files.
+    """Auto-fix non-idempotent SQL in migrations.
 
-    Transforms non-idempotent SQL statements into their idempotent equivalents.
+    PROCESS:
+      Transforms non-idempotent statements to safe-to-rerun equivalents:
+      CREATE TABLE → CREATE TABLE IF NOT EXISTS, CREATE INDEX → CREATE INDEX
+      IF NOT EXISTS, DROP TABLE → DROP TABLE IF EXISTS, and more.
 
-    Transformations applied:
-    - CREATE TABLE → CREATE TABLE IF NOT EXISTS
-    - CREATE INDEX → CREATE INDEX IF NOT EXISTS
-    - CREATE FUNCTION → CREATE OR REPLACE FUNCTION
-    - DROP TABLE → DROP TABLE IF EXISTS
-    - And more...
+    EXAMPLES:
+      confiture migrate fix --idempotent --dry-run
+        ↳ Preview what would be fixed without modifying files
 
-    Examples:
-        # Preview fixes without modifying files
-        confiture migrate fix --idempotent --dry-run
+      confiture migrate fix --idempotent
+        ↳ Apply all fixes to migration files
 
-        # Apply fixes to all migration files
-        confiture migrate fix --idempotent
+      confiture migrate fix --idempotent --format json --output fixes.json
+        ↳ Generate JSON report of all transformations
 
-        # Output as JSON
-        confiture migrate fix --idempotent --dry-run --format json
+    RELATED:
+      confiture migrate validate - Check migration quality
+      confiture migrate up       - Apply migrations
+      confiture migrate generate - Create new migration
     """
     try:
         # Validate output format
@@ -3004,4 +3306,8 @@ def verify(
 
 
 if __name__ == "__main__":
+    # Note: QW4 "Did you mean?" feature requires custom Click/Typer error handler
+    # infrastructure is ready (_get_suggestion helper), but full integration
+    # requires wrapping Click's exception handling at a lower level.
+    # See: https://github.com/evoludigit/confiture/issues/qw4
     app()

@@ -2,6 +2,41 @@
 
 Common issues and solutions when using Confiture.
 
+> **💡 Tip**: Confiture provides detailed error messages with step-by-step solutions. See [Error Reference Guide](./error-reference.md) for all error types and how to fix them.
+
+---
+
+## Enhanced Error Messages
+
+Starting with v0.4.1, Confiture provides comprehensive error messages with:
+- **Clear cause explanation** - Why the error occurred
+- **Step-by-step solutions** - How to fix it
+- **Real examples** - Commands you can copy and run
+- **Documentation links** - Learn more about the topic
+
+When you encounter an error, follow the "HOW TO FIX" steps in order. Each step builds on the previous one.
+
+**Example error message**:
+```
+❌ Database connection failed
+
+📋 CAUSE:
+  Cannot reach PostgreSQL database at the specified URL
+
+✅ HOW TO FIX:
+  1. Verify PostgreSQL is running: pg_isready localhost
+  2. Check your DATABASE_URL parameter
+  3. Verify username/password: psql -U postgres
+  4. Check network connectivity: ping localhost
+
+💡 EXAMPLES:
+  $ confiture build --database-url postgresql://localhost/mydb
+  $ export DATABASE_URL=postgresql://user:pass@localhost/mydb
+
+📚 LEARN MORE:
+  https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#db_connection_failed
+```
+
 ---
 
 ## Migration Issues

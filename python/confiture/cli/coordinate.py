@@ -77,19 +77,21 @@ def _get_connection(database_url: str | None = None) -> psycopg.Connection:
 
 @coordinate_app.command()
 def register(
-    agent_id: str = typer.Option(..., help="Identifier for the agent (e.g., claude-payments)"),
-    feature_name: str = typer.Option(..., help="Human-readable feature name"),
-    schema_changes: str = typer.Option(
-        ..., help="Comma-separated DDL statements or path to SQL file"
+    agent_id: str = typer.Option(
+        ..., help="Identifier for the agent, e.g. claude-payments (required)"
     ),
+    feature_name: str = typer.Option(..., help="Human-readable feature name (required)"),
+    schema_changes: str = typer.Option(..., help="DDL statements or path to SQL file (required)"),
     tables_affected: str | None = typer.Option(
-        None, help="Comma-separated table names affected by changes"
+        None, help="Comma-separated table names affected (default: none)"
     ),
-    risk_level: str = typer.Option("low", help="Risk assessment: low, medium, or high"),
-    estimated_hours: float = typer.Option(0, help="Estimated hours to complete"),
-    database_url: str | None = typer.Option(None, help="Database URL"),
-    metadata: str | None = typer.Option(None, help="JSON metadata string"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    risk_level: str = typer.Option("low", help="Risk assessment: low, medium, high (default: low)"),
+    estimated_hours: float = typer.Option(0, help="Estimated hours to complete (default: 0)"),
+    database_url: str | None = typer.Option(None, help="Database URL (default: from config)"),
+    metadata: str | None = typer.Option(None, help="JSON metadata string (default: none)"),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json (default: text)"
+    ),
 ) -> None:
     """Register a new agent intention for schema changes.
 
