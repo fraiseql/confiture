@@ -374,6 +374,17 @@ def build(
         "--continue-on-error",
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
+    format_type: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, csv (default: text)",
+    ),
+    report_output: Path = typer.Option(
+        None,
+        "--report",
+        help="Save structured output (JSON/CSV) to file (default: stdout)",
+    ),
 ) -> None:
     """Build complete schema from DDL files in one fast operation.
 
@@ -406,6 +417,9 @@ def build(
 
       ADVANCED: --show-hash, --schema-only, --separator-style, --separator-template
         Optional parameters for customizing output format
+
+      STRUCTURED OUTPUT: --format, --report
+        Export results in JSON/CSV format for automation and integration
 
       SEEDS & VALIDATION: --sequential, --database-url, --continue-on-error,
                          --validate-comments, --fail-on-unclosed, --fail-on-spillover
@@ -506,7 +520,11 @@ def build(
                 schema = builder.build(output_path=output, schema_only=True, progress=progress)
                 sql_files = builder.find_sql_files()
                 schema_file_count = len(
-                    [f for f in sql_files if not any(p.lower() in ("seed", "seeds") for p in f.parts)]
+                    [
+                        f
+                        for f in sql_files
+                        if not any(p.lower() in ("seed", "seeds") for p in f.parts)
+                    ]
                 )
             else:
                 # Build schema with seeds
@@ -516,11 +534,8 @@ def build(
 
         console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
 
-        # Success message
-        console.print("[green]✅ Schema built successfully![/green]")
-        console.print(f"\n📁 Output: {output.absolute()}")
-        console.print(f"📏 Size: {len(schema):,} bytes")
-        console.print(f"📊 Files: {schema_file_count}")
+        # Track seed files applied (will be updated if sequential)
+        seed_files_applied = 0
 
         # Apply seeds sequentially if requested
         if apply_sequential:
@@ -557,6 +572,7 @@ def build(
                     )
                     result = applier.apply_sequential(continue_on_error=continue_on_error)
 
+                    seed_files_applied = result.succeeded
                     console.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
                     if result.failed > 0:
                         console.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
@@ -575,19 +591,77 @@ def build(
                 raise typer.Exit(1) from e
 
         # Show hash if requested
+        schema_hash = None
         if show_hash:
             schema_hash = builder.compute_hash()
-            console.print(f"🔐 Hash: {schema_hash}")
 
-        console.print("\n💡 Next steps:")
-        console.print(f"  • Apply schema: psql -f {output}")
-        console.print("  • Or use: confiture migrate up")
+        # Validate format_type
+        if format_type not in ("text", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {format_type}. Use text, json, or csv[/red]")
+            raise typer.Exit(1)
+
+        # Create and format build result
+        from confiture.cli.formatters.build_formatter import format_build_result
+        from confiture.models.results import BuildResult
+
+        build_result = BuildResult(
+            success=True,
+            files_processed=schema_file_count,
+            schema_size_bytes=len(schema),
+            output_path=str(output.absolute()),
+            hash=schema_hash,
+            execution_time_ms=0,  # Could track this if needed
+            seed_files_applied=seed_files_applied,
+        )
+
+        # Format and output result
+        format_build_result(build_result, format_type, report_output, console)
+
+        # Show next steps only for text format
+        if format_type == "text":
+            console.print("\n💡 Next steps:")
+            console.print(f"  • Apply schema: psql -f {output}")
+            console.print("  • Or use: confiture migrate up")
 
     except FileNotFoundError as e:
+        # Try to format error result if format was specified
+        try:
+            from confiture.cli.formatters.build_formatter import format_build_result
+            from confiture.models.results import BuildResult
+
+            error_result = BuildResult(
+                success=False,
+                files_processed=0,
+                schema_size_bytes=0,
+                output_path="",
+                error=str(e),
+            )
+            if format_type != "text":
+                format_build_result(error_result, format_type, report_output, console)
+        except Exception:
+            pass
+
         print_error_to_console(e)
         console.print("\n💡 Tip: Run 'confiture init' to create project structure")
         raise typer.Exit(handle_cli_error(e)) from e
     except Exception as e:
+        # Try to format error result if format was specified
+        try:
+            from confiture.cli.formatters.build_formatter import format_build_result
+            from confiture.models.results import BuildResult
+
+            error_result = BuildResult(
+                success=False,
+                files_processed=0,
+                schema_size_bytes=0,
+                output_path="",
+                error=str(e),
+            )
+            if format_type != "text":
+                format_build_result(error_result, format_type, report_output, console)
+        except Exception:
+            pass
+
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e
 
@@ -1448,7 +1522,9 @@ def migrate_up(
                         # Create migration instance
                         migration = migration_class(connection=conn)
                         # Override strict_mode from CLI/config if not already set on class
-                        if effective_strict_mode and not getattr(migration_class, "strict_mode", False):
+                        if effective_strict_mode and not getattr(
+                            migration_class, "strict_mode", False
+                        ):
                             migration.strict_mode = effective_strict_mode
 
                         # Check target
@@ -1460,7 +1536,8 @@ def migrate_up(
 
                         # Apply migration
                         console.print(
-                            f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]", end=" "
+                            f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]",
+                            end=" ",
                         )
 
                         try:
