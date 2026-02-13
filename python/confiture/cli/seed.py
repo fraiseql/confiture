@@ -141,32 +141,32 @@ def validate(
     seeds_dir: Path = typer.Option(
         Path("db/seeds"),
         "--seeds-dir",
-        help="Directory containing seed files",
+        help="Directory containing seed files (default: db/seeds)",
     ),
     env: str | None = typer.Option(
         None,
         "--env",
-        help="Environment name for multi-env validation",
+        help="Environment name for multi-env validation (default: none)",
     ),
     all_envs: bool = typer.Option(
         False,
         "--all",
-        help="Validate all environments",
+        help="Validate all environments (default: off)",
     ),
     mode: str = typer.Option(
         "static",
         "--mode",
-        help="Validation mode: static or database",
+        help="Validation mode: static or database (default: static)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database URL for database mode validation",
+        help="Database URL for database mode validation (default: none)",
     ),
     format_: str = typer.Option(
         "text",
         "--format",
-        help="Output format: text, json, or csv",
+        help="Output format: text, json, csv (default: text)",
     ),
     output: Path | None = typer.Option(
         None,
@@ -176,40 +176,40 @@ def validate(
     fix: bool = typer.Option(
         False,
         "--fix",
-        help="Automatically fix issues (where possible)",
+        help="Automatically fix issues where possible (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be fixed without modifying files",
+        help="Show what would be fixed without modifying (default: off)",
     ),
     prep_seed: bool = typer.Option(
         False,
         "--prep-seed",
-        help="Enable prep-seed pattern validation (UUID->BIGINT transformations)",
+        help="Enable prep-seed pattern validation (default: off)",
     ),
     prep_seed_level: int = typer.Option(
         3,
         "--level",
         "-l",
-        help="Prep-seed validation level: 1-5 (1=files, 2=schema, 3=resolvers, 4=runtime, 5=execution)",
+        help="Prep-seed validation level 1-5 (default: 3)",
         min=1,
         max=5,
     ),
     static_only: bool = typer.Option(
         False,
         "--static-only",
-        help="Run only prep-seed Levels 1-3 (no database, pre-commit safe)",
+        help="Run only Levels 1-3, no database (default: off)",
     ),
     full_execution: bool = typer.Option(
         False,
         "--full-execution",
-        help="Run all prep-seed levels 1-5 (requires database)",
+        help="Run all levels 1-5, requires database (default: off)",
     ),
     uuid_validation: bool = typer.Option(
         False,
         "--uuid-validation",
-        help="Enable seed enumerated UUID pattern validation (Phase 10)",
+        help="Enable seed enumerated UUID pattern validation (default: off)",
     ),
 ) -> None:
     """Validate seed files for data consistency.
@@ -389,42 +389,42 @@ def apply(
     seeds_dir: Path = typer.Option(
         DEFAULT_SEEDS_DIR,
         "--seeds-dir",
-        help="Directory containing seed files",
+        help="Directory containing seed files (default: db/seeds)",
     ),
     env: str = typer.Option(
         DEFAULT_ENV,
         "--env",
-        help="Environment name (for context and database URL lookup)",
+        help="Environment name for database URL lookup (default: local)",
     ),
     sequential: bool = typer.Option(
         False,
         "--sequential",
-        help="Apply files sequentially instead of concatenating (solves parser limits)",
+        help="Apply files sequentially, solves parser limits (default: off)",
     ),
     continue_on_error: bool = typer.Option(
         False,
         "--continue-on-error",
-        help="Continue applying remaining files if one fails",
+        help="Continue if file fails, for --sequential only (default: off)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database URL (if not loading from environment config)",
+        help="Database URL, overrides environment config (default: from config)",
     ),
     copy_format: bool = typer.Option(
         False,
         "--copy-format",
-        help="Convert INSERT statements to COPY format for faster loading",
+        help="Convert INSERT to COPY format for faster loading (default: off)",
     ),
     copy_threshold: int = typer.Option(
         DEFAULT_COPY_THRESHOLD,
         "--copy-threshold",
-        help=f"Row threshold for automatic COPY format selection (default: {DEFAULT_COPY_THRESHOLD})",
+        help=f"Row threshold for auto COPY selection (default: {DEFAULT_COPY_THRESHOLD})",
     ),
     benchmark: bool = typer.Option(
         False,
         "--benchmark",
-        help="Show performance comparison (VALUES vs COPY format)",
+        help="Show VALUES vs COPY performance comparison (default: off)",
     ),
 ) -> None:
     """Apply seed files to database.
@@ -516,7 +516,7 @@ def convert(
     input_file: Path = typer.Option(
         ...,
         "--input",
-        help="Input file with INSERT statements",
+        help="Input file with INSERT statements (required)",
     ),
     output_file: Path | None = typer.Option(
         None,
@@ -573,7 +573,7 @@ def benchmark(
     seeds_dir: Path = typer.Option(
         DEFAULT_SEEDS_DIR,
         "--seeds-dir",
-        help="Directory containing seed files",
+        help="Directory containing seed files (default: db/seeds)",
     ),
 ) -> None:
     """Benchmark COPY vs VALUES performance.

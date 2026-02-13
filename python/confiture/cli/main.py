@@ -279,7 +279,7 @@ def build(
         "local",
         "--env",
         "-e",
-        help="Environment to build (references db/environments/{env}.yaml)",
+        help="Environment to build (default: local)",
     ),
     output: Path = typer.Option(
         None,
@@ -295,47 +295,47 @@ def build(
     show_hash: bool = typer.Option(
         False,
         "--show-hash",
-        help="Display schema hash after build",
+        help="Display schema hash after build (default: off)",
     ),
     schema_only: bool = typer.Option(
         False,
         "--schema-only",
-        help="Build schema only, exclude seed data",
+        help="Build schema only, exclude seed data (default: off)",
     ),
     validate_comments: bool | None = typer.Option(
         None,
         "--validate-comments/--no-validate-comments",
-        help="Override: enable/disable comment validation",
+        help="Enable/disable comment validation (default: from config)",
     ),
     fail_on_unclosed: bool | None = typer.Option(
         None,
         "--fail-on-unclosed/--no-fail-on-unclosed",
-        help="Override: fail on unclosed block comments",
+        help="Fail on unclosed block comments (default: from config)",
     ),
     fail_on_spillover: bool | None = typer.Option(
         None,
         "--fail-on-spillover/--no-fail-on-spillover",
-        help="Override: fail on comment spillover into next file",
+        help="Fail on comment spillover into next file (default: from config)",
     ),
     separator_style: str | None = typer.Option(
         None,
         "--separator-style",
-        help="Override separator style: block_comment, line_comment, mysql, custom",
+        help="Separator style: block_comment, line_comment, mysql, custom (default: from config)",
     ),
     separator_template: str | None = typer.Option(
         None,
         "--separator-template",
-        help="Custom separator template with {file_path} placeholder",
+        help="Custom separator template with {file_path} placeholder (default: none)",
     ),
     sequential: bool = typer.Option(
         False,
         "--sequential",
-        help="Apply seed files sequentially after schema build (avoids parser limits)",
+        help="Apply seed files sequentially after build (default: off)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database connection URL (required for --sequential)",
+        help="Database connection URL (required for --sequential, default: from config)",
     ),
     continue_on_error: bool = typer.Option(
         False,
@@ -580,7 +580,7 @@ def lint(
         "local",
         "--env",
         "-e",
-        help="Environment to lint (references db/environments/{env}.yaml)",
+        help="Environment to lint (default: local)",
     ),
     project_dir: Path = typer.Option(
         Path("."),
@@ -591,23 +591,23 @@ def lint(
         "table",
         "--format",
         "-f",
-        help="Output format (table, json, csv)",
+        help="Output format: table, json, csv (default: table)",
     ),
     output: Path = typer.Option(
         None,
         "--output",
         "-o",
-        help="Output file path (only with json/csv format)",
+        help="Output file path (default: stdout, only with json/csv)",
     ),
     fail_on_error: bool = typer.Option(
         True,
         "--fail-on-error",
-        help="Exit with code 1 if errors found",
+        help="Exit with code 1 if errors found (default: on)",
     ),
     fail_on_warning: bool = typer.Option(
         False,
         "--fail-on-warning",
-        help="Exit with code 1 if warnings found (stricter)",
+        help="Exit with code 1 if warnings found (default: off, stricter)",
     ),
 ) -> None:
     """Lint schema against best practices.
@@ -712,25 +712,25 @@ def migrate_status(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         None,
         "--config",
         "-c",
-        help="Configuration file (optional, to show applied status)",
+        help="Configuration file (default: none, optional for applied status)",
     ),
     output_format: str = typer.Option(
         "table",
         "--format",
         "-f",
-        help="Output format: table (default) or json",
+        help="Output format: table or json (default: table)",
     ),
     output_file: Path = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file (useful with --format json)",
+        help="Save output to file (default: stdout, useful with json)",
     ),
 ) -> None:
     """Show migration status.
@@ -998,77 +998,77 @@ def migrate_up(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     target: str = typer.Option(
         None,
         "--target",
         "-t",
-        help="Target migration version (applies all if not specified)",
+        help="Target migration version (default: applies all pending)",
     ),
     strict: bool = typer.Option(
         False,
         "--strict",
-        help="Enable strict mode (fail on warnings)",
+        help="Enable strict mode, fail on warnings (default: off)",
     ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Force migration application, skipping state checks",
+        help="Force application, skip state checks (default: off)",
     ),
     lock_timeout: int = typer.Option(
         30000,
         "--lock-timeout",
-        help="Lock acquisition timeout in milliseconds (default: 30000ms = 30s)",
+        help="Lock timeout in milliseconds (default: 30000ms)",
     ),
     no_lock: bool = typer.Option(
         False,
         "--no-lock",
-        help="Disable migration locking (DANGEROUS in multi-pod environments)",
+        help="Disable migration locking (default: off, DANGEROUS in multi-pod)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Analyze migrations without executing (metadata queries only)",
+        help="Analyze without executing (default: off)",
     ),
     dry_run_execute: bool = typer.Option(
         False,
         "--dry-run-execute",
-        help="Execute migrations in SAVEPOINT for realistic testing (guaranteed rollback)",
+        help="Execute in SAVEPOINT for testing (default: off, guaranteed rollback)",
     ),
     verify_checksums: bool = typer.Option(
         True,
         "--verify-checksums/--no-verify-checksums",
-        help="Verify migration file checksums before running (default: enabled)",
+        help="Verify migration checksums before running (default: on)",
     ),
     on_checksum_mismatch: str = typer.Option(
         "fail",
         "--on-checksum-mismatch",
-        help="Behavior on checksum mismatch: fail, warn, ignore",
+        help="Checksum mismatch behavior: fail, warn, ignore (default: fail)",
     ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
         "-v",
-        help="Show detailed analysis in dry-run report",
+        help="Show detailed analysis in dry-run (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Report format (text or json)",
+        help="Report format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save report to file",
+        help="Save report to file (default: stdout)",
     ),
 ) -> None:
     """Apply pending migrations.
@@ -1561,29 +1561,29 @@ def migrate_generate(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Output format: text or json",
+        help="Output format: text or json (default: text)",
     ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Overwrite existing migration file if it exists",
+        help="Overwrite existing migration file (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be generated without creating files",
+        help="Show what would be generated without creating (default: off)",
     ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
         "-v",
-        help="Show version calculation and scanning details",
+        help="Show version calculation details (default: off)",
     ),
 ) -> None:
     """Generate a new migration file with auto-incrementing version number.
@@ -1783,23 +1783,23 @@ def migrate_baseline(
         ...,
         "--through",
         "-t",
-        help="Mark all migrations through this version as applied",
+        help="Mark all migrations through this version as applied (required)",
     ),
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file with database connection",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be marked without making changes",
+        help="Show what would be marked without making changes (default: off)",
     ),
 ) -> None:
     """Mark migrations as applied without executing them.
@@ -1945,17 +1945,17 @@ def migrate_diff(
     generate: bool = typer.Option(
         False,
         "--generate",
-        help="Generate migration from diff",
+        help="Generate migration from diff (default: off)",
     ),
     name: str = typer.Option(
         None,
         "--name",
-        help="Migration name (required with --generate)",
+        help="Migration name (default: none, required with --generate)",
     ),
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
 ) -> None:
     """Compare two schema files and show differences.
@@ -2026,42 +2026,42 @@ def migrate_down(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
         "-c",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
     steps: int = typer.Option(
         1,
         "--steps",
         "-n",
-        help="Number of migrations to rollback",
+        help="Number of migrations to rollback (default: 1)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Analyze rollback without executing",
+        help="Analyze rollback without executing (default: off)",
     ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
         "-v",
-        help="Show detailed analysis in dry-run report",
+        help="Show detailed analysis in dry-run (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Report format (text or json)",
+        help="Report format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save report to file",
+        help="Save report to file (default: stdout)",
     ),
 ) -> None:
     """Rollback applied migrations.
@@ -2244,27 +2244,27 @@ def migrate_validate(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     fix_naming: bool = typer.Option(
         False,
         "--fix-naming",
-        help="Automatically rename orphaned migration files to match naming convention",
+        help="Auto-rename orphaned files to match convention (default: off)",
     ),
     idempotent: bool = typer.Option(
         False,
         "--idempotent",
-        help="Validate that migrations are idempotent (can be safely re-run)",
+        help="Validate migrations are idempotent, can re-run (default: off)",
     ),
     check_drift: bool = typer.Option(
         False,
         "--check-drift",
-        help="Validate schema against git refs for drift detection",
+        help="Validate schema against git refs for drift (default: off)",
     ),
     require_migration: bool = typer.Option(
         False,
         "--require-migration",
-        help="Ensure DDL changes have corresponding migration files",
+        help="Ensure DDL changes have migration files (default: off)",
     ),
     base_ref: str = typer.Option(
         "origin/main",
@@ -2274,29 +2274,29 @@ def migrate_validate(
     since: str | None = typer.Option(
         None,
         "--since",
-        help="Shortcut for --base-ref",
+        help="Shortcut for --base-ref (default: none)",
     ),
     staged: bool = typer.Option(
         False,
         "--staged",
-        help="Only validate staged files (pre-commit hook mode)",
+        help="Validate staged files only, pre-commit mode (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Preview changes without actually renaming files",
+        help="Preview changes without renaming (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Output format: text (default) or json",
+        help="Output format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file",
+        help="Save output to file (default: stdout)",
     ),
 ) -> None:
     """Validate migration file naming conventions, idempotency, and git integrity.
@@ -2660,29 +2660,29 @@ def migrate_fix(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
-        help="Migrations directory",
+        help="Migrations directory (default: db/migrations)",
     ),
     idempotent: bool = typer.Option(
         False,
         "--idempotent",
-        help="Fix non-idempotent SQL statements",
+        help="Fix non-idempotent SQL statements (default: off)",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Preview changes without modifying files",
+        help="Preview changes without modifying files (default: off)",
     ),
     format_output: str = typer.Option(
         "text",
         "--format",
         "-f",
-        help="Output format: text (default) or json",
+        help="Output format: text or json (default: text)",
     ),
     output_file: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file",
+        help="Save output to file (default: stdout)",
     ),
 ) -> None:
     """Auto-fix migration files.

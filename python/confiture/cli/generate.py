@@ -75,24 +75,24 @@ def generate_from_branch(
         "main",
         "--base",
         "-b",
-        help="Base branch to compare against",
+        help="Base branch to compare against (default: main)",
     ),
     output: Path = typer.Option(
         Path("db/migrations"),
         "--output",
         "-o",
-        help="Output directory for migration files",
+        help="Output directory for migration files (default: db/migrations)",
     ),
     combined: bool = typer.Option(
         False,
         "--combined",
         "-c",
-        help="Generate a single combined migration instead of multiple",
+        help="Generate single combined migration (default: off)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
 ) -> None:
     """Generate migrations from a pgGit branch.
@@ -146,12 +146,12 @@ def preview_generation(
         "main",
         "--base",
         "-b",
-        help="Base branch to compare against",
+        help="Base branch to compare against (default: main)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
 ) -> None:
     """Preview what migrations would be generated.
@@ -221,18 +221,18 @@ def show_diff(
         "main",
         "--base",
         "-b",
-        help="Base branch to compare against",
+        help="Base branch to compare against (default: main)",
     ),
     show_sql: bool = typer.Option(
         False,
         "--show-sql",
         "-s",
-        help="Show the actual SQL for each change",
+        help="Show the actual SQL for each change (default: off)",
     ),
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
-        help="Configuration file",
+        help="Configuration file (default: db/environments/local.yaml)",
     ),
 ) -> None:
     """Show detailed diff between branches.
