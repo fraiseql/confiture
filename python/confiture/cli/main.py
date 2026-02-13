@@ -1497,12 +1497,18 @@ def migrate_up(
         lock = MigrationLock(conn, lock_config)
 
         # Import ProgressManager for progress tracking
-        from confiture.core.progress import ProgressManager
-
         # Apply migrations with distributed lock
+        import time
+
+        from confiture.cli.formatters.migrate_formatter import format_migrate_up_result
+        from confiture.core.progress import ProgressManager
+        from confiture.models.results import MigrateUpResult, MigrationApplied
+
         applied_count = 0
         failed_migration = None
         failed_exception = None
+        migrations_applied = []
+        total_execution_time_ms = 0
 
         try:
             with lock.acquire():
@@ -1541,9 +1547,23 @@ def migrate_up(
                         )
 
                         try:
+                            start_time = time.time()
                             migrator.apply(migration, force=force, migration_file=migration_file)
+                            execution_time_ms = int((time.time() - start_time) * 1000)
+                            total_execution_time_ms += execution_time_ms
+
                             console.print("[green]✅[/green]")
                             applied_count += 1
+
+                            # Track successful migration
+                            migrations_applied.append(
+                                MigrationApplied(
+                                    version=migration.version,
+                                    name=migration.name,
+                                    execution_time_ms=execution_time_ms,
+                                    rows_affected=0,  # Not easily tracked, so default to 0
+                                )
+                            )
                             progress.update(apply_task, advance=1)
                         except Exception as e:
                             console.print("[red]❌[/red]")
@@ -1566,32 +1586,51 @@ def migrate_up(
 
         # Handle results
         if failed_migration:
-            console.print("\n[red]❌ Migration failed![/red]")
-            if applied_count > 0:
-                console.print(
-                    f"[yellow]⚠️  {applied_count} migration(s) were applied successfully before the failure.[/yellow]"
-                )
+            # Create error result
+            error_result = MigrateUpResult(
+                success=False,
+                migrations_applied=migrations_applied,
+                total_execution_time_ms=total_execution_time_ms,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                error=str(failed_exception),
+            )
 
-            # Show detailed error information
-            _show_migration_error_details(failed_migration, failed_exception, applied_count)
+            # Format output if not text (text format handled above)
+            if format_output != "text":
+                format_migrate_up_result(error_result, format_output, output_file, console)
+            else:
+                # Show detailed error information for text format
+                _show_migration_error_details(failed_migration, failed_exception, applied_count)
+
             conn.close()
             raise typer.Exit(1)
         else:
-            if force:
-                console.print(
-                    f"\n[green]✅ Force mode: Successfully applied {applied_count} migration(s)![/green]"
-                )
-                console.print(
-                    "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
-                )
-            else:
-                console.print(
-                    f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]"
-                )
-                console.print("\n💡 Next steps:")
-                console.print("  • Verify: confiture migrate status")
-                console.print("  • Validate: confiture lint")
-                console.print("  • Load data: confiture seed apply")
+            # Create success result
+            success_result = MigrateUpResult(
+                success=True,
+                migrations_applied=migrations_applied,
+                total_execution_time_ms=total_execution_time_ms,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                warnings=["Force mode enabled"] if force else [],
+            )
+
+            # Format output
+            format_migrate_up_result(success_result, format_output, output_file, console)
+
+            # Show next steps for text format only
+            if format_output == "text":
+                if force:
+                    console.print(
+                        "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
+                    )
+                else:
+                    console.print("\n💡 Next steps:")
+                    console.print("  • Verify: confiture migrate status")
+                    console.print("  • Validate: confiture lint")
+                    console.print("  • Load data: confiture seed apply")
+
             conn.close()
 
     except typer.Exit:

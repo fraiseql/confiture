@@ -434,6 +434,17 @@ def apply(
         "--benchmark",
         help="Show VALUES vs COPY performance comparison (default: off)",
     ),
+    format_type: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, csv (default: text)",
+    ),
+    report_output: Path = typer.Option(
+        None,
+        "--report",
+        help="Save structured output (JSON/CSV) to file (default: stdout)",
+    ),
 ) -> None:
     """Load seed data into the database.
 
@@ -525,14 +536,18 @@ def apply(
                     continue_on_error=continue_on_error, progress=progress
                 )
 
-            # Exit with error if files failed and not continuing
-            if result.failed > 0 and not continue_on_error:
-                raise typer.Exit(1)
+            # Format output
+            from confiture.cli.formatters.seed_formatter import format_apply_result
+
+            format_apply_result(result, format_type, report_output, console)
 
             # Close connection
             connection.close()
 
-            console.print("[green]✓ Seed application complete[/green]")
+            # Exit with error if files failed and not continuing
+            if result.failed > 0 and not continue_on_error:
+                raise typer.Exit(1)
+
             raise typer.Exit(0)
 
         except Exception as e:
