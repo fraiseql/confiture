@@ -1,13 +1,11 @@
 """Tests for migrate status command CSV output support."""
 
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
+from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
-from rich.console import Console
 
 
 class TestMigrateStatusCSV:

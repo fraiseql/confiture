@@ -7,11 +7,10 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
+from rich.console import Console
 
 from confiture.cli.formatters.build_formatter import format_build_result
 from confiture.models.results import BuildResult
-from rich.console import Console
 
 
 class TestBuildFormatter:

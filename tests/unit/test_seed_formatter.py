@@ -7,11 +7,10 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
+from rich.console import Console
 
 from confiture.cli.formatters.seed_formatter import format_apply_result
 from confiture.core.seed_applier import ApplyResult
-from rich.console import Console
 
 
 class TestSeedApplyFormatter:

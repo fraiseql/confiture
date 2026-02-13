@@ -4,8 +4,6 @@ Tests the build command with JSON/CSV output formats.
 """
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 from typer.testing import CliRunner

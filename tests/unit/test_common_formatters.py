@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
+from rich.console import Console
 
 from confiture.cli.formatters.common import (
     handle_output,
@@ -16,7 +16,6 @@ from confiture.cli.formatters.common import (
     save_csv,
     save_json,
 )
-from rich.console import Console
 
 
 class TestSaveJson:

@@ -7,11 +7,10 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
+from rich.console import Console
 
 from confiture.cli.formatters.migrate_formatter import format_migrate_up_result
 from confiture.models.results import MigrateUpResult, MigrationApplied
-from rich.console import Console
 
 
 class TestMigrateUpFormatter:

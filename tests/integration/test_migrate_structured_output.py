@@ -60,6 +60,7 @@ class TestMigrateUpStructuredOutput:
         # This is a basic test that the option is accepted
         # Full integration would require a real database
         from typer.testing import CliRunner
+
         from confiture.cli.main import app
 
         runner = CliRunner()
@@ -82,6 +83,7 @@ class TestMigrateUpStructuredOutput:
     def test_migrate_up_csv_format_support(self, sample_migrations_dir, sample_config):
         """Test that migrate up accepts --format csv option."""
         from typer.testing import CliRunner
+
         from confiture.cli.main import app
 
         runner = CliRunner()
@@ -101,6 +103,7 @@ class TestMigrateUpStructuredOutput:
     def test_migrate_up_output_file_option(self, sample_migrations_dir, sample_config):
         """Test that migrate up accepts --output option."""
         from typer.testing import CliRunner
+
         from confiture.cli.main import app
 
         runner = CliRunner()

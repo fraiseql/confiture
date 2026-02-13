@@ -5,8 +5,8 @@ This example shows how to use the ConsistencyValidator to check seed data
 for data integrity issues before deployment.
 """
 
-from confiture.core.seed_validation.consistency_validator import ConsistencyValidator
 from confiture.core.seed_validation.consistency_cli import ConsistencyCLI, ConsistencyCLIConfig
+from confiture.core.seed_validation.consistency_validator import ConsistencyValidator
 from confiture.core.seed_validation.environment_comparator import EnvironmentComparator
 
 
