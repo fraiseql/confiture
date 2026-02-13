@@ -138,3 +138,86 @@ class MigrateDownResult:
             "warnings": self.warnings,
             "error": self.error,
         }
+
+
+@dataclass
+class SchemaChange:
+    """A single schema change detected in diff.
+
+    Tracks the type of change and details about what changed.
+    """
+
+    change_type: str
+    details: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "type": self.change_type,
+            "details": self.details,
+        }
+
+
+@dataclass
+class MigrateDiffResult:
+    """Result of schema diff operation.
+
+    Tracks differences between two schemas and whether a migration
+    was generated from the diff.
+    """
+
+    success: bool
+    has_changes: bool
+    changes: list[SchemaChange] = field(default_factory=list)
+    migration_generated: bool = False
+    migration_file: str | None = None
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "success": self.success,
+            "has_changes": self.has_changes,
+            "changes": [c.to_dict() for c in self.changes],
+            "change_count": len(self.changes),
+            "migration_generated": self.migration_generated,
+            "migration_file": self.migration_file,
+            "error": self.error,
+        }
+
+
+@dataclass
+class MigrateValidateResult:
+    """Result of migration validation operation.
+
+    Tracks validation checks performed and any issues found.
+    """
+
+    success: bool
+    orphaned_files: list[str] = field(default_factory=list)
+    duplicate_versions: dict[str, list[str]] = field(default_factory=dict)
+    fixed_files: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "success": self.success,
+            "orphaned_files": self.orphaned_files,
+            "orphaned_files_count": len(self.orphaned_files),
+            "duplicate_versions": self.duplicate_versions,
+            "duplicate_versions_count": len(self.duplicate_versions),
+            "fixed_files": self.fixed_files,
+            "fixed_files_count": len(self.fixed_files),
+            "warnings": self.warnings,
+            "error": self.error,
+        }

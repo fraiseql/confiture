@@ -860,8 +860,8 @@ def migrate_status(
     """
     try:
         # Validate output format
-        if output_format not in ("table", "json"):
-            console.print(f"[red]❌ Invalid format: {output_format}. Use 'table' or 'json'[/red]")
+        if output_format not in ("table", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {output_format}. Use 'table', 'json', or 'csv'[/red]")
             raise typer.Exit(1)
 
         if not migrations_dir.exists():
@@ -979,6 +979,15 @@ def migrate_status(
                     v: [f.name for f in files] for v, files in duplicate_versions.items()
                 }
             _output_json(result, output_file, console)
+        elif output_format == "csv":
+            # CSV output with migration list
+            from confiture.cli.formatters.common import handle_output
+
+            csv_data = (
+                ["version", "name", "status"],
+                [[m["version"], m["name"], m["status"]] for m in migrations_data],
+            )
+            handle_output("csv", {}, csv_data, output_file, console)
         else:
             # Display migrations in a table
             table = Table(title="Migrations")
@@ -1015,6 +1024,14 @@ def migrate_status(
         if output_format == "json":
             result = {"error": str(e)}
             _output_json(result, output_file, console)
+        elif output_format == "csv":
+            from confiture.cli.formatters.common import handle_output
+
+            csv_data = (
+                ["error"],
+                [[str(e)]],
+            )
+            handle_output("csv", {}, csv_data, output_file, console)
         else:
             console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
@@ -2179,6 +2196,18 @@ def migrate_diff(
         "--migrations-dir",
         help="Migrations directory (default: db/migrations)",
     ),
+    format_type: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, or csv (default: text)",
+    ),
+    report_file: Path | None = typer.Option(
+        None,
+        "--report",
+        "-o",
+        help="Save report to file (default: stdout)",
+    ),
 ) -> None:
     """Compare two schema files and identify differences.
 
@@ -2202,6 +2231,11 @@ def migrate_diff(
       confiture build             - Build schema from DDL files
     """
     try:
+        # Validate format
+        if format_type not in ("text", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {format_type}. Use text, json, or csv[/red]")
+            raise typer.Exit(1)
+
         # Validate files exist
         if not old_schema.exists():
             console.print(f"[red]❌ Old schema file not found: {old_schema}[/red]")
@@ -2219,25 +2253,14 @@ def migrate_diff(
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
 
-        # Display diff
-        if not diff.has_changes():
-            console.print("[green]✅ No changes detected. Schemas are identical.[/green]")
-            return
+        # Convert changes to SchemaChange objects
+        from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
+        from confiture.models.results import MigrateDiffResult, SchemaChange
 
-        console.print("[cyan]📊 Schema differences detected:[/cyan]\n")
+        changes = [SchemaChange(change.type, str(change)) for change in diff.changes]
+        migration_file_name = None
 
-        # Display changes in a table
-        table = Table()
-        table.add_column("Type", style="yellow")
-        table.add_column("Details", style="white")
-
-        for change in diff.changes:
-            table.add_row(change.type, str(change))
-
-        console.print(table)
-        console.print(f"\n📈 Total changes: {len(diff.changes)}")
-
-        # Generate migration if requested
+        # Handle migration generation if requested
         if generate:
             if not name:
                 console.print("[red]❌ Migration name is required when using --generate[/red]")
@@ -2252,11 +2275,29 @@ def migrate_diff(
             # Generate migration
             generator = MigrationGenerator(migrations_dir=migrations_dir)
             migration_file = generator.generate(diff, name=name)
+            migration_file_name = migration_file.name
 
-            console.print(f"\n[green]✅ Migration generated: {migration_file.name}[/green]")
+        # Create result and format output
+        result = MigrateDiffResult(
+            success=True,
+            has_changes=diff.has_changes(),
+            changes=changes,
+            migration_generated=generate and migration_file_name is not None,
+            migration_file=migration_file_name,
+        )
+
+        format_migrate_diff_result(result, format_type, report_file, console)
 
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
+        from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
+        from confiture.models.results import MigrateDiffResult
+
+        result = MigrateDiffResult(
+            success=False,
+            has_changes=False,
+            error=str(e),
+        )
+        format_migrate_diff_result(result, format_type, report_file, console)
         raise typer.Exit(1) from e
 
 
@@ -2597,8 +2638,8 @@ def migrate_validate(
     """
     try:
         # Validate output format
-        if format_output not in ("text", "json"):
-            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
+        if format_output not in ("text", "json", "csv"):
+            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]")
             raise typer.Exit(1)
 
         # Handle git validation flags
