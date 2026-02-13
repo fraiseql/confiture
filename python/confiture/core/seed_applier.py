@@ -13,6 +13,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from confiture.core.progress import ProgressManager
 from confiture.core.seed_executor import SeedExecutor
 
 
@@ -75,7 +76,9 @@ class SeedApplier:
         sql_files = sorted(self.seeds_dir.glob("*.sql"))
         return sql_files
 
-    def apply_sequential(self, continue_on_error: bool = False) -> ApplyResult:
+    def apply_sequential(
+        self, continue_on_error: bool = False, progress: ProgressManager | None = None
+    ) -> ApplyResult:
         """Apply seed files sequentially with savepoints.
 
         Each file executed in its own savepoint for isolation.
@@ -83,6 +86,7 @@ class SeedApplier:
 
         Args:
             continue_on_error: Continue applying files if one fails
+            progress: Optional ProgressManager for displaying progress
 
         Returns:
             ApplyResult with tracking info
@@ -93,13 +97,26 @@ class SeedApplier:
         if not self.connection:
             raise ValueError("Database connection required for sequential execution")
 
+        # Phase 1: Discovery
+        discover_task = None
+        if progress:
+            discover_task = progress.add_task("Discovering seed files...", total=None)
+
         # Discover seed files
         files = self.find_seed_files()
         result = ApplyResult(total=len(files))
 
+        if progress and discover_task is not None:
+            progress.update(discover_task, len(files))
+
         if not files:
             self.console.print("[yellow]⚠ No seed files found[/yellow]")
             return result
+
+        # Phase 2: Application
+        apply_task = None
+        if progress:
+            apply_task = progress.add_task("Applying seed files...", total=len(files))
 
         executor = SeedExecutor(connection=self.connection)
 
@@ -113,13 +130,24 @@ class SeedApplier:
                 result.succeeded += 1
                 self.console.print("[green]✓[/green]")
 
+                # Update progress
+                if progress and apply_task is not None:
+                    progress.update(apply_task, advance=1)
+
             except Exception as e:
                 result.failed += 1
                 result.failed_files.append(seed_file.name)
                 self.console.print(f"[red]✗ {e}[/red]")
 
+                # Still update progress on failure
+                if progress and apply_task is not None:
+                    progress.update(apply_task, advance=1)
+
                 if not continue_on_error:
                     raise
+
+        if progress and apply_task is not None:
+            progress.finish_task(apply_task)
 
         # Summary
         self.console.print("\n" + "=" * 50)

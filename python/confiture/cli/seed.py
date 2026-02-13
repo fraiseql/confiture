@@ -509,13 +509,21 @@ def apply(
 
         # Apply seeds sequentially
         try:
+            # Import ProgressManager for progress tracking
+            from confiture.core.progress import ProgressManager
+
             applier = SeedApplier(
                 seeds_dir=seeds_dir,
                 env=env,
                 connection=connection,
                 console=console,
             )
-            result = applier.apply_sequential(continue_on_error=continue_on_error)
+
+            # Use progress manager for seed application
+            with ProgressManager() as progress:
+                result = applier.apply_sequential(
+                    continue_on_error=continue_on_error, progress=progress
+                )
 
             # Exit with error if files failed and not continuing
             if result.failed > 0 and not continue_on_error:
