@@ -212,43 +212,33 @@ def validate(
         help="Enable seed enumerated UUID pattern validation (default: off)",
     ),
 ) -> None:
-    """Validate seed files for data consistency.
+    """Validate seed files for data consistency and quality.
 
-    This command checks seed files for common issues like:
-    - Double semicolons (;;)
-    - DDL statements (CREATE/ALTER/DROP) in seed files
-    - Missing ON CONFLICT clauses
+    PROCESS:
+      Checks for common issues (double semicolons, DDL statements, missing ON
+      CONFLICT). Optionally validates UUID patterns and prep-seed transformations
+      (5 validation levels). Supports auto-fix for common issues.
 
-    With --prep-seed, validates UUID→BIGINT transformation patterns (5 levels).
-    With --uuid-validation, validates seed enumerated UUID patterns (Phase 10).
+    EXAMPLES:
+      confiture seed validate
+        ↳ Validate default seed directory, static mode (no database needed)
 
-    Examples:
-        # Validate default seed directory
-        confiture seed validate
+      confiture seed validate --mode database --database-url postgresql://localhost/mydb
+        ↳ Validate with database checks for schema compatibility
 
-        # Validate specific directory
-        confiture seed validate --seeds-dir db/seeds/test
+      confiture seed validate --fix --dry-run
+        ↳ Preview what would be fixed (e.g., add ON CONFLICT clauses)
 
-        # Validate with database checks
-        confiture seed validate --mode database --database-url postgresql://localhost/mydb
+      confiture seed validate --prep-seed --static-only
+        ↳ Pre-commit safe: validate UUID transformations Levels 1-3
 
-        # Auto-fix issues (add ON CONFLICT clauses)
-        confiture seed validate --fix
+      confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
+        ↳ Full validation: all 5 levels including runtime execution
 
-        # Preview fixes without modifying files
-        confiture seed validate --fix --dry-run
-
-        # Output as JSON
-        confiture seed validate --format json --output report.json
-
-        # UUID validation (seed enumerated patterns)
-        confiture seed validate --uuid-validation
-
-        # Prep-seed validation (pre-commit safe, Levels 1-3)
-        confiture seed validate --prep-seed --static-only
-
-        # Prep-seed validation (full, Levels 1-5)
-        confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
+    RELATED:
+      confiture seed apply     - Load seeds into database
+      confiture seed convert   - Transform INSERT to COPY format
+      confiture seed benchmark - Compare VALUES vs COPY performance
     """
     try:
         # Handle prep-seed validation if requested
@@ -427,24 +417,30 @@ def apply(
         help="Show VALUES vs COPY performance comparison (default: off)",
     ),
 ) -> None:
-    """Apply seed files to database.
+    """Load seed data into the database.
 
-    By default, seed files are concatenated into a single SQL stream.
-    Use --sequential to apply each file independently within a savepoint,
-    which solves PostgreSQL parser limits for large files (650+ rows).
+    PROCESS:
+      Concatenates seed files (default) or applies sequentially with savepoint
+      isolation. Sequential mode solves PostgreSQL parser limits for large files
+      (650+ rows). Supports COPY format for 10x faster loading.
 
-    Examples:
-        # Concatenate mode (default)
-        confiture seed apply --env local
+    EXAMPLES:
+      confiture seed apply --env local --sequential
+        ↳ Apply seed files sequentially to local database
 
-        # Sequential mode (for large seed files)
-        confiture seed apply --env local --sequential
+      confiture seed apply --sequential --copy-format
+        ↳ Use faster COPY format (auto-converts INSERT statements)
 
-        # Continue on error (skip failed files)
-        confiture seed apply --env local --sequential --continue-on-error
+      confiture seed apply --sequential --continue-on-error --env production
+        ↳ Skip failed files, continue with remaining seeds
 
-        # Use explicit database URL
-        confiture seed apply --sequential --database-url postgresql://localhost/mydb
+      confiture seed apply --sequential --benchmark
+        ↳ Show VALUES vs COPY performance comparison
+
+    RELATED:
+      confiture seed validate - Check seed data quality
+      confiture seed convert  - Transform INSERT to COPY format
+      confiture build         - Build schema, optionally apply seeds
     """
     try:
         if not sequential:
@@ -524,17 +520,26 @@ def convert(
         help="Output file for COPY format (default: stdout)",
     ),
 ) -> None:
-    """Convert INSERT statements to COPY format.
+    """Transform INSERT statements to COPY format (10x faster).
 
-    This command reads SQL files with INSERT statements and converts them
-    to PostgreSQL COPY format for faster bulk loading.
+    PROCESS:
+      Reads SQL files with INSERT statements and converts to PostgreSQL COPY
+      format for dramatically faster bulk loading (typically 10x speed improvement).
 
-    Examples:
-        # Convert INSERT to COPY and display
-        confiture seed convert --input seeds.sql
+    EXAMPLES:
+      confiture seed convert --input seeds.sql
+        ↳ Convert and display COPY format to stdout
 
-        # Convert and save to file
-        confiture seed convert --input seeds.sql --output seeds_copy.sql
+      confiture seed convert --input seeds.sql --output seeds_copy.sql
+        ↳ Convert and save to file
+
+      confiture seed convert --input db/seeds/users.sql --output db/seeds/users_copy.sql
+        ↳ Convert multiple files in bulk
+
+    RELATED:
+      confiture seed apply     - Load seeds with optional COPY format
+      confiture seed validate  - Check seed data quality
+      confiture seed benchmark - Compare VALUES vs COPY performance
     """
     try:
         if not input_file.exists():
@@ -576,17 +581,27 @@ def benchmark(
         help="Directory containing seed files (default: db/seeds)",
     ),
 ) -> None:
-    """Benchmark COPY vs VALUES performance.
+    """Compare VALUES vs COPY format performance.
 
-    This command analyzes seed files and shows the performance difference
-    between VALUES and COPY format for loading the data.
+    PROCESS:
+      Analyzes seed files and benchmarks loading performance in both formats.
+      Shows estimated speedup, time savings, and per-table metrics to help
+      optimize seed data loading strategy.
 
-    Examples:
-        # Benchmark default seed directory
-        confiture seed benchmark
+    EXAMPLES:
+      confiture seed benchmark
+        ↳ Benchmark default seed directory, show performance comparison
 
-        # Benchmark specific directory
-        confiture seed benchmark --seeds-dir db/seeds/test
+      confiture seed benchmark --seeds-dir db/seeds/test
+        ↳ Benchmark specific seed directory
+
+      confiture seed apply --benchmark --sequential
+        ↳ See benchmark while applying seeds with --sequential flag
+
+    RELATED:
+      confiture seed apply   - Load seeds with --copy-format flag
+      confiture seed convert - Transform INSERT to COPY format
+      confiture seed validate - Check seed data quality
     """
     try:
         import asyncio

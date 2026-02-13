@@ -343,59 +343,30 @@ def build(
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
 ) -> None:
-    """Build complete schema from DDL files.
+    """Build complete schema from DDL files in one fast operation.
 
-    This command builds a complete schema by concatenating all SQL files
-    from the db/schema/ directory in deterministic order. This is the
-    fastest way to create or recreate a database from scratch.
+    PROCESS:
+      Concatenates all SQL files from db/schema/ in deterministic order, validates
+      comments (optional), adds separators, and writes the complete schema. Fastest
+      way to create or recreate a database from scratch.
 
-    The build process:
-    1. Reads environment configuration (db/environments/{env}.yaml)
-    2. Validates SQL comments (optional, catches concatenation errors)
-    3. Discovers all .sql files in configured include_dirs
-    4. Concatenates files in alphabetical order
-    5. Adds file separators (configurable style)
-    6. Adds metadata headers (environment, file count, timestamp)
-    7. Writes to output file (default: db/generated/schema_{env}.sql)
+    EXAMPLES:
+      confiture build
+        ↳ Build local environment, output to db/generated/schema_local.sql
 
-    Comment Validation:
-    Detects unclosed block comments that would corrupt concatenated schemas.
-    By default uses environment config, but can be overridden with --validate-comments.
+      confiture build --env production --show-hash
+        ↳ Build production environment and show schema hash for change detection
 
-    File Separators:
-    Controls how files are separated in concatenated output. Available styles:
-    - block_comment: SQL block comments (/* ... */) - default, safest
-    - line_comment: SQL line comments (--) - faster, less visible
-    - mysql: MySQL-compatible separators
-    - custom: Use custom template with {file_path} placeholder
+      confiture build --sequential --database-url postgresql://localhost/myapp
+        ↳ Build schema AND apply seed files sequentially (solves 650+ row limits)
 
-    Examples:
-        # Build local environment schema
-        confiture build
+      confiture build --validate-comments --fail-on-unclosed
+        ↳ Enable comment validation to catch concatenation errors
 
-        # Build for specific environment
-        confiture build --env production
-
-        # Custom output location
-        confiture build --output /tmp/schema.sql
-
-        # Enable comment validation
-        confiture build --validate-comments
-
-        # Use block comment separators (safest)
-        confiture build --separator-style block_comment
-
-        # Custom separators
-        confiture build --separator-style custom --separator-template "\\n/* {file_path} */\\n"
-
-        # Show hash for change detection
-        confiture build --show-hash
-
-        # Apply seeds sequentially (avoids parser limits with large seed files)
-        confiture build --sequential --database-url postgresql://localhost/myapp
-
-        # Continue on error when applying seeds
-        confiture build --sequential --continue-on-error --database-url postgresql://localhost/myapp
+    RELATED:
+      confiture migrate up      - Apply incremental migrations instead
+      confiture seed validate   - Validate seed data separately
+      confiture lint            - Check schema against best practices
     """
     try:
         # Create schema builder
@@ -610,28 +581,30 @@ def lint(
         help="Exit with code 1 if warnings found (default: off, stricter)",
     ),
 ) -> None:
-    """Lint schema against best practices.
+    """Validate schema against best practices.
 
-    Validates the schema against 6 built-in linting rules:
-    - Naming conventions (snake_case)
-    - Primary keys on all tables
-    - Documentation (COMMENT on tables)
-    - Multi-tenant identifier columns
-    - Indexes on foreign keys
-    - Security best practices (passwords, tokens, secrets)
+    PROCESS:
+      Checks schema against 6 rules: naming conventions (snake_case), primary
+      keys on all tables, documentation, multi-tenant columns, FK indexes, and
+      security (no passwords/secrets). Results in table or JSON format.
 
-    Examples:
-        # Lint local environment, display as table
-        confiture lint
+    EXAMPLES:
+      confiture lint
+        ↳ Lint local environment, display results as table
 
-        # Lint production environment, output as JSON
-        confiture lint --env production --format json
+      confiture lint --env production
+        ↳ Lint production environment
 
-        # Save results to file
-        confiture lint --format json --output lint-report.json
+      confiture lint --format json --output report.json
+        ↳ Save linting report to JSON file
 
-        # Strict mode: fail on warnings
-        confiture lint --fail-on-warning
+      confiture lint --fail-on-warning
+        ↳ Exit with error code if any warnings found (strict mode)
+
+    RELATED:
+      confiture build       - Build schema from DDL files
+      confiture migrate up  - Apply migrations
+      confiture schema-to-schema - Compare and sync schemas
     """
     try:
         # Validate format option
@@ -733,14 +706,29 @@ def migrate_status(
         help="Save output to file (default: stdout, useful with json)",
     ),
 ) -> None:
-    """Show migration status.
+    """Show migration status and history.
 
-    If config is provided, shows which migrations are applied vs pending.
+    PROCESS:
+      Lists all migrations and their status (applied or pending). With --config,
+      connects to database and shows which migrations are applied vs pending.
 
-    Examples:
-        confiture migrate status
-        confiture migrate status --format json
-        confiture migrate status -f json -o status.json
+    EXAMPLES:
+      confiture migrate status
+        ↳ List all migrations and their status
+
+      confiture migrate status --config db/environments/prod.yaml
+        ↳ Show applied vs pending migrations in production database
+
+      confiture migrate status --format json
+        ↳ Output as JSON for scripting
+
+      confiture migrate status --format json --output migrations.json
+        ↳ Save status report to file
+
+    RELATED:
+      confiture migrate up       - Apply pending migrations
+      confiture migrate down     - Rollback applied migrations
+      confiture migrate generate - Create new migration
     """
     try:
         # Validate output format
@@ -1071,17 +1059,30 @@ def migrate_up(
         help="Save report to file (default: stdout)",
     ),
 ) -> None:
-    """Apply pending migrations.
+    """Apply pending migrations to the database.
 
-    Applies all pending migrations up to the target version (or all if no target).
+    PROCESS:
+      Applies pending migrations in order, with distributed locking to prevent
+      concurrent runs. Verifies checksums to detect unauthorized changes. Use
+      --dry-run to analyze, or --dry-run-execute to test in a SAVEPOINT.
 
-    Uses distributed locking to ensure only one migration process runs at a time.
-    This is critical for Kubernetes/multi-pod deployments.
+    EXAMPLES:
+      confiture migrate up
+        ↳ Apply all pending migrations
 
-    Verifies migration file checksums to detect unauthorized modifications.
-    Use --no-verify-checksums to skip verification.
+      confiture migrate up --target 003
+        ↳ Apply migrations up to version 003
 
-    Use --dry-run for analysis without execution, or --dry-run-execute to test in SAVEPOINT.
+      confiture migrate up --dry-run
+        ↳ Analyze migrations without executing
+
+      confiture migrate up --strict --no-verify-checksums
+        ↳ Strict mode with warnings treated as errors, skip checksum validation
+
+    RELATED:
+      confiture migrate down        - Rollback migrations
+      confiture migrate status      - View migration history
+      confiture migrate generate    - Create new migration template
     """
     from confiture.cli.dry_run import (
         ask_dry_run_execute_confirmation,
@@ -1586,23 +1587,30 @@ def migrate_generate(
         help="Show version calculation details (default: off)",
     ),
 ) -> None:
-    """Generate a new migration file with auto-incrementing version number.
+    """Generate a new migration file with auto-incrementing version.
 
-    Creates an empty migration template with the given name. The version number
-    is automatically calculated by scanning existing migrations and incrementing
-    the highest version found.
+    PROCESS:
+      Creates an empty migration template with auto-calculated version number.
+      Scans existing migrations and increments the highest version (3-digit
+      zero-padded: 001, 002, ..., 999). Gaps in numbering are preserved.
 
-    Version Numbering:
-        Versions are 3-digit zero-padded (001, 002, ..., 999).
-        Next version = highest existing version + 1.
-        Gaps in numbering are preserved.
+    EXAMPLES:
+      confiture migrate generate add_user_email
+        ↳ Create migration template, auto-version to 001 (or next available)
 
-    Examples:
-        confiture migrate generate add_user_email
-        confiture migrate generate add_user_email --dry-run
-        confiture migrate generate add_user_email --format json
-        confiture migrate generate add_user_email --verbose
-        confiture migrate generate add_user_email --force
+      confiture migrate generate add_payment_column --verbose
+        ↳ Show version calculation and scanning details
+
+      confiture migrate generate stripe_integration --dry-run
+        ↳ Preview what would be created without writing files
+
+      confiture migrate generate hotfix --force
+        ↳ Overwrite existing migration file if it exists
+
+    RELATED:
+      confiture migrate up      - Apply the generated migration
+      confiture migrate status  - View all migrations
+      confiture migrate diff    - Compare schema files
     """
     try:
         # Ensure migrations directory exists
@@ -1802,17 +1810,30 @@ def migrate_baseline(
         help="Show what would be marked without making changes (default: off)",
     ),
 ) -> None:
-    """Mark migrations as applied without executing them.
+    """Mark migrations as applied without running them.
 
-    Use this to establish a baseline when:
-    - Adopting confiture on an existing database
-    - Setting up a new environment from a backup
-    - Recovering from a failed migration state
+    PROCESS:
+      Marks migrations as applied in the database without executing the SQL.
+      Useful for establishing a baseline when adopting confiture on existing
+      databases, setting up from backups, or recovering from failed states.
 
-    Examples:
-        confiture migrate baseline --through 002
-        confiture migrate baseline -t 005 --dry-run
-        confiture migrate baseline -t 003 -c db/environments/production.yaml
+    EXAMPLES:
+      confiture migrate baseline --through 002
+        ↳ Mark migrations 001-002 as applied
+
+      confiture migrate baseline --through 005 --dry-run
+        ↳ Preview what would be marked, without making changes
+
+      confiture migrate baseline -t 003 -c db/environments/production.yaml
+        ↳ Mark through version 003 in production database
+
+      confiture migrate baseline -t 010 --force
+        ↳ Force marking without state checks
+
+    RELATED:
+      confiture migrate up       - Apply migrations normally
+      confiture migrate status   - View migration history
+      confiture migrate diff     - Compare schema versions
     """
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator
@@ -1958,9 +1979,26 @@ def migrate_diff(
         help="Migrations directory (default: db/migrations)",
     ),
 ) -> None:
-    """Compare two schema files and show differences.
+    """Compare two schema files and identify differences.
 
-    Optionally generate a migration file from the diff.
+    PROCESS:
+      Compares old and new schema files, shows additions/modifications/removals.
+      Optionally generates a migration file from the detected differences.
+
+    EXAMPLES:
+      confiture migrate diff schema_old.sql schema_new.sql
+        ↳ Show all differences between two schemas
+
+      confiture migrate diff schema_old.sql schema_new.sql --generate --name add_payments
+        ↳ Generate migration file from differences
+
+      confiture migrate diff db/generated/schema_local.sql db/schema/production.sql
+        ↳ Compare local schema with production target
+
+    RELATED:
+      confiture migrate generate - Create migration template
+      confiture migrate validate - Check migration integrity
+      confiture build             - Build schema from DDL files
     """
     try:
         # Validate files exist
@@ -2064,11 +2102,29 @@ def migrate_down(
         help="Save report to file (default: stdout)",
     ),
 ) -> None:
-    """Rollback applied migrations.
+    """Rollback previously applied migrations.
 
-    Rolls back the last N applied migrations (default: 1).
+    PROCESS:
+      Rolls back the last N applied migrations (default: 1), reverting schema
+      changes. Use --dry-run to analyze without executing.
 
-    Use --dry-run to analyze rollback without executing.
+    EXAMPLES:
+      confiture migrate down
+        ↳ Rollback the last applied migration
+
+      confiture migrate down --steps 3
+        ↳ Rollback the last 3 migrations
+
+      confiture migrate down --dry-run
+        ↳ Analyze rollback without executing
+
+      confiture migrate down --verbose --format json
+        ↳ Detailed analysis in JSON format
+
+    RELATED:
+      confiture migrate up       - Apply migrations forward
+      confiture migrate status   - View migration history
+      confiture migrate validate - Check migration integrity
     """
     from confiture.core.connection import (
         create_connection,
@@ -2299,41 +2355,30 @@ def migrate_validate(
         help="Save output to file (default: stdout)",
     ),
 ) -> None:
-    """Validate migration file naming conventions, idempotency, and git integrity.
+    """Validate migration files follow naming and quality conventions.
 
-    Checks for .sql files that don't match the expected naming pattern.
-    With --idempotent, also validates that SQL statements are idempotent.
-    With --check-drift, validates schema against git refs for drift detection.
-    With --require-migration, ensures DDL changes have migration files.
+    PROCESS:
+      Checks for orphaned files, validates naming pattern ({NNN}_{name}.sql),
+      optionally verifies idempotency, checks for schema drift, and ensures DDL
+      changes have corresponding migration files.
 
-    Confiture only recognizes:
-    - {NNN}_{name}.up.sql (forward migrations)
-    - {NNN}_{name}.down.sql (rollback migrations)
-    - {NNN}_{name}.py (Python class migrations)
+    EXAMPLES:
+      confiture migrate validate
+        ↳ Check for orphaned files not matching naming pattern
 
-    Idempotent SQL patterns include:
-    - CREATE TABLE IF NOT EXISTS
-    - CREATE INDEX IF NOT EXISTS
-    - CREATE OR REPLACE FUNCTION/VIEW
-    - DROP TABLE IF EXISTS
+      confiture migrate validate --idempotent
+        ↳ Also validate all migrations are idempotent (safe to re-run)
 
-    Examples:
-        # Check for orphaned files
-        confiture migrate validate
+      confiture migrate validate --check-drift --staged
+        ↳ Pre-commit: check staged files for schema drift
 
-        # Validate idempotency of all migrations
-        confiture migrate validate --idempotent
+      confiture migrate validate --require-migration --base-ref origin/main --fix-naming
+        ↳ Ensure all DDL changes have migrations, auto-fix file names
 
-        # Check schema drift against main branch
-        confiture migrate validate --check-drift --base-ref origin/main
-
-        # Require migration files for DDL changes
-        confiture migrate validate --require-migration --base-ref origin/main
-
-        # Pre-commit hook: validate staged changes
-        confiture migrate validate --check-drift --require-migration --staged
-
-        # Auto-fix orphaned file names
+    RELATED:
+      confiture migrate generate - Create new migration file
+      confiture migrate fix      - Auto-fix non-idempotent migrations
+      confiture migrate status   - View migration history
         confiture migrate validate --fix-naming
 
         # Output as JSON
@@ -2685,26 +2730,27 @@ def migrate_fix(
         help="Save output to file (default: stdout)",
     ),
 ) -> None:
-    """Auto-fix migration files.
+    """Auto-fix non-idempotent SQL in migrations.
 
-    Transforms non-idempotent SQL statements into their idempotent equivalents.
+    PROCESS:
+      Transforms non-idempotent statements to safe-to-rerun equivalents:
+      CREATE TABLE → CREATE TABLE IF NOT EXISTS, CREATE INDEX → CREATE INDEX
+      IF NOT EXISTS, DROP TABLE → DROP TABLE IF EXISTS, and more.
 
-    Transformations applied:
-    - CREATE TABLE → CREATE TABLE IF NOT EXISTS
-    - CREATE INDEX → CREATE INDEX IF NOT EXISTS
-    - CREATE FUNCTION → CREATE OR REPLACE FUNCTION
-    - DROP TABLE → DROP TABLE IF EXISTS
-    - And more...
+    EXAMPLES:
+      confiture migrate fix --idempotent --dry-run
+        ↳ Preview what would be fixed without modifying files
 
-    Examples:
-        # Preview fixes without modifying files
-        confiture migrate fix --idempotent --dry-run
+      confiture migrate fix --idempotent
+        ↳ Apply all fixes to migration files
 
-        # Apply fixes to all migration files
-        confiture migrate fix --idempotent
+      confiture migrate fix --idempotent --format json --output fixes.json
+        ↳ Generate JSON report of all transformations
 
-        # Output as JSON
-        confiture migrate fix --idempotent --dry-run --format json
+    RELATED:
+      confiture migrate validate - Check migration quality
+      confiture migrate up       - Apply migrations
+      confiture migrate generate - Create new migration
     """
     try:
         # Validate output format
