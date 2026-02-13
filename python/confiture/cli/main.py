@@ -3131,4 +3131,8 @@ def verify(
 
 
 if __name__ == "__main__":
+    # Note: QW4 "Did you mean?" feature requires custom Click/Typer error handler
+    # infrastructure is ready (_get_suggestion helper), but full integration
+    # requires wrapping Click's exception handling at a lower level.
+    # See: https://github.com/evoludigit/confiture/issues/qw4
     app()
