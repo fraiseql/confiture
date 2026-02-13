@@ -1465,6 +1465,10 @@ def migrate_up(
                 console.print(
                     f"\n[green]✅ Successfully applied {applied_count} migration(s)![/green]"
                 )
+                console.print("\n💡 Next steps:")
+                console.print("  • Verify: confiture migrate status")
+                console.print("  • Validate: confiture lint")
+                console.print("  • Load data: confiture seed apply")
             conn.close()
 
     except typer.Exit:
@@ -1800,6 +1804,10 @@ class {class_name}(Migration):
             console.print("[green]✅ Migration generated successfully![/green]")
             print(f"\n📄 File: {filepath.absolute()}")
             console.print("\n✏️  Edit the migration file to add your SQL statements.")
+            console.print("\n💡 Next steps:")
+            console.print("  • Edit file and add SQL")
+            console.print("  • Apply: confiture migrate up")
+            console.print("  • Or verify first: confiture migrate up --dry-run")
 
     except typer.Exit:
         raise

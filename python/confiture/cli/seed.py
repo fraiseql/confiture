@@ -373,6 +373,10 @@ def validate(
                 console.print(table)
             else:
                 console.print("[green]✓ All seed files are valid![/green]")
+                console.print("\n💡 Next steps:")
+                console.print("  • Load data: confiture seed apply")
+                console.print("  • Show performance: confiture seed benchmark")
+                console.print("  • Convert format: confiture seed convert")
 
         # Exit with appropriate code
         if all_violations:
