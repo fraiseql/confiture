@@ -167,7 +167,7 @@ class TestErrorContextFormatting:
     def test_format_error_includes_documentation_link(self):
         """Verify formatted error includes documentation link."""
         output = format_error_with_context("DB_CONNECTION_FAILED")
-        assert "https://docs.confiture.dev/troubleshooting" in output
+        assert "https://github.com/fraiseql/confiture/blob/main/docs/" in output
 
     def test_custom_message_override(self):
         """Test custom message override."""

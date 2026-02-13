@@ -46,7 +46,7 @@ ERROR_CONTEXTS = {
             "confiture build --database-url postgresql://localhost/mydb",
             "export DATABASE_URL=postgresql://user:pass@localhost/mydb",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#connection",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/troubleshooting.md#connection-issues",
     ),
     "DB_PERMISSION_DENIED": ErrorContext(
         error_code="DB_PERMISSION_DENIED",
@@ -61,7 +61,7 @@ ERROR_CONTEXTS = {
         examples=[
             "psql -U postgres -c 'ALTER USER myuser CREATEDB;'",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#permissions",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/troubleshooting.md#connection-issues",
     ),
     "SEEDS_DIR_NOT_FOUND": ErrorContext(
         error_code="SEEDS_DIR_NOT_FOUND",
@@ -77,7 +77,7 @@ ERROR_CONTEXTS = {
             "confiture seed apply --seeds-dir db/seeds/common",
             "confiture init  # Create standard project structure",
         ],
-        docs_url="https://docs.confiture.dev/seeds",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#seeds_dir_not_found",
     ),
     "MIGRATIONS_DIR_NOT_FOUND": ErrorContext(
         error_code="MIGRATIONS_DIR_NOT_FOUND",
@@ -93,7 +93,7 @@ ERROR_CONTEXTS = {
             "mkdir -p db/migrations",
             "confiture init",
         ],
-        docs_url="https://docs.confiture.dev/migrations",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#migrations_dir_not_found",
     ),
     "SCHEMA_DIR_NOT_FOUND": ErrorContext(
         error_code="SCHEMA_DIR_NOT_FOUND",
@@ -109,7 +109,7 @@ ERROR_CONTEXTS = {
             "mkdir -p db/schema/10_tables",
             "confiture init",
         ],
-        docs_url="https://docs.confiture.dev/schema",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#schema_dir_not_found",
     ),
     "MIGRATION_CONFLICT": ErrorContext(
         error_code="MIGRATION_CONFLICT",
@@ -125,7 +125,7 @@ ERROR_CONTEXTS = {
             "confiture migrate status",
             "mv db/migrations/002_feature.sql db/migrations/004_feature.sql",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#conflicts",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#migration_conflict",
     ),
     "SEED_VALIDATION_FAILED": ErrorContext(
         error_code="SEED_VALIDATION_FAILED",
@@ -142,7 +142,7 @@ ERROR_CONTEXTS = {
             "confiture seed validate --format json --output report.json",
             "confiture seed validate --fix --dry-run",
         ],
-        docs_url="https://docs.confiture.dev/seeds#validation",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#seed_validation_failed",
     ),
     "SQL_SYNTAX_ERROR": ErrorContext(
         error_code="SQL_SYNTAX_ERROR",
@@ -159,7 +159,7 @@ ERROR_CONTEXTS = {
             "psql -U postgres -d mydb -f migration.sql",
             "psql --echo-errors -f migration.sql",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#syntax-errors",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#sql_syntax_error",
     ),
     "TABLE_ALREADY_EXISTS": ErrorContext(
         error_code="TABLE_ALREADY_EXISTS",
@@ -176,7 +176,7 @@ ERROR_CONTEXTS = {
             "CREATE TABLE IF NOT EXISTS users (...)",
             "confiture migrate rollback --version 001",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#already-exists",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#table_already_exists",
     ),
     "FOREIGN_KEY_CONSTRAINT": ErrorContext(
         error_code="FOREIGN_KEY_CONSTRAINT",
@@ -194,7 +194,7 @@ ERROR_CONTEXTS = {
             "ALTER TABLE orders DISABLE TRIGGER ALL;",
             "ALTER TABLE orders ENABLE TRIGGER ALL;",
         ],
-        docs_url="https://docs.confiture.dev/seeds#constraints",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#foreign_key_constraint",
     ),
     "INSUFFICIENT_DISK_SPACE": ErrorContext(
         error_code="INSUFFICIENT_DISK_SPACE",
@@ -211,7 +211,7 @@ ERROR_CONTEXTS = {
             "df -h /var/lib/postgresql/",
             "du -sh /var/lib/postgresql/*/base/*",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#disk-space",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#insufficient_disk_space",
     ),
     "LOCK_TIMEOUT": ErrorContext(
         error_code="LOCK_TIMEOUT",
@@ -228,7 +228,7 @@ ERROR_CONTEXTS = {
             "confiture migrate up --timeout 30s",
             "psql -c \"SELECT * FROM pg_stat_activity WHERE state = 'active';\"",
         ],
-        docs_url="https://docs.confiture.dev/troubleshooting#locks",
+        docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#lock_timeout",
     ),
 }
 
