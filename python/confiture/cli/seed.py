@@ -533,7 +533,11 @@ def apply(
             # Use progress manager for seed application
             with ProgressManager() as progress:
                 result = applier.apply_sequential(
-                    continue_on_error=continue_on_error, progress=progress
+                    continue_on_error=continue_on_error,
+                    progress=progress,
+                    copy_format=copy_format,
+                    copy_threshold=copy_threshold,
+                    benchmark=benchmark,
                 )
 
             # Format output

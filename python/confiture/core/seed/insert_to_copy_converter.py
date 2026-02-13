@@ -72,7 +72,7 @@ class InsertToCopyConverter:
         Raises:
             ValueError: If table name cannot be extracted
         """
-        table_match = re.search(r"INSERT\s+INTO\s+(\w+)\s*\(", sql, re.IGNORECASE)
+        table_match = re.search(r"INSERT\s+INTO\s+([\w.]+)\s*\(", sql, re.IGNORECASE)
         if not table_match:
             raise ValueError("Could not extract table name from INSERT statement")
         return table_match.group(1)
