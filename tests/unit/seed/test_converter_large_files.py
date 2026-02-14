@@ -14,9 +14,7 @@ class TestLargeFileConversion:
     def test_converts_5000_row_file(self) -> None:
         """Test conversion of INSERT with 5000 rows."""
         rows = [(i, f"user_{i}", f"user{i}@example.com") for i in range(5000)]
-        values_clause = ", ".join(
-            f"({row[0]}, '{row[1]}', '{row[2]}')" for row in rows
-        )
+        values_clause = ", ".join(f"({row[0]}, '{row[1]}', '{row[2]}')" for row in rows)
         sql = f"INSERT INTO users (id, name, email) VALUES {values_clause};"
 
         converter = InsertToCopyConverter()
@@ -132,9 +130,7 @@ class TestLargeFileConversion:
         """Test conversion of large file with very long string values."""
         long_string = "a" * 1000  # 1KB string
         rows = [(i, long_string, f"item_{i}") for i in range(1000)]
-        values_clause = ", ".join(
-            f"({row[0]}, '{row[1]}', '{row[2]}')" for row in rows
-        )
+        values_clause = ", ".join(f"({row[0]}, '{row[1]}', '{row[2]}')" for row in rows)
         sql = f"INSERT INTO data (id, content, name) VALUES {values_clause};"
 
         converter = InsertToCopyConverter()

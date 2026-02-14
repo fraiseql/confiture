@@ -194,11 +194,7 @@ class InsertToCopyConverter:
                 if char in ("'", '"') and (i == 0 or values_clause[i - 1] != "\\"):
                     in_string = not in_string
 
-                if (
-                    not in_string
-                    and i < len(values_clause) - 1
-                    and re.match(r"\w", char)
-                ):
+                if not in_string and i < len(values_clause) - 1 and re.match(r"\w", char):
                     j = i
                     while j < len(values_clause) and (
                         values_clause[j].isalnum() or values_clause[j] == "_"
@@ -227,7 +223,9 @@ class InsertToCopyConverter:
                         and i < len(values_clause) - 1
                         and values_clause[i : i + 2] == "||"
                     ):
-                        return "String concatenation (||) in VALUES is not compatible with COPY format"
+                        return (
+                            "String concatenation (||) in VALUES is not compatible with COPY format"
+                        )
 
         return "This INSERT statement cannot be converted to COPY format"
 

@@ -177,10 +177,7 @@ class TestRealWorldExamples:
         converter = InsertToCopyConverter()
 
         # Create 50 test files (all convertible)
-        files = {
-            f"table_{i}.sql": f"INSERT INTO table_{i} (id) VALUES ({i});"
-            for i in range(50)
-        }
+        files = {f"table_{i}.sql": f"INSERT INTO table_{i} (id) VALUES ({i});" for i in range(50)}
 
         report = converter.convert_batch(files)
 

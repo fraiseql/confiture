@@ -28,10 +28,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 1
         assert "null" in null_violations[0].message.lower()
 
@@ -45,10 +42,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 2
 
     def test_does_not_flag_casted_nulls(self) -> None:
@@ -61,10 +55,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) == 0
 
     def test_does_not_flag_all_casted_nulls(self) -> None:
@@ -77,10 +68,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) == 0
 
     def test_detects_null_in_first_branch(self) -> None:
@@ -93,10 +81,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 1
 
     def test_detects_null_in_middle_branches(self) -> None:
@@ -111,10 +96,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 1
 
     def test_violation_severity_is_error(self) -> None:
@@ -127,10 +109,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 1
         assert null_violations[0].severity == ViolationSeverity.ERROR
 
@@ -144,10 +123,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 1
         assert null_violations[0].suggestion is not None
         assert "NULL::" in null_violations[0].suggestion
@@ -158,10 +134,7 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) == 0
 
     def test_case_insensitive_null_detection(self) -> None:
@@ -174,8 +147,5 @@ class TestUnionUncastNulls:
         validator = Level1SeedValidator()
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
-        null_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL
-        ]
+        null_violations = [v for v in violations if v.pattern == PrepSeedPattern.UNION_UNCAST_NULL]
         assert len(null_violations) >= 1

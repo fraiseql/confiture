@@ -29,8 +29,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) == 1
         assert "comment" in inline_violations[0].message.lower()
@@ -46,8 +45,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) >= 1
 
@@ -64,8 +62,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) >= 2
 
@@ -80,8 +77,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) >= 1
 
@@ -97,8 +93,7 @@ class TestUnionInlineComments:
 
         # Should have no violations
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         # May have other violations but not inline comment
         assert len(inline_violations) == 0
@@ -115,8 +110,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) == 0
 
@@ -131,8 +125,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) >= 1
         assert inline_violations[0].suggestion is not None
@@ -148,8 +141,7 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) >= 1
         assert inline_violations[0].severity == ViolationSeverity.WARNING
@@ -165,7 +157,6 @@ class TestUnionInlineComments:
         violations = validator.validate_seed_file(sql=seed_sql, file_path="test.sql")
 
         inline_violations = [
-            v for v in violations
-            if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
+            v for v in violations if v.pattern == PrepSeedPattern.UNION_INLINE_COMMENT
         ]
         assert len(inline_violations) == 0

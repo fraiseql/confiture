@@ -127,14 +127,11 @@ class TestLargeFileEdgeCases:
         """Test large file with all data types mixed."""
         rows = []
         for i in range(5000):
-            rows.append(
-                f"({i}, 'text_{i}', {i * 1.5}, {i % 2 == 0}, NULL, {i * 100})"
-            )
+            rows.append(f"({i}, 'text_{i}', {i * 1.5}, {i % 2 == 0}, NULL, {i * 100})")
 
         values_clause = ", ".join(rows)
         sql = (
-            "INSERT INTO mixed (id, text, price, active, notes, quantity) "
-            f"VALUES {values_clause};"
+            f"INSERT INTO mixed (id, text, price, active, notes, quantity) VALUES {values_clause};"
         )
 
         converter = InsertToCopyConverter()
@@ -151,10 +148,7 @@ class TestLargeFileEdgeCases:
             rows.append(f"({i}, NULL, NULL, NULL, 'value_{i}', NULL, NULL)")
 
         values_clause = ", ".join(rows)
-        sql = (
-            "INSERT INTO sparse (id, a, b, c, d, e, f) "
-            f"VALUES {values_clause};"
-        )
+        sql = f"INSERT INTO sparse (id, a, b, c, d, e, f) VALUES {values_clause};"
 
         converter = InsertToCopyConverter()
         result = converter.try_convert(sql, file_path="nulls.sql")

@@ -227,9 +227,7 @@ class TestSeedConvertCommand:
         output_dir = tmp_path / "out"
 
         (input_dir / "convertible.sql").write_text("INSERT INTO t (id) VALUES (1);")
-        (input_dir / "non_convertible.sql").write_text(
-            "INSERT INTO t (ts) VALUES (NOW());"
-        )
+        (input_dir / "non_convertible.sql").write_text("INSERT INTO t (ts) VALUES (NOW());")
 
         result = cli_runner.invoke(
             seed_app,
