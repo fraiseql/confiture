@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from confiture.core.seed.copy_formatter import CopyFormatter
+from confiture.models.results import ConversionReport, ConversionResult
 
 
 class InsertToCopyConverter:
@@ -30,6 +31,410 @@ class InsertToCopyConverter:
         2   Bob
         \.
     """
+
+    def try_convert(
+        self,
+        insert_sql: str,
+        file_path: str = "",
+    ) -> ConversionResult:
+        """Attempt to convert INSERT statement to COPY format with graceful fallback.
+
+        Tries to convert the INSERT statement to COPY format. If conversion is not
+        possible, returns a ConversionResult with success=False and a descriptive
+        reason rather than raising an exception.
+
+        Args:
+            insert_sql: SQL INSERT statement
+            file_path: Optional path to the file being converted (for reporting)
+
+        Returns:
+            ConversionResult with success status, converted format (if successful),
+            rows converted (if successful), or failure reason (if unsuccessful)
+
+        Example:
+            >>> converter = InsertToCopyConverter()
+            >>> result = converter.try_convert(
+            ...     "INSERT INTO users (id) VALUES (1);",
+            ...     file_path="users.sql"
+            ... )
+            >>> if result.success:
+            ...     print(f"Converted {result.rows_converted} rows")
+            ... else:
+            ...     print(f"Cannot convert: {result.reason}")
+        """
+        # Check if conversion is possible before attempting
+        if not self._can_convert_to_copy(insert_sql):
+            reason = self._get_conversion_failure_reason(insert_sql)
+            return ConversionResult(
+                file_path=file_path,
+                success=False,
+                reason=reason,
+            )
+
+        # Try to convert
+        try:
+            copy_format = self.convert(insert_sql)
+
+            # Count rows in COPY format
+            # COPY format: header + data lines + \.
+            lines = copy_format.strip().split("\n")
+            # Subtract 1 for header (COPY ...) and 1 for footer (\.)
+            rows_converted = max(0, len(lines) - 2)
+
+            return ConversionResult(
+                file_path=file_path,
+                success=True,
+                copy_format=copy_format,
+                rows_converted=rows_converted,
+            )
+        except Exception as e:
+            # Graceful fallback for unexpected errors
+            return ConversionResult(
+                file_path=file_path,
+                success=False,
+                reason=f"Parse error: {str(e)}",
+            )
+
+    def convert_batch(
+        self,
+        files: dict[str, str],
+    ) -> ConversionReport:
+        """Convert multiple INSERT files to COPY format in batch.
+
+        Processes a collection of seed files, attempting to convert each one
+        from INSERT format to COPY format. Returns a comprehensive report
+        with success/failure metrics.
+
+        Args:
+            files: Dictionary mapping file paths to SQL content
+
+        Returns:
+            ConversionReport with aggregate statistics and per-file results
+
+        Example:
+            >>> converter = InsertToCopyConverter()
+            >>> files = {
+            ...     "users.sql": "INSERT INTO users (id) VALUES (1);",
+            ...     "posts.sql": "INSERT INTO posts (ts) VALUES (NOW());",
+            ... }
+            >>> report = converter.convert_batch(files)
+            >>> print(f"Converted {report.successful}/{report.total_files} files")
+            Converted 1/2 files
+        """
+        results: list[ConversionResult] = []
+
+        for file_path, sql_content in files.items():
+            result = self.try_convert(sql_content, file_path=file_path)
+            results.append(result)
+
+        # Calculate statistics
+        successful = sum(1 for r in results if r.success)
+        failed = len(files) - successful
+
+        return ConversionReport(
+            total_files=len(files),
+            successful=successful,
+            failed=failed,
+            results=results,
+        )
+
+    def _get_conversion_failure_reason(self, insert_sql: str) -> str:
+        """Determine why an INSERT statement cannot be converted to COPY format.
+
+        Analyzes the SQL and provides a human-readable reason for conversion failure.
+
+        Args:
+            insert_sql: SQL INSERT statement
+
+        Returns:
+            Descriptive reason why conversion failed
+        """
+        normalized = insert_sql.strip().upper()
+
+        # Check for specific unsupported patterns
+        if "ON CONFLICT" in normalized:
+            return "ON CONFLICT clause is not compatible with COPY format"
+        if "ON DUPLICATE" in normalized:
+            return "ON DUPLICATE KEY clause is not compatible with COPY format"
+        if "WITH " in normalized or "INSERT OR" in normalized:
+            return "CTE or INSERT OR clause is not compatible with COPY format"
+        if "RETURNING" in normalized:
+            return "RETURNING clause is not compatible with COPY format"
+
+        # Check VALUES clause for problematic patterns
+        values_match = re.search(
+            r"VALUES\s*(.+?)(?:;|\s*$)",
+            insert_sql,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if values_match:
+            values_clause = values_match.group(1)
+
+            if re.search(r"\bSELECT\b", values_clause, re.IGNORECASE):
+                return "SELECT query in VALUES clause is not compatible with COPY format"
+
+            if re.search(r"\bCASE\s+WHEN\b", values_clause, re.IGNORECASE):
+                return "CASE WHEN expression in VALUES is not compatible with COPY format"
+
+            if re.search(
+                r"\b(CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME|CURRENT_USER)\b",
+                values_clause,
+                re.IGNORECASE,
+            ):
+                return (
+                    "SQL function (CURRENT_TIMESTAMP, CURRENT_DATE, etc.) in VALUES "
+                    "is not compatible with COPY format"
+                )
+
+            # Check for function calls
+            in_string = False
+            i = 0
+            while i < len(values_clause):
+                char = values_clause[i]
+                if char in ("'", '"') and (i == 0 or values_clause[i - 1] != "\\"):
+                    in_string = not in_string
+
+                if (
+                    not in_string
+                    and i < len(values_clause) - 1
+                    and re.match(r"\w", char)
+                ):
+                    j = i
+                    while j < len(values_clause) and (
+                        values_clause[j].isalnum() or values_clause[j] == "_"
+                    ):
+                        j += 1
+                    while j < len(values_clause) and values_clause[j].isspace():
+                        j += 1
+                    if j < len(values_clause) and values_clause[j] == "(":
+                        func_name = values_clause[i:j].strip()
+                        if not self._is_convertible_expression(func_name):
+                            return (
+                                f"Function call in VALUES: {func_name}() "
+                                "is not compatible with COPY format"
+                            )
+
+                i += 1
+
+            if "||" in values_clause:
+                in_string = False
+                for i, char in enumerate(values_clause):
+                    if char in ("'", '"'):
+                        if i == 0 or values_clause[i - 1] != "\\":
+                            in_string = not in_string
+                    elif (
+                        not in_string
+                        and i < len(values_clause) - 1
+                        and values_clause[i : i + 2] == "||"
+                    ):
+                        return "String concatenation (||) in VALUES is not compatible with COPY format"
+
+        return "This INSERT statement cannot be converted to COPY format"
+
+    def _can_convert_to_copy(self, insert_sql: str) -> bool:
+        """Check if INSERT statement can be safely converted to COPY format.
+
+        Detects patterns that cannot be converted:
+        - Function calls (NOW(), uuid_generate_v4(), UPPER(), etc.)
+        - CURRENT_TIMESTAMP and similar special functions
+        - ON CONFLICT, ON DUPLICATE KEY clauses
+        - SELECT queries in VALUES
+        - CTEs (WITH clauses)
+        - CAST expressions
+        - CASE WHEN expressions
+        - String concatenation (||) in VALUES
+        - Arithmetic operations in VALUES
+
+        Args:
+            insert_sql: SQL INSERT statement
+
+        Returns:
+            True if statement can be converted, False otherwise
+        """
+        # Normalize for analysis
+        normalized = insert_sql.strip().upper()
+
+        # Check for clauses that make conversion impossible
+        if any(
+            pattern in normalized
+            for pattern in [
+                "ON CONFLICT",
+                "ON DUPLICATE",
+                "WITH ",
+                "INSERT OR",
+                "RETURNING",
+            ]
+        ):
+            return False
+
+        # Extract VALUES clause
+        try:
+            values_match = re.search(
+                r"VALUES\s*(.+?)(?:;|\s*$)",
+                insert_sql,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if not values_match:
+                return False
+
+            values_clause = values_match.group(1)
+
+            # Check for SELECT in VALUES
+            if re.search(r"\bSELECT\b", values_clause, re.IGNORECASE):
+                return False
+
+            # Check for CASE WHEN (case-insensitive)
+            if re.search(r"\bCASE\s+WHEN\b", values_clause, re.IGNORECASE):
+                return False
+
+            # Check for CURRENT_TIMESTAMP and similar special expressions
+            if re.search(
+                r"\b(CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME|CURRENT_USER)\b",
+                values_clause,
+                re.IGNORECASE,
+            ):
+                return False
+
+            # Skip quoted strings when looking for functions
+            in_string = False
+            quote_char = None
+            i = 0
+            while i < len(values_clause):
+                char = values_clause[i]
+
+                # Track string boundaries
+                if char in ("'", '"') and (i == 0 or values_clause[i - 1] != "\\"):
+                    if not in_string:
+                        in_string = True
+                        quote_char = char
+                    elif char == quote_char:
+                        in_string = False
+                        quote_char = None
+
+                # Check for function call outside of strings
+                if (
+                    not in_string
+                    and i < len(values_clause) - 1
+                    and re.match(r"\w", char)
+                    and values_clause[i : i + 20].find("(") >= 0
+                ):
+                    # Peek ahead to see if this looks like a function call
+                    j = i
+                    while j < len(values_clause) and (
+                        values_clause[j].isalnum() or values_clause[j] == "_"
+                    ):
+                        j += 1
+                    # Skip whitespace
+                    while j < len(values_clause) and values_clause[j].isspace():
+                        j += 1
+                    # If we hit '(', it's a function call
+                    if j < len(values_clause) and values_clause[j] == "(":
+                        func_name = values_clause[i:j].strip()
+                        # Check for known convertible patterns
+                        if not self._is_convertible_expression(func_name):
+                            return False
+
+                i += 1
+
+            # Check for string concatenation operator
+            if "||" in values_clause:
+                # Make sure it's not in a string
+                in_string = False
+                for i, char in enumerate(values_clause):
+                    if char in ("'", '"'):
+                        if i == 0 or values_clause[i - 1] != "\\":
+                            in_string = not in_string
+                    elif (
+                        not in_string
+                        and i < len(values_clause) - 1
+                        and values_clause[i : i + 2] == "||"
+                    ):
+                        return False
+
+            # Check for arithmetic operators outside strings
+            arithmetic_ops = [" + ", " - ", " * ", " / ", " % "]
+            in_string = False
+            quote_char = None
+            values_str_normalized = ""
+
+            for i, char in enumerate(values_clause):
+                if char in ("'", '"') and (i == 0 or values_clause[i - 1] != "\\"):
+                    in_string = not in_string
+                    quote_char = char if in_string else None
+
+                if in_string:
+                    values_str_normalized += " "
+                else:
+                    values_str_normalized += char
+
+            # Check for arithmetic operations (but allow negative numbers)
+            for op in arithmetic_ops:
+                if (
+                    op in values_str_normalized
+                    and (op != " - " or not re.search(r"\(\s*-\s*\d", values_clause))
+                    and re.search(r"\d\s*[\+\*/%]\s*\d", values_str_normalized)
+                ):
+                    return False
+
+            return True
+
+        except Exception:
+            # If we can't parse it, assume it can't be converted
+            return False
+
+    def _is_convertible_expression(self, expr_name: str) -> bool:
+        """Check if an expression/function is convertible.
+
+        Some expressions like ::type casts are convertible because
+        they represent literal type conversions.
+
+        Args:
+            expr_name: Name of expression/function
+
+        Returns:
+            True if expression is convertible, False otherwise
+        """
+        expr_upper = expr_name.upper()
+        # Expressions/functions that we CANNOT convert
+        non_convertible = {
+            "NOW",
+            "CURRENT_TIMESTAMP",
+            "CURRENT_DATE",
+            "CURRENT_TIME",
+            "CURRENT_USER",
+            "UUID_GENERATE_V4",
+            "UUID_GENERATE_V1",
+            "GEN_RANDOM_UUID",
+            "RANDOM",
+            "UPPER",
+            "LOWER",
+            "SUBSTRING",
+            "LENGTH",
+            "COALESCE",
+            "NULLIF",
+            "CASE",
+            "CAST",
+            "EXTRACT",
+            "DATE_PART",
+            "TO_CHAR",
+            "TO_DATE",
+            "TO_TIMESTAMP",
+            "TO_NUMBER",
+            "ROUND",
+            "CEIL",
+            "FLOOR",
+            "ABS",
+            "REPLACE",
+            "TRIM",
+            "LTRIM",
+            "RTRIM",
+            "CONCAT",
+            "ARRAY",
+            "ROW",
+            "DISTINCT",
+        }
+
+        return expr_upper not in non_convertible
 
     def convert(self, insert_sql: str) -> str:
         """Convert INSERT statement to COPY format.

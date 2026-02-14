@@ -221,3 +221,71 @@ class MigrateValidateResult:
             "warnings": self.warnings,
             "error": self.error,
         }
+
+
+@dataclass
+class ConversionResult:
+    """Result of converting a single INSERT statement to COPY format.
+
+    Tracks whether conversion was successful, the converted output,
+    number of rows converted, or failure reason if conversion failed.
+    """
+
+    file_path: str
+    success: bool
+    copy_format: str | None = None
+    rows_converted: int | None = None
+    reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "file_path": self.file_path,
+            "success": self.success,
+            "copy_format": self.copy_format,
+            "rows_converted": self.rows_converted,
+            "reason": self.reason,
+        }
+
+
+@dataclass
+class ConversionReport:
+    """Report of batch INSERT to COPY conversion.
+
+    Aggregates results from converting multiple seed files,
+    tracking success/failure counts and providing overall metrics.
+    """
+
+    total_files: int
+    successful: int
+    failed: int
+    results: list[ConversionResult] = field(default_factory=list)
+
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate as percentage.
+
+        Returns:
+            Percentage of successful conversions (0-100).
+        """
+        if self.total_files == 0:
+            return 0.0
+        return (self.successful / self.total_files) * 100
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "total_files": self.total_files,
+            "successful": self.successful,
+            "failed": self.failed,
+            "success_rate": self.success_rate,
+            "results": [r.to_dict() for r in self.results],
+        }
