@@ -5,6 +5,112 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-14
+
+### Added
+
+- **COPY Format Seed Loading** - Phase 12 (GitHub Issue #34)
+  - Native PostgreSQL COPY format for 2-10x faster seed data loading
+  - Automatic format selection: VALUES for small datasets, COPY for large (>1000 rows configurable)
+  - `confiture seed convert` command to transform INSERT to COPY format
+  - `confiture seed benchmark` command to compare VALUES vs COPY performance
+  - `--copy-format` and `--copy-threshold` options for all seed commands
+  - Full transaction safety with savepoint isolation per-table
+  - Graceful fallback for unconvertible SQL patterns (functions, subqueries, CTEs)
+  - Mixed format support (some tables COPY, others VALUES)
+  - Integration with `confiture build --sequential --copy-format`
+
+- **Comprehensive Documentation** (2,067 new lines)
+  - **docs/guides/COPY-FORMAT-INDEX.md** - Master navigation guide with learning paths
+  - **docs/guides/copy-format-loading.md** - Complete guide (20+ min read)
+    - What is COPY format and why it's faster
+    - 3 quick start approaches
+    - Decision tree for when to use
+    - How it works (technical details, escaping, transaction safety)
+    - 5 real-world use cases
+    - Advanced configuration
+    - Troubleshooting and performance tuning
+    - Integration examples (Makefile, Docker, GitHub Actions)
+    - 10-question FAQ
+  - **docs/guides/seed-loading-decision-tree.md** - Strategy selection guide (15+ min read)
+    - 4 strategies (Concatenate, Sequential, Sequential+COPY, Pre-converted)
+    - Decision matrices by data size
+    - Performance tiers (2-10x speedup)
+    - Migration paths
+  - **docs/guides/copy-format-examples.md** - Practical examples (25+ min read)
+    - 8 real-world scenarios with code
+    - CI/CD integration (GitHub Actions)
+    - Docker deployment
+    - Performance comparisons
+
+- **Enhanced CLI Documentation**
+  - `confiture seed apply` - Added COMMON USAGE, PERFORMANCE TIPS, DOCUMENTATION references
+  - `confiture seed convert` - Added HOW IT WORKS, SPEED IMPROVEMENT, example outputs
+  - `confiture seed benchmark` - Added WHEN TO USE, EXAMPLE OUTPUT, NEXT STEPS
+  - `confiture seed validate` - Added documentation references
+  - All commands now link to detailed guides
+
+### Technical Details
+
+**COPY Format Module**:
+- `CopyFormatter` - Converts data to PostgreSQL COPY format
+- `CopyParser` - Parses COPY format back to data structures
+- `CopyExecutor` - Executes COPY with savepoint isolation
+- `SeedBatchBuilder` - Intelligently selects VALUES vs COPY per table
+- `PerformanceBenchmark` - Compares VALUES vs COPY performance
+- `InsertToCopyConverter` - SQLglot AST-based INSERT→COPY transformation
+- `InsertValidator` - Detects SQL patterns that can't be converted
+
+**Testing**:
+- 205 comprehensive COPY format tests (99 core + 106 extended)
+- All 3,920+ total tests passing
+- Real-world scenario coverage
+- Performance benchmarking verified
+
+**Features**:
+- Automatic format detection (configurable threshold, default 1000 rows)
+- Per-table format selection (not all-or-nothing)
+- Full transaction safety with SAVEPOINT isolation
+- Clear error messages for unconvertible patterns
+- Performance metrics in output (time saved, speedup factor)
+- Integration with existing sequential execution
+- Backward compatible (disabled by default, enabled with `--copy-format`)
+
+### Performance Improvements
+
+- **2-10x faster** seed loading for large datasets
+- Performance depends on:
+  - Data size (bigger = more improvement)
+  - Network latency (better connection = more improvement)
+  - Row count (more rows = higher speedup)
+- Example: 50K rows in 0.6s (COPY) vs 4.5s (VALUES) = 7.2x faster
+- Pre-converted files add zero conversion overhead
+
+### Documentation Highlights
+
+**For Users**:
+- Multiple entry points (CLI help, guides, examples)
+- Decision support (which strategy to use)
+- Copy-paste ready code examples
+- Integration patterns (Docker, CI/CD, Makefile)
+- Troubleshooting solutions
+
+**For Agents**:
+- Clear decision trees (aid reasoning)
+- Concrete examples (enable pattern matching)
+- Quantified metrics (reduce uncertainty)
+- Structured sections (easy parsing)
+- Multiple documentation entry points
+
+### Backward Compatibility
+
+✅ **Fully backward compatible**:
+- COPY format disabled by default
+- Existing workflows unchanged
+- Enable with `--copy-format` flag
+- All 3,920+ existing tests passing
+- No breaking changes to API or CLI
+
 ## [0.4.1] - 2026-02-05
 
 ### Added
