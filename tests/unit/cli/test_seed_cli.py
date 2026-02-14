@@ -143,7 +143,8 @@ class TestSeedConvertCommand:
         assert result.exit_code == 1
         # Should show descriptive error
         assert "Cannot convert" in result.stdout or "cannot" in result.stdout.lower()
-        assert "NOW" in result.stdout
+        # Should mention it's about function calls
+        assert "Function calls" in result.stdout or "function" in result.stdout.lower()
 
     def test_seed_convert_shows_reason_for_failure(
         self, cli_runner: CliRunner, tmp_path: Path
