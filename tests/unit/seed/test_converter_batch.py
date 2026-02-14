@@ -5,10 +5,7 @@ Phase 11, Cycle 4: Add convert_batch() method for batch processing.
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
-from confiture.models.results import ConversionReport
 
 
 class TestBatchConversion:

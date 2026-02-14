@@ -6,8 +6,6 @@ Issue #40
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed_validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )

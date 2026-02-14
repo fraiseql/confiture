@@ -5,8 +5,6 @@ Tests converter performance and correctness on files with 5000+ records.
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

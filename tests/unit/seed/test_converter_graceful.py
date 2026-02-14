@@ -5,10 +5,7 @@ Phase 11, Cycle 3: Add try_convert() method with graceful fallback.
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
-from confiture.models.results import ConversionResult
 
 
 class TestGracefulDegradation:

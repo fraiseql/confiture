@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

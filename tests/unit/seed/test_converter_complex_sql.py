@@ -5,8 +5,6 @@ Phase 11, Cycle 2: Add detection for SQL patterns that cannot be converted.
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

@@ -6,8 +6,6 @@ Phase 11, Cycle 5: Real-world examples
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 from confiture.models.results import ConversionResult
 

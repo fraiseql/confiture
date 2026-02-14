@@ -5,10 +5,6 @@ Phase 11, Cycle 1: Add ConversionResult and ConversionReport models.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from confiture.models.results import ConversionReport, ConversionResult
 
 
