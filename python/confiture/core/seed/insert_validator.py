@@ -111,11 +111,7 @@ class InsertValidator:
             exp.Abs,
         }
 
-        for func_type in incompatible_funcs:
-            if values_expr.find(func_type):
-                return True
-
-        return False
+        return any(values_expr.find(func_type) for func_type in incompatible_funcs)
 
     def _has_subqueries(self, values_expr: exp.Values) -> bool:
         """Check if VALUES clause contains subqueries.
@@ -154,11 +150,7 @@ class InsertValidator:
             exp.Mod,
         }
 
-        for op_type in arithmetic_types:
-            if values_expr.find(op_type):
-                return True
-
-        return False
+        return any(values_expr.find(op_type) for op_type in arithmetic_types)
 
     def extract_rows(
         self,
