@@ -126,6 +126,118 @@ class TestSeedConvertCommand:
             output = output_file.read_text()
             assert "COPY" in output or "COPY users" in output
 
+    def test_seed_convert_graceful_error_with_now_function(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test graceful error handling for non-convertible INSERT."""
+        # Create file with NOW() function (not convertible)
+        non_convertible_file = tmp_path / "events.sql"
+        non_convertible_file.write_text("INSERT INTO events (created_at) VALUES (NOW());")
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(non_convertible_file)],
+        )
+
+        # Should exit with code 1 (not 2, which is error)
+        assert result.exit_code == 1
+        # Should show descriptive error
+        assert "Cannot convert" in result.stdout or "cannot" in result.stdout.lower()
+        assert "NOW" in result.stdout
+
+    def test_seed_convert_shows_reason_for_failure(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test that convert shows specific reason for failure."""
+        non_convertible_file = tmp_path / "on_conflict.sql"
+        non_convertible_file.write_text(
+            "INSERT INTO users (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET id = 2;"
+        )
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(non_convertible_file)],
+        )
+
+        assert result.exit_code == 1
+        assert "ON CONFLICT" in result.stdout or "cannot" in result.stdout.lower()
+
+    def test_seed_convert_batch_mode_requires_output(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test that batch mode requires output directory."""
+        input_dir = tmp_path / "seeds"
+        input_dir.mkdir()
+        (input_dir / "test.sql").write_text("INSERT INTO t (id) VALUES (1);")
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(input_dir), "--batch"],
+        )
+
+        assert result.exit_code == 2
+        assert "output" in result.stdout.lower()
+
+    def test_seed_convert_batch_mode_requires_directory(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test that batch mode requires input to be directory."""
+        input_file = tmp_path / "test.sql"
+        input_file.write_text("INSERT INTO t (id) VALUES (1);")
+        output_dir = tmp_path / "out"
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(input_file), "--batch", "--output", str(output_dir)],
+        )
+
+        assert result.exit_code == 2
+        assert "directory" in result.stdout.lower()
+
+    def test_seed_convert_batch_mode_processes_multiple_files(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test batch mode processes multiple SQL files."""
+        input_dir = tmp_path / "seeds"
+        input_dir.mkdir()
+        output_dir = tmp_path / "out"
+
+        # Create multiple convertible files
+        (input_dir / "users.sql").write_text("INSERT INTO users (id, name) VALUES (1, 'Alice');")
+        (input_dir / "posts.sql").write_text("INSERT INTO posts (id, title) VALUES (1, 'Title');")
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(input_dir), "--batch", "--output", str(output_dir)],
+        )
+
+        assert result.exit_code == 0
+        # Check that output directory exists
+        assert output_dir.exists()
+        # Check that files were created
+        assert (output_dir / "users.sql").exists()
+        assert (output_dir / "posts.sql").exists()
+
+    def test_seed_convert_batch_mode_shows_summary(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test that batch mode shows summary statistics."""
+        input_dir = tmp_path / "seeds"
+        input_dir.mkdir()
+        output_dir = tmp_path / "out"
+
+        (input_dir / "convertible.sql").write_text("INSERT INTO t (id) VALUES (1);")
+        (input_dir / "non_convertible.sql").write_text("INSERT INTO t (ts) VALUES (NOW());")
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(input_dir), "--batch", "--output", str(output_dir)],
+        )
+
+        # Should show summary
+        assert "Summary" in result.stdout or "Total" in result.stdout
+        assert "success" in result.stdout.lower() or "converted" in result.stdout.lower()
+
 
 class TestSeedBenchmarkCommand:
     """Test seed benchmark command."""

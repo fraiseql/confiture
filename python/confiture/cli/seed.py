@@ -236,10 +236,16 @@ def validate(
       confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
         ↳ Full validation: all 5 levels including runtime execution
 
-    RELATED:
+    RELATED COMMANDS:
       confiture seed apply     - Load seeds into database
       confiture seed convert   - Transform INSERT to COPY format
       confiture seed benchmark - Compare VALUES vs COPY performance
+      confiture build          - Build schema with optional validation
+
+    DOCUMENTATION:
+      📖 Seed Validation: docs/guides/seed-validation.md
+      📖 COPY Format: docs/guides/copy-format-loading.md
+      📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
 
     OPTIONS:
       CORE: --seeds-dir, --mode, --format, --output
@@ -407,32 +413,32 @@ def apply(
     sequential: bool = typer.Option(
         False,
         "--sequential",
-        help="Apply files sequentially, solves parser limits (default: off)",
+        help="Apply files sequentially, solves 650+ row parser limits",
     ),
     continue_on_error: bool = typer.Option(
         False,
         "--continue-on-error",
-        help="Continue if file fails, for --sequential only (default: off)",
+        help="Continue if file fails (--sequential only, useful for CI/CD)",
     ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
-        help="Database URL, overrides environment config (default: from config)",
+        help="Database URL (overrides environment config)",
     ),
     copy_format: bool = typer.Option(
         False,
         "--copy-format",
-        help="Convert INSERT to COPY format for faster loading (default: off)",
+        help="Use COPY format (2-10x faster for large datasets)",
     ),
     copy_threshold: int = typer.Option(
         DEFAULT_COPY_THRESHOLD,
         "--copy-threshold",
-        help=f"Row threshold for auto COPY selection (default: {DEFAULT_COPY_THRESHOLD})",
+        help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
     ),
     benchmark: bool = typer.Option(
         False,
         "--benchmark",
-        help="Show VALUES vs COPY performance comparison (default: off)",
+        help="Show VALUES vs COPY performance comparison",
     ),
     format_type: str = typer.Option(
         "text",
@@ -443,46 +449,55 @@ def apply(
     report_output: Path = typer.Option(
         None,
         "--report",
-        help="Save structured output (JSON/CSV) to file (default: stdout)",
+        help="Save structured output (JSON/CSV) to file",
     ),
 ) -> None:
     """Load seed data into the database.
 
     PROCESS:
-      Concatenates seed files (default) or applies sequentially with savepoint
-      isolation. Sequential mode solves PostgreSQL parser limits for large files
-      (650+ rows). Supports COPY format for 10x faster loading.
+      Applies seed files with optional sequential execution and COPY format.
+      Sequential mode solves PostgreSQL's 650+ row parser limit. COPY format
+      provides 2-10x faster loading for large datasets.
 
-    EXAMPLES:
-      confiture seed apply --env local --sequential
-        ↳ Apply seed files sequentially to local database
+    COMMON USAGE:
 
-      confiture seed apply --sequential --copy-format
-        ↳ Use faster COPY format (auto-converts INSERT statements)
+      📌 Development (small seeds < 5K rows):
+        confiture seed apply --env local --sequential
 
-      confiture seed apply --sequential --continue-on-error --env production
-        ↳ Skip failed files, continue with remaining seeds
+      ⚡ Testing (large seeds > 50K rows):
+        confiture seed apply --sequential --copy-format --env test
 
-      confiture seed apply --sequential --benchmark
-        ↳ Show VALUES vs COPY performance comparison
+      🚀 CI/CD (maximum speed):
+        confiture seed apply --sequential --copy-format --continue-on-error
 
-    RELATED:
-      confiture seed validate - Check seed data quality
-      confiture seed convert  - Transform INSERT to COPY format
-      confiture build         - Build schema, optionally apply seeds
+    PERFORMANCE TIPS:
+      • Use --sequential if any file has 650+ rows
+      • Use --copy-format if total rows > 50,000
+      • Use --benchmark to see improvement
+
+    RELATED COMMANDS:
+      confiture seed validate   - Check seed data quality
+      confiture seed convert    - Transform INSERT to COPY format
+      confiture seed benchmark  - Compare VALUES vs COPY performance
+      confiture build           - Build schema, optionally apply seeds
+
+    DOCUMENTATION:
+      📖 COPY Format Guide: docs/guides/copy-format-loading.md
+      📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
+      📖 Examples: docs/guides/copy-format-examples.md
 
     OPTIONS:
-      CORE: --env, --sequential
-        Environment and execution mode (sequential solves 650+ row limits)
+      EXECUTION: --sequential, --continue-on-error
+        Mode and error handling (sequential for 650+ rows)
 
-      DATABASE: --database-url
-        Explicit database URL (overrides environment config)
+      DATABASE: --env, --database-url
+        Connection parameters (URL overrides environment)
 
       PERFORMANCE: --copy-format, --copy-threshold, --benchmark
-        Use faster COPY format, control when it's selected, show benchmarks
+        Format selection (2-10x faster for >50K rows)
 
-      ERROR-HANDLING: --continue-on-error
-        Skip failed files and continue (for --sequential only)
+      OUTPUT: --format, --report
+        Structured results (JSON/CSV for automation)
     """
     try:
         if not sequential:
@@ -577,57 +592,177 @@ def convert(
         "--output",
         help="Output file for COPY format (default: stdout)",
     ),
+    batch: bool = typer.Option(
+        False,
+        "--batch",
+        help="Process all .sql files in directory (requires --output)",
+    ),
 ) -> None:
-    """Transform INSERT statements to COPY format (10x faster).
+    """Transform INSERT statements to COPY format (2-10x faster).
 
     PROCESS:
-      Reads SQL files with INSERT statements and converts to PostgreSQL COPY
-      format for dramatically faster bulk loading (typically 10x speed improvement).
+      Converts PostgreSQL INSERT statements to native COPY format for
+      dramatically faster bulk loading. Gracefully skips unconvertible
+      patterns (functions, subqueries) with clear error messages.
+
+    COMMON USAGE:
+
+      📌 Single file conversion:
+        confiture seed convert --input seeds.sql --output seeds_copy.sql
+
+      📁 Batch directory conversion:
+        confiture seed convert --input db/seeds --batch --output db/seeds_copy
+
+      🔍 Preview conversion (stdout):
+        confiture seed convert --input seeds.sql | head -20
+
+    HOW IT WORKS:
+      ✓ Parses INSERT statements using SQLglot AST parser
+      ✓ Validates data compatibility with COPY format
+      ✓ Converts to tab-delimited COPY format with proper escaping
+      ✓ Gracefully skips unconvertible patterns
+
+    SPEED IMPROVEMENT:
+      • 2x faster: Small datasets (5K rows)
+      • 5x faster: Medium datasets (50K rows)
+      • 10x faster: Large datasets (500K+ rows)
+
+    RELATED COMMANDS:
+      confiture seed apply     - Load seeds with COPY format
+      confiture seed validate  - Check seed data quality
+      confiture seed benchmark - Show performance comparison
+
+    DOCUMENTATION:
+      📖 COPY Format Guide: docs/guides/copy-format-loading.md
+      📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
+      📖 Examples: docs/guides/copy-format-examples.md
 
     EXAMPLES:
-      confiture seed convert --input seeds.sql
-        ↳ Convert and display COPY format to stdout
 
-      confiture seed convert --input seeds.sql --output seeds_copy.sql
-        ↳ Convert and save to file
+      Convert single file to COPY format:
+        $ confiture seed convert --input db/seeds/users.sql --output db/seeds/users_copy.sql
+        ✓ Converted to COPY format
+          Input: db/seeds/users.sql
+          Output: db/seeds/users_copy.sql
+          Rows: 1,234
 
-      confiture seed convert --input db/seeds/users.sql --output db/seeds/users_copy.sql
-        ↳ Convert multiple files in bulk
+      Batch convert directory:
+        $ confiture seed convert --input db/seeds --batch --output db/seeds_copy
+        Processing 4 files...
+        users.sql       ✓ Converted     1,234 rows
+        posts.sql       ✓ Converted     5,678 rows
+        complex.sql     ⚠ Skipped       Has CTEs
+        Summary: 2/3 files converted (67%)
 
-    RELATED:
-      confiture seed apply     - Load seeds with optional COPY format
-      confiture seed validate  - Check seed data quality
-      confiture seed benchmark - Compare VALUES vs COPY performance
+    OPTIONS:
+      INPUT: --input (required)
+        Single file or directory path
+
+      OUTPUT: --output
+        Destination file/directory (required for --batch)
+
+      MODE: --batch
+        Process all .sql files in input directory
     """
     try:
-        if not input_file.exists():
-            console.print(f"[red]✗ Input file not found: {input_file}[/red]")
-            raise typer.Exit(2)
-
         from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
-        # Read input file
-        sql_content = input_file.read_text()
+        if not input_file.exists():
+            console.print(f"[red]✗ Input file/directory not found: {input_file}[/red]")
+            raise typer.Exit(2)
 
-        # Convert to COPY format
         converter = InsertToCopyConverter()
-        copy_format = converter.convert(sql_content)
+
+        # Batch mode: process all files in directory
+        if batch:
+            if not input_file.is_dir():
+                console.print("[red]✗ For --batch mode, input must be a directory[/red]")
+                raise typer.Exit(2)
+
+            if not output_file:
+                console.print("[red]✗ For --batch mode, --output is required[/red]")
+                raise typer.Exit(2)
+
+            # Create output directory if it doesn't exist
+            output_file.mkdir(parents=True, exist_ok=True)
+
+            # Find all .sql files
+            sql_files = sorted(input_file.glob("*.sql"))
+            if not sql_files:
+                console.print(f"[yellow]⚠ No .sql files found in {input_file}[/yellow]")
+                raise typer.Exit(0)
+
+            console.print(f"[bold]Processing {len(sql_files)} files...[/bold]\n")
+
+            # Process each file
+            files_content = {str(f.relative_to(input_file)): f.read_text() for f in sql_files}
+            report = converter.convert_batch(files_content)
+
+            # Display results
+            table = Table(title="Conversion Results")
+            table.add_column("File", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Rows/Reason", style="yellow")
+
+            for result in report.results:
+                if result.success:
+                    table.add_row(
+                        result.file_path,
+                        "[green]✓ Converted[/green]",
+                        str(result.rows_converted),
+                    )
+                    # Write converted file
+                    out_path = output_file / result.file_path
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    out_path.write_text(result.copy_format)
+                else:
+                    table.add_row(
+                        result.file_path,
+                        "[yellow]⚠ Skipped[/yellow]",
+                        result.reason,
+                    )
+
+            console.print(table)
+            console.print("\n[bold]Summary:[/bold]")
+            console.print(f"  Total: {report.total_files} files")
+            console.print(f"  [green]Converted: {report.successful}[/green]")
+            console.print(f"  [yellow]Skipped: {report.failed}[/yellow]")
+            console.print(f"  Success rate: {report.success_rate:.1f}%")
+
+            if report.successful > 0:
+                console.print(f"\n[green]✓ Results saved to: {output_file}[/green]")
+
+            raise typer.Exit(0)
+
+        # Single file mode
+        sql_content = input_file.read_text()
+        result = converter.try_convert(sql_content, file_path=str(input_file))
+
+        # Handle conversion result
+        if not result.success:
+            console.print(f"[yellow]⚠ Cannot convert {input_file}[/yellow]")
+            console.print(f"  Reason: {result.reason}")
+            console.print("\n[dim]Tip: This INSERT statement uses SQL features that")
+            console.print("cannot be converted to COPY format. You can still use")
+            console.print("the original INSERT format for this file.[/dim]")
+            raise typer.Exit(1)
 
         # Output result
         if output_file:
-            output_file.write_text(copy_format)
+            output_file.write_text(result.copy_format)
             console.print("[green]✓ Converted to COPY format[/green]")
             console.print(f"  Input: {input_file}")
             console.print(f"  Output: {output_file}")
+            console.print(f"  Rows: {result.rows_converted}")
         else:
-            console.print(copy_format)
+            console.print(result.copy_format)
 
         raise typer.Exit(0)
 
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Conversion failed: {e}[/red]")
+        print_error_to_console(f"Conversion failed: {e}")
         raise typer.Exit(2) from e
 
 
@@ -646,20 +781,54 @@ def benchmark(
       Shows estimated speedup, time savings, and per-table metrics to help
       optimize seed data loading strategy.
 
-    EXAMPLES:
-      confiture seed benchmark
-        ↳ Benchmark default seed directory, show performance comparison
+    WHEN TO USE:
+      ✓ Deciding between VALUES and COPY format
+      ✓ Estimating time savings from conversion
+      ✓ Analyzing per-table performance
+      ✓ Optimizing CI/CD pipeline speed
 
-      confiture seed benchmark --seeds-dir db/seeds/test
-        ↳ Benchmark specific seed directory
+    EXAMPLE OUTPUT:
+      COPY Format Performance Benchmark
+      ════════════════════════════════════
+      Total rows: 120,000
 
-      confiture seed apply --benchmark --sequential
-        ↳ See benchmark while applying seeds with --sequential flag
+      VALUES format:  12.5s
+      COPY format:    1.3s
+      Speedup:        9.6x faster
+      Time saved:     11.2s
 
-    RELATED:
-      confiture seed apply   - Load seeds with --copy-format flag
+      Per-Table Metrics:
+        users (2,000 rows):      0.08s → 0.01s (8.0x)
+        products (15,000 rows):  0.45s → 0.04s (11.2x)
+        orders (103,000 rows):   11.97s → 1.26s (9.5x)
+
+    NEXT STEPS:
+      If speedup >= 5x:
+        confiture seed apply --sequential --copy-format
+
+      If speedup < 5x:
+        confiture seed apply --sequential
+        (VALUES format is fast enough)
+
+    RELATED COMMANDS:
+      confiture seed apply   - Load seeds with --copy-format
       confiture seed convert - Transform INSERT to COPY format
-      confiture seed validate - Check seed data quality
+      confiture build        - Build schema with optional seed apply
+
+    DOCUMENTATION:
+      📖 COPY Format Guide: docs/guides/copy-format-loading.md
+      📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
+      📖 Examples: docs/guides/copy-format-examples.md
+
+    USAGE:
+      Basic benchmark:
+        $ confiture seed benchmark
+
+      Specific directory:
+        $ confiture seed benchmark --seeds-dir db/seeds/test
+
+      With apply (simultaneous benchmark):
+        $ confiture seed apply --sequential --benchmark
     """
     try:
         import asyncio

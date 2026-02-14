@@ -75,6 +75,12 @@ class Level1SeedValidator:
         # Check UNION type consistency
         violations.extend(self._validate_union_type_consistency(sql, file_path))
 
+        # Check for inline comments after UNION ALL (Issue #40)
+        violations.extend(self._validate_union_inline_comments(sql, file_path))
+
+        # Check for uncast NULL values in UNION (Issue #40)
+        violations.extend(self._validate_union_uncast_nulls(sql, file_path))
+
         return violations
 
     def _validate_schema_target(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
@@ -204,7 +210,7 @@ class Level1SeedValidator:
         # Pattern: SELECT ... UNION [ALL] SELECT ...
         union_pattern = r"(?:INSERT\s+INTO\s+\w+\.\w+\s*\([^)]*\)\s+)?(SELECT\s+[^;]+?\s+UNION\s+(?:ALL\s+)?SELECT\s+[^;]+)"
         for match in re.finditer(union_pattern, sql, re.IGNORECASE | re.DOTALL):
-            full_query = match.group(1) if match.lastindex >= 1 else match.group(0)
+            full_query = match.group(1)
             line_number = sql[: match.start()].count("\n") + 1
 
             # Extract branches: split by UNION or UNION ALL
@@ -347,3 +353,137 @@ class Level1SeedValidator:
                 return f"NULL type mismatch: 'NULL::{type1}' vs 'NULL::{type2}'"
 
         return None  # No mismatch detected
+
+    def _validate_union_inline_comments(
+        self,
+        sql: str,
+        file_path: str,
+    ) -> list[PrepSeedViolation]:
+        """Check for inline comments after UNION that break concatenation.
+
+        Detects pattern: UNION [ALL] -- comment (inline comment on same line as UNION)
+
+        Args:
+            sql: SQL content of seed file
+            file_path: Path to seed file for error reporting
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        # Pre-filter: Skip if no UNION keyword (fast path)
+        if not re.search(r"\bUNION\s+(?:ALL\s+)?", sql, re.IGNORECASE):
+            return violations
+
+        # Pattern: UNION [ALL] followed by inline comment
+        # Match both "UNION --" and "UNION ALL --"
+        inline_comment_pattern = r"\bUNION(?:\s+ALL)?\s+--"
+
+        # Skip over strings to avoid matching inside string literals
+        in_string = False
+        quote_char = None
+        i = 0
+
+        while i < len(sql):
+            # Track string boundaries
+            if sql[i] in ("'", '"') and (i == 0 or sql[i - 1] != "\\"):
+                if not in_string:
+                    in_string = True
+                    quote_char = sql[i]
+                elif sql[i] == quote_char:
+                    in_string = False
+                    quote_char = None
+                i += 1
+                continue
+
+            # Check for pattern outside of strings
+            if not in_string:
+                match = re.match(inline_comment_pattern, sql[i:], re.IGNORECASE)
+                if match:
+                    line_number = sql[:i].count("\n") + 1
+                    violations.append(
+                        PrepSeedViolation(
+                            pattern=PrepSeedPattern.UNION_INLINE_COMMENT,
+                            severity=ViolationSeverity.WARNING,
+                            message="Inline comment after UNION breaks SQL concatenation",
+                            file_path=file_path,
+                            line_number=line_number,
+                            fix_available=True,
+                            suggestion="Move comment to line before UNION or remove it",
+                        )
+                    )
+                    i += len(match.group(0))
+                    continue
+
+            i += 1
+
+        return violations
+
+    def _validate_union_uncast_nulls(
+        self,
+        sql: str,
+        file_path: str,
+    ) -> list[PrepSeedViolation]:
+        """Check for bare NULL values in UNION without type cast.
+
+        Detects bare NULL (not NULL::type) in UNION branches. PostgreSQL requires
+        all UNION branches to have compatible types; bare NULL causes type inference
+        errors.
+
+        Args:
+            sql: SQL content of seed file
+            file_path: Path to seed file for error reporting
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+
+        # Pre-filter: Skip if no UNION keyword
+        if not re.search(r"\bUNION\s+(?:ALL\s+)?", sql, re.IGNORECASE):
+            return violations
+
+        # Find all UNION query blocks (with or without INSERT INTO)
+        union_pattern = r"(SELECT\s+[^;]+?\s+UNION\s+(?:ALL\s+)?SELECT\s+[^;]+)"
+        for match in re.finditer(union_pattern, sql, re.IGNORECASE | re.DOTALL):
+            full_query = match.group(1)
+            line_number = sql[: match.start()].count("\n") + 1
+
+            # Extract branches: split by UNION or UNION ALL
+            branches = re.split(
+                r"\s+UNION\s+(?:ALL\s+)?",
+                full_query,
+                flags=re.IGNORECASE,
+            )
+
+            if len(branches) < 2:
+                continue
+
+            # Check each branch for bare NULLs
+            for branch_num, branch in enumerate(branches, start=1):
+                branch_columns = self._extract_select_columns_from_text(branch)
+
+                for col_idx, col_expr in enumerate(branch_columns, start=1):
+                    # Detect bare NULL (not NULL::type)
+                    col_clean = col_expr.strip()
+                    # Check for NULL at the start (may have alias after it)
+                    # Match: NULL or NULL AS alias or NULL as alias
+                    if re.match(r"^NULL(?:\s+AS\s+\w+)?$", col_clean, re.IGNORECASE):
+                        violations.append(
+                            PrepSeedViolation(
+                                pattern=PrepSeedPattern.UNION_UNCAST_NULL,
+                                severity=ViolationSeverity.ERROR,
+                                message=(
+                                    f"UNION branch {branch_num} column {col_idx}: "
+                                    "NULL without type cast"
+                                ),
+                                file_path=file_path,
+                                line_number=line_number,
+                                impact="PostgreSQL cannot infer type for bare NULL in UNION",
+                                fix_available=True,
+                                suggestion="Change 'NULL' to 'NULL::type' (e.g., NULL::timestamp)",
+                            )
+                        )
+
+        return violations

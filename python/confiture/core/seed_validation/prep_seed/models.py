@@ -52,6 +52,12 @@ class PrepSeedPattern(Enum):
     MISSING_SELF_REFERENCE_HANDLING = "MISSING_SELF_REFERENCE_HANDLING"
     """Self-referencing FK not handled with two-pass resolution."""
 
+    UNION_INLINE_COMMENT = "UNION_INLINE_COMMENT"
+    """Inline comment after UNION ALL breaks SQL concatenation."""
+
+    UNION_UNCAST_NULL = "UNION_UNCAST_NULL"
+    """Bare NULL without type cast in UNION query."""
+
     @property
     def description(self) -> str:
         """Get human-readable description of this pattern."""
@@ -83,6 +89,12 @@ class PrepSeedPattern(Enum):
             PrepSeedPattern.UNIQUE_CONSTRAINT_VIOLATION: ("Duplicate identifiers after resolution"),
             PrepSeedPattern.MISSING_SELF_REFERENCE_HANDLING: (
                 "Self-referencing FK not handled with two-pass resolution"
+            ),
+            PrepSeedPattern.UNION_INLINE_COMMENT: (
+                "Inline comment after UNION ALL breaks SQL concatenation in seed files"
+            ),
+            PrepSeedPattern.UNION_UNCAST_NULL: (
+                "Bare NULL value in UNION query without type cast (e.g., NULL::timestamp)"
             ),
         }
         return descriptions.get(self, "Prep-seed pattern violation")
