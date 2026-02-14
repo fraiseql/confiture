@@ -1,6 +1,5 @@
 """Tests for UNION uncast NULL validation.
 
-Phase 12, Cycle 3: Detect bare NULL values in UNION queries.
 Issue #40
 """
 

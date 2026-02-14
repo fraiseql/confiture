@@ -1,6 +1,5 @@
 """Tests for UNION inline comment validation.
 
-Phase 12, Cycle 2: Detect inline comments after UNION ALL keywords.
 Issue #40
 """
 

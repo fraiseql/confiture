@@ -155,7 +155,6 @@ class InsertToCopyConverter:
             results=results,
         )
 
-
     def convert(self, insert_sql: str) -> str:
         """Convert INSERT statement to COPY format.
 
