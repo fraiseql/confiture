@@ -577,12 +577,18 @@ def convert(
         "--output",
         help="Output file for COPY format (default: stdout)",
     ),
+    batch: bool = typer.Option(
+        False,
+        "--batch",
+        help="Process all .sql files in directory (for input_file)",
+    ),
 ) -> None:
     """Transform INSERT statements to COPY format (10x faster).
 
     PROCESS:
       Reads SQL files with INSERT statements and converts to PostgreSQL COPY
       format for dramatically faster bulk loading (typically 10x speed improvement).
+      Gracefully handles unconvertible patterns with descriptive error messages.
 
     EXAMPLES:
       confiture seed convert --input seeds.sql
@@ -594,40 +600,113 @@ def convert(
       confiture seed convert --input db/seeds/users.sql --output db/seeds/users_copy.sql
         ↳ Convert multiple files in bulk
 
+      confiture seed convert --input db/seeds --batch --output db/seeds_copy
+        ↳ Batch convert all .sql files in directory (requires --output)
+
     RELATED:
       confiture seed apply     - Load seeds with optional COPY format
       confiture seed validate  - Check seed data quality
       confiture seed benchmark - Compare VALUES vs COPY performance
     """
     try:
-        if not input_file.exists():
-            console.print(f"[red]✗ Input file not found: {input_file}[/red]")
-            raise typer.Exit(2)
-
         from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
-        # Read input file
-        sql_content = input_file.read_text()
+        if not input_file.exists():
+            console.print(f"[red]✗ Input file/directory not found: {input_file}[/red]")
+            raise typer.Exit(2)
 
-        # Convert to COPY format
         converter = InsertToCopyConverter()
-        copy_format = converter.convert(sql_content)
+
+        # Batch mode: process all files in directory
+        if batch:
+            if not input_file.is_dir():
+                console.print("[red]✗ For --batch mode, input must be a directory[/red]")
+                raise typer.Exit(2)
+
+            if not output_file:
+                console.print("[red]✗ For --batch mode, --output is required[/red]")
+                raise typer.Exit(2)
+
+            # Create output directory if it doesn't exist
+            output_file.mkdir(parents=True, exist_ok=True)
+
+            # Find all .sql files
+            sql_files = sorted(input_file.glob("*.sql"))
+            if not sql_files:
+                console.print(f"[yellow]⚠ No .sql files found in {input_file}[/yellow]")
+                raise typer.Exit(0)
+
+            console.print(f"[bold]Processing {len(sql_files)} files...[/bold]\n")
+
+            # Process each file
+            files_content = {str(f.relative_to(input_file)): f.read_text() for f in sql_files}
+            report = converter.convert_batch(files_content)
+
+            # Display results
+            table = Table(title="Conversion Results")
+            table.add_column("File", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Rows/Reason", style="yellow")
+
+            for result in report.results:
+                if result.success:
+                    table.add_row(
+                        result.file_path,
+                        "[green]✓ Converted[/green]",
+                        str(result.rows_converted),
+                    )
+                    # Write converted file
+                    out_path = output_file / result.file_path
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    out_path.write_text(result.copy_format)
+                else:
+                    table.add_row(
+                        result.file_path,
+                        "[yellow]⚠ Skipped[/yellow]",
+                        result.reason,
+                    )
+
+            console.print(table)
+            console.print("\n[bold]Summary:[/bold]")
+            console.print(f"  Total: {report.total_files} files")
+            console.print(f"  [green]Converted: {report.successful}[/green]")
+            console.print(f"  [yellow]Skipped: {report.failed}[/yellow]")
+            console.print(f"  Success rate: {report.success_rate:.1f}%")
+
+            if report.successful > 0:
+                console.print(f"\n[green]✓ Results saved to: {output_file}[/green]")
+
+            raise typer.Exit(0)
+
+        # Single file mode
+        sql_content = input_file.read_text()
+        result = converter.try_convert(sql_content, file_path=str(input_file))
+
+        # Handle conversion result
+        if not result.success:
+            console.print(f"[yellow]⚠ Cannot convert {input_file}[/yellow]")
+            console.print(f"  Reason: {result.reason}")
+            console.print("\n[dim]Tip: This INSERT statement uses SQL features that")
+            console.print("cannot be converted to COPY format. You can still use")
+            console.print("the original INSERT format for this file.[/dim]")
+            raise typer.Exit(1)
 
         # Output result
         if output_file:
-            output_file.write_text(copy_format)
+            output_file.write_text(result.copy_format)
             console.print("[green]✓ Converted to COPY format[/green]")
             console.print(f"  Input: {input_file}")
             console.print(f"  Output: {output_file}")
+            console.print(f"  Rows: {result.rows_converted}")
         else:
-            console.print(copy_format)
+            console.print(result.copy_format)
 
         raise typer.Exit(0)
 
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Conversion failed: {e}[/red]")
+        print_error_to_console(f"Conversion failed: {e}")
         raise typer.Exit(2) from e
 
 
