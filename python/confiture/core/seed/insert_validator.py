@@ -204,10 +204,10 @@ class InsertValidator:
             return expr.this
 
         if isinstance(expr, exp.Boolean):
-            return str(expr).lower()
+            return str(expr.this).lower()
 
-        # For anything else, return string representation
-        return str(expr)
+        # For anything else, return SQL without comments
+        return expr.sql(comments=False)
 
     def extract_table_name(self, insert_sql: str) -> str | None:
         """Extract table name from INSERT statement.
