@@ -141,6 +141,7 @@ app = typer.Typer(
 # Create Rich console for pretty output
 console = Console()
 
+
 def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
