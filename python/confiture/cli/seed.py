@@ -742,9 +742,11 @@ def convert(
         if not result.success:
             console.print(f"[yellow]⚠ Cannot convert {input_file}[/yellow]")
             console.print(f"  Reason: {result.reason}")
-            console.print("\n[dim]Tip: This INSERT statement uses SQL features that")
-            console.print("cannot be converted to COPY format. You can still use")
-            console.print("the original INSERT format for this file.[/dim]")
+            console.print(
+                "\n[dim]Tip: This INSERT statement uses SQL features that\n"
+                "cannot be converted to COPY format. You can still use\n"
+                "the original INSERT format for this file.[/dim]"
+            )
             raise typer.Exit(1)
 
         # Output result
@@ -755,14 +757,18 @@ def convert(
             console.print(f"  Output: {output_file}")
             console.print(f"  Rows: {result.rows_converted}")
         else:
-            console.print(result.copy_format)
+            import sys
+
+            sys.stdout.write(result.copy_format)
 
         raise typer.Exit(0)
 
     except typer.Exit:
         raise
     except Exception as e:
-        print_error_to_console(f"Conversion failed: {e}")
+        from rich.text import Text
+
+        console.print(Text(f"Conversion failed: {e!s}", style="red"))
         raise typer.Exit(2) from e
 
 

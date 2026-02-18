@@ -141,13 +141,11 @@ app = typer.Typer(
 # Create Rich console for pretty output
 console = Console()
 
-# Version
-__version__ = "0.4.2"
-
-
 def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
+        from confiture import __version__
+
         console.print(f"confiture version {__version__}")
         raise typer.Exit()
 

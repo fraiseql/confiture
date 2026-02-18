@@ -71,7 +71,7 @@ class CopyFormatter:
         # Add COPY terminator
         lines.append("\\.")
 
-        return "\n".join(lines)
+        return "\n".join(lines) + "\n"
 
     @staticmethod
     def _format_value(value: Any) -> str:

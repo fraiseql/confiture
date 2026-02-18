@@ -60,7 +60,7 @@ class MigrationTracer:
             resource = Resource.create(
                 {
                     "service.name": self.config.service_name,
-                    "service.version": "0.5.0",
+                    "service.version": "0.5.1",
                 }
             )
 
