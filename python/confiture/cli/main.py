@@ -18,8 +18,10 @@ from confiture.cli.generate import generate_app
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.seed import seed_app
 from confiture.core.builder import SchemaBuilder
+from confiture.core.connection import create_connection
 from confiture.core.differ import SchemaDiffer
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
+from confiture.core.introspector import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import (
     LintConfig as LinterConfig,
@@ -43,6 +45,7 @@ COMMON_COMMANDS = [
     "build",
     "migrate",
     "lint",
+    "introspect",
     "seed",
     "branch",
     "generate",
@@ -788,6 +791,111 @@ def lint(
     except Exception as e:
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e
+
+
+@app.command()
+def introspect(
+    db: str = typer.Option(
+        ...,
+        "--db",
+        help="PostgreSQL connection URL (e.g. postgresql://user:pass@host/dbname)",
+    ),
+    schema: str = typer.Option(
+        "public",
+        "--schema",
+        help="Schema to introspect (default: public)",
+    ),
+    format_type: str = typer.Option(
+        "json",
+        "--format",
+        "-f",
+        help="Output format: json, yaml (default: json)",
+    ),
+    all_tables: bool = typer.Option(
+        False,
+        "--all-tables",
+        help="Include all tables, not just tb_* (default: off)",
+    ),
+    hints: bool = typer.Option(
+        True,
+        "--hints/--no-hints",
+        help="Include naming-convention hints block (default: on)",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Write output to file instead of stdout",
+    ),
+) -> None:
+    """Introspect a PostgreSQL database and export its schema as structured JSON.
+
+    Connects to an existing database and exports tables, columns, PostgreSQL
+    types, primary keys, and the full FK relationship graph.  Designed for
+    brownfield adoption and agentic workflows where an agent needs accurate,
+    structured facts about a schema it cannot see.
+
+    By default only tables whose names start with ``tb_`` are included.
+    Use ``--all-tables`` to include every base table in the schema.
+
+    The ``hints`` block surfaces surrogate-PK / natural-ID naming patterns as
+    non-prescriptive signals.  Use ``--no-hints`` to omit it.
+
+    Examples:
+
+      confiture introspect --db $DATABASE_URL
+
+      confiture introspect --db $DATABASE_URL --schema myschema
+
+      confiture introspect --db $DATABASE_URL --format yaml --output schema.yaml
+
+      confiture introspect --db $DATABASE_URL --all-tables --no-hints
+    """
+    # Status/error messages go to stderr so stdout stays pipe-friendly.
+    console = Console(stderr=True)
+
+    if format_type not in ("json", "yaml"):
+        console.print(f"[red]❌ Invalid format: {format_type!r}. Use 'json' or 'yaml'[/red]")
+        raise typer.Exit(1)
+
+    try:
+        conn = create_connection(db)
+    except Exception as e:
+        console.print(f"[red]❌ Connection failed: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    with conn:
+        introspector = SchemaIntrospector(conn)
+        result = introspector.introspect(
+            schema=schema,
+            all_tables=all_tables,
+            include_hints=hints,
+        )
+
+    data = result.to_dict()
+
+    if format_type == "yaml":
+        _output_yaml(data, output, console)
+    else:
+        _output_json(data, output, console)
+
+
+def _output_yaml(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
+    """Output YAML data to file or console.
+
+    Args:
+        data: Data to serialise as YAML.
+        output_file: Optional file to write to; if None, writes to stdout.
+        console: Console used for status messages (stderr).
+    """
+    import yaml
+
+    yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    if output_file:
+        output_file.write_text(yaml_str)
+        console.print(f"[green]✅ Output written to {output_file}[/green]")
+    else:
+        print(yaml_str, end="")
 
 
 # Create migrate subcommand group
