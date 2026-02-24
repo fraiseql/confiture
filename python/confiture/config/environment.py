@@ -117,10 +117,12 @@ class MigrationConfig(BaseModel):
     Attributes:
         strict_mode: Whether to fail on warnings/notices (default: False)
         locking: Distributed locking configuration
+        view_helpers: View helper installation mode ("auto", "manual", "off")
     """
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
     locking: LockingConfig = Field(default_factory=LockingConfig)
+    view_helpers: str = "manual"  # "auto" | "manual" | "off"
 
 
 class PgGitConfig(BaseModel):

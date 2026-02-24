@@ -50,6 +50,7 @@ COMMON_COMMANDS = [
     "branch",
     "generate",
     "coordinate",
+    "install-helpers",
     "migrate-up",
     "migrate-down",
     "migrate-status",
@@ -915,6 +916,82 @@ app.add_typer(coordinate_app, name="coordinate")
 app.add_typer(seed_app, name="seed")
 
 
+@app.command("install-helpers")
+def install_helpers(
+    config: Path = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Configuration file (YAML)",
+    ),
+    env: str = typer.Option(
+        "local",
+        "--env",
+        "-e",
+        help="Environment name (default: local)",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show SQL without executing",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Reinstall even if already installed",
+    ),
+) -> None:
+    """Install confiture SQL helper functions in the target database.
+
+    Creates the `confiture` schema with `save_and_drop_dependent_views()`
+    and `recreate_saved_views()` PL/pgSQL functions for use in migrations
+    that need to ALTER COLUMN TYPE on tables with dependent views.
+    """
+    try:
+        from confiture.core.connection import load_config
+        from confiture.core.view_manager import ViewManager
+
+        if config:
+            cfg = load_config(config)
+        else:
+            from confiture.config.environment import Environment
+
+            environment = Environment.load(env)
+            cfg = {"database": {"url": environment.database_url}}
+
+        conn = create_connection(cfg)
+
+        if dry_run:
+            from importlib import resources
+
+            sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
+            console.print("[bold]SQL that would be executed:[/bold]\n")
+            console.print(sql)
+            conn.close()
+            return
+
+        vm = ViewManager(conn)
+
+        if not force and vm.helpers_installed():
+            console.print("[green]✓[/green] View helpers already installed — nothing to do")
+            console.print("  Use [bold]--force[/bold] to reinstall")
+            conn.close()
+            return
+
+        vm.install_helpers()
+        conn.close()
+
+        console.print("[green]✓[/green] Installed confiture view helper functions")
+        console.print("  Schema: [bold]confiture[/bold]")
+        console.print("  Functions:")
+        console.print("    • confiture.save_and_drop_dependent_views(schemas TEXT[])")
+        console.print("    • confiture.recreate_saved_views()")
+
+    except Exception as e:
+        handle_cli_error(e, console)
+        raise typer.Exit(code=1) from None
+
+
 @migrate_app.command("status")
 def migrate_status(
     migrations_dir: Path = typer.Option(
@@ -1463,6 +1540,26 @@ def migrate_up(
         # Create migrator
         migrator = Migrator(connection=conn)
         migrator.initialize()
+
+        # Auto-install view helpers if configured
+        try:
+            if config.parent.name == "environments" and config.parent.parent.name == "db":
+                from confiture.config.environment import Environment as _EnvCfg
+                from confiture.core.view_manager import ViewManager as _VM
+
+                _env_name = config.stem
+                _project_dir = config.parent.parent.parent
+                _env_cfg = _EnvCfg.load(_env_name, project_dir=_project_dir)
+                if _env_cfg.migration.view_helpers == "auto":
+                    _vm = _VM(conn)
+                    if not _vm.helpers_installed():
+                        _vm.install_helpers()
+                        console.print(
+                            "[cyan]🔧 Auto-installed view helper functions "
+                            "(migration.view_helpers: auto)[/cyan]\n"
+                        )
+        except Exception:
+            pass  # Non-critical — don't block migration on helper install failure
 
         # Verify checksums before running migrations (unless force mode)
         if verify_checksums and not force:
