@@ -565,9 +565,7 @@ class Migrator:
                     found = True
                     break
             if not found:
-                raise MigrationError(
-                    f"Migration version '{through}' not found on disk"
-                )
+                raise MigrationError(f"Migration version '{through}' not found on disk")
         else:
             migrations_to_mark = list(all_migrations)
 

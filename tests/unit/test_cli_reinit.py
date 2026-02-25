@@ -103,15 +103,23 @@ class TestMigrateReinitValidation:
         assert "Duplicate migration versions" in result.output
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 class TestMigrateReinitHelp:
     """Test CLI help output."""
 
     def test_reinit_help(self):
         """Should show help text."""
         result = runner.invoke(app, ["migrate", "reinit", "--help"])
+        output = _strip_ansi(result.output)
         assert result.exit_code == 0
-        assert "--through" in result.output
-        assert "--dry-run" in result.output
-        assert "--yes" in result.output
-        assert "--config" in result.output
-        assert "--migrations-dir" in result.output
+        assert "--through" in output
+        assert "--dry-run" in output
+        assert "--yes" in output
+        assert "--config" in output
+        assert "--migrations-dir" in output

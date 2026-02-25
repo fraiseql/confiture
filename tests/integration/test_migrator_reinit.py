@@ -346,10 +346,14 @@ class TestMigrateReinitCLI:
         result = runner.invoke(
             app,
             [
-                "migrate", "reinit",
-                "--through", "002",
-                "--config", str(config_file),
-                "--migrations-dir", str(migrations_dir),
+                "migrate",
+                "reinit",
+                "--through",
+                "002",
+                "--config",
+                str(config_file),
+                "--migrations-dir",
+                str(migrations_dir),
                 "--yes",
             ],
         )
@@ -373,9 +377,12 @@ class TestMigrateReinitCLI:
         result = runner.invoke(
             app,
             [
-                "migrate", "reinit",
-                "--config", str(config_file),
-                "--migrations-dir", str(migrations_dir),
+                "migrate",
+                "reinit",
+                "--config",
+                str(config_file),
+                "--migrations-dir",
+                str(migrations_dir),
                 "--yes",
             ],
         )
@@ -396,10 +403,14 @@ class TestMigrateReinitCLI:
         result = runner.invoke(
             app,
             [
-                "migrate", "reinit",
-                "--through", "001",
-                "--config", str(config_file),
-                "--migrations-dir", str(migrations_dir),
+                "migrate",
+                "reinit",
+                "--through",
+                "001",
+                "--config",
+                str(config_file),
+                "--migrations-dir",
+                str(migrations_dir),
                 "--dry-run",
             ],
         )
@@ -424,10 +435,14 @@ class TestMigrateReinitCLI:
         result = runner.invoke(
             app,
             [
-                "migrate", "reinit",
-                "--through", "999",
-                "--config", str(config_file),
-                "--migrations-dir", str(migrations_dir),
+                "migrate",
+                "reinit",
+                "--through",
+                "999",
+                "--config",
+                str(config_file),
+                "--migrations-dir",
+                str(migrations_dir),
                 "--yes",
             ],
         )
@@ -446,10 +461,14 @@ class TestMigrateReinitCLI:
         result = runner.invoke(
             app,
             [
-                "migrate", "reinit",
-                "--through", "001",
-                "--config", str(config_file),
-                "--migrations-dir", str(migrations_dir),
+                "migrate",
+                "reinit",
+                "--through",
+                "001",
+                "--config",
+                str(config_file),
+                "--migrations-dir",
+                str(migrations_dir),
             ],
             input="n\n",
         )

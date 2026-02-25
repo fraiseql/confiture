@@ -2515,7 +2515,9 @@ def migrate_reinit(
 
         # Show what will happen
         target_desc = f"through {through}" if through else "all files on disk"
-        console.print(f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n")
+        console.print(
+            f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
+        )
 
         console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
         console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
