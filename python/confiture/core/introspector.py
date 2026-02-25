@@ -108,7 +108,7 @@ class SchemaIntrospector:
                     FROM pg_class c
                     JOIN pg_namespace n ON n.oid = c.relnamespace
                     WHERE n.nspname = %s AND c.relkind = 'r'
-                      AND c.relname LIKE 'tb\\_%'
+                      AND c.relname LIKE 'tb\\_%%'
                     ORDER BY c.relname
                     """,
                     (schema,),

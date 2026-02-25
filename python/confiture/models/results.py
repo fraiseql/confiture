@@ -109,6 +109,40 @@ class MigrateUpResult:
 
 
 @dataclass
+class MigrateReinitResult:
+    """Result of migrate reinit operation.
+
+    Tracks how many tracking entries were deleted, which migrations
+    were re-marked as applied, and any warnings or errors.
+    """
+
+    success: bool
+    deleted_count: int
+    migrations_marked: list[MigrationApplied]
+    total_execution_time_ms: int
+    dry_run: bool = False
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary with all fields suitable for JSON output.
+        """
+        return {
+            "success": self.success,
+            "deleted_count": self.deleted_count,
+            "migrations_marked": [m.to_dict() for m in self.migrations_marked],
+            "count": len(self.migrations_marked),
+            "total_execution_time_ms": self.total_execution_time_ms,
+            "dry_run": self.dry_run,
+            "warnings": self.warnings,
+            "error": self.error,
+        }
+
+
+@dataclass
 class MigrateDownResult:
     """Result of migrate down operation.
 

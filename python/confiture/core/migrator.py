@@ -1,9 +1,14 @@
 """Migration executor for applying and rolling back database migrations."""
 
+from __future__ import annotations
+
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from confiture.models.results import MigrateReinitResult
 
 import psycopg
 
@@ -470,9 +475,9 @@ class Migrator:
             logger.info(f"Migration {migration.version} already applied, skipping")
             return migration.version
 
-        # Generate slug with baseline marker
+        # Generate slug with reason marker
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = f"{migration.name}_{timestamp}_baseline"
+        slug = f"{migration.name}_{timestamp}_{reason}"
 
         # Compute checksum
         checksum = compute_checksum(migration_file)
@@ -494,6 +499,138 @@ class Migrator:
         )
 
         return migration.version
+
+    def _clear_tracking_table(self) -> int:
+        """Delete all entries from the tracking table.
+
+        Used internally by reinit() to reset migration state before
+        re-baselining. Uses DELETE (not TRUNCATE) for transaction safety.
+
+        Returns:
+            Number of rows deleted.
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute("DELETE FROM tb_confiture")
+            deleted = cursor.rowcount
+        return deleted
+
+    def reinit(
+        self,
+        through: str | None = None,
+        dry_run: bool = False,
+        migrations_dir: Path | None = None,
+    ) -> MigrateReinitResult:
+        """Reset tracking table and re-mark migrations as applied.
+
+        Clears all entries from tb_confiture, then re-marks migration files
+        on disk as applied. Used after consolidating migration files to
+        re-establish a clean tracking state.
+
+        Args:
+            through: Mark migrations up to and including this version.
+                If None, marks all migration files on disk.
+            dry_run: If True, perform the operation inside a transaction
+                that is rolled back, returning what would have happened.
+            migrations_dir: Directory containing migration files.
+                Defaults to the migrator's configured directory.
+
+        Returns:
+            MigrateReinitResult with details of the operation.
+
+        Raises:
+            MigrationError: If the through version is not found on disk.
+
+        Example:
+            >>> migrator.reinit(through="005")
+            MigrateReinitResult(success=True, deleted_count=5, ...)
+
+            >>> migrator.reinit()  # marks all files
+            MigrateReinitResult(success=True, deleted_count=3, ...)
+        """
+        from confiture.models.results import MigrateReinitResult, MigrationApplied
+
+        start_time = time.time()
+
+        # Discover migration files
+        all_migrations = self.find_migration_files(migrations_dir)
+
+        # Filter to target version if specified
+        if through is not None:
+            migrations_to_mark: list[Path] = []
+            found = False
+            for migration_file in all_migrations:
+                version = self._version_from_filename(migration_file.name)
+                migrations_to_mark.append(migration_file)
+                if version == through:
+                    found = True
+                    break
+            if not found:
+                raise MigrationError(
+                    f"Migration version '{through}' not found on disk"
+                )
+        else:
+            migrations_to_mark = list(all_migrations)
+
+        try:
+            # Clear tracking table
+            deleted_count = self._clear_tracking_table()
+
+            # Re-mark each migration using direct INSERT (avoid mark_applied's
+            # commit which would interfere with dry-run rollback)
+            from datetime import datetime
+
+            from confiture.core.checksum import compute_checksum
+            from confiture.core.connection import load_migration_class
+
+            marked: list[MigrationApplied] = []
+            for migration_file in migrations_to_mark:
+                migration_class = load_migration_class(migration_file)
+                migration = migration_class(connection=self.connection)
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                slug = f"{migration.name}_{timestamp}_reinit"
+                checksum = compute_checksum(migration_file)
+
+                with self.connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO tb_confiture
+                            (slug, version, name, execution_time_ms, checksum)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (slug, migration.version, migration.name, 0, checksum),
+                    )
+
+                name_parts = migration_file.stem.split("_", 1)
+                name = name_parts[1] if len(name_parts) > 1 else migration_file.stem
+                if name.endswith(".up"):
+                    name = name[:-3]
+                marked.append(
+                    MigrationApplied(
+                        version=migration.version,
+                        name=name,
+                        execution_time_ms=0,
+                    )
+                )
+
+            if dry_run:
+                self.connection.rollback()
+            else:
+                self.connection.commit()
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+
+            return MigrateReinitResult(
+                success=True,
+                deleted_count=deleted_count,
+                migrations_marked=marked,
+                total_execution_time_ms=elapsed_ms,
+                dry_run=dry_run,
+            )
+
+        except Exception:
+            self.connection.rollback()
+            raise
 
     def rollback(
         self,

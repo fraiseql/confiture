@@ -2383,6 +2383,197 @@ def migrate_baseline(
         raise typer.Exit(1) from e
 
 
+@migrate_app.command("reinit")
+def migrate_reinit(
+    through: str = typer.Option(
+        None,
+        "--through",
+        "-t",
+        help="Mark migrations as applied through this version (default: all files on disk)",
+    ),
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory (default: db/migrations)",
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file (default: db/environments/local.yaml)",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would happen without making changes (default: off)",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompt",
+    ),
+) -> None:
+    """Reset tracking table and re-baseline from migration files on disk.
+
+    PROCESS:
+      Deletes all entries from tb_confiture, then re-marks migration files
+      as applied. Used after consolidating migration files to establish a
+      clean tracking state that matches the files on disk.
+
+    EXAMPLES:
+      confiture migrate reinit --through 003
+        ↳ Clear tracking table and re-mark migrations 001-003
+
+      confiture migrate reinit
+        ↳ Clear tracking table and re-mark ALL migration files on disk
+
+      confiture migrate reinit --through 005 --dry-run
+        ↳ Preview what would happen without making changes
+
+      confiture migrate reinit -t 003 -y
+        ↳ Skip confirmation prompt
+
+    RELATED:
+      confiture migrate baseline  - Mark migrations as applied (without clearing)
+      confiture migrate up        - Apply migrations normally
+      confiture migrate status    - View migration history
+    """
+    from confiture.core.connection import create_connection, load_config
+    from confiture.core.migrator import Migrator, find_duplicate_migration_versions
+
+    try:
+        if not config.exists():
+            console.print(f"[red]❌ Config file not found: {config}[/red]")
+            console.print(
+                "[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]"
+            )
+            raise typer.Exit(1)
+
+        if not migrations_dir.exists():
+            console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+            raise typer.Exit(1)
+
+        # Check for duplicate migration versions (hard block, no DB needed)
+        duplicates = find_duplicate_migration_versions(migrations_dir)
+        if duplicates:
+            console.print(
+                "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
+            )
+            console.print("[red]Multiple migration files share the same version number:[/red]\n")
+            for version, files in sorted(duplicates.items()):
+                console.print(f"  Version {version}:")
+                for f in files:
+                    console.print(f"    • {f.name}")
+            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+            console.print(
+                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
+            )
+            raise typer.Exit(3)
+
+        # Load config and create connection
+        config_data = load_config(config)
+        conn = create_connection(config_data)
+
+        # Initialize migrator
+        migrator = Migrator(connection=conn)
+        migrator.initialize()
+
+        # Find migration files to show what will happen
+        all_migrations = migrator.find_migration_files(migrations_dir)
+
+        if not all_migrations:
+            console.print("[yellow]No migrations found.[/yellow]")
+            conn.close()
+            return
+
+        # Determine which migrations will be marked
+        if through is not None:
+            migrations_to_mark: list[Path] = []
+            for migration_file in all_migrations:
+                version = migrator._version_from_filename(migration_file.name)
+                migrations_to_mark.append(migration_file)
+                if version == through:
+                    break
+            else:
+                # Target version not found
+                console.print(f"[red]❌ Migration version '{through}' not found[/red]")
+                console.print("[yellow]Available versions:[/yellow]")
+                for mf in all_migrations[:10]:
+                    v = migrator._version_from_filename(mf.name)
+                    console.print(f"  • {v}")
+                if len(all_migrations) > 10:
+                    console.print(f"  ... and {len(all_migrations) - 10} more")
+                conn.close()
+                raise typer.Exit(1)
+        else:
+            migrations_to_mark = list(all_migrations)
+
+        # Get current tracking state for summary
+        applied_versions = migrator.get_applied_versions()
+        current_count = len(applied_versions)
+
+        # Show what will happen
+        target_desc = f"through {through}" if through else "all files on disk"
+        console.print(f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n")
+
+        console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
+        console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
+
+        for migration_file in migrations_to_mark:
+            version = migrator._version_from_filename(migration_file.name)
+            base_name = migration_file.stem
+            if base_name.endswith(".up"):
+                base_name = base_name[:-3]
+            parts = base_name.split("_", 1)
+            name = parts[1] if len(parts) > 1 else base_name
+            console.print(f"  [dim]•[/dim] {version} {name}")
+
+        console.print()
+
+        if dry_run:
+            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+
+        # Confirmation
+        if not yes and not dry_run:
+            confirmed = typer.confirm(
+                f"Will delete {current_count} entries from tb_confiture "
+                f"and re-mark {len(migrations_to_mark)} migrations. Continue?"
+            )
+            if not confirmed:
+                console.print("[dim]Aborted.[/dim]")
+                conn.close()
+                return
+
+        # Execute reinit
+        result = migrator.reinit(
+            through=through,
+            dry_run=dry_run,
+            migrations_dir=migrations_dir,
+        )
+
+        # Show results
+        if dry_run:
+            console.print(
+                f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
+                f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
+            )
+            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+        else:
+            console.print(
+                f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
+                f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
+            )
+
+        conn.close()
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
 @migrate_app.command("diff")
 def migrate_diff(
     old_schema: Path = typer.Argument(..., help="Old schema file"),
