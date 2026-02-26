@@ -3828,13 +3828,9 @@ def restore(
         console.print(f"[yellow]⚠ {len(result.warnings)} warning(s) during restore[/yellow]")
 
     if result.success:
-        console.print(
-            f"[green]✓ Restore complete[/green] ({len(result.phases_completed)} phases)"
-        )
+        console.print(f"[green]✓ Restore complete[/green] ({len(result.phases_completed)} phases)")
         if result.table_count is not None:
-            console.print(
-                f"  Tables verified: {result.table_count} (≥ {min_tables} required)"
-            )
+            console.print(f"  Tables verified: {result.table_count} (≥ {min_tables} required)")
     else:
         for err in result.errors:
             console.print(f"[red]{err}[/red]")
