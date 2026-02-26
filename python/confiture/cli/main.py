@@ -3822,7 +3822,7 @@ def restore(
         result = DatabaseRestorer().restore(options, on_stderr_line=on_stderr_line)
     except RestoreError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if result.warnings:
         console.print(f"[yellow]⚠ {len(result.warnings)} warning(s) during restore[/yellow]")

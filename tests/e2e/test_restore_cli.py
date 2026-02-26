@@ -19,8 +19,11 @@ runner = CliRunner()
 
 class TestRestoreCLI:
     def test_restore_help_shows_expected_options(self):
+        import re
+
         result = runner.invoke(app, ["restore", "--help"])
         assert result.exit_code == 0
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
         for flag in [
             "--database",
             "--host",
@@ -30,7 +33,7 @@ class TestRestoreCLI:
             "--exit-on-error",
             "--superuser",
         ]:
-            assert flag in result.output, f"Flag {flag!r} not found in help output"
+            assert flag in clean, f"Flag {flag!r} not found in help output"
 
     def test_missing_database_exits_nonzero(self, tmp_path):
         backup = tmp_path / "dump.pgdump"
