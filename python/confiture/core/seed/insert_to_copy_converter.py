@@ -4,6 +4,8 @@ This module provides InsertToCopyConverter to parse INSERT statements
 and convert them to COPY format for faster bulk loading.
 """
 
+from sqlglot import parse as sqlglot_parse
+
 from confiture.core.seed.copy_formatter import CopyFormatter
 from confiture.core.seed.insert_validator import InsertValidator
 from confiture.models.results import ConversionReport, ConversionResult
@@ -54,14 +56,16 @@ class InsertToCopyConverter:
         insert_sql: str,
         file_path: str = "",
     ) -> ConversionResult:
-        """Attempt to convert INSERT statement to COPY format with graceful fallback.
+        """Attempt to convert INSERT statements to COPY format with graceful fallback.
 
-        Tries to convert the INSERT statement to COPY format. If conversion is not
-        possible, returns a ConversionResult with success=False and a descriptive
-        reason rather than raising an exception.
+        Handles files containing multiple INSERT statements. Statements targeting
+        the same table with identical column lists are merged into a single COPY
+        block; statements with different tables or different column lists each get
+        their own COPY block. Non-convertible statements (functions, ON CONFLICT,
+        etc.) are passed through as-is after the COPY blocks.
 
         Args:
-            insert_sql: SQL INSERT statement
+            insert_sql: One or more SQL INSERT statements
             file_path: Optional path to the file being converted (for reporting)
 
         Returns:
@@ -71,7 +75,8 @@ class InsertToCopyConverter:
         Example:
             >>> converter = InsertToCopyConverter()
             >>> result = converter.try_convert(
-            ...     "INSERT INTO users (id) VALUES (1);",
+            ...     "INSERT INTO users (id) VALUES (1);\\n"
+            ...     "INSERT INTO users (id) VALUES (2);",
             ...     file_path="users.sql"
             ... )
             >>> if result.success:
@@ -79,38 +84,80 @@ class InsertToCopyConverter:
             ... else:
             ...     print(f"Cannot convert: {result.reason}")
         """
-        # Check if conversion is possible using validator
-        can_convert, reason = self.validator.can_convert_to_copy(insert_sql)
-        if not can_convert:
-            return ConversionResult(
-                file_path=file_path,
-                success=False,
-                reason=reason or "Cannot convert to COPY format",
-            )
-
-        # Try to convert
         try:
-            copy_format = self.convert(insert_sql)
-
-            # Count rows in COPY format
-            # COPY format: header + data lines + \.
-            lines = copy_format.strip().split("\n")
-            # Subtract 1 for header (COPY ...) and 1 for footer (\.)
-            rows_converted = max(0, len(lines) - 2)
-
-            return ConversionResult(
-                file_path=file_path,
-                success=True,
-                copy_format=copy_format,
-                rows_converted=rows_converted,
-            )
+            statements = [s for s in sqlglot_parse(insert_sql, dialect="postgres") if s is not None]
         except Exception as e:
-            # Graceful fallback for unexpected errors
             return ConversionResult(
                 file_path=file_path,
                 success=False,
                 reason=f"Parse error: {str(e)}",
             )
+
+        if not statements:
+            return ConversionResult(
+                file_path=file_path,
+                success=False,
+                reason="No SQL statements found",
+            )
+
+        # Groups: (table_name, columns_tuple) -> accumulated rows
+        groups: dict[tuple[str, tuple[str, ...]], list[list[str | None]]] = {}
+        group_order: list[tuple[str, tuple[str, ...]]] = []
+        passthrough: list[str] = []
+        total_rows = 0
+        first_failure_reason: str | None = None
+
+        for stmt in statements:
+            stmt_sql = stmt.sql(dialect="postgres")
+
+            can_convert, reason = self.validator.can_convert_to_copy(stmt_sql)
+            if not can_convert:
+                if first_failure_reason is None:
+                    first_failure_reason = reason
+                passthrough.append(stmt_sql)
+                continue
+
+            table_name = self.validator.extract_table_name(stmt_sql)
+            columns = self.validator.extract_columns(stmt_sql)
+            rows = self.validator.extract_rows(stmt_sql)
+
+            if table_name is None or columns is None or rows is None:
+                passthrough.append(stmt_sql)
+                continue
+
+            key: tuple[str, tuple[str, ...]] = (table_name, tuple(columns))
+            if key not in groups:
+                groups[key] = []
+                group_order.append(key)
+            groups[key].extend(rows)
+            total_rows += len(rows)
+
+        if not groups:
+            return ConversionResult(
+                file_path=file_path,
+                success=False,
+                reason=first_failure_reason or "No convertible INSERT statements found",
+            )
+
+        # Build output: one COPY block per (table, columns) group, then passthrough SQL
+        formatter = CopyFormatter()
+        output_parts: list[str] = []
+
+        for key in group_order:
+            table_name, col_tuple = key
+            columns = list(col_tuple)
+            rows = [dict(zip(columns, values, strict=False)) for values in groups[key]]
+            output_parts.append(formatter.format_table(table_name, rows, columns))
+
+        output_parts.extend(passthrough)
+        combined = "\n".join(output_parts)
+
+        return ConversionResult(
+            file_path=file_path,
+            success=True,
+            copy_format=combined,
+            rows_converted=total_rows,
+        )
 
     def convert_batch(
         self,
