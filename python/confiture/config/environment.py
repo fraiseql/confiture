@@ -111,6 +111,29 @@ class LockingConfig(BaseModel):
     timeout_ms: int = 30000  # 30 seconds default
 
 
+class MigrationGeneratorConfig(BaseModel):
+    """Config for one named external migration generator.
+
+    Attributes:
+        command: Shell command template with {from}, {to}, {output} placeholders
+        description: Human-readable label for the generator
+    """
+
+    command: str
+    description: str = ""
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(cls, v: str) -> str:
+        """Validate command is non-empty and contains all required placeholders."""
+        if not v:
+            raise ValueError("command must not be empty")
+        missing = [p for p in ("{from}", "{to}", "{output}") if p not in v]
+        if missing:
+            raise ValueError(f"command is missing required placeholder(s): {', '.join(missing)}")
+        return v
+
+
 class MigrationConfig(BaseModel):
     """Migration configuration options.
 
@@ -118,11 +141,13 @@ class MigrationConfig(BaseModel):
         strict_mode: Whether to fail on warnings/notices (default: False)
         locking: Distributed locking configuration
         view_helpers: View helper installation mode ("auto", "manual", "off")
+        migration_generators: Named external generator commands
     """
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
     locking: LockingConfig = Field(default_factory=LockingConfig)
     view_helpers: str = "manual"  # "auto" | "manual" | "off"
+    migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)
 
 
 class PgGitConfig(BaseModel):

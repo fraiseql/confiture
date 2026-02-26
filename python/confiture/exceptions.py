@@ -382,6 +382,40 @@ class MigrationOverwriteError(MigrationError):
         self.filepath = filepath
 
 
+class ExternalGeneratorError(ConfiturError):
+    """External migration generator command failed
+
+    Raised when:
+    - The generator command exits with a non-zero return code
+    - The generator writes an empty SQL file
+
+    Attributes:
+        returncode: Exit code from the subprocess (if available)
+        stderr: Standard error output from the generator (if available)
+    """
+
+    def __init__(
+        self,
+        message: str,
+        returncode: int | None = None,
+        stderr: str | None = None,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code,
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+        self.returncode = returncode
+        self.stderr = stderr
+
+
 class RestoreError(ConfiturError):
     """pg_restore failure, interruption, or unsupported dump format
 
@@ -460,6 +494,7 @@ __all__ = [
     "SQLError",
     "GitError",
     "NotAGitRepositoryError",
+    "ExternalGeneratorError",
     "RestoreError",
     "SeedError",
     "PreconditionError",
