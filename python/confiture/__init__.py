@@ -14,7 +14,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.5.7"
+__version__ = "0.5.8"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
