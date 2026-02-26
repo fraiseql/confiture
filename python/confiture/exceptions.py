@@ -382,6 +382,23 @@ class MigrationOverwriteError(MigrationError):
         self.filepath = filepath
 
 
+class RestoreError(ConfiturError):
+    """pg_restore failure, interruption, or unsupported dump format
+
+    Raised when:
+    - Backup file is plain-text SQL format (requires custom or directory format)
+    - pg_restore is not installed or not on PATH
+    - pg_restore exits with non-zero status
+    - Restore is interrupted by the user (Ctrl+C)
+    - Post-restore table count is below the required minimum
+
+    Example:
+        >>> raise RestoreError("Backup is plain-text format; use pg_dump -Fc instead")
+    """
+
+    pass
+
+
 class SeedError(ConfiturError):
     """Seed file execution error
 
@@ -443,6 +460,7 @@ __all__ = [
     "SQLError",
     "GitError",
     "NotAGitRepositoryError",
+    "RestoreError",
     "SeedError",
     "PreconditionError",
     "PreconditionValidationError",

@@ -51,6 +51,7 @@ COMMON_COMMANDS = [
     "generate",
     "coordinate",
     "install-helpers",
+    "restore",
     "migrate-up",
     "migrate-down",
     "migrate-status",
@@ -3700,6 +3701,144 @@ def verify(
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@app.command()
+def restore(
+    backup_file: Path = typer.Argument(
+        ...,
+        help="Path to pg_dump backup file. Must be custom (-Fc) or directory (-Fd) format.",
+    ),
+    database: str = typer.Option(
+        ...,
+        "--database",
+        "-d",
+        help="Target database name",
+    ),
+    host: str = typer.Option(
+        "/var/run/postgresql",
+        "--host",
+        help="PostgreSQL host or socket path",
+    ),
+    port: int = typer.Option(
+        5432,
+        "--port",
+        help="PostgreSQL port",
+    ),
+    username: str | None = typer.Option(
+        None,
+        "--username",
+        "-U",
+        help="PostgreSQL user",
+    ),
+    jobs: int = typer.Option(
+        4,
+        "--jobs",
+        "-j",
+        help="Parallel workers for the data phase",
+    ),
+    no_owner: bool = typer.Option(
+        False,
+        "--no-owner/--owner",
+        help="Skip ownership restoration",
+    ),
+    no_acl: bool = typer.Option(
+        False,
+        "--no-acl/--acl",
+        help="Skip access privilege restoration",
+    ),
+    exit_on_error: bool = typer.Option(
+        True,
+        "--exit-on-error/--no-exit-on-error",
+        help="Abort on first error (recommended for production restores)",
+    ),
+    min_tables: int = typer.Option(
+        0,
+        "--min-tables",
+        help="Post-restore: minimum expected table count (0 = skip check)",
+    ),
+    min_tables_schema: str = typer.Option(
+        "public",
+        "--min-tables-schema",
+        help="Schema for --min-tables validation",
+    ),
+    superuser: str | None = typer.Option(
+        None,
+        "--superuser",
+        help="Run pg_restore via sudo as this OS user",
+    ),
+) -> None:
+    """Restore a PostgreSQL backup using three-phase pg_restore.
+
+    Prevents FK constraint race conditions during parallel restore by running
+    pre-data and post-data phases serially, parallelising only the data phase
+    (where no FK constraints exist yet).
+
+    Requires custom format (-Fc) or directory format (-Fd) dumps. To create one:
+
+      pg_dump -Fc mydb > backup.pgdump
+
+    Example usage:
+
+      confiture restore prod.pgdump --database staging --jobs 4
+
+      confiture restore prod.pgdump --database staging --jobs 8 --min-tables 300
+
+      confiture restore /backups/dump --database staging --superuser postgres
+    """
+    from confiture.core.restorer import DatabaseRestorer, RestoreOptions
+    from confiture.exceptions import RestoreError
+
+    if not backup_file.exists():
+        console.print(f"[red]Error:[/red] Backup file not found: {backup_file}")
+        raise typer.Exit(1)
+
+    options = RestoreOptions(
+        backup_path=backup_file,
+        target_db=database,
+        host=host,
+        port=port,
+        username=username,
+        jobs=jobs,
+        no_owner=no_owner,
+        no_acl=no_acl,
+        exit_on_error=exit_on_error,
+        superuser=superuser,
+        min_tables=min_tables,
+        min_tables_schema=min_tables_schema,
+    )
+
+    console.print(
+        f"[bold]Restoring[/bold] [cyan]{backup_file.name}[/cyan] → [cyan]{database}[/cyan]"
+    )
+
+    def on_stderr_line(line: str) -> None:
+        if "pg_restore: error:" in line:
+            console.print(f"  [red]{line}[/red]")
+        elif "pg_restore: warning:" in line:
+            console.print(f"  [yellow]{line}[/yellow]")
+
+    try:
+        result = DatabaseRestorer().restore(options, on_stderr_line=on_stderr_line)
+    except RestoreError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if result.warnings:
+        console.print(f"[yellow]⚠ {len(result.warnings)} warning(s) during restore[/yellow]")
+
+    if result.success:
+        console.print(
+            f"[green]✓ Restore complete[/green] ({len(result.phases_completed)} phases)"
+        )
+        if result.table_count is not None:
+            console.print(
+                f"  Tables verified: {result.table_count} (≥ {min_tables} required)"
+            )
+    else:
+        for err in result.errors:
+            console.print(f"[red]{err}[/red]")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
