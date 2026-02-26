@@ -389,6 +389,14 @@ confiture migrate generate NAME [OPTIONS]
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
 | `--migrations-dir` | - | Path | `db/migrations` | Directory to create migration file in |
+| `--format`, `-f` | `-f` | String | `text` | Output format: `text` or `json` |
+| `--force` | - | Flag | off | Overwrite existing migration file |
+| `--dry-run` | - | Flag | off | Preview what would be created without writing files |
+| `--verbose`, `-v` | `-v` | Flag | off | Show version calculation details |
+| `--from` | - | Path | — | Old schema file (required with `--generator`) |
+| `--to` | - | Path | — | New schema file (required with `--generator`) |
+| `--generator` | - | String | — | Named external generator from `migration_generators` config |
+| `--config`, `-c` | `-c` | Path | `db/environments/local.yaml` | Environment config file |
 
 #### Examples
 
@@ -399,6 +407,59 @@ confiture migrate generate add_user_bio
 
 # Custom migrations directory
 confiture migrate generate add_timestamps --migrations-dir custom/migrations
+
+# Use an external schema-diff tool (see External generators below)
+confiture migrate generate add_email_column \
+  --from db/schema/v1.sql \
+  --to   db/schema/v2.sql \
+  --generator schema_diff
+```
+
+#### External generators
+
+You can plug any schema-diff tool into `confiture migrate generate` via the
+`migration_generators` config key:
+
+```yaml
+# db/environments/local.yaml
+migration:
+  migration_generators:
+    schema_diff:
+      command: "pgdiff --from {from} --to {to} --output {output}"
+      description: "Generate migration SQL from pgdiff"
+```
+
+Then run:
+
+```bash
+confiture migrate generate add_email_column \
+  --from db/schema/v1.sql \
+  --to   db/schema/v2.sql \
+  --generator schema_diff
+```
+
+**Placeholders** interpolated by Confiture (shell-quoted absolute paths):
+
+| Placeholder | Value |
+|---|---|
+| `{from}` | Absolute path to the old schema file |
+| `{to}` | Absolute path to the new schema file |
+| `{output}` | Absolute path where the tool must write its SQL |
+
+Confiture reads `{output}`, strips any `BEGIN`/`COMMIT` wrappers (case-insensitive,
+with or without semicolons), and writes the result as `{version}_{name}.up.sql` in
+`db/migrations/`. An empty `{version}_{name}.down.sql` stub is also created.
+
+Use `--dry-run` to preview the resolved command and target filename without executing:
+
+```bash
+confiture migrate generate add_email_column \
+  --from db/schema/v1.sql \
+  --to   db/schema/v2.sql \
+  --generator schema_diff \
+  --dry-run
+# Resolved command: pgdiff --from '/abs/v1.sql' --to '/abs/v2.sql' --output '/abs/003_add_email_column.up.sql'
+# Target file:      db/migrations/003_add_email_column.up.sql
 ```
 
 #### Generated Template

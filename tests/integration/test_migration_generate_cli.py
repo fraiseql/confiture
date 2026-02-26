@@ -1,9 +1,11 @@
 """Integration tests for migrate generate CLI command with new features.
 
-Tests JSON output, dry-run mode, verbose mode, and --force flag.
+Tests JSON output, dry-run mode, verbose mode, --force flag, and external generators.
 """
 
 import json
+import stat
+import textwrap
 
 from typer.testing import CliRunner
 
@@ -447,3 +449,357 @@ class TestMigrateGenerateIntegration:
         # Both files should exist
         migration_files = list(migrations_dir.glob("*.py"))
         assert len(migration_files) == 2
+
+
+# ---------------------------------------------------------------------------
+# External generator CLI tests (Issue #49)
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_generator(
+    tmp_path, sql: str = "ALTER TABLE foo ADD COLUMN bar TEXT;", exit_code: int = 0
+) -> str:
+    """Write a tiny shell script that acts as a fake migration generator.
+
+    The script reads {output} as its third positional argument and writes SQL there.
+    """
+    script = tmp_path / "fake_generator.sh"
+    script.write_text(
+        textwrap.dedent(f"""\
+            #!/bin/sh
+            # Args passed via format_map with shell quoting:
+            #   $1 = from_path  $2 = to_path  $3 = output_path
+            output="$3"
+            printf '%s\\n' 'BEGIN;' '{sql}' 'COMMIT;' > "$output"
+            exit {exit_code}
+        """)
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return str(script)
+
+
+def _make_env_yaml(tmp_path, generator_name: str, command: str) -> tuple:
+    """Create a minimal project tree with a local.yaml that has migration_generators."""
+    project_dir = tmp_path / "project"
+    env_dir = project_dir / "db" / "environments"
+    env_dir.mkdir(parents=True)
+    schema_dir = project_dir / "db" / "schema"
+    schema_dir.mkdir(parents=True)
+    # Minimal include_dir
+    (schema_dir).mkdir(exist_ok=True)
+
+    config_path = env_dir / "local.yaml"
+    config_path.write_text(
+        textwrap.dedent(f"""\
+            database_url: postgresql://localhost/test_db
+            include_dirs:
+              - db/schema
+            migration:
+              migration_generators:
+                {generator_name}:
+                  command: "{command}"
+                  description: "Fake generator for tests"
+        """)
+    )
+    return project_dir, config_path
+
+
+class TestMigrateGenerateExternalGenerator:
+    """Integration tests for --generator flag."""
+
+    def test_happy_path_generator_creates_up_and_down_sql(self, tmp_path):
+        """Generator runs, .up.sql has BEGIN/COMMIT stripped, .down.sql stub created."""
+        script_path = _make_fake_generator(tmp_path)
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+
+        from_file = tmp_path / "v1.sql"
+        from_file.write_text("SELECT 1;")
+        to_file = tmp_path / "v2.sql"
+        to_file.write_text("SELECT 2;")
+
+        project_dir, config_path = _make_env_yaml(
+            tmp_path,
+            "fake",
+            f"{script_path} {{from}} {{to}} {{output}}",
+        )
+        # Provide schema dir so Environment.load doesn't fail
+        schema_dir = project_dir / "db" / "schema"
+        schema_dir.mkdir(exist_ok=True)
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "fake",
+                "--from",
+                str(from_file),
+                "--to",
+                str(to_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+            ],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, result.output
+
+        up_files = list(migrations_dir.glob("*.up.sql"))
+        assert len(up_files) == 1
+        sql = up_files[0].read_text()
+        assert "BEGIN" not in sql
+        assert "COMMIT" not in sql
+        assert "ALTER TABLE foo ADD COLUMN bar TEXT;" in sql
+
+        down_files = list(migrations_dir.glob("*.down.sql"))
+        assert len(down_files) == 1
+        assert "TODO" in down_files[0].read_text()
+
+    def test_dry_run_does_not_create_file(self, tmp_path):
+        """--dry-run prints resolved command and target, no file created."""
+        script_path = _make_fake_generator(tmp_path)
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+
+        from_file = tmp_path / "v1.sql"
+        from_file.write_text("SELECT 1;")
+        to_file = tmp_path / "v2.sql"
+        to_file.write_text("SELECT 2;")
+
+        project_dir, config_path = _make_env_yaml(
+            tmp_path,
+            "fake",
+            f"{script_path} {{from}} {{to}} {{output}}",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "fake",
+                "--from",
+                str(from_file),
+                "--to",
+                str(to_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+                "--dry-run",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert list(migrations_dir.glob("*.up.sql")) == []
+        assert "Resolved command" in result.output or "Target file" in result.output
+
+    def test_generator_exits_nonzero_surfaces_error(self, tmp_path):
+        """Non-zero generator exit → error message + exit 1."""
+        script_path = _make_fake_generator(tmp_path, exit_code=2)
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+
+        from_file = tmp_path / "v1.sql"
+        from_file.write_text("SELECT 1;")
+        to_file = tmp_path / "v2.sql"
+        to_file.write_text("SELECT 2;")
+
+        project_dir, config_path = _make_env_yaml(
+            tmp_path,
+            "fake",
+            f"{script_path} {{from}} {{to}} {{output}}",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "fake",
+                "--from",
+                str(from_file),
+                "--to",
+                str(to_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+            ],
+        )
+
+        assert result.exit_code == 1
+
+    def test_generator_without_from_exits_1(self, tmp_path):
+        """--generator without --from → clear error, exit 1."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+        to_file = tmp_path / "v2.sql"
+        to_file.write_text("SELECT 2;")
+
+        project_dir, config_path = _make_env_yaml(
+            tmp_path,
+            "fake",
+            "tool {from} {to} {output}",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "fake",
+                "--to",
+                str(to_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "--from" in result.output or "required" in result.output.lower()
+
+    def test_generator_without_to_exits_1(self, tmp_path):
+        """--generator without --to → clear error, exit 1."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+        from_file = tmp_path / "v1.sql"
+        from_file.write_text("SELECT 1;")
+
+        project_dir, config_path = _make_env_yaml(
+            tmp_path,
+            "fake",
+            "tool {from} {to} {output}",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "fake",
+                "--from",
+                str(from_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "--to" in result.output or "required" in result.output.lower()
+
+    def test_unknown_generator_name_exits_1(self, tmp_path):
+        """Unknown generator name → clear error, exit 1."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+        from_file = tmp_path / "v1.sql"
+        from_file.write_text("SELECT 1;")
+        to_file = tmp_path / "v2.sql"
+        to_file.write_text("SELECT 2;")
+
+        project_dir, config_path = _make_env_yaml(
+            tmp_path,
+            "fake",
+            "tool {from} {to} {output}",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "nonexistent_generator",
+                "--from",
+                str(from_file),
+                "--to",
+                str(to_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "nonexistent_generator" in result.output or "not found" in result.output.lower()
+
+    def test_no_generator_flag_uses_python_template(self, tmp_path):
+        """Omitting --generator generates the standard Python template (regression)."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
+        )
+
+        assert result.exit_code == 0
+        py_files = list(migrations_dir.glob("*.py"))
+        assert len(py_files) == 1
+        assert "class AddBarColumn" in py_files[0].read_text()
+
+    def test_config_with_no_migration_generators_exits_1(self, tmp_path):
+        """Config without migration_generators key → error + exit 1."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+        from_file = tmp_path / "v1.sql"
+        from_file.write_text("SELECT 1;")
+        to_file = tmp_path / "v2.sql"
+        to_file.write_text("SELECT 2;")
+
+        project_dir = tmp_path / "project"
+        env_dir = project_dir / "db" / "environments"
+        env_dir.mkdir(parents=True)
+        schema_dir = project_dir / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+
+        config_path = env_dir / "local.yaml"
+        config_path.write_text(
+            "database_url: postgresql://localhost/test_db\ninclude_dirs:\n  - db/schema\n"
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_bar_column",
+                "--generator",
+                "fake",
+                "--from",
+                str(from_file),
+                "--to",
+                str(to_file),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--config",
+                str(config_path),
+            ],
+        )
+
+        assert result.exit_code == 1

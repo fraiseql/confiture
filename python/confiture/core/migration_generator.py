@@ -5,10 +5,14 @@ Each migration file contains up() and down() methods with the necessary SQL.
 """
 
 import fcntl
+import re
+import shlex
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from confiture.exceptions import ExternalGeneratorError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
 
@@ -333,6 +337,82 @@ class {class_name}(Migration):
 
         return None
 
+    def run_external_generator(
+        self,
+        *,
+        generator_config: Any,
+        from_path: Path,
+        to_path: Path,
+        migration_name: str,
+        dry_run: bool = False,
+    ) -> tuple[str, Path]:
+        """Run an external generator command and return (resolved_command, output_path).
+
+        On dry_run=True: resolves the command and target filename but does NOT
+        execute the subprocess or write any file.
+
+        Args:
+            generator_config: MigrationGeneratorConfig with command template
+            from_path: Path to the old schema file
+            to_path: Path to the new schema file
+            migration_name: Name for the migration (snake_case)
+            dry_run: If True, skip execution and return resolved paths only
+
+        Returns:
+            Tuple of (resolved_command, target_up_sql_path)
+
+        Raises:
+            FileNotFoundError: If from_path or to_path does not exist
+            ExternalGeneratorError: If subprocess exits with non-zero code or writes empty file
+        """
+        version = self._get_next_version()
+        output_path = self.migrations_dir / f"{version}_{migration_name}.up.sql"
+
+        resolved = generator_config.command.format_map(
+            {
+                "from": shlex.quote(str(from_path.resolve())),
+                "to": shlex.quote(str(to_path.resolve())),
+                "output": shlex.quote(str(output_path.resolve())),
+            }
+        )
+
+        if dry_run:
+            return (resolved, output_path)
+
+        if not from_path.exists():
+            raise FileNotFoundError(f"from_path does not exist: {from_path}")
+        if not to_path.exists():
+            raise FileNotFoundError(f"to_path does not exist: {to_path}")
+
+        result = subprocess.run(
+            resolved,
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise ExternalGeneratorError(
+                f"Generator exited with code {result.returncode}.\nstderr: {result.stderr}",
+                returncode=result.returncode,
+                stderr=result.stderr,
+            )
+
+        sql = output_path.read_text()
+        if not sql.strip():
+            raise ExternalGeneratorError(
+                "Generator wrote an empty SQL file; aborting to avoid a silent no-op migration.",
+                returncode=0,
+                stderr="",
+            )
+        sql = _strip_transaction_wrappers(sql)
+        output_path.write_text(sql)
+
+        down_path = output_path.parent / output_path.name.replace(".up.sql", ".down.sql")
+        if not down_path.exists():
+            down_path.write_text("-- TODO: add rollback SQL\n")
+
+        return (resolved, output_path)
+
     def _change_to_down_sql(self, change: SchemaChange) -> str | None:
         """Convert schema change to SQL for down migration (reverse).
 
@@ -389,3 +469,34 @@ class {class_name}(Migration):
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP DEFAULT"
 
         return None
+
+
+# Transaction-wrapper pattern: lines that are exactly BEGIN[;] or COMMIT[;]
+_TRANSACTION_LINE_RE = re.compile(r"^\s*(BEGIN|COMMIT)\s*;?\s*$", re.IGNORECASE)
+
+
+def _strip_transaction_wrappers(sql: str) -> str:
+    """Remove BEGIN/COMMIT wrappers from generator SQL output.
+
+    Strips lines that are exactly BEGIN or COMMIT (with or without semicolons,
+    case-insensitive). Preserves all other SQL, collapsing redundant leading/
+    trailing blank lines to at most one.
+
+    Args:
+        sql: Raw SQL string from external generator
+
+    Returns:
+        SQL with transaction wrapper lines removed
+    """
+    lines = sql.splitlines()
+    filtered = [line for line in lines if not _TRANSACTION_LINE_RE.match(line)]
+
+    # Remove leading blank lines
+    while filtered and not filtered[0].strip():
+        filtered.pop(0)
+
+    # Remove trailing blank lines
+    while filtered and not filtered[-1].strip():
+        filtered.pop()
+
+    return "\n".join(filtered) + "\n" if filtered else ""
