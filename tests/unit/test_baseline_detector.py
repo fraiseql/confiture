@@ -1,0 +1,225 @@
+"""Unit tests for BaselineDetector."""
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from confiture.core.baseline_detector import BaselineDetector
+
+
+class TestNormalizeSchema:
+    """Tests for BaselineDetector.normalize_schema."""
+
+    def setup_method(self) -> None:
+        self.detector = BaselineDetector(Path("/snapshots"))
+
+    def test_collapses_whitespace(self) -> None:
+        sql = "CREATE   TABLE   tb_users  (  id   bigint  );"
+        result = self.detector.normalize_schema(sql)
+        assert "  " not in result
+
+    def test_lowercases_keywords(self) -> None:
+        sql = "CREATE TABLE TB_Users (ID BIGINT NOT NULL);"
+        result = self.detector.normalize_schema(sql)
+        assert "CREATE" not in result
+        assert "create table tb_users" in result
+
+    def test_strips_line_comments(self) -> None:
+        sql = "-- This is a comment\nCREATE TABLE tb_x (id bigint);"
+        result = self.detector.normalize_schema(sql)
+        assert "comment" not in result
+        assert "create table tb_x" in result
+
+    def test_strips_block_comments(self) -> None:
+        sql = "/* block comment */ CREATE TABLE tb_x (id bigint);"
+        result = self.detector.normalize_schema(sql)
+        assert "block comment" not in result
+        assert "create table tb_x" in result
+
+    def test_removes_if_not_exists(self) -> None:
+        sql = "CREATE TABLE IF NOT EXISTS tb_users (id bigint);"
+        result = self.detector.normalize_schema(sql)
+        assert "if not exists" not in result
+        assert "create table tb_users" in result
+
+    def test_removes_if_exists(self) -> None:
+        sql = "DROP TABLE IF EXISTS tb_old;"
+        result = self.detector.normalize_schema(sql)
+        assert "if exists" not in result
+
+    def test_sorts_create_table_blocks_alphabetically(self) -> None:
+        sql = "CREATE TABLE tb_zebra (id bigint); CREATE TABLE tb_alpha (id bigint);"
+        result = self.detector.normalize_schema(sql)
+        pos_alpha = result.index("tb_alpha")
+        pos_zebra = result.index("tb_zebra")
+        assert pos_alpha < pos_zebra
+
+    def test_empty_schema_returns_empty_string(self) -> None:
+        result = self.detector.normalize_schema("")
+        assert result == ""
+
+    def test_schema_with_no_tables(self) -> None:
+        sql = "-- just a comment\n\nSELECT 1;"
+        result = self.detector.normalize_schema(sql)
+        assert isinstance(result, str)
+
+    def test_idempotent(self) -> None:
+        sql = "CREATE TABLE tb_users (id bigint NOT NULL);"
+        once = self.detector.normalize_schema(sql)
+        twice = self.detector.normalize_schema(once)
+        assert once == twice
+
+
+class TestLoadSnapshots:
+    """Tests for BaselineDetector.load_snapshots."""
+
+    def test_returns_empty_when_dir_absent(self, tmp_path: Path) -> None:
+        detector = BaselineDetector(tmp_path / "missing")
+        assert detector.load_snapshots() == []
+
+    def test_returns_snapshots_newest_first(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        (snapshots_dir / "001_init.sql").write_text("CREATE TABLE tb_a (id bigint);")
+        (snapshots_dir / "003_later.sql").write_text("CREATE TABLE tb_b (id bigint);")
+        (snapshots_dir / "002_middle.sql").write_text("CREATE TABLE tb_c (id bigint);")
+
+        detector = BaselineDetector(snapshots_dir)
+        snapshots = detector.load_snapshots()
+
+        versions = [v for v, _ in snapshots]
+        assert versions == ["003", "002", "001"]
+
+    def test_ignores_non_sql_files(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        (snapshots_dir / "001_init.sql").write_text("CREATE TABLE tb_a (id bigint);")
+        (snapshots_dir / "README.md").write_text("docs")
+        (snapshots_dir / "001_init.py").write_text("# python")
+
+        detector = BaselineDetector(snapshots_dir)
+        snapshots = detector.load_snapshots()
+        assert len(snapshots) == 1
+
+
+class TestFindMatchingSnapshot:
+    """Tests for BaselineDetector.find_matching_snapshot."""
+
+    def test_returns_none_when_no_snapshots(self, tmp_path: Path) -> None:
+        detector = BaselineDetector(tmp_path / "empty")
+        result = detector.find_matching_snapshot("CREATE TABLE tb_x (id bigint);")
+        assert result is None
+
+    def test_exact_match_returns_version(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        sql = "CREATE TABLE tb_users (id bigint NOT NULL);"
+        (snapshots_dir / "005_add_users.sql").write_text(sql)
+
+        detector = BaselineDetector(snapshots_dir)
+        result = detector.find_matching_snapshot(sql)
+        assert result == "005"
+
+    def test_match_ignores_keyword_case_differences(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        stored = "CREATE TABLE tb_users (id bigint NOT NULL);"
+        live = "create table tb_users (id bigint not null);"
+        (snapshots_dir / "005_add_users.sql").write_text(stored)
+
+        detector = BaselineDetector(snapshots_dir)
+        result = detector.find_matching_snapshot(live)
+        assert result == "005"
+
+    def test_match_ignores_comment_differences(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        stored = "-- header\nCREATE TABLE tb_users (id bigint);"
+        live = "CREATE TABLE tb_users (id bigint);"
+        (snapshots_dir / "003_users.sql").write_text(stored)
+
+        detector = BaselineDetector(snapshots_dir)
+        result = detector.find_matching_snapshot(live)
+        assert result == "003"
+
+    def test_no_match_returns_none(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        (snapshots_dir / "001_init.sql").write_text("CREATE TABLE tb_a (x bigint);")
+
+        detector = BaselineDetector(snapshots_dir)
+        result = detector.find_matching_snapshot("CREATE TABLE tb_b (y text);")
+        assert result is None
+
+    def test_no_match_populates_last_closest(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        (snapshots_dir / "001_init.sql").write_text("CREATE TABLE tb_a (id bigint);")
+
+        detector = BaselineDetector(snapshots_dir)
+        detector.find_matching_snapshot("CREATE TABLE tb_b (name text);")
+        assert detector.last_closest is not None
+        version, ratio = detector.last_closest
+        assert version == "001"
+        assert 0.0 <= ratio <= 1.0
+
+    def test_multiple_snapshots_returns_newest_match(self, tmp_path: Path) -> None:
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        sql = "CREATE TABLE tb_users (id bigint);"
+        # Both snapshots have same content — should return newest (003)
+        (snapshots_dir / "001_init.sql").write_text(sql)
+        (snapshots_dir / "003_same.sql").write_text(sql)
+
+        detector = BaselineDetector(snapshots_dir)
+        result = detector.find_matching_snapshot(sql)
+        assert result == "003"
+
+
+class TestIntrospectLiveSchema:
+    """Tests for BaselineDetector.introspect_live_schema (mocked)."""
+
+    def test_delegates_to_schema_introspector(self, tmp_path: Path) -> None:
+        detector = BaselineDetector(tmp_path / "snapshots")
+
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.tables = []
+
+        with patch("confiture.core.baseline_detector.SchemaIntrospector") as mock_cls:
+            mock_introspector = MagicMock()
+            mock_introspector.introspect.return_value = mock_result
+            mock_cls.return_value = mock_introspector
+
+            sql = detector.introspect_live_schema(mock_conn)
+
+        mock_cls.assert_called_once_with(mock_conn)
+        mock_introspector.introspect.assert_called_once_with(all_tables=True, include_hints=False)
+        assert isinstance(sql, str)
+
+    def test_converts_tables_to_sql(self, tmp_path: Path) -> None:
+        from confiture.models.introspection import IntrospectedColumn, IntrospectedTable
+
+        detector = BaselineDetector(tmp_path / "snapshots")
+        mock_conn = MagicMock()
+
+        col = IntrospectedColumn(name="id", pg_type="bigint", nullable=False, is_primary_key=True)
+        table = IntrospectedTable(
+            name="tb_users",
+            columns=[col],
+            outbound_fks=[],
+            inbound_fks=[],
+            hints=None,
+        )
+        mock_result = MagicMock()
+        mock_result.tables = [table]
+
+        with patch("confiture.core.baseline_detector.SchemaIntrospector") as mock_cls:
+            mock_introspector = MagicMock()
+            mock_introspector.introspect.return_value = mock_result
+            mock_cls.return_value = mock_introspector
+
+            sql = detector.introspect_live_schema(mock_conn)
+
+        assert "tb_users" in sql
+        assert "id" in sql
+        assert "bigint" in sql

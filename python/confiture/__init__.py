@@ -14,7 +14,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.5.8"
+__version__ = "0.5.9"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -24,6 +24,8 @@ __all__ = [
     "__email__",
     "ExternalGeneratorError",
     "SchemaLinter",
+    "SchemaSnapshotGenerator",
+    "BaselineDetector",
 ]
 
 # Lazy imports to avoid errors during development
@@ -47,4 +49,12 @@ def __getattr__(name: str) -> Any:
         from confiture.config.environment import Environment
 
         return Environment
+    elif name == "SchemaSnapshotGenerator":
+        from confiture.core.schema_snapshot import SchemaSnapshotGenerator
+
+        return SchemaSnapshotGenerator
+    elif name == "BaselineDetector":
+        from confiture.core.baseline_detector import BaselineDetector
+
+        return BaselineDetector
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

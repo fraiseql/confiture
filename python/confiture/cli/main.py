@@ -989,8 +989,7 @@ def install_helpers(
         console.print("    • confiture.recreate_saved_views()")
 
     except Exception as e:
-        handle_cli_error(e, console)
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(handle_cli_error(e)) from e
 
 
 @migrate_app.command("status")
@@ -1390,6 +1389,16 @@ def migrate_up(
         "-o",
         help="Save report to file (default: stdout)",
     ),
+    auto_detect_baseline: bool = typer.Option(
+        False,
+        "--auto-detect-baseline",
+        help="Introspect DB and self-baseline if tb_confiture is missing (default: off)",
+    ),
+    snapshots_dir_up: Path | None = typer.Option(
+        None,
+        "--snapshots-dir",
+        help="Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history)",
+    ),
 ) -> None:
     """Apply pending migrations to the database.
 
@@ -1540,6 +1549,42 @@ def migrate_up(
 
         # Create migrator
         migrator = Migrator(connection=conn)
+
+        # Auto-detect baseline pre-flight (before initialize so we can check absence)
+        if auto_detect_baseline and not migrator.tracking_table_exists():
+            _resolved_snapshots_dir = snapshots_dir_up or Path("db/schema_history")
+            if not _resolved_snapshots_dir.exists():
+                console.print(
+                    "[yellow]⚠️  --auto-detect-baseline: db/schema_history/ not found "
+                    "— no effect[/yellow]"
+                )
+            else:
+                from confiture.core.baseline_detector import BaselineDetector
+
+                _detector = BaselineDetector(_resolved_snapshots_dir)
+                console.print(
+                    "[cyan]🔍 tb_confiture missing — attempting auto-detect baseline...[/cyan]"
+                )
+                _live_sql = _detector.introspect_live_schema(conn)
+                _detected_version = _detector.find_matching_snapshot(_live_sql)
+                if _detected_version:
+                    console.print(f"[green]✓ Detected baseline: {_detected_version}[/green]")
+                    migrator.initialize()
+                    migrator.baseline_through(_detected_version, migrations_dir)
+                    console.print(f"[green]✅ Auto-baselined through {_detected_version}[/green]")
+                else:
+                    closest = _detector.last_closest
+                    if closest:
+                        _cv, _cr = closest
+                        console.print(
+                            f"[yellow]⚠️  No exact snapshot match found "
+                            f"(closest: {_cv}, {_cr:.0%} similar) — proceeding with empty baseline[/yellow]"
+                        )
+                    else:
+                        console.print(
+                            "[yellow]⚠️  No matching snapshot found — proceeding with empty baseline[/yellow]"
+                        )
+
         migrator.initialize()
 
         # Auto-install view helpers if configured
@@ -2028,6 +2073,16 @@ def migrate_generate(
         "-c",
         help="Environment config file (default: db/environments/local.yaml)",
     ),
+    snapshot: bool | None = typer.Option(
+        None,
+        "--snapshot/--no-snapshot",
+        help="Write schema history snapshot (default: from config, True)",
+    ),
+    snapshots_dir: Path | None = typer.Option(
+        None,
+        "--snapshots-dir",
+        help="Override snapshot output directory (default: db/schema_history)",
+    ),
 ) -> None:
     """Generate a new migration file with auto-incrementing version.
 
@@ -2251,6 +2306,50 @@ class {class_name}(Migration):
         finally:
             generator_instance._release_migration_lock(lock_fd)
 
+        # Write schema history snapshot (non-fatal if it fails)
+        _snapshot_path: Path | None = None
+        _snapshot_env_config = None
+        try:
+            from confiture.config.environment import Environment as _SnapshotEnv
+
+            _snapshot_env_name = config.stem
+            _snapshot_project_dir = config.parent.parent.parent
+            _snapshot_env_config = _SnapshotEnv.load(
+                _snapshot_env_name, project_dir=_snapshot_project_dir
+            )
+        except Exception:
+            pass
+
+        _should_snapshot = snapshot
+        if _should_snapshot is None:
+            _should_snapshot = (
+                _snapshot_env_config.migration.snapshot_history
+                if _snapshot_env_config is not None
+                else True
+            )
+
+        if _should_snapshot:
+            try:
+                from confiture.core.schema_snapshot import SchemaSnapshotGenerator
+
+                _resolved_snapshots_dir = snapshots_dir
+                if _resolved_snapshots_dir is None and _snapshot_env_config is not None:
+                    _resolved_snapshots_dir = Path(_snapshot_env_config.migration.snapshots_dir)
+                if _resolved_snapshots_dir is None:
+                    _resolved_snapshots_dir = Path("db/schema_history")
+
+                _snap_gen = SchemaSnapshotGenerator(snapshots_dir=_resolved_snapshots_dir)
+                _snap_env_name = config.stem
+                _snap_project_dir = config.parent.parent.parent
+                _snapshot_path = _snap_gen.write_snapshot(
+                    _snap_env_name, version, name, _snap_project_dir
+                )
+            except Exception as _snap_err:
+                if format_output == "text":
+                    console.print(
+                        f"[yellow]⚠️  Snapshot write failed (non-fatal): {_snap_err}[/yellow]"
+                    )
+
         # Output success message
         if format_output == "json":
             output = {
@@ -2261,12 +2360,15 @@ class {class_name}(Migration):
                 "class_name": class_name,
                 "migrations_dir": str(migrations_dir.absolute()),
                 "next_available_version": version,
+                "snapshot": str(_snapshot_path.absolute()) if _snapshot_path else None,
                 "warnings": warnings,
             }
             print(json.dumps(output, indent=2))
         else:
             console.print("[green]✅ Migration generated successfully![/green]")
             print(f"\n📄 File: {filepath.absolute()}")
+            if _snapshot_path:
+                console.print(f"📸 Snapshot: {_snapshot_path.absolute()}")
             console.print("\n✏️  Edit the migration file to add your SQL statements.")
             console.print("\n💡 Next steps:")
             console.print("  • Edit file and add SQL")
@@ -3614,6 +3716,168 @@ def _fix_idempotency(
             console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
         else:
             console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
+
+
+@migrate_app.command("introspect")
+def migrate_introspect(
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file (default: db/environments/local.yaml)",
+    ),
+    snapshots_dir: Path = typer.Option(
+        Path("db/schema_history"),
+        "--snapshots-dir",
+        help="Schema history snapshots directory (default: db/schema_history)",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
+) -> None:
+    """Detect migration level by comparing live schema to history snapshots.
+
+    PROCESS:
+      Introspects the live database schema using pg_catalog, normalises it,
+      and compares against stored schema history snapshots. Reports the
+      detected migration level without making any changes.
+
+    EXAMPLES:
+      confiture migrate introspect
+        ↳ Detect migration level using default config and snapshots dir
+
+      confiture migrate introspect --format json
+        ↳ Output result as JSON for scripting
+
+      confiture migrate introspect --snapshots-dir path/to/snapshots
+        ↳ Use a custom snapshots directory
+
+    RELATED:
+      confiture migrate up --auto-detect-baseline   - Apply migrations with auto-baseline
+      confiture migrate baseline --through <ver>    - Manually establish baseline
+    """
+    from confiture.core.connection import create_connection, load_config
+    from confiture.core.migrator import Migrator
+
+    try:
+        if not config.exists():
+            console.print(f"[red]❌ Config file not found: {config}[/red]")
+            raise typer.Exit(1)
+
+        config_data = load_config(config)
+        conn = create_connection(config_data)
+        migrator = Migrator(connection=conn)
+
+        tb_present = migrator.tracking_table_exists()
+
+        if format_output == "text":
+            console.print("\n[cyan]Introspecting database schema...[/cyan]\n")
+            console.print(f"  Snapshots directory: {snapshots_dir}")
+            if not snapshots_dir.exists():
+                console.print("  [yellow](directory not found — no snapshots available)[/yellow]")
+            else:
+                snap_count = len(list(snapshots_dir.glob("*.sql")))
+                console.print(f"  ({snap_count} snapshot(s) found)")
+            console.print(
+                f"  tb_confiture: {'PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]'}"
+            )
+
+        if not snapshots_dir.exists():
+            if format_output == "json":
+                print(
+                    json.dumps(
+                        {
+                            "tb_confiture_present": tb_present,
+                            "detected_version": None,
+                            "error": "snapshots_dir not found",
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                console.print("\n[red]❌ Cannot introspect: snapshots directory not found.[/red]")
+                console.print(
+                    "  Run 'confiture migrate generate' to start building snapshot history."
+                )
+            conn.close()
+            raise typer.Exit(1)
+
+        from confiture.core.baseline_detector import BaselineDetector
+
+        detector = BaselineDetector(snapshots_dir)
+
+        if format_output == "text":
+            console.print("\n  Comparing live schema against snapshots...")
+
+        live_sql = detector.introspect_live_schema(conn)
+        detected_version = detector.find_matching_snapshot(live_sql)
+        conn.close()
+
+        if detected_version:
+            # Resolve name from snapshot filename
+            detected_name = ""
+            for snap_path in snapshots_dir.glob(f"{detected_version}_*.sql"):
+                stem = snap_path.stem
+                parts = stem.split("_", 1)
+                detected_name = parts[1] if len(parts) > 1 else stem
+                break
+
+            if format_output == "json":
+                print(
+                    json.dumps(
+                        {
+                            "tb_confiture_present": tb_present,
+                            "detected_version": detected_version,
+                            "detected_migration_name": detected_name,
+                            "confidence": "exact",
+                            "recommendation": f"confiture migrate baseline --through {detected_version}",
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                console.print(f"  [green]✓ Match found: {detected_version}_{detected_name}[/green]")
+                console.print(f"\n  Detected migration level: [bold]{detected_version}[/bold]")
+                if not tb_present:
+                    console.print("\n  To restore tracking, run:")
+                    console.print(
+                        f"    confiture migrate baseline --through {detected_version} --config {config}"
+                    )
+                    console.print("\n  Or apply automatically with:")
+                    console.print(
+                        f"    confiture migrate up --auto-detect-baseline --config {config}"
+                    )
+        else:
+            closest = detector.last_closest
+            if format_output == "json":
+                result: dict = {
+                    "tb_confiture_present": tb_present,
+                    "detected_version": None,
+                    "confidence": "none",
+                }
+                if closest:
+                    result["closest_version"] = closest[0]
+                    result["closest_similarity"] = round(closest[1], 4)
+                print(json.dumps(result, indent=2))
+            else:
+                console.print("  [yellow]✗ No matching snapshot found[/yellow]")
+                if closest:
+                    _cv, _cr = closest
+                    console.print(f"  [dim]Closest: {_cv} ({_cr:.0%} similar)[/dim]")
+                console.print("\n  The live schema does not exactly match any stored snapshot.")
+                console.print("  This can happen if the schema was modified outside of confiture.")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        if format_output == "json":
+            print(json.dumps({"error": str(e)}, indent=2))
+        else:
+            console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
 
 
 @app.command()

@@ -142,12 +142,16 @@ class MigrationConfig(BaseModel):
         locking: Distributed locking configuration
         view_helpers: View helper installation mode ("auto", "manual", "off")
         migration_generators: Named external generator commands
+        snapshot_history: Write schema snapshot alongside each generated migration (default: True)
+        snapshots_dir: Directory for schema history snapshots (default: db/schema_history)
     """
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
     locking: LockingConfig = Field(default_factory=LockingConfig)
     view_helpers: str = "manual"  # "auto" | "manual" | "off"
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)
+    snapshot_history: bool = True
+    snapshots_dir: str = "db/schema_history"
 
 
 class PgGitConfig(BaseModel):

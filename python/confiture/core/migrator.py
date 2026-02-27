@@ -846,6 +846,82 @@ class Migrator:
 
         return migration_files
 
+    def tracking_table_exists(self) -> bool:
+        """Return True if the tb_confiture tracking table exists in the database.
+
+        Useful for detecting whether a database has been initialised with
+        confiture (e.g. after a staging restore that wiped the tracking table).
+
+        Returns:
+            True if ``tb_confiture`` exists, False otherwise.
+
+        Example:
+            >>> migrator = Migrator(connection=conn)
+            >>> if not migrator.tracking_table_exists():
+            ...     migrator.initialize()
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'tb_confiture'
+                )
+                """
+            )
+            result = cursor.fetchone()
+            return bool(result[0]) if result else False
+
+    def baseline_through(
+        self,
+        through: str,
+        migrations_dir: Path,
+    ) -> list[str]:
+        """Mark migrations as applied through a version without clearing the table.
+
+        Unlike :meth:`reinit`, this method does **not** delete existing
+        tracking entries.  It only inserts new rows for migrations that are
+        not yet recorded.  Intended for use by auto-detect baseline after a
+        restore wipes the tracking table.
+
+        Args:
+            through: Target version string (e.g. ``"007"``).  All migration
+                files from the first through this version are marked applied.
+            migrations_dir: Directory containing migration files.
+
+        Returns:
+            List of version strings that were newly marked as applied.
+
+        Raises:
+            MigrationError: If ``through`` version is not found on disk.
+
+        Example:
+            >>> migrator.baseline_through("007", Path("db/migrations"))
+            ["001", "002", "003", "004", "005", "006", "007"]
+        """
+        all_migrations = self.find_migration_files(migrations_dir)
+
+        migrations_to_mark: list[Path] = []
+        found = False
+        for migration_file in all_migrations:
+            version = self._version_from_filename(migration_file.name)
+            migrations_to_mark.append(migration_file)
+            if version == through:
+                found = True
+                break
+
+        if not found:
+            raise MigrationError(f"Migration version '{through}' not found on disk")
+
+        already_applied = set(self.get_applied_versions())
+        newly_marked: list[str] = []
+        for migration_file in migrations_to_mark:
+            version = self._version_from_filename(migration_file.name)
+            if version not in already_applied:
+                self.mark_applied(migration_file, reason="auto-baseline")
+                newly_marked.append(version)
+        return newly_marked
+
     def find_duplicate_versions(self, migrations_dir: Path | None = None) -> dict[str, list[Path]]:
         """Find migration files that share the same version prefix.
 
