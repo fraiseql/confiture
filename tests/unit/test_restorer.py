@@ -61,6 +61,7 @@ class TestRestoreOptionsDefaults:
         assert opts.superuser is None
         assert opts.min_tables == 0
         assert opts.min_tables_schema == "public"
+        assert opts.parallel_restore is False
 
 
 class TestRestoreResultDefaults:
@@ -69,6 +70,7 @@ class TestRestoreResultDefaults:
         assert result.errors == []
         assert result.warnings == []
         assert result.table_count is None
+        assert result.diagnostics == []
 
 
 # ---------------------------------------------------------------------------
@@ -500,3 +502,156 @@ class TestClassifyStderrLine:
 
     def test_empty_line(self):
         assert DatabaseRestorer._classify_stderr_line("") == "info"
+
+
+# ---------------------------------------------------------------------------
+# Cycle 10: _diagnose_post_data_errors  (Issue #55)
+# ---------------------------------------------------------------------------
+
+
+class TestDiagnosePostDataErrors:
+    def test_out_of_shared_memory_produces_hint(self):
+        lines = ["pg_restore: error: out of shared memory"]
+        hints = DatabaseRestorer._diagnose_post_data_errors(lines)
+        assert len(hints) == 1
+        assert "max_locks_per_transaction" in hints[0]
+
+    def test_out_of_shared_memory_in_warning_produces_hint(self):
+        lines = ["pg_restore: warning: out of shared memory"]
+        hints = DatabaseRestorer._diagnose_post_data_errors(lines)
+        assert len(hints) == 1
+
+    def test_unrelated_errors_produce_no_diagnostics(self):
+        lines = [
+            "pg_restore: error: FK violation",
+            "pg_restore: warning: table does not exist",
+        ]
+        hints = DatabaseRestorer._diagnose_post_data_errors(lines)
+        assert hints == []
+
+    def test_empty_lines_produce_no_diagnostics(self):
+        assert DatabaseRestorer._diagnose_post_data_errors([]) == []
+
+    def test_restore_result_diagnostics_populated_on_post_data_failure(self):
+        """End-to-end: out-of-shared-memory error in post-data → hint in RestoreResult."""
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+
+        def fake_run(section, opts, parallel, on_stderr_line=None):
+            if section == "post-data":
+                return RestoreResult(
+                    success=False,
+                    phases_completed=[],
+                    errors=["pg_restore: error: out of shared memory"],
+                )
+            return RestoreResult(success=True, phases_completed=[section])
+
+        restorer._run_section = fake_run  # type: ignore[method-assign]
+        result = restorer.restore(RestoreOptions(backup_path=Path("d.pgdump"), target_db="db"))
+        assert result.success is False
+        assert len(result.diagnostics) == 1
+        assert "max_locks_per_transaction" in result.diagnostics[0]
+
+    def test_restore_result_diagnostics_populated_on_success_with_warning(self):
+        """out-of-shared-memory in a warning on a lenient restore → hint in RestoreResult."""
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+
+        def fake_run(section, opts, parallel, on_stderr_line=None):
+            if section == "post-data":
+                return RestoreResult(
+                    success=True,
+                    phases_completed=["post-data"],
+                    warnings=["pg_restore: warning: out of shared memory"],
+                )
+            return RestoreResult(success=True, phases_completed=[section])
+
+        restorer._run_section = fake_run  # type: ignore[method-assign]
+        result = restorer.restore(RestoreOptions(backup_path=Path("d.pgdump"), target_db="db"))
+        assert result.success is True
+        assert len(result.diagnostics) == 1
+        assert "max_locks_per_transaction" in result.diagnostics[0]
+
+    def test_restore_result_no_diagnostics_on_clean_restore(self):
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._run_section = (  # type: ignore[method-assign]
+            lambda s, o, p, on_stderr_line=None: RestoreResult(success=True, phases_completed=[s])
+        )
+        result = restorer.restore(RestoreOptions(backup_path=Path("d.pgdump"), target_db="db"))
+        assert result.diagnostics == []
+
+
+# ---------------------------------------------------------------------------
+# Cycle 11: parallel_restore flag  (Issue #54)
+# ---------------------------------------------------------------------------
+
+
+class TestParallelRestoreFlag:
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {"backup_path": Path("d.pgdump"), "target_db": "db"}
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def _make_restorer(self):
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._run_section = (  # type: ignore[method-assign]
+            lambda s, o, p, on_stderr_line=None: RestoreResult(success=True, phases_completed=[s])
+        )
+        return restorer
+
+    def test_parallel_restore_false_does_not_override(self):
+        """exit_on_error=True stays True when parallel_restore=False."""
+        seen_options: list[RestoreOptions] = []
+
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+
+        def capture_run(section, opts, parallel, on_stderr_line=None):
+            seen_options.append(opts)
+            return RestoreResult(success=True, phases_completed=[section])
+
+        restorer._run_section = capture_run  # type: ignore[method-assign]
+        restorer.restore(self._opts(parallel_restore=False, exit_on_error=True))
+        assert all(o.exit_on_error is True for o in seen_options)
+
+    def test_parallel_restore_true_overrides_exit_on_error(self):
+        """exit_on_error is overridden to False when parallel_restore=True."""
+        seen_options: list[RestoreOptions] = []
+
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+
+        def capture_run(section, opts, parallel, on_stderr_line=None):
+            seen_options.append(opts)
+            return RestoreResult(success=True, phases_completed=[section])
+
+        restorer._run_section = capture_run  # type: ignore[method-assign]
+        restorer.restore(self._opts(parallel_restore=True, exit_on_error=True))
+        assert all(o.exit_on_error is False for o in seen_options)
+
+    def test_parallel_restore_does_not_mutate_original_options(self):
+        """The caller's RestoreOptions object is not mutated."""
+        original = self._opts(parallel_restore=True, exit_on_error=True)
+        restorer = self._make_restorer()
+        restorer.restore(original)
+        assert original.exit_on_error is True  # unchanged
+
+    def test_parallel_restore_logs_warning(self, caplog):
+        """A warning is logged when exit_on_error is overridden."""
+        import logging
+
+        restorer = self._make_restorer()
+        with caplog.at_level(logging.WARNING, logger="confiture.core.restorer"):
+            restorer.restore(self._opts(parallel_restore=True, exit_on_error=True))
+        assert any("parallel_restore" in msg for msg in caplog.messages)
+
+    def test_parallel_restore_true_exit_on_error_already_false_no_warning(self, caplog):
+        """No warning when exit_on_error is already False."""
+        import logging
+
+        restorer = self._make_restorer()
+        with caplog.at_level(logging.WARNING, logger="confiture.core.restorer"):
+            restorer.restore(self._opts(parallel_restore=True, exit_on_error=False))
+        assert not any("parallel_restore" in msg for msg in caplog.messages)

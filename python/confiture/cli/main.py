@@ -1003,7 +1003,8 @@ def migrate_status(
         None,
         "--config",
         "-c",
-        help="Configuration file (default: none, optional for applied status)",
+        help="Config file for database connection. Must appear after 'status': "
+        "confiture migrate status -c config.yaml",
     ),
     output_format: str = typer.Option(
         "table",
@@ -1022,13 +1023,26 @@ def migrate_status(
 
     PROCESS:
       Lists all migrations and their status (applied or pending). With --config,
-      connects to database and shows which migrations are applied vs pending.
+      connects to the database and shows which migrations are applied vs pending.
+
+      Exit codes:
+        0  Normal: status shown successfully.
+        1  The tb_confiture tracking table was not found in the target database.
+           All migrations are shown as "pending" and an advisory is printed.
+           Run `confiture migrate up` to initialise, or use
+           `confiture migrate baseline --through <version>` if the schema is
+           already applied.
+
+    NOTE:
+      The -c/--config flag must appear AFTER the subcommand name (v0.5.9+):
+        confiture migrate status -c config.yaml   ✅
+        confiture migrate -c config.yaml status   ❌ (old form, no longer works)
 
     EXAMPLES:
       confiture migrate status
-        ↳ List all migrations and their status
+        ↳ List all migrations (file-based, status shown as "unknown" without --config)
 
-      confiture migrate status --config db/environments/prod.yaml
+      confiture migrate status -c db/environments/prod.yaml
         ↳ Show applied vs pending migrations in production database
 
       confiture migrate status --format json
@@ -1042,6 +1056,7 @@ def migrate_status(
       confiture migrate down     - Rollback applied migrations
       confiture migrate generate - Create new migration
     """
+    tracking_table_absent_exit: bool = False
     try:
         # Validate output format
         if output_format not in ("table", "json", "csv"):
@@ -1093,6 +1108,7 @@ def migrate_status(
         # Get applied migrations from database if config provided
         applied_versions: set[str] = set()
         db_error: str | None = None
+        tracking_table_absent: bool = False
         if config and config.exists():
             try:
                 from confiture.core.connection import create_connection, load_config
@@ -1101,9 +1117,12 @@ def migrate_status(
                 config_data = load_config(config)
                 conn = create_connection(config_data)
                 migrator = Migrator(connection=conn)
+                tracking_table_was_present = migrator.tracking_table_exists()
                 migrator.initialize()
                 applied_versions = set(migrator.get_applied_versions())
                 conn.close()
+                if not tracking_table_was_present:
+                    tracking_table_absent = True
             except Exception as e:
                 db_error = str(e)
                 if output_format != "json":
@@ -1127,14 +1146,17 @@ def migrate_status(
             name = parts[1] if len(parts) > 1 else base_name
 
             # Determine status
-            if applied_versions:
-                if version in applied_versions:
-                    status = "applied"
-                    applied_list.append(version)
-                else:
+            if config and config.exists() and not db_error:
+                # tracking_table_absent: table was missing → all migrations are pending
+                # (confiture has not been set up on this database yet)
+                if tracking_table_absent or version not in applied_versions:
                     status = "pending"
                     pending_list.append(version)
+                else:
+                    status = "applied"
+                    applied_list.append(version)
             else:
+                # No config provided or DB connection failed: status is genuinely unknown
                 status = "unknown"
 
             migrations_data.append(
@@ -1158,6 +1180,13 @@ def migrate_status(
             }
             if db_error:
                 result["warning"] = f"Could not connect to database: {db_error}"
+            elif tracking_table_absent:
+                result["warning"] = (
+                    "tb_confiture not found in this database. All migrations shown as "
+                    "'pending'. Run `confiture migrate up` to apply all migrations, or "
+                    "`confiture migrate baseline --through <version>` if the schema is "
+                    "already applied."
+                )
             if orphaned_sql_files:
                 result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
             if duplicate_versions:
@@ -1165,6 +1194,8 @@ def migrate_status(
                     v: [f.name for f in files] for v, files in duplicate_versions.items()
                 }
             _output_json(result, output_file, console)
+            if tracking_table_absent:
+                tracking_table_absent_exit = True
         elif output_format == "csv":
             # CSV output with migration list
             from confiture.cli.formatters.common import handle_output
@@ -1187,7 +1218,7 @@ def migrate_status(
                 elif migration["status"] == "pending":
                     status_display = "[yellow]⏳ pending[/yellow]"
                 else:
-                    status_display = "unknown"
+                    status_display = "[dim]⚠️ unknown (no config)[/dim]"
 
                 table.add_row(migration["version"], migration["name"], status_display)
 
@@ -1197,6 +1228,20 @@ def migrate_status(
                 console.print(f" ({len(applied_list)} applied, {len(pending_list)} pending)")
             else:
                 console.print()
+
+            if tracking_table_absent:
+                console.print(
+                    "\n[yellow]⚠️  tb_confiture not found in this database. "
+                    "Migrations shown as 'pending'.[/yellow]"
+                )
+                console.print(
+                    "[yellow]   Run `confiture migrate up` to apply all migrations, or[/yellow]"
+                )
+                console.print(
+                    "[yellow]   `confiture migrate baseline --through <version>` if the "
+                    "schema is already applied.[/yellow]"
+                )
+                tracking_table_absent_exit = True
 
             # Warn about duplicate versions
             if duplicate_versions:
@@ -1221,6 +1266,9 @@ def migrate_status(
         else:
             console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+    if tracking_table_absent_exit:
+        raise typer.Exit(1)
 
 
 def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:

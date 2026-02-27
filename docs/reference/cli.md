@@ -314,6 +314,10 @@ confiture migrate status [OPTIONS]
 | `--migrations-dir` | - | Path | `db/migrations` | Directory containing migration files |
 | `--config` | `-c` | Path | (none) | Config file to check applied status from database |
 
+> **Note (v0.5.9+):** The `-c`/`--config` flag must appear _after_ `status`:
+> `confiture migrate status -c config.yaml`
+> Using the old form (`confiture migrate -c config.yaml status`) produces `No such option: -c`.
+
 #### Examples
 
 ```bash
@@ -322,6 +326,7 @@ confiture migrate status
 
 # Show applied vs pending (requires database connection)
 confiture migrate status --config db/environments/local.yaml
+confiture migrate status -c db/environments/local.yaml  # short form (v0.5.9+: after subcommand)
 
 # Custom migrations directory
 confiture migrate status --migrations-dir custom/migrations

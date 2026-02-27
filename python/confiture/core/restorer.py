@@ -9,6 +9,8 @@ Requires custom format (-Fc) or directory format (-Fd) dumps.
 
 from __future__ import annotations
 
+import dataclasses
+import logging
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -17,6 +19,8 @@ from pathlib import Path
 import psycopg
 
 from confiture.exceptions import RestoreError
+
+_log = logging.getLogger(__name__)
 
 _PGDUMP_MAGIC = b"PGDMP"
 
@@ -35,11 +39,16 @@ class RestoreOptions:
         no_owner: Skip restoration of object ownership (--no-owner).
         no_acl: Skip restoration of access privileges (--no-acl).
         exit_on_error: Abort on first error (--exit-on-error). Recommended for
-            production restores.
+            production restores. Note: when ``parallel_restore=True`` this is
+            automatically overridden to ``False``.
         superuser: If set, run pg_restore via ``sudo -u <superuser>``.
         min_tables: After restore, verify at least this many tables exist.
             0 skips the check.
         min_tables_schema: Schema to count tables in for --min-tables.
+        parallel_restore: When ``True``, ``exit_on_error`` is automatically set
+            to ``False`` so that transient FK violations during the parallel
+            data phase do not abort the restore.  Use for all restores with
+            ``jobs > 1``.
     """
 
     backup_path: Path
@@ -54,6 +63,18 @@ class RestoreOptions:
     superuser: str | None = None
     min_tables: int = 0
     min_tables_schema: str = "public"
+    parallel_restore: bool = False
+    """When ``True``, ``exit_on_error`` is automatically overridden to ``False``
+    for the restore run and a warning is logged.
+
+    Use this for all restores with ``jobs > 1``.  During the data phase of a
+    parallel restore, FK constraints do not yet exist, so any FK-related errors
+    are transient and non-fatal.  Keeping ``exit_on_error=True`` with parallel
+    workers causes these transient errors to abort the restore unnecessarily.
+
+    Note: even with ``parallel_restore=True``, ``exit_on_error=False`` is set
+    on :class:`RestoreOptions`; the original options object is **not** mutated.
+    """
 
 
 @dataclass
@@ -67,6 +88,9 @@ class RestoreResult:
             None if --min-tables was 0 or validation was not reached.
         errors: Lines from pg_restore stderr containing ``pg_restore: error:``.
         warnings: Lines from pg_restore stderr containing ``pg_restore: warning:``.
+        diagnostics: Actionable hints emitted when known error patterns are
+            detected.  Currently populated after the post-data phase when
+            ``"out of shared memory"`` is found in errors or warnings.
     """
 
     success: bool
@@ -74,6 +98,7 @@ class RestoreResult:
     table_count: int | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
 
 
 class DatabaseRestorer:
@@ -88,12 +113,15 @@ class DatabaseRestorer:
             backup_path=Path("prod.pgdump"),
             target_db="staging",
             jobs=8,
+            parallel_restore=True,  # recommended for jobs > 1
             min_tables=300,
         )
         result = DatabaseRestorer().restore(opts)
         if not result.success:
             for err in result.errors:
                 print(err)
+        for hint in result.diagnostics:
+            print(hint)
     """
 
     # ------------------------------------------------------------------
@@ -126,8 +154,19 @@ class DatabaseRestorer:
         """
         self._validate_dump_format(options.backup_path)
 
+        # parallel_restore=True implies exit_on_error=False; FK violations during
+        # the data phase are transient and non-fatal when running parallel workers.
+        if options.parallel_restore and options.exit_on_error:
+            _log.warning(
+                "parallel_restore=True: overriding exit_on_error to False. "
+                "FK violations during the data phase are transient when using "
+                "parallel workers and will not abort the restore."
+            )
+            options = dataclasses.replace(options, exit_on_error=False)
+
         all_warnings: list[str] = []
         phases_done: list[str] = []
+        post_data_result: RestoreResult | None = None
 
         for section, parallel in [
             ("pre-data", False),
@@ -136,14 +175,30 @@ class DatabaseRestorer:
         ]:
             result = self._run_section(section, options, parallel, on_stderr_line)
             all_warnings.extend(result.warnings)
+            if section == "post-data":
+                post_data_result = result
             if not result.success:
+                diagnostics = (
+                    self._diagnose_post_data_errors(result.errors + result.warnings)
+                    if section == "post-data"
+                    else []
+                )
                 return RestoreResult(
                     success=False,
                     phases_completed=phases_done,
                     errors=result.errors,
                     warnings=all_warnings,
+                    diagnostics=diagnostics,
                 )
             phases_done.extend(result.phases_completed)
+
+        # Collect diagnostics from post-data phase (success or not)
+        post_data_lines = (
+            (post_data_result.errors + post_data_result.warnings)
+            if post_data_result is not None
+            else []
+        )
+        diagnostics = self._diagnose_post_data_errors(post_data_lines)
 
         # Optional post-restore table count check
         if options.min_tables > 0:
@@ -154,12 +209,14 @@ class DatabaseRestorer:
                 table_count=check.table_count,
                 errors=check.errors,
                 warnings=all_warnings,
+                diagnostics=diagnostics,
             )
 
         return RestoreResult(
             success=True,
             phases_completed=phases_done,
             warnings=all_warnings,
+            diagnostics=diagnostics,
         )
 
     # ------------------------------------------------------------------
@@ -251,6 +308,26 @@ class DatabaseRestorer:
             cmd += ["-j", str(options.jobs)]
         cmd.append(str(options.backup_path))
         return cmd
+
+    @staticmethod
+    def _diagnose_post_data_errors(lines: list[str]) -> list[str]:
+        """Return actionable hints for known post-data error patterns.
+
+        Args:
+            lines: Combined error and warning lines from the post-data phase.
+
+        Returns:
+            List of human-readable diagnostic strings (may be empty).
+        """
+        hints: list[str] = []
+        if any("out of shared memory" in line for line in lines):
+            hints.append(
+                "Hint: 'out of shared memory' during the post-data phase indicates that "
+                "max_locks_per_transaction is too low. For schemas with many partitions "
+                "(2 000+), set max_locks_per_transaction = 256 (or higher) in "
+                "postgresql.conf and reload PostgreSQL before retrying the restore."
+            )
+        return hints
 
     @staticmethod
     def _classify_stderr_line(line: str) -> str:

@@ -5,6 +5,73 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2026-02-27
+
+### Added
+
+- `RestoreOptions.parallel_restore` flag: when `True`, automatically sets
+  `exit_on_error=False` for parallel restores. FK violations during the data
+  phase are transient and non-fatal when running with multiple workers.
+  Logs a warning when the override is applied. See #54.
+- `RestoreResult.diagnostics`: list of actionable hints emitted when known
+  error patterns are detected after the post-data phase. Currently detects
+  `"out of shared memory"` and suggests raising `max_locks_per_transaction`
+  to 256+ for heavily partitioned schemas. See #55.
+
+### Changed
+
+- `migrate status` now reports all migrations as `"pending"` (not `"unknown"`)
+  when the `tb_confiture` tracking table is absent from the target database,
+  and exits with code 1 with an actionable advisory message. See #57.
+
+### Fixed
+
+- `migrate status` could not distinguish between "tracking table missing" and
+  "migrations applied but nothing recorded". These states now produce different
+  outputs and exit codes. See #57.
+
+---
+
+## [0.5.9] - 2026-02-27 ⚠️ Contains breaking CLI change — see below
+
+### Added
+
+- Schema history snapshots: `confiture migrate generate` now writes a DDL snapshot to
+  `db/schema_history/` after generating a migration. Opt out with `--no-snapshot`. See #53.
+- Auto-detect baseline: `confiture migrate up --auto-detect-baseline` compares the current
+  database schema against the nearest snapshot and marks matching migrations as baseline
+  without applying them. See #53.
+- `confiture migrate introspect` command to inspect live database schema. See #53.
+- External migration generator support: `confiture migrate generate --generator <name>`
+  delegates diff generation to a configurable external tool. See #49.
+
+### Fixed
+
+- `confiture seed convert` now correctly handles SQL files that contain multiple
+  `INSERT` statements. See #44.
+
+### Breaking Changes
+
+- **CLI: `-c` flag now comes after the subcommand name** (#56)
+
+  The config flag for `migrate status` changed position between 0.5.8 and 0.5.9:
+
+  ```sh
+  # Before (0.5.8) — no longer works:
+  confiture migrate -c config.yaml status
+
+  # After (0.5.9) — required form:
+  confiture migrate status -c config.yaml
+  ```
+
+  **Migration**: Update any automation scripts or aliases that use the old form.
+  The symptom of using the old form is `No such option: -c` at the group level.
+
+  This aligns `-c` with other `migrate` sub-commands and avoids ambiguity with
+  the top-level `confiture -c` option.
+
+---
+
 ## [0.5.0] - 2026-02-14
 
 ### Added
