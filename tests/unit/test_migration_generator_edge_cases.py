@@ -1,5 +1,7 @@
 """Edge case tests for MigrationGenerator to improve coverage."""
 
+import re
+
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.models.schema import SchemaChange, SchemaDiff
 
@@ -155,16 +157,18 @@ class TestMigrationGeneratorEdgeCases:
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 
-        # Create migrations with gaps
+        # Create migrations with gaps (old format for backward compatibility)
         (migrations_dir / "001_first.py").write_text("# migration")
         (migrations_dir / "003_third.py").write_text("# migration")  # Gap at 002
         (migrations_dir / "005_fifth.py").write_text("# migration")  # Gap at 004
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # Should find next version after highest (005 -> 006)
+        # Should return timestamp version (gaps no longer relevant with timestamp format)
         next_version = generator._get_next_version()
-        assert next_version == "006"
+        assert re.match(r"^\d{14}$", next_version), (
+            f"Version {next_version} should be 14-digit timestamp"
+        )
 
     def test_get_next_version_empty_directory(self, tmp_path):
         """Test _get_next_version with no existing migrations."""
@@ -173,6 +177,8 @@ class TestMigrationGeneratorEdgeCases:
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # Should start at 001
+        # Should return timestamp version
         next_version = generator._get_next_version()
-        assert next_version == "001"
+        assert re.match(r"^\d{14}$", next_version), (
+            f"Version {next_version} should be 14-digit timestamp"
+        )

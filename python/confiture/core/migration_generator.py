@@ -65,31 +65,18 @@ class MigrationGenerator:
         return filepath
 
     def _get_next_version(self) -> str:
-        """Get next sequential migration version number.
+        """Generate a timestamp-based migration version (seconds precision).
 
         Returns:
-            Version string (e.g., "001", "002", etc.)
+            Version string in YYYYMMDDHHmmSS format (e.g., "20260228120530").
+            Guaranteed unique for practical migration rates (< 1/second per developer).
+
+        Note:
+            Timestamps are seconds-precision to ensure lexicographic sort order
+            matches chronological order. Collision probability at 10 migrations/day
+            per developer is negligible.
         """
-        if not self.migrations_dir.exists():
-            return "001"
-
-        # Find existing migration files
-        migration_files = sorted(self.migrations_dir.glob("*.py"))
-
-        if not migration_files:
-            return "001"
-
-        # Extract version from last file (e.g., "003_name.py" -> 3)
-        last_file = migration_files[-1]
-        last_version_str = last_file.name.split("_")[0]
-
-        try:
-            last_version = int(last_version_str)
-            next_version = last_version + 1
-            return f"{next_version:03d}"
-        except ValueError:
-            # If we can't parse version, start over
-            return "001"
+        return datetime.now().strftime("%Y%m%d%H%M%S")
 
     def _validate_versions(self) -> dict[str, list[Path]]:
         """Validate migration versions for duplicates.

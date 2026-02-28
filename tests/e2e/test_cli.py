@@ -185,7 +185,9 @@ class TestMigrateGenerateCommand:
         )
 
         assert result.exit_code == 0
-        assert "001_test_migration" in result.stdout
+        # Check for timestamp-based migration file in output
+        assert "test_migration" in result.stdout
+        assert ".py" in result.stdout  # File was created
 
 
 class TestMigrateDiffCommand:

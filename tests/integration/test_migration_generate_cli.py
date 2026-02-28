@@ -4,6 +4,7 @@ Tests JSON output, dry-run mode, verbose mode, --force flag, and external genera
 """
 
 import json
+import re
 import stat
 import textwrap
 
@@ -44,7 +45,9 @@ class TestMigrateGenerateJSONOutput:
 
         # Should have expected structure
         assert data["status"] == "success"
-        assert data["version"] == "001"
+        assert re.match(r"^\d{14}$", data["version"]), (
+            f"Version {data['version']} should be 14-digit timestamp"
+        )
         assert data["name"] == "test_migration"
         assert "filepath" in data
         assert data["class_name"] == "TestMigration"
@@ -208,8 +211,12 @@ class TestMigrateGenerateVerbose:
 
         # Should show scanning information
         assert "Scanning" in result.stdout or "scanning" in result.stdout
-        # Should show found files
-        assert "001_first" in result.stdout or "Found" in result.stdout
+        # Should show found files or timestamp version
+        assert (
+            "001_first" in result.stdout
+            or "Found" in result.stdout
+            or "test_migration" in result.stdout
+        )
 
 
 class TestMigrateGenerateForceFlag:
@@ -220,14 +227,14 @@ class TestMigrateGenerateForceFlag:
     """
 
     def test_sequential_naming_without_collision(self, tmp_path):
-        """Should generate sequential versions without collision."""
+        """Should generate unique timestamp versions without collision."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        # Create existing file with same name
+        # Create existing file with same name (old format for compatibility)
         (migrations_dir / "001_test.py").write_text("# migration 1")
 
-        # Generate migration with same name (should create 002_test.py)
+        # Generate migration with same name (should create timestamp_test.py)
         result = runner.invoke(
             app,
             [
@@ -242,19 +249,23 @@ class TestMigrateGenerateForceFlag:
         # Should succeed
         assert result.exit_code == 0
 
-        # Both files should exist
+        # Both files should exist - old format and new timestamp format
         assert (migrations_dir / "001_test.py").exists()
-        assert (migrations_dir / "002_test.py").exists()
+        # Check for any timestamp_test.py file
+        timestamp_files = list(migrations_dir.glob(r"[0-9][0-9][0-9][0-9]*_test.py"))
+        assert len(timestamp_files) >= 1, (
+            f"Should have generated timestamp migration, found: {list(migrations_dir.glob('*.py'))}"
+        )
 
     def test_force_flag_has_no_effect_with_auto_versioning(self, tmp_path):
-        """Force flag has limited use with auto-versioning."""
+        """Force flag with timestamp-based versioning."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
         # Create file 001_test.py
         (migrations_dir / "001_test.py").write_text("# migration 1")
 
-        # Generate with --force (auto-generates 002_test.py, so force doesn't matter)
+        # Generate with --force (auto-generates timestamp version)
         result = runner.invoke(
             app,
             [
@@ -270,9 +281,11 @@ class TestMigrateGenerateForceFlag:
         # Should succeed
         assert result.exit_code == 0
 
-        # Should create 002_test.py, not overwrite 001_test.py
+        # Should create timestamp_test.py, not overwrite 001_test.py
         assert (migrations_dir / "001_test.py").exists()
-        assert (migrations_dir / "002_test.py").exists()
+        # Check for timestamp-based migration file
+        timestamp_files = list(migrations_dir.glob(r"[0-9][0-9][0-9][0-9]*_test.py"))
+        assert len(timestamp_files) >= 1, "Should have generated timestamp migration"
 
     def test_force_flag_mentioned_in_help(self, tmp_path):
         """Force flag should be documented in help text."""
@@ -427,7 +440,9 @@ class TestMigrateGenerateIntegration:
         )
 
         data1 = json.loads(result1.stdout.strip())
-        assert data1["version"] == "001"
+        assert re.match(r"^\d{14}$", data1["version"]), (
+            f"Version {data1['version']} should be 14-digit timestamp"
+        )
 
         # Generate second migration
         result2 = runner.invoke(
@@ -444,7 +459,11 @@ class TestMigrateGenerateIntegration:
         )
 
         data2 = json.loads(result2.stdout.strip())
-        assert data2["version"] == "002"
+        assert re.match(r"^\d{14}$", data2["version"]), (
+            f"Version {data2['version']} should be 14-digit timestamp"
+        )
+        # Second version should be >= first version (can be same second or later)
+        assert data2["version"] >= data1["version"]
 
         # Both files should exist
         migration_files = list(migrations_dir.glob("*.py"))

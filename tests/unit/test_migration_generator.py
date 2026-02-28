@@ -1,5 +1,7 @@
 """Unit tests for Migration Generator (Milestone 1.11)."""
 
+import re
+
 import pytest
 
 from confiture.core.migration_generator import MigrationGenerator
@@ -24,21 +26,27 @@ class TestMigrationGenerator:
         assert "add_users_table" in migration_file.name
 
     def test_generate_migration_with_version_number(self, tmp_path):
-        """Should generate sequential version numbers."""
+        """Should generate timestamp-based version numbers."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # First migration should be 001
+        # First migration should have timestamp format
         diff1 = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
         file1 = generator.generate(diff1, name="add_users")
-        assert file1.name.startswith("001_")
+        assert re.match(r"^\d{14}_", file1.name), (
+            f"Filename {file1.name} should start with 14-digit timestamp"
+        )
 
-        # Second migration should be 002
+        # Second migration should also have timestamp format (may be same second or later)
         diff2 = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="posts")])
         file2 = generator.generate(diff2, name="add_posts")
-        assert file2.name.startswith("002_")
+        assert re.match(r"^\d{14}_", file2.name), (
+            f"Filename {file2.name} should start with 14-digit timestamp"
+        )
+        # Timestamps should be >= (can be same second or later)
+        assert file2.name[:14] >= file1.name[:14]
 
     def test_generate_migration_for_add_table(self, tmp_path):
         """Should generate correct SQL for ADD_TABLE."""
@@ -54,7 +62,9 @@ class TestMigrationGenerator:
 
         # Should contain migration class
         assert "class AddUsersTable(Migration):" in content
-        assert 'version = "001"' in content
+        assert re.search(r'version = "\d{14}"', content), (
+            "version should have 14-digit timestamp format"
+        )
         assert 'name = "add_users_table"' in content
 
         # Should contain up method with CREATE TABLE
@@ -328,28 +338,28 @@ class TestMigrationGenerator:
         compile(content, str(migration_file), "exec")  # Should not raise
 
     def test_get_next_version_empty_dir(self, tmp_path):
-        """Should return 001 for empty migrations directory."""
+        """Should return timestamp version for empty migrations directory."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         version = generator._get_next_version()
 
-        assert version == "001"
+        assert re.match(r"^\d{14}$", version), f"Version {version} should be 14-digit timestamp"
 
     def test_get_next_version_with_existing(self, tmp_path):
-        """Should return next version number."""
+        """Should return timestamp version regardless of existing migrations."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        # Create existing migrations
+        # Create existing migrations (old format or new format - doesn't matter)
         (migrations_dir / "001_first.py").touch()
         (migrations_dir / "002_second.py").touch()
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         version = generator._get_next_version()
 
-        assert version == "003"
+        assert re.match(r"^\d{14}$", version), f"Version {version} should be 14-digit timestamp"
 
     def test_to_class_name_conversion(self, tmp_path):
         """Should convert snake_case to PascalCase."""

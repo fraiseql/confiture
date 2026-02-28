@@ -1,8 +1,8 @@
 # Confiture 🍓
 
-**PostgreSQL migrations with multi-agent coordination and 4 flexible strategies**
+**PostgreSQL migrations with multi-agent coordination, timestamp-based versioning, and 4 flexible strategies**
 
-Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent conflict detection. Production data sync with PII anonymization.
+Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent conflict detection. No merge conflicts (timestamp-based versioning). Production data sync with PII anonymization.
 
 [![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
 [![Tests](https://img.shields.io/badge/tests-4100%2B-brightgreen)](https://github.com/fraiseql/confiture)

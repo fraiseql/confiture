@@ -1512,7 +1512,9 @@ def migrate_up(
     try:
         # Validate dry-run options
         if dry_run and dry_run_execute:
-            error_console.print("[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]")
+            error_console.print(
+                "[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]"
+            )
             raise typer.Exit(1)
 
         if (dry_run or dry_run_execute) and force:
@@ -1543,12 +1545,16 @@ def migrate_up(
             error_console.print(
                 "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
             )
-            error_console.print("[red]Multiple migration files share the same version number:[/red]\n")
+            error_console.print(
+                "[red]Multiple migration files share the same version number:[/red]\n"
+            )
             for version, files in sorted(_up_duplicates.items()):
                 error_console.print(f"  Version {version}:")
                 for f in files:
                     error_console.print(f"    • {f.name}")
-            error_console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+            error_console.print(
+                "\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]"
+            )
             error_console.print(
                 "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
             )
@@ -1710,7 +1716,9 @@ def migrate_up(
         if orphaned_files:
             _print_orphaned_files_warning(orphaned_files, error_console)
             if effective_strict_mode:
-                error_console.print("\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]")
+                error_console.print(
+                    "\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]"
+                )
                 conn.close()
                 raise typer.Exit(1)
 

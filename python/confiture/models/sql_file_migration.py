@@ -5,18 +5,18 @@ Migrations are discovered from .up.sql/.down.sql file pairs.
 
 Example file structure:
     db/migrations/
-    ├── 001_create_users.py           # Python migration
-    ├── 002_add_posts.py              # Python migration
-    ├── 003_move_catalog_tables.up.sql    # SQL migration (up)
-    ├── 003_move_catalog_tables.down.sql  # SQL migration (down)
-    ├── 003_move_catalog_tables.yaml      # Optional: preconditions
+    ├── 20260228120530_create_users.py           # Python migration
+    ├── 20260228120531_add_posts.py              # Python migration
+    ├── 20260228120532_move_catalog_tables.up.sql    # SQL migration (up)
+    ├── 20260228120532_move_catalog_tables.down.sql  # SQL migration (down)
+    ├── 20260228120532_move_catalog_tables.yaml      # Optional: preconditions
 
 The migrator will automatically detect and load SQL file pairs alongside
 Python migrations.
 
 Preconditions for SQL-only migrations can be defined in a YAML sidecar file:
 
-    # 003_move_catalog_tables.yaml
+    # 20260228120532_move_catalog_tables.yaml
     up_preconditions:
       - type: TableExists
         table: tb_datasupplier
@@ -47,7 +47,7 @@ class FileSQLMigration(Migration):
     SQL files.
 
     The version and name are extracted from the filename:
-    - `003_move_catalog_tables.up.sql` → version="003", name="move_catalog_tables"
+    - `20260228120532_move_catalog_tables.up.sql` → version="20260228120532", name="move_catalog_tables"
 
     Attributes:
         up_file: Path to the .up.sql file
@@ -75,7 +75,7 @@ class FileSQLMigration(Migration):
             FileNotFoundError: If either SQL file doesn't exist
         """
         # Extract version and name from filename before calling super().__init__
-        # Filename format: 003_move_catalog_tables.up.sql
+        # Filename format: 20260228120532_move_catalog_tables.up.sql
         base_name = up_file.name.replace(".up.sql", "")
         parts = base_name.split("_", 1)
 

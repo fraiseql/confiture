@@ -14,7 +14,7 @@ class Migration(ABC):
     """Base class for all database migrations.
 
     Each migration must:
-    - Define a version (e.g., "001", "002")
+    - Define a version (e.g., "20260228120530")
     - Define a name (e.g., "create_users")
     - Implement up() method for applying the migration
     - Implement down() method for rolling back the migration
@@ -51,7 +51,7 @@ class Migration(ABC):
 
     Example:
         >>> class CreateUsers(Migration):
-        ...     version = "001"
+        ...     version = "20260228120530"
         ...     name = "create_users"
         ...
         ...     def up(self):
@@ -67,7 +67,7 @@ class Migration(ABC):
 
     Example with hooks:
         >>> class AddAnalyticsTable(Migration):
-        ...     version = "002"
+        ...     version = "20260228120531"
         ...     name = "add_analytics_table"
         ...     after_ddl_hooks = [BackfillAnalyticsHook()]
         ...
@@ -79,7 +79,7 @@ class Migration(ABC):
 
     Example non-transactional (CREATE INDEX CONCURRENTLY):
         >>> class AddSearchIndex(Migration):
-        ...     version = "015"
+        ...     version = "20260301090000"
         ...     name = "add_search_index"
         ...     transactional = False  # Required for CONCURRENTLY
         ...
@@ -91,7 +91,7 @@ class Migration(ABC):
 
     Example SQL-only migration (using SQLMigration):
         >>> class MoveCatalogTables(SQLMigration):
-        ...     version = "003"
+        ...     version = "20260228130000"
         ...     name = "move_catalog_tables"
         ...
         ...     up_sql = "ALTER TABLE tenant.products SET SCHEMA catalog;"

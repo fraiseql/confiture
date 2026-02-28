@@ -137,6 +137,12 @@ confiture migrate up
 - [Production Data Sync](guides/03-production-sync.md) - Copy and anonymize data
 - [Schema-to-Schema](guides/04-schema-to-schema.md) - Zero-downtime via FDW
 
+### Migration Versioning (v0.6.0+)
+- [Migration Versioning Strategies](guides/migration-versioning-strategies.md) - **NEW!** Timestamp-based versioning (v0.6.0)
+  - Comparison: Confiture vs Flyway vs Django vs Rails vs Alembic
+  - Why we switched to timestamps, no more merge conflicts
+  - Backwards compatible with legacy `001_` format
+
 ### Migration File Management
 - [Migration Naming Best Practices](guides/migration-naming-best-practices.md) - Naming conventions and validation
 

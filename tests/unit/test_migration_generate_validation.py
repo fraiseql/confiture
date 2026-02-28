@@ -4,6 +4,8 @@ Tests duplicate version detection, file existence checks, name conflicts,
 and concurrent creation protection.
 """
 
+import re
+
 from confiture.core.migration_generator import MigrationGenerator
 
 
@@ -251,29 +253,33 @@ class TestVersionCalculationWithValidation:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        # Create migrations including duplicates
+        # Create migrations including duplicates (old format for test)
         (migrations_dir / "001_first.py").write_text("# migration")
         (migrations_dir / "003_third_a.py").write_text("# migration")
         (migrations_dir / "003_third_b.py").write_text("# migration")
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # Should find next version after highest (3)
+        # Should return timestamp version (duplicates don't affect timestamp generation)
         next_version = generator._get_next_version()
-        assert next_version == "004"
+        assert re.match(r"^\d{14}$", next_version), (
+            f"Version {next_version} should be 14-digit timestamp"
+        )
 
     def test_next_version_with_gaps(self, tmp_path):
         """Should calculate next version with gaps in sequence."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        # Create migrations with gaps
+        # Create migrations with gaps (old format for test)
         (migrations_dir / "001_first.py").write_text("# migration")
         (migrations_dir / "005_fifth.py").write_text("# migration")
         (migrations_dir / "007_seventh.py").write_text("# migration")
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # Should find next version after highest
+        # Should return timestamp version (gaps don't affect timestamp generation)
         next_version = generator._get_next_version()
-        assert next_version == "008"
+        assert re.match(r"^\d{14}$", next_version), (
+            f"Version {next_version} should be 14-digit timestamp"
+        )
