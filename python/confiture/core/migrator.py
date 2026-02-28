@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +28,9 @@ from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
+
+# Allows 'table_name' or 'schema.table_name' (letters, digits, underscores only)
+_VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
 
 
 def _version_from_migration_filename(filename: str) -> str:
@@ -96,13 +100,35 @@ class Migrator:
         >>> migrator.apply(my_migration)
     """
 
-    def __init__(self, connection: psycopg.Connection):
+    def __init__(
+        self,
+        connection: psycopg.Connection,
+        migration_table: str = "tb_confiture",
+    ):
         """Initialize migrator with database connection.
 
         Args:
             connection: psycopg3 database connection
+            migration_table: Name of the tracking table. May be schema-qualified
+                (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``.
+
+        Raises:
+            ValueError: If migration_table contains characters that are not
+                safe for use as an unquoted SQL identifier.
         """
+        if not _VALID_TABLE_RE.match(migration_table):
+            raise ValueError(
+                f"Invalid migration_table name: {migration_table!r}. "
+                "Use letters, digits, and underscores only, optionally "
+                "schema-qualified (e.g. 'public.tb_confiture')."
+            )
         self.connection = connection
+        self.migration_table = migration_table
+        # Unqualified table name — used for index names and information_schema lookups
+        self._table_base = migration_table.split(".")[-1]
+        # Schema part (None when not schema-qualified)
+        parts = migration_table.split(".", 1)
+        self._table_schema: str | None = parts[0] if len(parts) == 2 else None
 
     def _execute_sql(self, sql: str, params: tuple[str, ...] | None = None) -> None:
         """Execute SQL with detailed error reporting.
@@ -140,21 +166,35 @@ class Migrator:
             # Enable UUID extension
             self._execute_sql('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
-            # Check if table exists
+            # Check if table exists (schema-aware)
             with self.connection.cursor() as cursor:
-                cursor.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_name = 'tb_confiture'
+                if self._table_schema is not None:
+                    cursor.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables
+                            WHERE table_schema = %s AND table_name = %s
+                        )
+                        """,
+                        (self._table_schema, self._table_base),
                     )
-                """)
+                else:
+                    cursor.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables
+                            WHERE table_name = %s
+                        )
+                        """,
+                        (self._table_base,),
+                    )
                 result = cursor.fetchone()
                 table_exists = result[0] if result else False
 
             if not table_exists:
                 # Create new table with Trinity pattern
-                self._execute_sql("""
-                    CREATE TABLE tb_confiture (
+                self._execute_sql(f"""
+                    CREATE TABLE {self.migration_table} (
                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                         pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
                         slug TEXT NOT NULL UNIQUE,
@@ -167,21 +207,21 @@ class Migrator:
                 """)
 
                 # Create indexes
-                self._execute_sql("""
-                    CREATE INDEX idx_tb_confiture_pk_confiture
-                        ON tb_confiture(pk_confiture)
+                self._execute_sql(f"""
+                    CREATE INDEX idx_{self._table_base}_pk_confiture
+                        ON {self.migration_table}(pk_confiture)
                 """)
-                self._execute_sql("""
-                    CREATE INDEX idx_tb_confiture_slug
-                        ON tb_confiture(slug)
+                self._execute_sql(f"""
+                    CREATE INDEX idx_{self._table_base}_slug
+                        ON {self.migration_table}(slug)
                 """)
-                self._execute_sql("""
-                    CREATE INDEX idx_tb_confiture_version
-                        ON tb_confiture(version)
+                self._execute_sql(f"""
+                    CREATE INDEX idx_{self._table_base}_version
+                        ON {self.migration_table}(version)
                 """)
-                self._execute_sql("""
-                    CREATE INDEX idx_tb_confiture_applied_at
-                        ON tb_confiture(applied_at DESC)
+                self._execute_sql(f"""
+                    CREATE INDEX idx_{self._table_base}_applied_at
+                        ON {self.migration_table}(applied_at DESC)
                 """)
 
             self.connection.commit()
@@ -423,8 +463,8 @@ class Migrator:
 
         with self.connection.cursor() as cursor:
             cursor.execute(
-                """
-                INSERT INTO tb_confiture
+                f"""
+                INSERT INTO {self.migration_table}
                     (slug, version, name, execution_time_ms, checksum)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
@@ -485,8 +525,8 @@ class Migrator:
         # Record in tracking table with execution_time_ms = 0 (not executed)
         with self.connection.cursor() as cursor:
             cursor.execute(
-                """
-                INSERT INTO tb_confiture
+                f"""
+                INSERT INTO {self.migration_table}
                     (slug, version, name, execution_time_ms, checksum)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
@@ -510,7 +550,7 @@ class Migrator:
             Number of rows deleted.
         """
         with self.connection.cursor() as cursor:
-            cursor.execute("DELETE FROM tb_confiture")
+            cursor.execute(f"DELETE FROM {self.migration_table}")
             deleted = cursor.rowcount
         return deleted
 
@@ -591,8 +631,8 @@ class Migrator:
 
                 with self.connection.cursor() as cursor:
                     cursor.execute(
-                        """
-                        INSERT INTO tb_confiture
+                        f"""
+                        INSERT INTO {self.migration_table}
                             (slug, version, name, execution_time_ms, checksum)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
@@ -690,8 +730,8 @@ class Migrator:
 
             # Remove from tracking table
             self._execute_sql(
-                """
-                DELETE FROM tb_confiture
+                f"""
+                DELETE FROM {self.migration_table}
                 WHERE version = %s
                 """,
                 (migration.version,),
@@ -738,8 +778,8 @@ class Migrator:
 
             # Remove from tracking table
             self._execute_sql(
-                """
-                DELETE FROM tb_confiture
+                f"""
+                DELETE FROM {self.migration_table}
                 WHERE version = %s
                 """,
                 (migration.version,),
@@ -776,9 +816,9 @@ class Migrator:
         """
         with self.connection.cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*)
-                FROM tb_confiture
+                FROM {self.migration_table}
                 WHERE version = %s
                 """,
                 (version,),
@@ -796,9 +836,9 @@ class Migrator:
             List of migration versions, sorted by applied_at timestamp
         """
         with self.connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT version
-                FROM tb_confiture
+                FROM {self.migration_table}
                 ORDER BY applied_at ASC
             """)
             return [row[0] for row in cursor.fetchall()]
@@ -861,14 +901,26 @@ class Migrator:
             ...     migrator.initialize()
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_name = 'tb_confiture'
+            if self._table_schema is not None:
+                cursor.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = %s AND table_name = %s
+                    )
+                    """,
+                    (self._table_schema, self._table_base),
                 )
-                """
-            )
+            else:
+                cursor.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_name = %s
+                    )
+                    """,
+                    (self._table_base,),
+                )
             result = cursor.fetchone()
             return bool(result[0]) if result else False
 

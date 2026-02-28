@@ -5,6 +5,34 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-02-28
+
+### Fixed
+
+- **`migration.tracking_table` now respected** (#60) - The tracking table name configured in
+  environment YAML was previously defined but silently ignored; all SQL always used the
+  hardcoded name `tb_confiture`. Schema-qualified names such as `public.tb_confiture` now flow
+  through to every SQL statement (`CREATE TABLE`, `INSERT`, `SELECT`, `DELETE`, index creation)
+  and to the `information_schema` existence checks, so `search_path` can no longer redirect
+  the table to an unintended schema.
+
+### Changed
+
+- `tracking_table` is now nested under `migration:` (consistent with `strict_mode`, `locking`,
+  `view_helpers`, and all other migration options) instead of being a top-level field:
+
+  ```yaml
+  migration:
+    tracking_table: public.tb_confiture   # was: migration_table: public.tb_confiture
+  ```
+
+- `Migrator.__init__` accepts an explicit `migration_table` keyword argument (default:
+  `"tb_confiture"`). Invalid names (anything other than letters, digits, underscores, and an
+  optional `schema.` prefix) raise `ValueError` immediately, preventing SQL injection through
+  configuration.
+
+---
+
 ## [0.6.0] - 2026-02-28 ⚠️ Breaking change: Migration version format
 
 ### Added

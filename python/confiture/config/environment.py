@@ -144,6 +144,8 @@ class MigrationConfig(BaseModel):
         migration_generators: Named external generator commands
         snapshot_history: Write schema snapshot alongside each generated migration (default: True)
         snapshots_dir: Directory for schema history snapshots (default: db/schema_history)
+        tracking_table: Name of the confiture tracking table, optionally schema-qualified
+            (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``.
     """
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
@@ -152,6 +154,7 @@ class MigrationConfig(BaseModel):
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)
     snapshot_history: bool = True
     snapshots_dir: str = "db/schema_history"
+    tracking_table: str = "tb_confiture"
 
 
 class PgGitConfig(BaseModel):
@@ -260,11 +263,10 @@ class Environment(BaseModel):
         database_url: PostgreSQL connection URL
         include_dirs: Directories to include when building schema (supports both string and dict formats)
         exclude_dirs: Directories to exclude from schema build
-        migration_table: Table name for tracking migrations
         auto_backup: Whether to automatically backup before migrations
         require_confirmation: Whether to require user confirmation for risky operations
         build: Build configuration options
-        migration: Migration configuration options
+        migration: Migration configuration options (includes tracking_table)
         pggit: pgGit integration configuration (development/staging only)
         seed: Seed data application configuration
     """
@@ -273,7 +275,6 @@ class Environment(BaseModel):
     database_url: str
     include_dirs: list[str | DirectoryConfig]
     exclude_dirs: list[str] = Field(default_factory=list)
-    migration_table: str = "tb_confiture"
     auto_backup: bool = True
     require_confirmation: bool = True
     build: BuildConfig = Field(default_factory=BuildConfig)

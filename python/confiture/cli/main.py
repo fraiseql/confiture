@@ -1118,7 +1118,7 @@ def migrate_status(
 
                 config_data = load_config(config)
                 conn = create_connection(config_data)
-                migrator = Migrator(connection=conn)
+                migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
                 tracking_table_was_present = migrator.tracking_table_exists()
                 migrator.initialize()
                 applied_versions = set(migrator.get_applied_versions())
@@ -1604,7 +1604,7 @@ def migrate_up(
         conn = create_connection(config_data)
 
         # Create migrator
-        migrator = Migrator(connection=conn)
+        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
 
         # Auto-detect baseline pre-flight (before initialize so we can check absence)
         if auto_detect_baseline and not migrator.tracking_table_exists():
@@ -2537,7 +2537,7 @@ def migrate_baseline(
         conn = create_connection(config_data)
 
         # Initialize migrator
-        migrator = Migrator(connection=conn)
+        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
         migrator.initialize()
 
         # Find all migration files
@@ -2715,7 +2715,7 @@ def migrate_reinit(
         conn = create_connection(config_data)
 
         # Initialize migrator
-        migrator = Migrator(connection=conn)
+        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
         migrator.initialize()
 
         # Find migration files to show what will happen
@@ -3038,7 +3038,7 @@ def migrate_down(
         conn = create_connection(config_data)
 
         # Create migrator
-        migrator = Migrator(connection=conn)
+        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
         migrator.initialize()
 
         # Get applied migrations
@@ -3827,7 +3827,7 @@ def migrate_introspect(
 
         config_data = load_config(config)
         conn = create_connection(config_data)
-        migrator = Migrator(connection=conn)
+        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
 
         tb_present = migrator.tracking_table_exists()
 
