@@ -5,6 +5,7 @@ This module defines the main Typer application and all CLI commands.
 
 import difflib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -143,8 +144,9 @@ app = typer.Typer(
     add_completion=False,
 )
 
-# Create Rich console for pretty output
+# Create Rich consoles for stdout and stderr
 console = Console()
+error_console = Console(file=sys.stderr)
 
 
 def version_callback(value: bool) -> None:
@@ -1510,16 +1512,16 @@ def migrate_up(
     try:
         # Validate dry-run options
         if dry_run and dry_run_execute:
-            console.print("[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]")
+            error_console.print("[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]")
             raise typer.Exit(1)
 
         if (dry_run or dry_run_execute) and force:
-            console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
+            error_console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
             raise typer.Exit(1)
 
         # Validate format option
         if format_output not in ("text", "json"):
-            console.print(
+            error_console.print(
                 f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
             )
             raise typer.Exit(1)
@@ -1527,7 +1529,7 @@ def migrate_up(
         # Validate checksum mismatch option
         valid_mismatch_behaviors = ("fail", "warn", "ignore")
         if on_checksum_mismatch not in valid_mismatch_behaviors:
-            console.print(
+            error_console.print(
                 f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
                 f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
             )
@@ -1538,16 +1540,16 @@ def migrate_up(
 
         _up_duplicates = find_duplicate_migration_versions(migrations_dir)
         if _up_duplicates:
-            console.print(
+            error_console.print(
                 "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
             )
-            console.print("[red]Multiple migration files share the same version number:[/red]\n")
+            error_console.print("[red]Multiple migration files share the same version number:[/red]\n")
             for version, files in sorted(_up_duplicates.items()):
-                console.print(f"  Version {version}:")
+                error_console.print(f"  Version {version}:")
                 for f in files:
-                    console.print(f"    • {f.name}")
-            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-            console.print(
+                    error_console.print(f"    • {f.name}")
+            error_console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+            error_console.print(
                 "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
             )
             raise typer.Exit(3)
@@ -1669,12 +1671,12 @@ def migrate_up(
                 if not mismatches:
                     console.print("[cyan]🔐 Checksum verification passed[/cyan]\n")
             except ChecksumVerificationError as e:
-                console.print("[red]❌ Checksum verification failed![/red]\n")
+                error_console.print("[red]❌ Checksum verification failed![/red]\n")
                 for m in e.mismatches:
-                    console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-                    console.print(f"    Expected: {m.expected[:16]}...")
-                    console.print(f"    Actual:   {m.actual[:16]}...")
-                console.print(
+                    error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+                    error_console.print(f"    Expected: {m.expected[:16]}...")
+                    error_console.print(f"    Actual:   {m.actual[:16]}...")
+                error_console.print(
                     "\n[yellow]💡 Tip: Use 'confiture verify --fix' to update checksums, "
                     "or --no-verify-checksums to skip[/yellow]"
                 )
@@ -1706,9 +1708,9 @@ def migrate_up(
         # Check for orphaned migration files
         orphaned_files = _find_orphaned_sql_files(migrations_dir)
         if orphaned_files:
-            _print_orphaned_files_warning(orphaned_files, console)
+            _print_orphaned_files_warning(orphaned_files, error_console)
             if effective_strict_mode:
-                console.print("\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]")
+                error_console.print("\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]")
                 conn.close()
                 raise typer.Exit(1)
 
@@ -1889,13 +1891,13 @@ def migrate_up(
                             break
 
         except LockAcquisitionError as e:
-            print_error_to_console(e)
+            print_error_to_console(e, error_console)
             if e.timeout:
-                console.print(
+                error_console.print(
                     f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
                 )
             else:
-                console.print(
+                error_console.print(
                     "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
                 )
             conn.close()
@@ -1956,7 +1958,7 @@ def migrate_up(
         # Already handled above
         raise
     except Exception as e:
-        print_error_to_console(e)
+        print_error_to_console(e, error_console)
         raise typer.Exit(1) from e
 
 
@@ -2132,16 +2134,16 @@ def migrate_generate(
         help="Override snapshot output directory (default: db/schema_history)",
     ),
 ) -> None:
-    """Generate a new migration file with auto-incrementing version.
+    """Generate a new migration file with timestamp-based version.
 
     PROCESS:
-      Creates an empty migration template with auto-calculated version number.
-      Scans existing migrations and increments the highest version (3-digit
-      zero-padded: 001, 002, ..., 999). Gaps in numbering are preserved.
+      Creates an empty migration template with a timestamp-based version number.
+      Uses the current system time (YYYYMMDDHHmmSS format) to ensure uniqueness
+      and avoid merge conflicts in multi-developer environments.
 
     EXAMPLES:
       confiture migrate generate add_user_email
-        ↳ Create migration template, auto-version to 001 (or next available)
+        ↳ Create migration template with timestamp version (20260228120530_add_user_email.py)
 
       confiture migrate generate add_payment_column --verbose
         ↳ Show version calculation and scanning details

@@ -175,6 +175,102 @@ class TestFindMatchingSnapshot:
         assert result == "003"
 
 
+class TestFuzzyMatching:
+    """Tests for fuzzy/structural matching with sparse snapshots (Issue #58)."""
+
+    def test_fuzzy_match_returns_version_when_above_threshold(self, tmp_path: Path) -> None:
+        """Fuzzy match is accepted when similarity >= threshold (default 0.85)."""
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        # Snapshot with 3 tables
+        snapshot = """
+            CREATE TABLE tb_a (id bigint);
+            CREATE TABLE tb_b (id bigint);
+            CREATE TABLE tb_c (id bigint);
+        """
+        (snapshots_dir / "001_baseline.sql").write_text(snapshot)
+
+        # Live DB at intermediate state: has all tables from snapshot + 1 new table
+        # This simulates migration 002 state when only 001 snapshot exists
+        live = """
+            CREATE TABLE tb_a (id bigint);
+            CREATE TABLE tb_b (id bigint);
+            CREATE TABLE tb_c (id bigint);
+            CREATE TABLE tb_d (id bigint);
+        """
+
+        detector = BaselineDetector(snapshots_dir, similarity_threshold=0.85)
+        result = detector.find_matching_snapshot(live)
+        # Should match 001 (similarity ~0.856)
+        assert result == "001"
+
+    def test_fuzzy_match_respects_custom_threshold(self, tmp_path: Path) -> None:
+        """Custom similarity threshold can make matching stricter."""
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        snapshot = """
+            CREATE TABLE tb_a (id bigint);
+            CREATE TABLE tb_b (id bigint);
+        """
+        (snapshots_dir / "001_baseline.sql").write_text(snapshot)
+
+        # Live DB differs significantly
+        live = """
+            CREATE TABLE tb_x (id bigint);
+            CREATE TABLE tb_y (id bigint);
+            CREATE TABLE tb_z (id bigint);
+        """
+
+        # With high threshold, no match
+        detector_strict = BaselineDetector(snapshots_dir, similarity_threshold=0.99)
+        result = detector_strict.find_matching_snapshot(live)
+        assert result is None
+
+        # With low threshold, should match
+        detector_loose = BaselineDetector(snapshots_dir, similarity_threshold=0.01)
+        result = detector_loose.find_matching_snapshot(live)
+        assert result == "001"
+
+    def test_sparse_snapshots_scenario(self, tmp_path: Path) -> None:
+        """After migration consolidation (001, 015 snapshots), intermediate states match best."""
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+
+        # Only 2 snapshots after consolidation
+        (snapshots_dir / "001_baseline.sql").write_text(
+            "CREATE TABLE tb_catalog (id bigint); CREATE TABLE tb_users (id bigint);"
+        )
+        (snapshots_dir / "015_final.sql").write_text(
+            "CREATE TABLE tb_catalog (id bigint); CREATE TABLE tb_users (id bigint); "
+            "CREATE TABLE tb_orders (id bigint); CREATE TABLE tb_payments (id bigint); "
+            "CREATE TABLE tb_shipments (id bigint);"
+        )
+
+        # Live DB is at migration 002 state (matches 001 + adds tb_orders from migration 002)
+        live = (
+            "CREATE TABLE tb_catalog (id bigint); CREATE TABLE tb_users (id bigint); "
+            "CREATE TABLE tb_orders (id bigint);"
+        )
+
+        detector = BaselineDetector(snapshots_dir, similarity_threshold=0.75)
+        result = detector.find_matching_snapshot(live)
+        # Should match 001 (the closest match, ~0.8 similarity)
+        assert result == "001"
+
+    def test_exact_match_preferred_over_fuzzy(self, tmp_path: Path) -> None:
+        """Exact match is returned immediately, even if a fuzzy match also exists."""
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+        (snapshots_dir / "001_init.sql").write_text("CREATE TABLE tb_a (id bigint);")
+        (snapshots_dir / "002_exact.sql").write_text("CREATE TABLE tb_a (id bigint);")
+
+        # Exact match with 002
+        detector = BaselineDetector(snapshots_dir)
+        result = detector.find_matching_snapshot("CREATE TABLE tb_a (id bigint);")
+        # Should return 002 (newest exact match), not 001
+        assert result == "002"
+
+
 class TestIntrospectLiveSchema:
     """Tests for BaselineDetector.introspect_live_schema (mocked)."""
 

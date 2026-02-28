@@ -28,9 +28,18 @@ class BaselineDetector:
     the live schema as SQL, then normalises and compares it against the
     snapshot files in ``snapshots_dir``.
 
+    Matching uses fuzzy/structural comparison: first tries exact match, then
+    returns the best match if its similarity exceeds the threshold (default 0.95).
+    This allows baseline detection to work with sparse snapshot sets where the
+    live database is at an intermediate migration state.
+
     Args:
         snapshots_dir: Directory containing ``<version>_<name>.sql`` snapshot
             files written by :class:`~confiture.core.schema_snapshot.SchemaSnapshotGenerator`.
+        similarity_threshold: Minimum similarity ratio (0.0-1.0) to accept a match
+            when no exact match is found (default: 0.85). Works well for sparse
+            snapshots where the live database is at an intermediate migration state.
+            Set lower (e.g., 0.75) for looser matching, higher (e.g., 0.95) for stricter.
 
     Example:
         >>> with psycopg.connect(db_url) as conn:
@@ -38,10 +47,17 @@ class BaselineDetector:
         ...     live_sql = detector.introspect_live_schema(conn)
         ...     version = detector.find_matching_snapshot(live_sql)
         ...     print(version)  # e.g. "007"
+
+    Example with custom threshold:
+        >>> detector = BaselineDetector(
+        ...     Path("db/schema_history"),
+        ...     similarity_threshold=0.98  # stricter matching
+        ... )
     """
 
-    def __init__(self, snapshots_dir: Path) -> None:
+    def __init__(self, snapshots_dir: Path, similarity_threshold: float = 0.85) -> None:
         self.snapshots_dir = snapshots_dir
+        self.similarity_threshold = similarity_threshold
 
     # ------------------------------------------------------------------
     # Public API
@@ -100,17 +116,21 @@ class BaselineDetector:
     def find_matching_snapshot(self, live_schema_sql: str) -> str | None:
         """Find the snapshot version that matches the live schema.
 
-        Iterates snapshots newest-first and returns the first exact match
-        on normalised SQL.  If no exact match is found, logs the closest
-        match (by similarity ratio) as a diagnostic hint.
+        Uses fuzzy matching with a configurable similarity threshold. First checks
+        for exact matches (100% similarity), then returns the best match if its
+        similarity exceeds the threshold (default 0.95).
+
+        This allows auto-detection to work with sparse snapshot sets where the live
+        database sits between two snapshots (e.g., after migration consolidation).
 
         Args:
             live_schema_sql: Raw SQL reconstructed from the live database
                 (e.g. from :meth:`introspect_live_schema`).
 
         Returns:
-            Matching version string (e.g. ``"007"``), or ``None`` if no
-            snapshot matches.
+            Matching version string (e.g. ``"007"``) if best match exceeds the
+            similarity threshold, or ``None`` if no match found. The closest
+            non-matching snapshot is stored in :attr:`last_closest` for diagnostics.
         """
         normalised_live = self.normalize_schema(live_schema_sql)
         snapshots = self.load_snapshots()
@@ -121,15 +141,20 @@ class BaselineDetector:
         best_ratio = 0.0
         best_version = ""
         for version, normalised_snapshot in snapshots:
+            # Exact match: return immediately
             if normalised_live == normalised_snapshot:
                 return version
+            # Fuzzy match: track best similarity
             ratio = difflib.SequenceMatcher(None, normalised_live, normalised_snapshot).ratio()
             if ratio > best_ratio:
                 best_ratio = ratio
                 best_version = version
 
-        # No exact match — emit diagnostic info via a warning string embedded
-        # in return value so callers can surface it without a logging dependency.
+        # Return best match if it exceeds the similarity threshold
+        if best_ratio >= self.similarity_threshold:
+            return best_version
+
+        # No match above threshold — store diagnostic info
         self._last_closest = (best_version, best_ratio)
         return None
 

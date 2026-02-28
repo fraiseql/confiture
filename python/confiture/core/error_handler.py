@@ -176,7 +176,7 @@ def handle_cli_error(error: Exception) -> int:
     return 1
 
 
-def print_error_to_console(error: Exception) -> None:
+def print_error_to_console(error: Exception, error_console: Console | None = None) -> None:
     """Print an error to the console with Rich formatting.
 
     Tries to detect specific error contexts and provide enhanced error
@@ -185,21 +185,26 @@ def print_error_to_console(error: Exception) -> None:
 
     Args:
         error: The exception to print
+        error_console: Optional Rich Console to use for error output.
+            If None, uses the default console. Use to write errors to stderr.
     """
+    # Use provided console or fall back to default
+    out_console = error_console or console
+
     # Try to detect and use enhanced error context
     error_context = _detect_error_context(error)
     if error_context:
         formatted = format_error_with_context(error_context, str(error))
-        console.print(formatted)
+        out_console.print(formatted)
         return
 
     # Fall back to standard error formatting
     if isinstance(error, ConfiturError):
         formatted = format_error_for_cli(error)
-        console.print(formatted)
+        out_console.print(formatted)
     else:
         # Generic exception without special formatting
-        console.print(f"[red]Error: {error}[/red]")
+        out_console.print(f"[red]Error: {error}[/red]")
 
 
 def get_error_context(error: Exception) -> dict[str, Any]:
