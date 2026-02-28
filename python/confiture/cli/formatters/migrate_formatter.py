@@ -36,7 +36,7 @@ def format_migrate_up_result(
     else:
         # JSON/CSV output
         csv_data = (
-            ["version", "name", "execution_time_ms", "rows_affected"],
+            ["version", "name", "duration_ms", "rows_affected"],
             [
                 [m.version, m.name, str(m.execution_time_ms), str(m.rows_affected)]
                 for m in result.migrations_applied

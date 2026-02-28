@@ -130,7 +130,7 @@ class TestMigrationApplied:
 
         assert data["version"] == "002"
         assert data["name"] == "add_users_table"
-        assert data["execution_time_ms"] == 200
+        assert data["duration_ms"] == 200
         assert data["rows_affected"] == 0
 
     def test_migration_applied_defaults(self):
@@ -198,11 +198,10 @@ class TestMigrateUpResult:
         data = result.to_dict()
 
         assert data["success"] is True
-        assert data["count"] == 2
-        assert len(data["migrations_applied"]) == 2
-        assert data["migrations_applied"][0]["version"] == "001"
-        assert data["migrations_applied"][1]["version"] == "002"
-        assert data["total_execution_time_ms"] == 300
+        assert len(data["applied"]) == 2
+        assert data["applied"][0]["version"] == "001"
+        assert data["applied"][1]["version"] == "002"
+        assert data["total_duration_ms"] == 300
         assert data["checksums_verified"] is True
         assert data["dry_run"] is False
         assert data["warnings"] == ["Check indexes"]
@@ -218,8 +217,7 @@ class TestMigrateUpResult:
         data = result.to_dict()
 
         assert data["success"] is True
-        assert data["count"] == 0
-        assert data["migrations_applied"] == []
+        assert len(data["applied"]) == 0
 
     def test_migrate_up_result_dry_run(self):
         """Test migrate up result in dry-run mode."""

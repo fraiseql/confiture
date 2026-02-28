@@ -55,10 +55,9 @@ class TestMigrateUpFormatter:
             data = json.loads(output_file.read_text())
 
             assert data["success"] is True
-            assert data["count"] == 2
-            assert len(data["migrations_applied"]) == 2
-            assert data["migrations_applied"][0]["version"] == "001"
-            assert data["total_execution_time_ms"] == 300
+            assert len(data["applied"]) == 2
+            assert data["applied"][0]["version"] == "001"
+            assert data["total_duration_ms"] == 300
 
     def test_format_migrate_up_csv_to_file(self):
         """Test formatting migrate up result as CSV to file."""
@@ -111,6 +110,7 @@ class TestMigrateUpFormatter:
                 migrations_applied=[],
                 total_execution_time_ms=0,
                 error="Lock timeout",
+                errors=["Lock timeout"],
             )
 
             console = Console()
@@ -120,8 +120,8 @@ class TestMigrateUpFormatter:
             data = json.loads(output_file.read_text())
 
             assert data["success"] is False
-            assert data["error"] == "Lock timeout"
-            assert data["count"] == 0
+            assert "Lock timeout" in data["errors"]
+            assert len(data["applied"]) == 0
 
     def test_format_migrate_up_empty_migrations(self):
         """Test formatting migrate up with no migrations applied."""

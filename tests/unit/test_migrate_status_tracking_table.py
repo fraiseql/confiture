@@ -53,7 +53,21 @@ def _make_migrator_mock(
     mock.tracking_table_exists.return_value = tracking_table_exists
     mock.initialize.return_value = None
     mock.get_applied_versions.return_value = applied_versions
+    mock.get_applied_migrations_with_timestamps.return_value = []
     return mock
+
+
+def _make_env(tracking_table: str = "tb_confiture"):
+    from confiture.config.environment import Environment
+
+    return Environment.model_validate(
+        {
+            "name": "test",
+            "database_url": "postgresql://localhost/test_db",
+            "include_dirs": ["db/schema"],
+            "migration": {"tracking_table": tracking_table},
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +85,7 @@ class TestMigrateStatusTrackingTableAbsent:
         mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -87,7 +101,7 @@ class TestMigrateStatusTrackingTableAbsent:
                 ],
             )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
         assert "pending" in result.output
         # No migration status cell should show "applied" (word appears in advisory text but not as status)
         assert "✅ applied" not in result.output
@@ -101,7 +115,7 @@ class TestMigrateStatusTrackingTableAbsent:
         mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -117,11 +131,11 @@ class TestMigrateStatusTrackingTableAbsent:
                 ],
             )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
         assert "tb_confiture" in result.output
 
-    def test_exit_code_1_when_table_absent(self, tmp_path):
-        """Exit code must be 1 when the tracking table is absent."""
+    def test_exit_code_2_when_table_absent(self, tmp_path):
+        """Exit code must be 2 when the tracking table is absent."""
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         _write_migrations(migrations_dir, count=1)
@@ -129,7 +143,7 @@ class TestMigrateStatusTrackingTableAbsent:
         mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -145,7 +159,7 @@ class TestMigrateStatusTrackingTableAbsent:
                 ],
             )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_json_format_includes_warning_when_table_absent(self, tmp_path):
         """JSON output must include a 'warning' key when tb_confiture is absent."""
@@ -156,7 +170,7 @@ class TestMigrateStatusTrackingTableAbsent:
         mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -174,7 +188,7 @@ class TestMigrateStatusTrackingTableAbsent:
                 ],
             )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
         data = json.loads(result.output)
         assert "warning" in data
         assert "tb_confiture" in data["warning"]
@@ -191,7 +205,7 @@ class TestMigrateStatusTrackingTableAbsent:
         mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -221,8 +235,8 @@ class TestMigrateStatusTrackingTableAbsent:
 
 
 class TestMigrateStatusTablePresentEmpty:
-    def test_all_pending_exit_zero_when_table_exists_but_empty(self, tmp_path):
-        """When table exists but no migrations applied, exit code should be 0."""
+    def test_all_pending_exit_one_when_table_exists_but_empty(self, tmp_path):
+        """When table exists but no migrations applied, exit code should be 1 (pending exist)."""
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         _write_migrations(migrations_dir, count=2)
@@ -231,7 +245,7 @@ class TestMigrateStatusTablePresentEmpty:
         mock_migrator = _make_migrator_mock(tracking_table_exists=True, applied_versions=[])
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -247,8 +261,8 @@ class TestMigrateStatusTablePresentEmpty:
                 ],
             )
 
-        # Normal pending state: exit 0, no advisory about tb_confiture
-        assert result.exit_code == 0
+        # Pending migrations exist → exit 1, no advisory about tb_confiture
+        assert result.exit_code == 1
         assert "tb_confiture" not in result.output
 
 
@@ -296,7 +310,7 @@ class TestMigrateStatusTablePresentWithApplied:
         )
 
         with (
-            patch("confiture.core.connection.load_config", return_value=MagicMock()),
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
         ):
@@ -314,9 +328,205 @@ class TestMigrateStatusTablePresentWithApplied:
                 ],
             )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 1
         data = json.loads(result.output)
         assert "001" in data["applied"]
         assert "002" in data["applied"]
         assert "003" in data["pending"]
         assert "warning" not in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: semantic exit codes (Issue #62)
+# ---------------------------------------------------------------------------
+
+
+class TestSemanticExitCodes:
+    def test_exit_code_0_when_all_applied(self, tmp_path):
+        """Exit 0 when all migrations are applied (nothing pending)."""
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+
+        mock_migrator = _make_migrator_mock(
+            tracking_table_exists=True, applied_versions=["001", "002"]
+        )
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                ],
+            )
+
+        assert result.exit_code == 0
+
+    def test_exit_code_1_when_pending_exist(self, tmp_path):
+        """Exit 1 when pending migrations exist (table present, at least one pending)."""
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=3)
+
+        mock_migrator = _make_migrator_mock(tracking_table_exists=True, applied_versions=["001"])
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                ],
+            )
+
+        assert result.exit_code == 1
+
+    def test_exit_code_2_when_tracking_table_absent(self, tmp_path):
+        """Exit 2 when the tracking table is not found in the database."""
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+
+        mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                ],
+            )
+
+        assert result.exit_code == 2
+
+    def test_exit_code_3_on_connection_error(self, tmp_path):
+        """Exit 3 on fatal error (connection failure, bad config, etc.)."""
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch(
+                "confiture.core.connection.create_connection",
+                side_effect=RuntimeError("Connection refused"),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                ],
+            )
+
+        assert result.exit_code == 3
+
+    def test_exit_code_0_when_no_config(self, tmp_path):
+        """Exit 0 when no config is provided (status unknown, not an error)."""
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "status",
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
+        )
+
+        assert result.exit_code == 0
+
+    def test_exit_code_1_json_format_with_pending(self, tmp_path):
+        """Exit 1 with --format json when pending migrations exist."""
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+
+        mock_migrator = _make_migrator_mock(tracking_table_exists=True, applied_versions=["001"])
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert len(data["pending"]) == 1
+
+    def test_exit_code_2_json_format_table_absent(self, tmp_path):
+        """Exit 2 with --format json when tracking table is absent."""
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+
+        mock_migrator = _make_migrator_mock(tracking_table_exists=False, applied_versions=[])
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 2
+        data = json.loads(result.output)
+        assert "warning" in data

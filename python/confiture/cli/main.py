@@ -1028,12 +1028,14 @@ def migrate_status(
       connects to the database and shows which migrations are applied vs pending.
 
       Exit codes:
-        0  Normal: status shown successfully.
-        1  The tb_confiture tracking table was not found in the target database.
+        0  All migrations applied (nothing pending) or status unknown (no config).
+        1  Pending migrations exist in the target database.
+        2  The tracking table was not found in the target database.
            All migrations are shown as "pending" and an advisory is printed.
            Run `confiture migrate up` to initialise, or use
            `confiture migrate baseline --through <version>` if the schema is
            already applied.
+        3  Fatal error (connection failure, bad config, permission denied).
 
     NOTE:
       The -c/--config flag must appear AFTER the subcommand name (v0.5.9+):
@@ -1059,6 +1061,8 @@ def migrate_status(
       confiture migrate generate - Create new migration
     """
     tracking_table_absent_exit: bool = False
+    pending_migrations_exit: bool = False
+    fatal_error_exit: bool = False
     try:
         # Validate output format
         if output_format not in ("table", "json", "csv"):
@@ -1109,19 +1113,24 @@ def migrate_status(
 
         # Get applied migrations from database if config provided
         applied_versions: set[str] = set()
+        applied_at_by_version: dict[str, Any] = {}
         db_error: str | None = None
         tracking_table_absent: bool = False
+        status_tracking_table: str | None = None
         if config and config.exists():
             try:
                 from confiture.core.connection import create_connection, load_config
                 from confiture.core.migrator import Migrator
 
                 config_data = load_config(config)
+                status_tracking_table = config_data.migration.tracking_table
                 conn = create_connection(config_data)
-                migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
+                migrator = Migrator(connection=conn, migration_table=status_tracking_table)
                 tracking_table_was_present = migrator.tracking_table_exists()
                 migrator.initialize()
                 applied_versions = set(migrator.get_applied_versions())
+                for row in migrator.get_applied_migrations_with_timestamps():
+                    applied_at_by_version[row["version"]] = row["applied_at"]
                 conn.close()
                 if not tracking_table_was_present:
                     tracking_table_absent = True
@@ -1161,11 +1170,15 @@ def migrate_status(
                 # No config provided or DB connection failed: status is genuinely unknown
                 status = "unknown"
 
+            applied_at: str | None = (
+                applied_at_by_version.get(version) if status == "applied" else None
+            )
             migrations_data.append(
                 {
                     "version": version,
                     "name": name,
                     "status": status,
+                    "applied_at": applied_at,
                 }
             )
 
@@ -1174,11 +1187,17 @@ def migrate_status(
 
         if output_format == "json":
             result: dict[str, Any] = {
+                "tracking_table": status_tracking_table,
                 "applied": applied_list,
                 "pending": pending_list,
                 "current": current_version,
                 "total": len(migration_files),
                 "migrations": migrations_data,
+                "summary": {
+                    "applied": len(applied_list),
+                    "pending": len(pending_list),
+                    "total": len(migration_files),
+                },
             }
             if db_error:
                 result["warning"] = f"Could not connect to database: {db_error}"
@@ -1253,6 +1272,18 @@ def migrate_status(
             if orphaned_sql_files:
                 _print_orphaned_files_warning(orphaned_sql_files, console)
 
+        # Set exit flags after output is written (avoids raising inside try)
+        if config and config.exists() and db_error:
+            fatal_error_exit = True
+        elif (
+            config
+            and config.exists()
+            and not db_error
+            and not tracking_table_absent
+            and len(pending_list) > 0
+        ):
+            pending_migrations_exit = True
+
     except Exception as e:
         if output_format == "json":
             result = {"error": str(e)}
@@ -1267,9 +1298,13 @@ def migrate_status(
             handle_output("csv", {}, csv_data, output_file, console)
         else:
             console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        raise typer.Exit(3) from e
 
+    if fatal_error_exit:
+        raise typer.Exit(3)
     if tracking_table_absent_exit:
+        raise typer.Exit(2)
+    if pending_migrations_exit:
         raise typer.Exit(1)
 
 
@@ -1690,6 +1725,7 @@ def migrate_up(
                 raise typer.Exit(1) from e
 
         # Find migrations to apply
+        skipped_versions: list[str] = []
         if force:
             # In force mode, apply all migrations regardless of state
             migrations_to_apply = migrator.find_migration_files(migrations_dir=migrations_dir)
@@ -1702,7 +1738,14 @@ def migrate_up(
             )
         else:
             # Normal mode: only apply pending migrations
+            all_migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
             migrations_to_apply = migrator.find_pending(migrations_dir=migrations_dir)
+            apply_versions = {migrator._version_from_filename(f.name) for f in migrations_to_apply}
+            skipped_versions = [
+                migrator._version_from_filename(f.name)
+                for f in all_migration_files
+                if migrator._version_from_filename(f.name) not in apply_versions
+            ]
             if not migrations_to_apply:
                 console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
                 conn.close()
@@ -1921,6 +1964,8 @@ def migrate_up(
                 checksums_verified=verify_checksums,
                 dry_run=False,
                 error=str(failed_exception),
+                errors=[str(failed_exception)],
+                skipped=skipped_versions,
             )
 
             # Format output if not text (text format handled above)
@@ -1941,6 +1986,7 @@ def migrate_up(
                 checksums_verified=verify_checksums,
                 dry_run=False,
                 warnings=["Force mode enabled"] if force else [],
+                skipped=skipped_versions,
             )
 
             # Format output

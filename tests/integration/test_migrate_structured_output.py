@@ -190,4 +190,4 @@ class TestMigrateUpFormatterIntegration:
         # Verify JSON is valid
         parsed = json.loads(json_str)
         assert parsed["success"] is True
-        assert parsed["count"] == 1
+        assert len(parsed["applied"]) == 1
