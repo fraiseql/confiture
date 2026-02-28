@@ -8,7 +8,65 @@ across all commands that support structured output.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
+
+
+@dataclass
+class MigrationInfo:
+    """Status of a single migration file.
+
+    Used in StatusResult to represent each migration and whether it
+    has been applied, is pending, or has unknown status (no DB connection).
+    """
+
+    version: str
+    name: str
+    status: str  # "applied" | "pending" | "unknown"
+    applied_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "version": self.version,
+            "name": self.name,
+            "status": self.status,
+            "applied_at": self.applied_at.isoformat() if self.applied_at is not None else None,
+        }
+
+
+@dataclass
+class StatusResult:
+    """Result of migrate status operation."""
+
+    migrations: list[MigrationInfo]
+    tracking_table_exists: bool
+    tracking_table: str
+    summary: dict[str, int]  # {"applied": N, "pending": N, "total": N}
+
+    @property
+    def pending(self) -> list[str]:
+        """Versions of pending migrations."""
+        return [m.version for m in self.migrations if m.status == "pending"]
+
+    @property
+    def applied(self) -> list[str]:
+        """Versions of applied migrations."""
+        return [m.version for m in self.migrations if m.status == "applied"]
+
+    @property
+    def has_pending(self) -> bool:
+        """True if any migrations are pending."""
+        return any(m.status == "pending" for m in self.migrations)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "tracking_table": self.tracking_table,
+            "tracking_table_exists": self.tracking_table_exists,
+            "migrations": [m.to_dict() for m in self.migrations],
+            "summary": self.summary,
+        }
 
 
 @dataclass
@@ -69,7 +127,7 @@ class MigrationApplied:
         return {
             "version": self.version,
             "name": self.name,
-            "execution_time_ms": self.execution_time_ms,
+            "duration_ms": self.execution_time_ms,
             "rows_affected": self.rows_affected,
         }
 
@@ -89,6 +147,8 @@ class MigrateUpResult:
     dry_run: bool = False
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
+    skipped: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -98,13 +158,13 @@ class MigrateUpResult:
         """
         return {
             "success": self.success,
-            "migrations_applied": [m.to_dict() for m in self.migrations_applied],
-            "count": len(self.migrations_applied),
-            "total_execution_time_ms": self.total_execution_time_ms,
+            "applied": [m.to_dict() for m in self.migrations_applied],
+            "skipped": self.skipped,
+            "errors": self.errors,
+            "total_duration_ms": self.total_execution_time_ms,
             "checksums_verified": self.checksums_verified,
             "dry_run": self.dry_run,
             "warnings": self.warnings,
-            "error": self.error,
         }
 
 

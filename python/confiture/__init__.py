@@ -6,7 +6,16 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    0.5.5
+    0.6.2
+
+Library API example::
+
+    from confiture import Migrator
+
+    with Migrator.from_config("db/environments/prod.yaml") as m:
+        status = m.status()
+        if status.has_pending:
+            result = m.up()
 """
 
 from typing import Any
@@ -14,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -22,39 +31,74 @@ __all__ = [
     "__version__",
     "__author__",
     "__email__",
-    "ExternalGeneratorError",
+    # Core classes
+    "Migrator",
+    "MigratorSession",
+    "Environment",
+    "SchemaBuilder",
     "SchemaLinter",
     "SchemaSnapshotGenerator",
     "BaselineDetector",
+    # Exceptions
+    "ExternalGeneratorError",
+    # Result models
+    "StatusResult",
+    "MigrationInfo",
+    "MigrateUpResult",
+    "MigrateDownResult",
+    "MigrateReinitResult",
+    "MigrationApplied",
 ]
-
-# Lazy imports to avoid errors during development
-# These will be enabled as components are implemented:
-# - SchemaBuilder (Milestone 1.3+)
-# - Migrator (Milestone 1.7+)
-# - Environment (Milestone 1.2+)
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy import for not-yet-implemented components"""
+    """Lazy imports to avoid circular dependency issues at module load time."""
     if name == "SchemaBuilder":
         from confiture.core.builder import SchemaBuilder
 
         return SchemaBuilder
-    elif name == "Migrator":
+    if name == "Migrator":
         from confiture.core.migrator import Migrator
 
         return Migrator
-    elif name == "Environment":
+    if name == "MigratorSession":
+        from confiture.core.migrator import MigratorSession
+
+        return MigratorSession
+    if name == "Environment":
         from confiture.config.environment import Environment
 
         return Environment
-    elif name == "SchemaSnapshotGenerator":
+    if name == "SchemaSnapshotGenerator":
         from confiture.core.schema_snapshot import SchemaSnapshotGenerator
 
         return SchemaSnapshotGenerator
-    elif name == "BaselineDetector":
+    if name == "BaselineDetector":
         from confiture.core.baseline_detector import BaselineDetector
 
         return BaselineDetector
+    if name == "StatusResult":
+        from confiture.models.results import StatusResult
+
+        return StatusResult
+    if name == "MigrationInfo":
+        from confiture.models.results import MigrationInfo
+
+        return MigrationInfo
+    if name == "MigrateUpResult":
+        from confiture.models.results import MigrateUpResult
+
+        return MigrateUpResult
+    if name == "MigrateDownResult":
+        from confiture.models.results import MigrateDownResult
+
+        return MigrateDownResult
+    if name == "MigrateReinitResult":
+        from confiture.models.results import MigrateReinitResult
+
+        return MigrateReinitResult
+    if name == "MigrationApplied":
+        from confiture.models.results import MigrationApplied
+
+        return MigrationApplied
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

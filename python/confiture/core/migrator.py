@@ -6,10 +6,17 @@ import logging
 import re
 import time
 from pathlib import Path
+from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from confiture.models.results import MigrateReinitResult
+    from confiture.config.environment import Environment
+    from confiture.models.results import (
+        MigrateDownResult,
+        MigrateReinitResult,
+        MigrateUpResult,
+        StatusResult,
+    )
 
 import psycopg
 
@@ -18,7 +25,12 @@ from confiture.core.checksum import (
     MigrationChecksumVerifier,
     compute_checksum,
 )
-from confiture.core.connection import get_migration_class, load_migration_module
+from confiture.core.connection import (
+    create_connection,
+    get_migration_class,
+    load_migration_class,
+    load_migration_module,
+)
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.locking import LockConfig, MigrationLock
@@ -843,6 +855,28 @@ class Migrator:
             """)
             return [row[0] for row in cursor.fetchall()]
 
+    def get_applied_migrations_with_timestamps(self) -> list[dict[str, Any]]:
+        """Return applied migrations with version, name, and applied_at timestamp.
+
+        Returns:
+            List of dicts with 'version', 'name', and 'applied_at' (ISO string or None),
+            ordered by applied_at ascending.
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"""
+                SELECT version, name, applied_at
+                FROM {self.migration_table}
+                ORDER BY applied_at ASC
+            """)
+            return [
+                {
+                    "version": row[0],
+                    "name": row[1],
+                    "applied_at": row[2].isoformat() if row[2] else None,
+                }
+                for row in cursor.fetchall()
+            ]
+
     def find_migration_files(self, migrations_dir: Path | None = None) -> list[Path]:
         """Find all migration files in the migrations directory.
 
@@ -1401,3 +1435,399 @@ class Migrator:
 
         validator = PreconditionValidator(self.connection)
         return validator.check(preconditions)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Environment | Path | str,
+        *,
+        migrations_dir: Path | str = Path("db/migrations"),
+    ) -> MigratorSession:
+        """Create a managed MigratorSession from an Environment config.
+
+        Args:
+            config: Environment object, or path to a YAML config file.
+            migrations_dir: Directory containing migration files.
+
+        Returns:
+            MigratorSession context manager. Use as::
+
+                with Migrator.from_config("db/environments/prod.yaml") as m:
+                    result = m.status()
+
+        Raises:
+            MigrationError: If the config file cannot be found or is invalid.
+        """
+        from confiture.config.environment import Environment
+
+        if isinstance(config, Environment):
+            env = config
+        else:
+            import yaml
+
+            config_path = Path(config)
+            if not config_path.exists():
+                from confiture.exceptions import MigrationError
+
+                raise MigrationError(f"Configuration file not found: {config_path}")
+            with open(config_path) as f:
+                raw: dict[str, Any] = yaml.safe_load(f)
+            env = Environment.model_validate(raw)
+
+        return MigratorSession(env, Path(migrations_dir))
+
+
+class MigratorSession:
+    """Context manager that wraps Migrator with connection lifecycle management.
+
+    Created via ``Migrator.from_config()``. Ensures the database connection is
+    always closed, even when an exception is raised inside the ``with`` block.
+
+    Example::
+
+        with Migrator.from_config("db/environments/prod.yaml") as m:
+            result = m.status()
+            if result.has_pending:
+                m.up()
+    """
+
+    def __init__(self, config: Environment, migrations_dir: Path) -> None:
+        self._config = config
+        self._migrations_dir = migrations_dir
+        self._conn: Any = None
+        self._migrator: Migrator | None = None
+
+    def __enter__(self) -> MigratorSession:
+        self._conn = create_connection(self._config.database_url)
+        self._migrator = Migrator(
+            connection=self._conn,
+            migration_table=self._config.migration.tracking_table,
+        )
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    # ------------------------------------------------------------------ #
+    # High-level library methods (implemented in B.3–B.6)                 #
+    # ------------------------------------------------------------------ #
+
+    def status(self) -> StatusResult:
+        """Return migration status without any output.
+
+        Returns:
+            StatusResult with full migration list and summary.
+
+        Raises:
+            MigrationError: On database connection failure.
+        """
+        from datetime import datetime
+
+        from confiture.models.results import MigrationInfo, StatusResult
+
+        assert self._migrator is not None, "Call status() inside a 'with' block"
+
+        tracking_table = self._config.migration.tracking_table
+
+        # Discover migration files (Python and SQL)
+        if not self._migrations_dir.exists():
+            return StatusResult(
+                migrations=[],
+                tracking_table_exists=False,
+                tracking_table=tracking_table,
+                summary={"applied": 0, "pending": 0, "total": 0},
+            )
+
+        py_files = list(self._migrations_dir.glob("*.py"))
+        sql_files = list(self._migrations_dir.glob("*.up.sql"))
+        migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
+
+        if not migration_files:
+            table_exists = self._migrator.tracking_table_exists()
+            return StatusResult(
+                migrations=[],
+                tracking_table_exists=table_exists,
+                tracking_table=tracking_table,
+                summary={"applied": 0, "pending": 0, "total": 0},
+            )
+
+        # Query tracking table
+        table_exists = self._migrator.tracking_table_exists()
+        applied_versions: set[str] = set()
+        applied_at_by_version: dict[str, datetime | None] = {}
+
+        if table_exists:
+            applied_versions = set(self._migrator.get_applied_versions())
+            for row in self._migrator.get_applied_migrations_with_timestamps():
+                raw_ts = row.get("applied_at")
+                if raw_ts is not None and isinstance(raw_ts, str):
+                    try:
+                        applied_at_by_version[row["version"]] = datetime.fromisoformat(raw_ts)
+                    except ValueError:
+                        applied_at_by_version[row["version"]] = None
+                elif isinstance(raw_ts, datetime):
+                    applied_at_by_version[row["version"]] = raw_ts
+                else:
+                    applied_at_by_version[row["version"]] = None
+
+        # Build MigrationInfo list
+        infos: list[MigrationInfo] = []
+        for mf in migration_files:
+            base_name = mf.stem
+            if base_name.endswith(".up"):
+                base_name = base_name[:-3]
+            parts = base_name.split("_", 1)
+            version = parts[0] if parts else "???"
+            name = parts[1] if len(parts) > 1 else base_name
+
+            migration_status = (
+                "applied" if (table_exists and version in applied_versions) else "pending"
+            )
+
+            at = applied_at_by_version.get(version) if migration_status == "applied" else None
+            infos.append(
+                MigrationInfo(version=version, name=name, status=migration_status, applied_at=at)
+            )
+
+        applied_count = sum(1 for m in infos if m.status == "applied")
+        pending_count = sum(1 for m in infos if m.status == "pending")
+
+        return StatusResult(
+            migrations=infos,
+            tracking_table_exists=table_exists,
+            tracking_table=tracking_table,
+            summary={"applied": applied_count, "pending": pending_count, "total": len(infos)},
+        )
+
+    def up(
+        self,
+        *,
+        target: str | None = None,
+        dry_run: bool = False,
+        dry_run_execute: bool = False,  # noqa: ARG002
+        auto_detect_baseline: bool = False,  # noqa: ARG002
+        snapshots_dir: Path | None = None,  # noqa: ARG002
+        verify_checksums: bool = True,
+        on_checksum_mismatch: str = "fail",  # noqa: ARG002
+        strict: bool = False,  # noqa: ARG002
+        force: bool = False,
+        lock_timeout: int = 30000,
+        no_lock: bool = False,
+    ) -> MigrateUpResult:
+        """Apply pending migrations.
+
+        Returns:
+            MigrateUpResult with applied migrations and timing.
+
+        Raises:
+            MigrationError: If a migration fails.
+            MigrationError: If the migrations directory does not exist.
+        """
+        import time as _time
+
+        from confiture.models.results import MigrateUpResult, MigrationApplied
+
+        assert self._migrator is not None, "Call up() inside a 'with' block"
+
+        if not self._migrations_dir.exists():
+            raise MigrationError(
+                f"Migrations directory not found: {self._migrations_dir.absolute()}"
+            )
+
+        self._migrator.initialize()
+
+        # Resolve migrations to apply
+        all_files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
+        if force:
+            pending_files = all_files
+        else:
+            pending_files = self._migrator.find_pending(migrations_dir=self._migrations_dir)
+
+        apply_versions = {self._migrator._version_from_filename(f.name) for f in pending_files}
+        skipped_versions = [
+            self._migrator._version_from_filename(f.name)
+            for f in all_files
+            if self._migrator._version_from_filename(f.name) not in apply_versions
+        ]
+
+        # Dry-run: return without applying
+        if dry_run:
+            return MigrateUpResult(
+                success=True,
+                migrations_applied=[],
+                total_execution_time_ms=0,
+                checksums_verified=verify_checksums,
+                dry_run=True,
+                skipped=skipped_versions,
+            )
+
+        if not pending_files:
+            return MigrateUpResult(
+                success=True,
+                migrations_applied=[],
+                total_execution_time_ms=0,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                skipped=skipped_versions,
+            )
+
+        # Apply with distributed lock
+        lock_config = LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+        lock = MigrationLock(self._conn, lock_config)
+
+        migrations_applied: list[MigrationApplied] = []
+        total_execution_time_ms = 0
+        failed_exception: Exception | None = None
+
+        try:
+            with lock.acquire():
+                for migration_file in pending_files:
+                    migration_class = load_migration_class(migration_file)
+                    migration = migration_class(connection=self._conn)
+
+                    # Stop at target version
+                    if target and migration.version > target:
+                        break
+
+                    try:
+                        start = _time.time()
+                        self._migrator.apply(migration, force=force, migration_file=migration_file)
+                        elapsed = int((_time.time() - start) * 1000)
+                        total_execution_time_ms += elapsed
+                        migrations_applied.append(
+                            MigrationApplied(
+                                version=migration.version,
+                                name=migration.name,
+                                execution_time_ms=elapsed,
+                            )
+                        )
+                    except Exception as exc:
+                        failed_exception = exc
+                        break
+        except Exception as exc:
+            if failed_exception is None:
+                failed_exception = exc
+
+        if failed_exception is not None:
+            return MigrateUpResult(
+                success=False,
+                migrations_applied=migrations_applied,
+                total_execution_time_ms=total_execution_time_ms,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                errors=[str(failed_exception)],
+                skipped=skipped_versions,
+            )
+
+        return MigrateUpResult(
+            success=True,
+            migrations_applied=migrations_applied,
+            total_execution_time_ms=total_execution_time_ms,
+            checksums_verified=verify_checksums,
+            dry_run=False,
+            warnings=["Force mode enabled"] if force else [],
+            skipped=skipped_versions,
+        )
+
+    def down(
+        self,
+        *,
+        steps: int = 1,
+        dry_run: bool = False,
+    ) -> MigrateDownResult:
+        """Roll back applied migrations.
+
+        Args:
+            steps: Number of migrations to roll back (default: 1).
+            dry_run: If True, analyze without executing.
+
+        Returns:
+            MigrateDownResult with rolled-back migrations and timing.
+        """
+        import time as _time
+
+        from confiture.models.results import MigrateDownResult, MigrationApplied
+
+        assert self._migrator is not None, "Call down() inside a 'with' block"
+
+        self._migrator.initialize()
+        applied_versions = self._migrator.get_applied_versions()
+
+        if not applied_versions:
+            return MigrateDownResult(
+                success=True,
+                migrations_rolled_back=[],
+                total_execution_time_ms=0,
+            )
+
+        versions_to_rollback = applied_versions[-steps:]
+        migration_files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
+
+        rolled_back: list[MigrationApplied] = []
+        total_execution_time_ms = 0
+
+        for version in reversed(versions_to_rollback):
+            migration_file = next(
+                (
+                    f
+                    for f in migration_files
+                    if self._migrator._version_from_filename(f.name) == version
+                ),
+                None,
+            )
+            if migration_file is None:
+                continue
+
+            migration_class = load_migration_class(migration_file)
+            migration = migration_class(connection=self._conn)
+
+            if not dry_run:
+                start = _time.time()
+                self._migrator.rollback(migration)
+                elapsed = int((_time.time() - start) * 1000)
+                total_execution_time_ms += elapsed
+            else:
+                elapsed = 0
+
+            rolled_back.append(
+                MigrationApplied(
+                    version=migration.version,
+                    name=migration.name,
+                    execution_time_ms=elapsed,
+                )
+            )
+
+        return MigrateDownResult(
+            success=True,
+            migrations_rolled_back=rolled_back,
+            total_execution_time_ms=total_execution_time_ms,
+        )
+
+    def reinit(
+        self,
+        *,
+        through: str | None = None,
+        dry_run: bool = False,
+    ) -> MigrateReinitResult:
+        """Reset tracking table and re-baseline from migration files on disk.
+
+        Args:
+            through: Mark migrations as applied through this version.
+                If None, marks all migration files on disk as applied.
+            dry_run: If True, show what would happen without making changes.
+
+        Returns:
+            MigrateReinitResult with deleted count and re-marked migrations.
+        """
+        assert self._migrator is not None, "Call reinit() inside a 'with' block"
+        self._migrator.initialize()
+        return self._migrator.reinit(
+            through=through, dry_run=dry_run, migrations_dir=self._migrations_dir
+        )
