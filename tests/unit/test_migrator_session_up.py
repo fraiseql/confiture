@@ -55,7 +55,9 @@ class TestMigratorSessionUpNoMigrations:
         env = _make_env()
         session, _ = _make_session(env, tmp_path / "nonexistent")
 
-        with pytest.raises(Exception):
+        from confiture.exceptions import MigrationError
+
+        with pytest.raises(MigrationError):
             session.up()
 
 

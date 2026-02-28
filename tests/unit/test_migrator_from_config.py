@@ -127,7 +127,9 @@ class TestMigratorFromConfig:
             mock_conn.close.assert_called_once()
 
     def test_from_config_nonexistent_file_raises(self):
-        with pytest.raises(Exception):
+        from confiture.exceptions import MigrationError
+
+        with pytest.raises(MigrationError):
             Migrator.from_config(Path("/nonexistent/config.yaml"))
 
     def test_from_config_default_migrations_dir(self):
