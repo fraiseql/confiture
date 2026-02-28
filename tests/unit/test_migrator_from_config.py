@@ -92,9 +92,7 @@ class TestMigratorFromConfig:
     def test_from_config_with_path(self, tmp_path):
         config_file = tmp_path / "local.yaml"
         config_file.write_text(
-            "name: test\n"
-            "database_url: postgresql://localhost/test\n"
-            "include_dirs:\n  - db/schema\n"
+            "name: test\ndatabase_url: postgresql://localhost/test\ninclude_dirs:\n  - db/schema\n"
         )
         mock_conn = MagicMock()
         with (
@@ -106,9 +104,7 @@ class TestMigratorFromConfig:
     def test_from_config_with_string_path(self, tmp_path):
         config_file = tmp_path / "local.yaml"
         config_file.write_text(
-            "name: test\n"
-            "database_url: postgresql://localhost/test\n"
-            "include_dirs:\n  - db/schema\n"
+            "name: test\ndatabase_url: postgresql://localhost/test\ninclude_dirs:\n  - db/schema\n"
         )
         mock_conn = MagicMock()
         with patch("confiture.core.migrator.create_connection", return_value=mock_conn):

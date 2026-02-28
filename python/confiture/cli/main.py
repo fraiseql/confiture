@@ -1123,7 +1123,7 @@ def migrate_status(
                 from confiture.core.migrator import Migrator
 
                 config_data = load_config(config)
-                status_tracking_table = config_data.migration.tracking_table
+                status_tracking_table = _get_tracking_table(config_data)
                 conn = create_connection(config_data)
                 migrator = Migrator(connection=conn, migration_table=status_tracking_table)
                 tracking_table_was_present = migrator.tracking_table_exists()
@@ -1306,6 +1306,22 @@ def migrate_status(
         raise typer.Exit(2)
     if pending_migrations_exit:
         raise typer.Exit(1)
+
+
+def _get_tracking_table(config_data: Any) -> str:
+    """Safely extract migration tracking table name from any config format.
+
+    Handles Environment objects (from mocks / validated config), raw dicts
+    from load_config() (old YAML format without database_url), and MagicMock
+    objects used in tests.
+    """
+    if hasattr(config_data, "migration") and hasattr(config_data.migration, "tracking_table"):
+        return config_data.migration.tracking_table  # type: ignore[no-any-return]
+    if isinstance(config_data, dict):
+        migration_cfg = config_data.get("migration") or {}
+        if isinstance(migration_cfg, dict):
+            return migration_cfg.get("tracking_table", "tb_confiture")
+    return "tb_confiture"
 
 
 def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
@@ -1607,11 +1623,11 @@ def migrate_up(
         ):
             # Check if config is in standard environments directory
             try:
-                from confiture.config.environment import Environment
+                from confiture.config.environment import Environment as _Env
 
                 env_name = config.stem  # e.g., "local" from "local.yaml"
                 project_dir = config.parent.parent.parent
-                env_config = Environment.load(env_name, project_dir=project_dir)
+                env_config = _Env.load(env_name, project_dir=project_dir)
                 effective_strict_mode = env_config.migration.strict_mode
             except Exception:
                 # If environment config loading fails, use default (False)
@@ -1639,7 +1655,7 @@ def migrate_up(
         conn = create_connection(config_data)
 
         # Create migrator
-        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
+        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
 
         # Auto-detect baseline pre-flight (before initialize so we can check absence)
         if auto_detect_baseline and not migrator.tracking_table_exists():
@@ -1973,7 +1989,11 @@ def migrate_up(
                 format_migrate_up_result(error_result, format_output, output_file, console)
             else:
                 # Show detailed error information for text format
-                _show_migration_error_details(failed_migration, failed_exception, applied_count)
+                from confiture.cli.formatters.migrate_formatter import show_migration_error_details
+
+                show_migration_error_details(
+                    failed_migration, failed_exception, applied_count, console
+                )
 
             conn.close()
             raise typer.Exit(1)
@@ -2014,116 +2034,6 @@ def migrate_up(
     except Exception as e:
         print_error_to_console(e, error_console)
         raise typer.Exit(1) from e
-
-
-def _show_migration_error_details(failed_migration, exception, applied_count: int) -> None:
-    """Show detailed error information for a failed migration with actionable guidance.
-
-    Args:
-        failed_migration: The Migration instance that failed
-        exception: The exception that was raised
-        applied_count: Number of migrations that succeeded before this one
-    """
-    from confiture.exceptions import MigrationError
-
-    console.print("\n[red]Failed Migration Details:[/red]")
-    console.print(f"  Version: {failed_migration.version}")
-    console.print(f"  Name: {failed_migration.name}")
-    console.print(f"  File: db/migrations/{failed_migration.version}_{failed_migration.name}.py")
-
-    # Analyze error type and provide specific guidance
-    error_message = str(exception)
-
-    # Check if this is a SQL error wrapped in a MigrationError
-    if "SQL execution failed" in error_message:
-        console.print("  Error Type: SQL Execution Error")
-
-        # Extract SQL and error details from the message
-        # Message format: "...SQL execution failed | SQL: ... | Error: ..."
-        parts = error_message.split(" | ")
-        sql_part = next((part for part in parts if part.startswith("SQL: ")), None)
-        error_part = next((part for part in parts if part.startswith("Error: ")), None)
-
-        if sql_part:
-            sql_content = sql_part[5:].strip()  # Remove "SQL: " prefix
-            console.print(
-                f"  SQL Statement: {sql_content[:100]}{'...' if len(sql_content) > 100 else ''}"
-            )
-
-        if error_part:
-            db_error = error_part[7:].strip()  # Remove "Error: " prefix
-            console.print(f"  Database Error: {db_error.split(chr(10))[0]}")
-
-            # Specific SQL error guidance
-            error_msg = db_error.lower()
-            if "syntax error" in error_msg:
-                console.print("\n[yellow]🔍 SQL Syntax Error Detected:[/yellow]")
-                console.print("  • Check for typos in SQL keywords, table names, or column names")
-                console.print(
-                    "  • Verify quotes, parentheses, and semicolons are properly balanced"
-                )
-                if sql_part:
-                    sql_content = sql_part[5:].strip()
-                    console.print(f'  • Test the SQL manually: psql -c "{sql_content}"')
-            elif "does not exist" in error_msg:
-                if "schema" in error_msg:
-                    console.print("\n[yellow]🔍 Missing Schema Error:[/yellow]")
-                    console.print(
-                        "  • Create the schema first: CREATE SCHEMA IF NOT EXISTS schema_name;"
-                    )
-                    console.print("  • Or use the public schema by default")
-                elif "table" in error_msg or "relation" in error_msg:
-                    console.print("\n[yellow]🔍 Missing Table Error:[/yellow]")
-                    console.print("  • Ensure dependent migrations ran first")
-                    console.print("  • Check table name spelling and schema qualification")
-                elif "function" in error_msg:
-                    console.print("\n[yellow]🔍 Missing Function Error:[/yellow]")
-                    console.print("  • Define the function before using it")
-                    console.print("  • Check function name and parameter types")
-            elif "already exists" in error_msg:
-                console.print("\n[yellow]🔍 Object Already Exists:[/yellow]")
-                console.print("  • Use IF NOT EXISTS clauses for safe creation")
-                console.print("  • Check if migration was partially applied")
-            elif "permission denied" in error_msg:
-                console.print("\n[yellow]🔍 Permission Error:[/yellow]")
-                console.print("  • Verify database user has required privileges")
-                console.print("  • Check GRANT statements in earlier migrations")
-
-    elif isinstance(exception, MigrationError):
-        console.print("  Error Type: Migration Framework Error")
-        console.print(f"  Message: {exception}")
-
-        # Migration-specific guidance
-        error_msg = str(exception).lower()
-        if "already been applied" in error_msg:
-            console.print("\n[yellow]🔍 Migration Already Applied:[/yellow]")
-            console.print("  • Check migration status: confiture migrate status")
-            console.print("  • This migration may have run successfully before")
-        elif "connection" in error_msg:
-            console.print("\n[yellow]🔍 Database Connection Error:[/yellow]")
-            console.print("  • Verify database is running and accessible")
-            console.print("  • Check connection string in config file")
-            console.print("  • Test connection: psql 'your-connection-string'")
-
-    else:
-        console.print(f"  Error Type: {type(exception).__name__}")
-        console.print(f"  Message: {exception}")
-
-    # General troubleshooting
-    console.print("\n[yellow]🛠️  General Troubleshooting:[/yellow]")
-    console.print(
-        f"  • View migration file: cat db/migrations/{failed_migration.version}_{failed_migration.name}.py"
-    )
-    console.print("  • Check database logs for more details")
-    console.print("  • Test SQL manually in psql")
-
-    if applied_count > 0:
-        console.print(f"  • {applied_count} migration(s) succeeded - database is partially updated")
-        console.print("  • Fix the error and re-run: confiture migrate up")
-        console.print(f"  • Or rollback and retry: confiture migrate down --steps {applied_count}")
-    else:
-        console.print("  • No migrations applied yet - database state is clean")
-        console.print("  • Fix the error and re-run: confiture migrate up")
 
 
 @migrate_app.command("generate")
@@ -2724,135 +2634,105 @@ def migrate_reinit(
       confiture migrate up        - Apply migrations normally
       confiture migrate status    - View migration history
     """
-    from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator, find_duplicate_migration_versions
 
+    # Pre-flight validations (no DB needed)
+    if not config.exists():
+        console.print(f"[red]❌ Config file not found: {config}[/red]")
+        console.print("[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]")
+        raise typer.Exit(1)
+
+    if not migrations_dir.exists():
+        console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+        raise typer.Exit(1)
+
+    duplicates = find_duplicate_migration_versions(migrations_dir)
+    if duplicates:
+        console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
+        console.print("[red]Multiple migration files share the same version number:[/red]\n")
+        for version, files in sorted(duplicates.items()):
+            console.print(f"  Version {version}:")
+            for f in files:
+                console.print(f"    • {f.name}")
+        console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+        console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
+        raise typer.Exit(3)
+
     try:
-        if not config.exists():
-            console.print(f"[red]❌ Config file not found: {config}[/red]")
-            console.print(
-                "[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]"
-            )
-            raise typer.Exit(1)
+        with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
+            migrator = m._migrator
+            assert migrator is not None
+            migrator.initialize()
 
-        if not migrations_dir.exists():
-            console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-            raise typer.Exit(1)
-
-        # Check for duplicate migration versions (hard block, no DB needed)
-        duplicates = find_duplicate_migration_versions(migrations_dir)
-        if duplicates:
-            console.print(
-                "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
-            )
-            console.print("[red]Multiple migration files share the same version number:[/red]\n")
-            for version, files in sorted(duplicates.items()):
-                console.print(f"  Version {version}:")
-                for f in files:
-                    console.print(f"    • {f.name}")
-            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-            console.print(
-                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
-            )
-            raise typer.Exit(3)
-
-        # Load config and create connection
-        config_data = load_config(config)
-        conn = create_connection(config_data)
-
-        # Initialize migrator
-        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
-        migrator.initialize()
-
-        # Find migration files to show what will happen
-        all_migrations = migrator.find_migration_files(migrations_dir)
-
-        if not all_migrations:
-            console.print("[yellow]No migrations found.[/yellow]")
-            conn.close()
-            return
-
-        # Determine which migrations will be marked
-        if through is not None:
-            migrations_to_mark: list[Path] = []
-            for migration_file in all_migrations:
-                version = migrator._version_from_filename(migration_file.name)
-                migrations_to_mark.append(migration_file)
-                if version == through:
-                    break
-            else:
-                # Target version not found
-                console.print(f"[red]❌ Migration version '{through}' not found[/red]")
-                console.print("[yellow]Available versions:[/yellow]")
-                for mf in all_migrations[:10]:
-                    v = migrator._version_from_filename(mf.name)
-                    console.print(f"  • {v}")
-                if len(all_migrations) > 10:
-                    console.print(f"  ... and {len(all_migrations) - 10} more")
-                conn.close()
-                raise typer.Exit(1)
-        else:
-            migrations_to_mark = list(all_migrations)
-
-        # Get current tracking state for summary
-        applied_versions = migrator.get_applied_versions()
-        current_count = len(applied_versions)
-
-        # Show what will happen
-        target_desc = f"through {through}" if through else "all files on disk"
-        console.print(
-            f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
-        )
-
-        console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
-        console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
-
-        for migration_file in migrations_to_mark:
-            version = migrator._version_from_filename(migration_file.name)
-            base_name = migration_file.stem
-            if base_name.endswith(".up"):
-                base_name = base_name[:-3]
-            parts = base_name.split("_", 1)
-            name = parts[1] if len(parts) > 1 else base_name
-            console.print(f"  [dim]•[/dim] {version} {name}")
-
-        console.print()
-
-        if dry_run:
-            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
-
-        # Confirmation
-        if not yes and not dry_run:
-            confirmed = typer.confirm(
-                f"Will delete {current_count} entries from tb_confiture "
-                f"and re-mark {len(migrations_to_mark)} migrations. Continue?"
-            )
-            if not confirmed:
-                console.print("[dim]Aborted.[/dim]")
-                conn.close()
+            all_migrations = migrator.find_migration_files(migrations_dir)
+            if not all_migrations:
+                console.print("[yellow]No migrations found.[/yellow]")
                 return
 
-        # Execute reinit
-        result = migrator.reinit(
-            through=through,
-            dry_run=dry_run,
-            migrations_dir=migrations_dir,
-        )
+            # Determine which migrations will be marked
+            if through is not None:
+                migrations_to_mark: list[Path] = []
+                for migration_file in all_migrations:
+                    version = migrator._version_from_filename(migration_file.name)
+                    migrations_to_mark.append(migration_file)
+                    if version == through:
+                        break
+                else:
+                    console.print(f"[red]❌ Migration version '{through}' not found[/red]")
+                    console.print("[yellow]Available versions:[/yellow]")
+                    for mf in all_migrations[:10]:
+                        v = migrator._version_from_filename(mf.name)
+                        console.print(f"  • {v}")
+                    if len(all_migrations) > 10:
+                        console.print(f"  ... and {len(all_migrations) - 10} more")
+                    raise typer.Exit(1)
+            else:
+                migrations_to_mark = list(all_migrations)
 
-        # Show results
-        if dry_run:
+            current_count = len(migrator.get_applied_versions())
+            target_desc = f"through {through}" if through else "all files on disk"
             console.print(
-                f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
-                f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
+                f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
             )
-            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
-        else:
-            console.print(
-                f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
-                f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
-            )
+            console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
+            console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
 
-        conn.close()
+            for migration_file in migrations_to_mark:
+                version = migrator._version_from_filename(migration_file.name)
+                base_name = migration_file.stem
+                if base_name.endswith(".up"):
+                    base_name = base_name[:-3]
+                parts = base_name.split("_", 1)
+                name = parts[1] if len(parts) > 1 else base_name
+                console.print(f"  [dim]•[/dim] {version} {name}")
+
+            console.print()
+
+            if dry_run:
+                console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+
+            if not yes and not dry_run:
+                confirmed = typer.confirm(
+                    f"Will delete {current_count} entries from tb_confiture "
+                    f"and re-mark {len(migrations_to_mark)} migrations. Continue?"
+                )
+                if not confirmed:
+                    console.print("[dim]Aborted.[/dim]")
+                    return
+
+            result = m.reinit(through=through, dry_run=dry_run)
+
+            if dry_run:
+                console.print(
+                    f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
+                    f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
+                )
+                console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+            else:
+                console.print(
+                    f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
+                    f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
+                )
 
     except typer.Exit:
         raise
@@ -3084,7 +2964,7 @@ def migrate_down(
         conn = create_connection(config_data)
 
         # Create migrator
-        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
+        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
         migrator.initialize()
 
         # Get applied migrations

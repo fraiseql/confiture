@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from confiture.config.environment import Environment
-from confiture.core.migrator import Migrator, MigratorSession
+from confiture.core.migrator import MigratorSession
 from confiture.models.results import StatusResult
 
 
@@ -110,7 +108,7 @@ class TestMigratorSessionStatusAllApplied:
         mock_conn = MagicMock()
         session = _make_session(env, migrations_dir, mock_conn)
 
-        ts = datetime(2026, 2, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 2, 1, 12, 0, 0, tzinfo=UTC)
         session._migrator.tracking_table_exists = MagicMock(return_value=True)
         session._migrator.get_applied_versions = MagicMock(return_value=["001", "002"])
         session._migrator.get_applied_migrations_with_timestamps = MagicMock(
@@ -160,7 +158,7 @@ class TestMigratorSessionStatusMixed:
         mock_conn = MagicMock()
         session = _make_session(env, migrations_dir, mock_conn)
 
-        ts = datetime(2026, 2, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 2, 1, 12, 0, 0, tzinfo=UTC)
         session._migrator.tracking_table_exists = MagicMock(return_value=True)
         session._migrator.get_applied_versions = MagicMock(return_value=["001", "002"])
         session._migrator.get_applied_migrations_with_timestamps = MagicMock(

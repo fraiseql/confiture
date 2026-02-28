@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -18,7 +18,7 @@ class TestMigrationInfo:
         assert info.applied_at is None
 
     def test_with_applied_at(self):
-        ts = datetime(2026, 2, 28, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
         info = MigrationInfo(version="001", name="add_users", status="applied", applied_at=ts)
         assert info.applied_at == ts
 
@@ -31,7 +31,7 @@ class TestMigrationInfo:
         assert d["applied_at"] is None
 
     def test_to_dict_applied_with_timestamp(self):
-        ts = datetime(2026, 2, 28, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
         info = MigrationInfo(version="001", name="add_users", status="applied", applied_at=ts)
         d = info.to_dict()
         assert d["applied_at"] == ts.isoformat()
@@ -47,7 +47,7 @@ class TestStatusResult:
     ) -> StatusResult:
         migrations = []
         for i in range(1, applied + 1):
-            ts = datetime(2026, 2, i, 10, 0, 0, tzinfo=timezone.utc)
+            ts = datetime(2026, 2, i, 10, 0, 0, tzinfo=UTC)
             migrations.append(
                 MigrationInfo(
                     version=f"{i:03d}",

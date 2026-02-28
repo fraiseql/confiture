@@ -5,10 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from confiture.config.environment import Environment
-from confiture.core.migrator import Migrator, MigratorSession
+from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateDownResult, MigrateReinitResult, MigrationApplied
 
 
@@ -104,9 +102,7 @@ class TestMigratorSessionDown:
         session._migrator.get_applied_versions = MagicMock(return_value=["001", "002"])
         session._migrator.find_migration_files = MagicMock(return_value=[f1, f2])
         session._migrator.rollback = MagicMock()
-        session._migrator._version_from_filename = MagicMock(
-            side_effect=lambda n: n.split("_")[0]
-        )
+        session._migrator._version_from_filename = MagicMock(side_effect=lambda n: n.split("_")[0])
 
         with patch("confiture.core.migrator.load_migration_class", side_effect=_load_class):
             result = session.down(steps=2)

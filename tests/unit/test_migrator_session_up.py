@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from confiture.config.environment import Environment
-from confiture.core.migrator import Migrator, MigratorSession
+from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateUpResult
 
 
@@ -41,9 +41,9 @@ class TestMigratorSessionUpNoMigrations:
         session, _ = _make_session(env, migrations_dir)
         session._migrator.initialize = MagicMock()
         session._migrator.find_pending = MagicMock(return_value=[])
-        session._migrator.find_migration_files = MagicMock(return_value=[
-            migrations_dir / "001_add_users.py"
-        ])
+        session._migrator.find_migration_files = MagicMock(
+            return_value=[migrations_dir / "001_add_users.py"]
+        )
 
         result = session.up()
 

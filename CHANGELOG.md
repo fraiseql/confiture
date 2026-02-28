@@ -5,6 +5,67 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-02-28
+
+### Added
+
+- **Python library API** (#63) - Confiture can now be used as a Python library without going
+  through the CLI. `Migrator.from_config()` returns a `MigratorSession` context manager that
+  handles connection lifecycle automatically:
+
+  ```python
+  from confiture import Migrator
+
+  with Migrator.from_config("db/environments/prod.yaml") as m:
+      result = m.status()
+      if result.has_pending:
+          m.up()
+  ```
+
+  New public surface:
+  - `Migrator.from_config(config, *, migrations_dir)` — accepts `Environment`, `Path`, or `str`
+  - `MigratorSession` — context manager wrapping `Migrator` with connection lifecycle
+  - `MigratorSession.status() → StatusResult` — returns structured migration status
+  - `MigratorSession.up(**kwargs) → MigrateUpResult` — applies pending migrations
+  - `MigratorSession.down(*, steps, dry_run) → MigrateDownResult` — rolls back migrations
+  - `MigratorSession.reinit(*, through, dry_run) → MigrateReinitResult` — resets tracking table
+  - `StatusResult` and `MigrationInfo` models in `confiture.models.results`
+
+- **Complete JSON output for `migrate status`** (#61) - `--format json` now includes:
+  - `tracking_table` field — the configured tracking table name
+  - `applied_at` per migration entry — ISO 8601 timestamp for applied migrations, `null` for pending
+  - `summary` sub-object — `{applied, pending, total}` counts
+
+- **Semantic exit codes for `migrate status`** (#62) - Exit codes now carry actionable meaning
+  for use in deployment scripts:
+  - `0` — all migrations applied (up to date)
+  - `1` — pending migrations exist
+  - `2` — tracking table absent from the target database
+  - `3` — fatal error (connection failure, bad config, permission denied)
+
+### Changed
+
+- **`migrate up` JSON key names** (#61) - `MigrateUpResult.to_dict()` now uses canonical names:
+  - `migrations_applied` → `applied`
+  - `total_execution_time_ms` → `total_duration_ms`
+  - `execution_time_ms` (per migration) → `duration_ms`
+  - `error` (singular) removed; replaced by `errors: list[str]`
+  - `skipped: list[str]` added — versions present in the tracking table that were skipped
+
+- **`migrate reinit` now uses managed connection** (#63) - The `migrate reinit` CLI command
+  uses `MigratorSession` internally, ensuring the database connection is always closed even
+  when an error occurs.
+
+### Fixed
+
+- **Config attribute access bug in CLI** (#63) - `migrate up`, `migrate down`, `migrate status`,
+  and `migrate reinit` accessed `config_data.migration.tracking_table` on the raw `dict` returned
+  by `load_config()`. This raised `AttributeError` in production when the YAML file used the
+  standard format. A `_get_tracking_table()` helper now handles `Environment` objects, raw dicts,
+  and legacy config formats uniformly.
+
+---
+
 ## [0.6.1] - 2026-02-28
 
 ### Fixed
