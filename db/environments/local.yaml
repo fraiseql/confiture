@@ -3,6 +3,7 @@ database_url: postgresql://localhost/confiture_local
 include_dirs:
   - db/schema
 exclude_dirs: []
-migration_table: confiture_migrations
+migration:
+  tracking_table: confiture_migrations
 auto_backup: false
 require_confirmation: false

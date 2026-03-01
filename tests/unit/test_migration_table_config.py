@@ -282,3 +282,84 @@ migration:
                     str(migrations_dir),
                 ],
             )
+
+
+# ---------------------------------------------------------------------------
+# Legacy top-level migration_table key — backwards compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyMigrationTableKey:
+    """Top-level migration_table is rejected with a clear ConfigurationError.
+
+    Before Issue #60, some documentation showed ``migration_table:`` at the top
+    level of the environment YAML.  Pydantic silently ignored it (unknown field).
+    The validator now raises an explicit error so users know exactly what to fix,
+    rather than silently running with the wrong (default) tracking table.
+    """
+
+    def test_environment_model_validate_rejects_top_level_key(self):
+        """model_validate raises ConfigurationError for top-level migration_table."""
+        from confiture.config.environment import Environment
+        from confiture.exceptions import ConfigurationError
+
+        with pytest.raises(ConfigurationError, match="migration_table"):
+            Environment.model_validate(
+                {
+                    "name": "test",
+                    "database_url": "postgresql://localhost/test",
+                    "include_dirs": ["db/schema"],
+                    "migration_table": "public.custom_track",
+                }
+            )
+
+    def test_error_message_shows_correct_form(self):
+        """ConfigurationError message includes the correct YAML form."""
+        from confiture.config.environment import Environment
+        from confiture.exceptions import ConfigurationError
+
+        with pytest.raises(ConfigurationError, match="tracking_table"):
+            Environment.model_validate(
+                {
+                    "name": "test",
+                    "database_url": "postgresql://localhost/test",
+                    "include_dirs": ["db/schema"],
+                    "migration_table": "public.custom_track",
+                }
+            )
+
+    def test_from_config_raises_for_legacy_top_level_key_in_yaml(self, tmp_path):
+        """Migrator.from_config raises ConfigurationError when YAML has top-level migration_table."""
+        from confiture.core.migrator import Migrator
+        from confiture.exceptions import ConfigurationError
+
+        config_file = tmp_path / "local.yaml"
+        config_file.write_text(
+            "name: test\n"
+            "database_url: postgresql://localhost/test\n"
+            "include_dirs:\n  - db/schema\n"
+            "migration_table: public.legacy_track\n"
+        )
+        with pytest.raises(ConfigurationError, match="tracking_table"):
+            Migrator.from_config(config_file)
+
+    def test_correct_nested_form_is_accepted(self):
+        """migration.tracking_table nested under migration: works correctly."""
+        from confiture.config.environment import Environment
+
+        env = Environment.model_validate(
+            {
+                "name": "test",
+                "database_url": "postgresql://localhost/test",
+                "include_dirs": ["db/schema"],
+                "migration": {"tracking_table": "public.custom_track"},
+            }
+        )
+        assert env.migration.tracking_table == "public.custom_track"
+
+    def test_get_tracking_table_returns_default_for_missing_key(self):
+        """_get_tracking_table returns 'tb_confiture' when no tracking_table in dict."""
+        from confiture.cli.main import _get_tracking_table
+
+        raw_dict = {"database_url": "postgresql://localhost/test"}
+        assert _get_tracking_table(raw_dict) == "tb_confiture"

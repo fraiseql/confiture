@@ -13,21 +13,29 @@ from confiture.models.results import MigrateRebuildResult, MigrationApplied
 runner = CliRunner()
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 class TestRebuildCLIHelp:
     """Cycle 5.1: Basic CLI wiring."""
 
     def test_help_shows_all_options(self):
         result = runner.invoke(app, ["migrate", "rebuild", "--help"])
         assert result.exit_code == 0
-        assert "--drop-schemas" in result.output
-        assert "--seed" in result.output
-        assert "--backup-tracking" in result.output
-        assert "--verify" in result.output
-        assert "--config" in result.output
-        assert "--migrations-dir" in result.output
-        assert "--dry-run" in result.output
-        assert "--yes" in result.output
-        assert "--format" in result.output
+        clean = _strip_ansi(result.output)
+        assert "--drop-schemas" in clean
+        assert "--seed" in clean
+        assert "--backup-tracking" in clean
+        assert "--verify" in clean
+        assert "--config" in clean
+        assert "--migrations-dir" in clean
+        assert "--dry-run" in clean
+        assert "--yes" in clean
+        assert "--format" in clean
 
 
 class TestRebuildPreFlight:
