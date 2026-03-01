@@ -5,13 +5,13 @@ Each migration file contains up() and down() methods with the necessary SQL.
 """
 
 import fcntl
-import re
 import shlex
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import ExternalGeneratorError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
@@ -458,32 +458,8 @@ class {class_name}(Migration):
         return None
 
 
-# Transaction-wrapper pattern: lines that are exactly BEGIN[;] or COMMIT[;]
-_TRANSACTION_LINE_RE = re.compile(r"^\s*(BEGIN|COMMIT)\s*;?\s*$", re.IGNORECASE)
-
-
+# Backward-compatible alias — logic lives in confiture.core.sql_utils
 def _strip_transaction_wrappers(sql: str) -> str:
-    """Remove BEGIN/COMMIT wrappers from generator SQL output.
-
-    Strips lines that are exactly BEGIN or COMMIT (with or without semicolons,
-    case-insensitive). Preserves all other SQL, collapsing redundant leading/
-    trailing blank lines to at most one.
-
-    Args:
-        sql: Raw SQL string from external generator
-
-    Returns:
-        SQL with transaction wrapper lines removed
-    """
-    lines = sql.splitlines()
-    filtered = [line for line in lines if not _TRANSACTION_LINE_RE.match(line)]
-
-    # Remove leading blank lines
-    while filtered and not filtered[0].strip():
-        filtered.pop(0)
-
-    # Remove trailing blank lines
-    while filtered and not filtered[-1].strip():
-        filtered.pop()
-
-    return "\n".join(filtered) + "\n" if filtered else ""
+    result = strip_transaction_wrappers(sql)
+    assert isinstance(result, str)
+    return result

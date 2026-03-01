@@ -5,6 +5,33 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-03-01
+
+### Fixed
+
+- **Handle explicit `BEGIN`/`COMMIT` in migration SQL files** (#64) — `.up.sql` and `.down.sql`
+  files containing explicit transaction control statements no longer break confiture's
+  savepoint-based execution. The statements are stripped automatically before execution and a
+  `WARNING` is logged so users know to omit them from future migration files.
+
+  Before this fix, running a migration file that started with `BEGIN;` caused:
+  ```
+  ERROR: savepoint "migration_004" does not exist
+  STATEMENT: RELEASE SAVEPOINT migration_004
+  ```
+  This was a common pain point for teams migrating from workflows where files were applied
+  directly via `psql -f`.
+
+  The stripping logic is intentionally narrow: only lines that are *exactly* `BEGIN` or
+  `COMMIT` (with optional semicolon and surrounding whitespace, case-insensitive) are removed.
+  `BEGIN` appearing inside a comment, string literal, or compound statement is preserved.
+
+### Internal
+
+- Extracted shared `strip_transaction_wrappers()` utility to `confiture.core.sql_utils`.
+  Previously this logic existed only inside the external migration generator; it is now reused
+  by `FileSQLMigration` as well.
+
 ## [0.6.2] - 2026-02-28
 
 ### Added

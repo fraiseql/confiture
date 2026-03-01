@@ -31,12 +31,16 @@ Preconditions for SQL-only migrations can be defined in a YAML sidecar file:
         schema: catalog
 """
 
+import logging
 from pathlib import Path
 
 import psycopg
 
 from confiture.core.preconditions import Precondition
+from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.models.migration import Migration
+
+logger = logging.getLogger(__name__)
 
 
 class FileSQLMigration(Migration):
@@ -105,12 +109,26 @@ class FileSQLMigration(Migration):
 
     def up(self) -> None:
         """Apply the migration by executing the .up.sql file."""
-        sql = self.up_file.read_text()
+        sql, changed = strip_transaction_wrappers(self.up_file.read_text(), return_changed=True)
+        if changed:
+            logger.warning(
+                "Migration %s (%s): stripped BEGIN/COMMIT from .up.sql — "
+                "confiture manages transactions; omit them from migration files.",
+                self.version,
+                self.up_file.name,
+            )
         self.execute(sql)
 
     def down(self) -> None:
         """Rollback the migration by executing the .down.sql file."""
-        sql = self.down_file.read_text()
+        sql, changed = strip_transaction_wrappers(self.down_file.read_text(), return_changed=True)
+        if changed:
+            logger.warning(
+                "Migration %s (%s): stripped BEGIN/COMMIT from .down.sql — "
+                "confiture manages transactions; omit them from migration files.",
+                self.version,
+                self.down_file.name,
+            )
         self.execute(sql)
 
     @classmethod
@@ -172,11 +190,27 @@ class FileSQLMigration(Migration):
                 raise FileNotFoundError(f"Migration down file not found: {down_file}")
 
         def up_method(self: "FileSQLMigration") -> None:
-            sql = self.up_file.read_text()
+            sql, changed = strip_transaction_wrappers(self.up_file.read_text(), return_changed=True)
+            if changed:
+                logger.warning(
+                    "Migration %s (%s): stripped BEGIN/COMMIT from .up.sql — "
+                    "confiture manages transactions; omit them from migration files.",
+                    version,
+                    self.up_file.name,
+                )
             self.execute(sql)
 
         def down_method(self: "FileSQLMigration") -> None:
-            sql = self.down_file.read_text()
+            sql, changed = strip_transaction_wrappers(
+                self.down_file.read_text(), return_changed=True
+            )
+            if changed:
+                logger.warning(
+                    "Migration %s (%s): stripped BEGIN/COMMIT from .down.sql — "
+                    "confiture manages transactions; omit them from migration files.",
+                    version,
+                    self.down_file.name,
+                )
             self.execute(sql)
 
         # Create the class
