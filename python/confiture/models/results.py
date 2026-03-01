@@ -43,6 +43,8 @@ class StatusResult:
     tracking_table_exists: bool
     tracking_table: str
     summary: dict[str, int]  # {"applied": N, "pending": N, "total": N}
+    rebuild_recommended: bool = False
+    rebuild_reasons: list[str] = field(default_factory=list)
 
     @property
     def pending(self) -> list[str]:
@@ -66,6 +68,8 @@ class StatusResult:
             "tracking_table_exists": self.tracking_table_exists,
             "migrations": [m.to_dict() for m in self.migrations],
             "summary": self.summary,
+            "rebuild_recommended": self.rebuild_recommended,
+            "rebuild_reasons": self.rebuild_reasons,
         }
 
 
@@ -231,6 +235,41 @@ class MigrateDownResult:
             "checksums_verified": self.checksums_verified,
             "warnings": self.warnings,
             "error": self.error,
+        }
+
+
+@dataclass
+class MigrateRebuildResult:
+    """Result of migrate rebuild operation.
+
+    Tracks schema cleanup, DDL application, tracking bootstrap,
+    optional seed application, and post-rebuild verification.
+    """
+
+    success: bool
+    schemas_dropped: list[str]
+    ddl_statements_executed: int
+    migrations_marked: list[MigrationApplied]
+    total_execution_time_ms: int
+    dry_run: bool = False
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None
+    seeds_applied: int | None = None
+    verified: bool | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "success": self.success,
+            "schemas_dropped": self.schemas_dropped,
+            "ddl_statements_executed": self.ddl_statements_executed,
+            "migrations_marked": [m.to_dict() for m in self.migrations_marked],
+            "total_execution_time_ms": self.total_execution_time_ms,
+            "dry_run": self.dry_run,
+            "warnings": self.warnings,
+            "error": self.error,
+            "seeds_applied": self.seeds_applied,
+            "verified": self.verified,
         }
 
 

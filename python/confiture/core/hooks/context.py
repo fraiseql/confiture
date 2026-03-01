@@ -118,6 +118,17 @@ class ValidationContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class RebuildContext:
+    """Context available during before/after_rebuild hooks."""
+
+    env: str
+    drop_schemas: bool
+    migrations_count: int
+    schemas_dropped: list[str]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 class HookContext(Generic[T]):
     """Type-safe hook context with phase-specific information."""
 

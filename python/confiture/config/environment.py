@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from confiture.exceptions import ConfigurationError
 
@@ -155,6 +155,7 @@ class MigrationConfig(BaseModel):
     snapshot_history: bool = True
     snapshots_dir: str = "db/schema_history"
     tracking_table: str = "tb_confiture"
+    rebuild_threshold: int = 5
 
 
 class PgGitConfig(BaseModel):
@@ -290,6 +291,30 @@ class Environment(BaseModel):
             DatabaseConfig instance
         """
         return DatabaseConfig.from_url(self.database_url)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_legacy_migration_table(cls, data: Any) -> Any:
+        """Reject the legacy top-level ``migration_table`` key with an actionable error.
+
+        Before Issue #60, some documentation showed ``migration_table:`` at the
+        top level of the environment YAML.  Pydantic would silently ignore it
+        (unknown field).  This validator turns that silent misconfiguration into
+        a clear ``ConfigurationError`` so users know exactly what to fix.
+
+        Correct form::
+
+            migration:
+              tracking_table: public.tb_confiture
+        """
+        if isinstance(data, dict) and "migration_table" in data:
+            raise ConfigurationError(
+                "Unknown config key 'migration_table' at top level.\n"
+                "Move it under 'migration:' and rename to 'tracking_table':\n\n"
+                "  migration:\n"
+                "    tracking_table: " + str(data["migration_table"])
+            )
+        return data
 
     @field_validator("database_url")
     @classmethod

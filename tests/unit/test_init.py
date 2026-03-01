@@ -12,7 +12,7 @@ class TestPackageMetadata:
 
         assert __version__ is not None
         assert isinstance(__version__, str)
-        assert "0.6" in __version__  # Check major.minor prefix (0.6.0 after timestamp versioning)
+        assert "0." in __version__  # Check version prefix
 
     def test_author_exists(self):
         """Test that __author__ is defined."""

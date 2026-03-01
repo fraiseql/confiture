@@ -416,6 +416,22 @@ class ExternalGeneratorError(ConfiturError):
         self.stderr = stderr
 
 
+class RebuildError(ConfiturError):
+    """Schema rebuild failure
+
+    Raised when:
+    - Schema build fails during rebuild
+    - DDL application fails
+    - Tracking table bootstrap fails
+    - Schema cleanup fails
+
+    Example:
+        >>> raise RebuildError("Rebuild failed: cannot apply DDL")
+    """
+
+    pass
+
+
 class RestoreError(ConfiturError):
     """pg_restore failure, interruption, or unsupported dump format
 
@@ -495,6 +511,7 @@ __all__ = [
     "GitError",
     "NotAGitRepositoryError",
     "ExternalGeneratorError",
+    "RebuildError",
     "RestoreError",
     "SeedError",
     "PreconditionError",

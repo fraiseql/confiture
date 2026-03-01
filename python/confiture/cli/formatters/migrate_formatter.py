@@ -11,6 +11,7 @@ from confiture.cli.formatters.common import handle_output
 from confiture.models.results import (
     MigrateDiffResult,
     MigrateDownResult,
+    MigrateRebuildResult,
     MigrateUpResult,
     MigrateValidateResult,
 )
@@ -266,6 +267,63 @@ def format_validate_text(result: MigrateValidateResult, console: Console) -> Non
 
     if result.success and not result.orphaned_files and not result.duplicate_versions:
         console.print("[green]✅ All validation checks passed[/green]")
+
+
+def format_rebuild_result(
+    result: MigrateRebuildResult,
+    format_type: str,
+    output_path: Path | None,
+    console: Console,
+) -> None:
+    """Format rebuild result in requested format.
+
+    Args:
+        result: MigrateRebuildResult to format.
+        format_type: Output format ('text', 'json', or 'csv').
+        output_path: Optional file path to write output.
+        console: Rich console for output.
+    """
+    if format_type == "text":
+        _format_rebuild_text(result, console)
+    else:
+        csv_data = (
+            ["version", "name", "duration_ms"],
+            [[m.version, m.name, str(m.execution_time_ms)] for m in result.migrations_marked],
+        )
+        handle_output(format_type, result.to_dict(), csv_data, output_path, console)
+
+
+def _format_rebuild_text(result: MigrateRebuildResult, console: Console) -> None:
+    """Format rebuild result as rich text for console output."""
+    if result.success:
+        if result.dry_run:
+            console.print("[cyan]🔍 DRY RUN — no changes made[/cyan]")
+        else:
+            console.print("[green]✅ Rebuild complete[/green]")
+
+        if result.schemas_dropped:
+            console.print(f"\n  Schemas dropped: {', '.join(result.schemas_dropped)}")
+        console.print(f"  DDL statements executed: {result.ddl_statements_executed}")
+        console.print(f"  Migrations marked: {len(result.migrations_marked)}")
+
+        if result.seeds_applied is not None:
+            console.print(f"  Seed files applied: {result.seeds_applied}")
+
+        if result.verified is not None:
+            status = (
+                "[green]✅ verified[/green]" if result.verified else "[red]❌ pending found[/red]"
+            )
+            console.print(f"  Post-rebuild verify: {status}")
+
+        if result.total_execution_time_ms > 0:
+            console.print(f"\n  ⏱️  Total time: {result.total_execution_time_ms}ms")
+
+        if result.warnings:
+            console.print("\n[yellow]Warnings:[/yellow]")
+            for warning in result.warnings:
+                console.print(f"  ⚠️  {warning}")
+    else:
+        console.print(f"[red]❌ Rebuild failed: {result.error}[/red]")
 
 
 def show_migration_error_details(

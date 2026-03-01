@@ -5,6 +5,78 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-01
+
+### Added
+
+- **`confiture migrate rebuild` command** — Rebuilds database from DDL schema and bootstraps the
+  tracking table in a single operation. Designed for staging/QA environments restored from
+  production backups where `migrate up` fails due to large migration gaps, lock exhaustion, or
+  cumulative DDL complexity.
+
+  ```bash
+  # Full rebuild: drop schemas, apply DDL, mark all migrations, apply seeds
+  confiture migrate rebuild --drop-schemas --seed --verify --yes
+
+  # Preview what would happen
+  confiture migrate rebuild --dry-run
+
+  # Backup tracking table before rebuild
+  confiture migrate rebuild --backup-tracking --drop-schemas --yes
+  ```
+
+  Key features:
+  - `--drop-schemas` — drops all user schemas (CASCADE) and recreates `public`
+  - `--seed` — applies seed files after DDL via existing `SeedApplier`
+  - `--backup-tracking` — dumps `tb_confiture` to JSON before clearing
+  - `--verify` — runs `migrate status` after rebuild to confirm 0 pending
+  - `--format json` — structured output following the established `handle_output()` pattern
+  - `--dry-run` — shows what would happen without making changes
+  - Semantic exit codes: 0 (success), 3 (fatal error)
+  - CREATE EXTENSION failures captured as warnings, not errors
+
+- **Python library API for rebuild** — `MigratorSession.rebuild()` provides programmatic access:
+
+  ```python
+  from confiture import Migrator
+
+  with Migrator.from_config("db/environments/staging.yaml") as m:
+      result = m.rebuild(drop_schemas=True, apply_seeds=True)
+      print(f"Applied {result.ddl_statements_executed} DDL statements")
+  ```
+
+- **`--check-rebuild` flag on `migrate status`** — Checks whether a full rebuild is recommended
+  instead of `migrate up`, based on configurable threshold and strategy headers:
+
+  ```bash
+  confiture migrate status --check-rebuild -c db/environments/staging.yaml
+  # 🔄 Rebuild recommended:
+  #   • 12 pending migrations exceed threshold of 5
+  #   • Migration 008_refactor_schema.up.sql has '-- Strategy: rebuild' header
+  ```
+
+- **`-- Strategy: rebuild` header** — Migration files can declare their preferred strategy in the
+  first 10 lines. Detected by `--check-rebuild` and `find_rebuild_strategy_files()`:
+
+  ```sql
+  -- Strategy: rebuild
+  CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT NOT NULL);
+  ```
+
+- **`rebuild_threshold` config field** — `migration.rebuild_threshold` in environment YAML
+  (default: 5) controls when `--check-rebuild` triggers the rebuild advisory.
+
+- **`BEFORE_REBUILD` / `AFTER_REBUILD` hook phases** — New lifecycle events for hook integrations.
+
+- **`RebuildError` exception** — New exception type for rebuild-specific failures, inherits
+  `ConfiturError`.
+
+- **`MigrateRebuildResult` model** — Structured result with `schemas_dropped`, `ddl_statements_executed`,
+  `migrations_marked`, `seeds_applied`, `verified`, `warnings`, and `to_dict()` for JSON output.
+
+- **`rebuild_recommended` / `rebuild_reasons` on `StatusResult`** — Populated by `--check-rebuild`
+  and included in JSON output.
+
 ## [0.6.3] - 2026-03-01
 
 ### Fixed

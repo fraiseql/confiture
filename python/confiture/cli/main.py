@@ -1020,6 +1020,16 @@ def migrate_status(
         "-o",
         help="Save output to file (default: stdout, useful with json)",
     ),
+    check_rebuild: bool = typer.Option(
+        False,
+        "--check-rebuild",
+        help="Check whether a full rebuild is recommended instead of migrate up",
+    ),
+    rebuild_threshold: int = typer.Option(
+        None,
+        "--rebuild-threshold",
+        help="Number of pending migrations that triggers rebuild advisory (default: from config or 5)",
+    ),
 ) -> None:
     """Show migration status and history.
 
@@ -1214,6 +1224,22 @@ def migrate_status(
                 result["duplicate_versions"] = {
                     v: [f.name for f in files] for v, files in duplicate_versions.items()
                 }
+            if check_rebuild and pending_list:
+                from confiture.core.strategy import (
+                    find_rebuild_strategy_files as _json_find_rebuild,
+                )
+
+                _json_threshold = rebuild_threshold or 5
+                _json_reasons: list[str] = []
+                if len(pending_list) >= _json_threshold:
+                    _json_reasons.append(
+                        f"{len(pending_list)} pending migrations exceed threshold of {_json_threshold}"
+                    )
+                for sf in _json_find_rebuild(migrations_dir):
+                    _json_reasons.append(f"Migration {sf.name} has '-- Strategy: rebuild' header")
+                if _json_reasons:
+                    result["rebuild_recommended"] = True
+                    result["rebuild_reasons"] = _json_reasons
             _output_json(result, output_file, console)
             if tracking_table_absent:
                 tracking_table_absent_exit = True
@@ -1271,6 +1297,49 @@ def migrate_status(
             # Warn about orphaned files
             if orphaned_sql_files:
                 _print_orphaned_files_warning(orphaned_sql_files, console)
+
+            # Check if rebuild is recommended
+            if check_rebuild and pending_list:
+                from confiture.core.strategy import find_rebuild_strategy_files
+
+                threshold = rebuild_threshold
+                if threshold is None:
+                    # Try to read from config
+                    if config and config.exists():
+                        try:
+                            from confiture.core.connection import load_config as _rebuild_load
+
+                            _cfg = _rebuild_load(config)
+                            if hasattr(_cfg, "migration") and hasattr(
+                                _cfg.migration, "rebuild_threshold"
+                            ):
+                                threshold = _cfg.migration.rebuild_threshold
+                        except Exception:
+                            pass
+                    if threshold is None:
+                        threshold = 5
+
+                rebuild_reasons: list[str] = []
+
+                if len(pending_list) >= threshold:
+                    rebuild_reasons.append(
+                        f"{len(pending_list)} pending migrations exceed threshold of {threshold}"
+                    )
+
+                strategy_files = find_rebuild_strategy_files(migrations_dir)
+                if strategy_files:
+                    for sf in strategy_files:
+                        rebuild_reasons.append(
+                            f"Migration {sf.name} has '-- Strategy: rebuild' header"
+                        )
+
+                if rebuild_reasons and output_format in ("text", "table"):
+                    console.print("\n[yellow]🔄 Rebuild recommended:[/yellow]")
+                    for reason in rebuild_reasons:
+                        console.print(f"  • {reason}")
+                    console.print(
+                        "\n[yellow]  Run: confiture migrate rebuild --drop-schemas --yes[/yellow]"
+                    )
 
         # Set exit flags after output is written (avoids raising inside try)
         if config and config.exists() and db_error:
@@ -2739,6 +2808,187 @@ def migrate_reinit(
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@migrate_app.command("rebuild")
+def migrate_rebuild(
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file (default: db/environments/local.yaml)",
+    ),
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory (default: db/migrations)",
+    ),
+    drop_schemas: bool = typer.Option(
+        False,
+        "--drop-schemas",
+        help="Drop all user schemas before rebuild",
+    ),
+    seed: bool = typer.Option(
+        False,
+        "--seed",
+        help="Apply seed files after DDL rebuild",
+    ),
+    backup_tracking: bool = typer.Option(
+        False,
+        "--backup-tracking",
+        help="Dump tracking table to JSON before clearing",
+    ),
+    verify: bool = typer.Option(
+        False,
+        "--verify",
+        help="Run status check after rebuild to confirm 0 pending",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would happen without making changes",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompt",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
+) -> None:
+    """Rebuild database from DDL schema and bootstrap tracking table.
+
+    PROCESS:
+      Drops all user schemas (if --drop-schemas), applies DDL from
+      db/schema/ via SchemaBuilder, creates tracking table, and marks
+      all migration files as applied. Optionally applies seeds.
+
+    USE CASE:
+      When staging/QA environments restored from production backups have
+      large migration gaps (10+ pending), migrate up often fails due to
+      lock exhaustion or cumulative DDL complexity. Rebuild automates the
+      manual workaround of: build DDL → psql -f → hand-insert tracking rows.
+
+    EXAMPLES:
+      confiture migrate rebuild --drop-schemas --yes
+        ↳ Drop all schemas, rebuild from DDL, bootstrap tracking
+
+      confiture migrate rebuild --dry-run
+        ↳ Preview what would happen without making changes
+
+      confiture migrate rebuild --drop-schemas --seed --verify --yes
+        ↳ Full rebuild with seeds and post-rebuild verification
+
+      confiture migrate rebuild --backup-tracking --drop-schemas --yes
+        ↳ Dump tracking table before rebuild (creates JSON backup file)
+
+    RELATED:
+      confiture migrate reinit  - Reset tracking table without rebuilding schema
+      confiture migrate up      - Apply migrations incrementally
+      confiture migrate status  - View migration history
+    """
+    import json as json_module
+    from datetime import datetime
+
+    from confiture.cli.formatters.migrate_formatter import format_rebuild_result
+    from confiture.core.migrator import Migrator, find_duplicate_migration_versions
+
+    fatal_error_exit = False
+
+    # Pre-flight: validate config
+    if not config.exists():
+        console.print(f"[red]❌ Config file not found: {config}[/red]")
+        console.print("[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]")
+        raise typer.Exit(1)
+
+    # Pre-flight: validate migrations dir
+    if not migrations_dir.exists():
+        console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
+        raise typer.Exit(1)
+
+    # Pre-flight: validate format
+    if format_output not in ("text", "json"):
+        error_console.print(
+            f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
+        )
+        raise typer.Exit(1)
+
+    # Pre-flight: check for duplicate versions
+    duplicates = find_duplicate_migration_versions(migrations_dir)
+    if duplicates:
+        console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
+        for version, files in sorted(duplicates.items()):
+            console.print(f"  Version {version}:")
+            for f in files:
+                console.print(f"    • {f.name}")
+        raise typer.Exit(3)
+
+    try:
+        with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
+            # Backup tracking table before rebuild if requested
+            tracking_backup_data = None
+            if backup_tracking and not dry_run:
+                migrator = m._migrator
+                assert migrator is not None
+                tracking_backup_data = migrator._backup_tracking_table()
+
+            # Confirmation prompt
+            if not yes and not dry_run:
+                action = "DROP all user schemas and rebuild" if drop_schemas else "Rebuild"
+                confirmed = typer.confirm(
+                    f"{action} database from DDL schema? This will reset the tracking table."
+                )
+                if not confirmed:
+                    console.print("[dim]Aborted.[/dim]")
+                    return
+
+            if dry_run and format_output == "text":
+                console.print("[yellow]🔍 DRY RUN — no changes will be made[/yellow]\n")
+
+            # Execute rebuild
+            result = m.rebuild(
+                drop_schemas=drop_schemas,
+                dry_run=dry_run,
+                apply_seeds=seed,
+                backup_tracking=False,  # already handled above
+            )
+
+            # Write tracking backup to file
+            if tracking_backup_data is not None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_path = Path(f"tb_confiture_backup_{timestamp}.json")
+                backup_path.write_text(
+                    json_module.dumps(tracking_backup_data, indent=2, default=str)
+                )
+                if format_output == "text":
+                    console.print(f"[cyan]📦 Tracking table backed up to {backup_path}[/cyan]\n")
+
+            # Post-rebuild verification
+            if verify and not dry_run:
+                status = m.status()
+                result.verified = not status.has_pending
+                if status.has_pending and format_output == "text":
+                    console.print(
+                        f"[yellow]⚠️  Verification: {len(status.pending)} pending migration(s) found[/yellow]"
+                    )
+
+            # Output result
+            format_rebuild_result(result, format_output, None, console)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        if format_output == "text":
+            error_console.print(f"[red]❌ Fatal error: {e}[/red]")
+        fatal_error_exit = True
+
+    if fatal_error_exit:
+        raise typer.Exit(3)
 
 
 @migrate_app.command("diff")

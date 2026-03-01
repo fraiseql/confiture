@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from confiture.config.environment import Environment
     from confiture.models.results import (
         MigrateDownResult,
+        MigrateRebuildResult,
         MigrateReinitResult,
         MigrateUpResult,
         StatusResult,
@@ -919,6 +920,265 @@ class Migrator:
         migration_files = sorted(all_files, key=lambda f: self._version_from_filename(f.name))
 
         return migration_files
+
+    # ------------------------------------------------------------------
+    # Rebuild helpers
+    # ------------------------------------------------------------------
+
+    _SYSTEM_SCHEMAS = frozenset(
+        {
+            "pg_catalog",
+            "information_schema",
+            "pg_toast",
+        }
+    )
+
+    def _discover_user_schemas(self) -> list[str]:
+        """Query all user-created schemas, excluding system schemas.
+
+        Returns:
+            List of schema names (e.g. ``["public", "myapp"]``).
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute("SELECT schema_name FROM information_schema.schemata")
+            rows = cursor.fetchall()
+
+        return [
+            row[0]
+            for row in rows
+            if row[0] not in self._SYSTEM_SCHEMAS
+            and not row[0].startswith("pg_temp_")
+            and not row[0].startswith("pg_toast_temp_")
+        ]
+
+    def _drop_user_schemas(self, schemas: list[str]) -> list[str]:
+        """Drop user schemas with CASCADE and recreate ``public``.
+
+        Runs in autocommit mode (DDL cannot be rolled back safely).
+
+        Args:
+            schemas: Schema names to drop.
+
+        Returns:
+            List of schemas that were actually dropped.
+        """
+        if not schemas:
+            return []
+
+        original_autocommit = self.connection.autocommit
+        self.connection.autocommit = True
+        try:
+            with self.connection.cursor() as cursor:
+                for schema in schemas:
+                    logger.info("Dropping schema %s", schema)
+                    cursor.execute(f"DROP SCHEMA {schema} CASCADE")
+                # Always recreate public
+                cursor.execute("CREATE SCHEMA public")
+            return list(schemas)
+        finally:
+            self.connection.autocommit = original_autocommit
+
+    def _apply_ddl_string(self, ddl: str) -> tuple[int, list[str]]:
+        """Execute DDL statements in autocommit mode.
+
+        Strips BEGIN/COMMIT wrappers, splits into statements, and executes
+        each one. CREATE EXTENSION failures are captured as warnings rather
+        than raised.
+
+        Args:
+            ddl: Raw DDL string (may contain multiple statements).
+
+        Returns:
+            Tuple of (statements_executed, warnings).
+        """
+        import sqlparse
+
+        from confiture.core.sql_utils import strip_transaction_wrappers
+
+        cleaned = strip_transaction_wrappers(ddl)
+        statements = [s.strip() for s in sqlparse.split(cleaned) if s.strip()]
+
+        if not statements:
+            return 0, []
+
+        warnings: list[str] = []
+        executed = 0
+
+        original_autocommit = self.connection.autocommit
+        self.connection.autocommit = True
+        try:
+            with self.connection.cursor() as cursor:
+                for stmt in statements:
+                    if not stmt or stmt == ";":
+                        continue
+                    try:
+                        cursor.execute(stmt)
+                        executed += 1
+                    except Exception as exc:
+                        if "CREATE EXTENSION" in stmt.upper():
+                            warnings.append(f"CREATE EXTENSION warning: {exc}")
+                        else:
+                            raise
+        finally:
+            self.connection.autocommit = original_autocommit
+
+        return executed, warnings
+
+    def _backup_tracking_table(self) -> list[dict[str, Any]]:
+        """Dump current tracking table contents as list of dicts.
+
+        Returns:
+            List of row dicts, or empty list if table does not exist.
+        """
+        if not self.tracking_table_exists():
+            return []
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"SELECT * FROM {self.migration_table}")
+            columns = [desc[0] for desc in cursor.description]
+            return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+
+    def rebuild(
+        self,
+        *,
+        drop_schemas: bool = False,
+        dry_run: bool = False,
+        apply_seeds: bool = False,
+        backup_tracking: bool = False,
+        schema_dir: Path | None = None,
+        migrations_dir: Path | None = None,
+        seeds_dir: Path | None = None,
+        env_config: Any | None = None,
+    ) -> MigrateRebuildResult:
+        """Rebuild database from DDL and bootstrap tracking table.
+
+        Orchestrates: (1) optional tracking backup, (2) optional schema
+        cleanup, (3) DDL build + apply, (4) tracking table init +
+        re-baseline, (5) optional seed application.
+
+        Args:
+            drop_schemas: Drop all user schemas before rebuild.
+            dry_run: Build DDL and report what would happen without executing.
+            apply_seeds: Apply seed files after DDL.
+            backup_tracking: Dump tracking table before clearing.
+            schema_dir: Path to schema directory (default: db/schema).
+            migrations_dir: Path to migrations directory (default: db/migrations).
+            seeds_dir: Path to seeds directory (default: db/seeds).
+            env_config: Optional Environment config for SchemaBuilder.
+
+        Returns:
+            MigrateRebuildResult with operation details.
+
+        Raises:
+            RebuildError: If schema build or DDL application fails.
+        """
+        from confiture.exceptions import RebuildError
+        from confiture.models.results import MigrateRebuildResult
+
+        start_time = time.time()
+        warnings: list[str] = []
+        schemas_dropped: list[str] = []
+        ddl_count = 0
+        seeds_applied: int | None = None
+
+        if schema_dir is None:
+            schema_dir = Path("db") / "schema"
+        if migrations_dir is None:
+            migrations_dir = Path("db") / "migrations"
+        if seeds_dir is None:
+            seeds_dir = Path("db") / "seeds"
+
+        # Step 1: Backup tracking table if requested
+        if backup_tracking:
+            self._backup_tracking_table()  # result used by CLI for JSON dump
+
+        # Step 2: Build DDL via SchemaBuilder
+        try:
+            from confiture.core.builder import SchemaBuilder
+
+            builder = SchemaBuilder(
+                env=env_config.name if env_config and hasattr(env_config, "name") else "rebuild",
+                include_dirs=[str(schema_dir)],
+            )
+            ddl = builder.build(schema_only=True)
+        except Exception as exc:
+            raise RebuildError(f"Schema build failed: {exc}") from exc
+
+        if dry_run:
+            # Count what would be executed
+            import sqlparse
+
+            from confiture.core.sql_utils import strip_transaction_wrappers
+
+            cleaned = strip_transaction_wrappers(ddl)
+            stmts = [s.strip() for s in sqlparse.split(cleaned) if s.strip()]
+            ddl_count = len(stmts)
+
+            # Count migrations that would be marked
+            all_migrations = self.find_migration_files(migrations_dir)
+            from confiture.models.results import MigrationApplied
+
+            marked = []
+            for mf in all_migrations:
+                version = self._version_from_filename(mf.name)
+                name_parts = mf.stem.split("_", 1)
+                name = name_parts[1] if len(name_parts) > 1 else mf.stem
+                if name.endswith(".up"):
+                    name = name[:-3]
+                marked.append(MigrationApplied(version=version, name=name, execution_time_ms=0))
+
+            # Discover schemas that would be dropped
+            if drop_schemas:
+                schemas_dropped = self._discover_user_schemas()
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            return MigrateRebuildResult(
+                success=True,
+                schemas_dropped=schemas_dropped,
+                ddl_statements_executed=ddl_count,
+                migrations_marked=marked,
+                total_execution_time_ms=elapsed_ms,
+                dry_run=True,
+                warnings=warnings,
+            )
+
+        # Step 3: Drop schemas if requested
+        if drop_schemas:
+            user_schemas = self._discover_user_schemas()
+            schemas_dropped = self._drop_user_schemas(user_schemas)
+
+        # Step 4: Apply DDL
+        ddl_count, ddl_warnings = self._apply_ddl_string(ddl)
+        warnings.extend(ddl_warnings)
+
+        # Step 5: Initialize tracking table + re-baseline
+        self.initialize()
+        reinit_result = self.reinit(migrations_dir=migrations_dir)
+        migrations_marked = reinit_result.migrations_marked
+
+        # Step 6: Optionally apply seeds
+        if apply_seeds:
+            from confiture.core.seed_applier import SeedApplier
+
+            applier = SeedApplier(
+                seeds_dir=seeds_dir,
+                connection=self.connection,
+            )
+            seed_result = applier.apply_sequential()
+            seeds_applied = seed_result.total_applied
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+
+        return MigrateRebuildResult(
+            success=True,
+            schemas_dropped=schemas_dropped,
+            ddl_statements_executed=ddl_count,
+            migrations_marked=migrations_marked,
+            total_execution_time_ms=elapsed_ms,
+            dry_run=False,
+            warnings=warnings,
+            seeds_applied=seeds_applied,
+        )
 
     def tracking_table_exists(self) -> bool:
         """Return True if the tb_confiture tracking table exists in the database.
@@ -1830,4 +2090,32 @@ class MigratorSession:
         self._migrator.initialize()
         return self._migrator.reinit(
             through=through, dry_run=dry_run, migrations_dir=self._migrations_dir
+        )
+
+    def rebuild(
+        self,
+        *,
+        drop_schemas: bool = False,
+        dry_run: bool = False,
+        apply_seeds: bool = False,
+        backup_tracking: bool = False,
+    ) -> MigrateRebuildResult:
+        """Rebuild database from DDL and bootstrap tracking table.
+
+        Args:
+            drop_schemas: Drop all user schemas before rebuild.
+            dry_run: Report what would happen without executing.
+            apply_seeds: Apply seed files after DDL.
+            backup_tracking: Dump tracking table before clearing.
+
+        Returns:
+            MigrateRebuildResult with operation details.
+        """
+        assert self._migrator is not None, "Call rebuild() inside a 'with' block"
+        return self._migrator.rebuild(
+            drop_schemas=drop_schemas,
+            dry_run=dry_run,
+            apply_seeds=apply_seeds,
+            backup_tracking=backup_tracking,
+            migrations_dir=self._migrations_dir,
         )

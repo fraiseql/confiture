@@ -28,6 +28,8 @@ class HookPhase(Enum):
     AFTER_VALIDATE = "after_validate"
     BEFORE_ROLLBACK = "before_rollback"
     AFTER_ROLLBACK = "after_rollback"
+    BEFORE_REBUILD = "before_rebuild"
+    AFTER_REBUILD = "after_rebuild"
 
 
 class HookEvent(Enum):

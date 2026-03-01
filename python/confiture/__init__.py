@@ -23,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.6.3"
+__version__ = "0.7.0"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -41,12 +41,14 @@ __all__ = [
     "BaselineDetector",
     # Exceptions
     "ExternalGeneratorError",
+    "RebuildError",
     # Result models
     "StatusResult",
     "MigrationInfo",
     "MigrateUpResult",
     "MigrateDownResult",
     "MigrateReinitResult",
+    "MigrateRebuildResult",
     "MigrationApplied",
 ]
 
@@ -97,8 +99,16 @@ def __getattr__(name: str) -> Any:
         from confiture.models.results import MigrateReinitResult
 
         return MigrateReinitResult
+    if name == "MigrateRebuildResult":
+        from confiture.models.results import MigrateRebuildResult
+
+        return MigrateRebuildResult
     if name == "MigrationApplied":
         from confiture.models.results import MigrationApplied
 
         return MigrationApplied
+    if name == "RebuildError":
+        from confiture.exceptions import RebuildError
+
+        return RebuildError
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
