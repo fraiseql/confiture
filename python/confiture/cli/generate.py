@@ -286,3 +286,41 @@ def show_diff(
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@generate_app.command("stubs")
+def generate_stubs(
+    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
+    schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    output_format: str = typer.Option(
+        "pydantic",
+        "--format",
+        help="Output format: pydantic|dataclass|typeddict",
+    ),
+    include: str | None = typer.Option(
+        None, "--include", help="SQL LIKE pattern to filter functions"
+    ),
+) -> None:
+    """Generate typed Python wrapper functions for stored procedures."""
+    import psycopg
+
+    from confiture.core.stub_generator import StubGenerator
+
+    try:
+        with psycopg.connect(database_url) as conn:
+            gen = StubGenerator(conn, schema=schema, name_pattern=include)
+            stub_file = gen.generate()
+    except Exception as e:
+        console.print(f"[red]Error connecting to database: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    code = stub_file.render(output_format=output_format)
+
+    if output is None:
+        console.print(code)
+    else:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(code)
+        console.print(f"[green]Generated stubs written to {output}[/green]")
+        console.print(f"[dim]{len(stub_file.functions)} function(s) exported.[/dim]")
