@@ -645,6 +645,118 @@ def lint(
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+def lint_unified(
+    files: list[Path] = typer.Argument(
+        default=None,
+        help="SQL files or directories to lint (default: all schema files)",
+    ),
+    check: list[str] = typer.Option(
+        None,
+        "--check",
+        "-c",
+        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter). "
+        "Default: all.",
+    ),
+    git_diff: bool = typer.Option(
+        False,
+        "--git-diff",
+        help="Only lint files changed in the current git diff (default: off)",
+    ),
+    env: str = typer.Option(
+        "local",
+        "--env",
+        "-e",
+        help="Environment for schema lint (default: local)",
+    ),
+    format_type: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table, json (default: table)",
+    ),
+    fail_on_error: bool = typer.Option(
+        True,
+        "--fail-on-error",
+        help="Exit with code 1 if errors found (default: on)",
+    ),
+) -> None:
+    """Run unified SQL lint checks (Squawk, SQLFluff, and/or SchemaLinter).
+
+    EXAMPLES:
+      confiture lint-unified db/migrations/
+        Lint all SQL files in migrations directory with all available tools.
+
+      confiture lint-unified --check safety
+        Run only Squawk safety checks.
+
+      confiture lint-unified --check schema --env local
+        Run only SchemaLinter checks on the local environment.
+
+      confiture lint-unified --git-diff
+        Lint only SQL files changed in the current git diff.
+    """
+    from confiture.core.unified_linter import UnifiedLinter
+
+    checks = list(check) if check else None
+
+    # Handle schema checks separately (uses SchemaLinter)
+    run_schema = checks is None or "schema" in (checks or [])
+    run_tool_checks = checks is None or any(c in (checks or []) for c in ("safety", "format"))
+
+    all_issues: list = []
+
+    if run_tool_checks:
+        linter = UnifiedLinter()
+        result = linter.run(files=list(files) if files else None, checks=checks, git_diff=git_diff)
+        all_issues.extend(result.issues)
+
+    if run_schema:
+        from confiture.core.linting import SchemaLinter
+        from confiture.core.linting.schema_linter import LintConfig as LinterConfig
+        from confiture.models.unified_lint import UnifiedLintIssue
+
+        schema_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
+        schema_linter = SchemaLinter(env=env, config=schema_config)
+        try:
+            linter_report = schema_linter.lint()
+            for v in linter_report.violations:
+                all_issues.append(
+                    UnifiedLintIssue(
+                        tool="schema",
+                        file=env,
+                        line=None,
+                        message=v.message,
+                        severity=v.severity,
+                        rule=v.rule_name,
+                    )
+                )
+        except Exception as e:
+            console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
+
+    from confiture.models.unified_lint import UnifiedLintResult
+
+    unified_result = UnifiedLintResult(issues=all_issues)
+
+    if format_type == "json":
+        import json
+
+        console.print(json.dumps(unified_result.to_dict(), indent=2))
+    else:
+        if not unified_result.issues:
+            console.print("[green]No issues found.[/green]")
+        else:
+            for tool, tool_issues in unified_result.by_tool.items():
+                console.print(f"\n[bold]{tool}[/bold] ({len(tool_issues)} issue(s)):")
+                for issue in tool_issues:
+                    sev = issue.severity.value.upper()
+                    loc = f"{issue.file}:{issue.line}" if issue.line else issue.file
+                    rule = f" [{issue.rule}]" if issue.rule else ""
+                    console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
+
+    if fail_on_error and unified_result.has_errors:
+        raise typer.Exit(1)
+
+
 def introspect(
     db: str = typer.Option(
         ...,

@@ -13,6 +13,7 @@ from confiture.cli.commands.admin import (
     validate_profile,
     verify,
 )
+from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate_analysis import (
     migrate_diff,
     migrate_fix,
@@ -31,8 +32,7 @@ from confiture.cli.commands.migrate_state import (
     migrate_rebuild,
     migrate_reinit,
 )
-from confiture.cli.commands.mcp import mcp_app
-from confiture.cli.commands.schema import build, init, introspect, lint
+from confiture.cli.commands.schema import build, init, introspect, lint, lint_unified
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
 
@@ -135,6 +135,7 @@ def main(
 app.command()(init)
 app.command()(build)
 app.command()(lint)
+app.command("lint-unified")(lint_unified)
 app.command()(introspect)
 
 # Register admin commands
