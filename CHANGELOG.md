@@ -5,6 +5,100 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-10
+
+### Added
+
+- **`confiture migrate verify` command** — Verify applied migrations using `.verify.sql` sidecar
+  files (Issue #65).
+
+  After applying migrations, there's no built-in way to verify each migration achieved its
+  intended outcome. The `.verify.sql` sidecar pattern lets users write assertion queries.
+
+  ```bash
+  # Verify all applied migrations
+  confiture migrate verify -c db/environments/local.yaml
+
+  # Verify a single migration
+  confiture migrate verify --version 003 -c db/environments/local.yaml
+
+  # JSON output for CI/CD pipelines
+  confiture migrate verify --format json -c db/environments/local.yaml
+  ```
+
+  File format:
+  ```sql
+  -- db/migrations/003_add_users.verify.sql
+  SELECT COUNT(*) > 0 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'email'
+  ```
+
+  Key features:
+  - `.verify.sql` files discovered alongside `.up.sql` in migrations dir
+  - Queries execute inside SAVEPOINT/ROLLBACK (read-only, no side effects)
+  - First column of first row checked for truthiness (true/t/1/non-null/non-zero)
+  - DDL/DML in verify files rejected with `VerifyFileError`
+  - `--version` to verify a single migration
+  - Text and JSON output; exit 0 if no failures, exit 1 if any failure
+  - Migrations without verify files shown as `SKIP` (not an error)
+
+- **`MigrationVerifier` public API**:
+
+  ```python
+  from confiture import MigrationVerifier
+
+  verifier = MigrationVerifier(connection=conn, migrations_dir=Path("db/migrations"))
+  results = verifier.verify_all(applied_versions=["001", "002"])
+  for r in results:
+      print(f"{r.version}: {r.status}")
+  ```
+
+- **`VerifyFileError` exception** — Raised when a `.verify.sql` file contains forbidden SQL.
+
+## [0.8.0] - 2026-03-10
+
+### Added
+
+- **`--require-grant-migration` flag on `migrate validate`** — Warns when `db/7_grant/` files
+  change without a corresponding `.up.sql` migration file (Issue #66).
+
+  Build environments apply grants from `7_grant/` automatically; migrate environments (staging,
+  production) only apply grants when they appear in a migration file. This asymmetry caused silent
+  permission failures in production.
+
+  ```bash
+  # Pre-commit: check staged grant files have a migration
+  confiture migrate validate --require-grant-migration --staged
+
+  # CI: check grant changes between branches
+  confiture migrate validate --require-grant-migration --base-ref origin/main
+
+  # Build-only branch: suppress the check
+  confiture migrate validate --require-grant-migration --allow-grant-only
+  ```
+
+- **`GrantAccompanimentChecker` public API** — Programmatic access to grant accompaniment checking:
+
+  ```python
+  from confiture import GrantAccompanimentChecker
+
+  checker = GrantAccompanimentChecker(grant_dir="db/7_grant")
+  report = checker.check_accompaniment(staged_only=True)
+  if not report.is_valid:
+      print(f"Grant changes require migration: {report.grant_files_changed}")
+  ```
+
+- **`migration.grant_dir` config option** — Override the grant directory in YAML config:
+
+  ```yaml
+  migration:
+    grant_dir: "db/custom_grants"  # default: db/7_grant
+  ```
+
+### Closed
+
+- Issue #64: Already fixed in v0.7.0 (commit 6e03805) — `BEGIN`/`COMMIT` auto-stripping.
+
 ## [0.7.0] - 2026-03-01
 
 ### Added

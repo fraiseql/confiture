@@ -278,7 +278,7 @@ def validate(
 
         # Handle UUID validation if requested
         if uuid_validation:
-            console.print("[blue]ℹ Phase 10: UUID Validation Support[/blue]")
+            console.print("[blue]ℹ UUID Validation Support[/blue]")
             console.print("  UUID validation is available via Level 1 of prep-seed validation.")
             console.print("  Use: confiture seed validate --prep-seed --static-only")
             raise typer.Exit(0)

@@ -1,7 +1,5 @@
 """Low-level seed file execution with savepoint management.
 
-Phase 9: Sequential Seed File Execution
-
 Executes seed files within PostgreSQL savepoints to isolate failures
 and avoid parser limits from concatenation.
 """

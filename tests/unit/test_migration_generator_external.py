@@ -199,7 +199,7 @@ class TestRunExternalGenerator:
 
         down_path = up_path.parent / up_path.name.replace(".up.sql", ".down.sql")
         assert down_path.exists()
-        assert "TODO" in down_path.read_text()
+        assert "WARNING" in down_path.read_text()
 
     def test_nonzero_exit_raises_external_generator_error(self, tmp_path):
         from_file = tmp_path / "v1.sql"

@@ -109,7 +109,6 @@ class TestMigrateUpFormatter:
                 success=False,
                 migrations_applied=[],
                 total_execution_time_ms=0,
-                error="Lock timeout",
                 errors=["Lock timeout"],
             )
 

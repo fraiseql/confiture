@@ -283,8 +283,11 @@ class {class_name}(Migration):
             SQL string or None if not applicable
         """
         if change.type == "ADD_TABLE":
-            # We don't have full schema info, so create a placeholder
-            return f"# TODO: ADD_TABLE {change.table}"
+            # Full schema info not available; user must write this migration manually
+            raise NotImplementedError(
+                f"Cannot auto-generate migration for ADD_TABLE on {change.table}. "
+                "Write the migration manually or use --generator."
+            )
 
         elif change.type == "DROP_TABLE":
             return f"DROP TABLE {change.table}"
@@ -382,6 +385,7 @@ class {class_name}(Migration):
                 f"Generator exited with code {result.returncode}.\nstderr: {result.stderr}",
                 returncode=result.returncode,
                 stderr=result.stderr,
+                resolution_hint="Check the generator command configuration and ensure the external tool is installed and accessible",
             )
 
         sql = output_path.read_text()
@@ -390,13 +394,17 @@ class {class_name}(Migration):
                 "Generator wrote an empty SQL file; aborting to avoid a silent no-op migration.",
                 returncode=0,
                 stderr="",
+                resolution_hint="Ensure the generator command writes valid SQL to the output file path",
             )
         sql = _strip_transaction_wrappers(sql)
         output_path.write_text(sql)
 
         down_path = output_path.parent / output_path.name.replace(".up.sql", ".down.sql")
         if not down_path.exists():
-            down_path.write_text("-- TODO: add rollback SQL\n")
+            down_path.write_text(
+                "-- WARNING: Rollback SQL not generated. Edit this file before deploying.\n"
+                "-- If no rollback is needed, replace this with a comment explaining why.\n"
+            )
 
         return (resolved, output_path)
 

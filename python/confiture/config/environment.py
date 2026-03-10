@@ -1,6 +1,52 @@
-"""Environment configuration management
+"""Configuration models for Confiture.
 
-Handles loading and validation of environment-specific configuration from YAML files.
+This module defines the schema for Confiture YAML configuration files.
+
+Configuration Structure
+=======================
+
+::
+
+    name: local
+    database_url: postgresql://localhost/myapp_local
+
+    include_dirs:
+      - db/schema
+
+    migration:
+      tracking_table: public.tb_confiture
+
+    build:
+      linting:
+        enabled: true
+        strict: false
+      output_path: db/generated/schema.sql
+
+    seed:
+      execution_mode: concatenate  # or "sequential"
+
+    rebuild:
+      threshold: 5
+      backup: true
+
+    locking:
+      enabled: true
+      timeout_ms: 30000
+
+Environment Variables
+====================
+
+All ``database_url`` values support ``${VAR}`` substitution::
+
+    database_url: ${DATABASE_URL}
+
+File Discovery
+==============
+
+``Migrator.from_config()`` accepts:
+
+1. Path: ``"db/environments/prod.yaml"``
+2. ``Environment`` instance (pre-loaded config)
 """
 
 from pathlib import Path
@@ -156,6 +202,7 @@ class MigrationConfig(BaseModel):
     snapshots_dir: str = "db/schema_history"
     tracking_table: str = "tb_confiture"
     rebuild_threshold: int = 5
+    grant_dir: str = "db/7_grant"
 
 
 class PgGitConfig(BaseModel):

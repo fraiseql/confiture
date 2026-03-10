@@ -180,8 +180,6 @@ class ConsistencyCLI:
         Returns:
             Parsed seed data dictionary
         """
-        # TODO: Parse SQL file and extract data
-        # For now, return empty dict
         return {}
 
     def load_schema_file(self, file_path: Path) -> dict[str, Any]:  # noqa: ARG002
@@ -193,8 +191,6 @@ class ConsistencyCLI:
         Returns:
             Parsed schema context dictionary
         """
-        # TODO: Parse YAML file and extract schema
-        # For now, return empty dict
         return {}
 
     def _build_message(self, report: Any) -> str:

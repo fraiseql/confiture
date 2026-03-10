@@ -71,7 +71,7 @@ database_url: postgresql://localhost/test
             app, ["build", "--env", "nonexistent", "--project-dir", str(tmp_path)]
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code in (1, 2)  # 2 if ConfigurationError (CONFIG_001)
         assert "File not found" in result.output or "Error" in result.output
 
     def test_build_with_custom_output(self, tmp_path):

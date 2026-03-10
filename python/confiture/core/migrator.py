@@ -10,6 +10,8 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from psycopg import Connection
+
     from confiture.config.environment import Environment
     from confiture.models.results import (
         MigrateDownResult,
@@ -160,7 +162,12 @@ class Migrator:
                 else:
                     cursor.execute(sql)
         except Exception as e:
-            raise SQLError(sql, params, e) from e
+            raise SQLError(
+                sql,
+                params,
+                e,
+                resolution_hint="Check the SQL syntax and ensure the target database objects exist",
+            ) from e
 
     def initialize(self) -> None:
         """Create tb_confiture tracking table with Trinity pattern.
@@ -241,9 +248,15 @@ class Migrator:
         except Exception as e:
             self.connection.rollback()
             if isinstance(e, SQLError):
-                raise MigrationError(f"Failed to initialize migrations table: {e}") from e
+                raise MigrationError(
+                    f"Failed to initialize migrations table: {e}",
+                    resolution_hint="Check database permissions to CREATE TABLE in the target schema",
+                ) from e
             else:
-                raise MigrationError(f"Failed to initialize migrations table: {e}") from e
+                raise MigrationError(
+                    f"Failed to initialize migrations table: {e}",
+                    resolution_hint="Check database permissions to CREATE TABLE in the target schema",
+                ) from e
 
     def apply(
         self,
@@ -282,7 +295,10 @@ class Migrator:
 
         if not force and already_applied:
             raise MigrationError(
-                f"Migration {migration.version} ({migration.name}) has already been applied"
+                f"Migration {migration.version} ({migration.name}) has already been applied",
+                migration.version,
+                migration.name,
+                resolution_hint="Use --force to re-apply this migration, or run 'confiture migrate status' to review applied migrations",
             )
 
         # Validate preconditions before applying
@@ -370,7 +386,10 @@ class Migrator:
                 raise
             else:
                 raise MigrationError(
-                    f"Failed to apply migration {migration.version} ({migration.name}): {e}"
+                    f"Failed to apply migration {migration.version} ({migration.name}): {e}",
+                    migration.version,
+                    migration.name,
+                    resolution_hint="Check the migration SQL for errors and ensure the database is in the expected state",
                 ) from e
 
     def _apply_non_transactional(
@@ -423,7 +442,10 @@ class Migrator:
             raise MigrationError(
                 f"Failed to apply non-transactional migration "
                 f"{migration.version} ({migration.name}): {e}. "
-                "Manual cleanup may be required."
+                "Manual cleanup may be required.",
+                migration.version,
+                migration.name,
+                resolution_hint="Inspect the database for partial changes and manually revert any applied DDL statements",
             ) from e
 
         finally:
@@ -618,7 +640,11 @@ class Migrator:
                     found = True
                     break
             if not found:
-                raise MigrationError(f"Migration version '{through}' not found on disk")
+                raise MigrationError(
+                    f"Migration version '{through}' not found on disk",
+                    through,
+                    resolution_hint=f"Run 'confiture migrate status' to list available versions, or check that version '{through}' exists in your migrations directory",
+                )
         else:
             migrations_to_mark = list(all_migrations)
 
@@ -716,7 +742,10 @@ class Migrator:
         if not self._is_applied(migration.version):
             raise MigrationError(
                 f"Migration {migration.version} ({migration.name}) "
-                "has not been applied, cannot rollback"
+                "has not been applied, cannot rollback",
+                migration.version,
+                migration.name,
+                resolution_hint="Run 'confiture migrate status' to see which migrations are applied",
             )
 
         # Validate preconditions before rolling back
@@ -759,7 +788,10 @@ class Migrator:
         except Exception as e:
             self.connection.rollback()
             raise MigrationError(
-                f"Failed to rollback migration {migration.version} ({migration.name}): {e}"
+                f"Failed to rollback migration {migration.version} ({migration.name}): {e}",
+                migration.version,
+                migration.name,
+                resolution_hint="Check the down migration SQL and ensure the database objects being reversed still exist",
             ) from e
 
     def _rollback_non_transactional(self, migration: Migration) -> None:
@@ -811,7 +843,10 @@ class Migrator:
             raise MigrationError(
                 f"Failed to rollback non-transactional migration "
                 f"{migration.version} ({migration.name}): {e}. "
-                "Manual cleanup may be required."
+                "Manual cleanup may be required.",
+                migration.version,
+                migration.name,
+                resolution_hint="Inspect the database for partial rollback changes and manually complete the reversal",
             ) from e
 
         finally:
@@ -1048,7 +1083,7 @@ class Migrator:
         schema_dir: Path | None = None,
         migrations_dir: Path | None = None,
         seeds_dir: Path | None = None,
-        env_config: Any | None = None,
+        env_config: Environment | None = None,
     ) -> MigrateRebuildResult:
         """Rebuild database from DDL and bootstrap tracking table.
 
@@ -1102,7 +1137,10 @@ class Migrator:
             )
             ddl = builder.build(schema_only=True)
         except Exception as exc:
-            raise RebuildError(f"Schema build failed: {exc}") from exc
+            raise RebuildError(
+                f"Schema build failed: {exc}",
+                resolution_hint="Check your schema DDL files for syntax errors and ensure the schema directory exists",
+            ) from exc
 
         if dry_run:
             # Count what would be executed
@@ -1257,7 +1295,11 @@ class Migrator:
                 break
 
         if not found:
-            raise MigrationError(f"Migration version '{through}' not found on disk")
+            raise MigrationError(
+                f"Migration version '{through}' not found on disk",
+                through,
+                resolution_hint=f"Run 'confiture migrate status' to list available versions, or check that version '{through}' exists in your migrations directory",
+            )
 
         already_applied = set(self.get_applied_versions())
         newly_marked: list[str] = []
@@ -1499,7 +1541,6 @@ class Migrator:
         """
         effective_migrations_dir = migrations_dir or Path("db/migrations")
 
-        # Phase 1: Verification
         verify_task = None
         if progress:
             verify_task = progress.add_task("Verifying checksums...", total=None)
@@ -1540,7 +1581,6 @@ class Migrator:
         Returns:
             List of applied migration versions
         """
-        # Phase 1: Discovery
         discover_task = None
         if progress:
             discover_task = progress.add_task("Discovering migrations...", total=None)
@@ -1559,7 +1599,6 @@ class Migrator:
         # Check for mixed transactional modes and warn
         self._warn_mixed_transactional_modes(migrations_to_apply)
 
-        # Phase 2: Application
         apply_task = None
         if progress:
             apply_task = progress.add_task("Applying migrations...", total=len(migrations_to_apply))
@@ -1705,18 +1744,31 @@ class Migrator:
     ) -> MigratorSession:
         """Create a managed MigratorSession from an Environment config.
 
+        Accepts an ``Environment`` object, a ``Path`` to a YAML config file,
+        or a string path. The returned ``MigratorSession`` must be used as a
+        context manager (``with`` statement) to ensure the database connection
+        is properly closed.
+
         Args:
-            config: Environment object, or path to a YAML config file.
+            config: One of:
+                    - ``Environment`` instance (pre-loaded config)
+                    - ``Path`` or ``str`` path to YAML config file
+                    Example: ``"db/environments/prod.yaml"``
             migrations_dir: Directory containing migration files.
+                           Defaults to ``db/migrations``.
 
         Returns:
-            MigratorSession context manager. Use as::
-
-                with Migrator.from_config("db/environments/prod.yaml") as m:
-                    result = m.status()
+            MigratorSession context manager.
 
         Raises:
-            MigrationError: If the config file cannot be found or is invalid.
+            MigrationError: If the config file cannot be found.
+            ConfigurationError: If the YAML config is invalid.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     status = m.status()
+            ...     if status.has_pending:
+            ...         result = m.up()
         """
         from confiture.config.environment import Environment
 
@@ -1729,10 +1781,25 @@ class Migrator:
             if not config_path.exists():
                 from confiture.exceptions import MigrationError
 
-                raise MigrationError(f"Configuration file not found: {config_path}")
+                raise MigrationError(
+                    f"Configuration file not found: {config_path}",
+                    resolution_hint=f"Create a config file at {config_path} or use an existing one",
+                )
             with open(config_path) as f:
                 raw: dict[str, Any] = yaml.safe_load(f)
-            env = Environment.model_validate(raw)
+            try:
+                env = Environment.model_validate(raw)
+            except Exception as e:
+                if "ValidationError" in type(e).__name__:
+                    from confiture.exceptions import ConfigurationError
+
+                    raise ConfigurationError(
+                        f"Invalid configuration in {config_path}: {e}",
+                        error_code="CONFIG_002",
+                        context={"file_path": str(config_path)},
+                        resolution_hint=f"Fix validation errors in {config_path}",
+                    ) from e
+                raise
 
         return MigratorSession(env, Path(migrations_dir))
 
@@ -1754,7 +1821,7 @@ class MigratorSession:
     def __init__(self, config: Environment, migrations_dir: Path) -> None:
         self._config = config
         self._migrations_dir = migrations_dir
-        self._conn: Any = None
+        self._conn: Connection | None = None
         self._migrator: Migrator | None = None
 
     def __enter__(self) -> MigratorSession:
@@ -1780,19 +1847,41 @@ class MigratorSession:
     # ------------------------------------------------------------------ #
 
     def status(self) -> StatusResult:
-        """Return migration status without any output.
+        """Get migration status: which migrations are applied, pending, or unknown.
+
+        Queries the tracking table to determine applied vs pending migrations.
+        If the tracking table doesn't exist, all migrations show as pending.
 
         Returns:
-            StatusResult with full migration list and summary.
+            StatusResult with:
+            - migrations: List of MigrationInfo (version, name, status, applied_at)
+            - applied/pending: Shortcut properties for version lists
+            - has_pending: True if any migrations need applying
+            - summary: {"applied": N, "pending": N, "total": N}
+            - tracking_table_exists: Whether tracking table is present
 
         Raises:
-            MigrationError: On database connection failure.
+            ConfigurationError: If called outside ``with`` context manager.
+                               Fix: ``with Migrator.from_config(...) as m: m.status()``
+            SchemaError: If migration files cannot be parsed (invalid filename format).
+            SQLError: If querying the tracking table fails (permission denied, etc.).
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     status = m.status()
+            ...     print(f"Applied: {status.summary['applied']}")
+            ...     print(f"Pending: {status.summary['pending']}")
         """
         from datetime import datetime
 
+        from confiture.exceptions import ConfigurationError
         from confiture.models.results import MigrationInfo, StatusResult
 
-        assert self._migrator is not None, "Call status() inside a 'with' block"
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
 
         tracking_table = self._config.migration.tracking_table
 
@@ -1871,6 +1960,7 @@ class MigratorSession:
         *,
         target: str | None = None,
         dry_run: bool = False,
+        # Reserved for future use (accepted but not yet implemented):
         dry_run_execute: bool = False,  # noqa: ARG002
         auto_detect_baseline: bool = False,  # noqa: ARG002
         snapshots_dir: Path | None = None,  # noqa: ARG002
@@ -1881,24 +1971,71 @@ class MigratorSession:
         lock_timeout: int = 30000,
         no_lock: bool = False,
     ) -> MigrateUpResult:
-        """Apply pending migrations.
+        """Apply pending migrations up to target version.
+
+        Applies pending migrations in sequence. All migrations are executed
+        within a single transaction (atomic operation).
+
+        Args:
+            target: Target migration version to apply up to (YYYYMMDDHHMMSS format).
+                    If None, applies all pending migrations.
+                    Example: "20260228180602"
+            dry_run: If True, analyze migrations without executing SQL.
+                     Shows which migrations would be applied.
+            verify_checksums: If True, verify migration file checksums.
+            force: If True, re-apply all migrations including already-applied ones.
+            lock_timeout: Lock timeout in milliseconds (default: 30000).
+            no_lock: If True, skip distributed locking.
+
+        Note:
+            The following parameters are **reserved for future use**. They are accepted
+            for forward API compatibility but currently have no effect:
+
+            - ``dry_run_execute``: Use ``dry_run=True`` instead.
+            - ``auto_detect_baseline``: Use explicit baseline config.
+            - ``snapshots_dir``: Pass via environment config.
+            - ``on_checksum_mismatch``: Currently always "fail".
+            - ``strict``: Currently all validation is strict.
 
         Returns:
-            MigrateUpResult with applied migrations and timing.
+            MigrateUpResult with:
+            - success: True if all migrations applied successfully
+            - migrations_applied: List of MigrationApplied (serialized as "applied")
+            - skipped: List of already-applied migration versions
+            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+            - errors: List of error messages if success=False
+            - has_errors: Property — True if success=False and errors non-empty
+            - error_summary: Property — first error message or None
 
         Raises:
-            MigrationError: If a migration fails.
+            ConfigurationError: If used outside ``with`` context manager.
+            MigrationError: If a migration file cannot be loaded or executed.
             MigrationError: If the migrations directory does not exist.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     result = m.up()
+            ...     if result.success:
+            ...         print(f"Applied {len(result.migrations_applied)} migrations")
+            ...     else:
+            ...         for error in result.errors:
+            ...             print(f"ERROR: {error}")
         """
         import time as _time
 
+        from confiture.exceptions import ConfigurationError
         from confiture.models.results import MigrateUpResult, MigrationApplied
 
-        assert self._migrator is not None, "Call up() inside a 'with' block"
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
 
         if not self._migrations_dir.exists():
             raise MigrationError(
-                f"Migrations directory not found: {self._migrations_dir.absolute()}"
+                f"Migrations directory not found: {self._migrations_dir.absolute()}",
+                resolution_hint=f"Create the migrations directory at {self._migrations_dir} or run 'confiture migrate generate' to scaffold it",
             )
 
         self._migrator.initialize()
@@ -2002,20 +2139,44 @@ class MigratorSession:
         steps: int = 1,
         dry_run: bool = False,
     ) -> MigrateDownResult:
-        """Roll back applied migrations.
+        """Roll back applied migrations in reverse order.
+
+        Rolls back the most recently applied migrations. Each migration's
+        ``down()`` method or ``.down.sql`` file is executed.
 
         Args:
             steps: Number of migrations to roll back (default: 1).
-            dry_run: If True, analyze without executing.
+                   Migrations are rolled back in reverse chronological order.
+            dry_run: If True, analyze without executing SQL.
 
         Returns:
-            MigrateDownResult with rolled-back migrations and timing.
+            MigrateDownResult with:
+            - success: True if all rollbacks succeeded
+            - migrations_rolled_back: List of MigrationApplied (serialized as "rolled_back")
+            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+            - error: Error message if success=False
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+            MigrationError: If a migration file cannot be loaded.
+            RollbackError: If rollback SQL execution fails.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     result = m.down(steps=2)
+            ...     if result.success:
+            ...         print(f"Rolled back {len(result.migrations_rolled_back)} migrations")
         """
         import time as _time
 
+        from confiture.exceptions import ConfigurationError
         from confiture.models.results import MigrateDownResult, MigrationApplied
 
-        assert self._migrator is not None, "Call down() inside a 'with' block"
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
 
         self._migrator.initialize()
         applied_versions = self._migrator.get_applied_versions()
@@ -2078,15 +2239,37 @@ class MigratorSession:
     ) -> MigrateReinitResult:
         """Reset tracking table and re-baseline from migration files on disk.
 
+        Deletes all entries from the tracking table, then marks migrations
+        as applied (without executing SQL). Useful after schema consolidation.
+
         Args:
             through: Mark migrations as applied through this version.
-                If None, marks all migration files on disk as applied.
+                     If None, marks all migration files on disk as applied.
             dry_run: If True, show what would happen without making changes.
 
         Returns:
-            MigrateReinitResult with deleted count and re-marked migrations.
+            MigrateReinitResult with:
+            - success: True if reinit succeeded
+            - deleted_count: Number of tracking entries removed
+            - migrations_marked: List of MigrationApplied (serialized as "marked")
+            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+            MigrationError: If tracking table operations fail.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     result = m.reinit(through="20260228180602")
+            ...     print(f"Marked {len(result.migrations_marked)} migrations")
         """
-        assert self._migrator is not None, "Call reinit() inside a 'with' block"
+        from confiture.exceptions import ConfigurationError
+
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
         self._migrator.initialize()
         return self._migrator.reinit(
             through=through, dry_run=dry_run, migrations_dir=self._migrations_dir
@@ -2102,6 +2285,9 @@ class MigratorSession:
     ) -> MigrateRebuildResult:
         """Rebuild database from DDL and bootstrap tracking table.
 
+        Orchestrates a full rebuild: drops schemas (optional), applies DDL,
+        bootstraps tracking, and optionally applies seeds.
+
         Args:
             drop_schemas: Drop all user schemas before rebuild.
             dry_run: Report what would happen without executing.
@@ -2109,9 +2295,31 @@ class MigratorSession:
             backup_tracking: Dump tracking table before clearing.
 
         Returns:
-            MigrateRebuildResult with operation details.
+            MigrateRebuildResult with:
+            - success: True if rebuild completed
+            - schemas_dropped: List of dropped schema names
+            - ddl_statements_executed: Number of DDL statements applied
+            - migrations_marked: Migrations marked as applied
+            - verified: True/False/None — post-rebuild verification result
+            - seeds_applied: Number of seed files applied (None if not requested)
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+            RebuildError: If schema build or DDL application fails.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     result = m.rebuild(drop_schemas=True, apply_seeds=True)
+            ...     if result.success:
+            ...         print(f"Rebuilt with {result.ddl_statements_executed} DDL statements")
         """
-        assert self._migrator is not None, "Call rebuild() inside a 'with' block"
+        from confiture.exceptions import ConfigurationError
+
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
         return self._migrator.rebuild(
             drop_schemas=drop_schemas,
             dry_run=dry_run,

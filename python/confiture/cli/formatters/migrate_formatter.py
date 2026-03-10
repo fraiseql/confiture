@@ -14,6 +14,7 @@ from confiture.models.results import (
     MigrateRebuildResult,
     MigrateUpResult,
     MigrateValidateResult,
+    VerifyAllResult,
 )
 
 
@@ -79,7 +80,7 @@ def format_text(result: MigrateUpResult, console: Console) -> None:
             for warning in result.warnings:
                 console.print(f"  ⚠️ {warning}")
     else:
-        console.print(f"[red]❌ Migration failed: {result.error}[/red]")
+        console.print(f"[red]❌ Migration failed: {result.error_summary}[/red]")
         if result.migrations_applied:
             count = len(result.migrations_applied)
             console.print(f"\n[yellow]⚠️ {count} migration(s) were applied before failure[/yellow]")
@@ -105,7 +106,7 @@ def format_migrate_down_result(
     else:
         # JSON/CSV output
         csv_data = (
-            ["version", "name", "execution_time_ms", "rows_affected"],
+            ["version", "name", "duration_ms", "rows_affected"],
             [
                 [m.version, m.name, str(m.execution_time_ms), str(m.rows_affected)]
                 for m in result.migrations_rolled_back
@@ -434,3 +435,31 @@ def show_migration_error_details(
     else:
         console.print("  • No migrations applied yet - database state is clean")
         console.print("  • Fix the error and re-run: confiture migrate up")
+
+
+def format_verify_results(result: VerifyAllResult, console: Console) -> None:
+    """Rich text output for migrate verify results.
+
+    Args:
+        result: VerifyAllResult with all verification outcomes
+        console: Rich console for output
+    """
+    console.print("\n[bold]Migration verification:[/bold]\n")
+    for r in result.results:
+        if r.status == "verified":
+            console.print(f"  [green]OK[/green]   {r.version}_{r.name} — verified")
+        elif r.status == "failed":
+            if r.actual_value is not None:
+                detail = f"returned: {r.actual_value}"
+            else:
+                detail = r.error or "unknown"
+            console.print(f"  [red]FAIL[/red] {r.version}_{r.name} — FAILED ({detail})")
+            if r.verify_file:
+                console.print(f"       File: {r.verify_file}")
+        elif r.status == "no_file":
+            console.print(f"  [dim]SKIP[/dim] {r.version} — no verify file")
+
+    console.print(
+        f"\nSummary: {result.verified_count} verified, {result.failed_count} failed, "
+        f"{result.skipped_count} skipped ({result.total_applied} total applied)\n"
+    )

@@ -57,7 +57,10 @@ class SchemaBuilder:
 
         # Validate include_dirs
         if not self.env_config.include_dirs:
-            raise SchemaError("No include_dirs specified in environment config")
+            raise SchemaError(
+                "No include_dirs specified in environment config",
+                resolution_hint="Add an 'include_dirs' list to your environment YAML config (e.g., include_dirs: ['db/schema'])",
+            )
 
         # Parse include_dirs (support string, dict, and DirectoryConfig formats)
         self.include_configs = []
@@ -265,7 +268,10 @@ class SchemaBuilder:
                     # Skip non-existent directories in auto-discover mode
                     continue
                 else:
-                    raise SchemaError(f"Include directory does not exist: {include_dir}")
+                    raise SchemaError(
+                        f"Include directory does not exist: {include_dir}",
+                        resolution_hint=f"Create the directory at {include_dir} or update include_dirs in your config",
+                    )
 
             # Find files matching include patterns
             for pattern in include_patterns:  # type: ignore
@@ -298,8 +304,8 @@ class SchemaBuilder:
         if not filtered_files:
             include_dirs_str = ", ".join(str(d) for d in self.include_dirs)
             raise SchemaError(
-                f"No SQL files found in include directories: {include_dirs_str}\n"
-                f"Expected files in subdirectories like 00_common/, 10_tables/, etc."
+                f"No SQL files found in include directories: {include_dirs_str}",
+                resolution_hint="Add .sql files to subdirectories like 00_common/, 10_tables/ or check your include/exclude patterns",
             )
 
         # Sort files based on configuration
@@ -464,12 +470,18 @@ class SchemaBuilder:
         # Custom style
         elif style == "custom":
             if not self.env_config.build.separators.custom_template:
-                raise SchemaError("Custom separator style requires custom_template")
+                raise SchemaError(
+                    "Custom separator style requires custom_template",
+                    resolution_hint="Set build.separators.custom_template in your config when using style: custom",
+                )
             template = self.env_config.build.separators.custom_template
             return "\n" + template.format(file_path=rel_path) + "\n"
 
         else:
-            raise SchemaError(f"Invalid separator style: {style}")
+            raise SchemaError(
+                f"Invalid separator style: {style}",
+                resolution_hint="Use one of: block_comment, line_comment, mysql, custom",
+            )
 
     def build(
         self,
@@ -508,7 +520,6 @@ class SchemaBuilder:
             >>> with ProgressManager() as pm:
             ...     schema = builder.build(progress=pm)
         """
-        # Phase 1: Discovery
         discover_task = None
         if progress:
             discover_task = progress.add_task("Discovering SQL files...", total=None)
@@ -523,7 +534,6 @@ class SchemaBuilder:
             schema_files, _ = self.categorize_sql_files()
             files = schema_files
 
-        # Phase 2: Validation
         validate_task = None
         if progress:
             validate_task = progress.add_task("Validating comments...", total=len(files))
@@ -537,7 +547,6 @@ class SchemaBuilder:
         # Generate header
         header = self._generate_header(len(files))
 
-        # Phase 3: Processing
         process_task = None
         if progress:
             process_task = progress.add_task("Processing files...", total=len(files))
@@ -565,7 +574,6 @@ class SchemaBuilder:
         if progress and process_task is not None:
             progress.finish_task(process_task)
 
-        # Phase 4: Writing
         write_task = None
         if progress:
             write_task = progress.add_task("Writing output...", total=1)
@@ -576,7 +584,10 @@ class SchemaBuilder:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(schema, encoding="utf-8")
             except Exception as e:
-                raise SchemaError(f"Error writing schema to {output_path}: {e}") from e
+                raise SchemaError(
+                    f"Error writing schema to {output_path}: {e}",
+                    resolution_hint="Check that the output directory exists and you have write permissions",
+                ) from e
 
         if progress and write_task is not None:
             progress.update(write_task, 1)

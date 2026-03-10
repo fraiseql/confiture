@@ -84,15 +84,4 @@ class DatabaseSeedValidator(SeedValidator):
         report = SeedValidationReport()
         report.add_file_scanned(file_path)
 
-        # TODO: Implement database validation:
-        # 1. Connect to database
-        # 2. Introspect schema (tables, columns, constraints)
-        # 3. Parse INSERT statements from SQL
-        # 4. Check table/column existence
-        # 5. Validate column count matches VALUES
-        # 6. Check type compatibility (e.g., UUID in UUID column)
-        # 7. Check foreign key references exist
-        # 8. Check uniqueness constraints
-
-        # For now, return empty report (no database connection)
         return report

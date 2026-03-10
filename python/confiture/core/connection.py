@@ -25,14 +25,20 @@ def load_config(config_file: Path) -> dict[str, Any]:
         MigrationError: If config file is invalid
     """
     if not config_file.exists():
-        raise MigrationError(f"Configuration file not found: {config_file}")
+        raise MigrationError(
+            f"Configuration file not found: {config_file}",
+            resolution_hint=f"Create a YAML config file at {config_file} or check the path is correct",
+        )
 
     try:
         with open(config_file) as f:
             config: dict[str, Any] = yaml.safe_load(f)
         return config
     except yaml.YAMLError as e:
-        raise MigrationError(f"Invalid YAML configuration: {e}") from e
+        raise MigrationError(
+            f"Invalid YAML configuration: {e}",
+            resolution_hint="Check the YAML syntax in your config file for indentation or formatting errors",
+        ) from e
 
 
 def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
@@ -83,7 +89,10 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
                 )
         return conn
     except psycopg.Error as e:
-        raise MigrationError(f"Failed to connect to database: {e}") from e
+        raise MigrationError(
+            f"Failed to connect to database: {e}",
+            resolution_hint="Check that the database server is running and the connection credentials are correct",
+        ) from e
 
 
 def load_migration_module(migration_file: Path) -> ModuleType:
@@ -102,7 +111,10 @@ def load_migration_module(migration_file: Path) -> ModuleType:
         # Create module spec
         spec = importlib.util.spec_from_file_location(migration_file.stem, migration_file)
         if spec is None or spec.loader is None:
-            raise MigrationError(f"Cannot load migration: {migration_file}")
+            raise MigrationError(
+                f"Cannot load migration: {migration_file}",
+                resolution_hint="Ensure the migration file exists and contains valid Python code",
+            )
 
         # Load module
         module = importlib.util.module_from_spec(spec)
@@ -111,7 +123,10 @@ def load_migration_module(migration_file: Path) -> ModuleType:
 
         return module
     except Exception as e:
-        raise MigrationError(f"Failed to load migration {migration_file}: {e}") from e
+        raise MigrationError(
+            f"Failed to load migration {migration_file}: {e}",
+            resolution_hint="Check the migration file for syntax errors or missing imports",
+        ) from e
 
 
 def get_migration_class(module: ModuleType) -> type:
@@ -134,7 +149,10 @@ def get_migration_class(module: ModuleType) -> type:
         if isinstance(attr, type) and issubclass(attr, Migration) and attr is not Migration:
             return attr
 
-    raise MigrationError(f"No Migration subclass found in {module}")
+    raise MigrationError(
+        f"No Migration subclass found in {module}",
+        resolution_hint="Ensure your migration file defines a class that inherits from confiture.models.migration.Migration",
+    )
 
 
 def load_migration_class(migration_file: Path) -> type:
@@ -178,12 +196,13 @@ def load_migration_class(migration_file: Path) -> type:
         if not down_file.exists():
             raise MigrationError(
                 f"SQL migration {migration_file.name} has no matching .down.sql file.\n"
-                f"Expected: {down_file}\n"
-                f"Hint: Create {down_file.name} with the rollback SQL"
+                f"Expected: {down_file}",
+                resolution_hint=f"Create {down_file.name} with the rollback SQL for this migration",
             )
 
         return FileSQLMigration.from_files(migration_file, down_file)
     else:
         raise MigrationError(
-            f"Unknown migration file type: {migration_file}\nExpected .py or .up.sql file"
+            f"Unknown migration file type: {migration_file}",
+            resolution_hint="Rename the file to use a .py or .up.sql extension",
         )

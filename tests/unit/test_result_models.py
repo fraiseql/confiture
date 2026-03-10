@@ -172,11 +172,12 @@ class TestMigrateUpResult:
             success=False,
             migrations_applied=[],
             total_execution_time_ms=0,
-            error="Migration conflict",
+            errors=["Migration conflict"],
         )
 
         assert result.success is False
-        assert result.error == "Migration conflict"
+        assert result.has_errors is True
+        assert result.error_summary == "Migration conflict"
         assert len(result.migrations_applied) == 0
 
     def test_migrate_up_result_to_dict(self):

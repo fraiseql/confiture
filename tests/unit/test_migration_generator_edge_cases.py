@@ -16,9 +16,9 @@ class TestMigrationGeneratorEdgeCases:
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="email")])
 
-        migration_file = generator.generate(diff=diff, name="add_users")
+        migration_file = generator.generate(diff=diff, name="add_email")
 
         # File should be created
         assert migrations_dir.exists()
@@ -123,10 +123,9 @@ class TestMigrationGeneratorEdgeCases:
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        # Complex diff with multiple changes
+        # Complex diff with multiple changes (ADD_TABLE is not auto-generatable)
         diff = SchemaDiff(
             changes=[
-                SchemaChange(type="ADD_TABLE", table="users"),
                 SchemaChange(type="ADD_COLUMN", table="posts", column="title"),
                 SchemaChange(
                     type="RENAME_COLUMN",
@@ -147,7 +146,6 @@ class TestMigrationGeneratorEdgeCases:
         content = migration_file.read_text()
 
         # Should contain all change types
-        assert "TODO: ADD_TABLE users" in content  # ADD_TABLE generates TODO
         assert "ADD COLUMN title" in content
         assert "RENAME COLUMN" in content
         assert "DROP TABLE old_logs" in content

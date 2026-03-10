@@ -71,9 +71,9 @@ class TestMigrateRebuildResult:
         assert d["success"] is True
         assert d["schemas_dropped"] == ["public"]
         assert d["ddl_statements_executed"] == 10
-        assert len(d["migrations_marked"]) == 1
-        assert d["migrations_marked"][0]["version"] == "001"
-        assert d["total_execution_time_ms"] == 200
+        assert len(d["marked"]) == 1
+        assert d["marked"][0]["version"] == "001"
+        assert d["total_duration_ms"] == 200
         assert d["dry_run"] is False
         assert d["warnings"] == ["extension warning"]
         assert d["seeds_applied"] == 3

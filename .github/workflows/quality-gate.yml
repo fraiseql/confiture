@@ -132,6 +132,13 @@ jobs:
       run: uv run ruff check .
     - name: Run ruff format check
       run: uv run ruff format --check .
+    - name: Check docstring version is in sync
+      run: |
+        python scripts/sync_docstring_version.py
+        if [ $? -eq 1 ]; then
+          echo "❌ Docstring version is stale — run scripts/sync_docstring_version.py locally"
+          exit 1
+        fi
 
   type-check:
     name: Type Check

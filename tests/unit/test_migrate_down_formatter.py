@@ -34,8 +34,7 @@ class TestMigrateDownFormatter:
             data = json.loads(output_file.read_text())
 
             assert data["success"] is True
-            assert data["count"] == 2
-            assert len(data["migrations_rolled_back"]) == 2
+            assert len(data["rolled_back"]) == 2
 
     def test_format_migrate_down_csv_to_file(self):
         """Test formatting migrate down result as CSV to file."""

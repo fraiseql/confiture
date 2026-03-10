@@ -51,6 +51,7 @@ Thumbs.db
 
 # Project specific
 db/generated/
+db/schema_history/*.sql
 *.db
 *.sqlite
 *.sql.bak

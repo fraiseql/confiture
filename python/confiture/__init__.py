@@ -6,7 +6,7 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    0.6.2
+    0.7.2
 
 Library API example::
 
@@ -23,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.7.0"
+__version__ = "0.7.2"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -40,9 +40,29 @@ __all__ = [
     "SchemaSnapshotGenerator",
     "BaselineDetector",
     # Exceptions
+    "ConfiturError",
+    "ConfigurationError",
+    "MigrationError",
+    "SchemaError",
+    "SQLError",
+    "RollbackError",
+    "SeedError",
+    "RestoreError",
+    "PreconditionError",
+    "PreconditionValidationError",
     "ExternalGeneratorError",
+    "GrantAccompanimentError",
     "RebuildError",
+    "VerifyFileError",
+    # Git accompaniment
+    "GrantAccompanimentChecker",
+    "GrantAccompanimentReport",
+    # Migration verification
+    "MigrationVerifier",
+    "VerifyResult",
+    "VerifyAllResult",
     # Result models
+    "MigrationStatus",
     "StatusResult",
     "MigrationInfo",
     "MigrateUpResult",
@@ -52,63 +72,56 @@ __all__ = [
     "MigrationApplied",
 ]
 
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # Core
+    "SchemaBuilder": ("confiture.core.builder", "SchemaBuilder"),
+    "Migrator": ("confiture.core.migrator", "Migrator"),
+    "MigratorSession": ("confiture.core.migrator", "MigratorSession"),
+    "Environment": ("confiture.config.environment", "Environment"),
+    "SchemaSnapshotGenerator": ("confiture.core.schema_snapshot", "SchemaSnapshotGenerator"),
+    "BaselineDetector": ("confiture.core.baseline_detector", "BaselineDetector"),
+    # Result models
+    "MigrationStatus": ("confiture.models.results", "MigrationStatus"),
+    "StatusResult": ("confiture.models.results", "StatusResult"),
+    "MigrationInfo": ("confiture.models.results", "MigrationInfo"),
+    "MigrateUpResult": ("confiture.models.results", "MigrateUpResult"),
+    "MigrateDownResult": ("confiture.models.results", "MigrateDownResult"),
+    "MigrateReinitResult": ("confiture.models.results", "MigrateReinitResult"),
+    "MigrateRebuildResult": ("confiture.models.results", "MigrateRebuildResult"),
+    "MigrationApplied": ("confiture.models.results", "MigrationApplied"),
+    "VerifyAllResult": ("confiture.models.results", "VerifyAllResult"),
+    # Exceptions
+    "RebuildError": ("confiture.exceptions", "RebuildError"),
+    "GrantAccompanimentError": ("confiture.exceptions", "GrantAccompanimentError"),
+    "VerifyFileError": ("confiture.exceptions", "VerifyFileError"),
+    "ConfiturError": ("confiture.exceptions", "ConfiturError"),
+    "ConfigurationError": ("confiture.exceptions", "ConfigurationError"),
+    "MigrationError": ("confiture.exceptions", "MigrationError"),
+    "SchemaError": ("confiture.exceptions", "SchemaError"),
+    "SQLError": ("confiture.exceptions", "SQLError"),
+    "RollbackError": ("confiture.exceptions", "RollbackError"),
+    "SeedError": ("confiture.exceptions", "SeedError"),
+    "RestoreError": ("confiture.exceptions", "RestoreError"),
+    # Preconditions
+    "PreconditionError": ("confiture.core.preconditions", "PreconditionError"),
+    "PreconditionValidationError": ("confiture.core.preconditions", "PreconditionValidationError"),
+    # Grant accompaniment
+    "GrantAccompanimentChecker": (
+        "confiture.core.grant_accompaniment",
+        "GrantAccompanimentChecker",
+    ),
+    "GrantAccompanimentReport": ("confiture.models.git", "GrantAccompanimentReport"),
+    # Migration verification
+    "MigrationVerifier": ("confiture.core.migration_verifier", "MigrationVerifier"),
+    "VerifyResult": ("confiture.core.migration_verifier", "VerifyResult"),
+}
+
 
 def __getattr__(name: str) -> Any:
     """Lazy imports to avoid circular dependency issues at module load time."""
-    if name == "SchemaBuilder":
-        from confiture.core.builder import SchemaBuilder
-
-        return SchemaBuilder
-    if name == "Migrator":
-        from confiture.core.migrator import Migrator
-
-        return Migrator
-    if name == "MigratorSession":
-        from confiture.core.migrator import MigratorSession
-
-        return MigratorSession
-    if name == "Environment":
-        from confiture.config.environment import Environment
-
-        return Environment
-    if name == "SchemaSnapshotGenerator":
-        from confiture.core.schema_snapshot import SchemaSnapshotGenerator
-
-        return SchemaSnapshotGenerator
-    if name == "BaselineDetector":
-        from confiture.core.baseline_detector import BaselineDetector
-
-        return BaselineDetector
-    if name == "StatusResult":
-        from confiture.models.results import StatusResult
-
-        return StatusResult
-    if name == "MigrationInfo":
-        from confiture.models.results import MigrationInfo
-
-        return MigrationInfo
-    if name == "MigrateUpResult":
-        from confiture.models.results import MigrateUpResult
-
-        return MigrateUpResult
-    if name == "MigrateDownResult":
-        from confiture.models.results import MigrateDownResult
-
-        return MigrateDownResult
-    if name == "MigrateReinitResult":
-        from confiture.models.results import MigrateReinitResult
-
-        return MigrateReinitResult
-    if name == "MigrateRebuildResult":
-        from confiture.models.results import MigrateRebuildResult
-
-        return MigrateRebuildResult
-    if name == "MigrationApplied":
-        from confiture.models.results import MigrationApplied
-
-        return MigrationApplied
-    if name == "RebuildError":
-        from confiture.exceptions import RebuildError
-
-        return RebuildError
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name in _LAZY_IMPORTS:
+        module_path, attr_name = _LAZY_IMPORTS[name]
+        module = __import__(module_path, fromlist=[attr_name])
+        return getattr(module, attr_name)
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)

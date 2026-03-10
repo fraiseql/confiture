@@ -633,6 +633,127 @@ def _create_global_registry() -> ErrorCodeRegistry:
     for code in lint_codes:
         registry.register(code)
 
+    # ========== Default error codes for exception types ==========
+    # These are the base codes used as defaults in exception __init__ methods.
+    # More specific codes (e.g., MIGR_100, SCHEMA_200) are used at raise sites.
+    default_codes = [
+        ErrorCodeDefinition(
+            code="MIGR_001",
+            message_template="Migration error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint="Check migration files and database state",
+        ),
+        ErrorCodeDefinition(
+            code="MIGR_004",
+            message_template="Migration file already exists",
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint="Use --force flag to overwrite existing file",
+        ),
+        ErrorCodeDefinition(
+            code="SCHEMA_001",
+            message_template="Schema error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=4,
+            resolution_hint="Check SQL DDL files for errors",
+        ),
+        ErrorCodeDefinition(
+            code="SYNC_001",
+            message_template="Sync error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Check source and target database connections",
+        ),
+        ErrorCodeDefinition(
+            code="DIFF_001",
+            message_template="Schema diff error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Check SQL DDL for parsing issues",
+        ),
+        ErrorCodeDefinition(
+            code="VALID_001",
+            message_template="Validation error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Check validation rules and data integrity",
+        ),
+        ErrorCodeDefinition(
+            code="VERIFY_001",
+            message_template="Verify file contains forbidden SQL",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Verify files must only contain SELECT queries",
+        ),
+        ErrorCodeDefinition(
+            code="ROLLBACK_001",
+            message_template="Rollback error",
+            severity=ErrorSeverity.CRITICAL,
+            exit_code=8,
+            resolution_hint="Check rollback SQL and database state",
+        ),
+        ErrorCodeDefinition(
+            code="SQL_001",
+            message_template="SQL execution error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=1,
+            resolution_hint="Check the SQL statement for errors",
+        ),
+        ErrorCodeDefinition(
+            code="GIT_001",
+            message_template="Git operation error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=7,
+            resolution_hint="Check git repository status",
+        ),
+        ErrorCodeDefinition(
+            code="GIT_002",
+            message_template="Not a git repository",
+            severity=ErrorSeverity.ERROR,
+            exit_code=7,
+            resolution_hint="Initialize a git repository or use a valid repository path",
+        ),
+        ErrorCodeDefinition(
+            code="GRANT_001",
+            message_template="Grant accompaniment error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=7,
+            resolution_hint="Stage a migration file alongside grant changes",
+        ),
+        ErrorCodeDefinition(
+            code="GEN_001",
+            message_template="External generator error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint="Check the external generator command and its output",
+        ),
+        ErrorCodeDefinition(
+            code="REBUILD_001",
+            message_template="Schema rebuild error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=4,
+            resolution_hint="Check schema DDL and database state",
+        ),
+        ErrorCodeDefinition(
+            code="RESTORE_001",
+            message_template="Restore error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Check backup format and pg_restore availability",
+        ),
+        ErrorCodeDefinition(
+            code="SEED_001",
+            message_template="Seed execution error",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Check seed file syntax and database state",
+        ),
+    ]
+
+    for code in default_codes:
+        registry.register(code)
+
     return registry
 
 

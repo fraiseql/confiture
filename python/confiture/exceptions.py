@@ -10,7 +10,7 @@ from confiture.models.error import ErrorSeverity
 
 
 class ConfiturError(Exception):
-    """Base exception for all Confiture errors
+    """Base exception for all Confiture errors.
 
     All Confiture-specific exceptions inherit from this base class.
     This allows catching all Confiture errors with:
@@ -31,10 +31,21 @@ class ConfiturError(Exception):
                 pass
 
     Attributes:
-        error_code: Machine-readable error code (e.g., "CONFIG_001")
-        severity: Error severity level (INFO, WARNING, ERROR, CRITICAL)
-        context: Additional context dict for error details
-        resolution_hint: Optional suggestion for resolving the error
+        error_code: Machine-readable error code (e.g., "CONFIG_001").
+                   All subclasses provide defaults; callers may override.
+
+        severity: Error severity (INFO, WARNING, ERROR, CRITICAL).
+
+        context: Structured context dict. Universal keys (all optional):
+                 - "file_path": str — path to the file that caused the error
+                 - "migration_version": str — version string (e.g., "20260228180602")
+                 - "database_name": str — target database name
+                 - "recovery_suggestions": list[str] — manual recovery steps
+
+                 Subclasses may add domain-specific keys; see their docstrings.
+
+        resolution_hint: Human-readable suggestion for resolving the error.
+                        Example: "Check database permissions for schema 'public'"
     """
 
     def __init__(
@@ -99,7 +110,7 @@ class ConfiturError(Exception):
 
 
 class ConfigurationError(ConfiturError):
-    """Invalid configuration (YAML, environment, database connection)
+    """Invalid configuration (YAML, environment, database connection).
 
     Raised when:
     - Environment YAML file is malformed or missing
@@ -111,11 +122,26 @@ class ConfigurationError(ConfiturError):
         >>> raise ConfigurationError("Missing database_url in local.yaml")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "CONFIG_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class MigrationError(ConfiturError):
-    """Migration execution failure
+    """Migration execution failure.
 
     Raised when:
     - Migration file cannot be loaded
@@ -126,6 +152,11 @@ class MigrationError(ConfiturError):
     Attributes:
         version: Migration version that failed (e.g., "001")
         migration_name: Human-readable migration name
+
+    Additional context keys:
+        - "migration_name": str — human-readable migration name
+        - "sql_statement": str — the SQL that failed (truncated)
+        - "affected_tables": list[str] — tables modified by the migration
     """
 
     def __init__(
@@ -141,7 +172,7 @@ class MigrationError(ConfiturError):
     ) -> None:
         super().__init__(
             message,
-            error_code=error_code,
+            error_code=error_code or "MIGR_001",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint,
@@ -151,7 +182,7 @@ class MigrationError(ConfiturError):
 
 
 class SchemaError(ConfiturError):
-    """Invalid schema DDL or schema build failure
+    """Invalid schema DDL or schema build failure.
 
     Raised when:
     - SQL syntax error in DDL files
@@ -163,11 +194,26 @@ class SchemaError(ConfiturError):
         >>> raise SchemaError("Syntax error in 10_tables/users.sql at line 15")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "SCHEMA_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class SyncError(ConfiturError):
-    """Production data sync failure
+    """Production data sync failure.
 
     Raised when:
     - Cannot connect to source database
@@ -179,11 +225,26 @@ class SyncError(ConfiturError):
         >>> raise SyncError("Table 'users' not found in source database")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "SYNC_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class DifferError(ConfiturError):
-    """Schema diff detection error
+    """Schema diff detection error.
 
     Raised when:
     - Cannot parse SQL DDL
@@ -194,11 +255,26 @@ class DifferError(ConfiturError):
         >>> raise DifferError("Cannot parse CREATE TABLE statement")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "DIFF_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class ValidationError(ConfiturError):
-    """Data or schema validation error
+    """Data or schema validation error.
 
     Raised when:
     - Row count mismatch after migration
@@ -209,11 +285,55 @@ class ValidationError(ConfiturError):
         >>> raise ValidationError("Row count mismatch: expected 10000, got 9999")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "VALID_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+
+
+class VerifyFileError(ValidationError):
+    """Verify file contains forbidden SQL (DDL/DML).
+
+    Raised when:
+    - A .verify.sql file contains ALTER, INSERT, UPDATE, DELETE, or other non-SELECT statements
+    - Verify files must only contain SELECT (or WITH ... SELECT) queries
+
+    Example:
+        >>> raise VerifyFileError("Verify file contains forbidden ALTER statement")
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "VERIFY_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class RollbackError(ConfiturError):
-    """Migration rollback failure
+    """Migration rollback failure.
 
     Raised when:
     - Cannot rollback migration (irreversible change)
@@ -226,7 +346,22 @@ class RollbackError(ConfiturError):
         >>> raise RollbackError("Cannot rollback: data already deleted")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "ROLLBACK_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class SQLError(ConfiturError):
@@ -284,7 +419,7 @@ class SQLError(ConfiturError):
         message = " | ".join(message_parts)
         super().__init__(
             message,
-            error_code=error_code,
+            error_code=error_code or "SQL_001",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint,
@@ -292,7 +427,7 @@ class SQLError(ConfiturError):
 
 
 class GitError(ConfiturError):
-    """Git operation error
+    """Git operation error.
 
     Raised when:
     - Git command fails (invalid ref, file not found, etc.)
@@ -303,11 +438,26 @@ class GitError(ConfiturError):
         >>> raise GitError("Invalid git reference 'nonexistent_ref'")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "GIT_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class NotAGitRepositoryError(GitError):
-    """Directory is not a git repository
+    """Directory is not a git repository.
 
     Raised when:
     - Attempting git operations in non-git directory
@@ -317,7 +467,51 @@ class NotAGitRepositoryError(GitError):
         >>> raise NotAGitRepositoryError("Not a git repository: /tmp/not-git")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "GIT_002",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+
+
+class GrantAccompanimentError(GitError):
+    """Grant file changes without corresponding migration.
+
+    Raised when:
+    - Files in db/7_grant/ changed but no .up.sql migration was staged
+    - Migrate environments (staging, production) will not apply the grants
+
+    Example:
+        >>> raise GrantAccompanimentError("Grant changes staged without migration file")
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "GRANT_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class MigrationConflictError(MigrationError):
@@ -374,7 +568,7 @@ class MigrationOverwriteError(MigrationError):
     ) -> None:
         super().__init__(
             f"Migration file already exists: {filepath.name}",
-            error_code=error_code or "MIGRATION_004",
+            error_code=error_code or "MIGR_004",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint or "Use --force flag to overwrite existing file",
@@ -407,7 +601,7 @@ class ExternalGeneratorError(ConfiturError):
     ) -> None:
         super().__init__(
             message,
-            error_code=error_code,
+            error_code=error_code or "GEN_001",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint,
@@ -417,7 +611,7 @@ class ExternalGeneratorError(ConfiturError):
 
 
 class RebuildError(ConfiturError):
-    """Schema rebuild failure
+    """Schema rebuild failure.
 
     Raised when:
     - Schema build fails during rebuild
@@ -429,11 +623,26 @@ class RebuildError(ConfiturError):
         >>> raise RebuildError("Rebuild failed: cannot apply DDL")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "REBUILD_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class RestoreError(ConfiturError):
-    """pg_restore failure, interruption, or unsupported dump format
+    """pg_restore failure, interruption, or unsupported dump format.
 
     Raised when:
     - Backup file is plain-text SQL format (requires custom or directory format)
@@ -446,7 +655,22 @@ class RestoreError(ConfiturError):
         >>> raise RestoreError("Backup is plain-text format; use pg_dump -Fc instead")
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "RESTORE_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
 
 
 class SeedError(ConfiturError):
@@ -476,7 +700,7 @@ class SeedError(ConfiturError):
     ) -> None:
         super().__init__(
             message,
-            error_code=error_code,
+            error_code=error_code or "SEED_001",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint,

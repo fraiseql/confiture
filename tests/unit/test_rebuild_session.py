@@ -77,9 +77,11 @@ class TestMigratorSessionRebuild:
         )
 
     def test_error_outside_context_manager(self):
+        from confiture.exceptions import ConfigurationError
+
         session = self._make_session()
         # _migrator is None by default (before __enter__)
         session._migrator = None
 
-        with pytest.raises(AssertionError, match="'with' block"):
+        with pytest.raises(ConfigurationError, match="context manager"):
             session.rebuild()

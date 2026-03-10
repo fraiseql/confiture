@@ -16,7 +16,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="email")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")
@@ -33,15 +33,15 @@ class TestMigrationGenerator:
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
         # First migration should have timestamp format
-        diff1 = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
-        file1 = generator.generate(diff1, name="add_users")
+        diff1 = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="email")])
+        file1 = generator.generate(diff1, name="add_email")
         assert re.match(r"^\d{14}_", file1.name), (
             f"Filename {file1.name} should start with 14-digit timestamp"
         )
 
         # Second migration should also have timestamp format (may be same second or later)
-        diff2 = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="posts")])
-        file2 = generator.generate(diff2, name="add_posts")
+        diff2 = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="posts", column="title")])
+        file2 = generator.generate(diff2, name="add_title")
         assert re.match(r"^\d{14}_", file2.name), (
             f"Filename {file2.name} should start with 14-digit timestamp"
         )
@@ -49,32 +49,15 @@ class TestMigrationGenerator:
         assert file2.name[:14] >= file1.name[:14]
 
     def test_generate_migration_for_add_table(self, tmp_path):
-        """Should generate correct SQL for ADD_TABLE."""
+        """Should raise NotImplementedError for ADD_TABLE (requires manual migration)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
         diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
-
         generator = MigrationGenerator(migrations_dir=migrations_dir)
-        migration_file = generator.generate(diff, name="add_users_table")
 
-        content = migration_file.read_text()
-
-        # Should contain migration class
-        assert "class AddUsersTable(Migration):" in content
-        assert re.search(r'version = "\d{14}"', content), (
-            "version should have 14-digit timestamp format"
-        )
-        assert 'name = "add_users_table"' in content
-
-        # Should contain up method with CREATE TABLE
-        assert "def up(self) -> None:" in content
-        # Note: Full table creation requires schema info, so this might be a placeholder
-        assert "# TODO: ADD_TABLE users" in content or "CREATE TABLE users" in content
-
-        # Should contain down method with DROP TABLE
-        assert "def down(self) -> None:" in content
-        assert 'self.execute("DROP TABLE users")' in content or "DROP TABLE users" in content
+        with pytest.raises(NotImplementedError, match="ADD_TABLE on users"):
+            generator.generate(diff, name="add_users_table")
 
     def test_generate_migration_for_drop_table(self, tmp_path):
         """Should generate correct SQL for DROP_TABLE."""
@@ -277,7 +260,6 @@ class TestMigrationGenerator:
 
         diff = SchemaDiff(
             changes=[
-                SchemaChange(type="ADD_TABLE", table="posts"),
                 SchemaChange(
                     type="ADD_COLUMN",
                     table="users",
@@ -298,7 +280,6 @@ class TestMigrationGenerator:
         content = migration_file.read_text()
 
         # Should contain all changes
-        assert "posts" in content
         assert "ADD COLUMN email" in content
         assert "RENAME COLUMN name TO username" in content
 
@@ -366,7 +347,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="email")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")

@@ -6,6 +6,7 @@ for both human-readable and machine-readable output.
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from confiture.models.schema import SchemaChange
 
@@ -95,4 +96,58 @@ class MigrationAccompanimentReport:
             "migration_error": self.migration_error,
             "base_ref": self.base_ref,
             "target_ref": self.target_ref,
+        }
+
+
+@dataclass
+class GrantAccompanimentReport:
+    """Report of grant accompaniment validation.
+
+    Validates that changes to grant files (db/7_grant/) are accompanied
+    by migration files, since migrate environments only apply grants
+    through migration files.
+
+    Attributes:
+        has_grant_changes: Whether any grant files changed
+        has_migration_changes: Whether any .up.sql migration files changed
+        grant_files_changed: List of changed grant file paths
+        migration_files_staged: List of staged migration file paths
+
+    Example:
+        >>> report = GrantAccompanimentReport(
+        ...     has_grant_changes=True,
+        ...     has_migration_changes=False,
+        ...     grant_files_changed=[Path("db/7_grant/grants.sql")],
+        ...     migration_files_staged=[],
+        ... )
+        >>> print(f"Valid: {report.is_valid}")
+        Valid: False
+    """
+
+    has_grant_changes: bool
+    has_migration_changes: bool
+    grant_files_changed: list[Path] = field(default_factory=list)
+    migration_files_staged: list[Path] = field(default_factory=list)
+
+    @property
+    def is_valid(self) -> bool:
+        """Valid when no grant changes, or grant changes + migration present."""
+        return (not self.has_grant_changes) or self.has_migration_changes
+
+    def summary(self) -> str:
+        """Get human-readable summary of validation result."""
+        if not self.has_grant_changes:
+            return "No grant file changes"
+        if self.is_valid:
+            return f"Grant changes accompanied by {len(self.migration_files_staged)} migration(s)"
+        return f"Grant changes without migration files ({len(self.grant_files_changed)} file(s) changed)"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert report to dictionary for JSON serialization."""
+        return {
+            "is_valid": self.is_valid,
+            "has_grant_changes": self.has_grant_changes,
+            "has_migration_changes": self.has_migration_changes,
+            "grant_files_changed": [f.as_posix() for f in self.grant_files_changed],
+            "migration_files_staged": [f.as_posix() for f in self.migration_files_staged],
         }

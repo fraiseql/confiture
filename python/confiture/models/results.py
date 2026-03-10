@@ -9,7 +9,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from confiture.core.migration_verifier import VerifyResult
+
+
+class MigrationStatus:
+    """Constants for migration status values.
+
+    Use these instead of raw strings for reliable comparisons::
+
+        if info.status == MigrationStatus.APPLIED:
+            ...
+    """
+
+    APPLIED = "applied"
+    PENDING = "pending"
+    UNKNOWN = "unknown"
 
 
 @dataclass
@@ -60,6 +77,18 @@ class StatusResult:
     def has_pending(self) -> bool:
         """True if any migrations are pending."""
         return any(m.status == "pending" for m in self.migrations)
+
+    def get_migration(self, version: str) -> MigrationInfo | None:
+        """Get migration info by version, or None if not found."""
+        for m in self.migrations:
+            if m.version == version:
+                return m
+        return None
+
+    def get_status(self, version: str) -> str | None:
+        """Get status of a migration ("applied", "pending", "unknown"), or None."""
+        m = self.get_migration(version)
+        return m.status if m else None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -140,8 +169,27 @@ class MigrationApplied:
 class MigrateUpResult:
     """Result of migrate up operation.
 
-    Tracks which migrations were applied, total execution time,
-    checksum verification status, and any warnings or errors.
+    Attributes:
+        success: True if all migrations applied successfully, False if any failed.
+
+        migrations_applied: List of migrations that were successfully applied.
+                           Each includes version, name, execution_time_ms, rows_affected.
+                           (Serialized as "applied" in to_dict() output.)
+
+        total_execution_time_ms: Total time in milliseconds.
+                                (Serialized as "total_duration_ms" in to_dict() output.)
+
+        checksums_verified: True if all applied migrations passed checksum verification.
+
+        dry_run: True if this was a dry-run analysis (no SQL executed).
+
+        warnings: List of non-fatal warning messages. Empty if no warnings.
+
+        skipped: List of migration versions that were already applied.
+                Empty if no previously-applied migrations were encountered.
+
+        errors: List of error messages if success=False. Each string is a human-readable
+               error description. Empty list if success=True.
     """
 
     success: bool
@@ -150,9 +198,25 @@ class MigrateUpResult:
     checksums_verified: bool = True
     dry_run: bool = False
     warnings: list[str] = field(default_factory=list)
-    error: str | None = None
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+
+    @property
+    def has_errors(self) -> bool:
+        """True if operation had errors (success=False and errors non-empty)."""
+        return not self.success and len(self.errors) > 0
+
+    @property
+    def error_summary(self) -> str | None:
+        """First error message, or None if no errors. Convenience for logging."""
+        return self.errors[0] if self.errors else None
+
+    def by_version(self, version: str) -> MigrationApplied | None:
+        """Get applied migration by version, or None if not in this operation."""
+        for m in self.migrations_applied:
+            if m.version == version:
+                return m
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -197,9 +261,8 @@ class MigrateReinitResult:
         return {
             "success": self.success,
             "deleted_count": self.deleted_count,
-            "migrations_marked": [m.to_dict() for m in self.migrations_marked],
-            "count": len(self.migrations_marked),
-            "total_execution_time_ms": self.total_execution_time_ms,
+            "marked": [m.to_dict() for m in self.migrations_marked],
+            "total_duration_ms": self.total_execution_time_ms,
             "dry_run": self.dry_run,
             "warnings": self.warnings,
             "error": self.error,
@@ -229,9 +292,8 @@ class MigrateDownResult:
         """
         return {
             "success": self.success,
-            "migrations_rolled_back": [m.to_dict() for m in self.migrations_rolled_back],
-            "count": len(self.migrations_rolled_back),
-            "total_execution_time_ms": self.total_execution_time_ms,
+            "rolled_back": [m.to_dict() for m in self.migrations_rolled_back],
+            "total_duration_ms": self.total_execution_time_ms,
             "checksums_verified": self.checksums_verified,
             "warnings": self.warnings,
             "error": self.error,
@@ -263,8 +325,8 @@ class MigrateRebuildResult:
             "success": self.success,
             "schemas_dropped": self.schemas_dropped,
             "ddl_statements_executed": self.ddl_statements_executed,
-            "migrations_marked": [m.to_dict() for m in self.migrations_marked],
-            "total_execution_time_ms": self.total_execution_time_ms,
+            "marked": [m.to_dict() for m in self.migrations_marked],
+            "total_duration_ms": self.total_execution_time_ms,
             "dry_run": self.dry_run,
             "warnings": self.warnings,
             "error": self.error,
@@ -421,4 +483,43 @@ class ConversionReport:
             "failed": self.failed,
             "success_rate": self.success_rate,
             "results": [r.to_dict() for r in self.results],
+        }
+
+
+@dataclass
+class VerifyAllResult:
+    """Result of verifying all applied migrations.
+
+    Attributes:
+        results: Individual VerifyResult for each migration
+        verified_count: Number of migrations that passed verification
+        failed_count: Number of migrations that failed verification
+        skipped_count: Number of applied migrations with no verify file
+        total_applied: Total number of applied migrations checked
+    """
+
+    results: list[VerifyResult]
+    verified_count: int
+    failed_count: int
+    skipped_count: int
+    total_applied: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "verified_count": self.verified_count,
+            "failed_count": self.failed_count,
+            "skipped_count": self.skipped_count,
+            "total_applied": self.total_applied,
+            "results": [
+                {
+                    "version": r.version,
+                    "name": r.name,
+                    "status": r.status,
+                    "actual_value": r.actual_value,
+                    "verify_file": str(r.verify_file) if r.verify_file else None,
+                    "error": r.error,
+                }
+                for r in self.results
+            ],
         }

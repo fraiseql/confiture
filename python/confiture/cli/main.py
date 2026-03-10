@@ -2322,14 +2322,14 @@ class {class_name}(Migration):
 
     def up(self) -> None:
         """Apply migration."""
-        # TODO: Add your SQL statements here
+        # Add your forward migration SQL here
         # Example:
         # self.execute("CREATE TABLE users (id SERIAL PRIMARY KEY)")
         pass
 
     def down(self) -> None:
         """Rollback migration."""
-        # TODO: Add your rollback SQL statements here
+        # Add your rollback SQL here
         # Example:
         # self.execute("DROP TABLE users")
         pass
@@ -3403,6 +3403,16 @@ def migrate_validate(
         "--staged",
         help="Validate staged files only, pre-commit mode (default: off)",
     ),
+    require_grant_migration: bool = typer.Option(
+        False,
+        "--require-grant-migration",
+        help="Fail if staged changes in db/7_grant/ exist without a corresponding migration file (default: off)",
+    ),
+    allow_grant_only: bool = typer.Option(
+        False,
+        "--allow-grant-only",
+        help="Suppress --require-grant-migration failure for build-only branches (default: off)",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -3459,10 +3469,11 @@ def migrate_validate(
             raise typer.Exit(1)
 
         # Handle git validation flags
-        if check_drift or require_migration or staged:
+        if check_drift or require_migration or require_grant_migration or staged:
             from confiture.cli.git_validation import (
                 validate_git_drift,
                 validate_git_flags_in_repo,
+                validate_grant_accompaniment,
                 validate_migration_accompaniment,
             )
 
@@ -3538,14 +3549,52 @@ def migrate_validate(
                         console.print(f"[red]❌ Accompaniment check failed: {e}[/red]")
                     raise typer.Exit(1) from e
 
+            # Run grant accompaniment check
+            grant_passed = True
+            if require_grant_migration and not allow_grant_only:
+                try:
+                    grant_result = validate_grant_accompaniment(
+                        base_ref=effective_base_ref,
+                        target_ref="HEAD",
+                        staged_only=staged,
+                        console=console,
+                        format_output=format_output,
+                        migrations_dir=str(migrations_dir),
+                    )
+                    if not grant_result.get("is_valid"):
+                        grant_passed = False
+                        if format_output == "json":
+                            result = {
+                                "status": "failed",
+                                "check": "grant_accompaniment",
+                                **grant_result,
+                            }
+                            _output_json(result, output_file, console)
+                            raise typer.Exit(1)
+                except typer.Exit:
+                    raise
+                except Exception as e:
+                    if format_output == "json":
+                        result = {"error": f"Grant accompaniment check failed: {e}"}
+                        _output_json(result, output_file, console)
+                    else:
+                        console.print(f"[red]❌ Grant accompaniment check failed: {e}[/red]")
+                    raise typer.Exit(1) from e
+
             # Check if all checks passed (for text output)
-            if drift_passed and accompaniment_passed:
+            if drift_passed and accompaniment_passed and grant_passed:
                 if format_output == "json":
                     result = {
                         "status": "passed",
-                        "checks": ["drift", "accompaniment"]
-                        if (check_drift and require_migration)
-                        else (["drift"] if check_drift else ["accompaniment"]),
+                        "checks": [
+                            c
+                            for c, flag in [
+                                ("drift", check_drift),
+                                ("accompaniment", require_migration),
+                                ("grant_accompaniment", require_grant_migration),
+                            ]
+                            if flag
+                        ],
                     }
                     _output_json(result, output_file, console)
                 else:
@@ -4411,6 +4460,105 @@ def restore(
         for err in result.errors:
             console.print(f"[red]{err}[/red]")
         raise typer.Exit(1)
+
+
+@migrate_app.command("verify")
+def migrate_verify(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory (default: db/migrations)",
+    ),
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Configuration file path",
+    ),
+    version: str | None = typer.Option(
+        None,
+        "--version",
+        help="Verify a single migration version (default: verify all applied)",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file (default: stdout)",
+    ),
+) -> None:
+    """Verify applied migrations using .verify.sql sidecar files.
+
+    Each .verify.sql file contains a SELECT query that returns a truthy value
+    when the migration was applied correctly. Queries run inside SAVEPOINT
+    (read-only, no side effects).
+
+    EXAMPLES:
+      confiture migrate verify -c db/environments/local.yaml
+        -> Verify all applied migrations that have .verify.sql files
+
+      confiture migrate verify --version 003 -c db/environments/local.yaml
+        -> Verify a single migration
+
+      confiture migrate verify --format json -c db/environments/local.yaml
+        -> Output as JSON for CI/CD pipelines
+
+    RELATED:
+      confiture migrate status  - View migration history
+      confiture migrate up      - Apply pending migrations
+    """
+    from confiture.cli.formatters.migrate_formatter import format_verify_results
+    from confiture.core.connection import create_connection, load_config
+    from confiture.core.migration_verifier import MigrationVerifier
+    from confiture.core.migrator import Migrator
+    from confiture.models.results import VerifyAllResult
+
+    try:
+        if not config or not config.exists():
+            error_console.print("[red]Config file required for migrate verify[/red]")
+            raise typer.Exit(1)
+
+        config_data = load_config(str(config))
+        tracking_table = _get_tracking_table(config_data)
+
+        conn = create_connection(config_data.database_url)
+        try:
+            migrator = Migrator(connection=conn, migration_table=tracking_table)
+            applied_versions = migrator.get_applied_versions()
+
+            verifier = MigrationVerifier(connection=conn, migrations_dir=migrations_dir)
+            results = verifier.verify_all(applied_versions, target_version=version)
+
+            verify_result = VerifyAllResult(
+                results=results,
+                verified_count=sum(1 for r in results if r.status == "verified"),
+                failed_count=sum(1 for r in results if r.status == "failed"),
+                skipped_count=sum(1 for r in results if r.status == "no_file"),
+                total_applied=len(applied_versions),
+            )
+
+            if format_output == "json":
+                _output_json(verify_result.to_dict(), output_file, console)
+            else:
+                format_verify_results(verify_result, console)
+
+            if verify_result.failed_count > 0:
+                raise typer.Exit(1)
+
+        finally:
+            conn.close()
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        error_console.print(f"[red]Verify failed: {e}[/red]")
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":

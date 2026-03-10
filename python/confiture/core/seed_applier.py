@@ -1,7 +1,5 @@
 """Orchestrator for sequential seed file execution.
 
-Phase 9: Sequential Seed File Execution
-
 Provides high-level orchestration for applying seed files either
 sequentially (each in own savepoint) or concatenated (default behavior).
 """
@@ -111,7 +109,6 @@ class SeedApplier:
         if not self.connection:
             raise ValueError("Database connection required for sequential execution")
 
-        # Phase 1: Discovery
         discover_task = None
         if progress:
             discover_task = progress.add_task("Discovering seed files...", total=None)
@@ -127,7 +124,6 @@ class SeedApplier:
             self.console.print("[yellow]⚠ No seed files found[/yellow]")
             return result
 
-        # Phase 2: Application
         apply_task = None
         if progress:
             apply_task = progress.add_task("Applying seed files...", total=len(files))
