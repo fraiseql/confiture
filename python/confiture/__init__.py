@@ -61,6 +61,13 @@ __all__ = [
     "MigrationVerifier",
     "VerifyResult",
     "VerifyAllResult",
+    # Introspection layer
+    "FunctionIntrospector",
+    "FunctionInfo",
+    "FunctionParam",
+    "FunctionCatalog",
+    "TypeMapper",
+    "DependencyGraph",
     # Result models
     "MigrationStatus",
     "StatusResult",
@@ -80,6 +87,13 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Environment": ("confiture.config.environment", "Environment"),
     "SchemaSnapshotGenerator": ("confiture.core.schema_snapshot", "SchemaSnapshotGenerator"),
     "BaselineDetector": ("confiture.core.baseline_detector", "BaselineDetector"),
+    # Introspection layer
+    "FunctionIntrospector": ("confiture.core.introspection.functions", "FunctionIntrospector"),
+    "FunctionInfo": ("confiture.models.function_info", "FunctionInfo"),
+    "FunctionParam": ("confiture.models.function_info", "FunctionParam"),
+    "FunctionCatalog": ("confiture.models.function_info", "FunctionCatalog"),
+    "TypeMapper": ("confiture.core.introspection.type_mapping", "TypeMapper"),
+    "DependencyGraph": ("confiture.core.introspection.dependency_graph", "DependencyGraph"),
     # Result models
     "MigrationStatus": ("confiture.models.results", "MigrationStatus"),
     "StatusResult": ("confiture.models.results", "StatusResult"),

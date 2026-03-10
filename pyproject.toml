@@ -61,11 +61,14 @@ dev = [
     "ruff>=0.6.0",
     "ty>=0.0.7",  # Astral's ultra-fast type checker (replaces mypy)
     "maturin>=1.7.0",
+    "pglast>=6.0",
 ]
 
 fraiseql = [
     # FraiseQL integration (requires Python 3.13+)
 ]
+
+ast = ["pglast>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/fraiseql/confiture"
