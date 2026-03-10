@@ -288,6 +288,55 @@ def show_diff(
         raise typer.Exit(1) from e
 
 
+@generate_app.command("pgtap")
+def generate_pgtap(
+    database_url: str = typer.Option(
+        ..., "--database-url", "-d", help="PostgreSQL connection URL"
+    ),
+    schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    include: str | None = typer.Option(
+        None, "--include", help="SQL LIKE pattern to filter functions"
+    ),
+    no_volatility: bool = typer.Option(
+        False, "--no-volatility", help="Skip volatility tests (default: include)"
+    ),
+    no_return_type: bool = typer.Option(
+        False, "--no-return-type", help="Skip return type tests (default: include)"
+    ),
+) -> None:
+    """Generate pgTAP test scaffolds for PostgreSQL stored functions."""
+    import psycopg
+
+    from confiture.core.pgtap_generator import PgTAPGenerator
+
+    try:
+        with psycopg.connect(database_url) as conn:
+            gen = PgTAPGenerator(
+                conn,
+                schema=schema,
+                name_pattern=include,
+                include_volatility=not no_volatility,
+                include_return_type=not no_return_type,
+            )
+            pgtap_file = gen.generate()
+    except Exception as e:
+        console.print(f"[red]Error connecting to database: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    sql = pgtap_file.render()
+
+    if output is None:
+        console.print(sql)
+    else:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(sql)
+        console.print(f"[green]pgTAP tests written to {output}[/green]")
+        console.print(
+            f"[dim]{pgtap_file.function_count} function(s), {len(pgtap_file.tests)} test(s).[/dim]"
+        )
+
+
 @generate_app.command("stubs")
 def generate_stubs(
     database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
