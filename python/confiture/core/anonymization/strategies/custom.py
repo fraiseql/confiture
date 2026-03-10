@@ -87,11 +87,11 @@ class CustomStrategy(AnonymizationStrategy):
                 f"Error in custom anonymization function '{self.config.name}': {e}"
             ) from e
 
-    def validate(self, value: Any) -> bool:  # noqa: ARG002
+    def validate(self, value: Any) -> bool:  # noqa: ARG002  # abstract-like interface method
         """Check if strategy can handle this value type.
 
         Args:
-            value: Sample value to validate (unused, custom accepts any)
+            _value: Sample value (unused — custom strategy accepts any type)
 
         Returns:
             True (custom accepts any value type)
@@ -141,7 +141,7 @@ class CustomLambdaStrategy(AnonymizationStrategy):
         except Exception as e:
             raise Exception(f"Error in lambda anonymization: {e}") from e
 
-    def validate(self, value: Any) -> bool:  # noqa: ARG002
+    def validate(self, value: Any) -> bool:  # noqa: ARG002  # abstract-like interface method
         """Check if strategy can handle this value type.
 
         Args:

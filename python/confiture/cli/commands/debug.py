@@ -17,9 +17,7 @@ debug_app = typer.Typer(
 
 @debug_app.command("cte")
 def debug_cte(
-    database_url: str = typer.Option(
-        ..., "--database-url", "-d", help="PostgreSQL connection URL"
-    ),
+    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
     sql: str | None = typer.Option(None, "--sql", "-s", help="SQL query to debug"),
     file: Path | None = typer.Option(None, "--file", "-f", help="SQL file to debug"),
     max_rows: int = typer.Option(

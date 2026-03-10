@@ -56,6 +56,7 @@ def migrate_baseline(
       confiture migrate status   - View migration history
       confiture migrate diff     - Compare schema versions
     """
+    from confiture.cli.helpers import _get_tracking_table
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator
 
@@ -95,7 +96,7 @@ def migrate_baseline(
         conn = create_connection(config_data)
 
         # Initialize migrator
-        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
+        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
         migrator.initialize()
 
         # Find all migration files

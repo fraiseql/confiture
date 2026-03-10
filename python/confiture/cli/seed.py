@@ -550,9 +550,6 @@ def apply(
                 result = applier.apply_sequential(
                     continue_on_error=continue_on_error,
                     progress=progress,
-                    copy_format=copy_format,
-                    copy_threshold=copy_threshold,
-                    benchmark=benchmark,
                 )
 
             # Format output
@@ -759,7 +756,7 @@ def convert(
         else:
             import sys
 
-            sys.stdout.write(result.copy_format)
+            sys.stdout.write(result.copy_format or "")
 
         raise typer.Exit(0)
 
@@ -877,9 +874,7 @@ def benchmark(
 @seed_app.command("generate")
 def seed_generate(
     table: str = typer.Argument(..., help="Table name to generate seed data for"),
-    database_url: str = typer.Option(
-        ..., "--database-url", "-d", help="PostgreSQL connection URL"
-    ),
+    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema name (default: public)"),
     env: str = typer.Option("development", "--env", "-e", help="Seed environment directory"),
     output_dir: Path = typer.Option(

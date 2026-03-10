@@ -5,7 +5,7 @@ on seed data, with support for multiple output formats and configuration options
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -44,8 +44,9 @@ class ConsistencyCLIResult:
     message: str
     violation_count: int
     exit_code: int
-    violations: list[Any] = None
-    validators_run: list[str] = None
+    violations: list[Any] = field(default_factory=list)
+    validators_run: list[str] = field(default_factory=list)
+    config: "ConsistencyCLIConfig | None" = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize default values."""
@@ -60,7 +61,7 @@ class ConsistencyCLIResult:
         Returns:
             Formatted output string (text or JSON)
         """
-        if hasattr(self, "_config") and self._config.output_format == "json":
+        if self.config is not None and self.config.output_format == "json":
             return self._format_json()
         else:
             return self._format_text()
@@ -167,11 +168,11 @@ class ConsistencyCLI:
         )
 
         # Store config for formatting
-        result._config = self.config
+        result.config = self.config
 
         return result
 
-    def load_seed_file(self, file_path: Path) -> dict[str, list[dict[str, Any]]]:  # noqa: ARG002
+    def load_seed_file(self, _file_path: Path) -> dict[str, list[dict[str, Any]]]:
         """Load seed data from SQL file.
 
         Args:
@@ -182,7 +183,7 @@ class ConsistencyCLI:
         """
         return {}
 
-    def load_schema_file(self, file_path: Path) -> dict[str, Any]:  # noqa: ARG002
+    def load_schema_file(self, _file_path: Path) -> dict[str, Any]:
         """Load schema context from YAML file.
 
         Args:

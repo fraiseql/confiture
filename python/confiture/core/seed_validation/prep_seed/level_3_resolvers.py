@@ -49,7 +49,7 @@ class Level3ResolutionValidator:
         self,
         func_name: str,
         func_body: str,
-        expected_table: str = "",  # noqa: ARG002
+        expected_table: str = "",  # noqa: ARG002  # interface param; table is extracted from SQL body
         fk_columns: list[str] | None = None,
     ) -> list[PrepSeedViolation]:
         """Validate a resolution function.

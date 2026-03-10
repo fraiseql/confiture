@@ -65,7 +65,7 @@ class PreserveStrategy(AnonymizationStrategy):
         """
         return value
 
-    def validate(self, value: Any) -> bool:  # noqa: ARG002
+    def validate(self, value: Any) -> bool:  # noqa: ARG002  # abstract-like interface method
         """Check if strategy can handle this value type.
 
         Args:

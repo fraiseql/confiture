@@ -719,7 +719,7 @@ def lint_unified(
         schema_linter = SchemaLinter(env=env, config=schema_config)
         try:
             linter_report = schema_linter.lint()
-            for v in linter_report.violations:
+            for v in linter_report.errors + linter_report.warnings + linter_report.info:
                 all_issues.append(
                     UnifiedLintIssue(
                         tool="schema",

@@ -10,7 +10,7 @@ import sys
 from rich.progress import (
     BarColumn,
     Progress,
-    Task,
+    TaskID,
     TextColumn,
     TimeRemainingColumn,
 )
@@ -71,6 +71,7 @@ class ProgressManager:
         self.live = live
         self.progress: Progress | None = None
         self.tasks: dict[str, int] = {}  # task_name -> task_id
+        self.progress_task: TaskID | None = None
 
         # Create progress display if enabled
         if self.enabled:
@@ -110,7 +111,7 @@ class ProgressManager:
         description: str,
         total: float | None = None,
         start: bool = True,
-    ) -> Task | None:
+    ) -> TaskID | None:
         """Add a new progress task.
 
         Args:
@@ -132,7 +133,7 @@ class ProgressManager:
 
     def update(
         self,
-        task: Task | None,
+        task: TaskID | None,
         advance: float = 1,
         description: str | None = None,
         total: float | None = None,
@@ -160,7 +161,7 @@ class ProgressManager:
         if advance > 0:
             self.progress.update(task, advance=advance, refresh=refresh)
 
-    def update_description(self, task: Task | None, description: str) -> None:
+    def update_description(self, task: TaskID | None, description: str) -> None:
         """Update a task's description.
 
         Args:
@@ -171,7 +172,7 @@ class ProgressManager:
             return
         self.progress.update(task, description=description)
 
-    def finish_task(self, task: Task | None, description: str | None = None) -> None:
+    def finish_task(self, task: TaskID | None, description: str | None = None) -> None:
         """Mark a task as completed.
 
         Args:

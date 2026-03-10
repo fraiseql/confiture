@@ -43,9 +43,7 @@ class MCPServer:
 
     def initialize(self) -> None:
         """Introspect the database and build the tool registry."""
-        self._catalog = self._introspector.introspect(
-            self._schema, name_pattern=self._name_pattern
-        )
+        self._catalog = self._introspector.introspect(self._schema, name_pattern=self._name_pattern)
         self._tools = {
             f.name: MCPTool.from_function_info(f, self._mapper) for f in self._catalog.functions
         }

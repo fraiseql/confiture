@@ -341,7 +341,7 @@ class TestRebuildOrchestrator:
 
         seed_instance = MockSeedApplier.return_value
         apply_result = MagicMock()
-        apply_result.total_applied = 3
+        apply_result.succeeded = 3
         seed_instance.apply_sequential.return_value = apply_result
 
         migrator._apply_ddl_string = MagicMock(return_value=(1, []))

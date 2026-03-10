@@ -359,7 +359,7 @@ class TestLegacyMigrationTableKey:
 
     def test_get_tracking_table_returns_default_for_missing_key(self):
         """_get_tracking_table returns 'tb_confiture' when no tracking_table in dict."""
-        from confiture.cli.main import _get_tracking_table
+        from confiture.cli.helpers import _get_tracking_table
 
         raw_dict = {"database_url": "postgresql://localhost/test"}
         assert _get_tracking_table(raw_dict) == "tb_confiture"

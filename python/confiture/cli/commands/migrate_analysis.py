@@ -6,6 +6,7 @@ from typing import Any
 
 import typer
 
+from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import (
     _fix_idempotency,
     _output_json,
@@ -13,7 +14,9 @@ from confiture.cli.helpers import (
     console,
     error_console,
 )
+from confiture.core.connection import create_connection, load_config
 from confiture.core.differ import SchemaDiffer
+from confiture.core.drift import SchemaDriftDetector
 from confiture.core.migration_generator import MigrationGenerator
 
 
@@ -195,6 +198,25 @@ def migrate_validate(
         False,
         "--dry-run",
         help="Preview changes without renaming (default: off)",
+    ),
+    check_live_drift: bool = typer.Option(
+        False,
+        "--check-live-drift",
+        help=(
+            "Compare the live database schema against the DDL files. "
+            "Requires --config and a database connection."
+        ),
+    ),
+    config: Path = typer.Option(
+        Path("confiture.yaml"),
+        "-c",
+        "--config",
+        help="Config file (required for --check-live-drift)",
+    ),
+    schema_file: Path | None = typer.Option(
+        None,
+        "--schema",
+        help="Schema SQL file to compare against (required for --check-live-drift)",
     ),
     format_output: str = typer.Option(
         "text",
@@ -381,6 +403,43 @@ def migrate_validate(
             else:
                 # At least one check failed in text mode
                 raise typer.Exit(1)
+
+        # Run live drift check
+        if check_live_drift:
+            live_drift_passed = True
+            try:
+                if not config.exists():
+                    error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                    raise typer.Exit(2)
+                if schema_file is None:
+                    error_console.print(
+                        "[red]❌ --schema is required with --check-live-drift[/red]"
+                    )
+                    raise typer.Exit(2)
+                config_data = load_config(config)
+                conn = create_connection(config_data)
+                try:
+                    detector = SchemaDriftDetector(conn)
+                    drift_report = detector.compare_with_schema_file(str(schema_file))
+                finally:
+                    conn.close()
+                if format_output == "json":
+                    _output_json(
+                        {"check": "live_drift", **drift_report.to_dict()}, output_file, console
+                    )
+                else:
+                    display_drift_report(drift_report, console)
+                if drift_report.has_critical_drift:
+                    live_drift_passed = False
+            except typer.Exit:
+                raise
+            except Exception as e:
+                error_console.print(f"[red]❌ Live drift check failed: {e}[/red]")
+                raise typer.Exit(2) from e
+
+            if not live_drift_passed:
+                raise typer.Exit(1)
+            return
 
         if not migrations_dir.exists():
             if format_output == "json":
@@ -640,6 +699,7 @@ def migrate_introspect(
       confiture migrate up --auto-detect-baseline   - Apply migrations with auto-baseline
       confiture migrate baseline --through <ver>    - Manually establish baseline
     """
+    from confiture.cli.helpers import _get_tracking_table
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator
 
@@ -650,7 +710,7 @@ def migrate_introspect(
 
         config_data = load_config(config)
         conn = create_connection(config_data)
-        migrator = Migrator(connection=conn, migration_table=config_data.migration.tracking_table)
+        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
 
         tb_present = migrator.tracking_table_exists()
 
@@ -826,7 +886,7 @@ def migrate_verify(
         config_data = load_config(str(config))
         tracking_table = _get_tracking_table(config_data)
 
-        conn = create_connection(config_data.database_url)
+        conn = create_connection(config_data)
         try:
             migrator = Migrator(connection=conn, migration_table=tracking_table)
             applied_versions = migrator.get_applied_versions()

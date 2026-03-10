@@ -6,7 +6,7 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    0.7.2
+    0.8.0
 
 Library API example::
 
@@ -23,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.7.2"
+__version__ = "0.8.0"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -68,6 +68,12 @@ __all__ = [
     "FunctionCatalog",
     "TypeMapper",
     "DependencyGraph",
+    # Drift detection
+    "SchemaDriftDetector",
+    "DriftReport",
+    "DriftItem",
+    "DriftType",
+    "DriftSeverity",
     # Result models
     "MigrationStatus",
     "StatusResult",
@@ -77,6 +83,12 @@ __all__ = [
     "MigrateReinitResult",
     "MigrateRebuildResult",
     "MigrationApplied",
+    # Large table operations
+    "BatchedMigration",
+    "BatchConfig",
+    "BatchProgress",
+    "OnlineIndexBuilder",
+    "TableSizeEstimator",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -94,6 +106,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "FunctionCatalog": ("confiture.models.function_info", "FunctionCatalog"),
     "TypeMapper": ("confiture.core.introspection.type_mapping", "TypeMapper"),
     "DependencyGraph": ("confiture.core.introspection.dependency_graph", "DependencyGraph"),
+    # Drift detection
+    "SchemaDriftDetector": ("confiture.core.drift", "SchemaDriftDetector"),
+    "DriftReport": ("confiture.core.drift", "DriftReport"),
+    "DriftItem": ("confiture.core.drift", "DriftItem"),
+    "DriftType": ("confiture.core.drift", "DriftType"),
+    "DriftSeverity": ("confiture.core.drift", "DriftSeverity"),
     # Result models
     "MigrationStatus": ("confiture.models.results", "MigrationStatus"),
     "StatusResult": ("confiture.models.results", "StatusResult"),
@@ -128,6 +146,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Migration verification
     "MigrationVerifier": ("confiture.core.migration_verifier", "MigrationVerifier"),
     "VerifyResult": ("confiture.core.migration_verifier", "VerifyResult"),
+    # Large table operations
+    "BatchedMigration": ("confiture.core.large_tables", "BatchedMigration"),
+    "BatchConfig": ("confiture.core.large_tables", "BatchConfig"),
+    "BatchProgress": ("confiture.core.large_tables", "BatchProgress"),
+    "OnlineIndexBuilder": ("confiture.core.large_tables", "OnlineIndexBuilder"),
+    "TableSizeEstimator": ("confiture.core.large_tables", "TableSizeEstimator"),
 }
 
 

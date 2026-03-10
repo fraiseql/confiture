@@ -489,6 +489,21 @@ def migrate_up(
         "--snapshots-dir",
         help="Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history)",
     ),
+    batched: bool = typer.Option(
+        False,
+        "--batched",
+        help="Use batch processing for large-table operations (default: off)",
+    ),
+    batch_size: int = typer.Option(
+        10000,
+        "--batch-size",
+        help="Rows per batch when --batched is active (default: 10000)",
+    ),
+    batch_sleep: float = typer.Option(
+        0.1,
+        "--batch-sleep",
+        help="Seconds to sleep between batches to reduce lock pressure (default: 0.1)",
+    ),
 ) -> None:
     """Apply pending migrations to the database.
 
@@ -578,6 +593,14 @@ def migrate_up(
                 f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
             )
             raise typer.Exit(1)
+
+        # Build BatchConfig if --batched is requested
+        if batched:
+            from confiture.core.large_tables import BatchConfig
+
+            _batch_config = BatchConfig(batch_size=batch_size, sleep_between_batches=batch_sleep)
+        else:
+            _batch_config = None
 
         # Check for duplicate migration versions (hard block, no DB needed)
         from confiture.core.migrator import find_duplicate_migration_versions
@@ -966,7 +989,6 @@ def migrate_up(
                 total_execution_time_ms=total_execution_time_ms,
                 checksums_verified=verify_checksums,
                 dry_run=False,
-                error=str(failed_exception),
                 errors=[str(failed_exception)],
                 skipped=skipped_versions,
             )
@@ -1632,4 +1654,101 @@ class {class_name}(Migration):
             print(json.dumps(output, indent=2))
         else:
             console.print(f"[red]❌ Error generating migration: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+def migrate_estimate(
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file (default: db/environments/local.yaml)",
+    ),
+    tables: list[str] = typer.Option(
+        [],
+        "--table",
+        "-t",
+        help="Tables to estimate (default: all tables)",
+    ),
+    format_output: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table or json (default: table)",
+    ),
+) -> None:
+    """Estimate row counts for tables to decide if --batched is needed.
+
+    Uses pg_class statistics (fast, no COUNT(*)) to show which tables
+    are large enough to benefit from --batched mode.
+
+    EXAMPLES:
+      confiture migrate estimate
+        ↳ Show row count estimates for all tables
+
+      confiture migrate estimate --table users --table orders
+        ↳ Estimate specific tables only
+
+    RELATED:
+      confiture migrate up --batched - Apply migrations in batch mode
+    """
+    from confiture.core.connection import create_connection, load_config
+    from confiture.core.large_tables import TableSizeEstimator
+
+    try:
+        if not config.exists():
+            error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+            raise typer.Exit(2)
+
+        config_data = load_config(config)
+        conn = create_connection(config_data)
+
+        estimator = TableSizeEstimator(conn)
+
+        # If no tables specified, estimate all in public schema
+        if not tables:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
+                )
+                tables = [row[0] for row in cur.fetchall()]
+
+        if not tables:
+            console.print("[yellow]No tables found.[/yellow]")
+            return
+
+        rows_data: list[dict[str, Any]] = []
+        for table in tables:
+            estimate = estimator.get_row_count_estimate(table)
+            should_batch = estimator.should_use_batched_operation(table)
+            rows_data.append(
+                {
+                    "table": table,
+                    "estimated_rows": estimate,
+                    "recommendation": "Use --batched" if should_batch else "Standard migration OK",
+                }
+            )
+
+        if format_output == "json":
+            print(json.dumps(rows_data, indent=2))
+        else:
+            from rich.table import Table
+
+            tbl = Table(title="Table Row Count Estimates")
+            tbl.add_column("Table", style="cyan")
+            tbl.add_column("Estimated Rows", justify="right")
+            tbl.add_column("Recommendation")
+            for row in rows_data:
+                style = "yellow" if row["recommendation"].startswith("Use") else "green"
+                tbl.add_row(
+                    row["table"],
+                    f"{row['estimated_rows']:,}",
+                    f"[{style}]{row['recommendation']}[/{style}]",
+                )
+            console.print(tbl)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        error_console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e

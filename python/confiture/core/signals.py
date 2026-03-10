@@ -163,7 +163,7 @@ class GracefulShutdown:
         """
         self._migration_in_progress = migration
 
-    def _handle_signal(self, signum: int, frame: Any) -> None:  # noqa: ARG002
+    def _handle_signal(self, signum: int, frame: Any) -> None:  # noqa: ARG002  # frame required by signal handler protocol
         """Handle shutdown signal.
 
         Args:

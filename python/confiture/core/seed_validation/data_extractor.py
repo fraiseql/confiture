@@ -69,7 +69,7 @@ class DataExtractor:
         # Return just the table name without schema prefix if present
         return [match.split(".")[-1] if "." in match else match for match in matches]
 
-    def extract_columns(self, sql: str, table: str) -> list[str]:  # noqa: ARG002
+    def extract_columns(self, sql: str, _table: str) -> list[str]:
         """Extract column names from INSERT statement.
 
         Preserves column order as they appear in the INSERT statement.
@@ -97,7 +97,7 @@ class DataExtractor:
         columns = [col.strip() for col in columns_str.split(",")]
         return columns
 
-    def extract_rows(self, sql: str, table: str) -> list[dict[str, Any]]:  # noqa: ARG002
+    def extract_rows(self, sql: str, _table: str) -> list[dict[str, Any]]:
         """Extract row data from INSERT statement.
 
         Handles:
@@ -121,7 +121,7 @@ class DataExtractor:
             return []
 
         # Get column names first
-        columns = self.extract_columns(sql, table)
+        columns = self.extract_columns(sql, _table)
         if not columns:
             return []
 

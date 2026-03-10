@@ -67,6 +67,29 @@ def print_csv(headers: list[str], rows: list[list[Any]], console: Console) -> No
     console.print(csv_output.getvalue())
 
 
+def display_drift_report(report: Any, console: Console) -> None:
+    """Display drift report to console.
+
+    Args:
+        report: DriftReport instance with drift detection results
+        console: Rich console for output
+    """
+    if not report.has_drift:
+        console.print("[green]✅ No schema drift detected.[/green]")
+        return
+    console.print(
+        f"[yellow]⚠️  Schema drift detected[/yellow]: "
+        f"{report.critical_count} critical, "
+        f"{report.warning_count} warnings, "
+        f"{report.info_count} info"
+    )
+    for item in report.drift_items:
+        color = "red" if item.severity.value == "critical" else "yellow"
+        console.print(
+            f"  [{color}]{item.severity.value.upper()}[/{color}] {item.object_name}: {item.message}"
+        )
+
+
 def handle_output(
     format_type: str,
     data_dict: dict[str, Any],

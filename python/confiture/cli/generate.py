@@ -290,9 +290,7 @@ def show_diff(
 
 @generate_app.command("pgtap")
 def generate_pgtap(
-    database_url: str = typer.Option(
-        ..., "--database-url", "-d", help="PostgreSQL connection URL"
-    ),
+    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
     output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
     include: str | None = typer.Option(

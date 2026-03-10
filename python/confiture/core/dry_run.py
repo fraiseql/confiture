@@ -61,15 +61,16 @@ class DryRunResult:
 
 
 class DryRunExecutor:
-    """Executes migrations in dry-run mode for testing.
+    """Simulates migration execution to estimate timing without a database connection.
 
-    Features:
-    - Transaction-based execution with automatic rollback
-    - Capture of execution metrics (time, rows affected, locks)
-    - Estimation of production execution time
-    - Detection of constraint violations
-    - Confidence level for estimates
-    - Structured logging for observability
+    WARNING: This executor does NOT connect to the database. It measures the time
+    to call migration.up() in isolation (no DB, no transaction, no SAVEPOINT).
+    Row counts and lock detection are unavailable in this mode.
+
+    Reported values:
+    - execution_time_ms: time to call migration.up() without a database connection
+    - rows_affected: always 0 (not measurable without a connection)
+    - confidence_percent: 40 (low — no real DB execution)
     """
 
     def __init__(self):
@@ -78,20 +79,20 @@ class DryRunExecutor:
 
     def run(
         self,
-        conn: psycopg.Connection,  # noqa: ARG002 - used in real implementation
+        _conn: psycopg.Connection | None,
         migration,
     ) -> DryRunResult:
-        """Execute migration in dry-run mode.
+        """Simulate migration execution to estimate timing.
 
-        Executes the migration within a transaction that is automatically
-        rolled back, allowing testing without permanent changes.
+        Calls migration.up() without a database connection. The connection
+        parameter is accepted for API compatibility but is not used.
 
         Args:
-            conn: Database connection
+            _conn: Accepted but not used. Migration SQL files are connection-agnostic.
             migration: Migration instance with up() method
 
         Returns:
-            DryRunResult with execution metrics
+            DryRunResult with timing estimate (confidence_percent=40)
 
         Raises:
             DryRunError: If migration execution fails
@@ -150,20 +151,15 @@ class DryRunExecutor:
         return int((time.time() - start_time) * 1000)
 
     def _build_result(self, migration, execution_time_ms: int) -> DryRunResult:
-        """Build DryRunResult from execution metrics.
+        """Build DryRunResult from simulation metrics.
 
         Args:
             migration: Migration instance
             execution_time_ms: Execution time in milliseconds
 
         Returns:
-            DryRunResult with calculated metrics
+            DryRunResult with simulation results
         """
-        # In real implementation, would:
-        # - Detect locked tables via pg_locks
-        # - Calculate confidence based on lock time variance
-        # - Estimate production time with ±15% confidence
-
         return DryRunResult(
             migration_name=migration.name,
             migration_version=migration.version,
@@ -171,9 +167,12 @@ class DryRunExecutor:
             execution_time_ms=execution_time_ms,
             rows_affected=0,
             locked_tables=[],
-            estimated_production_time_ms=execution_time_ms,  # Best estimate
-            confidence_percent=85,  # Default confidence
-            warnings=[],
+            estimated_production_time_ms=execution_time_ms,
+            confidence_percent=40,
+            warnings=[
+                "Simulation only: no database connection used. "
+                "Row counts and lock detection are unavailable."
+            ],
             stats={
                 "measured_execution_ms": execution_time_ms,
                 "estimated_range_low_ms": int(execution_time_ms * 0.85),

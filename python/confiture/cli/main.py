@@ -14,6 +14,7 @@ from confiture.cli.commands.admin import (
     verify,
 )
 from confiture.cli.commands.debug import debug_app
+from confiture.cli.commands.drift import drift
 from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate_analysis import (
     migrate_diff,
@@ -24,6 +25,7 @@ from confiture.cli.commands.migrate_analysis import (
 )
 from confiture.cli.commands.migrate_core import (
     migrate_down,
+    migrate_estimate,
     migrate_generate,
     migrate_status,
     migrate_up,
@@ -36,29 +38,8 @@ from confiture.cli.commands.migrate_state import (
 from confiture.cli.commands.schema import build, init, introspect, lint, lint_unified
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
-
-# Helpers — also re-exported here so existing mock patch paths continue to work
-from confiture.cli.helpers import (
-    _convert_linter_report,  # noqa: F401
-    _find_orphaned_sql_files,  # noqa: F401
-    _fix_idempotency,  # noqa: F401
-    _get_suggestion,  # noqa: F401
-    _get_tracking_table,  # noqa: F401
-    _output_json,  # noqa: F401
-    _output_yaml,  # noqa: F401
-    _print_duplicate_versions_warning,  # noqa: F401
-    _print_orphaned_files_warning,  # noqa: F401
-    _validate_idempotency,  # noqa: F401
-    console,
-    error_console,  # noqa: F401
-)
-from confiture.cli.lint_formatter import save_report  # noqa: F401
+from confiture.cli.helpers import console
 from confiture.cli.seed import seed_app
-
-# Re-exported for backward-compatible mock patch targets in tests
-from confiture.core.connection import create_connection  # noqa: F401
-from confiture.core.introspector import SchemaIntrospector  # noqa: F401
-from confiture.core.linting import SchemaLinter  # noqa: F401
 
 # Valid output formats for linting
 LINT_FORMATS = ("table", "json", "csv")
@@ -80,6 +61,7 @@ COMMON_COMMANDS = [
     "migrate-down",
     "migrate-status",
     "migrate-validate",
+    "drift",
 ]
 
 # Create Typer app
@@ -142,6 +124,9 @@ app.command()(lint)
 app.command("lint-unified")(lint_unified)
 app.command()(introspect)
 
+# Register drift command
+app.command()(drift)
+
 # Register admin commands
 app.command("install-helpers")(install_helpers)
 app.command()(validate_profile)
@@ -153,6 +138,7 @@ migrate_app.command("status")(migrate_status)
 migrate_app.command("up")(migrate_up)
 migrate_app.command("down")(migrate_down)
 migrate_app.command("generate")(migrate_generate)
+migrate_app.command("estimate")(migrate_estimate)
 
 # Register migrate state commands
 migrate_app.command("baseline")(migrate_baseline)
