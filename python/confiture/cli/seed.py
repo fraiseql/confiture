@@ -872,3 +872,68 @@ def benchmark(
     except Exception as e:
         console.print(f"[red]✗ Benchmark failed: {e}[/red]")
         raise typer.Exit(2) from e
+
+
+@seed_app.command("generate")
+def seed_generate(
+    table: str = typer.Argument(..., help="Table name to generate seed data for"),
+    database_url: str = typer.Option(
+        ..., "--database-url", "-d", help="PostgreSQL connection URL"
+    ),
+    schema: str = typer.Option("public", "--schema", "-s", help="Schema name (default: public)"),
+    env: str = typer.Option("development", "--env", "-e", help="Seed environment directory"),
+    output_dir: Path = typer.Option(
+        Path("db/seeds"), "--output-dir", "-o", help="Seeds output directory (default: db/seeds)"
+    ),
+    row_count: int = typer.Option(10, "--rows", "-n", help="Number of stub rows (default: 10)"),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Overwrite existing seed file (default: off)"
+    ),
+    format_type: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text, json (default: text)"
+    ),
+) -> None:
+    """Generate a seed SQL stub for a PostgreSQL table.
+
+    Connects to the database, introspects the table's column structure,
+    and writes a commented-out INSERT template to db/seeds/<env>/<table>.sql.
+
+    EXAMPLES:
+      confiture seed generate users --database-url $DATABASE_URL
+        ↳ Generate seed stub for the users table
+
+      confiture seed generate bookings -d $DATABASE_URL --rows 5 --env test
+        ↳ Generate 5-row stub for bookings in the test environment
+    """
+    from confiture.core.seed_bridge import SeedBridge, SeedGenerationConfig
+
+    config = SeedGenerationConfig(
+        table=table,
+        schema=schema,
+        row_count=row_count,
+        output_dir=output_dir,
+        env=env,
+        overwrite=overwrite,
+    )
+
+    bridge = SeedBridge(database_url)
+
+    try:
+        result = bridge.generate(config)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    if format_type == "json":
+        import json
+
+        console.print(json.dumps(result.to_dict(), indent=2))
+    else:
+        if result.success:
+            console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
+            console.print(
+                f"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
+            )
+        else:
+            console.print(f"[red]Error: {result.error}[/red]")
+            raise typer.Exit(1)
