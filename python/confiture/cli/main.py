@@ -13,6 +13,7 @@ from confiture.cli.commands.admin import (
     validate_profile,
     verify,
 )
+from confiture.cli.commands.debug import debug_app
 from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate_analysis import (
     migrate_diff,
@@ -106,6 +107,9 @@ app.add_typer(seed_app, name="seed")
 
 # Add mcp subcommand group (MCP server)
 app.add_typer(mcp_app, name="mcp")
+
+# Add debug subcommand group (CTE debugger)
+app.add_typer(debug_app, name="debug")
 
 
 def version_callback(value: bool) -> None:
