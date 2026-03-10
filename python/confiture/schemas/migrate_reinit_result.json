@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MigrateReinitResult",
+  "description": "Result of migrate reinit (reset tracking table).",
+  "type": "object",
+  "required": [
+    "success",
+    "deleted_count",
+    "marked",
+    "total_duration_ms",
+    "dry_run"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "deleted_count": {
+      "type": "integer"
+    },
+    "marked": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version",
+          "name",
+          "duration_ms",
+          "rows_affected"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "rows_affected": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "total_duration_ms": {
+      "type": "integer"
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

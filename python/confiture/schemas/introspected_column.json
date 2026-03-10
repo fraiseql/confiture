@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IntrospectedColumn",
+  "description": "A single column from schema introspection.",
+  "type": "object",
+  "required": [
+    "name",
+    "data_type",
+    "is_nullable",
+    "ordinal_position"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "data_type": {
+      "type": "string"
+    },
+    "is_nullable": {
+      "type": "boolean"
+    },
+    "ordinal_position": {
+      "type": "integer"
+    },
+    "column_default": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "character_maximum_length": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "is_primary_key": {
+      "type": "boolean"
+    }
+  }
+}

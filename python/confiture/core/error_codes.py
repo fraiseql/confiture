@@ -633,6 +633,34 @@ def _create_global_registry() -> ErrorCodeRegistry:
     for code in lint_codes:
         registry.register(code)
 
+    # ========== MIGR extra: granular migration execution codes ==========
+    migr_extra_codes = [
+        ErrorCodeDefinition(
+            code="MIGR_010",
+            message_template="Lock timeout waiting for migration lock",
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint="Retry with a higher --lock-timeout value or schedule during low-traffic window",
+        ),
+        ErrorCodeDefinition(
+            code="MIGR_011",
+            message_template="Checksum mismatch for migration '{version}'",
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint="Migration file was modified after application. Restore the original file or use --force to override.",
+        ),
+        ErrorCodeDefinition(
+            code="CONFIG_010",
+            message_template="Database URL not set in environment '{env}'",
+            severity=ErrorSeverity.ERROR,
+            exit_code=2,
+            resolution_hint="Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable",
+        ),
+    ]
+
+    for code in migr_extra_codes:
+        registry.register(code)
+
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_200) are used at raise sites.

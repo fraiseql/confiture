@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StatusResult",
+  "description": "Result of migrate status operation.",
+  "type": "object",
+  "required": [
+    "tracking_table",
+    "tracking_table_exists",
+    "migrations",
+    "summary"
+  ],
+  "properties": {
+    "tracking_table": {
+      "type": "string"
+    },
+    "tracking_table_exists": {
+      "type": "boolean"
+    },
+    "migrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version",
+          "name",
+          "status",
+          "applied_at"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "applied",
+        "pending",
+        "total"
+      ],
+      "properties": {
+        "applied": {
+          "type": "integer"
+        },
+        "pending": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "rebuild_recommended": {
+      "type": "boolean"
+    },
+    "rebuild_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BuildResult",
+  "description": "Result of confiture build (schema build from DDL).",
+  "type": "object",
+  "required": [
+    "success",
+    "files_processed",
+    "schema_size_bytes",
+    "output_path"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "files_processed": {
+      "type": "integer"
+    },
+    "schema_size_bytes": {
+      "type": "integer"
+    },
+    "output_path": {
+      "type": "string"
+    },
+    "hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "execution_time_ms": {
+      "type": "integer"
+    },
+    "seed_files_applied": {
+      "type": "integer"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

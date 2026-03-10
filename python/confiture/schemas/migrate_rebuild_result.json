@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MigrateRebuildResult",
+  "description": "Result of migrate rebuild (rebuild from DDL).",
+  "type": "object",
+  "required": [
+    "success",
+    "schemas_dropped",
+    "ddl_statements_executed",
+    "marked",
+    "total_duration_ms",
+    "dry_run"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "schemas_dropped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ddl_statements_executed": {
+      "type": "integer"
+    },
+    "marked": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version",
+          "name",
+          "duration_ms",
+          "rows_affected"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "rows_affected": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "total_duration_ms": {
+      "type": "integer"
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "seeds_applied": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verified": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

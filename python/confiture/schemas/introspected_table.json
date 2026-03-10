@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IntrospectedTable",
+  "description": "A single table from schema introspection.",
+  "type": "object",
+  "required": [
+    "name",
+    "schema",
+    "columns",
+    "foreign_keys"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "columns": {
+      "type": "array",
+      "items": {}
+    },
+    "foreign_keys": {
+      "type": "array",
+      "items": {}
+    },
+    "row_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

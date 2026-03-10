@@ -241,6 +241,7 @@ class Migrator:
                 f"Migration {migration.version} ({migration.name}) has already been applied",
                 migration.version,
                 migration.name,
+                error_code="MIGR_101",
                 resolution_hint="Use --force to re-apply this migration, or run 'confiture migrate status' to review applied migrations",
             )
 
@@ -586,6 +587,7 @@ class Migrator:
                 raise MigrationError(
                     f"Migration version '{through}' not found on disk",
                     through,
+                    error_code="MIGR_100",
                     resolution_hint=f"Run 'confiture migrate status' to list available versions, or check that version '{through}' exists in your migrations directory",
                 )
         else:
@@ -688,6 +690,7 @@ class Migrator:
                 "has not been applied, cannot rollback",
                 migration.version,
                 migration.name,
+                error_code="MIGR_100",
                 resolution_hint="Run 'confiture migrate status' to see which migrations are applied",
             )
 
@@ -1721,10 +1724,12 @@ class Migrator:
 
             config_path = Path(config)
             if not config_path.exists():
-                from confiture.exceptions import MigrationError
+                from confiture.exceptions import ConfigurationError
 
-                raise MigrationError(
+                raise ConfigurationError(
                     f"Configuration file not found: {config_path}",
+                    error_code="CONFIG_004",
+                    context={"file_path": str(config_path)},
                     resolution_hint=f"Create a config file at {config_path} or use an existing one",
                 )
             with open(config_path) as f:

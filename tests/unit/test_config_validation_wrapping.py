@@ -27,13 +27,14 @@ class TestConfigValidationWrapping:
         assert exc_info.value.error_code == "CONFIG_002"
         assert "bad.yaml" in str(exc_info.value)
 
-    def test_missing_config_raises_migration_error(self, tmp_path: Path):
-        """Missing config file should raise MigrationError."""
+    def test_missing_config_raises_configuration_error(self, tmp_path: Path):
+        """Missing config file should raise ConfigurationError with CONFIG_004."""
         from confiture.core.migrator import Migrator
-        from confiture.exceptions import MigrationError
 
-        with pytest.raises(MigrationError):
+        with pytest.raises(ConfigurationError) as exc_info:
             Migrator.from_config(tmp_path / "nonexistent.yaml")
+
+        assert exc_info.value.error_code == "CONFIG_004"
 
     def test_wrapped_validation_error_has_context(self, tmp_path: Path):
         """Wrapped error should preserve file_path in context."""

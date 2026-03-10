@@ -5,99 +5,180 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2026-03-10
+## [0.8.0] - 2026-03-10
 
 ### Added
+
+- **`confiture mcp` command** — Expose Confiture operations and PostgreSQL stored functions as
+  MCP (Model Context Protocol) tools, enabling direct agent integration (Issue #68).
+
+  ```bash
+  # stdio mode (Claude Code, local agents)
+  confiture mcp --database-url $DB_URL --stdio
+
+  # HTTP mode for remote/containerised agents (requires [mcp-http] extras)
+  confiture mcp --database-url $DB_URL --port 8080
+  # POST http://localhost:8080/mcp  {"jsonrpc":"2.0","id":1,"method":"tools/list"}
+  # GET  http://localhost:8080/health
+  ```
+
+  Built-in tools (`confiture__*` prefix): `migrate_status`, `migrate_up`, `migrate_down`,
+  `schema_introspect`, `drift_check`. PostgreSQL stored functions discovered automatically.
+
+  HTTP transport ships as an optional extra to preserve the minimal psycopg footprint:
+  ```bash
+  uv add 'fraiseql-confiture[mcp-http]'
+  ```
+
+- **`confiture generate stubs` command** — Generate Python type stubs for PostgreSQL stored
+  functions, enabling IDE autocompletion and static analysis (Issue #67).
+
+- **`confiture generate pgtap` command** — Generate pgTAP test scaffolding from introspected
+  stored functions (Issue #69).
+
+- **`confiture lint` command** — Unified schema linting running Squawk and SQLFluff rules
+  across all migration and schema files (Issue #72).
+
+- **`confiture seed generate` command** — Generate seed data via the fraiseql-data bridge,
+  transforming UUID-keyed data into BIGINT-keyed COPY format (Issue #71).
+
+- **`confiture debug` command** — CTE step-through debugger for complex queries, letting
+  agents inspect intermediate result sets one CTE at a time (Issue #73).
 
 - **`confiture migrate verify` command** — Verify applied migrations using `.verify.sql` sidecar
   files (Issue #65).
 
-  After applying migrations, there's no built-in way to verify each migration achieved its
-  intended outcome. The `.verify.sql` sidecar pattern lets users write assertion queries.
-
   ```bash
-  # Verify all applied migrations
   confiture migrate verify -c db/environments/local.yaml
-
-  # Verify a single migration
-  confiture migrate verify --version 003 -c db/environments/local.yaml
-
-  # JSON output for CI/CD pipelines
+  confiture migrate verify --version 20260228180602 -c db/environments/local.yaml
   confiture migrate verify --format json -c db/environments/local.yaml
   ```
 
   File format:
   ```sql
-  -- db/migrations/003_add_users.verify.sql
+  -- db/migrations/20260228180602_add_users.verify.sql
   SELECT COUNT(*) > 0 FROM information_schema.columns
     WHERE table_name = 'users' AND column_name = 'email'
   ```
 
-  Key features:
-  - `.verify.sql` files discovered alongside `.up.sql` in migrations dir
-  - Queries execute inside SAVEPOINT/ROLLBACK (read-only, no side effects)
-  - First column of first row checked for truthiness (true/t/1/non-null/non-zero)
-  - DDL/DML in verify files rejected with `VerifyFileError`
-  - `--version` to verify a single migration
-  - Text and JSON output; exit 0 if no failures, exit 1 if any failure
-  - Migrations without verify files shown as `SKIP` (not an error)
+  Queries run inside SAVEPOINT/ROLLBACK (read-only). DDL/DML in verify files raises
+  `VerifyFileError`. Migrations without verify files shown as `SKIP`.
 
-- **`MigrationVerifier` public API**:
-
-  ```python
-  from confiture import MigrationVerifier
-
-  verifier = MigrationVerifier(connection=conn, migrations_dir=Path("db/migrations"))
-  results = verifier.verify_all(applied_versions=["001", "002"])
-  for r in results:
-      print(f"{r.version}: {r.status}")
-  ```
-
-- **`VerifyFileError` exception** — Raised when a `.verify.sql` file contains forbidden SQL.
-
-## [0.8.0] - 2026-03-10
-
-### Added
-
-- **`--require-grant-migration` flag on `migrate validate`** — Warns when `db/7_grant/` files
-  change without a corresponding `.up.sql` migration file (Issue #66).
-
-  Build environments apply grants from `7_grant/` automatically; migrate environments (staging,
-  production) only apply grants when they appear in a migration file. This asymmetry caused silent
-  permission failures in production.
+- **`--require-grant-migration` flag on `migrate validate`** — Detects `db/7_grant/` changes
+  without a corresponding migration file (Issue #66).
 
   ```bash
-  # Pre-commit: check staged grant files have a migration
   confiture migrate validate --require-grant-migration --staged
-
-  # CI: check grant changes between branches
   confiture migrate validate --require-grant-migration --base-ref origin/main
-
-  # Build-only branch: suppress the check
-  confiture migrate validate --require-grant-migration --allow-grant-only
   ```
 
-- **`GrantAccompanimentChecker` public API** — Programmatic access to grant accompaniment checking:
+- **Schema drift detection** — `confiture drift` command and `migrate validate --check-live-drift`
+  compare live database schema against DDL source and report divergence.
+
+- **`confiture migrate estimate` / `migrate up --batched`** — Large-table migration support with
+  row-count estimation and batched execution to avoid lock exhaustion.
+
+- **Introspection layer** — `FunctionIntrospector`, `TypeMapper`, and `DependencyGraph` now in
+  the public API for programmatic schema analysis:
+
+  ```python
+  from confiture import FunctionIntrospector, TypeMapper, DependencyGraph
+  ```
+
+- **JSON Schema files for all result types** — 16 pre-generated JSON Schema v7 files ship in
+  the package, enabling agents to validate structured output without reading source:
+
+  ```python
+  from importlib.resources import files
+  import json
+
+  schema = json.loads(
+      files("confiture.schemas").joinpath("migrate_up_result.json").read_text()
+  )
+  # or via public API:
+  from confiture import generate_schema
+  schema = generate_schema("MigrateUpResult")
+  ```
+
+  Also available as CLI: `confiture schemas generate --output ./my-schemas/`
+
+- **`IntentRegistry`, `ConflictSeverity`, `IntentStatus` in public API** — Multi-agent
+  coordination classes now importable directly from `confiture`:
+
+  ```python
+  from confiture import IntentRegistry, ConflictSeverity, IntentStatus
+  ```
+
+### Improved
+
+- **Granular `error_code` at public API raise sites** — All `MigrationError`,
+  `ConfigurationError`, and `SchemaError` raised from the public API now carry a specific
+  error code that agents can pattern-match on:
+
+  | Code | Meaning |
+  |------|---------|
+  | `MIGR_100` | Migration version not found / not applied |
+  | `MIGR_101` | Migration already applied |
+  | `MIGR_010` | Lock timeout |
+  | `MIGR_011` | Checksum mismatch |
+  | `CONFIG_001` | Session used outside context manager |
+  | `CONFIG_004` | Config file not found |
+  | `CONFIG_010` | Database URL not set |
+
+  ```python
+  except MigrationError as e:
+      if e.error_code == "MIGR_010":
+          retry_with_backoff()
+  ```
+
+- **Missing config raises `ConfigurationError` (not `MigrationError`)** — `Migrator.from_config()`
+  now raises `ConfigurationError(error_code="CONFIG_004")` when the YAML file does not exist.
+  More semantically correct; `error_code` gives agents the exit code and resolution hint.
+
+- **`MigrationVerifier` and `GrantAccompanimentChecker` public API** — Both now importable from
+  the top-level `confiture` package.
+
+- **`VerifyFileError` exception** — Raised when a `.verify.sql` file contains forbidden SQL
+  (DDL/DML). Importable from `confiture`.
+
+- **`GrantAccompanimentChecker` public API**:
 
   ```python
   from confiture import GrantAccompanimentChecker
 
   checker = GrantAccompanimentChecker(grant_dir="db/7_grant")
   report = checker.check_accompaniment(staged_only=True)
-  if not report.is_valid:
-      print(f"Grant changes require migration: {report.grant_files_changed}")
   ```
 
-- **`migration.grant_dir` config option** — Override the grant directory in YAML config:
+- **`migration.grant_dir` config option** — Override the grant directory path in YAML.
 
-  ```yaml
-  migration:
-    grant_dir: "db/custom_grants"  # default: db/7_grant
-  ```
+- **CLI restructure** — `python/confiture/cli/` split into focused command modules
+  (`schema`, `migrate_core`, `migrate_state`, `migrate_analysis`, `admin`, `drift`);
+  no user-visible changes.
+
+- **Codebase hygiene** — Removed ~10,000 lines of orphaned enterprise modules (scenarios,
+  workflows, observability, theatre tests). `DryRunExecutor` now correctly reports simulation
+  confidence. All `ty` type errors resolved. All stub parameters removed from `MigratorSession`.
+
+### Breaking changes
+
+- `MigratorSession.up()` no longer accepts `dry_run_execute`, `auto_detect_baseline`,
+  `snapshots_dir`, or `on_checksum_mismatch` keyword arguments (they were stubs). Use the
+  `dry_run=True` parameter instead.
+- `Migrator.from_config()` raises `ConfigurationError` (not `MigrationError`) for a missing
+  config file.
 
 ### Closed
 
-- Issue #64: Already fixed in v0.7.0 (commit 6e03805) — `BEGIN`/`COMMIT` auto-stripping.
+- Issue #64: `BEGIN`/`COMMIT` auto-stripping (fixed in v0.7.0, documented here).
+- Issue #65: `confiture migrate verify` command.
+- Issue #66: `--require-grant-migration` flag.
+- Issue #67: `confiture generate stubs`.
+- Issue #68: `confiture mcp` (stdio + HTTP).
+- Issue #69: `confiture generate pgtap`.
+- Issue #71: `confiture seed generate`.
+- Issue #72: `confiture lint`.
+- Issue #73: `confiture debug`.
 
 ## [0.7.0] - 2026-03-01
 

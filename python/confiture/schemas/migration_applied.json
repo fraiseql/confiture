@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MigrationApplied",
+  "description": "A single migration that was applied or rolled back.",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "duration_ms",
+    "rows_affected"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "duration_ms": {
+      "type": "integer"
+    },
+    "rows_affected": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}

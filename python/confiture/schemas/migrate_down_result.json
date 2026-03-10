@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MigrateDownResult",
+  "description": "Result of migrate down (roll back migrations).",
+  "type": "object",
+  "required": [
+    "success",
+    "rolled_back",
+    "total_duration_ms",
+    "checksums_verified",
+    "warnings"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "rolled_back": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version",
+          "name",
+          "duration_ms",
+          "rows_affected"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "rows_affected": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "total_duration_ms": {
+      "type": "integer"
+    },
+    "checksums_verified": {
+      "type": "boolean"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

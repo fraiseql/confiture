@@ -83,12 +83,28 @@ __all__ = [
     "MigrateReinitResult",
     "MigrateRebuildResult",
     "MigrationApplied",
+    # Table/schema introspection
+    "SchemaIntrospector",
+    "IntrospectionResult",
+    "IntrospectedTable",
+    "IntrospectedColumn",
+    "FKReference",
+    # Seed operations
+    "SeedApplier",
+    "ApplyResult",
     # Large table operations
     "BatchedMigration",
     "BatchConfig",
     "BatchProgress",
     "OnlineIndexBuilder",
     "TableSizeEstimator",
+    # Multi-agent coordination
+    "IntentRegistry",
+    "ConflictSeverity",
+    "IntentStatus",
+    # Schema export
+    "generate_schema",
+    "export_all_schemas",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -146,12 +162,37 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Migration verification
     "MigrationVerifier": ("confiture.core.migration_verifier", "MigrationVerifier"),
     "VerifyResult": ("confiture.core.migration_verifier", "VerifyResult"),
+    # Table/schema introspection
+    "SchemaIntrospector": ("confiture.core.introspector", "SchemaIntrospector"),
+    "IntrospectionResult": ("confiture.models.introspection", "IntrospectionResult"),
+    "IntrospectedTable": ("confiture.models.introspection", "IntrospectedTable"),
+    "IntrospectedColumn": ("confiture.models.introspection", "IntrospectedColumn"),
+    "FKReference": ("confiture.models.introspection", "FKReference"),
+    # Seed operations
+    "SeedApplier": ("confiture.core.seed_applier", "SeedApplier"),
+    "ApplyResult": ("confiture.core.seed_applier", "ApplyResult"),
     # Large table operations
     "BatchedMigration": ("confiture.core.large_tables", "BatchedMigration"),
     "BatchConfig": ("confiture.core.large_tables", "BatchConfig"),
     "BatchProgress": ("confiture.core.large_tables", "BatchProgress"),
     "OnlineIndexBuilder": ("confiture.core.large_tables", "OnlineIndexBuilder"),
     "TableSizeEstimator": ("confiture.core.large_tables", "TableSizeEstimator"),
+    # Multi-agent coordination
+    "IntentRegistry": (
+        "confiture.integrations.pggit.coordination.registry",
+        "IntentRegistry",
+    ),
+    "ConflictSeverity": (
+        "confiture.integrations.pggit.coordination.models",
+        "ConflictSeverity",
+    ),
+    "IntentStatus": (
+        "confiture.integrations.pggit.coordination.models",
+        "IntentStatus",
+    ),
+    # Schema export
+    "generate_schema": ("confiture.core.schema_exporter", "generate_schema"),
+    "export_all_schemas": ("confiture.core.schema_exporter", "export_all"),
 }
 
 

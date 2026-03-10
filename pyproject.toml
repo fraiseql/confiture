@@ -70,6 +70,11 @@ fraiseql = [
 
 ast = ["pglast>=6.0"]
 
+mcp-http = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+]
+
 [project.urls]
 Homepage = "https://github.com/fraiseql/confiture"
 Documentation = "https://github.com/fraiseql/confiture"
@@ -91,6 +96,9 @@ build-backend = "maturin"
 python-source = "python"
 module-name = "confiture._core"
 features = ["pyo3/extension-module"]
+include = [
+    { path = "python/confiture/schemas/*.json", format = "wheel" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "python/tests"]
