@@ -6,6 +6,7 @@ in a structured format for diff detection and comparison.
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class ColumnType(str, Enum):
@@ -156,7 +157,7 @@ class SchemaChange:
     column: str | None = None
     old_value: str | None = None
     new_value: str | None = None
-    details: dict[str, str] | None = None
+    details: dict[str, Any] | None = None
 
     def __str__(self) -> str:
         """String representation of change."""

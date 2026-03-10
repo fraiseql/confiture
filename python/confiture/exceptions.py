@@ -709,6 +709,35 @@ class SeedError(ConfiturError):
         self.sql_error = sql_error
 
 
+class UnsafeOperationError(ConfiturError):
+    """Raised when a destructive DDL operation is attempted without force flag.
+
+    Raised when:
+    - DROP TABLE, DROP COLUMN, or other destructive operations are requested
+    - The force_destructive flag is not set
+
+    Example:
+        >>> raise UnsafeOperationError("DROP TABLE is destructive. Use --force.")
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "DDL_001",
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+
+
 # Re-export precondition exceptions for convenience
 # These are defined in confiture.core.preconditions but users may want to
 # import them from confiture.exceptions
@@ -741,4 +770,5 @@ __all__ = [
     "PreconditionError",
     "PreconditionValidationError",
     "PreStateSimulationError",
+    "UnsafeOperationError",
 ]
