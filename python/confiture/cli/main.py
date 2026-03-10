@@ -31,6 +31,7 @@ from confiture.cli.commands.migrate_state import (
     migrate_rebuild,
     migrate_reinit,
 )
+from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.schema import build, init, introspect, lint
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
@@ -102,6 +103,9 @@ app.add_typer(coordinate_app, name="coordinate")
 
 # Add seed subcommand group (seed validation)
 app.add_typer(seed_app, name="seed")
+
+# Add mcp subcommand group (MCP server)
+app.add_typer(mcp_app, name="mcp")
 
 
 def version_callback(value: bool) -> None:
