@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.4.1
-**Last Updated**: February 5, 2026
+**Version**: 0.7.2
+**Last Updated**: 2026-03-10
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -94,20 +94,27 @@ uv run mypy confiture/
 [project.dependencies]
 python = ">=3.11"
 typer = ">=0.12"          # CLI framework
-pydantic = ">=2.0"        # Configuration validation
+pydantic = ">=2.5"        # Configuration validation
 pyyaml = ">=6.0"          # YAML parsing
-psycopg = {version = ">=3.0", extras = ["binary"]}  # PostgreSQL driver
-rich = ">=13.0"           # Terminal formatting
+psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
+rich = ">=13.7"           # Terminal formatting
 sqlparse = ">=0.5"        # SQL parsing (Python)
+sqlglot = ">=28.0"        # SQL dialect-aware parsing
+cryptography = ">=42.0"   # Encryption utilities
 
 [project.optional-dependencies]
+ast = [
+    "pglast>=6.0",         # PostgreSQL SQL AST (optional, via libpg_query)
+]
+
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.1",
+    "pytest-json-report>=1.5",
     "ruff>=0.6",
-    "mypy>=1.11",
-    "pre-commit>=3.0",
+    "ty>=0.0.7",           # Astral's type checker (replaces mypy)
+    "maturin>=1.7",
 ]
 ```
 
@@ -132,90 +139,100 @@ sha2 = "0.10"             # Hashing
 ```
 confiture/
 ├── python/confiture/
-│   ├── __init__.py              # Public API
+│   ├── __init__.py              # Public API (lazy imports via _LAZY_IMPORTS)
+│   ├── exceptions.py            # Full exception hierarchy (ConfiturError tree)
+│   │
 │   ├── cli/
-│   │   ├── __init__.py
-│   │   ├── main.py              # Entry point (Typer app)
-│   │   ├── build.py             # confiture build
-│   │   ├── migrate.py           # confiture migrate
-│   │   └── sync.py              # confiture sync
+│   │   ├── main.py              # Entry point: app setup + command registration (166 lines)
+│   │   ├── helpers.py           # Shared helpers: console, _output_json, _get_tracking_table, etc.
+│   │   ├── commands/
+│   │   │   ├── schema.py        # init, build, lint, introspect
+│   │   │   ├── migrate_core.py  # migrate status/up/down/generate
+│   │   │   ├── migrate_state.py # migrate baseline/reinit/rebuild
+│   │   │   ├── migrate_analysis.py  # migrate diff/validate/fix/introspect/verify
+│   │   │   └── admin.py         # install-helpers, validate_profile, verify, restore
+│   │   ├── formatters/
+│   │   │   ├── build_formatter.py
+│   │   │   ├── migrate_formatter.py
+│   │   │   ├── seed_formatter.py
+│   │   │   └── common.py
+│   │   ├── branch.py            # branch subcommand group (pgGit)
+│   │   ├── coordinate.py        # coordinate subcommand group (multi-agent)
+│   │   ├── seed.py              # seed subcommand group
+│   │   ├── generate.py          # generate subcommand group
+│   │   ├── dry_run.py           # Dry-run UI helpers
+│   │   └── git_validation.py    # Pre-commit git validation helpers
 │   │
 │   ├── core/
-│   │   ├── __init__.py
-│   │   ├── builder.py           # Schema builder (Medium 1)
-│   │   ├── migrator.py          # Migration executor (Medium 2)
-│   │   ├── differ.py            # Schema diff detector
-│   │   ├── syncer.py            # Production sync (Medium 3)
-│   │   └── schema_to_schema.py  # FDW migration (Medium 4)
+│   │   ├── builder.py           # SchemaBuilder — Medium 1: build from DDL
+│   │   ├── migrator.py          # Migrator + MigratorSession — Medium 2
+│   │   ├── differ.py            # SchemaDiffer — schema diff detection
+│   │   ├── syncer.py            # Production sync — Medium 3
+│   │   ├── schema_to_schema.py  # FDW migration — Medium 4
+│   │   ├── migration_generator.py  # Migration file generation (+ external generators)
+│   │   ├── migration_verifier.py   # MigrationVerifier + VerifyResult
+│   │   ├── grant_accompaniment.py  # GrantAccompanimentChecker
+│   │   ├── baseline_detector.py    # BaselineDetector (fuzzy snapshot matching)
+│   │   ├── schema_snapshot.py      # SchemaSnapshotGenerator
+│   │   ├── introspector.py         # SchemaIntrospector (tables/columns/FKs)
+│   │   ├── introspection/          # Phase 6 introspection package
+│   │   │   ├── functions.py        # FunctionIntrospector
+│   │   │   ├── type_mapping.py     # TypeMapper
+│   │   │   ├── dependency_graph.py # DependencyGraph
+│   │   │   └── sql_ast.py          # CTENode, JSONBKey
+│   │   ├── connection.py        # create_connection, load_config
+│   │   ├── error_codes.py       # ErrorCodeDefinition, ErrorCodeRegistry
+│   │   ├── linting/             # SchemaLinter and rules
+│   │   ├── seed/                # Seed validation system (5 levels)
+│   │   ├── seed_validation/     # PrepSeedOrchestrator and validators
+│   │   ├── anonymization/       # PII anonymization strategies
+│   │   ├── hooks/               # Migration lifecycle hooks
+│   │   ├── idempotency/         # Idempotency analysis and fixing
+│   │   ├── risk/                # Migration risk assessment
+│   │   └── security/            # Security validation
 │   │
 │   ├── config/
-│   │   ├── __init__.py
-│   │   ├── environment.py       # Environment config
-│   │   └── version.py           # Version tracking
+│   │   └── environment.py       # Environment + all nested Pydantic config models
 │   │
 │   └── models/
-│       ├── __init__.py
+│       ├── results.py           # MigrateUpResult, StatusResult, VerifyAllResult, etc.
+│       ├── function_info.py     # FunctionParam, FunctionInfo, FunctionCatalog
+│       ├── introspection.py     # IntrospectedTable, IntrospectedColumn, FKReference
+│       ├── git.py               # MigrationAccompanimentReport, GrantAccompanimentReport
+│       ├── lint.py              # LintReport, Violation, LintSeverity
+│       ├── error.py             # ErrorSeverity enum
 │       ├── migration.py         # Migration base class
-│       └── schema.py            # Schema models
+│       ├── schema.py            # Schema representation models
+│       └── sql_file_migration.py
 │
 ├── tests/
-│   ├── unit/                    # Fast, isolated tests
-│   │   ├── test_builder.py
-│   │   ├── test_migrator.py
-│   │   ├── test_differ.py
-│   │   └── test_config.py
-│   │
+│   ├── unit/                    # Fast, isolated tests (no database required)
 │   ├── integration/             # Database-dependent tests
-│   │   ├── test_build_local.py
-│   │   ├── test_migrate_up.py
-│   │   └── test_sync.py
-│   │
-│   ├── e2e/                     # Full workflow tests
-│   │   └── test_complete_workflow.py
-│   │
-│   ├── fixtures/                # Test data
-│   │   ├── schemas/
-│   │   └── migrations/
-│   │
-│   └── conftest.py              # Pytest config
+│   ├── e2e/                     # Full CLI workflow tests
+│   ├── fixtures/                # SQL fixtures and migration stubs
+│   └── conftest.py              # Pytest configuration
+│
+├── db/
+│   ├── schema/                  # Source-of-truth DDL files
+│   ├── migrations/              # Migration files (YYYYMMDDHHMMSS_name.up.sql)
+│   └── schema_history/          # Schema snapshots after each migration
 │
 ├── docs/
-│   ├── index.md                 # Documentation homepage
-│   ├── getting-started.md
-│   ├── guides/                 # User guides
-│   │   ├── medium-1-build-from-ddl.md
-│   │   ├── medium-2-incremental-migrations.md
-│   │   ├── medium-3-production-sync.md
-│   │   ├── medium-4-schema-to-schema.md
-│   │   └── migration-decision-tree.md
-│   ├── reference/              # API/CLI reference
-│   │   ├── cli.md
-│   │   └── configuration.md
-│   └── api/                    # API documentation
-│       ├── builder.md
-│       ├── migrator.md
-│       ├── syncer.md
-│       └── schema-to-schema.md
-│
-├── examples/
-│   ├── basic/                   # Simple example
-│   ├── fraiseql/                # FraiseQL integration
-│   └── zero-downtime/           # Production migration
+│   ├── guides/                  # User guides per medium and feature
+│   ├── reference/               # CLI and configuration reference
+│   └── api/                     # API documentation
 │
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml               # Run tests
-│       └── release.yml          # Build wheels
+│       ├── quality-gate.yml     # Linting, type checking, unit tests
+│       └── release.yml          # Build wheels + publish
 │
-├── pyproject.toml               # Python packaging
+├── pyproject.toml               # Python packaging (fraiseql-confiture)
 ├── uv.lock                      # Dependency lock file
-├── .python-version              # Python 3.11
-├── .gitignore
-├── README.md
-├── PRD.md
-├── CLAUDE.md                    # This file
-├── PHASES.md
-└── LICENSE
+├── ARCHITECTURE.md              # This document
+├── CLAUDE.md                    # AI-assisted development guide
+├── CHANGELOG.md                 # Release notes
+└── README.md
 ```
 
 ---
@@ -309,7 +326,7 @@ uv run pytest tests/unit/test_builder.py::test_find_sql_files -v
 
 ---
 
-## 🌱 Prep-Seed Validation (v0.3.13+)
+## 🌱 Prep-Seed Validation
 
 Confiture includes a comprehensive **5-level prep-seed validation system** for catching data transformation issues before deployment.
 
@@ -752,7 +769,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### Beta (v0.3.13)
+### Beta (v0.7.2)
 
 > **⚠️ Not Production-Tested**: All features below are implemented and have passing tests, but have never been used in a real production environment.
 
@@ -762,21 +779,24 @@ Closes #123
 - ✅ Production sync (Medium 3) - Copy data with PII anonymization
 - ✅ Zero-downtime migrations (Medium 4) - Schema-to-schema via FDW
 - ✅ Schema diff detection
-- ✅ **Prep-seed validation (v0.3.13)** - 5-level validation orchestrator with full Level 4-5 support
+- ✅ Prep-seed validation - 5-level validation orchestrator with full Level 4-5 support
 - ✅ CLI with rich terminal output
 - ✅ Migration hooks
 - ✅ Schema linting
 - ✅ Anonymization strategies
-
-**Seed Validation Features** (NEW):
-- ✅ Level 1-3: Static analysis (pre-commit safe)
-- ✅ Level 4: Runtime validation with SAVEPOINT dry-runs
-- ✅ Level 5: Full execution with transaction rollback
-- ✅ Comprehensive & standard modes
-- ✅ Catches NULL FKs, constraint violations, schema drift
+- ✅ Timestamp-based migration versioning (YYYYMMDDHHMMSS)
+- ✅ Exception hierarchy with error codes and resolution hints
+- ✅ Library API: `Migrator.from_config()` + `MigratorSession` context manager
+- ✅ Introspection layer: `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`
+- ✅ Grant accompaniment checker (detect grant changes without migration)
+- ✅ Migration verifier (`.verify.sql` post-migration queries)
+- ✅ `migrate rebuild` command
+- ✅ Semantic exit codes for `migrate status`
+- ✅ JSON/CSV/YAML structured output for all commands
 
 **Test Metrics**:
-- **Tests**: 3,170+ passing
+- **Total collected**: 5,583
+- **Unit tests passing**: 4,518+
 - **Python Support**: 3.11, 3.12, 3.13
 - **Documentation**: Comprehensive with guides and API references
 
@@ -848,44 +868,19 @@ except psycopg.OperationalError as e:
 
 ## 📊 Implementation Metrics
 
-- ✅ **Test Coverage**: 3,250+ tests passing (including seed validation orchestrator)
-- ✅ **CLI Commands**: 8 implemented (`build`, `migrate up/down`, `status`, `init`, `sync`, `schema-to-schema`, `seed validate`)
-- ✅ **Documentation**: Comprehensive guides + API references + seed validation guide
-- ✅ **Examples**: 5+ example scenarios (plus prep-seed example)
-- ✅ **Validation System**: 5-level orchestrator with full database support
-- ✅ **CI/CD**: Multi-platform wheel building, quality gates
+- ✅ **Tests**: 5,583 collected, 4,518+ unit passing (2026-03-10)
+- ✅ **CLI Commands**: 20+ implemented across schema, migrate, admin, seed, branch, coordinate, generate subgroups
+- ✅ **Documentation**: Comprehensive guides + API references
+- ✅ **Validation System**: 5-level prep-seed orchestrator with full database support
+- ✅ **CI/CD**: Multi-platform wheel building, quality gates (ruff + ty + pytest)
 - ✅ **Python Support**: 3.11, 3.12, 3.13 tested
-
-**Seed Validation Metrics**:
-- ✅ 92 seed validation unit tests (includes 6 new UNION type validation tests)
-- ✅ 12 orchestrator integration tests
-- ✅ All 5 validation levels implemented
-- ✅ Level 1 now detects UNION type mismatches (Issue #29)
-- ✅ Database connection & transaction handling
-- ✅ Comprehensive error reporting
-
-**Sequential Seed Execution Metrics (v0.4.0)**:
-- ✅ 29 new seed execution tests (5 config + 7 discovery + 8 executor + 9 workflow)
-- ✅ Real database integration testing
-- ✅ 650+ row batch execution verified
-- ✅ Savepoint isolation verified
-- ✅ Error recovery and rollback tested
-- ✅ Continue-on-error mode tested
-- ✅ Complex SQL support verified
-
-**Sequential Seed Execution in Build Command (v0.4.1)**:
-- ✅ 37 new tests (9 unit + 11 integration + 5 edge cases)
-- ✅ SchemaBuilder categorization methods implemented
-- ✅ CLI build command sequential integration
-- ✅ Environment config support (seed.execution_mode)
-- ✅ Large file handling (650+ rows)
-- ✅ Edge cases: no seeds, nested dirs, case variations
-- ✅ 100% backward compatible
-- ✅ 3,803+ total tests passing
+- ✅ **Library API**: `Migrator.from_config()` + `MigratorSession` context manager
+- ✅ **Introspection layer**: `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`
+- ✅ **Structured error hierarchy**: `ConfiturError` + error codes + exit codes
+- ✅ **Structured output**: JSON/CSV/YAML for all major commands
 
 **Not Yet Measured in Production**:
 - ❓ Actual build speed under real conditions
-- ❓ Rust extension performance gains
 - ❓ Reliability over time
 - ❓ Validation performance at scale
 - ❓ Sequential seed execution at scale (>1M rows)
@@ -922,23 +917,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: February 5, 2026
-**Version**: 0.4.1 (Not Production-Tested)
-
-**Recent Major Update (v0.4.1)**:
-- Sequential seed execution in build command (Issue #32)
-- `confiture build --sequential` for fresh database initialization
-- SchemaBuilder file categorization (schema vs seeds)
-- Environment config integration (seed.execution_mode)
-- 37 new tests, 3,803+ total tests passing
-- 100% backward compatible
-
-**Previous Major Update (v0.4.0)**:
-- Sequential seed file execution (Phase 9)
-- Per-file savepoint isolation
-- 650+ row file support (parser limit solved)
-- Continue-on-error mode
-- 29 new tests + comprehensive documentation
+**Last Updated**: 2026-03-10
+**Version**: 0.7.2 (Not Production-Tested)
 
 ---
 

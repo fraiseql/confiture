@@ -1,7 +1,8 @@
 # Confiture Architecture
 
-**Version**: 0.4.0 (Production Release 🎉)
-**Last Updated**: December 27, 2025
+**Version**: 0.7.2
+**Last Updated**: 2026-03-10
+**Status**: Beta (Not Production-Tested)
 
 ---
 
@@ -9,7 +10,7 @@
 
 > **"Build from DDL, not migration history"**
 
-The `db/schema/` directory is the **single source of truth**. Migrations are derived from schema changes, not primary artifacts.
+The `db/schema/` directory is the **single source of truth**. Migrations are derived from schema changes, not primary artifacts. The schema you write is what you get — the migration system brings existing databases in line with it.
 
 ---
 
@@ -25,7 +26,7 @@ Confiture is a modern PostgreSQL migration tool with **four distinct mediums** f
 │     (confiture build)     (migrate up)        (sync)            │
 │                                                                 │
 │  Create fresh DB      Apply migrations      Copy data with      │
-│  in <1 second         incrementally        anonymization       │
+│  from schema DDL      incrementally         anonymization       │
 │                                                                 │
 │                4. Schema-to-Schema                             │
 │                (FDW migration)                                 │
@@ -41,459 +42,295 @@ Confiture is a modern PostgreSQL migration tool with **four distinct mediums** f
 
 ### 1. CLI Layer (`python/confiture/cli/`)
 
-**Purpose**: User-facing command interface via Typer framework
+**Purpose**: User-facing command interface via the Typer framework, organised into focused modules with shared helpers.
 
-**Components**:
-- `main.py` - Entry point with all CLI commands:
-  - `confiture build` - Build fresh database from DDL
-  - `confiture migrate up` - Apply pending migrations
-  - `confiture migrate down` - Rollback migrations
-  - `confiture status` - Show migration status
-  - `confiture sync` - Production data sync
-  - `confiture schema-to-schema` - Zero-downtime FDW migration
+#### 1.1 Entry Point
 
-- `dry_run.py` - Helper module for dry-run operations (Phase 5)
-  - `display_dry_run_header()` - Show analysis mode
-  - `save_text_report()` - Text output format
-  - `save_json_report()` - JSON output format
-  - `ask_dry_run_execute_confirmation()` - User confirmation
-  - `extract_sql_statements_from_migration()` - SQL extraction
+- **`main.py`** (166 lines) — App setup only. Creates the `app` Typer instance, registers sub-apps (`migrate`, `branch`, `generate`, `coordinate`, `seed`), and attaches all command functions imported from command modules. Contains no business logic.
 
-**Output Format**: Rich terminal UI with colors and formatting
+#### 1.2 Shared Helpers (`helpers.py`, 418 lines)
 
-**Example**:
-```bash
-$ confiture migrate up --dry-run
-🔍 Analyzing migrations without execution...
+Central module providing utilities shared across all command modules:
+- `console` / `error_console` — Rich consoles for stdout and stderr
+- `_output_json()` / `_output_yaml()` — structured output helpers
+- `_get_tracking_table()` — safely extracts `migration.tracking_table` from `Environment`, dict, or MagicMock
+- `_get_suggestion()` — "Did you mean?" suggestions via difflib
+- `_convert_linter_report()` — linter report type conversion
+- `_find_orphaned_sql_files()`, `_validate_idempotency()`, `_fix_idempotency()` — migration hygiene helpers
+- `_print_duplicate_versions_warning()`, `_print_orphaned_files_warning()` — warning printers
 
-Migration Analysis Summary
-================================================================================
-Migrations to apply: 2
+#### 1.3 Command Modules (`commands/`)
 
-  001: create_initial_schema
-    Estimated time: 500ms | Disk: 1.0MB | CPU: 30%
-  002: add_user_table
-    Estimated time: 500ms | Disk: 1.0MB | CPU: 30%
+Each module registers with `migrate_app` or `app` in `main.py`. No module contains shared state.
 
-✓ All migrations appear safe to execute
-================================================================================
-```
+| Module | Commands | Lines |
+|--------|----------|-------|
+| `commands/schema.py` | `init`, `build`, `lint`, `introspect` | 733 |
+| `commands/migrate_core.py` | `migrate status`, `migrate up`, `migrate down`, `migrate generate` | 1635 |
+| `commands/migrate_state.py` | `migrate baseline`, `migrate reinit`, `migrate rebuild` | 522 |
+| `commands/migrate_analysis.py` | `migrate diff`, `migrate validate`, `migrate fix`, `migrate introspect`, `migrate verify` | 860 |
+| `commands/admin.py` | `install-helpers`, `validate_profile`, `verify`, `restore` | 379 |
+
+#### 1.4 Additional CLI Modules
+
+- **`branch.py`** — `branch` subcommand group (pgGit integration)
+- **`coordinate.py`** — `coordinate` subcommand group (multi-agent coordination)
+- **`seed.py`** — `seed` subcommand group (seed validation)
+- **`generate.py`** — `generate` subcommand group (migration generation)
+- **`dry_run.py`** — Dry-run UI helpers (`display_dry_run_header`, `save_text_report`, `save_json_report`, `ask_dry_run_execute_confirmation`, `extract_sql_statements_from_migration`)
+- **`git_validation.py`** — Pre-commit git validation helpers
+
+#### 1.5 Formatters (`formatters/`)
+
+| Module | Purpose |
+|--------|---------|
+| `build_formatter.py` | Format `confiture build` output |
+| `migrate_formatter.py` | Format migration results (`MigrateUpResult`, `MigrateDownResult`, etc.) and `show_migration_error_details()` |
+| `seed_formatter.py` | Format seed execution output |
+| `common.py` | Shared formatting utilities |
 
 ---
 
 ### 2. Core Layer (`python/confiture/core/`)
 
-**Purpose**: Business logic and database operations
+**Purpose**: Business logic and database operations. The CLI layer delegates to this layer; it contains no CLI framework imports.
 
-#### 2.1 Schema Builder (`builder.py`)
+#### 2.1 Schema & Build
 
-**Responsibility**: Medium 1 - Build from DDL
+| Module | Description |
+|--------|-------------|
+| `builder.py` | `SchemaBuilder` — reads SQL files from `db/schema/`, concatenates in deterministic order, builds fresh databases (Medium 1) |
+| `differ.py` | `SchemaDiffer` — structural diff between two schema versions |
+| `schema_snapshot.py` | `SchemaSnapshotGenerator` — saves schema snapshots to `db/schema_history/` after each migration |
+| `schema_analyzer.py` | Schema analysis utilities |
+| `linting/` | `SchemaLinter` — SQL linting rules and report generation |
 
-**Features**:
-- Reads SQL files from `db/schema/` directory
-- Concatenates files in deterministic order (alphabetical)
-- Builds fresh databases in <1 second
-- Supports environment-specific schemas (local, test, staging)
+#### 2.2 Migration Execution
 
-**Key Methods**:
-```python
-class SchemaBuilder:
-    def find_sql_files(self) -> list[Path]
-        """Discover SQL files in deterministic order"""
+| Module | Description |
+|--------|-------------|
+| `migrator.py` | `Migrator` + `MigratorSession` — core migration engine; tracks state in configurable tracking table (default `public.tb_confiture`); timestamp-based versioning (`YYYYMMDDHHMMSS`) |
+| `migration_generator.py` | `MigrationGenerator` — generates migration files; supports external generators via subprocess |
+| `migration_verifier.py` | `MigrationVerifier` + `VerifyResult` — runs `.verify.sql` queries post-migration |
+| `rollback_generator.py` | Generates rollback SQL for migrations |
+| `baseline_detector.py` | `BaselineDetector` — fuzzy schema matching (85% threshold) to find the right baseline snapshot for `--auto-detect-baseline` |
 
-    def build_schema(self, env: str) -> str
-        """Concatenate DDL files into single schema"""
+#### 2.3 Introspection Layer (`introspection/`)
 
-    def create_database(self, conn: Connection) -> None
-        """Execute schema against database connection"""
-```
+A package providing PostgreSQL introspection beyond tables and columns, used as foundation for code generation features (Phase 6):
 
-**Example**:
-```bash
-$ confiture build --env local
-✅ Built schema in 0.89 seconds
-```
+| Module | Description |
+|--------|-------------|
+| `introspection/functions.py` | `FunctionIntrospector` — queries `pg_catalog` to retrieve function/procedure definitions, parameters, volatility, language, and source |
+| `introspection/type_mapping.py` | `TypeMapper` — maps PostgreSQL types to Python/GraphQL types |
+| `introspection/dependency_graph.py` | `DependencyGraph` + `DependencyOrder` — tracks function/view dependencies for safe drop/recreate ordering |
+| `introspection/sql_ast.py` | `CTENode`, `JSONBKey` — lightweight SQL AST nodes for structured query analysis |
+| `introspector.py` | `SchemaIntrospector` — existing table/column/FK introspection via `pg_catalog` |
 
----
+#### 2.4 Database Operations
 
-#### 2.2 Migrator (`migrator.py`)
+| Module | Description |
+|--------|-------------|
+| `connection.py` | `create_connection()`, `load_config()` — psycopg3 connection management |
+| `syncer.py` | Production data sync with PII anonymization (Medium 3) |
+| `schema_to_schema.py` | Zero-downtime migration via Foreign Data Wrapper (Medium 4) |
+| `restorer.py` | `pg_restore` wrapper with diagnostics |
+| `pool.py` | Connection pooling utilities |
+| `dry_run.py` | `DryRunExecutor` — SAVEPOINT-based migration testing with guaranteed rollback |
 
-**Responsibility**: Medium 2 - Incremental migrations
+#### 2.5 Accompaniment & Validation
 
-**Features**:
-- Manages migration execution state
-- Tracks applied migrations in `tb_confiture` table
-- Supports migration up and down
-- Handles dependency resolution
+| Module | Description |
+|--------|-------------|
+| `grant_accompaniment.py` | `GrantAccompanimentChecker` — detects grant file changes staged without a corresponding `.up.sql` migration |
+| `preconditions.py` | `PreconditionError`, `PreconditionValidationError` — pre-migration condition checks |
+| `checksum.py` | Migration file checksum computation and comparison |
+| `idempotency/` | SQL idempotency analysis and fixing utilities |
+| `validators/` | Additional SQL/schema validators |
 
-**Key Methods**:
-```python
-class Migrator:
-    def get_pending_migrations(self) -> list[Path]
-        """Find migrations not yet applied"""
+#### 2.6 Advanced Features
 
-    def get_applied_versions(self) -> list[str]
-        """Query applied migration versions"""
-
-    def apply(self, migrations: list[Path]) -> None
-        """Execute migrations within transaction"""
-
-    def rollback(self, steps: int) -> None
-        """Undo N most recent migrations"""
-```
-
-**Storage**: Tracks state in `public.tb_confiture` table:
-```sql
-CREATE TABLE tb_confiture (
-    version TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    applied_at TIMESTAMP NOT NULL,
-    execution_time_ms INTEGER NOT NULL
-);
-```
-
----
-
-#### 2.3 Dry-Run Mode (`dry_run.py`) - Phase 4 Feature
-
-**Responsibility**: Test migrations safely before production
-
-**Features**:
-- SAVEPOINT-based transaction testing
-- Guaranteed automatic rollback
-- Resource impact estimation
-- Detailed reporting
-
-**Key Classes**:
-```python
-@dataclass
-class DryRunResult:
-    """Result of a dry-run execution"""
-    migration_name: str
-    migration_version: str
-    success: bool
-    execution_time_ms: int
-    rows_affected: int
-    locked_tables: list[str]
-    estimated_production_time_ms: int
-
-class DryRunExecutor:
-    """Orchestrate safe migration testing"""
-
-    def run(
-        self,
-        conn: psycopg.Connection,
-        migration: Migration
-    ) -> DryRunResult:
-        """Execute in SAVEPOINT, guaranteed rollback"""
-```
-
-**How It Works**:
-```
-User Command: confiture migrate up --dry-run-execute
-    ↓
-Create SAVEPOINT (point in transaction)
-    ↓
-Execute migration
-    ↓
-Measure: time, rows, locks
-    ↓
-Automatic ROLLBACK to SAVEPOINT
-    ↓
-Report results
-    ↓
-User confirms: "Proceed with real execution?" [y/N]
-    ↓
-If YES: Execute for real (no SAVEPOINT)
-If NO: Exit (no changes)
-```
-
----
-
-#### 2.4 Schema Differ (`differ.py`)
-
-**Responsibility**: Detect structural differences between schemas
-
-**Features**:
-- Compare two schema versions
-- Identify: added/removed/modified tables
-- Identify: added/removed/modified columns
-- Detect: constraint changes, index changes
-- Support for simple renames
-
-**Key Methods**:
-```python
-class SchemaDiffer:
-    def detect_changes(
-        self,
-        old_schema: str,
-        new_schema: str
-    ) -> SchemaDiff:
-        """Compare schemas and return differences"""
-```
-
----
-
-#### 2.5 Production Syncer (`syncer.py`) - Medium 3
-
-**Responsibility**: Copy data to new environments with anonymization
-
-**Features**:
-- Copy schema + data from production
-- PII anonymization strategies
-- Incremental syncing
-- Metadata preservation
-
-**Example Use Case**:
-```bash
-$ confiture sync \
-  --from postgresql://prod-db \
-  --to postgresql://local-db \
-  --anonymize-pii
-# Copies production data to local, masks sensitive info
-```
-
----
-
-#### 2.6 Schema-to-Schema (`schema_to_schema.py`) - Medium 4
-
-**Responsibility**: Zero-downtime migrations using Foreign Data Wrapper
-
-**Features**:
-- Deploy new schema without downtime
-- Dual-write pattern via FDW
-- Atomic cutover
-- Rollback capability
-
-**How It Works**:
-```
-Old Schema ──> Foreign Data Wrapper <── New Schema
-                      ↓
-              Shadow tables (read-only)
-                      ↓
-              Dual-write logic
-                      ↓
-              Data validation
-                      ↓
-              Atomic cutover
-```
+| Module | Description |
+|--------|-------------|
+| `git.py`, `git_accompaniment.py`, `git_schema.py` | Git integration for schema tracking |
+| `anonymization/` | PII anonymization strategies for production sync |
+| `seed/`, `seed_executor.py`, `seed_applier.py`, `seed_validation/` | 5-level seed validation system with SAVEPOINT isolation |
+| `locking.py` | PostgreSQL advisory locking for safe concurrent operations |
+| `hooks/` | Migration lifecycle hooks (pre/post migration) |
+| `observability/`, `metrics.py`, `metrics_aggregator.py` | Metrics and observability |
+| `blue_green.py` | Blue-green deployment support |
+| `risk/` | Migration risk assessment |
+| `security/` | Security validation utilities |
+| `error_codes.py` | `ErrorCodeDefinition`, `ErrorCodeRegistry` — structured error codes with exit codes |
+| `error_handler.py`, `error_context.py` | Error handling utilities |
 
 ---
 
 ### 3. Configuration Layer (`python/confiture/config/`)
 
-**Purpose**: Environment and version management
+**Purpose**: Pydantic-based environment and configuration management.
 
-**Components**:
+**`environment.py`** — Defines the full Pydantic model hierarchy:
 
-#### 3.1 Environment Config (`environment.py`)
-
-```python
-class EnvironmentConfig:
-    """Manage environment-specific settings"""
-
-    env: str              # "local", "test", "staging", "production"
-    schema_dir: Path      # Where to find DDL files
-    migrations_dir: Path  # Where to find migration files
-    database_url: str     # PostgreSQL connection string
-```
+- `Environment` — top-level config; loaded from YAML via `load_config()`
+- `MigrationConfig` — migration settings including `tracking_table` (default: `public.tb_confiture`), `snapshot_history`, `snapshots_dir`, and external `migration_generators`
+- `BuildConfig` — `BuildLintConfig`, `SeparatorConfig`, `CommentValidationConfig`, output path settings
+- `SeedConfig` — `execution_mode` (`concatenate` | `sequential`)
+- `RebuildConfig` — `threshold`, `backup` toggle
+- `LockingConfig` — advisory lock timeout settings
+- `MigrationGeneratorConfig` — external generator command with `{from}`, `{to}`, `{output}` placeholder validation
 
 **Example `confiture.yaml`**:
+
 ```yaml
-environments:
-  local:
-    database_url: postgresql://localhost/confiture_local
-    schema_dir: db/schema
+name: local
+database_url: postgresql://localhost/myapp_local
 
-  test:
-    database_url: postgresql://localhost/confiture_test
-    schema_dir: db/schema
+include_dirs:
+  - db/schema
 
-  production:
-    database_url: postgresql://prod.example.com/confiture
-    schema_dir: db/schema
+migration:
+  tracking_table: public.tb_confiture
+  snapshot_history: true
+  snapshots_dir: db/schema_history
+
+build:
+  linting:
+    enabled: true
+  output_path: db/generated/schema.sql
+
+seed:
+  execution_mode: sequential
+
+rebuild:
+  threshold: 5
+  backup: true
+
+locking:
+  enabled: true
+  timeout_ms: 30000
 ```
 
-#### 3.2 Version Tracking (`version.py`)
-
-- Track current package version
-- Used in CLI output (`confiture --version`)
-- Used in release notes and documentation
+All `database_url` values support `${VAR}` environment variable substitution.
 
 ---
 
 ### 4. Models Layer (`python/confiture/models/`)
 
-**Purpose**: Data structures and type definitions
+**Purpose**: Data structures, result types, and type definitions used across layers.
 
-**Components**:
+| Module | Contents |
+|--------|---------|
+| `results.py` | `MigrationStatus`, `MigrationInfo`, `StatusResult`, `MigrateUpResult`, `MigrateDownResult`, `MigrateReinitResult`, `MigrateRebuildResult`, `MigrationApplied`, `VerifyAllResult` — all with `to_dict()` for JSON serialization; timing keys use `total_duration_ms` / `duration_ms` |
+| `function_info.py` | `ParamMode`, `Volatility`, `FunctionParam`, `FunctionInfo`, `FunctionCatalog` — function/procedure introspection data |
+| `introspection.py` | `IntrospectedColumn`, `FKReference`, `TableHints`, `IntrospectedTable`, `IntrospectionResult` — table/column/FK models |
+| `git.py` | `MigrationAccompanimentReport`, `GrantAccompanimentReport` — git accompaniment check results |
+| `lint.py` | `LintSeverity`, `Violation`, `LintConfig`, `LintReport` — linting result models |
+| `schema.py` | Schema representation models |
+| `migration.py` | `Migration` base class |
+| `sql_file_migration.py` | SQL file migration representation |
+| `error.py` | `ErrorSeverity` enum |
 
-#### 4.1 Migration Model (`migration.py`)
+---
 
+### 5. Exception Hierarchy (`python/confiture/exceptions.py`)
+
+All exceptions inherit from `ConfiturError`. Each carries optional `error_code`, `severity`, `context`, and `resolution_hint` fields, plus a `.to_dict()` method and `.exit_code` property backed by `ErrorCodeRegistry`.
+
+```
+ConfiturError (base)
+├── ConfigurationError          error_code: CONFIG_001
+├── MigrationError              error_code: MIGR_001
+│   ├── MigrationConflictError  error_code: MIGR_106
+│   └── MigrationOverwriteError error_code: MIGR_004
+├── SchemaError                 error_code: SCHEMA_001
+├── SyncError                   error_code: SYNC_001
+├── DifferError                 error_code: DIFF_001
+├── ValidationError             error_code: VALID_001
+│   └── VerifyFileError         error_code: VERIFY_001
+├── RollbackError               error_code: ROLLBACK_001
+├── SQLError                    error_code: SQL_001
+├── GitError                    error_code: GIT_001
+│   ├── NotAGitRepositoryError  error_code: GIT_002
+│   └── GrantAccompanimentError error_code: GRANT_001
+├── ExternalGeneratorError      error_code: GEN_001
+├── RebuildError                error_code: REBUILD_001
+├── RestoreError                error_code: RESTORE_001
+└── SeedError                   error_code: SEED_001
+
+# Imported from core modules and re-exported:
+PreconditionError (from core.preconditions)
+PreconditionValidationError (from core.preconditions)
+PreStateSimulationError (from testing.sandbox)
+```
+
+Users can catch all Confiture-specific errors with `except ConfiturError`.
+
+---
+
+### 6. Public API (`python/confiture/__init__.py`)
+
+All public symbols are declared in `__all__` and use lazy imports via a `_LAZY_IMPORTS` dict and `__getattr__` to avoid circular dependency issues at module load time.
+
+**Core classes**:
+- `Migrator`, `MigratorSession` — migration engine and context manager session
+- `Environment` — configuration model
+- `SchemaBuilder` — DDL-based schema builder
+- `SchemaLinter` — schema linting
+- `SchemaSnapshotGenerator`, `BaselineDetector` — snapshot and baseline management
+
+**Introspection layer**:
+- `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`
+- `FunctionInfo`, `FunctionParam`, `FunctionCatalog`
+
+**Result models**:
+- `MigrationStatus`, `MigrationInfo`, `StatusResult`
+- `MigrateUpResult`, `MigrateDownResult`, `MigrateReinitResult`, `MigrateRebuildResult`
+- `MigrationApplied`, `VerifyAllResult`
+
+**Grant accompaniment & verification**:
+- `GrantAccompanimentChecker`, `GrantAccompanimentReport`
+- `MigrationVerifier`, `VerifyResult`
+
+**Exceptions** (full list in `__all__`):
+- `ConfiturError`, `ConfigurationError`, `MigrationError`, `SchemaError`, `SQLError`, `RollbackError`, `SeedError`, `RestoreError`, `PreconditionError`, `PreconditionValidationError`, `ExternalGeneratorError`, `GrantAccompanimentError`, `RebuildError`, `VerifyFileError`
+
+**Library API example**:
 ```python
-class Migration:
-    """Base class for all migrations"""
+from confiture import Migrator
 
-    version: str          # "001", "002", etc.
-    name: str             # "create_users_table"
-    created_at: datetime
-
-    def up(self, conn: Connection) -> None:
-        """Forward migration logic"""
-
-    def down(self, conn: Connection) -> None:
-        """Rollback logic"""
-```
-
-#### 4.2 Schema Models (`schema.py`)
-
-```python
-@dataclass
-class Table:
-    name: str
-    columns: list[Column]
-    constraints: list[Constraint]
-
-@dataclass
-class Column:
-    name: str
-    type: str
-    nullable: bool
-    default: str | None
-
-@dataclass
-class Constraint:
-    type: str  # "PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK"
-    columns: list[str]
+with Migrator.from_config("db/environments/prod.yaml") as m:
+    status = m.status()
+    if status.has_pending:
+        result = m.up()
 ```
 
 ---
 
-## Data Flow Examples
+## Technology Stack
 
-### Example 1: `confiture build --env local`
+### Runtime Dependencies
 
-```
-User runs: confiture build --env local
-    ↓
-SchemaBuilder.find_sql_files(db/schema/)
-    ↓
-Read files: 00_common/01_base.sql, 10_tables/01_users.sql, ...
-    ↓
-Concatenate in order
-    ↓
-Connect to PostgreSQL (postgresql://localhost/confiture_local)
-    ↓
-Execute schema: CREATE TABLE users (...)
-    ↓
-Return: "Built schema in 0.89s"
-```
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `typer` | >=0.12 | CLI framework |
+| `rich` | >=13.7 | Terminal formatting |
+| `pydantic` | >=2.5 | Configuration validation |
+| `pyyaml` | >=6.0 | YAML parsing |
+| `psycopg[binary,pool]` | >=3.1 | PostgreSQL driver (sync + pool) |
+| `sqlparse` | >=0.5 | SQL parsing |
+| `sqlglot` | >=28.0 | SQL dialect-aware parsing and transformation |
+| `cryptography` | >=42.0 | Encryption utilities |
 
----
+### Optional Dependencies
 
-### Example 2: `confiture migrate up --dry-run`
+| Package | Extra | Purpose |
+|---------|-------|---------|
+| `pglast` | `ast` | PostgreSQL SQL AST parsing (via libpg_query) |
 
-```
-User runs: confiture migrate up --dry-run
-    ↓
-Migrator.get_pending_migrations()
-    ↓
-Load migration files: 001_init.py, 002_add_users.py
-    ↓
-For each migration:
-  - Extract version and name
-  - Estimate impact (conservative: 500ms, 1MB, 30% CPU)
-  - Collect for analysis
-    ↓
-Display text report:
-  Migration Analysis Summary
-  =====================================
-  001: create_initial_schema
-    Estimated time: 500ms | Disk: 1.0MB | CPU: 30%
-    ↓
-Early return (no execution, no database changes)
-```
+### Dev / Testing Dependencies
 
----
-
-### Example 3: `confiture migrate up --dry-run-execute`
-
-```
-User runs: confiture migrate up --dry-run-execute
-    ↓
-Display analysis (same as --dry-run above)
-    ↓
-Ask: "Proceed with real execution? [y/N]"
-    ↓
-User enters: y
-    ↓
-Execute migrations in real transaction
-    ↓
-Return: "✅ Successfully applied 2 migration(s)!"
-```
-
----
-
-## Testing Architecture
-
-### Test Pyramid
-
-```
-        ┌──────────────┐
-        │    E2E       │  10% - Full workflows
-        │   (~10)      │
-        ├──────────────┤
-        │Integration   │  30% - Database ops
-        │   (~9)       │
-        ├──────────────┤
-        │   Unit       │  60% - Isolated
-        │   (~30)      │
-        └──────────────┘
-```
-
-### Test Categories
-
-**Unit Tests** (`tests/unit/`):
-- Fast, no database dependency
-- Mock all external calls
-- Example: `test_cli_dry_run.py` (12 tests for dry-run features)
-
-**Integration Tests** (`tests/integration/`):
-- Require actual PostgreSQL database
-- Test real database operations
-- Example: `test_build_local.py`, `test_migrate_up.py`
-
-**E2E Tests** (`tests/e2e/`):
-- Full workflow testing
-- Example: `test_complete_workflow.py` (init → build → migrate → verify)
-
----
-
-## Development Status
-
-### ✅ Completed (v0.4.0)
-
-- **Phase 1**: Python MVP (4 mediums, CLI, tests)
-- **Phase 2**: Rust performance layer (10-50x faster)
-- **Phase 3**: Production features (sync, FDW, zero-downtime)
-- **Phase 4**: Advanced features (schema linting)
-- **Phase 5**: CLI dry-run integration (--dry-run, --dry-run-execute, output formats)
-
-### 🎯 Current Metrics
-
-- **Tests**: 30/30 passing (100%)
-- **Code Quality**: A+ (0 linting issues)
-- **Coverage**: 81.68% (332 tests)
-- **Platforms**: Python 3.11, 3.12, 3.13
-- **Performance**: <1s fresh builds, 10-50x faster with Rust
-
-### 🚀 Future Enhancements
-
-- Interactive migration wizard
-- Custom anonymization strategies
-- Advanced schema validation
-- Performance profiling tools
-- Integration with other tools (GitOps, CI/CD)
+`pytest`, `pytest-asyncio`, `pytest-cov`, `pytest-json-report`, `ruff`, `ty` (Astral's type checker), `maturin`
 
 ---
 
@@ -501,81 +338,113 @@ Return: "✅ Successfully applied 2 migration(s)!"
 
 ### Decision 1: DDL as Source of Truth
 
-**Choice**: Keep `db/schema/` as primary, derive migrations
+**Choice**: Keep `db/schema/` as primary; derive migrations from schema changes.
 
-**Rationale**:
-- Schema is easier to understand than migration sequence
-- Simpler for new developers
-- Easier to understand total state
-- Migration history becomes optional
+**Rationale**: Schema is easier to understand than a migration sequence. New developers can read the DDL directory to understand the full current state without replaying history. Migration history is a consequence, not a primary artifact.
 
-**Alternative**: Migration history as primary (like Alembic)
-- Would require analyzing full history to understand current state
-- More complex for new contributors
+**Alternative considered**: Migration history as primary (Alembic style) — requires analyzing full history to understand current state; more complex for new contributors.
 
 ---
 
-### Decision 2: Simplified Dry-Run Estimates
+### Decision 2: Timestamp-Based Migration Versioning
 
-**Choice**: Use conservative estimates (500ms, 1MB, 30% CPU) instead of full analysis
+**Choice**: Migration files use `YYYYMMDDHHMMSS` format (e.g., `20260310102415_add_users_table.up.sql`).
 
-**Rationale**:
-- CLI uses synchronous psycopg.Connection
-- DryRunExecutor provides transaction-based testing with rollback
-- Estimates still provide safety value
-- Can be enhanced when async support added
-
-**Alternative**: Full actual dry-run execution
-- Would require async connection changes
-- More complex, not yet needed
+**Rationale**: Eliminates merge conflicts in multi-developer environments. Sequential numbers (001, 002, ...) require coordination to avoid collisions and impose a 999-migration limit. Old 001-style migrations sort first and remain valid (backwards compatible).
 
 ---
 
-### Decision 3: SAVEPOINT-Based Testing
+### Decision 3: Exception Hierarchy with Error Codes
 
-**Choice**: Use PostgreSQL SAVEPOINT for --dry-run-execute
+**Choice**: All exceptions inherit `ConfiturError` and carry `error_code`, `severity`, `context`, and `resolution_hint`.
 
-**Rationale**:
-- Guaranteed rollback (atomic transaction)
-- No special infrastructure needed
-- Works with synchronous connections
-- Clear semantics to users
-
-**Alternative**: Actually roll forward and backward
-- More complex, less safe
-- Can leave database in bad state if interrupted
+**Rationale**: Enables structured error handling for automation (CI/CD, agents) via `e.to_dict()` and `e.exit_code`. Resolution hints provide actionable guidance without requiring users to look up documentation.
 
 ---
 
-## Integration Points
+### Decision 4: Lazy Imports in `__init__.py`
 
-### FraiseQL Integration
+**Choice**: Public API uses `_LAZY_IMPORTS` dict + `__getattr__` instead of direct top-level imports.
 
-FraiseQL can use Confiture for schema management:
+**Rationale**: Avoids circular dependency issues at module load time. The package is importable without incurring the cost of loading every submodule. Editors and type checkers still see the full `__all__` list.
 
-```python
-from confiture import SchemaBuilder, Migrator
+---
 
-# In FraiseQL setup:
-builder = SchemaBuilder(env="test")
-schema = builder.build_schema("test")  # Returns DDL string
+### Decision 5: CLI Split — Thin `main.py` + Focused Command Modules
 
-# Then use in FraiseQL tests:
-await fraiseql.setup_schema(schema)
+**Choice**: `main.py` is 166 lines of registration only; business-facing command code lives in `commands/` modules; shared helpers are in `helpers.py`.
+
+**Rationale**: A single monolithic `main.py` (was >4000 lines) becomes untestable and hard to navigate. Focused modules allow co-locating related commands, make mock patch targets stable, and reduce merge conflicts when multiple features are developed in parallel.
+
+---
+
+### Decision 6: SAVEPOINT-Based Dry-Run Testing
+
+**Choice**: `--dry-run-execute` uses PostgreSQL SAVEPOINTs for safe migration testing.
+
+**Rationale**: Guaranteed rollback regardless of interrupt. Works with synchronous psycopg3 connections. Clear semantics — users see real execution timings and row counts, then confirm or abort.
+
+---
+
+### Decision 7: Introspection Layer as Shared Foundation
+
+**Choice**: `core/introspection/` provides `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`, and `sql_ast` as a reusable package.
+
+**Rationale**: Multiple CLI commands (`migrate introspect`, code generation features) need PostgreSQL function and type metadata. A shared layer avoids duplicating `pg_catalog` queries and provides a stable API for future code generation features (GraphQL resolver stubs, type-safe wrappers, etc.).
+
+---
+
+## Testing Architecture
+
+### Test Counts (2026-03-10)
+
+- **Total collected**: 5,583
+- **Unit tests passing**: 4,518
+- **Skipped**: 13
+- **Python versions**: 3.11, 3.12, 3.13
+
+### Test Pyramid
+
 ```
+        ┌──────────────┐
+        │    E2E       │  ~10% - Full CLI workflows
+        ├──────────────┤
+        │Integration   │  ~20% - Real database operations
+        ├──────────────┤
+        │   Unit       │  ~70% - Fast, isolated, mocked
+        └──────────────┘
+```
+
+### Test Organisation
+
+- **`tests/unit/`** — Fast tests with mocked database connections. No PostgreSQL required.
+- **`tests/integration/`** — Require a live PostgreSQL instance. Test real query execution, schema introspection, and migration apply/rollback.
+- **`tests/e2e/`** — Full CLI workflow tests via Typer's `CliRunner`.
+- **`tests/fixtures/`** — SQL fixtures, schema files, migration stubs.
+
+### Patch Targets
+
+When mocking in tests, use these module-level targets:
+
+| Symbol | Patch target |
+|--------|-------------|
+| `Migrator` in CLI | `confiture.core.migrator.Migrator` |
+| `create_connection` | `confiture.core.migrator.create_connection` |
+| `load_config` | `confiture.core.connection.load_config` |
+| `SchemaBuilder` snapshot | `confiture.core.schema_snapshot.SchemaBuilder` |
+| `BaselineDetector` introspector | `confiture.core.baseline_detector.SchemaIntrospector` |
 
 ---
 
 ## Related Documentation
 
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Contributing guide
-- **[README.md](./README.md)** - Quick start and overview
-- **[CHANGELOG.md](./CHANGELOG.md)** - Release notes by version
-- **[docs/guides/](./docs/guides/)** - User guides for each medium
-- **[.development/INDEX.md](./.development/INDEX.md)** - Development history (phases)
+- **[README.md](./README.md)** — Quick start and overview
+- **[CLAUDE.md](./CLAUDE.md)** — AI-assisted development guide
+- **[CHANGELOG.md](./CHANGELOG.md)** — Release notes by version
+- **[docs/guides/](./docs/guides/)** — User guides for each medium and feature
 
 ---
 
-**Last Updated**: December 27, 2025
-**Version**: 0.4.0 (Production Release)
-**Status**: Production Ready 🚀
+**Last Updated**: 2026-03-10
+**Version**: 0.7.2
+**Status**: Beta (Not Production-Tested)
