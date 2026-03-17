@@ -34,9 +34,7 @@ class TestDiffResult:
         assert data["changes"] == []
 
     def test_diff_result_with_changes(self):
-        diff = SchemaDiff(
-            changes=[SchemaChange(type="ADD_COLUMN", table="users", column="bio")]
-        )
+        diff = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="bio")])
         result = DiffResult.from_schema_diff(diff)
         assert result.has_changes is True
         data = result.to_dict()
@@ -61,18 +59,27 @@ class TestDiffResult:
         data = DiffResult.from_schema_diff(diff).to_dict()
         summary = data["summary"]
         for key in (
-            "tables_added", "tables_dropped", "tables_renamed",
-            "columns_added", "columns_dropped",
-            "indexes_added", "indexes_dropped",
-            "foreign_keys_added", "foreign_keys_dropped",
-            "constraints_added", "constraints_dropped",
-            "enum_types_added", "enum_types_dropped",
-            "sequences_added", "sequences_dropped",
+            "tables_added",
+            "tables_dropped",
+            "tables_renamed",
+            "columns_added",
+            "columns_dropped",
+            "indexes_added",
+            "indexes_dropped",
+            "foreign_keys_added",
+            "foreign_keys_dropped",
+            "constraints_added",
+            "constraints_dropped",
+            "enum_types_added",
+            "enum_types_dropped",
+            "sequences_added",
+            "sequences_dropped",
         ):
             assert key in summary
 
     def test_diff_result_from_confiture_public_api(self):
         from confiture import DiffResult as PublicDiffResult  # noqa: PLC0415
+
         assert PublicDiffResult is DiffResult
 
 
@@ -127,10 +134,12 @@ class TestDiffResultNullFields:
     def test_diff_result_to_dict_null_fields(self):
         from confiture.models.schema import SchemaChange, SchemaDiff  # noqa: PLC0415
 
-        diff = SchemaDiff(changes=[
-            SchemaChange(type="ADD_SEQUENCE", table="order_seq"),
-            SchemaChange(type="ADD_ENUM_TYPE", table="status"),
-        ])
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(type="ADD_SEQUENCE", table="order_seq"),
+                SchemaChange(type="ADD_ENUM_TYPE", table="status"),
+            ]
+        )
         data = DiffResult.from_schema_diff(diff).to_dict()
         assert data["summary"]["sequences_added"] == 1
         assert data["summary"]["enum_types_added"] == 1
@@ -140,10 +149,15 @@ class TestDiffResultNullFields:
         assert seq_change["new_value"] is None
 
     def test_diff_result_to_dict_details_field_present(self):
-        diff = SchemaDiff(changes=[
-            SchemaChange(type="ADD_INDEX", table="users",
-                         details={"index_name": "idx_email", "columns": ["email"]}),
-        ])
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(
+                    type="ADD_INDEX",
+                    table="users",
+                    details={"index_name": "idx_email", "columns": ["email"]},
+                ),
+            ]
+        )
         data = DiffResult.from_schema_diff(diff).to_dict()
         change = data["changes"][0]
         assert change["details"] is not None
@@ -154,21 +168,23 @@ class TestDiffResultSummaryRenames:
     """Gap H — RENAME changes are not counted in the summary."""
 
     def test_diff_result_summary_does_not_count_renames(self):
-        diff = SchemaDiff(changes=[
-            SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
-            SchemaChange(type="RENAME_COLUMN", table="t", old_value="a", new_value="b"),
-        ])
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
+                SchemaChange(type="RENAME_COLUMN", table="t", old_value="a", new_value="b"),
+            ]
+        )
         data = DiffResult.from_schema_diff(diff).to_dict()
         # tables_renamed tracks RENAME_TABLE; all other counters should be 0
-        non_rename_sum = sum(
-            v for k, v in data["summary"].items() if k != "tables_renamed"
-        )
+        non_rename_sum = sum(v for k, v in data["summary"].items() if k != "tables_renamed")
         assert non_rename_sum == 0
 
     def test_diff_result_summary_tables_renamed_is_counted(self):
-        diff = SchemaDiff(changes=[
-            SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
-        ])
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
+            ]
+        )
         data = DiffResult.from_schema_diff(diff).to_dict()
         assert data["summary"]["tables_renamed"] == 1
 
@@ -219,11 +235,17 @@ class TestDiffTextRenameOutput:
         from confiture.models.results import DiffResult  # noqa: PLC0415
         from confiture.models.schema import SchemaChange, SchemaDiff  # noqa: PLC0415
 
-        diff = SchemaDiff(changes=[
-            SchemaChange(type="RENAME_COLUMN", table="users", old_value="email",
-                         new_value="email_address"),
-            SchemaChange(type="RENAME_TABLE", old_value="users", new_value="accounts"),
-        ])
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(
+                    type="RENAME_COLUMN",
+                    table="users",
+                    old_value="email",
+                    new_value="email_address",
+                ),
+                SchemaChange(type="RENAME_TABLE", old_value="users", new_value="accounts"),
+            ]
+        )
         result_obj = DiffResult.from_schema_diff(diff)
         buf = io.StringIO()
         con = Console(file=buf, highlight=False, markup=False)

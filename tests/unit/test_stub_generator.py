@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from confiture.core.introspection.type_mapping import TypeMapper
 from confiture.models.function_info import (
     FunctionCatalog,
     FunctionInfo,
@@ -16,7 +14,7 @@ from confiture.models.function_info import (
 
 
 def _make_catalog() -> FunctionCatalog:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     func = FunctionInfo(
         schema="public",
@@ -37,7 +35,7 @@ def _make_catalog() -> FunctionCatalog:
     return FunctionCatalog(
         database="testdb",
         schema="public",
-        introspected_at=datetime.now(timezone.utc).isoformat(),
+        introspected_at=datetime.now(UTC).isoformat(),
         functions=[func],
     )
 

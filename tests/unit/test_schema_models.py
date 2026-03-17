@@ -360,8 +360,11 @@ class TestSchemaChangeStrNewTypes:
     """Gap A — SchemaChange.__str__ for new DDL object types."""
 
     def test_str_add_index_with_details(self):
-        change = SchemaChange(type="ADD_INDEX", table="users",
-                              details={"index_name": "idx_email", "columns": ["email"]})
+        change = SchemaChange(
+            type="ADD_INDEX",
+            table="users",
+            details={"index_name": "idx_email", "columns": ["email"]},
+        )
         s = str(change)
         assert "idx_email" in s
         assert "users" in s
@@ -378,40 +381,42 @@ class TestSchemaChangeStrNewTypes:
         assert "DROP INDEX" in s
 
     def test_str_add_foreign_key(self):
-        change = SchemaChange(type="ADD_FOREIGN_KEY", table="orders",
-                              details={"name": "fk_user"})
+        change = SchemaChange(type="ADD_FOREIGN_KEY", table="orders", details={"name": "fk_user"})
         s = str(change)
         assert "ADD FOREIGN KEY" in s
         assert "fk_user" in s
 
     def test_str_drop_foreign_key(self):
-        change = SchemaChange(type="DROP_FOREIGN_KEY", table="orders",
-                              details={"name": "fk_user"})
+        change = SchemaChange(type="DROP_FOREIGN_KEY", table="orders", details={"name": "fk_user"})
         s = str(change)
         assert "DROP FOREIGN KEY" in s
 
     def test_str_add_check_constraint(self):
-        change = SchemaChange(type="ADD_CHECK_CONSTRAINT", table="orders",
-                              details={"name": "chk_pos"})
+        change = SchemaChange(
+            type="ADD_CHECK_CONSTRAINT", table="orders", details={"name": "chk_pos"}
+        )
         s = str(change)
         assert "ADD CHECK CONSTRAINT" in s
         assert "chk_pos" in s
 
     def test_str_drop_check_constraint(self):
-        change = SchemaChange(type="DROP_CHECK_CONSTRAINT", table="orders",
-                              details={"name": "chk_pos"})
+        change = SchemaChange(
+            type="DROP_CHECK_CONSTRAINT", table="orders", details={"name": "chk_pos"}
+        )
         s = str(change)
         assert "DROP CHECK CONSTRAINT" in s
 
     def test_str_add_unique_constraint(self):
-        change = SchemaChange(type="ADD_UNIQUE_CONSTRAINT", table="users",
-                              details={"name": "uq_email"})
+        change = SchemaChange(
+            type="ADD_UNIQUE_CONSTRAINT", table="users", details={"name": "uq_email"}
+        )
         s = str(change)
         assert "ADD UNIQUE CONSTRAINT" in s
 
     def test_str_drop_unique_constraint(self):
-        change = SchemaChange(type="DROP_UNIQUE_CONSTRAINT", table="users",
-                              details={"name": "uq_email"})
+        change = SchemaChange(
+            type="DROP_UNIQUE_CONSTRAINT", table="users", details={"name": "uq_email"}
+        )
         s = str(change)
         assert "DROP UNIQUE CONSTRAINT" in s
 
@@ -438,9 +443,14 @@ class TestSchemaChangeStrNewTypes:
     def test_str_no_details_defaults_gracefully(self):
         """details=None must not raise for any new type."""
         for change_type in (
-            "ADD_INDEX", "DROP_INDEX", "ADD_FOREIGN_KEY", "DROP_FOREIGN_KEY",
-            "ADD_CHECK_CONSTRAINT", "DROP_CHECK_CONSTRAINT",
-            "ADD_UNIQUE_CONSTRAINT", "DROP_UNIQUE_CONSTRAINT",
+            "ADD_INDEX",
+            "DROP_INDEX",
+            "ADD_FOREIGN_KEY",
+            "DROP_FOREIGN_KEY",
+            "ADD_CHECK_CONSTRAINT",
+            "DROP_CHECK_CONSTRAINT",
+            "ADD_UNIQUE_CONSTRAINT",
+            "DROP_UNIQUE_CONSTRAINT",
         ):
             change = SchemaChange(type=change_type, table="t")
             assert isinstance(str(change), str)

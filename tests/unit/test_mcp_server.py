@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+from datetime import UTC
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,11 +13,10 @@ from confiture.models.function_info import (
     FunctionParam,
     Volatility,
 )
-from confiture.models.mcp_models import MCPTool
 
 
 def _make_catalog() -> FunctionCatalog:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     func = FunctionInfo(
         schema="public",
@@ -38,7 +37,7 @@ def _make_catalog() -> FunctionCatalog:
     return FunctionCatalog(
         database="testdb",
         schema="public",
-        introspected_at=datetime.now(timezone.utc).isoformat(),
+        introspected_at=datetime.now(UTC).isoformat(),
         functions=[func],
     )
 
@@ -148,11 +147,11 @@ def test_mcp_http_import_error_without_fastapi():
 
     # Remove fastapi from sys.modules to simulate it not being installed
     with patch.dict(sys.modules, {"fastapi": None}):
-        from confiture.core import mcp_http as _http_mod
+        import builtins
 
         # Force re-evaluation by patching the internal import
-        import importlib
-        import builtins
+        from confiture.core import mcp_http as _http_mod
+
         original_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -195,9 +194,7 @@ def test_mcp_http_create_app_returns_fastapi_app():
         mock_connect.return_value = mock_conn
 
         catalog = _make_catalog()
-        with patch(
-            "confiture.core.mcp_server.FunctionIntrospector"
-        ) as mock_introspector_cls:
+        with patch("confiture.core.mcp_server.FunctionIntrospector") as mock_introspector_cls:
             mock_introspector = MagicMock()
             mock_introspector.introspect.return_value = catalog
             mock_introspector_cls.return_value = mock_introspector
@@ -217,6 +214,7 @@ def test_mcp_http_post_tools_list():
     pytest.importorskip("httpx", reason="httpx not installed")
 
     from unittest.mock import patch
+
     from fastapi.testclient import TestClient
 
     with patch("psycopg.connect") as mock_connect:
@@ -224,18 +222,14 @@ def test_mcp_http_post_tools_list():
         mock_connect.return_value = mock_conn
 
         catalog = _make_catalog()
-        with patch(
-            "confiture.core.mcp_server.FunctionIntrospector"
-        ) as mock_introspector_cls:
+        with patch("confiture.core.mcp_server.FunctionIntrospector") as mock_introspector_cls:
             mock_introspector = MagicMock()
             mock_introspector.introspect.return_value = catalog
             mock_introspector_cls.return_value = mock_introspector
 
             from confiture.core.mcp_http import create_app
 
-            app = create_app(
-                "postgresql://localhost/testdb", expose_confiture_tools=False
-            )
+            app = create_app("postgresql://localhost/testdb", expose_confiture_tools=False)
             client = TestClient(app)
 
             resp = client.post(
@@ -254,6 +248,7 @@ def test_mcp_http_health_returns_ok():
     pytest.importorskip("httpx", reason="httpx not installed")
 
     from unittest.mock import patch
+
     from fastapi.testclient import TestClient
 
     with patch("psycopg.connect") as mock_connect:
@@ -261,9 +256,7 @@ def test_mcp_http_health_returns_ok():
         mock_connect.return_value = mock_conn
 
         catalog = _make_catalog()
-        with patch(
-            "confiture.core.mcp_server.FunctionIntrospector"
-        ) as mock_introspector_cls:
+        with patch("confiture.core.mcp_server.FunctionIntrospector") as mock_introspector_cls:
             mock_introspector = MagicMock()
             mock_introspector.introspect.return_value = catalog
             mock_introspector_cls.return_value = mock_introspector
@@ -280,21 +273,24 @@ def test_mcp_http_health_returns_ok():
 
 def test_mcp_cli_port_starts_http_server():
     """--port flag calls serve() with correct parameters."""
+    from unittest.mock import MagicMock, patch
+
     from typer.testing import CliRunner
-    from unittest.mock import patch, MagicMock
 
     from confiture.cli.commands.mcp import mcp_app
 
     runner = CliRunner()
 
     with patch("confiture.cli.commands.mcp.mcp_server.__wrapped__", create=True):
-        with patch("confiture.core.mcp_http.serve") as mock_serve:
+        with patch("confiture.core.mcp_http.serve"):
             with patch("psycopg.connect", return_value=MagicMock()):
                 result = runner.invoke(
                     mcp_app,
                     [
-                        "--database-url", "postgresql://localhost/test",
-                        "--port", "8080",
+                        "--database-url",
+                        "postgresql://localhost/test",
+                        "--port",
+                        "8080",
                     ],
                 )
                 # If serve was called OR the import itself raised (no fastapi), either is OK

@@ -13,7 +13,6 @@ from confiture.exceptions import (
     SchemaError,
 )
 
-
 # ── C-1: MIGR_010 (lock timeout) and MIGR_011 (checksum mismatch) in registry ──
 
 
@@ -47,11 +46,13 @@ def test_config_010_registered():
 def _make_env():
     from confiture.config.environment import Environment
 
-    return Environment.model_validate({
-        "name": "test",
-        "database_url": "postgresql://localhost/test",
-        "include_dirs": ["db/schema"],
-    })
+    return Environment.model_validate(
+        {
+            "name": "test",
+            "database_url": "postgresql://localhost/test",
+            "include_dirs": ["db/schema"],
+        }
+    )
 
 
 def test_migrator_session_guard_has_config_error_code():

@@ -203,9 +203,12 @@ class SchemaDiffer:
                     table = self._parse_create_table(stmt)
                     if table:
                         result.tables.append(table)
-                elif self._statement_has_keyword(stmt, "INDEX") or self._statement_has_keyword(stmt, "TYPE") and self._statement_has_keyword(
-                    stmt, "ENUM"
-                ) or self._statement_has_keyword(stmt, "SEQUENCE"):
+                elif (
+                    self._statement_has_keyword(stmt, "INDEX")
+                    or self._statement_has_keyword(stmt, "TYPE")
+                    and self._statement_has_keyword(stmt, "ENUM")
+                    or self._statement_has_keyword(stmt, "SEQUENCE")
+                ):
                     # Parsed via regex below
                     pass
             elif stmt_type == "ALTER" and self._statement_has_keyword(stmt, "TABLE"):
@@ -506,9 +509,7 @@ class SchemaDiffer:
             },
         )
 
-    def _compare_check_constraints(
-        self, old_table: Table, new_table: Table
-    ) -> list[SchemaChange]:
+    def _compare_check_constraints(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped check constraints."""
         return self._compare_named_objects(
             old_map={cc.name: cc for cc in old_table.check_constraints},
@@ -519,9 +520,7 @@ class SchemaDiffer:
             detail_fn=lambda obj: {"name": obj.name, "expression": obj.expression},
         )
 
-    def _compare_unique_constraints(
-        self, old_table: Table, new_table: Table
-    ) -> list[SchemaChange]:
+    def _compare_unique_constraints(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped unique constraints."""
         return self._compare_named_objects(
             old_map={uc.name: uc for uc in old_table.unique_constraints},

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 # ── B-1: generate_schema returns valid schema for each known model ────────────
 
 
@@ -102,7 +101,7 @@ def test_committed_schemas_match_generated(tmp_path: Path):
         regenerated = generated[model_name]
         assert committed == regenerated, (
             f"Committed schema for {model_name} ({filename}) is out of date. "
-            "Regenerate with: python -c \"from confiture.core.schema_exporter import "
+            'Regenerate with: python -c "from confiture.core.schema_exporter import '
             "export_all; from pathlib import Path; "
             "export_all(Path('python/confiture/schemas'))\""
         )

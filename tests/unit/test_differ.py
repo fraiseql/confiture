@@ -490,10 +490,7 @@ class TestIndexDiff:
 
     def test_diff_no_change_when_indexes_identical(self):
         differ = SchemaDiffer()
-        sql = (
-            "CREATE TABLE users (id INT, email TEXT);\n"
-            "CREATE INDEX idx ON users(email);"
-        )
+        sql = "CREATE TABLE users (id INT, email TEXT);\nCREATE INDEX idx ON users(email);"
         diff = differ.compare(sql, sql)
         assert not diff.has_changes()
 
@@ -501,17 +498,13 @@ class TestIndexDiff:
 class TestForeignKeyDiff:
     """Phase 02 Cycle 4: Foreign key diffing."""
 
-    _BASE = (
-        "CREATE TABLE users (id INT);\n"
-        "CREATE TABLE orders (id INT, user_id INT);\n"
-    )
+    _BASE = "CREATE TABLE users (id INT);\nCREATE TABLE orders (id INT, user_id INT);\n"
 
     def test_diff_detects_new_fk(self):
         differ = SchemaDiffer()
         old = self._BASE
         new = (
-            self._BASE
-            + "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
+            self._BASE + "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
             "FOREIGN KEY (user_id) REFERENCES users(id);"
         )
         diff = differ.compare(old, new)
@@ -520,8 +513,7 @@ class TestForeignKeyDiff:
     def test_diff_detects_dropped_fk(self):
         differ = SchemaDiffer()
         old = (
-            self._BASE
-            + "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
+            self._BASE + "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
             "FOREIGN KEY (user_id) REFERENCES users(id);"
         )
         new = self._BASE

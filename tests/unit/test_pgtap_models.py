@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
+from datetime import UTC
 
-from confiture.models.function_info import FunctionInfo, FunctionParam, Volatility
+from confiture.models.function_info import FunctionInfo, Volatility
 from confiture.models.pgtap_models import PgTAPFile, PgTAPTest
 
 
@@ -52,14 +52,14 @@ def test_pgtap_test_function_volatility():
 
 
 def test_pgtap_file_render_produces_valid_sql():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     func = _make_func()
     tests = [PgTAPTest.function_exists(func), PgTAPTest.function_returns(func)]
     pgtap_file = PgTAPFile(
         schema="public",
         database="mydb",
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         tests=tests,
         function_count=1,
     )
@@ -72,7 +72,7 @@ def test_pgtap_file_render_produces_valid_sql():
 
 
 def test_pgtap_file_render_includes_all_tests():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     func1 = _make_func(name="fn1")
     func2 = _make_func(name="fn2", return_type="text")
@@ -84,7 +84,7 @@ def test_pgtap_file_render_includes_all_tests():
     pgtap_file = PgTAPFile(
         schema="public",
         database="mydb",
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         tests=tests,
         function_count=2,
     )

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import shutil
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from confiture.models.lint import LintSeverity
 from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult

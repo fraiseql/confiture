@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 def test_batched_migration_importable():
     """BatchedMigration is importable from the public API."""
-    from confiture import BatchedMigration, BatchConfig, OnlineIndexBuilder
+    from confiture import BatchConfig, BatchedMigration, OnlineIndexBuilder
 
     assert BatchedMigration is not None
     assert BatchConfig().batch_size == 10000

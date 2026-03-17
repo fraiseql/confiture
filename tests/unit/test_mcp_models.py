@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.introspection.type_mapping import TypeMapper
 from confiture.models.function_info import FunctionInfo, FunctionParam, Volatility
 from confiture.models.mcp_models import MCPTool, _pg_to_json_schema_type

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
+from datetime import UTC
 
 from confiture.core.introspection.type_mapping import TypeMapper
-from confiture.models.function_info import FunctionInfo, FunctionParam, ParamMode, Volatility
+from confiture.models.function_info import FunctionInfo, FunctionParam, Volatility
 from confiture.models.stub_models import StubFile, StubFunction, _to_pascal_case
 
 
@@ -96,7 +96,7 @@ def test_stub_function_render_function():
 
 
 def test_stub_file_render_produces_valid_python():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     mapper = TypeMapper()
     info = _make_info(
@@ -107,7 +107,7 @@ def test_stub_file_render_produces_valid_python():
     stub_file = StubFile(
         schema="public",
         database="mydb",
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         functions=[stub],
         imports=stub.required_imports,
     )
@@ -117,7 +117,7 @@ def test_stub_file_render_produces_valid_python():
 
 
 def test_stub_file_render_includes_pydantic_model():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     mapper = TypeMapper()
     source = "RETURN jsonb_build_object('user_id', v_id, 'name', v_name)"
@@ -126,7 +126,7 @@ def test_stub_file_render_includes_pydantic_model():
     stub_file = StubFile(
         schema="public",
         database="mydb",
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         functions=[stub],
         imports=stub.required_imports,
     )

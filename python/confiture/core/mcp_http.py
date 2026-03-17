@@ -46,10 +46,7 @@ def create_app(
         from fastapi import FastAPI, Request  # type: ignore[import-untyped]
         from fastapi.responses import JSONResponse  # type: ignore[import-untyped]
     except ImportError as e:
-        msg = (
-            "HTTP mode requires 'fastapi'. "
-            "Install with: uv add 'fraiseql-confiture[mcp-http]'"
-        )
+        msg = "HTTP mode requires 'fastapi'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
         raise ImportError(msg) from e
 
     import psycopg
@@ -118,10 +115,7 @@ def serve(
     try:
         import uvicorn  # type: ignore[import-untyped]
     except ImportError as e:
-        msg = (
-            "HTTP mode requires 'uvicorn'. "
-            "Install with: uv add 'fraiseql-confiture[mcp-http]'"
-        )
+        msg = "HTTP mode requires 'uvicorn'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
         raise ImportError(msg) from e
 
     app = create_app(

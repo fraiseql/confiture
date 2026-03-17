@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.models.debug_models import CTEDebugSession, CTEStepResult
 
 

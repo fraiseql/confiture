@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from confiture.models.function_info import (
     FunctionCatalog,
@@ -15,7 +14,7 @@ from confiture.models.function_info import (
 
 
 def _make_catalog() -> FunctionCatalog:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     func = FunctionInfo(
         schema="public",
@@ -36,7 +35,7 @@ def _make_catalog() -> FunctionCatalog:
     return FunctionCatalog(
         database="testdb",
         schema="public",
-        introspected_at=datetime.now(timezone.utc).isoformat(),
+        introspected_at=datetime.now(UTC).isoformat(),
         functions=[func],
     )
 
@@ -97,7 +96,9 @@ def test_pgtap_generator_skip_volatility():
         pgtap_file = gen.generate()
 
     test_names = [t.test_name for t in pgtap_file.tests]
-    assert not any("volatility" in name.lower() or "immutable" in name.lower() for name in test_names)
+    assert not any(
+        "volatility" in name.lower() or "immutable" in name.lower() for name in test_names
+    )
 
 
 def test_pgtap_generator_filters_by_name_pattern():

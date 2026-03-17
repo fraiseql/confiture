@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.models.schema import SchemaChange, SchemaDiff
 

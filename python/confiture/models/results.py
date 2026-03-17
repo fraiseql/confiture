@@ -551,14 +551,10 @@ class DiffResult:
             "foreign_keys_added": sum(1 for c in changes if c.type == "ADD_FOREIGN_KEY"),
             "foreign_keys_dropped": sum(1 for c in changes if c.type == "DROP_FOREIGN_KEY"),
             "constraints_added": sum(
-                1
-                for c in changes
-                if c.type in ("ADD_CHECK_CONSTRAINT", "ADD_UNIQUE_CONSTRAINT")
+                1 for c in changes if c.type in ("ADD_CHECK_CONSTRAINT", "ADD_UNIQUE_CONSTRAINT")
             ),
             "constraints_dropped": sum(
-                1
-                for c in changes
-                if c.type in ("DROP_CHECK_CONSTRAINT", "DROP_UNIQUE_CONSTRAINT")
+                1 for c in changes if c.type in ("DROP_CHECK_CONSTRAINT", "DROP_UNIQUE_CONSTRAINT")
             ),
             "enum_types_added": sum(1 for c in changes if c.type == "ADD_ENUM_TYPE"),
             "enum_types_dropped": sum(1 for c in changes if c.type == "DROP_ENUM_TYPE"),
