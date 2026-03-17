@@ -286,3 +286,65 @@ class TestAccompanimentGracefulDegradation:
         assert any(
             "⚠" in c or "warning" in c.lower() or "skipped" in c.lower() for c in print_calls
         )
+
+
+class TestGetNewMigrationsPyFiles:
+    """Issue #78 follow-up: _get_new_migrations() must recognise .py migrations."""
+
+    def _make_checker(self):
+        from confiture.core.git_accompaniment import MigrationAccompanimentChecker
+
+        return MigrationAccompanimentChecker("local", Path("."))
+
+    def test_py_migration_file_is_recognised(self):
+        """.py file in db/migrations/ counts as a migration."""
+        checker = self._make_checker()
+        changed = [Path("db/migrations/20260228120530_add_users.py")]
+
+        with patch.object(checker.git_repo, "get_changed_files", return_value=changed):
+            result = checker._get_new_migrations("HEAD~1", "HEAD")
+
+        assert Path("db/migrations/20260228120530_add_users.py") in result
+
+    def test_up_sql_migration_file_still_recognised(self):
+        """.up.sql files are still detected alongside .py files."""
+        checker = self._make_checker()
+        changed = [
+            Path("db/migrations/20260228120530_add_users.up.sql"),
+            Path("db/migrations/20260228120531_add_posts.py"),
+        ]
+
+        with patch.object(checker.git_repo, "get_changed_files", return_value=changed):
+            result = checker._get_new_migrations("HEAD~1", "HEAD")
+
+        assert len(result) == 2
+
+    def test_init_py_is_excluded(self):
+        """__init__.py inside db/migrations/ is not treated as a migration."""
+        checker = self._make_checker()
+        changed = [Path("db/migrations/__init__.py")]
+
+        with patch.object(checker.git_repo, "get_changed_files", return_value=changed):
+            result = checker._get_new_migrations("HEAD~1", "HEAD")
+
+        assert result == []
+
+    def test_private_py_module_is_excluded(self):
+        """_helpers.py inside db/migrations/ is not treated as a migration."""
+        checker = self._make_checker()
+        changed = [Path("db/migrations/_helpers.py")]
+
+        with patch.object(checker.git_repo, "get_changed_files", return_value=changed):
+            result = checker._get_new_migrations("HEAD~1", "HEAD")
+
+        assert result == []
+
+    def test_py_file_outside_db_migrations_is_excluded(self):
+        """A .py file in a different directory is not treated as a migration."""
+        checker = self._make_checker()
+        changed = [Path("src/migrations/20260228120530_add_users.py")]
+
+        with patch.object(checker.git_repo, "get_changed_files", return_value=changed):
+            result = checker._get_new_migrations("HEAD~1", "HEAD")
+
+        assert result == []

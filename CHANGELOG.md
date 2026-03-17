@@ -5,6 +5,19 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] - 2026-03-18
+
+### Fixed
+
+- **`migrate validate --require-migration` always reports "no migrations" for `.py` migrations** —
+  `MigrationAccompanimentChecker._get_new_migrations()` only matched `.up.sql` files, but
+  `confiture migrate generate` produces Python `.py` migration files. Projects using the default
+  migration format were always told their DDL changes had no accompanying migrations (Issue #78
+  follow-up). The filter now accepts both `.up.sql` and `.py` files (excluding `__init__.py`
+  and `_`-prefixed private modules).
+
+---
+
 ## [0.8.2] - 2026-03-17
 
 ### Fixed
