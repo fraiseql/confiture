@@ -74,13 +74,17 @@ class SchemaSnapshot:
 
 
 @dataclass
-class SchemaChange:
+class SnapshotChange:
     """Represents a detected schema change."""
 
     change_type: str  # added, removed, modified
     object_type: str  # table, column, index, constraint, etc.
     object_name: str
     details: dict[str, Any] = field(default_factory=dict)
+
+
+# Backward-compatible alias
+SchemaChange = SnapshotChange
 
 
 class SchemaSnapshotter:

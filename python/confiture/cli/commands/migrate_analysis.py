@@ -97,9 +97,9 @@ def migrate_diff(
 
         # Convert changes to SchemaChange objects
         from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
-        from confiture.models.results import MigrateDiffResult, SchemaChange
+        from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
-        changes = [SchemaChange(change.type, str(change)) for change in diff.changes]
+        changes = [MigrateDiffChange(change.type, str(change)) for change in diff.changes]
         migration_file_name = None
 
         # Handle migration generation if requested

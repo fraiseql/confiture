@@ -122,6 +122,11 @@ class DifferSQLGenerator:
             return "-- WARNING: Cannot drop index without name\n"
         return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
 
+    def _down_add_index(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        index_name = details.get("name", f"idx_{change.table}")
+        return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
+
     def _up_add_constraint(self, change: SchemaChange) -> str:
         details = change.details or {}
         constraint_name = details.get("name", f"fk_{change.table}")
@@ -229,3 +234,64 @@ class DifferSQLGenerator:
         if source:
             return f"{source}\n"
         return f"-- WARNING: No source provided for ADD_FUNCTION {change.table}\n"
+
+    def _up_add_enum_type(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        values = details.get("values", [])
+        name = change.table or ""
+        if values:
+            quoted = ", ".join(f"'{v}'" for v in values)
+            return f"CREATE TYPE {name} AS ENUM ({quoted});\n"
+        return f"CREATE TYPE {name} AS ENUM ();\n"
+
+    def _down_add_enum_type(self, change: SchemaChange) -> str:
+        name = change.table or ""
+        return f"DROP TYPE IF EXISTS {name};\n"
+
+    def _up_drop_enum_type(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP TYPE {change.table!r} is destructive. Re-run with --force to generate this DDL."
+            )
+        name = change.table or ""
+        return f"DROP TYPE IF EXISTS {name};\n"
+
+    def _down_drop_enum_type(self, change: SchemaChange) -> str:
+        name = change.table or ""
+        return f"-- WARNING: Cannot automatically recreate dropped enum type {name}\n"
+
+    def _up_change_enum_values(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        name = change.table or ""
+        added = details.get("added_values", [])
+        removed = details.get("removed_values", [])
+        parts: list[str] = []
+        for v in added:
+            parts.append(f"ALTER TYPE {name} ADD VALUE IF NOT EXISTS '{v}';\n")
+        if removed:
+            removed_list = ", ".join(f"'{v}'" for v in removed)
+            parts.append(
+                f"-- WARNING: Removing enum values ({removed_list}) from {name}"
+                " requires DROP + RECREATE. Edit this migration manually.\n"
+            )
+        return "".join(parts) if parts else f"-- No enum value changes for {name}\n"
+
+    def _up_add_sequence(self, change: SchemaChange) -> str:
+        name = change.table or ""
+        return f"CREATE SEQUENCE IF NOT EXISTS {name};\n"
+
+    def _down_add_sequence(self, change: SchemaChange) -> str:
+        name = change.table or ""
+        return f"DROP SEQUENCE IF EXISTS {name};\n"
+
+    def _up_drop_sequence(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP SEQUENCE {change.table!r} is destructive. Re-run with --force to generate this DDL."
+            )
+        name = change.table or ""
+        return f"DROP SEQUENCE IF EXISTS {name};\n"
+
+    def _down_drop_sequence(self, change: SchemaChange) -> str:
+        name = change.table or ""
+        return f"-- WARNING: Cannot automatically recreate dropped sequence {name}\n"

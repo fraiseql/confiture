@@ -5,6 +5,42 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-03-17
+
+### Added
+
+- **`confiture diff` command** — Compare two SQL schema files and report structural
+  differences (Issue #75).
+
+  ```bash
+  confiture diff --from db/schema/old.sql --to db/schema/new.sql
+  confiture diff --from old.sql --to new.sql --format json
+  ```
+
+  Exit codes: `0` = no changes, `1` = changes detected, `2` = parse or file error.
+  JSON output includes a structured `summary` object with per-category counts
+  (tables, columns, indexes, foreign keys, constraints, enums, sequences).
+
+- **Extended schema parser** — `SchemaDiffer` now parses and diffs indexes,
+  foreign keys, check constraints, unique constraints, enum types, and sequences
+  in addition to tables and columns (Issue #76). Both `ALTER TABLE … ADD CONSTRAINT`
+  and inline `CONSTRAINT … FOREIGN KEY / CHECK / UNIQUE` forms inside `CREATE TABLE`
+  bodies are supported.
+
+- **`DiffResult` public API export** — `from confiture import DiffResult` now works
+  from the top-level package.
+
+### Fixed
+
+- **Silent diff misses for domain/custom column types** — Columns whose type could
+  not be mapped to a known `ColumnType` were previously stored as `UNKNOWN` with
+  the raw SQL type captured separately, but the differ never compared `raw_sql_type`
+  between old and new schemas. Changes between two UNKNOWN types with different raw
+  strings, or between UNKNOWN and a known type, now correctly produce a
+  `CHANGE_COLUMN_TYPE` change (Issue #77).
+
+---
+
 ## [0.8.0] - 2026-03-10
 
 ### Added

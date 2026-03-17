@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from confiture import __version__
+
 if TYPE_CHECKING:
     pass
 
@@ -65,7 +67,7 @@ def create_app(
 
     app = FastAPI(
         title="confiture-mcp",
-        version="0.8.0",
+        version=__version__,
         description="Confiture MCP server over HTTP",
     )
 

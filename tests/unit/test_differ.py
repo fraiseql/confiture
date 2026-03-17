@@ -578,3 +578,131 @@ class TestSequenceDiff:
         new = "CREATE TABLE t (id INT);"
         diff = differ.compare(old, new)
         assert any(c.type == "DROP_SEQUENCE" for c in diff.changes)
+
+
+class TestUnknownTypeChanges:
+    """Gap C — UNKNOWN vs known type change detection in _compare_column_properties."""
+
+    def test_unknown_to_known_type_change_detected(self):
+        differ = SchemaDiffer()
+        old_sql = "CREATE TABLE t (x my_domain NOT NULL);"
+        new_sql = "CREATE TABLE t (x TEXT NOT NULL);"
+        diff = differ.compare(old_sql, new_sql)
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+
+    def test_known_to_unknown_type_change_detected(self):
+        differ = SchemaDiffer()
+        old_sql = "CREATE TABLE t (x TEXT NOT NULL);"
+        new_sql = "CREATE TABLE t (x my_domain NOT NULL);"
+        diff = differ.compare(old_sql, new_sql)
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+
+    def test_unknown_to_unknown_same_raw_type_no_change(self):
+        differ = SchemaDiffer()
+        sql = "CREATE TABLE t (x my_domain NOT NULL);"
+        diff = differ.compare(sql, sql)
+        assert not diff.has_changes()
+
+
+class TestCheckConstraintDiff:
+    """Gap D — Check constraint diffing."""
+
+    _BASE = "CREATE TABLE orders (id INT, amount NUMERIC);\n"
+
+    def test_diff_detects_new_check_constraint(self):
+        differ = SchemaDiffer()
+        old = self._BASE
+        new = self._BASE + "ALTER TABLE orders ADD CONSTRAINT chk_positive CHECK (amount > 0);"
+        diff = differ.compare(old, new)
+        assert any(c.type == "ADD_CHECK_CONSTRAINT" for c in diff.changes)
+
+    def test_diff_detects_dropped_check_constraint(self):
+        differ = SchemaDiffer()
+        old = self._BASE + "ALTER TABLE orders ADD CONSTRAINT chk_positive CHECK (amount > 0);"
+        new = self._BASE
+        diff = differ.compare(old, new)
+        assert any(c.type == "DROP_CHECK_CONSTRAINT" for c in diff.changes)
+
+    def test_no_change_when_check_constraint_identical(self):
+        differ = SchemaDiffer()
+        sql = self._BASE + "ALTER TABLE orders ADD CONSTRAINT chk_positive CHECK (amount > 0);"
+        diff = differ.compare(sql, sql)
+        assert not diff.has_changes()
+
+
+class TestUniqueConstraintDiff:
+    """Gap D — Unique constraint diffing."""
+
+    _BASE = "CREATE TABLE users (id INT, email TEXT);\n"
+
+    def test_diff_detects_new_unique_constraint(self):
+        differ = SchemaDiffer()
+        old = self._BASE
+        new = self._BASE + "ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email);"
+        diff = differ.compare(old, new)
+        assert any(c.type == "ADD_UNIQUE_CONSTRAINT" for c in diff.changes)
+
+    def test_diff_detects_dropped_unique_constraint(self):
+        differ = SchemaDiffer()
+        old = self._BASE + "ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email);"
+        new = self._BASE
+        diff = differ.compare(old, new)
+        assert any(c.type == "DROP_UNIQUE_CONSTRAINT" for c in diff.changes)
+
+    def test_no_change_when_unique_constraint_identical(self):
+        differ = SchemaDiffer()
+        sql = self._BASE + "ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email);"
+        diff = differ.compare(sql, sql)
+        assert not diff.has_changes()
+
+
+class TestInlineConstraintParsing:
+    """Gap E — Inline CONSTRAINT clauses in CREATE TABLE body."""
+
+    def test_parse_schema_extracts_inline_fk(self):
+        differ = SchemaDiffer()
+        sql = """
+        CREATE TABLE users (id INT);
+        CREATE TABLE orders (
+            id INT,
+            user_id INT,
+            CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        """
+        result = differ.parse_schema(sql)
+        orders = next(t for t in result.tables if t.name == "orders")
+        assert len(orders.foreign_keys) == 1
+        assert orders.foreign_keys[0].name == "fk_orders_user"
+
+    def test_parse_schema_extracts_inline_check(self):
+        differ = SchemaDiffer()
+        sql = """
+        CREATE TABLE products (
+            id INT,
+            price NUMERIC,
+            CONSTRAINT chk_price CHECK (price > 0)
+        );
+        """
+        result = differ.parse_schema(sql)
+        assert len(result.tables[0].check_constraints) == 1
+        assert result.tables[0].check_constraints[0].name == "chk_price"
+
+    def test_parse_schema_extracts_inline_unique(self):
+        differ = SchemaDiffer()
+        sql = """
+        CREATE TABLE users (
+            id INT,
+            email TEXT,
+            CONSTRAINT uq_email UNIQUE (email)
+        );
+        """
+        result = differ.parse_schema(sql)
+        assert len(result.tables[0].unique_constraints) == 1
+        assert result.tables[0].unique_constraints[0].name == "uq_email"
+
+    def test_parse_inline_constraint_no_match_returns_none_triple(self):
+        differ = SchemaDiffer()
+        fk, ck, uq = differ._parse_inline_constraint("NOT A CONSTRAINT", "users")
+        assert fk is None
+        assert ck is None
+        assert uq is None

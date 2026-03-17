@@ -11,9 +11,9 @@ from confiture.cli.formatters.migrate_formatter import (
     format_migrate_validate_result,
 )
 from confiture.models.results import (
+    MigrateDiffChange,
     MigrateDiffResult,
     MigrateValidateResult,
-    SchemaChange,
 )
 
 
@@ -25,8 +25,8 @@ class TestMigrateDiffFormatter:
         with TemporaryDirectory() as tmpdir:
             output_file = Path(tmpdir) / "diff.json"
             changes = [
-                SchemaChange("ADD_TABLE", "users table"),
-                SchemaChange("ADD_COLUMN", "email column to users"),
+                MigrateDiffChange("ADD_TABLE", "users table"),
+                MigrateDiffChange("ADD_COLUMN", "email column to users"),
             ]
             result = MigrateDiffResult(
                 success=True,
@@ -53,8 +53,8 @@ class TestMigrateDiffFormatter:
         with TemporaryDirectory() as tmpdir:
             output_file = Path(tmpdir) / "diff.csv"
             changes = [
-                SchemaChange("ADD_TABLE", "users table"),
-                SchemaChange("MODIFY_COLUMN", "user_id type change"),
+                MigrateDiffChange("ADD_TABLE", "users table"),
+                MigrateDiffChange("MODIFY_COLUMN", "user_id type change"),
             ]
             result = MigrateDiffResult(
                 success=True,
@@ -86,7 +86,7 @@ class TestMigrateDiffFormatter:
     def test_format_diff_text_with_changes(self):
         """Test formatting diff result with changes."""
         changes = [
-            SchemaChange("ADD_TABLE", "orders table"),
+            MigrateDiffChange("ADD_TABLE", "orders table"),
         ]
         result = MigrateDiffResult(
             success=True,

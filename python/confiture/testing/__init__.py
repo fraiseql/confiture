@@ -27,8 +27,9 @@ from confiture.testing.fixtures.schema_snapshotter import (
     ConstraintInfo,
     ForeignKeyInfo,
     IndexInfo,
-    SchemaChange,
+    SchemaChange,  # backward-compat alias for SnapshotChange
     SchemaSnapshot,
+    SnapshotChange,  # noqa: F401
     TableSchema,
 )
 

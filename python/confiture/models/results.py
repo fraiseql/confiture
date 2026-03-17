@@ -337,7 +337,7 @@ class MigrateRebuildResult:
 
 
 @dataclass
-class SchemaChange:
+class MigrateDiffChange:
     """A single schema change detected in diff.
 
     Tracks the type of change and details about what changed.
@@ -364,7 +364,7 @@ class MigrateDiffResult:
 
     success: bool
     has_changes: bool
-    changes: list[SchemaChange] = field(default_factory=list)
+    changes: list[MigrateDiffChange] = field(default_factory=list)
     migration_generated: bool = False
     migration_file: str | None = None
     error: str | None = None

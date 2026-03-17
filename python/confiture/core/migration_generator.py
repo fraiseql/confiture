@@ -11,8 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from confiture.core.introspection.differ_sql import DifferSQLGenerator
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import ExternalGeneratorError
+from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
 
@@ -32,6 +33,8 @@ class MigrationGenerator:
             migrations_dir: Directory where migration files will be created
         """
         self.migrations_dir = migrations_dir
+        # Non-destructive generator — destructive ops emit warning comments instead of raising
+        self._sql_gen = DifferSQLGenerator(force_destructive=False)
 
     def generate(self, diff: SchemaDiff, name: str) -> Path:
         """Generate migration file from schema diff.
@@ -273,6 +276,25 @@ class {class_name}(Migration):
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
+    # Change types delegated to DifferSQLGenerator (destructive ops emit warning comments)
+    _DELEGATED_UP_TYPES = frozenset(
+        {
+            "ADD_INDEX",
+            "DROP_INDEX",
+            "ADD_FOREIGN_KEY",
+            "DROP_FOREIGN_KEY",
+            "ADD_CHECK_CONSTRAINT",
+            "DROP_CHECK_CONSTRAINT",
+            "ADD_UNIQUE_CONSTRAINT",
+            "DROP_UNIQUE_CONSTRAINT",
+            "ADD_ENUM_TYPE",
+            "DROP_ENUM_TYPE",
+            "CHANGE_ENUM_VALUES",
+            "ADD_SEQUENCE",
+            "DROP_SEQUENCE",
+        }
+    )
+
     def _change_to_up_sql(self, change: SchemaChange) -> str | None:
         """Convert schema change to SQL for up migration.
 
@@ -296,7 +318,6 @@ class {class_name}(Migration):
             return f"ALTER TABLE {change.old_value} RENAME TO {change.new_value}"
 
         elif change.type == "ADD_COLUMN":
-            # For ADD_COLUMN, we might have type info in new_value
             col_def = change.new_value if change.new_value else "TEXT"
             return f"ALTER TABLE {change.table} ADD COLUMN {change.column} {col_def}"
 
@@ -324,6 +345,12 @@ class {class_name}(Migration):
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET DEFAULT {change.new_value}"
             else:
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP DEFAULT"
+
+        elif change.type in self._DELEGATED_UP_TYPES:
+            try:
+                return self._sql_gen.generate_up(change).rstrip("\n")
+            except UnsafeOperationError as exc:
+                return f"-- WARNING: {exc}"
 
         return None
 
@@ -418,50 +445,45 @@ class {class_name}(Migration):
             SQL string or None if not applicable
         """
         if change.type == "ADD_TABLE":
-            # Reverse of ADD is DROP
             return f"DROP TABLE {change.table}"
 
         elif change.type == "DROP_TABLE":
-            # Can't recreate without schema info
             return f"# WARNING: Cannot auto-generate down migration for DROP_TABLE {change.table}"
 
         elif change.type == "RENAME_TABLE":
-            # Reverse the rename
             return f"ALTER TABLE {change.new_value} RENAME TO {change.old_value}"
 
         elif change.type == "ADD_COLUMN":
-            # Reverse of ADD is DROP
             return f"ALTER TABLE {change.table} DROP COLUMN {change.column}"
 
         elif change.type == "DROP_COLUMN":
-            # Can't recreate without schema info
             return f"# WARNING: Cannot auto-generate down migration for DROP_COLUMN {change.table}.{change.column}"
 
         elif change.type == "RENAME_COLUMN":
-            # Reverse the rename
             return (
                 f"ALTER TABLE {change.table} RENAME COLUMN {change.new_value} TO {change.old_value}"
             )
 
         elif change.type == "CHANGE_COLUMN_TYPE":
-            # Reverse the type change
             return (
                 f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.old_value}"
             )
 
         elif change.type == "CHANGE_COLUMN_NULLABLE":
-            # Reverse the nullable change
             if change.old_value == "false":
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET NOT NULL"
             else:
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP NOT NULL"
 
         elif change.type == "CHANGE_COLUMN_DEFAULT":
-            # Reverse the default change
             if change.old_value:
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET DEFAULT {change.old_value}"
             else:
                 return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP DEFAULT"
+
+        elif change.type in self._DELEGATED_UP_TYPES:
+            sql = self._sql_gen.generate_down(change).rstrip("\n")
+            return sql if sql else None
 
         return None
 

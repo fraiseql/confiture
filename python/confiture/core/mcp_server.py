@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg
 
+from confiture import __version__
 from confiture.core.introspection.functions import FunctionIntrospector
 from confiture.core.introspection.type_mapping import TypeMapper
 from confiture.models.mcp_models import MCPTool
@@ -295,7 +296,7 @@ class MCPServer:
                 result: Any = {
                     "protocolVersion": _MCP_PROTOCOL_VERSION,
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "confiture-mcp", "version": "0.8.0"},
+                    "serverInfo": {"name": "confiture-mcp", "version": __version__},
                 }
             elif method == "tools/list":
                 result = {"tools": self.list_tools()}

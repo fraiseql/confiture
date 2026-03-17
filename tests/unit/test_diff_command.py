@@ -119,3 +119,115 @@ class TestDiffCommand:
         new = _write_sql(NEW_SQL)
         result = runner.invoke(app, ["diff", "--from", old, "--to", new])
         assert "1 change" in result.output
+
+
+class TestDiffResultNullFields:
+    """Gap G — DiffResult.to_dict() with None fields on changes."""
+
+    def test_diff_result_to_dict_null_fields(self):
+        from confiture.models.schema import SchemaChange, SchemaDiff  # noqa: PLC0415
+
+        diff = SchemaDiff(changes=[
+            SchemaChange(type="ADD_SEQUENCE", table="order_seq"),
+            SchemaChange(type="ADD_ENUM_TYPE", table="status"),
+        ])
+        data = DiffResult.from_schema_diff(diff).to_dict()
+        assert data["summary"]["sequences_added"] == 1
+        assert data["summary"]["enum_types_added"] == 1
+        seq_change = next(c for c in data["changes"] if c["type"] == "ADD_SEQUENCE")
+        assert seq_change["column"] is None
+        assert seq_change["old_value"] is None
+        assert seq_change["new_value"] is None
+
+    def test_diff_result_to_dict_details_field_present(self):
+        diff = SchemaDiff(changes=[
+            SchemaChange(type="ADD_INDEX", table="users",
+                         details={"index_name": "idx_email", "columns": ["email"]}),
+        ])
+        data = DiffResult.from_schema_diff(diff).to_dict()
+        change = data["changes"][0]
+        assert change["details"] is not None
+        assert change["details"]["index_name"] == "idx_email"
+
+
+class TestDiffResultSummaryRenames:
+    """Gap H — RENAME changes are not counted in the summary."""
+
+    def test_diff_result_summary_does_not_count_renames(self):
+        diff = SchemaDiff(changes=[
+            SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
+            SchemaChange(type="RENAME_COLUMN", table="t", old_value="a", new_value="b"),
+        ])
+        data = DiffResult.from_schema_diff(diff).to_dict()
+        # tables_renamed tracks RENAME_TABLE; all other counters should be 0
+        non_rename_sum = sum(
+            v for k, v in data["summary"].items() if k != "tables_renamed"
+        )
+        assert non_rename_sum == 0
+
+    def test_diff_result_summary_tables_renamed_is_counted(self):
+        diff = SchemaDiff(changes=[
+            SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
+        ])
+        data = DiffResult.from_schema_diff(diff).to_dict()
+        assert data["summary"]["tables_renamed"] == 1
+
+
+class TestDiffCommandParseError:
+    """Gap I — diff command parse error path exits with code 2."""
+
+    def test_diff_command_parse_error_exits_2(self):
+        from unittest.mock import patch  # noqa: PLC0415
+
+        old = _write_sql("CREATE TABLE t (id INT);")
+        new = _write_sql("CREATE TABLE t (id INT);")
+        with patch(
+            "confiture.cli.commands.diff.SchemaDiffer.compare",
+            side_effect=RuntimeError("parse failure"),
+        ):
+            result = runner.invoke(app, ["diff", "--from", old, "--to", new])
+        assert result.exit_code == 2
+
+
+class TestDiffCommandFormatFallthrough:
+    """Gap J — unknown --format value falls through to text output."""
+
+    def test_diff_command_unknown_format_falls_through_to_text(self):
+        p = _write_sql(OLD_SQL)
+        result = runner.invoke(app, ["diff", "--from", p, "--to", p, "--format", "csv"])
+        assert result.exit_code == 0
+        assert "No changes" in result.output
+
+
+class TestDiffTextRenameOutput:
+    """Gap K — print_diff_text colour branch for RENAME types."""
+
+    def test_diff_text_output_with_rename_table(self):
+        old = _write_sql("CREATE TABLE user_accounts (id INT);")
+        new = _write_sql("CREATE TABLE user_profiles (id INT);")
+        result = runner.invoke(app, ["diff", "--from", old, "--to", new])
+        # rename detection may or may not be supported; at minimum it must not crash
+        assert result.exit_code in (0, 1)
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    def test_diff_text_rename_column_change_renders(self):
+        import io  # noqa: PLC0415
+
+        from rich.console import Console  # noqa: PLC0415
+
+        from confiture.cli.formatters.diff_formatter import print_diff_text  # noqa: PLC0415
+        from confiture.models.results import DiffResult  # noqa: PLC0415
+        from confiture.models.schema import SchemaChange, SchemaDiff  # noqa: PLC0415
+
+        diff = SchemaDiff(changes=[
+            SchemaChange(type="RENAME_COLUMN", table="users", old_value="email",
+                         new_value="email_address"),
+            SchemaChange(type="RENAME_TABLE", old_value="users", new_value="accounts"),
+        ])
+        result_obj = DiffResult.from_schema_diff(diff)
+        buf = io.StringIO()
+        con = Console(file=buf, highlight=False, markup=False)
+        # Must not raise
+        print_diff_text(result_obj, con)
+        output = buf.getvalue()
+        assert len(output) > 0
