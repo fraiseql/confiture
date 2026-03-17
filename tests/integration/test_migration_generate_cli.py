@@ -577,7 +577,7 @@ class TestMigrateGenerateExternalGenerator:
 
         down_files = list(migrations_dir.glob("*.down.sql"))
         assert len(down_files) == 1
-        assert "TODO" in down_files[0].read_text()
+        assert "WARNING" in down_files[0].read_text()
 
     def test_dry_run_does_not_create_file(self, tmp_path):
         """--dry-run prints resolved command and target, no file created."""
