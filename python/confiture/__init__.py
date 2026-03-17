@@ -74,6 +74,8 @@ __all__ = [
     "DriftItem",
     "DriftType",
     "DriftSeverity",
+    # Diff
+    "DiffResult",
     # Result models
     "MigrationStatus",
     "StatusResult",
@@ -128,6 +130,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DriftItem": ("confiture.core.drift", "DriftItem"),
     "DriftType": ("confiture.core.drift", "DriftType"),
     "DriftSeverity": ("confiture.core.drift", "DriftSeverity"),
+    # Diff
+    "DiffResult": ("confiture.models.results", "DiffResult"),
     # Result models
     "MigrationStatus": ("confiture.models.results", "MigrationStatus"),
     "StatusResult": ("confiture.models.results", "StatusResult"),

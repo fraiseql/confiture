@@ -3,9 +3,14 @@
 from confiture.models.schema import (
     Column,
     ColumnType,
+    EnumType,
+    ForeignKey,
+    Index,
+    ParsedSchema,
     Schema,
     SchemaChange,
     SchemaDiff,
+    Sequence,
     Table,
 )
 
@@ -92,7 +97,9 @@ class TestTable:
         assert table.name == "users"
         assert table.columns == []
         assert table.indexes == []
-        assert table.constraints == []
+        assert table.foreign_keys == []
+        assert table.check_constraints == []
+        assert table.unique_constraints == []
 
     def test_table_with_columns(self):
         """Test table with columns."""
@@ -298,6 +305,55 @@ class TestSchemaChange:
         assert "UNKNOWN_CHANGE" in result
         assert "users" in result
         assert "some_field" in result
+
+
+class TestNewModelTypes:
+    """Tests for new DDL object models (Phase 02)."""
+
+    def test_column_type_enum_includes_money(self):
+        assert ColumnType.MONEY.value == "MONEY"
+
+    def test_column_type_enum_includes_network_types(self):
+        assert ColumnType.CIDR.value == "CIDR"
+        assert ColumnType.INET.value == "INET"
+        assert ColumnType.MACADDR.value == "MACADDR"
+
+    def test_column_type_enum_includes_range_types(self):
+        assert ColumnType.INT4RANGE.value == "INT4RANGE"
+        assert ColumnType.TSTZRANGE.value == "TSTZRANGE"
+
+    def test_column_type_enum_includes_text_search(self):
+        assert ColumnType.TSVECTOR.value == "TSVECTOR"
+        assert ColumnType.TSQUERY.value == "TSQUERY"
+
+    def test_index_model(self):
+        idx = Index(name="idx_users_email", table="users", columns=["email"], unique=False)
+        assert idx.name == "idx_users_email"
+        assert not idx.unique
+
+    def test_foreign_key_model(self):
+        fk = ForeignKey(
+            name="fk_orders_user",
+            table="orders",
+            columns=["user_id"],
+            ref_table="users",
+            ref_columns=["id"],
+        )
+        assert fk.ref_table == "users"
+
+    def test_enum_type_model(self):
+        et = EnumType(name="status", values=["active", "inactive"])
+        assert "active" in et.values
+
+    def test_sequence_model(self):
+        seq = Sequence(name="order_seq", start=1000, increment=1)
+        assert seq.start == 1000
+
+    def test_parsed_schema_model(self):
+        ps = ParsedSchema(tables=[Table(name="users")])
+        assert len(ps.tables) == 1
+        assert ps.enum_types == []
+        assert ps.sequences == []
 
 
 class TestSchemaDiff:

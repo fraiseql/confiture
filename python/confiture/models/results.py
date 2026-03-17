@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from confiture.core.migration_verifier import VerifyResult
+    from confiture.models.schema import SchemaChange, SchemaDiff
 
 
 class MigrationStatus:
@@ -521,5 +522,64 @@ class VerifyAllResult:
                     "error": r.error,
                 }
                 for r in self.results
+            ],
+        }
+
+
+@dataclass
+class DiffResult:
+    """Result of a schema diff operation."""
+
+    has_changes: bool
+    changes: list[SchemaChange]
+
+    @classmethod
+    def from_schema_diff(cls, diff: SchemaDiff) -> DiffResult:
+        """Construct from a SchemaDiff object."""
+        return cls(has_changes=diff.has_changes(), changes=diff.changes)
+
+    def _build_summary(self) -> dict[str, int]:
+        changes = self.changes
+        return {
+            "tables_added": sum(1 for c in changes if c.type == "ADD_TABLE"),
+            "tables_dropped": sum(1 for c in changes if c.type == "DROP_TABLE"),
+            "tables_renamed": sum(1 for c in changes if c.type == "RENAME_TABLE"),
+            "columns_added": sum(1 for c in changes if c.type == "ADD_COLUMN"),
+            "columns_dropped": sum(1 for c in changes if c.type == "DROP_COLUMN"),
+            "indexes_added": sum(1 for c in changes if c.type == "ADD_INDEX"),
+            "indexes_dropped": sum(1 for c in changes if c.type == "DROP_INDEX"),
+            "foreign_keys_added": sum(1 for c in changes if c.type == "ADD_FOREIGN_KEY"),
+            "foreign_keys_dropped": sum(1 for c in changes if c.type == "DROP_FOREIGN_KEY"),
+            "constraints_added": sum(
+                1
+                for c in changes
+                if c.type in ("ADD_CHECK_CONSTRAINT", "ADD_UNIQUE_CONSTRAINT")
+            ),
+            "constraints_dropped": sum(
+                1
+                for c in changes
+                if c.type in ("DROP_CHECK_CONSTRAINT", "DROP_UNIQUE_CONSTRAINT")
+            ),
+            "enum_types_added": sum(1 for c in changes if c.type == "ADD_ENUM_TYPE"),
+            "enum_types_dropped": sum(1 for c in changes if c.type == "DROP_ENUM_TYPE"),
+            "sequences_added": sum(1 for c in changes if c.type == "ADD_SEQUENCE"),
+            "sequences_dropped": sum(1 for c in changes if c.type == "DROP_SEQUENCE"),
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict for JSON output."""
+        return {
+            "has_changes": self.has_changes,
+            "summary": self._build_summary(),
+            "changes": [
+                {
+                    "type": c.type,
+                    "table": c.table,
+                    "column": c.column,
+                    "old_value": c.old_value,
+                    "new_value": c.new_value,
+                    "details": c.details,
+                }
+                for c in self.changes
             ],
         }

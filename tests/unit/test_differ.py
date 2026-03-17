@@ -1,7 +1,7 @@
 """Unit tests for SchemaDiffer (Milestone 1.9-1.10)."""
 
 from confiture.core.differ import SchemaDiffer
-from confiture.models.schema import ColumnType
+from confiture.models.schema import ColumnType, ParsedSchema
 
 
 class TestSQLParser:
@@ -344,3 +344,237 @@ class TestSchemaDiffAlgorithm:
         assert change.type == "RENAME_TABLE"
         assert change.old_value == "user_accounts"
         assert change.new_value == "user_profiles"
+
+
+class TestUnknownTypeHandling:
+    """Phase 01: ColumnType.UNKNOWN silent diff misses."""
+
+    def test_parse_column_type_money(self):
+        differ = SchemaDiffer()
+        col_type, _ = differ._parse_column_type("MONEY")
+        assert col_type == ColumnType.MONEY
+
+    def test_parse_column_type_inet(self):
+        differ = SchemaDiffer()
+        col_type, _ = differ._parse_column_type("INET")
+        assert col_type == ColumnType.INET
+
+    def test_parse_column_type_tsvector(self):
+        differ = SchemaDiffer()
+        col_type, _ = differ._parse_column_type("TSVECTOR")
+        assert col_type == ColumnType.TSVECTOR
+
+    def test_parse_column_type_cidr(self):
+        differ = SchemaDiffer()
+        col_type, _ = differ._parse_column_type("CIDR")
+        assert col_type == ColumnType.CIDR
+
+    def test_change_between_two_unknown_types_is_detected(self):
+        differ = SchemaDiffer()
+        old_sql = "CREATE TABLE products (amount my_domain NOT NULL);"
+        new_sql = "CREATE TABLE products (amount other_domain NOT NULL);"
+        diff = differ.compare(old_sql, new_sql)
+        assert diff.has_changes()
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+
+    def test_same_unknown_type_is_not_a_change(self):
+        differ = SchemaDiffer()
+        old_sql = "CREATE TABLE products (amount my_domain NOT NULL);"
+        new_sql = "CREATE TABLE products (amount my_domain NOT NULL);"
+        diff = differ.compare(old_sql, new_sql)
+        assert not diff.has_changes()
+
+    def test_array_type_change_detected(self):
+        differ = SchemaDiffer()
+        old_sql = "CREATE TABLE t (tags INT[] NOT NULL);"
+        new_sql = "CREATE TABLE t (tags TEXT[] NOT NULL);"
+        diff = differ.compare(old_sql, new_sql)
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+
+    def test_money_to_numeric_change_detected(self):
+        differ = SchemaDiffer()
+        old_sql = "CREATE TABLE t (price MONEY NOT NULL);"
+        new_sql = "CREATE TABLE t (price NUMERIC NOT NULL);"
+        diff = differ.compare(old_sql, new_sql)
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+
+
+class TestParseSchema:
+    """Phase 02: parse_schema returns ParsedSchema with enums/sequences."""
+
+    def test_parse_sql_returns_list_of_tables(self):
+        differ = SchemaDiffer()
+        tables = differ.parse_sql("CREATE TABLE users (id INT);")
+        assert len(tables) == 1
+
+    def test_parse_schema_returns_parsed_schema(self):
+        differ = SchemaDiffer()
+        result = differ.parse_schema("CREATE TABLE users (id INT);")
+        assert isinstance(result, ParsedSchema)
+        assert len(result.tables) == 1
+
+    def test_parse_schema_extracts_enum(self):
+        differ = SchemaDiffer()
+        sql = "CREATE TYPE status AS ENUM ('active', 'inactive', 'banned');"
+        result = differ.parse_schema(sql)
+        assert len(result.enum_types) == 1
+        assert result.enum_types[0].name == "status"
+        assert "active" in result.enum_types[0].values
+
+    def test_parse_schema_extracts_sequence(self):
+        differ = SchemaDiffer()
+        sql = "CREATE SEQUENCE order_seq START 1000 INCREMENT 1;"
+        result = differ.parse_schema(sql)
+        assert len(result.sequences) == 1
+        assert result.sequences[0].name == "order_seq"
+        assert result.sequences[0].start == 1000
+
+    def test_parse_schema_extracts_index(self):
+        differ = SchemaDiffer()
+        sql = (
+            "CREATE TABLE users (id INT, email TEXT);\n"
+            "CREATE INDEX idx_users_email ON users(email);"
+        )
+        result = differ.parse_schema(sql)
+        assert len(result.tables) == 1
+        assert len(result.tables[0].indexes) == 1
+        assert result.tables[0].indexes[0].name == "idx_users_email"
+
+    def test_parse_schema_extracts_unique_index(self):
+        differ = SchemaDiffer()
+        sql = (
+            "CREATE TABLE users (id INT, email TEXT);\n"
+            "CREATE UNIQUE INDEX idx_unique_email ON users(email);"
+        )
+        result = differ.parse_schema(sql)
+        idx = result.tables[0].indexes[0]
+        assert idx.unique is True
+
+    def test_parse_schema_extracts_fk_from_alter(self):
+        differ = SchemaDiffer()
+        sql = (
+            "CREATE TABLE users (id INT);\n"
+            "CREATE TABLE orders (id INT, user_id INT);\n"
+            "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
+            "FOREIGN KEY (user_id) REFERENCES users(id);"
+        )
+        result = differ.parse_schema(sql)
+        orders = next(t for t in result.tables if t.name == "orders")
+        assert len(orders.foreign_keys) == 1
+        assert orders.foreign_keys[0].name == "fk_orders_user"
+        assert orders.foreign_keys[0].ref_table == "users"
+
+
+class TestIndexDiff:
+    """Phase 02 Cycle 3: Index diffing."""
+
+    def test_diff_detects_new_index(self):
+        differ = SchemaDiffer()
+        old = "CREATE TABLE users (id INT, email TEXT);"
+        new = (
+            "CREATE TABLE users (id INT, email TEXT);\n"
+            "CREATE INDEX idx_users_email ON users(email);"
+        )
+        diff = differ.compare(old, new)
+        assert any(c.type == "ADD_INDEX" for c in diff.changes)
+
+    def test_diff_detects_dropped_index(self):
+        differ = SchemaDiffer()
+        old = (
+            "CREATE TABLE users (id INT, email TEXT);\n"
+            "CREATE INDEX idx_users_email ON users(email);"
+        )
+        new = "CREATE TABLE users (id INT, email TEXT);"
+        diff = differ.compare(old, new)
+        assert any(c.type == "DROP_INDEX" for c in diff.changes)
+
+    def test_diff_no_change_when_indexes_identical(self):
+        differ = SchemaDiffer()
+        sql = (
+            "CREATE TABLE users (id INT, email TEXT);\n"
+            "CREATE INDEX idx ON users(email);"
+        )
+        diff = differ.compare(sql, sql)
+        assert not diff.has_changes()
+
+
+class TestForeignKeyDiff:
+    """Phase 02 Cycle 4: Foreign key diffing."""
+
+    _BASE = (
+        "CREATE TABLE users (id INT);\n"
+        "CREATE TABLE orders (id INT, user_id INT);\n"
+    )
+
+    def test_diff_detects_new_fk(self):
+        differ = SchemaDiffer()
+        old = self._BASE
+        new = (
+            self._BASE
+            + "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
+            "FOREIGN KEY (user_id) REFERENCES users(id);"
+        )
+        diff = differ.compare(old, new)
+        assert any(c.type == "ADD_FOREIGN_KEY" for c in diff.changes)
+
+    def test_diff_detects_dropped_fk(self):
+        differ = SchemaDiffer()
+        old = (
+            self._BASE
+            + "ALTER TABLE orders ADD CONSTRAINT fk_orders_user "
+            "FOREIGN KEY (user_id) REFERENCES users(id);"
+        )
+        new = self._BASE
+        diff = differ.compare(old, new)
+        assert any(c.type == "DROP_FOREIGN_KEY" for c in diff.changes)
+
+
+class TestEnumDiff:
+    """Phase 02 Cycle 6: Enum type diffing."""
+
+    def test_diff_detects_new_enum(self):
+        differ = SchemaDiffer()
+        old = "CREATE TABLE t (id INT);"
+        new = "CREATE TABLE t (id INT);\nCREATE TYPE status AS ENUM ('a', 'b');"
+        diff = differ.compare(old, new)
+        assert any(c.type == "ADD_ENUM_TYPE" for c in diff.changes)
+
+    def test_diff_detects_dropped_enum(self):
+        differ = SchemaDiffer()
+        old = "CREATE TABLE t (id INT);\nCREATE TYPE status AS ENUM ('a', 'b');"
+        new = "CREATE TABLE t (id INT);"
+        diff = differ.compare(old, new)
+        assert any(c.type == "DROP_ENUM_TYPE" for c in diff.changes)
+
+    def test_diff_detects_changed_enum_values(self):
+        differ = SchemaDiffer()
+        old = "CREATE TYPE status AS ENUM ('active', 'inactive');"
+        new = "CREATE TYPE status AS ENUM ('active', 'inactive', 'banned');"
+        diff = differ.compare(old, new)
+        assert any(c.type == "CHANGE_ENUM_VALUES" for c in diff.changes)
+        change = next(c for c in diff.changes if c.type == "CHANGE_ENUM_VALUES")
+        assert "banned" in change.details["added_values"]
+
+    def test_diff_no_change_when_enum_identical(self):
+        differ = SchemaDiffer()
+        sql = "CREATE TYPE status AS ENUM ('active', 'inactive');"
+        diff = differ.compare(sql, sql)
+        assert not diff.has_changes()
+
+
+class TestSequenceDiff:
+    """Phase 02 Cycle 7: Sequence diffing."""
+
+    def test_diff_detects_new_sequence(self):
+        differ = SchemaDiffer()
+        old = "CREATE TABLE t (id INT);"
+        new = "CREATE TABLE t (id INT);\nCREATE SEQUENCE order_seq START 1;"
+        diff = differ.compare(old, new)
+        assert any(c.type == "ADD_SEQUENCE" for c in diff.changes)
+
+    def test_diff_detects_dropped_sequence(self):
+        differ = SchemaDiffer()
+        old = "CREATE TABLE t (id INT);\nCREATE SEQUENCE order_seq START 1;"
+        new = "CREATE TABLE t (id INT);"
+        diff = differ.compare(old, new)
+        assert any(c.type == "DROP_SEQUENCE" for c in diff.changes)

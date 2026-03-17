@@ -14,6 +14,7 @@ from confiture.cli.commands.admin import (
     verify,
 )
 from confiture.cli.commands.debug import debug_app
+from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
 from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate_analysis import (
@@ -123,6 +124,9 @@ app.command()(build)
 app.command()(lint)
 app.command("lint-unified")(lint_unified)
 app.command()(introspect)
+
+# Register diff command
+app.command("diff")(schema_diff)
 
 # Register drift command
 app.command()(drift)

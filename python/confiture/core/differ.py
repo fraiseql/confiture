@@ -12,7 +12,144 @@ import sqlparse
 from sqlparse.sql import Identifier, Parenthesis, Statement
 from sqlparse.tokens import Keyword, Name
 
-from confiture.models.schema import Column, ColumnType, SchemaChange, SchemaDiff, Table
+from confiture.models.schema import (
+    CheckConstraint,
+    Column,
+    ColumnType,
+    EnumType,
+    ForeignKey,
+    Index,
+    ParsedSchema,
+    SchemaChange,
+    SchemaDiff,
+    Sequence,
+    Table,
+    UniqueConstraint,
+)
+
+# ---------------------------------------------------------------------------
+# Module-level constants: compiled once for performance
+# ---------------------------------------------------------------------------
+
+_COLUMN_TYPE_MAP: dict[str, ColumnType] = {
+    "SMALLINT": ColumnType.SMALLINT,
+    "INT2": ColumnType.SMALLINT,
+    "INT": ColumnType.INTEGER,
+    "INTEGER": ColumnType.INTEGER,
+    "INT4": ColumnType.INTEGER,
+    "BIGINT": ColumnType.BIGINT,
+    "INT8": ColumnType.BIGINT,
+    "SERIAL": ColumnType.SERIAL,
+    "BIGSERIAL": ColumnType.BIGSERIAL,
+    "NUMERIC": ColumnType.NUMERIC,
+    "DECIMAL": ColumnType.DECIMAL,
+    "REAL": ColumnType.REAL,
+    "FLOAT4": ColumnType.REAL,
+    "DOUBLE": ColumnType.DOUBLE_PRECISION,
+    "FLOAT8": ColumnType.DOUBLE_PRECISION,
+    "DOUBLE PRECISION": ColumnType.DOUBLE_PRECISION,
+    "VARCHAR": ColumnType.VARCHAR,
+    "CHARACTER VARYING": ColumnType.VARCHAR,
+    "CHAR": ColumnType.CHAR,
+    "CHARACTER": ColumnType.CHAR,
+    "TEXT": ColumnType.TEXT,
+    "BOOLEAN": ColumnType.BOOLEAN,
+    "BOOL": ColumnType.BOOLEAN,
+    "DATE": ColumnType.DATE,
+    "TIME": ColumnType.TIME,
+    "TIMETZ": ColumnType.TIME,
+    "TIMESTAMP": ColumnType.TIMESTAMP,
+    "TIMESTAMP WITHOUT TIME ZONE": ColumnType.TIMESTAMP,
+    "TIMESTAMPTZ": ColumnType.TIMESTAMPTZ,
+    "TIMESTAMP WITH TIME ZONE": ColumnType.TIMESTAMPTZ,
+    "UUID": ColumnType.UUID,
+    "JSON": ColumnType.JSON,
+    "JSONB": ColumnType.JSONB,
+    "BYTEA": ColumnType.BYTEA,
+    # Network types
+    "CIDR": ColumnType.CIDR,
+    "INET": ColumnType.INET,
+    "MACADDR": ColumnType.MACADDR,
+    "MACADDR8": ColumnType.MACADDR8,
+    # Money
+    "MONEY": ColumnType.MONEY,
+    # Bit strings
+    "BIT": ColumnType.BIT,
+    "VARBIT": ColumnType.VARBIT,
+    "BIT VARYING": ColumnType.VARBIT,
+    # Text search
+    "TSVECTOR": ColumnType.TSVECTOR,
+    "TSQUERY": ColumnType.TSQUERY,
+    # XML
+    "XML": ColumnType.XML,
+    # Range types
+    "INT4RANGE": ColumnType.INT4RANGE,
+    "INT8RANGE": ColumnType.INT8RANGE,
+    "NUMRANGE": ColumnType.NUMRANGE,
+    "TSRANGE": ColumnType.TSRANGE,
+    "TSTZRANGE": ColumnType.TSTZRANGE,
+    "DATERANGE": ColumnType.DATERANGE,
+}
+
+# Regex patterns for ALTER TABLE / CREATE TYPE / CREATE SEQUENCE / CREATE INDEX
+_FK_RE = re.compile(
+    r"ALTER\s+TABLE\s+(?:\w+\.)?(?P<table>\w+)\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)"
+    r"\s+FOREIGN\s+KEY\s*\((?P<cols>[^)]+)\)"
+    r"\s+REFERENCES\s+(?:(?P<ref_schema>\w+)\.)?(?P<ref_table>\w+)\s*\((?P<ref_cols>[^)]+)\)"
+    r"(?:\s+ON\s+DELETE\s+(?P<on_delete>\w+(?:\s+\w+)?))?",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_CHECK_RE = re.compile(
+    r"ALTER\s+TABLE\s+(?:\w+\.)?(?P<table>\w+)\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)"
+    r"\s+CHECK\s*\((?P<expr>.+?)\)\s*;?",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_UNIQUE_RE = re.compile(
+    r"ALTER\s+TABLE\s+(?:\w+\.)?(?P<table>\w+)\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)"
+    r"\s+UNIQUE\s*\((?P<cols>[^)]+)\)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_ENUM_RE = re.compile(
+    r"CREATE\s+TYPE\s+(?:(?P<schema>\w+)\.)?(?P<name>\w+)"
+    r"\s+AS\s+ENUM\s*\((?P<values>[^)]+)\)",
+    re.IGNORECASE,
+)
+
+_SEQ_RE = re.compile(
+    r"CREATE\s+SEQUENCE\s+(?:(?P<schema>\w+)\.)?(?P<name>\w+)"
+    r"(?:\s+START(?:\s+WITH)?\s+(?P<start>\d+))?"
+    r"(?:\s+INCREMENT(?:\s+BY)?\s+(?P<increment>\d+))?",
+    re.IGNORECASE,
+)
+
+_INDEX_RE = re.compile(
+    r"CREATE\s+(?P<unique>UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?"
+    r"(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>\w+)\s+ON\s+(?:(?P<schema>\w+)\.)?(?P<table>\w+)"
+    r"\s*\((?P<cols>[^)]+)\)"
+    r"(?:\s+WHERE\s+(?P<where>.+?))?(?:;|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Inline constraint patterns (inside CREATE TABLE body)
+_INLINE_FK_RE = re.compile(
+    r"CONSTRAINT\s+(?P<name>\w+)\s+FOREIGN\s+KEY\s*\((?P<cols>[^)]+)\)"
+    r"\s+REFERENCES\s+(?:(?P<ref_schema>\w+)\.)?(?P<ref_table>\w+)\s*\((?P<ref_cols>[^)]+)\)"
+    r"(?:\s+ON\s+DELETE\s+(?P<on_delete>\w+(?:\s+\w+)?))?",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_INLINE_CHECK_RE = re.compile(
+    r"CONSTRAINT\s+(?P<name>\w+)\s+CHECK\s*\((?P<expr>.+)\)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_INLINE_UNIQUE_RE = re.compile(
+    r"CONSTRAINT\s+(?P<name>\w+)\s+UNIQUE\s*\((?P<cols>[^)]+)\)",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 class SchemaDiffer:
@@ -26,7 +163,7 @@ class SchemaDiffer:
     """
 
     def parse_sql(self, sql: str) -> list[Table]:
-        """Parse SQL DDL into structured Table objects.
+        """Parse SQL DDL into structured Table objects (backwards-compatible shim).
 
         Args:
             sql: SQL DDL string containing CREATE TABLE statements
@@ -41,20 +178,123 @@ class SchemaDiffer:
             >>> print(len(tables))
             1
         """
-        if not sql or not sql.strip():
-            return []
+        return self.parse_schema(sql).tables
 
-        # Parse SQL into statements
+    def parse_schema(self, sql: str) -> ParsedSchema:
+        """Parse SQL DDL into a ParsedSchema (tables, enums, sequences).
+
+        Args:
+            sql: SQL DDL string
+
+        Returns:
+            ParsedSchema with tables, enum_types, sequences
+        """
+        if not sql or not sql.strip():
+            return ParsedSchema()
+
+        result = ParsedSchema()
         statements = sqlparse.parse(sql)
 
-        tables: list[Table] = []
         for stmt in statements:
-            if self._is_create_table(stmt):
-                table = self._parse_create_table(stmt)
-                if table:
-                    tables.append(table)
+            stmt_type: str | None = stmt.get_type()
 
-        return tables
+            if stmt_type == "CREATE":
+                if self._statement_has_keyword(stmt, "TABLE"):
+                    table = self._parse_create_table(stmt)
+                    if table:
+                        result.tables.append(table)
+                elif self._statement_has_keyword(stmt, "INDEX") or self._statement_has_keyword(stmt, "TYPE") and self._statement_has_keyword(
+                    stmt, "ENUM"
+                ) or self._statement_has_keyword(stmt, "SEQUENCE"):
+                    # Parsed via regex below
+                    pass
+            elif stmt_type == "ALTER" and self._statement_has_keyword(stmt, "TABLE"):
+                self._parse_alter_table(stmt.value, result)
+
+        # Regex pass for CREATE INDEX / TYPE ... AS ENUM / SEQUENCE
+        # (sqlparse tokenisation of these is verbose; regex is more reliable)
+        sql_text = sql
+
+        for m in _INDEX_RE.finditer(sql_text):
+            cols = [c.strip() for c in m.group("cols").split(",")]
+            table_name = m.group("table")
+            idx = Index(
+                name=m.group("name"),
+                table=table_name,
+                columns=cols,
+                unique=bool(m.group("unique")),
+                where=m.group("where"),
+            )
+            # Attach to corresponding table if present
+            for t in result.tables:
+                if t.name == table_name:
+                    t.indexes.append(idx)
+                    break
+
+        for m in _ENUM_RE.finditer(sql_text):
+            raw_values = m.group("values")
+            values = [v.strip().strip("'\"") for v in raw_values.split(",")]
+            result.enum_types.append(
+                EnumType(name=m.group("name"), schema=m.group("schema"), values=values)
+            )
+
+        for m in _SEQ_RE.finditer(sql_text):
+            result.sequences.append(
+                Sequence(
+                    name=m.group("name"),
+                    schema=m.group("schema"),
+                    start=int(m.group("start")) if m.group("start") else 1,
+                    increment=int(m.group("increment")) if m.group("increment") else 1,
+                )
+            )
+
+        return result
+
+    def _statement_has_keyword(self, stmt: Statement, keyword: str) -> bool:
+        """Return True if the statement contains the given keyword token."""
+        kw_upper = keyword.upper()
+        return any(token.value.upper() == kw_upper for token in stmt.flatten())
+
+    def _parse_alter_table(self, sql_text: str, result: ParsedSchema) -> None:
+        """Parse ALTER TABLE ... ADD CONSTRAINT ... statements via regex."""
+        for m in _FK_RE.finditer(sql_text):
+            table_name = m.group("table")
+            fk = ForeignKey(
+                name=m.group("name"),
+                table=table_name,
+                columns=[c.strip() for c in m.group("cols").split(",")],
+                ref_table=m.group("ref_table"),
+                ref_columns=[c.strip() for c in m.group("ref_cols").split(",")],
+                on_delete=m.group("on_delete"),
+            )
+            for t in result.tables:
+                if t.name == table_name:
+                    t.foreign_keys.append(fk)
+                    break
+
+        for m in _CHECK_RE.finditer(sql_text):
+            table_name = m.group("table")
+            cc = CheckConstraint(
+                name=m.group("name"),
+                table=table_name,
+                expression=m.group("expr").strip(),
+            )
+            for t in result.tables:
+                if t.name == table_name:
+                    t.check_constraints.append(cc)
+                    break
+
+        for m in _UNIQUE_RE.finditer(sql_text):
+            table_name = m.group("table")
+            uc = UniqueConstraint(
+                name=m.group("name"),
+                table=table_name,
+                columns=[c.strip() for c in m.group("cols").split(",")],
+            )
+            for t in result.tables:
+                if t.name == table_name:
+                    t.unique_constraints.append(uc)
+                    break
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
         """Compare two schemas and detect changes.
@@ -74,80 +314,67 @@ class SchemaDiffer:
             >>> print(len(diff.changes))
             1
         """
-        old_tables = self.parse_sql(old_sql)
-        new_tables = self.parse_sql(new_sql)
+        old_schema = self.parse_schema(old_sql)
+        new_schema = self.parse_schema(new_sql)
 
         changes: list[SchemaChange] = []
 
-        # Build name-to-table maps for efficient lookup
-        old_table_map = {t.name: t for t in old_tables}
-        new_table_map = {t.name: t for t in new_tables}
+        # --- Table-level changes ---
+        old_table_map = {t.name: t for t in old_schema.tables}
+        new_table_map = {t.name: t for t in new_schema.tables}
 
-        # Detect table-level changes
         old_table_names = set(old_table_map.keys())
         new_table_names = set(new_table_map.keys())
 
-        # Check for renamed tables (fuzzy match before drop/add)
         renamed_tables = self._detect_table_renames(
             old_table_names - new_table_names, new_table_names - old_table_names
         )
 
-        # Process renamed tables
         for old_name, new_name in renamed_tables.items():
             changes.append(
                 SchemaChange(type="RENAME_TABLE", old_value=old_name, new_value=new_name)
             )
-            # Mark as processed
             old_table_names.discard(old_name)
             new_table_names.discard(new_name)
 
-        # Dropped tables (in old but not in new, and not renamed)
         for table_name in old_table_names - new_table_names:
             changes.append(SchemaChange(type="DROP_TABLE", table=table_name))
 
-        # New tables (in new but not in old, and not renamed)
         for table_name in new_table_names - old_table_names:
             changes.append(SchemaChange(type="ADD_TABLE", table=table_name))
 
-        # Compare columns in tables that exist in both schemas
         for table_name in old_table_names & new_table_names:
             old_table = old_table_map[table_name]
             new_table = new_table_map[table_name]
-            table_changes = self._compare_table_columns(old_table, new_table)
-            changes.extend(table_changes)
+            changes.extend(self._compare_table_columns(old_table, new_table))
+            changes.extend(self._compare_indexes(old_table, new_table))
+            changes.extend(self._compare_foreign_keys(old_table, new_table))
+            changes.extend(self._compare_check_constraints(old_table, new_table))
+            changes.extend(self._compare_unique_constraints(old_table, new_table))
+
+        # --- Enum type changes ---
+        changes.extend(self._compare_enum_types(old_schema.enum_types, new_schema.enum_types))
+
+        # --- Sequence changes ---
+        changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
 
         return SchemaDiff(changes=changes)
 
+    # ------------------------------------------------------------------
+    # Table column comparison
+    # ------------------------------------------------------------------
+
     def _detect_table_renames(self, old_names: set[str], new_names: set[str]) -> dict[str, str]:
-        """Detect renamed tables using fuzzy matching.
-
-        Args:
-            old_names: Set of table names that exist in old schema only
-            new_names: Set of table names that exist in new schema only
-
-        Returns:
-            Dictionary mapping old_name -> new_name for detected renames
-        """
+        """Detect renamed tables using fuzzy matching."""
         renames: dict[str, str] = {}
-
         for old_name in old_names:
-            # Look for similar names in new_names
             best_match = self._find_best_match(old_name, new_names)
             if best_match and self._similarity_score(old_name, best_match) > 0.5:
                 renames[old_name] = best_match
-
         return renames
 
     def _compare_table_columns(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
-        """Compare columns between two versions of the same table.
-
-        Args:
-            old_table: Old version of table
-            new_table: New version of table
-
-        Returns:
-            List of SchemaChange objects for column-level changes
-        """
+        """Compare columns between two versions of the same table."""
         changes: list[SchemaChange] = []
 
         old_col_map = {c.name: c for c in old_table.columns}
@@ -156,12 +383,10 @@ class SchemaDiffer:
         old_col_names = set(old_col_map.keys())
         new_col_names = set(new_col_map.keys())
 
-        # Detect renamed columns
         renamed_columns = self._detect_column_renames(
             old_col_names - new_col_names, new_col_names - old_col_names
         )
 
-        # Process renamed columns
         for old_name, new_name in renamed_columns.items():
             changes.append(
                 SchemaChange(
@@ -171,36 +396,29 @@ class SchemaDiffer:
                     new_value=new_name,
                 )
             )
-            # Mark as processed
             old_col_names.discard(old_name)
             new_col_names.discard(new_name)
 
-        # Dropped columns
         for col_name in old_col_names - new_col_names:
             changes.append(SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name))
 
-        # New columns
         for col_name in new_col_names - old_col_names:
             changes.append(SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name))
 
-        # Compare columns that exist in both
         for col_name in old_col_names & new_col_names:
             old_col = old_col_map[col_name]
             new_col = new_col_map[col_name]
-            col_changes = self._compare_column_properties(old_table.name, old_col, new_col)
-            changes.extend(col_changes)
+            changes.extend(self._compare_column_properties(old_table.name, old_col, new_col))
 
         return changes
 
     def _detect_column_renames(self, old_names: set[str], new_names: set[str]) -> dict[str, str]:
         """Detect renamed columns using fuzzy matching."""
         renames: dict[str, str] = {}
-
         for old_name in old_names:
             best_match = self._find_best_match(old_name, new_names)
             if best_match and self._similarity_score(old_name, best_match) > 0.5:
                 renames[old_name] = best_match
-
         return renames
 
     def _compare_column_properties(
@@ -209,8 +427,19 @@ class SchemaDiffer:
         """Compare properties of a column."""
         changes: list[SchemaChange] = []
 
-        # Type change
-        if old_col.type != new_col.type:
+        # Type change — handle UNKNOWN types using raw_sql_type
+        if old_col.type == new_col.type == ColumnType.UNKNOWN:
+            if old_col.raw_sql_type != new_col.raw_sql_type:
+                changes.append(
+                    SchemaChange(
+                        type="CHANGE_COLUMN_TYPE",
+                        table=table_name,
+                        column=old_col.name,
+                        old_value=old_col.raw_sql_type,
+                        new_value=new_col.raw_sql_type,
+                    )
+                )
+        elif old_col.type != new_col.type:
             changes.append(
                 SchemaChange(
                     type="CHANGE_COLUMN_TYPE",
@@ -221,7 +450,6 @@ class SchemaDiffer:
                 )
             )
 
-        # Nullable change
         if old_col.nullable != new_col.nullable:
             changes.append(
                 SchemaChange(
@@ -233,7 +461,6 @@ class SchemaDiffer:
                 )
             )
 
-        # Default change
         if old_col.default != new_col.default:
             changes.append(
                 SchemaChange(
@@ -246,6 +473,154 @@ class SchemaDiffer:
             )
 
         return changes
+
+    # ------------------------------------------------------------------
+    # Index, FK, constraint, enum, sequence comparison helpers
+    # ------------------------------------------------------------------
+
+    def _compare_indexes(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
+        """Detect added / dropped indexes."""
+        return self._compare_named_objects(
+            old_map={idx.name: idx for idx in old_table.indexes},
+            new_map={idx.name: idx for idx in new_table.indexes},
+            add_type="ADD_INDEX",
+            drop_type="DROP_INDEX",
+            table=old_table.name,
+            detail_fn=lambda obj: {"index_name": obj.name, "columns": obj.columns},
+        )
+
+    def _compare_foreign_keys(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
+        """Detect added / dropped foreign keys."""
+        return self._compare_named_objects(
+            old_map={fk.name: fk for fk in old_table.foreign_keys},
+            new_map={fk.name: fk for fk in new_table.foreign_keys},
+            add_type="ADD_FOREIGN_KEY",
+            drop_type="DROP_FOREIGN_KEY",
+            table=old_table.name,
+            detail_fn=lambda obj: {
+                "name": obj.name,
+                "columns": obj.columns,
+                "ref_table": obj.ref_table,
+                "ref_columns": obj.ref_columns,
+                "on_delete": obj.on_delete,
+            },
+        )
+
+    def _compare_check_constraints(
+        self, old_table: Table, new_table: Table
+    ) -> list[SchemaChange]:
+        """Detect added / dropped check constraints."""
+        return self._compare_named_objects(
+            old_map={cc.name: cc for cc in old_table.check_constraints},
+            new_map={cc.name: cc for cc in new_table.check_constraints},
+            add_type="ADD_CHECK_CONSTRAINT",
+            drop_type="DROP_CHECK_CONSTRAINT",
+            table=old_table.name,
+            detail_fn=lambda obj: {"name": obj.name, "expression": obj.expression},
+        )
+
+    def _compare_unique_constraints(
+        self, old_table: Table, new_table: Table
+    ) -> list[SchemaChange]:
+        """Detect added / dropped unique constraints."""
+        return self._compare_named_objects(
+            old_map={uc.name: uc for uc in old_table.unique_constraints},
+            new_map={uc.name: uc for uc in new_table.unique_constraints},
+            add_type="ADD_UNIQUE_CONSTRAINT",
+            drop_type="DROP_UNIQUE_CONSTRAINT",
+            table=old_table.name,
+            detail_fn=lambda obj: {"name": obj.name, "columns": obj.columns},
+        )
+
+    def _compare_enum_types(
+        self, old_enums: list[EnumType], new_enums: list[EnumType]
+    ) -> list[SchemaChange]:
+        """Detect added / dropped / changed enum types."""
+        changes: list[SchemaChange] = []
+        old_map = {e.name: e for e in old_enums}
+        new_map = {e.name: e for e in new_enums}
+
+        for name in set(new_map) - set(old_map):
+            changes.append(SchemaChange(type="ADD_ENUM_TYPE", table=name))
+
+        for name in set(old_map) - set(new_map):
+            changes.append(SchemaChange(type="DROP_ENUM_TYPE", table=name))
+
+        for name in set(old_map) & set(new_map):
+            old_vals = set(old_map[name].values)
+            new_vals = set(new_map[name].values)
+            if old_vals != new_vals:
+                changes.append(
+                    SchemaChange(
+                        type="CHANGE_ENUM_VALUES",
+                        table=name,
+                        details={
+                            "added_values": sorted(new_vals - old_vals),
+                            "removed_values": sorted(old_vals - new_vals),
+                        },
+                    )
+                )
+
+        return changes
+
+    def _compare_sequences(
+        self, old_seqs: list[Sequence], new_seqs: list[Sequence]
+    ) -> list[SchemaChange]:
+        """Detect added / dropped sequences."""
+        changes: list[SchemaChange] = []
+        old_map = {s.name: s for s in old_seqs}
+        new_map = {s.name: s for s in new_seqs}
+
+        for name in set(new_map) - set(old_map):
+            changes.append(SchemaChange(type="ADD_SEQUENCE", table=name))
+
+        for name in set(old_map) - set(new_map):
+            changes.append(SchemaChange(type="DROP_SEQUENCE", table=name))
+
+        return changes
+
+    def _compare_named_objects(
+        self,
+        old_map: dict,
+        new_map: dict,
+        add_type: str,
+        drop_type: str,
+        table: str,
+        detail_fn: object,
+    ) -> list[SchemaChange]:
+        """Generic name-based add/drop comparison for indexes/constraints."""
+        from collections.abc import Callable
+
+        detail_fn_typed: Callable = detail_fn  # type: ignore[assignment]
+        changes: list[SchemaChange] = []
+        old_names = set(old_map.keys())
+        new_names = set(new_map.keys())
+
+        for name in new_names - old_names:
+            obj = new_map[name]
+            changes.append(
+                SchemaChange(
+                    type=add_type,
+                    table=table,
+                    details=detail_fn_typed(obj),
+                )
+            )
+
+        for name in old_names - new_names:
+            obj = old_map[name]
+            changes.append(
+                SchemaChange(
+                    type=drop_type,
+                    table=table,
+                    details=detail_fn_typed(obj),
+                )
+            )
+
+        return changes
+
+    # ------------------------------------------------------------------
+    # Fuzzy matching helpers
+    # ------------------------------------------------------------------
 
     def _find_best_match(self, name: str, candidates: set[str]) -> str | None:
         """Find best matching name from candidates."""
@@ -274,37 +649,25 @@ class SchemaDiffer:
         name1 = name1.lower()
         name2 = name2.lower()
 
-        # Exact match
         if name1 == name2:
             return 1.0
 
-        # Split on underscores to get word parts
         name1_parts = name1.split("_")
         name2_parts = name2.split("_")
 
-        # Check for common suffix/prefix patterns
-        # e.g., "full_name" and "display_name" share "_name" suffix
         if len(name1_parts) > 1 or len(name2_parts) > 1:
-            # Check suffix
             if name1_parts[-1] == name2_parts[-1]:
-                # Same suffix, different prefix -> likely rename
                 return 0.6
-
-            # Check prefix
             if name1_parts[0] == name2_parts[0]:
-                # Same prefix, different suffix -> likely rename
                 return 0.6
 
-        # Word-level similarity
         name1_words = set(name1_parts)
         name2_words = set(name2_parts)
         common_words = name1_words & name2_words
 
         if common_words:
-            # Jaccard similarity for words
             return len(common_words) / len(name1_words | name2_words)
 
-        # Character-level Jaccard similarity
         name1_chars = set(name1)
         name2_chars = set(name2)
         common_chars = name1_chars & name2_chars
@@ -314,32 +677,37 @@ class SchemaDiffer:
 
         return 0.0
 
+    # ------------------------------------------------------------------
+    # SQL parsing helpers
+    # ------------------------------------------------------------------
+
     def _is_create_table(self, stmt: Statement) -> bool:
         """Check if statement is a CREATE TABLE statement."""
-        # Check if statement type is CREATE
-        stmt_type: str | None = stmt.get_type()
-        return bool(stmt_type == "CREATE")
+        return stmt.get_type() == "CREATE" and self._statement_has_keyword(stmt, "TABLE")
 
     def _parse_create_table(self, stmt: Statement) -> Table | None:
         """Parse a CREATE TABLE statement."""
         try:
-            # Extract table name
             table_name = self._extract_table_name(stmt)
             if not table_name:
                 return None
 
-            # Extract column definitions
-            columns = self._extract_columns(stmt)
+            table = Table(name=table_name)
+            columns, inline_fks, inline_checks, inline_uniques = self._extract_columns(
+                stmt, table_name
+            )
+            table.columns = columns
+            table.foreign_keys = inline_fks
+            table.check_constraints = inline_checks
+            table.unique_constraints = inline_uniques
 
-            return Table(name=table_name, columns=columns)
+            return table
 
         except Exception:
-            # Skip malformed statements
             return None
 
     def _extract_table_name(self, stmt: Statement) -> str | None:
         """Extract table name from CREATE TABLE statement."""
-        # Find the table name after CREATE TABLE keywords
         found_create = False
         found_table = False
 
@@ -347,17 +715,14 @@ class SchemaDiffer:
             if token.is_whitespace:
                 continue
 
-            # Check for CREATE keyword
             if token.ttype is Keyword.DDL and token.value.upper() == "CREATE":
                 found_create = True
                 continue
 
-            # Check for TABLE keyword
             if found_create and token.ttype is Keyword and token.value.upper() == "TABLE":
                 found_table = True
                 continue
 
-            # Next identifier is the table name
             if found_table:
                 if isinstance(token, Identifier):
                     return str(token.get_real_name())
@@ -366,11 +731,15 @@ class SchemaDiffer:
 
         return None
 
-    def _extract_columns(self, stmt: Statement) -> list[Column]:
-        """Extract column definitions from CREATE TABLE statement."""
+    def _extract_columns(
+        self, stmt: Statement, table_name: str
+    ) -> tuple[list[Column], list[ForeignKey], list[CheckConstraint], list[UniqueConstraint]]:
+        """Extract column definitions and inline constraints from CREATE TABLE."""
         columns: list[Column] = []
+        fks: list[ForeignKey] = []
+        checks: list[CheckConstraint] = []
+        uniques: list[UniqueConstraint] = []
 
-        # Find the parenthesis containing column definitions
         column_def_parens = None
         for token in stmt.tokens:
             if isinstance(token, Parenthesis):
@@ -378,19 +747,78 @@ class SchemaDiffer:
                 break
 
         if not column_def_parens:
-            return columns
+            return columns, fks, checks, uniques
 
-        # Parse column definitions
-        # Split on commas to get individual columns
-        column_text = str(column_def_parens.value)[1:-1]  # Remove outer parens
+        column_text = str(column_def_parens.value)[1:-1]
         column_parts = self._split_columns(column_text)
 
         for part in column_parts:
-            column = self._parse_column_definition(part.strip())
+            stripped = part.strip()
+            upper = stripped.upper()
+
+            # Route inline constraints
+            if upper.startswith("CONSTRAINT") or "FOREIGN KEY" in upper:
+                fk, ck, uq = self._parse_inline_constraint(stripped, table_name)
+                if fk:
+                    fks.append(fk)
+                if ck:
+                    checks.append(ck)
+                if uq:
+                    uniques.append(uq)
+                continue
+
+            if upper.startswith("PRIMARY KEY") or upper.startswith("UNIQUE ("):
+                # table-level PK/UNIQUE — skip (column-level already handled)
+                continue
+
+            column = self._parse_column_definition(stripped)
             if column:
                 columns.append(column)
 
-        return columns
+        return columns, fks, checks, uniques
+
+    def _parse_inline_constraint(
+        self, text: str, table_name: str
+    ) -> tuple[ForeignKey | None, CheckConstraint | None, UniqueConstraint | None]:
+        """Parse an inline CONSTRAINT clause from a CREATE TABLE body."""
+        m = _INLINE_FK_RE.search(text)
+        if m:
+            return (
+                ForeignKey(
+                    name=m.group("name"),
+                    table=table_name,
+                    columns=[c.strip() for c in m.group("cols").split(",")],
+                    ref_table=m.group("ref_table"),
+                    ref_columns=[c.strip() for c in m.group("ref_cols").split(",")],
+                    on_delete=m.group("on_delete"),
+                ),
+                None,
+                None,
+            )
+
+        m = _INLINE_CHECK_RE.search(text)
+        if m:
+            return (
+                None,
+                CheckConstraint(
+                    name=m.group("name"), table=table_name, expression=m.group("expr").strip()
+                ),
+                None,
+            )
+
+        m = _INLINE_UNIQUE_RE.search(text)
+        if m:
+            return (
+                None,
+                None,
+                UniqueConstraint(
+                    name=m.group("name"),
+                    table=table_name,
+                    columns=[c.strip() for c in m.group("cols").split(",")],
+                ),
+            )
+
+        return None, None, None
 
     def _split_columns(self, text: str) -> list[str]:
         """Split column definitions by comma, respecting nested parentheses."""
@@ -426,16 +854,14 @@ class SchemaDiffer:
             col_name = parts[0].strip("\"'")
             col_type_str = parts[1].upper()
 
-            # Extract column type and length
             col_type, length = self._parse_column_type(col_type_str)
+            raw_sql_type = col_type_str.lower() if col_type == ColumnType.UNKNOWN else None
 
-            # Parse constraints
             upper_def = col_def.upper()
             nullable = "NOT NULL" not in upper_def
             primary_key = "PRIMARY KEY" in upper_def
             unique = "UNIQUE" in upper_def and not primary_key
 
-            # Extract default value
             default = self._extract_default(col_def)
 
             return Column(
@@ -446,6 +872,7 @@ class SchemaDiffer:
                 primary_key=primary_key,
                 unique=unique,
                 length=length,
+                raw_sql_type=raw_sql_type,
             )
 
         except Exception:
@@ -460,41 +887,22 @@ class SchemaDiffer:
         Returns:
             Tuple of (ColumnType, length)
         """
-        # Extract length from types like VARCHAR(255)
         length = None
-        match = re.match(r"([A-Z]+)\((\d+)\)", type_str)
+        match = re.match(r"([A-Z_]+)\((\d+)\)", type_str)
         if match:
             type_str = match.group(1)
             length = int(match.group(2))
 
-        # Map SQL type to ColumnType enum
-        type_mapping = {
-            "SMALLINT": ColumnType.SMALLINT,
-            "INT": ColumnType.INTEGER,
-            "INTEGER": ColumnType.INTEGER,
-            "BIGINT": ColumnType.BIGINT,
-            "SERIAL": ColumnType.SERIAL,
-            "BIGSERIAL": ColumnType.BIGSERIAL,
-            "NUMERIC": ColumnType.NUMERIC,
-            "DECIMAL": ColumnType.DECIMAL,
-            "REAL": ColumnType.REAL,
-            "DOUBLE": ColumnType.DOUBLE_PRECISION,
-            "VARCHAR": ColumnType.VARCHAR,
-            "CHAR": ColumnType.CHAR,
-            "TEXT": ColumnType.TEXT,
-            "BOOLEAN": ColumnType.BOOLEAN,
-            "BOOL": ColumnType.BOOLEAN,
-            "DATE": ColumnType.DATE,
-            "TIME": ColumnType.TIME,
-            "TIMESTAMP": ColumnType.TIMESTAMP,
-            "TIMESTAMPTZ": ColumnType.TIMESTAMPTZ,
-            "UUID": ColumnType.UUID,
-            "JSON": ColumnType.JSON,
-            "JSONB": ColumnType.JSONB,
-            "BYTEA": ColumnType.BYTEA,
-        }
+        # Handle array types: INT[], TEXT[], etc.
+        if type_str.endswith("[]"):
+            base = type_str[:-2]
+            base_type = _COLUMN_TYPE_MAP.get(base, ColumnType.UNKNOWN)
+            if base_type == ColumnType.UNKNOWN:
+                return ColumnType.UNKNOWN, length
+            # Map to UNKNOWN with raw type preserved (array types stay UNKNOWN for now)
+            return ColumnType.UNKNOWN, length
 
-        col_type = type_mapping.get(type_str, ColumnType.UNKNOWN)
+        col_type = _COLUMN_TYPE_MAP.get(type_str, ColumnType.UNKNOWN)
         return col_type, length
 
     def _extract_default(self, col_def: str) -> str | None:
@@ -502,9 +910,7 @@ class SchemaDiffer:
         match = re.search(r"DEFAULT\s+([^\s,]+)", col_def, re.IGNORECASE)
         if match:
             default_val = match.group(1)
-            # Handle function calls like NOW()
             if "(" in default_val:
-                # Find the matching closing paren
                 start = match.start(1)
                 text = col_def[start:]
                 paren_count = 0

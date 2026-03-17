@@ -148,6 +148,81 @@ class DifferSQLGenerator:
             return "-- WARNING: Cannot drop constraint without name\n"
         return f"ALTER TABLE {change.table} DROP CONSTRAINT IF EXISTS {constraint_name};\n"
 
+    def _up_add_foreign_key(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        return self._up_add_constraint(
+            SchemaChange(
+                type=change.type,
+                table=change.table,
+                details={
+                    "name": details.get("name", f"fk_{change.table}"),
+                    "type": "FOREIGN KEY",
+                    "columns": details.get("columns", []),
+                    "references": (
+                        f"{details.get('ref_table', '')}({', '.join(details.get('ref_columns', []))})"
+                    ),
+                },
+            )
+        )
+
+    def _up_drop_foreign_key(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        return self._up_drop_constraint(
+            SchemaChange(
+                type=change.type,
+                table=change.table,
+                details={"name": details.get("name", "")},
+            )
+        )
+
+    def _up_add_check_constraint(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        return self._up_add_constraint(
+            SchemaChange(
+                type=change.type,
+                table=change.table,
+                details={
+                    "name": details.get("name", f"chk_{change.table}"),
+                    "type": f"CHECK ({details.get('expression', '')})",
+                    "columns": [],
+                },
+            )
+        )
+
+    def _up_drop_check_constraint(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        return self._up_drop_constraint(
+            SchemaChange(
+                type=change.type,
+                table=change.table,
+                details={"name": details.get("name", "")},
+            )
+        )
+
+    def _up_add_unique_constraint(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        return self._up_add_constraint(
+            SchemaChange(
+                type=change.type,
+                table=change.table,
+                details={
+                    "name": details.get("name", f"uq_{change.table}"),
+                    "type": "UNIQUE",
+                    "columns": details.get("columns", []),
+                },
+            )
+        )
+
+    def _up_drop_unique_constraint(self, change: SchemaChange) -> str:
+        details = change.details or {}
+        return self._up_drop_constraint(
+            SchemaChange(
+                type=change.type,
+                table=change.table,
+                details={"name": details.get("name", "")},
+            )
+        )
+
     def _up_add_function(self, change: SchemaChange) -> str:
         details = change.details or {}
         source = details.get("source", "")
