@@ -6,7 +6,7 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    0.8.1
+    0.8.2
 
 Library API example::
 
