@@ -300,10 +300,10 @@ class TestReinit:
 
         assert d["success"] is True
         assert d["deleted_count"] == 0
-        assert d["count"] == 1
         assert d["dry_run"] is False
-        assert isinstance(d["migrations_marked"], list)
-        assert d["migrations_marked"][0]["version"] == "001"
+        assert isinstance(d["marked"], list)
+        assert len(d["marked"]) == 1
+        assert d["marked"][0]["version"] == "001"
 
         # Cleanup
         with test_db_connection.cursor() as cursor:
@@ -315,9 +315,13 @@ def _make_config_file(tmp_path):
     """Create a minimal config file pointing to test database."""
     config_dir = tmp_path / "db" / "environments"
     config_dir.mkdir(parents=True)
+    schema_dir = tmp_path / "db" / "schema"
+    schema_dir.mkdir(parents=True)
     config_file = config_dir / "local.yaml"
     db_url = os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
-    config_file.write_text(f"name: local\ndatabase_url: {db_url}\n")
+    config_file.write_text(
+        f"name: local\ndatabase_url: {db_url}\ninclude_dirs:\n  - {schema_dir}\n"
+    )
     return config_file
 
 

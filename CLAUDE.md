@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.7.2
-**Last Updated**: 2026-03-10
+**Version**: 0.8.2
+**Last Updated**: 2026-03-17
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -98,13 +98,13 @@ pydantic = ">=2.5"        # Configuration validation
 pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
-sqlparse = ">=0.5"        # SQL parsing (Python)
-sqlglot = ">=28.0"        # SQL dialect-aware parsing
+sqlparse = ">=0.5"        # SQL parsing — fallback when pglast unavailable
+sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
 cryptography = ">=42.0"   # Encryption utilities
 
 [project.optional-dependencies]
 ast = [
-    "pglast>=6.0",         # PostgreSQL SQL AST (optional, via libpg_query)
+    "pglast>=6.0",         # PostgreSQL's own C parser (libpg_query) — no token limits
 ]
 
 dev = [
@@ -117,6 +117,21 @@ dev = [
     "maturin>=1.7",
 ]
 ```
+
+### SQL Parsing Architecture
+
+`SchemaDiffer` uses a two-tier parsing strategy:
+
+1. **Primary — pglast** (`[ast]` extra, `pip install "fraiseql-confiture[ast]"`):
+   Uses PostgreSQL's own C parser via `libpg_query`. No token/recursion limits,
+   full PostgreSQL syntax support, handles schemas of any size including bulk seed data.
+
+2. **Fallback — sqlparse**: Used when pglast is not installed. Splits SQL into
+   individual statements before parsing (avoids `MAX_GROUPING_TOKENS = 10000` crash)
+   and filters to DDL-only, so non-DDL content (INSERT, COPY, GRANT) is ignored.
+
+Both paths share the same regex pass for `CREATE INDEX`, `CREATE TYPE AS ENUM`,
+`CREATE SEQUENCE`, and `ALTER TABLE ADD CONSTRAINT`.
 
 ### Rust Extension (Optional Performance)
 
@@ -769,7 +784,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### Beta (v0.7.2)
+### Beta (v0.8.2)
 
 > **⚠️ Not Production-Tested**: All features below are implemented and have passing tests, but have never been used in a real production environment.
 
@@ -778,7 +793,8 @@ Closes #123
 - ✅ Migration system (Medium 2) - Incremental migrations with dry-run
 - ✅ Production sync (Medium 3) - Copy data with PII anonymization
 - ✅ Zero-downtime migrations (Medium 4) - Schema-to-schema via FDW
-- ✅ Schema diff detection
+- ✅ Schema diff detection — pglast primary parser, sqlparse fallback
+- ✅ Large-schema support — schemas with bulk seed data parse without token-limit crash
 - ✅ Prep-seed validation - 5-level validation orchestrator with full Level 4-5 support
 - ✅ CLI with rich terminal output
 - ✅ Migration hooks
@@ -795,8 +811,7 @@ Closes #123
 - ✅ JSON/CSV/YAML structured output for all commands
 
 **Test Metrics**:
-- **Total collected**: 5,583
-- **Unit tests passing**: 4,518+
+- **Unit tests passing**: 4,240+
 - **Python Support**: 3.11, 3.12, 3.13
 - **Documentation**: Comprehensive with guides and API references
 
@@ -868,7 +883,7 @@ except psycopg.OperationalError as e:
 
 ## 📊 Implementation Metrics
 
-- ✅ **Tests**: 5,583 collected, 4,518+ unit passing (2026-03-10)
+- ✅ **Tests**: 4,240+ unit passing (2026-03-17)
 - ✅ **CLI Commands**: 20+ implemented across schema, migrate, admin, seed, branch, coordinate, generate subgroups
 - ✅ **Documentation**: Comprehensive guides + API references
 - ✅ **Validation System**: 5-level prep-seed orchestrator with full database support
@@ -917,8 +932,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: 2026-03-10
-**Version**: 0.7.2 (Not Production-Tested)
+**Last Updated**: 2026-03-17
+**Version**: 0.8.2 (Not Production-Tested)
 
 ---
 

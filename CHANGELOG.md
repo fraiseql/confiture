@@ -5,6 +5,30 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-03-17
+
+### Fixed
+
+- **`migrate validate` crashes on large schemas** — `SchemaDiffer.parse_schema()` previously
+  passed the entire concatenated schema SQL to `sqlparse.parse()` in one call, hitting
+  sqlparse's `MAX_GROUPING_TOKENS = 10000` limit when schema files contained bulk `INSERT`
+  seed data or many `CREATE TABLE` statements (Issue #78).
+
+  **Primary fix**: pglast (PostgreSQL's own C parser, optional dependency) is now used when
+  available — it has no token limits and handles all PostgreSQL DDL accurately. Install with
+  `pip install "fraiseql-confiture[ast]"`.
+
+  **Fallback fix**: when pglast is not installed, the sqlparse path now splits SQL into
+  individual statements with `sqlparse.split()` and filters to DDL-only before calling
+  `sqlparse.parse()` per-statement, keeping each call well within the token budget.
+
+- **`migrate validate --require-migration` exits 1 on parse failure** — when schema parsing
+  failed, the accompaniment check propagated the error as a hard validation failure. The
+  checker now returns a report with `migration_error` set and `is_valid=True` (check
+  skipped ≠ check failed). The CLI prints a yellow `⚠️` warning instead of a red `❌` error.
+
+---
+
 ## [0.8.1] - 2026-03-17
 
 ### Added

@@ -7,8 +7,10 @@ This module provides functionality to:
 """
 
 import re
+from typing import Any
 
 import sqlparse
+from sqlparse.exceptions import SQLParseError as _SqlParseError
 from sqlparse.sql import Identifier, Parenthesis, Statement
 from sqlparse.tokens import Keyword, Name
 
@@ -133,6 +135,32 @@ _INDEX_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# DDL statement prefixes — used to filter out non-DDL (INSERT, COPY, GRANT, etc.)
+# before passing individual statements to sqlparse (avoids MAX_GROUPING_TOKENS crash).
+_DDL_PREFIXES = ("CREATE", "ALTER", "DROP", "TRUNCATE", "COMMENT")
+
+# pglast reports internal type aliases rather than the SQL keyword the user wrote.
+# Map them back to the canonical names in _COLUMN_TYPE_MAP.
+_PGLAST_TYPE_ALIASES: dict[str, str] = {
+    "INT4": "INTEGER",
+    "INT8": "BIGINT",
+    "INT2": "SMALLINT",
+    "FLOAT4": "REAL",
+    "FLOAT8": "DOUBLE PRECISION",
+    "BOOL": "BOOLEAN",
+}
+
+# pglast FK on-delete action code → human-readable string
+_PG_FK_DEL_ACTION: dict[str, str | None] = {
+    "c": "CASCADE",
+    "a": "SET NULL",
+    "d": "NO ACTION",
+    "r": "RESTRICT",
+    "p": "SET DEFAULT",
+    "": None,
+    "\x00": None,
+}
+
 # Inline constraint patterns (inside CREATE TABLE body)
 _INLINE_FK_RE = re.compile(
     r"CONSTRAINT\s+(?P<name>\w+)\s+FOREIGN\s+KEY\s*\((?P<cols>[^)]+)\)"
@@ -183,8 +211,12 @@ class SchemaDiffer:
     def parse_schema(self, sql: str) -> ParsedSchema:
         """Parse SQL DDL into a ParsedSchema (tables, enums, sequences).
 
+        Uses pglast (PostgreSQL's own parser) when available for accurate,
+        limit-free parsing. Falls back to sqlparse when pglast is not installed.
+        Non-DDL statements (INSERT, COPY, GRANT, etc.) are silently ignored.
+
         Args:
-            sql: SQL DDL string
+            sql: SQL DDL string (may contain any SQL, including non-DDL)
 
         Returns:
             ParsedSchema with tables, enum_types, sequences
@@ -193,32 +225,22 @@ class SchemaDiffer:
             return ParsedSchema()
 
         result = ParsedSchema()
-        statements = sqlparse.parse(sql)
 
-        for stmt in statements:
-            stmt_type: str | None = stmt.get_type()
+        # Primary path: pglast — uses PostgreSQL's actual C parser, no token limits.
+        # Falls back to sqlparse when pglast is not installed (optional dependency).
+        try:
+            import pglast  # noqa: PLC0415
 
-            if stmt_type == "CREATE":
-                if self._statement_has_keyword(stmt, "TABLE"):
-                    table = self._parse_create_table(stmt)
-                    if table:
-                        result.tables.append(table)
-                elif (
-                    self._statement_has_keyword(stmt, "INDEX")
-                    or self._statement_has_keyword(stmt, "TYPE")
-                    and self._statement_has_keyword(stmt, "ENUM")
-                    or self._statement_has_keyword(stmt, "SEQUENCE")
-                ):
-                    # Parsed via regex below
-                    pass
-            elif stmt_type == "ALTER" and self._statement_has_keyword(stmt, "TABLE"):
-                self._parse_alter_table(stmt.value, result)
+            self._parse_create_tables_pglast(sql, result, pglast)
+        except ImportError:
+            self._parse_create_tables_sqlparse(sql, result)
 
-        # Regex pass for CREATE INDEX / TYPE ... AS ENUM / SEQUENCE
-        # (sqlparse tokenisation of these is verbose; regex is more reliable)
-        sql_text = sql
+        # Regex pass: CREATE INDEX / TYPE AS ENUM / SEQUENCE / ALTER TABLE ADD CONSTRAINT.
+        # These are more reliably matched by regex than by either AST parser, and regex
+        # has no token-count limits.
+        self._parse_alter_table(sql, result)
 
-        for m in _INDEX_RE.finditer(sql_text):
+        for m in _INDEX_RE.finditer(sql):
             cols = [c.strip() for c in m.group("cols").split(",")]
             table_name = m.group("table")
             idx = Index(
@@ -228,20 +250,19 @@ class SchemaDiffer:
                 unique=bool(m.group("unique")),
                 where=m.group("where"),
             )
-            # Attach to corresponding table if present
             for t in result.tables:
                 if t.name == table_name:
                     t.indexes.append(idx)
                     break
 
-        for m in _ENUM_RE.finditer(sql_text):
+        for m in _ENUM_RE.finditer(sql):
             raw_values = m.group("values")
             values = [v.strip().strip("'\"") for v in raw_values.split(",")]
             result.enum_types.append(
                 EnumType(name=m.group("name"), schema=m.group("schema"), values=values)
             )
 
-        for m in _SEQ_RE.finditer(sql_text):
+        for m in _SEQ_RE.finditer(sql):
             result.sequences.append(
                 Sequence(
                     name=m.group("name"),
@@ -252,6 +273,208 @@ class SchemaDiffer:
             )
 
         return result
+
+    # ------------------------------------------------------------------
+    # pglast-based CREATE TABLE parser (primary path)
+    # ------------------------------------------------------------------
+
+    def _parse_create_tables_pglast(self, sql: str, result: ParsedSchema, pglast: Any) -> None:
+        """Parse CREATE TABLE statements using pglast (PostgreSQL's own parser).
+
+        pglast has no token/recursion limits and handles all PostgreSQL syntax.
+        Falls back to the sqlparse path on any parse error.
+
+        Args:
+            sql: Full SQL text (may contain any statements)
+            result: ParsedSchema to populate
+            pglast: The already-imported pglast module
+        """
+        try:
+            tree = pglast.parse_sql(sql)
+        except Exception:
+            # pglast parse error (e.g. non-PostgreSQL syntax) — fall back to sqlparse
+            self._parse_create_tables_sqlparse(sql, result)
+            return
+
+        if tree is None:
+            return
+
+        for stmt_wrapper in tree:
+            stmt = stmt_wrapper.stmt
+            if type(stmt).__name__ == "CreateStmt":
+                table = self._parse_create_table_pglast(stmt)
+                if table:
+                    result.tables.append(table)
+
+    def _parse_create_table_pglast(self, stmt: Any) -> Table | None:
+        """Build a Table model from a pglast CreateStmt node."""
+        try:
+            from pglast.enums.parsenodes import ConstrType  # noqa: PLC0415
+
+            table = Table(name=stmt.relation.relname)
+
+            for elt in stmt.tableElts or []:
+                if type(elt).__name__ == "ColumnDef":
+                    col = self._parse_column_pglast(elt, ConstrType)
+                    if col:
+                        table.columns.append(col)
+                elif type(elt).__name__ == "Constraint":
+                    self._parse_table_constraint_pglast(elt, table, ConstrType)
+
+            return table
+        except Exception:
+            return None
+
+    def _parse_column_pglast(self, col_def: Any, ConstrType: Any) -> Column | None:
+        """Build a Column model from a pglast ColumnDef node."""
+        try:
+            # Extract type name: last entry in typeName.names (skip 'pg_catalog' prefix)
+            names = [n.sval for n in col_def.typeName.names]
+            raw_type_str = names[-1].upper()
+            lookup_str = _PGLAST_TYPE_ALIASES.get(raw_type_str, raw_type_str)
+            col_type = _COLUMN_TYPE_MAP.get(lookup_str, ColumnType.UNKNOWN)
+            raw_sql_type = raw_type_str.lower() if col_type == ColumnType.UNKNOWN else None
+
+            # Extract length from first typmod (VARCHAR(N), NUMERIC(P,S), etc.)
+            length: int | None = None
+            typmods = col_def.typeName.typmods
+            if typmods:
+                first = typmods[0]
+                if type(first).__name__ == "A_Const" and hasattr(first, "val"):
+                    val = first.val
+                    if type(val).__name__ == "Integer":
+                        length = val.ival
+
+            # Array column (INT[], TEXT[], etc.) → UNKNOWN with raw type preserved
+            if col_def.typeName.arrayBounds:
+                col_type = ColumnType.UNKNOWN
+                raw_sql_type = raw_type_str.lower() + "[]"
+
+            nullable = True
+            primary_key = False
+            default: str | None = None
+
+            for constraint in col_def.constraints or []:
+                ctype = constraint.contype
+                if ctype == ConstrType.CONSTR_NOTNULL:
+                    nullable = False
+                elif ctype == ConstrType.CONSTR_PRIMARY:
+                    primary_key = True
+                    nullable = False
+                elif ctype == ConstrType.CONSTR_DEFAULT:
+                    default = self._render_default_pglast(constraint.raw_expr)
+
+            return Column(
+                name=col_def.colname,
+                type=col_type,
+                nullable=nullable,
+                default=default,
+                primary_key=primary_key,
+                unique=False,
+                length=length,
+                raw_sql_type=raw_sql_type,
+            )
+        except Exception:
+            return None
+
+    def _parse_table_constraint_pglast(
+        self, constraint: Any, table: Table, ConstrType: Any
+    ) -> None:
+        """Attach a table-level inline constraint (FK / CHECK / UNIQUE) to the table."""
+        try:
+            ctype = constraint.contype
+            name = constraint.conname or ""
+
+            if ctype == ConstrType.CONSTR_FOREIGN:
+                fk_cols = [s.sval for s in (constraint.fk_attrs or [])]
+                pk_cols = [s.sval for s in (constraint.pk_attrs or [])]
+                ref_table = constraint.pktable.relname if constraint.pktable else ""
+                on_delete = _PG_FK_DEL_ACTION.get(str(constraint.fk_del_action or ""))
+                table.foreign_keys.append(
+                    ForeignKey(
+                        name=name,
+                        table=table.name,
+                        columns=fk_cols,
+                        ref_table=ref_table,
+                        ref_columns=pk_cols,
+                        on_delete=on_delete,
+                    )
+                )
+            elif ctype == ConstrType.CONSTR_CHECK:
+                # Store the AST node type as a placeholder — identity-level comparison
+                # (detecting that a CHECK constraint was added/removed) is what matters.
+                expr = type(constraint.raw_expr).__name__ if constraint.raw_expr else ""
+                table.check_constraints.append(
+                    CheckConstraint(name=name, table=table.name, expression=expr)
+                )
+            elif ctype == ConstrType.CONSTR_UNIQUE:
+                cols = [s.sval for s in (constraint.keys or [])]
+                table.unique_constraints.append(
+                    UniqueConstraint(name=name, table=table.name, columns=cols)
+                )
+        except Exception:
+            pass
+
+    def _render_default_pglast(self, raw_expr: Any) -> str | None:
+        """Render a pglast default expression as a comparable string."""
+        if raw_expr is None:
+            return None
+        ntype = type(raw_expr).__name__
+        if ntype == "A_Const":
+            if getattr(raw_expr, "isnull", False):
+                return "NULL"
+            val = getattr(raw_expr, "val", None)
+            if val is None:
+                return None
+            vtype = type(val).__name__
+            if vtype == "Integer":
+                return str(val.ival)
+            if vtype == "Float":
+                return str(val.fval)
+            if vtype == "String":
+                return f"'{val.sval}'"
+            if vtype == "Boolean":
+                return "true" if val.boolval else "false"
+        if ntype == "FuncCall":
+            funcnames = [n.sval for n in (raw_expr.funcname or [])]
+            return ".".join(funcnames) + "()"
+        # TypeCast, ColumnRef, or other complex expression — non-None signals presence
+        return "expression"
+
+    # ------------------------------------------------------------------
+    # sqlparse-based CREATE TABLE parser (fallback when pglast not installed)
+    # ------------------------------------------------------------------
+
+    def _parse_create_tables_sqlparse(self, sql: str, result: ParsedSchema) -> None:
+        """Parse CREATE TABLE statements using sqlparse (fallback path).
+
+        Splits the SQL into individual statements and filters to DDL-only
+        before passing each to sqlparse, avoiding the MAX_GROUPING_TOKENS
+        crash that occurs when a large combined string is parsed at once.
+
+        Args:
+            sql: Full SQL text
+            result: ParsedSchema to populate
+        """
+        raw_statements = sqlparse.split(sql)
+        for raw_stmt in raw_statements:
+            if not raw_stmt.strip():
+                continue
+            upper = raw_stmt.lstrip().upper()
+            if not any(upper.startswith(p) for p in _DDL_PREFIXES):
+                continue
+            try:
+                parsed = sqlparse.parse(raw_stmt)
+            except _SqlParseError:
+                continue
+            if not parsed:
+                continue
+            stmt = parsed[0]
+            stmt_type: str | None = stmt.get_type()
+            if stmt_type == "CREATE" and self._statement_has_keyword(stmt, "TABLE"):
+                table = self._parse_create_table(stmt)
+                if table:
+                    result.tables.append(table)
 
     def _statement_has_keyword(self, stmt: Statement, keyword: str) -> bool:
         """Return True if the statement contains the given keyword token."""
@@ -679,10 +902,6 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
     # SQL parsing helpers
     # ------------------------------------------------------------------
-
-    def _is_create_table(self, stmt: Statement) -> bool:
-        """Check if statement is a CREATE TABLE statement."""
-        return stmt.get_type() == "CREATE" and self._statement_has_keyword(stmt, "TABLE")
 
     def _parse_create_table(self, stmt: Statement) -> Table | None:
         """Parse a CREATE TABLE statement."""

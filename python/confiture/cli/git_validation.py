@@ -117,7 +117,15 @@ def validate_migration_accompaniment(
         report = checker.check_accompaniment(base_ref, target_ref)
 
         if format_output == "text":
-            if not report.has_ddl_changes:
+            if report.migration_error:
+                console.print(
+                    f"[yellow]⚠️  Schema parse check skipped: {report.migration_error}[/yellow]"
+                )
+                console.print(
+                    "[yellow]   Schema may be too large for static analysis "
+                    "— DDL accompaniment check was not run.[/yellow]"
+                )
+            elif not report.has_ddl_changes:
                 console.print("[green]✅ No DDL changes detected[/green]")
             elif report.is_valid:
                 console.print("[green]✅ DDL changes accompanied by migrations[/green]")

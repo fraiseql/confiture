@@ -5,7 +5,7 @@
 Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent conflict detection. No merge conflicts (timestamp-based versioning). Production data sync with PII anonymization.
 
 [![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
-[![Tests](https://img.shields.io/badge/tests-4100%2B-brightgreen)](https://github.com/fraiseql/confiture)
+[![Tests](https://img.shields.io/badge/tests-4240%2B-brightgreen)](https://github.com/fraiseql/confiture)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![PostgreSQL 12+](https://img.shields.io/badge/PostgreSQL-12%2B-blue)](https://www.postgresql.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -27,6 +27,10 @@ Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent confli
 ### Installation
 ```bash
 pip install fraiseql-confiture
+
+# Recommended: include pglast for large-schema support
+# (uses PostgreSQL's own C parser — no token limits, handles schemas with bulk seed data)
+pip install "fraiseql-confiture[ast]"
 ```
 
 ### Basic Usage

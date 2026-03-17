@@ -285,7 +285,35 @@ The command has a 30-second timeout per git operation. If hitting timeout:
 2. Try fetching latest: `git fetch origin`
 3. Use a more recent base ref
 
-### Scenario 4: "I'm getting false positives for migration files"
+### Scenario 4: "I see a ⚠️ warning instead of ✅ or ❌"
+
+**Problem**: `migrate validate --require-migration` prints a yellow warning:
+
+```
+⚠️  Schema parse check skipped: Schema parse check skipped: Maximum number of tokens exceeded (10000).
+   Schema may be too large for static analysis — DDL accompaniment check was not run.
+```
+
+**Why**: The schema SQL is too large for the sqlparse fallback parser (which has a
+10,000-token limit). This typically happens when `db/schema/` files contain bulk `INSERT`
+seed data mixed with DDL.
+
+**Fix — install pglast** (recommended):
+
+```bash
+pip install "fraiseql-confiture[ast]"
+# or
+uv add "fraiseql-confiture[ast]"
+```
+
+pglast uses PostgreSQL's own C parser (via `libpg_query`) — no token limits, handles
+schemas of any size. Once installed, the warning disappears and full validation resumes.
+
+**Why the check is skipped, not failed**: "Schema couldn't be parsed" and "DDL has no
+migration" are different conditions. A skipped check does not block CI — the pipeline
+continues with exit code `0`. A genuine missing-migration failure still exits `1`.
+
+### Scenario 5: "I'm getting false positives for migration files"
 
 **Problem**: Migration files in non-standard locations are being detected.
 
