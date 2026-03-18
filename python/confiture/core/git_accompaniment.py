@@ -129,10 +129,7 @@ class MigrationAccompanimentChecker:
                 and file_path.parts[1] == "migrations"
                 and (
                     file_path.name.endswith(".up.sql")
-                    or (
-                        file_path.name.endswith(".py")
-                        and not file_path.name.startswith("_")
-                    )
+                    or (file_path.name.endswith(".py") and not file_path.name.startswith("_"))
                 )
             ):
                 migration_files.append(file_path)
