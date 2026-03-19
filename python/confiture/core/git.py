@@ -156,6 +156,22 @@ class GitRepository:
         # Convert to Path objects
         return [Path(line) for line in result.stdout.strip().split("\n")]
 
+    def show_file_at_ref(self, file_path: Path, ref: str) -> str | None:
+        """Return file content at the given git ref.
+
+        Args:
+            file_path: Relative path to file from repo root
+            ref: Git reference (commit hash, branch name, etc.)
+
+        Returns:
+            File content as string, or None if the file doesn't exist at that ref
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository
+            GitError: If git command fails for a reason other than missing file
+        """
+        return self.get_file_at_ref(file_path, ref)
+
     def get_staged_files(self) -> list[Path]:
         """Get list of currently staged files.
 

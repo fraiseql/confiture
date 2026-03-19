@@ -125,16 +125,29 @@ def validate_migration_accompaniment(
                     "[yellow]   Schema may be too large for static analysis "
                     "— DDL accompaniment check was not run.[/yellow]"
                 )
-            elif not report.has_ddl_changes:
+            elif not report.has_ddl_changes and not report.has_signature_violations:
                 console.print("[green]✅ No DDL changes detected[/green]")
             elif report.is_valid:
                 console.print("[green]✅ DDL changes accompanied by migrations[/green]")
                 console.print(f"   Changes: {len(report.ddl_changes)}")
                 console.print(f"   Migrations: {len(report.new_migration_files)}")
             else:
-                console.print("[red]❌ DDL changes without migration files[/red]")
-                console.print(f"   Changes: {len(report.ddl_changes)}")
-                console.print("   DDL changes found but no migrations added")
+                if report.has_ddl_changes and not report.has_new_migrations:
+                    console.print("[red]❌ DDL changes without migration files[/red]")
+                    console.print(f"   Changes: {len(report.ddl_changes)}")
+                    console.print("   DDL changes found but no migrations added")
+                if report.signature_violations:
+                    console.print(
+                        "[red]❌ Function parameter type changes detected without DROP FUNCTION[/red]"
+                    )
+                    for v in report.signature_violations:
+                        console.print(f"   • {v.function_key}")
+                        console.print(f"     Old signature: {v.old_signature}")
+                        console.print(f"     New signature: {v.new_signature}")
+                        console.print(
+                            f"     [yellow]Fix: add DROP FUNCTION {v.old_signature}; "
+                            f"before CREATE OR REPLACE in a migration[/yellow]"
+                        )
 
         return report.to_dict()
 

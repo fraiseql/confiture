@@ -4,11 +4,17 @@ Validates that DDL schema changes are accompanied by migration files.
 Useful for pre-commit hooks and CI/CD pipelines.
 """
 
+import re
 from pathlib import Path
 
 from confiture.core.git import GitRepository
 from confiture.core.git_schema import GitSchemaDiffer
 from confiture.models.git import MigrationAccompanimentReport
+
+_FUNC_CONTENT_RE = re.compile(
+    r"\bCREATE\b.*?\bFUNCTION\b|\bCREATE\b.*?\bPROCEDURE\b",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 class MigrationAccompanimentChecker:
@@ -88,6 +94,11 @@ class MigrationAccompanimentChecker:
                 target_ref=target_ref,
             )
 
+        # Check function signature violations (param type changes need DROP FUNCTION)
+        signature_violations = self._check_signature_violations(
+            new_migrations, base_ref, target_ref
+        )
+
         return MigrationAccompanimentReport(
             has_ddl_changes=has_ddl_changes,
             has_new_migrations=len(new_migrations) > 0,
@@ -95,7 +106,48 @@ class MigrationAccompanimentChecker:
             new_migration_files=new_migrations,
             base_ref=base_ref,
             target_ref=target_ref,
+            signature_violations=signature_violations,
         )
+
+    def _check_signature_violations(
+        self,
+        new_migrations: list[Path],
+        base_ref: str,
+        target_ref: str,
+    ) -> list:
+        """Return function signature violations for changed function files."""
+        try:
+            function_files = self._get_changed_function_files(base_ref, target_ref)
+            if not function_files:
+                return []
+
+            from confiture.core.function_signature_checker import FunctionSignatureChecker  # noqa: PLC0415
+
+            checker = FunctionSignatureChecker(self.git_repo)
+            return checker.check(
+                changed_sql_files=function_files,
+                migration_file_paths=new_migrations,
+                base_ref=base_ref,
+                target_ref=target_ref,
+            )
+        except Exception:
+            # Signature check is best-effort — never block CI on unexpected errors
+            return []
+
+    def _get_changed_function_files(self, base_ref: str, target_ref: str) -> list[Path]:
+        """Return SQL files that changed between refs and contain function definitions."""
+        changed_files = self.git_repo.get_changed_files(base_ref, target_ref)
+        result = []
+        for f in changed_files:
+            if not f.name.endswith(".sql"):
+                continue
+            try:
+                content = self.git_repo.show_file_at_ref(f, target_ref)
+            except Exception:
+                continue
+            if content and _FUNC_CONTENT_RE.search(content):
+                result.append(f)
+        return result
 
     def _get_new_migrations(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
         """Get list of new migration files between refs.
