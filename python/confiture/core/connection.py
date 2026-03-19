@@ -2,6 +2,8 @@
 
 import importlib.util
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -93,6 +95,79 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
             f"Failed to connect to database: {e}",
             resolution_hint="Check that the database server is running and the connection credentials are correct",
         ) from e
+
+
+@contextmanager
+def open_connection(
+    config: "dict[str, Any] | Any",
+) -> "Generator[psycopg.Connection[Any], None, None]":
+    """Open a psycopg connection, transparently handling SSH tunnels.
+
+    If *config* has an ``ssh_tunnel`` section (``Environment.ssh_tunnel`` or a
+    dict key), the tunnel is opened first and the ``database_url`` placeholder
+    ``${TUNNEL_LOCAL_PORT}`` is substituted with the real port.  The connection
+    and any tunnel subprocess are always closed on exit.
+
+    Args:
+        config: ``Environment`` instance, raw config dict, or database URL string.
+
+    Yields:
+        An open ``psycopg.Connection``.
+
+    Example::
+
+        from confiture.core.connection import open_connection
+
+        env = Environment.load("production")
+        with open_connection(env) as conn:
+            conn.execute("SELECT version()")
+    """
+    from confiture.config.environment import SshTunnelConfig  # noqa: PLC0415
+
+    # Resolve ssh_tunnel config (supports Environment objects and raw dicts).
+    # Explicitly check isinstance(SshTunnelConfig) to avoid treating MagicMock
+    # attributes (present in tests) as tunnel configuration.
+    tunnel_cfg: SshTunnelConfig | None = None
+    if hasattr(config, "ssh_tunnel"):
+        _ssh = config.ssh_tunnel
+        if isinstance(_ssh, SshTunnelConfig):
+            tunnel_cfg = _ssh
+    elif isinstance(config, dict) and config.get("ssh_tunnel"):
+        raw = config["ssh_tunnel"]
+        tunnel_cfg = SshTunnelConfig(**raw) if isinstance(raw, dict) else raw
+
+    if tunnel_cfg is not None:
+        from confiture.core.ssh_tunnel import ssh_tunnel  # noqa: PLC0415
+
+        database_url: str
+        if hasattr(config, "database_url"):
+            database_url = config.database_url
+        elif isinstance(config, dict):
+            database_url = config.get("database_url", "")
+        else:
+            raise MigrationError(
+                "Cannot determine database_url for SSH tunnel",
+                resolution_hint="Ensure your config has a 'database_url' field",
+            )
+
+        with ssh_tunnel(tunnel_cfg, database_url) as patched_url:
+            try:
+                conn = psycopg.connect(patched_url)
+            except psycopg.Error as e:
+                raise MigrationError(
+                    f"Failed to connect through SSH tunnel: {e}",
+                    resolution_hint="Check that the SSH tunnel opened correctly and the database URL is valid",
+                ) from e
+            try:
+                yield conn
+            finally:
+                conn.close()
+    else:
+        conn = create_connection(config)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 def load_migration_module(migration_file: Path) -> ModuleType:

@@ -1,14 +1,11 @@
 """Unit tests for migrate validate --check-signatures CLI flag."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport
-from confiture.core.function_signature_parser import FunctionSignature
 
 
 def _empty_report() -> FunctionSignatureDriftReport:
@@ -76,6 +73,16 @@ class TestCheckSignaturesFlag:
         )
         assert result.exit_code == 2
 
+    def _make_open_conn_mock(self) -> MagicMock:
+        """Return a context manager mock for open_connection."""
+
+        fake_conn = MagicMock()
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=fake_conn)
+        cm.__exit__ = MagicMock(return_value=False)
+        mock = MagicMock(return_value=cm)
+        return mock
+
     def test_check_signatures_exits_0_on_clean(self, tmp_path):
         config = tmp_path / "confiture.yaml"
         config.write_text("database:\n  url: postgresql://localhost/test\n")
@@ -84,13 +91,12 @@ class TestCheckSignaturesFlag:
 
         with (
             patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
-            patch("confiture.cli.commands.migrate_analysis.create_connection") as mock_conn,
             patch(
-                "confiture.core.live_function_catalog.FunctionIntrospector"
-            ) as MockIntrospector,
+                "confiture.cli.commands.migrate_analysis.open_connection",
+                self._make_open_conn_mock(),
+            ),
+            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
         ):
-            mock_conn.return_value.__enter__ = MagicMock()
-            mock_conn.return_value.close = MagicMock()
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
 
             with patch(
@@ -119,13 +125,12 @@ class TestCheckSignaturesFlag:
 
         with (
             patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
-            patch("confiture.cli.commands.migrate_analysis.create_connection") as mock_conn,
             patch(
-                "confiture.core.live_function_catalog.FunctionIntrospector"
-            ) as MockIntrospector,
+                "confiture.cli.commands.migrate_analysis.open_connection",
+                self._make_open_conn_mock(),
+            ),
+            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
         ):
-            mock_conn.return_value.__enter__ = MagicMock()
-            mock_conn.return_value.close = MagicMock()
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
 
             with patch(
@@ -154,13 +159,12 @@ class TestCheckSignaturesFlag:
 
         with (
             patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
-            patch("confiture.cli.commands.migrate_analysis.create_connection") as mock_conn,
             patch(
-                "confiture.core.live_function_catalog.FunctionIntrospector"
-            ) as MockIntrospector,
+                "confiture.cli.commands.migrate_analysis.open_connection",
+                self._make_open_conn_mock(),
+            ),
+            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
         ):
-            mock_conn.return_value.__enter__ = MagicMock()
-            mock_conn.return_value.close = MagicMock()
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
 
             with patch(

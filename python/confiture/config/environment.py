@@ -205,6 +205,57 @@ class MigrationConfig(BaseModel):
     grant_dir: str = "db/7_grant"
 
 
+class SshTunnelConfig(BaseModel):
+    """SSH tunnel configuration for remote database access.
+
+    When set, confiture opens an SSH tunnel before connecting to the database.
+    The tunnel is torn down automatically after the operation completes.
+
+    This is the standard configuration for self-hosted production databases
+    accessed via ``ssh user@host psql -d dbname``.
+
+    Attributes:
+        host: SSH server hostname (e.g. "printoptim.io")
+        user: SSH username. Defaults to the current OS user if omitted.
+        remote_host: PostgreSQL host on the remote side (default: localhost).
+            Ignored when ``remote_socket`` is set.
+        remote_port: PostgreSQL port on the remote side (default: 5432).
+            Ignored when ``remote_socket`` is set.
+        remote_socket: Unix domain socket path on the remote side
+            (e.g. ``/var/run/postgresql/.s.PGSQL.5432``).  When set, the
+            tunnel forwards a local TCP port to this socket instead of a
+            TCP ``remote_host:remote_port`` pair.  Requires OpenSSH ≥ 6.7.
+        local_port: Local port to bind. 0 = pick a free port automatically (default: 0)
+        identity_file: Path to SSH private key. If omitted, uses ssh-agent / default key.
+        timeout_s: Seconds to wait for the tunnel to open (default: 10)
+
+    Example config (TCP remote port)::
+
+        ssh_tunnel:
+          host: printoptim.io
+          user: lionel
+          remote_port: 5432
+          local_port: 0          # auto-assign
+
+    Example config (Unix socket on remote)::
+
+        ssh_tunnel:
+          host: printoptim.io
+          user: lionel
+          remote_socket: /var/run/postgresql/.s.PGSQL.5432
+          local_port: 0          # auto-assign
+    """
+
+    host: str
+    user: str | None = None
+    remote_host: str = "localhost"
+    remote_port: int = 5432
+    remote_socket: str | None = None
+    local_port: int = 0
+    identity_file: str | None = None
+    timeout_s: int = 10
+
+
 class PgGitConfig(BaseModel):
     """pgGit integration configuration.
 
@@ -329,6 +380,7 @@ class Environment(BaseModel):
     migration: MigrationConfig = Field(default_factory=MigrationConfig)
     pggit: PgGitConfig = Field(default_factory=PgGitConfig)
     seed: SeedConfig = Field(default_factory=SeedConfig)
+    ssh_tunnel: SshTunnelConfig | None = None
 
     @property
     def database(self) -> DatabaseConfig:

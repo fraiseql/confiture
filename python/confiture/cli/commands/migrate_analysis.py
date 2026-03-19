@@ -10,11 +10,12 @@ from confiture.cli.formatters.common import display_drift_report, display_signat
 from confiture.cli.helpers import (
     _fix_idempotency,
     _output_json,
+    _resolve_config,
     _validate_idempotency,
     console,
     error_console,
 )
-from confiture.core.connection import create_connection, load_config
+from confiture.core.connection import create_connection, load_config, open_connection
 from confiture.core.differ import SchemaDiffer
 from confiture.core.drift import SchemaDriftDetector
 from confiture.core.migration_generator import MigrationGenerator
@@ -167,7 +168,11 @@ def migrate_validate(
     require_migration: bool = typer.Option(
         False,
         "--require-migration",
-        help="Ensure DDL changes have migration files (default: off)",
+        help=(
+            "Ensure DDL changes have migration files (static, no DB required). "
+            "Also detects function parameter type changes missing a DROP FUNCTION. "
+            "Companion to --check-signatures which detects stale overloads in a live DB."
+        ),
     ),
     base_ref: str = typer.Option(
         "origin/main",
@@ -211,21 +216,50 @@ def migrate_validate(
         False,
         "--check-signatures",
         help=(
-            "Compare function signatures in source SQL against the live database. "
-            "Reports stale overloads left by CREATE OR REPLACE with changed param types. "
-            "Requires --config and --schema."
+            "Compare function signatures in --schema against the live DB. "
+            "Detects stale overloads created by CREATE OR REPLACE with changed param types. "
+            "Companion to --require-migration (static pre-commit check, no DB needed). "
+            "Requires --config (or --env) and --schema."
+        ),
+    ),
+    check_signature_schemas: str = typer.Option(
+        "public",
+        "--schemas",
+        help=(
+            "Comma-separated list of schemas to inspect for stale overloads "
+            "(default: public). Used with --check-signatures."
         ),
     ),
     config: Path = typer.Option(
         Path("confiture.yaml"),
         "-c",
         "--config",
-        help="Config file (required for --check-live-drift)",
+        help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
+    ),
+    env: str | None = typer.Option(
+        None,
+        "--env",
+        help=(
+            "Environment name — shortcut for --config db/environments/{name}.yaml "
+            "(e.g. --env production). Cannot be combined with --config."
+        ),
+    ),
+    ssh_via: str | None = typer.Option(
+        None,
+        "--ssh",
+        help=(
+            "Open an SSH tunnel before connecting: user@host or host "
+            "(e.g. lionel@printoptim.io).  Used with --check-signatures and "
+            "--check-live-drift.  Overrides the ssh_tunnel block in the config file."
+        ),
     ),
     schema_file: Path | None = typer.Option(
         None,
         "--schema",
-        help="Schema SQL file to compare against (required for --check-live-drift)",
+        help=(
+            "Schema SQL file to compare against. "
+            "If omitted with --check-signatures, schema is auto-built from DDL files."
+        ),
     ),
     format_output: str = typer.Option(
         "text",
@@ -257,17 +291,25 @@ def migrate_validate(
       confiture migrate validate --check-drift --staged
         ↳ Pre-commit: check staged files for schema drift
 
-      confiture migrate validate --require-migration --base-ref origin/main --fix-naming
-        ↳ Ensure all DDL changes have migrations, auto-fix file names
+      confiture migrate validate --require-migration --base-ref origin/main
+        ↳ Static: verify DDL changes + no function signature changes (no DB needed)
+
+      confiture migrate validate --check-signatures --env local
+        ↳ Live: detect stale function overloads in the local database (schema auto-built)
+
+      confiture migrate validate --check-signatures --env production --schemas public,auth
+        ↳ Live: check production DB across multiple schemas
+
+      confiture migrate validate --check-signatures --env production --ssh lionel@printoptim.io
+        ↳ Live: reach production DB through an SSH tunnel (no manual ssh -L needed)
+
+      confiture migrate validate --check-live-drift --check-signatures --env production --schema schema.sql
+        ↳ Live: check both column/table drift AND function overload drift
 
     RELATED:
       confiture migrate generate - Create new migration file
       confiture migrate fix      - Auto-fix non-idempotent migrations
       confiture migrate status   - View migration history
-        confiture migrate validate --fix-naming
-
-        # Output as JSON
-        confiture migrate validate --format json
     """
     try:
         # Validate output format
@@ -276,6 +318,16 @@ def migrate_validate(
                 f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]"
             )
             raise typer.Exit(1)
+
+        # Resolve --env / --config to a single config path
+        try:
+            config = _resolve_config(config, env)
+        except Exception as e:
+            if format_output == "json":
+                _output_json({"error": str(e)}, output_file, console)
+            else:
+                error_console.print(f"[red]❌ {e}[/red]")
+            raise typer.Exit(2) from e
 
         # Handle git validation flags
         if check_drift or require_migration or require_grant_migration or staged:
@@ -456,34 +508,92 @@ def migrate_validate(
                 if not config.exists():
                     error_console.print(f"[red]❌ Config file not found: {config}[/red]")
                     raise typer.Exit(2)
-                if schema_file is None:
-                    error_console.print(
-                        "[red]❌ --schema is required with --check-signatures[/red]"
-                    )
-                    raise typer.Exit(2)
+
                 config_data = load_config(config)
-                conn = create_connection(config_data)
-                try:
-                    from confiture.core.function_signature_drift import (  # noqa: PLC0415
-                        FunctionSignatureDriftDetector,
-                    )
-                    from confiture.core.function_signature_parser import (  # noqa: PLC0415
-                        FunctionSignatureParser,
-                    )
-                    from confiture.core.live_function_catalog import (  # noqa: PLC0415
-                        LiveFunctionCatalog,
-                    )
+                schemas = [s.strip() for s in check_signature_schemas.split(",") if s.strip()]
 
+                # Resolve source SQL: explicit --schema file or auto-build from DDL files
+                if schema_file is not None:
                     source_sql = schema_file.read_text()
-                    source_sigs = FunctionSignatureParser().parse(source_sql)
+                else:
+                    try:
+                        from confiture.core.builder import SchemaBuilder  # noqa: PLC0415
 
+                        env_name = (
+                            config_data.get("name")
+                            if isinstance(config_data, dict)
+                            else getattr(config_data, "name", None)
+                        )
+                        if not env_name:
+                            raise ValueError(
+                                "Config has no 'name' field — cannot auto-build schema. "
+                                "Pass --schema explicitly."
+                            )
+                        builder = SchemaBuilder(env=env_name)
+                        source_sql = builder.build(schema_only=True)
+                        if format_output == "text":
+                            console.print("[dim]  (schema auto-built from DDL files)[/dim]")
+                    except Exception as build_exc:
+                        error_console.print(
+                            f"[red]❌ --schema not provided and auto-build failed: {build_exc}[/red]\n"
+                            "  Either run 'confiture build' first or pass --schema explicitly."
+                        )
+                        raise typer.Exit(2) from build_exc
+
+                from confiture.core.function_signature_drift import (  # noqa: PLC0415
+                    FunctionSignatureDriftDetector,
+                )
+                from confiture.core.function_signature_parser import (  # noqa: PLC0415
+                    FunctionSignatureParser,
+                )
+                from confiture.core.live_function_catalog import (  # noqa: PLC0415
+                    LiveFunctionCatalog,
+                )
+
+                source_sigs = FunctionSignatureParser().parse(source_sql)
+
+                # Build effective config: --ssh flag overrides config-file ssh_tunnel
+                effective_config: Any = config_data
+                if ssh_via:
+                    from confiture.config.environment import SshTunnelConfig  # noqa: PLC0415
+
+                    parts = ssh_via.split("@", 1)
+                    ssh_host = parts[1] if len(parts) == 2 else parts[0]
+                    ssh_user = parts[0] if len(parts) == 2 else None
+
+                    # Wrap config_data with an ssh_tunnel override
+                    class _SshOverride:  # noqa: N801
+                        """Thin adapter that layers an ssh_tunnel onto config_data."""
+
+                        def __init__(self, base: Any, tunnel: SshTunnelConfig) -> None:
+                            self._base = base
+                            self.ssh_tunnel = tunnel
+
+                        @property
+                        def database_url(self) -> str:
+                            if hasattr(self._base, "database_url"):
+                                return self._base.database_url  # type: ignore[no-any-return]
+                            return self._base.get("database_url", "")
+
+                        def get(self, key: str, default: Any = None) -> Any:  # noqa: ANN401
+                            return getattr(self._base, key, None) or (
+                                self._base.get(key, default)
+                                if isinstance(self._base, dict)
+                                else default
+                            )
+
+                    effective_config = _SshOverride(
+                        config_data,
+                        SshTunnelConfig(host=ssh_host, user=ssh_user),
+                    )
+                    if format_output == "text":
+                        console.print(f"[dim]  (connecting via SSH tunnel to {ssh_via})[/dim]")
+
+                with open_connection(effective_config) as conn:
                     live_catalog = LiveFunctionCatalog(conn)
-                    live_sigs = live_catalog.get_signatures()
-
+                    live_sigs = live_catalog.get_signatures(schemas=schemas)
                     detector = FunctionSignatureDriftDetector()
-                    drift_report = detector.compare(source_sigs, live_sigs, schemas_checked=["public"])
-                finally:
-                    conn.close()
+                    drift_report = detector.compare(source_sigs, live_sigs, schemas_checked=schemas)
 
                 if format_output == "json":
                     _output_json(
