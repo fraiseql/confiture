@@ -5,7 +5,7 @@ with support for error codes, severity levels, context, and timestamps.
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from sys import stdout
 from typing import Any
@@ -132,7 +132,7 @@ class StructuredLogger:
             "message": str(error),
             "severity": self._get_severity(error),
             "level": level.value,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Add error code if present

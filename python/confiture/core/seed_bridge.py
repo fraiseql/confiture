@@ -65,7 +65,7 @@ class SeedBridge:
         if self._fraiseql_data is not None:
             return self._fraiseql_data
         try:
-            import fraiseql.data  # noqa: F401, PLC0415
+            import fraiseql.data  # noqa: F401, PLC0415  # type: ignore[import]
 
             return True
         except ImportError:

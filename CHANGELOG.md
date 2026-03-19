@@ -5,6 +5,38 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2026-03-19
+
+### Added
+
+- **`--check-body` flag for `migrate fix-signatures`** (issue #83).
+  Extends body-drift remediation to the fix command — not just detection.
+
+  - Dry-run: prints `CREATE OR REPLACE` blocks for each body-drifted function alongside
+    any signature-drift `DROP + CREATE` blocks.
+  - `--apply`: runs all body CORF statements in the same atomic transaction as signature
+    fixes; rolls back everything on any failure.
+  - After `--apply`, re-runs body comparison to confirm zero residual drift (exits 1 if
+    any drift persists).
+  - Body fixes for functions already covered by a `DROP + CREATE` overload fix are skipped
+    (the recreate from source already restores the correct body).
+  - Functions whose source cannot be found in the schema SQL are reported as
+    `body_drift_missing_source` but do not block the transaction.
+  - JSON output adds `body_drift_fixes_planned` / `body_drift_fixes_applied`,
+    `body_drift_blocks`, `body_drift_applied`, and `remaining_body_drift` keys.
+    These keys are absent when `--check-body` is not passed (no breaking change).
+
+### Fixed
+
+- `datetime.utcnow()` deprecated calls replaced with `datetime.now(UTC)` in
+  `logging.py`, `metrics.py`, and `metrics_aggregator.py`. Eliminates
+  `DeprecationWarning` on Python 3.12+.
+- `open_connection`: `config.database_url` now wrapped in `str()` to handle typed
+  URL objects (e.g. `pydantic.networks.PostgresDsn`) without implicit coercion errors.
+- `# type: ignore[import]` added to optional `fraiseql.data` and `sqlfluff` imports in
+  `seed_bridge.py` and `unified_linter.py` to silence `ty` false positives for
+  intentionally-absent optional dependencies.
+
 ## [0.8.7] - 2026-03-19
 
 ### Added

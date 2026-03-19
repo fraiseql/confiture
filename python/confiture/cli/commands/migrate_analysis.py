@@ -1260,6 +1260,14 @@ def migrate_fix_signatures(
         "-o",
         help="Save output to file (default: stdout).",
     ),
+    check_body: bool = typer.Option(
+        False,
+        "--check-body",
+        help=(
+            "Also detect and fix function body drift (same signature, different body). "
+            "Runs CREATE OR REPLACE from source for each drifted function — no DROP needed."
+        ),
+    ),
 ) -> None:
     """Fix stale function overloads: DROP old signature + re-apply source definition.
 
@@ -1363,6 +1371,12 @@ def migrate_fix_signatures(
             if format_output == "text":
                 console.print(f"[dim]  (connecting via SSH tunnel to {ssh_via})[/dim]")
 
+        # Pre-initialize body vars so they're accessible outside the with block (post-apply output)
+        source_bodies: dict[str, str | None] = {}
+        body_fix_blocks: list[dict[str, Any]] = []
+        body_missing_source: list[str] = []
+        body_report_after: Any = None  # FunctionBodyDriftReport | None
+
         # --- Detect drift ---
         with open_connection(effective_config) as conn:
             live_catalog = LiveFunctionCatalog(conn)
@@ -1371,7 +1385,7 @@ def migrate_fix_signatures(
                 source_sigs, live_sigs, schemas_checked=schemas
             )
 
-            if not drift_report.has_drift:
+            if not drift_report.has_drift and not check_body:
                 if format_output == "json":
                     _output_json(
                         {
@@ -1385,6 +1399,7 @@ def migrate_fix_signatures(
                 else:
                     console.print(f"[green]✅ {drift_report.summary()}[/green]")
                 return
+            # when check_body and no sig drift: fall through to body detection
 
             # --- Build fix SQL for each stale overload ---
             fix_blocks: list[dict[str, Any]] = []
@@ -1411,12 +1426,57 @@ def migrate_fix_signatures(
                 for sig in missing_source:
                     console.print(f"[yellow]    {sig}[/yellow]")
 
-            if not fix_blocks:
+            if not fix_blocks and not check_body:
                 error_console.print(
                     "[red]❌ No fixable overloads found "
                     "(source definitions missing for all stale overloads).[/red]"
                 )
                 raise typer.Exit(1)
+            # when check_body: no sig fixes available but body detection may still proceed
+
+            # --- Body drift detection ---
+            body_report: Any = None
+            if check_body:
+                from confiture.core.function_body_drift import (  # noqa: PLC0415
+                    FunctionBodyDriftDetector,
+                )
+
+                source_bodies = {
+                    sig.signature_key(): body
+                    for sig, body in FunctionSignatureParser().parse_with_bodies(source_sql)
+                }
+                live_bodies = live_catalog.get_bodies(schemas=schemas, sig_keys=set(source_bodies))
+                body_report = FunctionBodyDriftDetector().compare(source_bodies, live_bodies)
+
+                if body_report.has_drift:
+                    stale_fn_keys = {b["stale_signature"].split("(")[0] for b in fix_blocks}
+                    for drift in body_report.body_drifts:
+                        if f"{drift.schema}.{drift.name}" in stale_fn_keys:
+                            continue  # DROP + CREATE in fix_blocks already applies correct body
+                        create_sql = _extract_function_source(source_sql, drift.schema, drift.name)
+                        if create_sql is None:
+                            body_missing_source.append(drift.signature_key)
+                            continue
+                        body_fix_blocks.append(
+                            {"signature_key": drift.signature_key, "create_sql": create_sql}
+                        )
+
+            # Combined exit: no sig fixes and no body fixes
+            if not fix_blocks and not body_fix_blocks:
+                if format_output == "json":
+                    _output_json(
+                        {
+                            "status": "clean",
+                            "message": "No signature or body drift detected.",
+                            "fixes_applied": 0,
+                            **({"body_drift_fixes_planned": 0} if check_body else {}),
+                        },
+                        output_file,
+                        console,
+                    )
+                else:
+                    console.print("[green]✅ No signature or body drift detected.[/green]")
+                return
 
             combined_sql = "\n\n".join(f"{b['drop_sql']}\n{b['create_sql']}" for b in fix_blocks)
 
@@ -1430,17 +1490,35 @@ def migrate_fix_signatures(
                             "missing_source": missing_source,
                             "sql": combined_sql,
                             "blocks": fix_blocks,
+                            **(
+                                {
+                                    "body_drift_fixes_planned": len(body_fix_blocks),
+                                    "body_drift_blocks": body_fix_blocks,
+                                    "body_drift_missing_source": body_missing_source,
+                                }
+                                if check_body
+                                else {}
+                            ),
                         },
                         output_file,
                         console,
                     )
                 else:
-                    console.print(
-                        f"[bold]Dry-run: {len(fix_blocks)} fix(es) planned "
-                        f"(pass --apply to execute):[/bold]"
-                    )
-                    console.print()
-                    console.print(combined_sql)
+                    if fix_blocks:
+                        console.print(
+                            f"[bold]Dry-run: {len(fix_blocks)} fix(es) planned "
+                            f"(pass --apply to execute):[/bold]"
+                        )
+                        console.print()
+                        console.print(combined_sql)
+                    if body_fix_blocks:
+                        console.print(
+                            f"[bold]Dry-run: {len(body_fix_blocks)} body drift fix(es) planned"
+                            " (pass --apply to execute):[/bold]"
+                        )
+                        for block in body_fix_blocks:
+                            console.print()
+                            console.print(block["create_sql"])
                 return
 
             # --- Apply in a single transaction ---
@@ -1449,6 +1527,8 @@ def migrate_fix_signatures(
                 with conn.cursor() as cur:
                     for block in fix_blocks:
                         cur.execute(block["drop_sql"])
+                        cur.execute(block["create_sql"])
+                    for block in body_fix_blocks:
                         cur.execute(block["create_sql"])
                 conn.commit()
             except Exception as apply_exc:
@@ -1462,34 +1542,69 @@ def migrate_fix_signatures(
                 source_sigs, live_sigs_after, schemas_checked=schemas
             )
 
+            if check_body and source_bodies:
+                from confiture.core.function_body_drift import (  # noqa: PLC0415
+                    FunctionBodyDriftDetector,
+                )
+
+                live_bodies_after = LiveFunctionCatalog(conn).get_bodies(
+                    schemas=schemas, sig_keys=set(source_bodies)
+                )
+                body_report_after = FunctionBodyDriftDetector().compare(
+                    source_bodies, live_bodies_after
+                )
+
         applied = [b["stale_signature"] for b in fix_blocks]
+        body_applied = [b["signature_key"] for b in body_fix_blocks]
+        has_residual = report_after.has_drift or (
+            body_report_after is not None and body_report_after.has_drift
+        )
 
         if format_output == "json":
             _output_json(
                 {
-                    "status": "applied" if not report_after.has_drift else "partial",
+                    "status": "applied" if not has_residual else "partial",
                     "fixes_applied": len(fix_blocks),
                     "applied": applied,
                     "missing_source": missing_source,
                     "remaining_drift": report_after.has_drift,
                     "remaining_stale": [o.stale_signature for o in report_after.stale_overloads],
+                    **(
+                        {
+                            "body_drift_fixes_applied": len(body_fix_blocks),
+                            "body_drift_applied": body_applied,
+                            "body_drift_missing_source": body_missing_source,
+                            "remaining_body_drift": (
+                                body_report_after.has_drift if body_report_after else False
+                            ),
+                        }
+                        if check_body
+                        else {}
+                    ),
                 },
                 output_file,
                 console,
             )
         else:
-            console.print(f"[green]✅ Applied {len(fix_blocks)} fix(es):[/green]")
-            for sig in applied:
-                console.print(f"[green]    {sig}[/green]")
-            if report_after.has_drift:
+            if fix_blocks:
+                console.print(f"[green]✅ Applied {len(fix_blocks)} signature fix(es):[/green]")
+                for sig in applied:
+                    console.print(f"[green]    {sig}[/green]")
+            if body_fix_blocks:
+                console.print(
+                    f"[green]✅ Applied {len(body_fix_blocks)} body drift fix(es):[/green]"
+                )
+                for sig in body_applied:
+                    console.print(f"[green]    {sig}[/green]")
+            if has_residual:
                 console.print(
                     "[yellow]⚠ Residual drift detected after apply — "
-                    "run --check-signatures to investigate.[/yellow]"
+                    "run --check-signatures --check-body to investigate.[/yellow]"
                 )
             else:
                 console.print("[green]✅ Zero drift confirmed after apply.[/green]")
 
-        if report_after.has_drift:
+        if has_residual:
             raise typer.Exit(1)
 
     except typer.Exit:

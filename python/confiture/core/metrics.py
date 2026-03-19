@@ -5,7 +5,7 @@ frequency distributions, and statistics.
 """
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from confiture.exceptions import ConfiturError
@@ -21,7 +21,7 @@ class ErrorRecord:
             error: The exception that was recorded
         """
         self.error = error
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(UTC)
         self.code = error.error_code if isinstance(error, ConfiturError) else None
         self.category = self.code.split("_")[0] if self.code else "UNKNOWN"
         self.severity = error.severity.value if isinstance(error, ConfiturError) else "error"
@@ -119,7 +119,7 @@ class ErrorMetrics:
         Returns:
             Count of errors matching criteria
         """
-        cutoff = datetime.utcnow() - time_window
+        cutoff = datetime.now(UTC) - time_window
         count = 0
 
         for record in self.records:

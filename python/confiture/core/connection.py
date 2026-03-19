@@ -141,7 +141,7 @@ def open_connection(
 
         database_url: str
         if hasattr(config, "database_url"):
-            database_url = config.database_url
+            database_url = str(config.database_url)
         elif isinstance(config, dict):
             database_url = config.get("database_url", "")
         else:

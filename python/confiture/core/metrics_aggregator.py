@@ -5,7 +5,7 @@ error metrics with support for time windows and statistical analysis.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from confiture.core.metrics import ErrorMetrics
@@ -129,7 +129,7 @@ class MetricsAggregator:
             Dict with timestamp -> count
         """
         # Simplified implementation
-        current = datetime.utcnow()
+        current = datetime.now(UTC)
         cutoff = current - (interval * 10)  # Last 10 intervals
 
         counts_by_period: dict[str, int] = {}

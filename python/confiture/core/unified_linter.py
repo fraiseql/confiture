@@ -62,7 +62,7 @@ class SQLFluffRunner:
     def available(self) -> bool:
         """Whether sqlfluff is installed."""
         try:
-            import sqlfluff  # noqa: F401, PLC0415
+            import sqlfluff  # noqa: F401, PLC0415  # type: ignore[import]
 
             return True
         except ImportError:
@@ -72,7 +72,7 @@ class SQLFluffRunner:
         """Run sqlfluff on the given SQL files."""
         if not self.available or not files:
             return []
-        from sqlfluff.api import simple  # noqa: PLC0415
+        from sqlfluff.api import simple  # noqa: PLC0415  # type: ignore[import]
 
         issues = []
         for f in files:
