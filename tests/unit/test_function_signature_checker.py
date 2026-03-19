@@ -1,15 +1,11 @@
 """Unit tests for FunctionSignatureChecker."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from confiture.core.function_signature_checker import (
     FunctionSignatureChecker,
-    FunctionSignatureViolation,
 )
-from confiture.core.function_signature_parser import FunctionSignature, FunctionSignatureParser
 
 
 def _make_checker(old_content: str | None, new_content: str | None) -> FunctionSignatureChecker:

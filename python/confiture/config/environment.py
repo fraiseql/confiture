@@ -49,6 +49,7 @@ File Discovery
 2. ``Environment`` instance (pre-loaded config)
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,10 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from confiture.exceptions import ConfigurationError
+
+# SSH parameter validation patterns
+_VALID_SSH_HOST_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-._]*$")
+_VALID_SSH_USER_RE = re.compile(r"^[a-zA-Z0-9_\-\.@]+$")
 
 
 class CommentValidationConfig(BaseModel):
@@ -249,6 +254,28 @@ class SshTunnelConfig(BaseModel):
     host: str
     user: str | None = None
     remote_host: str = "localhost"
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        """Reject hostnames that contain shell metacharacters."""
+        if not _VALID_SSH_HOST_RE.match(v):
+            raise ValueError(
+                f"Invalid SSH hostname: {v!r}. "
+                "Use only letters, digits, hyphens, dots, and underscores."
+            )
+        return v
+
+    @field_validator("user")
+    @classmethod
+    def validate_user(cls, v: str | None) -> str | None:
+        """Reject usernames that contain shell metacharacters."""
+        if v is not None and not _VALID_SSH_USER_RE.match(v):
+            raise ValueError(
+                f"Invalid SSH username: {v!r}. "
+                "Use only letters, digits, hyphens, underscores, dots, or @."
+            )
+        return v
     remote_port: int = 5432
     remote_socket: str | None = None
     local_port: int = 0

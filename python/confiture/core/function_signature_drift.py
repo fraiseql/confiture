@@ -93,6 +93,7 @@ class FunctionSignatureDriftReport:
         return {
             "has_drift": self.has_drift,
             "has_critical_drift": self.has_critical_drift,
+            "remediation_sql": [o.drop_sql for o in self.stale_overloads],
             "stale_overloads": [o.to_dict() for o in self.stale_overloads],
             "missing_from_db": self.missing_from_db,
             "schemas_checked": self.schemas_checked,

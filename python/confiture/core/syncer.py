@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+from psycopg import sql as pgsql
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from confiture.config.environment import DatabaseConfig
@@ -231,11 +232,13 @@ class ProductionSyncer:
         start_time = time.time()
 
         with self._source_conn.cursor() as src_cursor, self._target_conn.cursor() as dst_cursor:
+            table_ident = pgsql.Identifier(table_name)
+
             # Truncate target table first
-            dst_cursor.execute(f"TRUNCATE TABLE {table_name} CASCADE")
+            dst_cursor.execute(pgsql.SQL("TRUNCATE TABLE {} CASCADE").format(table_ident))
 
             # Get row count for verification
-            src_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            src_cursor.execute(pgsql.SQL("SELECT COUNT(*) FROM {}").format(table_ident))
             expected_row = src_cursor.fetchone()
             expected_count: int = expected_row[0] if expected_row else 0
 
@@ -244,7 +247,9 @@ class ProductionSyncer:
                 progress.update(progress_task, total=expected_count)
 
             # Temporarily disable triggers to allow FK constraint violations
-            dst_cursor.execute(f"ALTER TABLE {table_name} DISABLE TRIGGER ALL")
+            dst_cursor.execute(
+                pgsql.SQL("ALTER TABLE {} DISABLE TRIGGER ALL").format(table_ident)
+            )
 
             try:
                 if anonymization_rules:
@@ -269,7 +274,9 @@ class ProductionSyncer:
                     )
             finally:
                 # Re-enable triggers
-                dst_cursor.execute(f"ALTER TABLE {table_name} ENABLE TRIGGER ALL")
+                dst_cursor.execute(
+                    pgsql.SQL("ALTER TABLE {} ENABLE TRIGGER ALL").format(table_ident)
+                )
 
             # Commit target transaction
             self._target_conn.commit()
@@ -314,9 +321,14 @@ class ProductionSyncer:
         Returns:
             Number of rows synced
         """
+        table_ident = pgsql.Identifier(table_name)
         with (
-            src_cursor.copy(f"COPY {table_name} TO STDOUT") as copy_out,
-            dst_cursor.copy(f"COPY {table_name} FROM STDIN") as copy_in,
+            src_cursor.copy(
+                pgsql.SQL("COPY {} TO STDOUT").format(table_ident)
+            ) as copy_out,
+            dst_cursor.copy(
+                pgsql.SQL("COPY {} FROM STDIN").format(table_ident)
+            ) as copy_in,
         ):
             for data in copy_out:
                 copy_in.write(data)
@@ -324,7 +336,7 @@ class ProductionSyncer:
                     progress.update(progress_task, advance=1)
 
         # Get final count
-        dst_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        dst_cursor.execute(pgsql.SQL("SELECT COUNT(*) FROM {}").format(table_ident))
         result = dst_cursor.fetchone()
         return int(result[0]) if result else 0
 
@@ -352,8 +364,10 @@ class ProductionSyncer:
         Returns:
             Number of rows synced
         """
+        table_ident = pgsql.Identifier(table_name)
+
         # Get column names
-        src_cursor.execute(f"SELECT * FROM {table_name} LIMIT 0")
+        src_cursor.execute(pgsql.SQL("SELECT * FROM {} LIMIT 0").format(table_ident))
         column_names = [desc[0] for desc in src_cursor.description]
 
         # Build column index map for anonymization
@@ -364,7 +378,7 @@ class ProductionSyncer:
                 anonymize_map[col_idx] = rule
 
         # Fetch all rows
-        src_cursor.execute(f"SELECT * FROM {table_name}")
+        src_cursor.execute(pgsql.SQL("SELECT * FROM {}").format(table_ident))
 
         # Process in batches
         rows_synced = 0
@@ -415,9 +429,13 @@ class ProductionSyncer:
         if not rows:
             return
 
-        columns_str = ", ".join(column_names)
-        placeholders = ", ".join(["%s"] * len(column_names))
-        query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
+        columns_sql = pgsql.SQL(", ").join(pgsql.Identifier(c) for c in column_names)
+        placeholders_sql = pgsql.SQL(", ").join(
+            [pgsql.Placeholder()] * len(column_names)
+        )
+        query = pgsql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
+            pgsql.Identifier(table_name), columns_sql, placeholders_sql
+        )
 
         cursor.executemany(query, rows)
 

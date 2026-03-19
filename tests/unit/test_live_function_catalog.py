@@ -2,10 +2,14 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from confiture.core.live_function_catalog import LiveFunctionCatalog
-from confiture.models.function_info import FunctionCatalog, FunctionInfo, FunctionParam, ParamMode, Volatility
+from confiture.models.function_info import (
+    FunctionCatalog,
+    FunctionInfo,
+    FunctionParam,
+    ParamMode,
+    Volatility,
+)
 
 
 def _make_func(

@@ -2,6 +2,7 @@
 
 import difflib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,8 @@ from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
 from confiture.models.lint import LintReport, LintSeverity, Violation
+
+_VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 
 # Create Rich consoles for stdout and stderr
 console = Console()
@@ -133,6 +136,47 @@ def _output_yaml(data: dict[str, Any], output_file: Path | None, console: Consol
         console.print(f"[green]✅ Output written to {output_file}[/green]")
     else:
         print(yaml_str, end="")
+
+
+_DEFAULT_CONFIG = Path("confiture.yaml")
+
+
+def _resolve_config(config: Path, env: str | None) -> Path:
+    """Resolve --config / --env to a single config Path.
+
+    --env is a shortcut for db/environments/{name}.yaml.
+    --config accepts any path (for non-standard layouts).
+    Raises ConfigurationError when both are explicitly set.
+
+    Args:
+        config: Value of the --config option (may be the default Path("confiture.yaml"))
+        env: Value of the --env option (None if not given)
+
+    Returns:
+        Resolved config file path
+
+    Examples:
+        >>> _resolve_config(Path("confiture.yaml"), "local")
+        PosixPath('db/environments/local.yaml')
+        >>> _resolve_config(Path("custom.yaml"), None)
+        PosixPath('custom.yaml')
+    """
+    from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+
+    if env and config != _DEFAULT_CONFIG:
+        raise ConfigurationError(
+            "Cannot use --env and --config together. "
+            "Use --env as a shortcut for db/environments/{name}.yaml, "
+            "or --config for a custom path."
+        )
+    if env:
+        if not _VALID_ENV_RE.match(env):
+            raise ConfigurationError(
+                f"Invalid environment name: {env!r}. "
+                "Use only letters, digits, hyphens, and underscores."
+            )
+        return Path("db") / "environments" / f"{env}.yaml"
+    return config
 
 
 def _get_tracking_table(config_data: Any) -> str:

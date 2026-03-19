@@ -1,10 +1,8 @@
 """Unit tests for FunctionSignatureDriftDetector and related models."""
 
-import pytest
 
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
-    FunctionSignatureDriftReport,
     StaleOverload,
 )
 from confiture.core.function_signature_parser import FunctionSignature

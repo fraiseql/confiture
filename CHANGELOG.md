@@ -5,6 +5,44 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-03-19
+
+### Security
+
+- **SQL injection via table/column identifiers** — All f-string SQL in `ProductionSyncer`
+  (`syncer.py`) and `Migrator` (`_migrator/engine.py`) replaced with `psycopg.sql.Identifier`
+  and `psycopg.sql.SQL`. Affects `TRUNCATE`, `ALTER TABLE`, `COPY`, `SELECT`, `INSERT`,
+  `DELETE`, `CREATE TABLE`, `CREATE INDEX`, `DROP SCHEMA`, and savepoint operations.
+  Table and column names supplied by callers are now always double-quoted by the database
+  driver, making injection structurally impossible regardless of input.
+
+- **Connection string injection in `RestoreOptions` table-count check** — `restorer.py`
+  built a `conninfo` string with f-string interpolation of `host`, `port`, `dbname`, and
+  `username`. Replaced with keyword arguments to `psycopg.connect()`, which are never
+  concatenated into a string by the driver.
+
+- **SSH parameter injection in `SshTunnelConfig`** — Added `@field_validator` on `host`
+  and `user` fields that reject values containing shell metacharacters. Hostnames must
+  match `[a-zA-Z0-9][a-zA-Z0-9\-._]*`; usernames `[a-zA-Z0-9_\-.@]+`. Validation runs
+  at config-load time, before any subprocess is spawned.
+
+- **Path traversal via `--env` flag** — `_resolve_config()` in `cli/helpers.py` now
+  validates the environment name against `[a-zA-Z0-9][a-zA-Z0-9_\-]*` before constructing
+  the `db/environments/{name}.yaml` path. Values containing `../` or absolute path
+  components are rejected with a `ConfigurationError`.
+
+- **Git reference injection** — `GitRepository.get_file_at_ref()` and
+  `get_changed_files()` now validate refs against a safe character set before passing
+  them to `subprocess.run`. Refs containing shell metacharacters raise `GitError`.
+
+- **PostgreSQL reserved words as tracking table name** — `Migrator.__init__` now rejects
+  migration table names that are PostgreSQL reserved words (e.g. `select`, `table`,
+  `user`). Even though `psycopg.sql.Identifier` quotes them correctly, using reserved
+  words as table names causes confusion in ad-hoc SQL. A `ValueError` is raised with a
+  suggestion to use a descriptive name like `tb_confiture`.
+
+---
+
 ## [0.8.3] - 2026-03-18
 
 ### Fixed

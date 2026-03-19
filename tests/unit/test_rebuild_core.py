@@ -86,9 +86,10 @@ class TestDropUserSchemas:
         # Check autocommit was enabled
         assert conn.autocommit is True or conn.autocommit is False  # restored
 
-        # Check DROP statements were issued
+        # Check DROP statements were issued.  execute() now receives
+        # psycopg.sql.Composable objects, so use repr() for content checks.
         execute_calls = list(cursor.execute.call_args_list)
-        sqls = [c[0][0] for c in execute_calls]
+        sqls = [repr(c[0][0]) for c in execute_calls]
         assert any("DROP SCHEMA" in s and "public" in s for s in sqls)
         assert any("DROP SCHEMA" in s and "myapp" in s for s in sqls)
         assert any("CREATE SCHEMA" in s and "public" in s for s in sqls)

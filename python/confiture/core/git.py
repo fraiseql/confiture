@@ -6,10 +6,15 @@ Provides git operations needed for pre-commit hooks and CI/CD workflows:
 - Staged file detection
 """
 
+import re
 import subprocess
 from pathlib import Path
 
 from confiture.exceptions import GitError, NotAGitRepositoryError
+
+# Allows commit hashes, branch names, tags, and common ref formats like
+# origin/main, HEAD, HEAD~1, refs/heads/main — but rejects shell metacharacters.
+_VALID_GIT_REF_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9/_.\-~@^{}]*$")
 
 
 class GitRepository:
@@ -48,7 +53,7 @@ class GitRepository:
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=3,  # local filesystem check; 3s is generous
             )
         except subprocess.TimeoutExpired:
             return False
@@ -75,6 +80,9 @@ class GitRepository:
         """
         if not self.is_git_repo():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
+
+        if not _VALID_GIT_REF_RE.match(ref):
+            raise GitError(f"Invalid git reference: {ref!r}")
 
         # Convert Path to forward slashes for git show command
         file_path_str = file_path.as_posix()
@@ -131,6 +139,10 @@ class GitRepository:
         """
         if not self.is_git_repo():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
+
+        for ref in (base_ref, target_ref):
+            if not _VALID_GIT_REF_RE.match(ref):
+                raise GitError(f"Invalid git reference: {ref!r}")
 
         # Get list of changed files (both added and modified)
         try:

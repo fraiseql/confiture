@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     )
 
 import psycopg
+from psycopg import sql as pgsql
 
 from confiture.core._migrator.discovery import find_duplicate_migration_versions
 from confiture.core.checksum import (
@@ -39,6 +40,27 @@ logger = logging.getLogger(__name__)
 
 # Allows 'table_name' or 'schema.table_name' (letters, digits, underscores only)
 _VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
+
+# PostgreSQL reserved words that must never be used as bare table names.
+# pgsql.Identifier quotes them correctly in SQL, but they would confuse anyone
+# writing ad-hoc queries against the tracking table.
+_POSTGRES_RESERVED_WORDS = frozenset({
+    "all", "analyse", "analyze", "and", "any", "array", "as", "asc",
+    "asymmetric", "both", "case", "cast", "check", "collate", "column",
+    "constraint", "create", "cross", "current_catalog", "current_date",
+    "current_role", "current_schema", "current_time", "current_timestamp",
+    "current_user", "default", "deferrable", "desc", "distinct", "do",
+    "else", "end", "except", "false", "fetch", "for", "foreign", "from",
+    "full", "grant", "group", "having", "ilike", "in", "initially",
+    "inner", "intersect", "into", "is", "isnull", "join", "lateral",
+    "leading", "left", "like", "limit", "localtime", "localtimestamp",
+    "natural", "not", "notnull", "null", "offset", "on", "only", "or",
+    "order", "outer", "overlaps", "placing", "primary", "references",
+    "returning", "right", "row", "select", "session_user", "similar",
+    "some", "symmetric", "table", "tablesample", "then", "to", "trailing",
+    "true", "union", "unique", "user", "using", "variadic", "verbose",
+    "when", "where", "window", "with",
+})
 
 
 class Migrator:
@@ -80,6 +102,12 @@ class Migrator:
                 "Use letters, digits, and underscores only, optionally "
                 "schema-qualified (e.g. 'public.tb_confiture')."
             )
+        table_base = migration_table.split(".")[-1].lower()
+        if table_base in _POSTGRES_RESERVED_WORDS:
+            raise ValueError(
+                f"Migration table name {migration_table!r} is a PostgreSQL reserved word. "
+                "Choose a descriptive name like 'tb_confiture' or 'schema_migrations'."
+            )
         self.connection = connection
         self.migration_table = migration_table
         # Unqualified table name — used for index names and information_schema lookups
@@ -88,7 +116,18 @@ class Migrator:
         parts = migration_table.split(".", 1)
         self._table_schema: str | None = parts[0] if len(parts) == 2 else None
 
-    def _execute_sql(self, sql: str, params: tuple[str, ...] | None = None) -> None:
+    @property
+    def _table_ident(self) -> pgsql.Identifier:
+        """Return a properly quoted SQL identifier for the tracking table."""
+        if self._table_schema is not None:
+            return pgsql.Identifier(self._table_schema, self._table_base)
+        return pgsql.Identifier(self._table_base)
+
+    def _execute_sql(
+        self,
+        query: str | pgsql.Composable,
+        params: tuple[str, ...] | None = None,
+    ) -> None:
         """Execute SQL with detailed error reporting.
 
         Args:
@@ -101,12 +140,12 @@ class Migrator:
         try:
             with self.connection.cursor() as cursor:
                 if params:
-                    cursor.execute(sql, params)
+                    cursor.execute(query, params)
                 else:
-                    cursor.execute(sql)
+                    cursor.execute(query)
         except Exception as e:
             raise SQLError(
-                sql,
+                query,
                 params,
                 e,
                 resolution_hint="Check the SQL syntax and ensure the target database objects exist",
@@ -156,8 +195,9 @@ class Migrator:
 
             if not table_exists:
                 # Create new table with Trinity pattern
-                self._execute_sql(f"""
-                    CREATE TABLE {self.migration_table} (
+                self._execute_sql(
+                    pgsql.SQL("""
+                    CREATE TABLE {} (
                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                         pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
                         slug TEXT NOT NULL UNIQUE,
@@ -167,25 +207,34 @@ class Migrator:
                         execution_time_ms INTEGER,
                         checksum VARCHAR(64)
                     )
-                """)
+                    """).format(self._table_ident)
+                )
 
-                # Create indexes
-                self._execute_sql(f"""
-                    CREATE INDEX idx_{self._table_base}_pk_confiture
-                        ON {self.migration_table}(pk_confiture)
-                """)
-                self._execute_sql(f"""
-                    CREATE INDEX idx_{self._table_base}_slug
-                        ON {self.migration_table}(slug)
-                """)
-                self._execute_sql(f"""
-                    CREATE INDEX idx_{self._table_base}_version
-                        ON {self.migration_table}(version)
-                """)
-                self._execute_sql(f"""
-                    CREATE INDEX idx_{self._table_base}_applied_at
-                        ON {self.migration_table}(applied_at DESC)
-                """)
+                # Create indexes — index names use the validated _table_base
+                self._execute_sql(
+                    pgsql.SQL("CREATE INDEX {} ON {}(pk_confiture)").format(
+                        pgsql.Identifier(f"idx_{self._table_base}_pk_confiture"),
+                        self._table_ident,
+                    )
+                )
+                self._execute_sql(
+                    pgsql.SQL("CREATE INDEX {} ON {}(slug)").format(
+                        pgsql.Identifier(f"idx_{self._table_base}_slug"),
+                        self._table_ident,
+                    )
+                )
+                self._execute_sql(
+                    pgsql.SQL("CREATE INDEX {} ON {}(version)").format(
+                        pgsql.Identifier(f"idx_{self._table_base}_version"),
+                        self._table_ident,
+                    )
+                )
+                self._execute_sql(
+                    pgsql.SQL("CREATE INDEX {} ON {}(applied_at DESC)").format(
+                        pgsql.Identifier(f"idx_{self._table_base}_applied_at"),
+                        self._table_ident,
+                    )
+                )
 
             self.connection.commit()
         except Exception as e:
@@ -399,18 +448,20 @@ class Migrator:
     def _create_savepoint(self, name: str) -> None:
         """Create a savepoint for transaction rollback."""
         with self.connection.cursor() as cursor:
-            cursor.execute(f"SAVEPOINT {name}")
+            cursor.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(name)))
 
     def _release_savepoint(self, name: str) -> None:
         """Release a savepoint (commit nested transaction)."""
         with self.connection.cursor() as cursor:
-            cursor.execute(f"RELEASE SAVEPOINT {name}")
+            cursor.execute(pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(name)))
 
     def _rollback_to_savepoint(self, name: str) -> None:
         """Rollback to a savepoint (undo nested transaction)."""
         try:
             with self.connection.cursor() as cursor:
-                cursor.execute(f"ROLLBACK TO SAVEPOINT {name}")
+                cursor.execute(
+                    pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name))
+                )
             self.connection.commit()
         except Exception:
             # Savepoint rollback failed, do full rollback
@@ -442,11 +493,11 @@ class Migrator:
 
         with self.connection.cursor() as cursor:
             cursor.execute(
-                f"""
-                INSERT INTO {self.migration_table}
+                pgsql.SQL("""
+                INSERT INTO {}
                     (slug, version, name, execution_time_ms, checksum)
                 VALUES (%s, %s, %s, %s, %s)
-                """,
+                """).format(self._table_ident),
                 (slug, migration.version, migration.name, execution_time_ms, checksum),
             )
 
@@ -504,11 +555,11 @@ class Migrator:
         # Record in tracking table with execution_time_ms = 0 (not executed)
         with self.connection.cursor() as cursor:
             cursor.execute(
-                f"""
-                INSERT INTO {self.migration_table}
+                pgsql.SQL("""
+                INSERT INTO {}
                     (slug, version, name, execution_time_ms, checksum)
                 VALUES (%s, %s, %s, %s, %s)
-                """,
+                """).format(self._table_ident),
                 (slug, migration.version, migration.name, 0, checksum),
             )
 
@@ -529,7 +580,7 @@ class Migrator:
             Number of rows deleted.
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(f"DELETE FROM {self.migration_table}")
+            cursor.execute(pgsql.SQL("DELETE FROM {}").format(self._table_ident))
             deleted = cursor.rowcount
         return deleted
 
@@ -615,11 +666,11 @@ class Migrator:
 
                 with self.connection.cursor() as cursor:
                     cursor.execute(
-                        f"""
-                        INSERT INTO {self.migration_table}
+                        pgsql.SQL("""
+                        INSERT INTO {}
                             (slug, version, name, execution_time_ms, checksum)
                         VALUES (%s, %s, %s, %s, %s)
-                        """,
+                        """).format(self._table_ident),
                         (slug, migration.version, migration.name, 0, checksum),
                     )
 
@@ -718,10 +769,7 @@ class Migrator:
 
             # Remove from tracking table
             self._execute_sql(
-                f"""
-                DELETE FROM {self.migration_table}
-                WHERE version = %s
-                """,
+                pgsql.SQL("DELETE FROM {} WHERE version = %s").format(self._table_ident),
                 (migration.version,),
             )
 
@@ -769,10 +817,7 @@ class Migrator:
 
             # Remove from tracking table
             self._execute_sql(
-                f"""
-                DELETE FROM {self.migration_table}
-                WHERE version = %s
-                """,
+                pgsql.SQL("DELETE FROM {} WHERE version = %s").format(self._table_ident),
                 (migration.version,),
             )
 
@@ -810,11 +855,9 @@ class Migrator:
         """
         with self.connection.cursor() as cursor:
             cursor.execute(
-                f"""
-                SELECT COUNT(*)
-                FROM {self.migration_table}
-                WHERE version = %s
-                """,
+                pgsql.SQL("SELECT COUNT(*) FROM {} WHERE version = %s").format(
+                    self._table_ident
+                ),
                 (version,),
             )
             result = cursor.fetchone()
@@ -830,11 +873,11 @@ class Migrator:
             List of migration versions, sorted by applied_at timestamp
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(f"""
-                SELECT version
-                FROM {self.migration_table}
-                ORDER BY applied_at ASC
-            """)
+            cursor.execute(
+                pgsql.SQL(
+                    "SELECT version FROM {} ORDER BY applied_at ASC"
+                ).format(self._table_ident)
+            )
             return [row[0] for row in cursor.fetchall()]
 
     def get_applied_migrations_with_timestamps(self) -> list[dict[str, Any]]:
@@ -845,11 +888,11 @@ class Migrator:
             ordered by applied_at ascending.
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(f"""
-                SELECT version, name, applied_at
-                FROM {self.migration_table}
-                ORDER BY applied_at ASC
-            """)
+            cursor.execute(
+                pgsql.SQL(
+                    "SELECT version, name, applied_at FROM {} ORDER BY applied_at ASC"
+                ).format(self._table_ident)
+            )
             return [
                 {
                     "version": row[0],
@@ -952,7 +995,9 @@ class Migrator:
             with self.connection.cursor() as cursor:
                 for schema in schemas:
                     logger.info("Dropping schema %s", schema)
-                    cursor.execute(f"DROP SCHEMA {schema} CASCADE")
+                    cursor.execute(
+                        pgsql.SQL("DROP SCHEMA {} CASCADE").format(pgsql.Identifier(schema))
+                    )
                 # Always recreate public
                 cursor.execute("CREATE SCHEMA public")
             return list(schemas)
@@ -1015,7 +1060,7 @@ class Migrator:
             return []
 
         with self.connection.cursor() as cursor:
-            cursor.execute(f"SELECT * FROM {self.migration_table}")
+            cursor.execute(pgsql.SQL("SELECT * FROM {}").format(self._table_ident))
             columns = [desc[0] for desc in (cursor.description or [])]
             return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
 

@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from confiture.core.function_signature_parser import FunctionSignature, FunctionSignatureParser
 
 

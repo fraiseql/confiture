@@ -433,11 +433,13 @@ class DatabaseRestorer:
         Raises:
             RestoreError: If the database connection fails.
         """
-        conninfo = f"host={options.host} port={options.port} dbname={options.target_db}" + (
-            f" user={options.username}" if options.username else ""
-        )
         try:
-            with psycopg.connect(conninfo) as conn, conn.cursor() as cur:
+            with psycopg.connect(
+                host=options.host,
+                port=options.port,
+                dbname=options.target_db,
+                user=options.username or None,
+            ) as conn, conn.cursor() as cur:
                 cur.execute(
                     """
                         SELECT COUNT(*)

@@ -121,7 +121,9 @@ class MigrationAccompanimentChecker:
             if not function_files:
                 return []
 
-            from confiture.core.function_signature_checker import FunctionSignatureChecker  # noqa: PLC0415
+            from confiture.core.function_signature_checker import (
+                FunctionSignatureChecker,  # noqa: PLC0415
+            )
 
             checker = FunctionSignatureChecker(self.git_repo)
             return checker.check(
