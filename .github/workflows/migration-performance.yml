@@ -124,84 +124,73 @@ jobs:
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture
         POSTGRES_PASSWORD: confiture
+      shell: python
       run: |
-        echo "=== Capturing Performance Metrics ==="
+        import subprocess
+        import json
+        import time
+        from datetime import UTC, datetime
+        from pathlib import Path
 
-        # Create metrics directory
-        mkdir -p .performance-metrics
+        Path(".performance-metrics").mkdir(exist_ok=True)
 
-        # Run specific performance-critical tests with timing
-        uv run python << 'EOF'
-import subprocess
-import json
-import time
-from datetime import datetime
+        metrics = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "run_date": datetime.now(UTC).strftime("%Y-%m-%d"),
+            "tests": [],
+        }
 
-metrics = {
-    "timestamp": datetime.utcnow().isoformat(),
-    "run_date": datetime.utcnow().strftime("%Y-%m-%d"),
-    "tests": []
-}
+        test_cases = [
+            ("test_forward_migrations.py::test_basic_forward_migration", "basic_forward"),
+            ("test_rollback_migrations.py::test_rollback_reverses_table_creation", "rollback_table"),
+            ("test_load_testing.py::test_bulk_insert_10k_rows", "bulk_10k"),
+            ("test_load_testing.py::test_bulk_insert_50k_rows", "bulk_50k"),
+            ("test_load_testing.py::test_index_creation_on_large_table", "index_large"),
+            ("test_advanced_scenarios.py::test_multi_table_migration_with_dependencies", "multi_table"),
+        ]
 
-# Test cases to monitor
-test_cases = [
-    ("test_forward_migrations.py::test_basic_forward_migration", "basic_forward"),
-    ("test_rollback_migrations.py::test_rollback_reverses_table_creation", "rollback_table"),
-    ("test_load_testing.py::test_bulk_insert_10k_rows", "bulk_10k"),
-    ("test_load_testing.py::test_bulk_insert_50k_rows", "bulk_50k"),
-    ("test_load_testing.py::test_index_creation_on_large_table", "index_large"),
-    ("test_advanced_scenarios.py::test_multi_table_migration_with_dependencies", "multi_table"),
-]
+        for test_path, test_name in test_cases:
+            start = time.time()
+            result = subprocess.run(
+                ["python", "-m", "pytest", f"tests/migration_testing/{test_path}", "-q"],
+                capture_output=True,
+                timeout=60,
+            )
+            duration = time.time() - start
+            metrics["tests"].append(
+                {
+                    "name": test_name,
+                    "duration_seconds": round(duration, 3),
+                    "passed": result.returncode == 0,
+                }
+            )
+            status = "✅" if result.returncode == 0 else "❌"
+            print(f"  {test_name:.<30} {duration:.3f}s {status}")
 
-for test_path, test_name in test_cases:
-    start = time.time()
-    result = subprocess.run(
-        ["python", "-m", "pytest", f"tests/migration_testing/{test_path}", "-q"],
-        capture_output=True,
-        timeout=60
-    )
-    duration = time.time() - start
-
-    metrics["tests"].append({
-        "name": test_name,
-        "duration_seconds": round(duration, 3),
-        "passed": result.returncode == 0
-    })
-    print(f"  {test_name:.<30} {duration:.3f}s {'✅' if result.returncode == 0 else '❌'}")
-
-# Save metrics
-with open(".performance-metrics/latest.json", "w") as f:
-    json.dump(metrics, f, indent=2)
-
-print(f"\n✅ Performance metrics captured: .performance-metrics/latest.json")
-EOF
+        Path(".performance-metrics/latest.json").write_text(json.dumps(metrics, indent=2))
+        print("\n✅ Performance metrics captured: .performance-metrics/latest.json")
 
     - name: Check for Performance Regressions
+      shell: python
       run: |
-        echo "=== Checking for Performance Regressions ==="
+        import json
+        from pathlib import Path
 
-        # Load latest metrics
-        if [ -f ".performance-metrics/latest.json" ]; then
-          echo "Latest performance metrics:"
-          cat .performance-metrics/latest.json | python -m json.tool
-
-          # Check for regressions (duration > 30s)
-          REGRESSIONS=$(python << 'EOF'
-import json
-with open(".performance-metrics/latest.json") as f:
-    metrics = json.load(f)
-    regressions = [t for t in metrics["tests"] if t["duration_seconds"] > 30]
-    for test in regressions:
-        print(f"⚠️  {test['name']}: {test['duration_seconds']}s (threshold: 30s)")
-    return len(regressions)
-EOF
-          )
-
-          if [ "$REGRESSIONS" -gt 0 ]; then
-            echo "⚠️  $REGRESSIONS potential performance regressions detected"
-            echo "   Review metrics: .performance-metrics/latest.json"
-          fi
-        fi
+        metrics_path = Path(".performance-metrics/latest.json")
+        if not metrics_path.exists():
+            print("No metrics file found — skipping regression check.")
+        else:
+            print("=== Checking for Performance Regressions ===")
+            metrics = json.loads(metrics_path.read_text())
+            print(json.dumps(metrics, indent=2))
+            regressions = [t for t in metrics["tests"] if t["duration_seconds"] > 30]
+            for test in regressions:
+                print(f"⚠️  {test['name']}: {test['duration_seconds']}s (threshold: 30s)")
+            if regressions:
+                print(f"⚠️  {len(regressions)} potential performance regression(s) detected")
+                print("   Review metrics: .performance-metrics/latest.json")
+            else:
+                print("✅ No performance regressions detected")
 
     - name: Create Performance Report
       if: always()
