@@ -90,6 +90,37 @@ def display_drift_report(report: Any, console: Console) -> None:
         )
 
 
+def display_signature_drift_report(report: Any, console: Console) -> None:
+    """Display a FunctionSignatureDriftReport to console.
+
+    Args:
+        report: FunctionSignatureDriftReport instance
+        console: Rich console for output
+    """
+    if not report.has_drift:
+        console.print(
+            f"[green]✅ No stale function overloads detected "
+            f"({report.functions_checked} functions checked)[/green]"
+        )
+        return
+
+    console.print(
+        f"[red]❌ {len(report.stale_overloads)} stale function overload(s) detected[/red]"
+    )
+    for overload in report.stale_overloads:
+        console.print(f"\n  [bold]{overload.schema}.{overload.name}[/bold]")
+        console.print(f"    Stale (in DB):   [red]{overload.stale_signature}[/red]")
+        for src in overload.source_signatures:
+            console.print(f"    Source defines:  [green]{src}[/green]")
+        console.print(f"    [cyan]Fix: {overload.drop_sql}[/cyan]")
+
+    if report.missing_from_db:
+        console.print(
+            f"\n  [dim]ℹ️  {len(report.missing_from_db)} source function(s) "
+            f"not yet in DB (pending deployment)[/dim]"
+        )
+
+
 def handle_output(
     format_type: str,
     data_dict: dict[str, Any],

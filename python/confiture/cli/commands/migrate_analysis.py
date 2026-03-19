@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from confiture.cli.formatters.common import display_drift_report
+from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
     _fix_idempotency,
     _output_json,
@@ -205,6 +205,15 @@ def migrate_validate(
         help=(
             "Compare the live database schema against the DDL files. "
             "Requires --config and a database connection."
+        ),
+    ),
+    check_signatures: bool = typer.Option(
+        False,
+        "--check-signatures",
+        help=(
+            "Compare function signatures in source SQL against the live database. "
+            "Reports stale overloads left by CREATE OR REPLACE with changed param types. "
+            "Requires --config and --schema."
         ),
     ),
     config: Path = typer.Option(
@@ -440,6 +449,59 @@ def migrate_validate(
             if not live_drift_passed:
                 raise typer.Exit(1)
             return
+
+        # Run live function signature drift check
+        if check_signatures:
+            try:
+                if not config.exists():
+                    error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                    raise typer.Exit(2)
+                if schema_file is None:
+                    error_console.print(
+                        "[red]❌ --schema is required with --check-signatures[/red]"
+                    )
+                    raise typer.Exit(2)
+                config_data = load_config(config)
+                conn = create_connection(config_data)
+                try:
+                    from confiture.core.function_signature_drift import (  # noqa: PLC0415
+                        FunctionSignatureDriftDetector,
+                    )
+                    from confiture.core.function_signature_parser import (  # noqa: PLC0415
+                        FunctionSignatureParser,
+                    )
+                    from confiture.core.live_function_catalog import (  # noqa: PLC0415
+                        LiveFunctionCatalog,
+                    )
+
+                    source_sql = schema_file.read_text()
+                    source_sigs = FunctionSignatureParser().parse(source_sql)
+
+                    live_catalog = LiveFunctionCatalog(conn)
+                    live_sigs = live_catalog.get_signatures()
+
+                    detector = FunctionSignatureDriftDetector()
+                    drift_report = detector.compare(source_sigs, live_sigs, schemas_checked=["public"])
+                finally:
+                    conn.close()
+
+                if format_output == "json":
+                    _output_json(
+                        {"check": "function_signature_drift", **drift_report.to_dict()},
+                        output_file,
+                        console,
+                    )
+                else:
+                    display_signature_drift_report(drift_report, console)
+
+                if drift_report.has_critical_drift:
+                    raise typer.Exit(1)
+                return
+            except typer.Exit:
+                raise
+            except Exception as e:
+                error_console.print(f"[red]❌ Signature drift check failed: {e}[/red]")
+                raise typer.Exit(2) from e
 
         if not migrations_dir.exists():
             if format_output == "json":
