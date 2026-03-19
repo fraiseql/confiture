@@ -21,6 +21,18 @@ _FUNC_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+# Header-only variant: matches up to and including the opening '('.
+# Used in _parse_regex to then extract balanced args separately.
+_FUNC_HEADER_RE = re.compile(
+    r"""
+    CREATE \s+ (?:OR \s+ REPLACE \s+)?
+    (?:FUNCTION|PROCEDURE) \s+
+    (?:(?P<schema>[\w"]+)\.)?(?P<name>[\w"]+)
+    \s* \(
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 _TYPE_ALIASES: dict[str, str] = {
     "int": "integer",
     "int4": "integer",
@@ -160,14 +172,23 @@ class FunctionSignatureParser:
         return result
 
     def _parse_regex(self, sql: str) -> list[FunctionSignature]:
-        """Parse using regex fallback (no optional dependencies)."""
+        """Parse using regex fallback (no optional dependencies).
+
+        Uses _FUNC_HEADER_RE to locate the opening '(' of each function, then
+        extracts the argument list with balanced-parenthesis tracking so that
+        complex DEFAULT expressions such as ``ROW(NULL, NULL)::mytype`` are
+        captured correctly rather than truncated at the first ')'.
+        """
         result = []
-        for match in _FUNC_RE.finditer(sql):
+        for match in _FUNC_HEADER_RE.finditer(sql):
             schema_raw = match.group("schema")
             schema = schema_raw.lower().strip('"') if schema_raw else "public"
             name = match.group("name").lower().strip('"')
-            args_raw = match.group("args").strip()
-            param_types = self._parse_args_regex(args_raw)
+            # match.end() points to the char after '(' — the start of the args
+            args_raw = self._extract_balanced_args(sql, match.end() - 1)
+            if args_raw is None:
+                continue
+            param_types = self._parse_args_regex(args_raw.strip())
             result.append(
                 FunctionSignature(
                     schema=schema,
@@ -177,20 +198,63 @@ class FunctionSignatureParser:
             )
         return result
 
+    @staticmethod
+    def _extract_balanced_args(sql: str, open_pos: int) -> str | None:
+        """Return the content inside the balanced parentheses starting at open_pos.
+
+        ``sql[open_pos]`` must be ``'('``.  Scans forward tracking depth;
+        returns the substring between the opening and matching closing paren,
+        or ``None`` if the parentheses are unbalanced.
+        """
+        depth = 0
+        for i in range(open_pos, len(sql)):
+            if sql[i] == "(":
+                depth += 1
+            elif sql[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    return sql[open_pos + 1 : i]
+        return None
+
     def _parse_args_regex(self, args_raw: str) -> list[str]:
-        """Parse comma-separated argument list into normalised type strings."""
+        """Parse a parameter list into normalised type strings.
+
+        Splits on commas only at paren-depth 0 so that complex DEFAULT
+        expressions containing nested parentheses (e.g.
+        ``DEFAULT ROW(NULL, NULL)::mytype``) are treated as a single
+        parameter token rather than multiple ones.
+        """
         if not args_raw:
             return []
 
+        # Depth-aware comma split
+        parts: list[str] = []
+        depth = 0
+        current: list[str] = []
+        for ch in args_raw:
+            if ch == "(":
+                depth += 1
+                current.append(ch)
+            elif ch == ")":
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current))
+
         param_types = []
-        for arg in args_raw.split(","):
+        for arg in parts:
             arg = arg.strip()
             if not arg:
                 continue
 
-            # Remove DEFAULT clause
-            arg = re.sub(r"\s+DEFAULT\s+.*$", "", arg, flags=re.IGNORECASE).strip()
-            arg = re.sub(r"\s*=\s*.*$", "", arg).strip()
+            # Remove DEFAULT clause (including complex expressions with nested parens)
+            arg = re.sub(r"\s+DEFAULT\s+.*$", "", arg, flags=re.IGNORECASE | re.DOTALL).strip()
+            arg = re.sub(r"\s*=\s*.*$", "", arg, flags=re.DOTALL).strip()
 
             # Skip OUT / VARIADIC / TABLE params
             if _SKIP_MODES.match(arg):

@@ -5,6 +5,23 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-03-19
+
+### Fixed
+
+- **False positive in `--check-signatures` with composite-type DEFAULT values** (issue #81).
+  The regex parser (`_parse_regex`) had two coupled bugs:
+  1. `_FUNC_RE` used `[^)]*` to capture the argument list, which stopped at the first `)`
+     inside a `DEFAULT ROW(NULL, NULL, NULL)::mytype` expression, truncating the real args.
+  2. `_parse_args_regex` split on all commas, so the `NULL`s inside `ROW(...)` were treated
+     as separate parameter types.
+
+  Fixed by introducing `_FUNC_HEADER_RE` (matches the function header up to `(`) and
+  `_extract_balanced_args` (scans for the matching `)` tracking paren depth), and
+  replacing the naive `split(",")` with a depth-aware comma split that ignores commas
+  inside nested parentheses.  Both the `pglast` path (which uses the AST's typed param
+  nodes directly) and the regex fallback now produce identical, correct results.
+
 ## [0.8.5] - 2026-03-19
 
 ### Added

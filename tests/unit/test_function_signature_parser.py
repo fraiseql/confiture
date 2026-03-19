@@ -82,6 +82,28 @@ class TestFunctionSignatureParserRegex:
         assert len(sigs) == 1
         assert sigs[0].param_types == ("integer",)
 
+    def test_composite_type_default_with_row_constructor(self):
+        # Issue #81: ROW(NULL, NULL, NULL)::type was parsed as 3 extra params
+        sql = """CREATE OR REPLACE FUNCTION my_schema.my_func(
+            v_ctx my_schema.my_type DEFAULT ROW(NULL, NULL, NULL)::my_schema.my_type,
+            dry_run BOOLEAN DEFAULT FALSE
+        ) RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;"""
+        sigs = self.parser._parse_regex(sql)
+        assert len(sigs) == 1
+        assert sigs[0].param_types == ("my_schema.my_type", "boolean")
+
+    def test_nested_parens_in_default_single_param(self):
+        sql = "CREATE FUNCTION f(x mytype DEFAULT ROW(NULL, NULL)::mytype) RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser._parse_regex(sql)
+        assert len(sigs) == 1
+        assert sigs[0].param_types == ("mytype",)
+
+    def test_multiple_params_with_and_without_complex_default(self):
+        sql = "CREATE FUNCTION f(a integer, b mytype DEFAULT ROW(1, 2)::mytype, c text DEFAULT 'hi') RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser._parse_regex(sql)
+        assert len(sigs) == 1
+        assert sigs[0].param_types == ("integer", "mytype", "text")
+
     def test_out_param_excluded(self):
         sql = "CREATE FUNCTION f(p_in INTEGER, OUT p_out TEXT) RETURNS void AS $$ $$ LANGUAGE sql;"
         sigs = self.parser._parse_regex(sql)
