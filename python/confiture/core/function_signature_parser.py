@@ -141,11 +141,9 @@ class FunctionSignatureParser:
 
                     names = arg_type.names
                     if names:
-                        type_str = ".".join(
-                            n.sval for n in names if hasattr(n, "sval")
-                        )
+                        type_str = ".".join(n.sval for n in names if hasattr(n, "sval"))
                         if type_str.startswith("pg_catalog."):
-                            type_str = type_str[len("pg_catalog."):]
+                            type_str = type_str[len("pg_catalog.") :]
                         param_types.append(self._normalise_type(type_str))
 
                 result.append(
@@ -232,7 +230,7 @@ class FunctionSignatureParser:
         """
         clean = raw.lower().strip()
         if clean.startswith("pg_catalog."):
-            clean = clean[len("pg_catalog."):]
+            clean = clean[len("pg_catalog.") :]
         # Strip precision/scale: varchar(255) -> varchar
         clean = re.sub(r"\([^)]*\)", "", clean).strip()
         return _TYPE_ALIASES.get(clean, clean)

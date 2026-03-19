@@ -276,6 +276,7 @@ class SshTunnelConfig(BaseModel):
                 "Use only letters, digits, hyphens, underscores, dots, or @."
             )
         return v
+
     remote_port: int = 5432
     remote_socket: str | None = None
     local_port: int = 0

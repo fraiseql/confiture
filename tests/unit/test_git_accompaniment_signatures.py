@@ -81,8 +81,10 @@ class TestMigrationAccompanimentCheckerSignatureIntegration:
         """Build a MigrationAccompanimentChecker with mocked git and differ."""
         from confiture.core.git_accompaniment import MigrationAccompanimentChecker
 
-        with patch("confiture.core.git_accompaniment.GitSchemaDiffer"), \
-             patch("confiture.core.git_accompaniment.GitRepository"):
+        with (
+            patch("confiture.core.git_accompaniment.GitSchemaDiffer"),
+            patch("confiture.core.git_accompaniment.GitRepository"),
+        ):
             checker = MigrationAccompanimentChecker.__new__(MigrationAccompanimentChecker)
 
         checker.env = "local"

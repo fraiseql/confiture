@@ -247,9 +247,7 @@ class ProductionSyncer:
                 progress.update(progress_task, total=expected_count)
 
             # Temporarily disable triggers to allow FK constraint violations
-            dst_cursor.execute(
-                pgsql.SQL("ALTER TABLE {} DISABLE TRIGGER ALL").format(table_ident)
-            )
+            dst_cursor.execute(pgsql.SQL("ALTER TABLE {} DISABLE TRIGGER ALL").format(table_ident))
 
             try:
                 if anonymization_rules:
@@ -323,12 +321,8 @@ class ProductionSyncer:
         """
         table_ident = pgsql.Identifier(table_name)
         with (
-            src_cursor.copy(
-                pgsql.SQL("COPY {} TO STDOUT").format(table_ident)
-            ) as copy_out,
-            dst_cursor.copy(
-                pgsql.SQL("COPY {} FROM STDIN").format(table_ident)
-            ) as copy_in,
+            src_cursor.copy(pgsql.SQL("COPY {} TO STDOUT").format(table_ident)) as copy_out,
+            dst_cursor.copy(pgsql.SQL("COPY {} FROM STDIN").format(table_ident)) as copy_in,
         ):
             for data in copy_out:
                 copy_in.write(data)
@@ -430,9 +424,7 @@ class ProductionSyncer:
             return
 
         columns_sql = pgsql.SQL(", ").join(pgsql.Identifier(c) for c in column_names)
-        placeholders_sql = pgsql.SQL(", ").join(
-            [pgsql.Placeholder()] * len(column_names)
-        )
+        placeholders_sql = pgsql.SQL(", ").join([pgsql.Placeholder()] * len(column_names))
         query = pgsql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
             pgsql.Identifier(table_name), columns_sql, placeholders_sql
         )

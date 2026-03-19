@@ -44,23 +44,106 @@ _VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]
 # PostgreSQL reserved words that must never be used as bare table names.
 # pgsql.Identifier quotes them correctly in SQL, but they would confuse anyone
 # writing ad-hoc queries against the tracking table.
-_POSTGRES_RESERVED_WORDS = frozenset({
-    "all", "analyse", "analyze", "and", "any", "array", "as", "asc",
-    "asymmetric", "both", "case", "cast", "check", "collate", "column",
-    "constraint", "create", "cross", "current_catalog", "current_date",
-    "current_role", "current_schema", "current_time", "current_timestamp",
-    "current_user", "default", "deferrable", "desc", "distinct", "do",
-    "else", "end", "except", "false", "fetch", "for", "foreign", "from",
-    "full", "grant", "group", "having", "ilike", "in", "initially",
-    "inner", "intersect", "into", "is", "isnull", "join", "lateral",
-    "leading", "left", "like", "limit", "localtime", "localtimestamp",
-    "natural", "not", "notnull", "null", "offset", "on", "only", "or",
-    "order", "outer", "overlaps", "placing", "primary", "references",
-    "returning", "right", "row", "select", "session_user", "similar",
-    "some", "symmetric", "table", "tablesample", "then", "to", "trailing",
-    "true", "union", "unique", "user", "using", "variadic", "verbose",
-    "when", "where", "window", "with",
-})
+_POSTGRES_RESERVED_WORDS = frozenset(
+    {
+        "all",
+        "analyse",
+        "analyze",
+        "and",
+        "any",
+        "array",
+        "as",
+        "asc",
+        "asymmetric",
+        "both",
+        "case",
+        "cast",
+        "check",
+        "collate",
+        "column",
+        "constraint",
+        "create",
+        "cross",
+        "current_catalog",
+        "current_date",
+        "current_role",
+        "current_schema",
+        "current_time",
+        "current_timestamp",
+        "current_user",
+        "default",
+        "deferrable",
+        "desc",
+        "distinct",
+        "do",
+        "else",
+        "end",
+        "except",
+        "false",
+        "fetch",
+        "for",
+        "foreign",
+        "from",
+        "full",
+        "grant",
+        "group",
+        "having",
+        "ilike",
+        "in",
+        "initially",
+        "inner",
+        "intersect",
+        "into",
+        "is",
+        "isnull",
+        "join",
+        "lateral",
+        "leading",
+        "left",
+        "like",
+        "limit",
+        "localtime",
+        "localtimestamp",
+        "natural",
+        "not",
+        "notnull",
+        "null",
+        "offset",
+        "on",
+        "only",
+        "or",
+        "order",
+        "outer",
+        "overlaps",
+        "placing",
+        "primary",
+        "references",
+        "returning",
+        "right",
+        "row",
+        "select",
+        "session_user",
+        "similar",
+        "some",
+        "symmetric",
+        "table",
+        "tablesample",
+        "then",
+        "to",
+        "trailing",
+        "true",
+        "union",
+        "unique",
+        "user",
+        "using",
+        "variadic",
+        "verbose",
+        "when",
+        "where",
+        "window",
+        "with",
+    }
+)
 
 
 class Migrator:
@@ -459,9 +542,7 @@ class Migrator:
         """Rollback to a savepoint (undo nested transaction)."""
         try:
             with self.connection.cursor() as cursor:
-                cursor.execute(
-                    pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name))
-                )
+                cursor.execute(pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name)))
             self.connection.commit()
         except Exception:
             # Savepoint rollback failed, do full rollback
@@ -855,9 +936,7 @@ class Migrator:
         """
         with self.connection.cursor() as cursor:
             cursor.execute(
-                pgsql.SQL("SELECT COUNT(*) FROM {} WHERE version = %s").format(
-                    self._table_ident
-                ),
+                pgsql.SQL("SELECT COUNT(*) FROM {} WHERE version = %s").format(self._table_ident),
                 (version,),
             )
             result = cursor.fetchone()
@@ -874,9 +953,9 @@ class Migrator:
         """
         with self.connection.cursor() as cursor:
             cursor.execute(
-                pgsql.SQL(
-                    "SELECT version FROM {} ORDER BY applied_at ASC"
-                ).format(self._table_ident)
+                pgsql.SQL("SELECT version FROM {} ORDER BY applied_at ASC").format(
+                    self._table_ident
+                )
             )
             return [row[0] for row in cursor.fetchall()]
 

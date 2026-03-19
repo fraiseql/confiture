@@ -45,9 +45,7 @@ class TestLiveFunctionCatalog:
             introspected_at="2026-01-01T00:00:00",
             functions=functions,
         )
-        with patch(
-            "confiture.core.live_function_catalog.FunctionIntrospector"
-        ) as MockIntrospector:
+        with patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector:
             MockIntrospector.return_value.introspect.return_value = mock_catalog
             catalog = LiveFunctionCatalog(mock_conn)
             catalog._introspector = MockIntrospector.return_value

@@ -81,8 +81,7 @@ class FunctionSignatureDriftReport:
     def summary(self) -> str:
         if not self.has_drift:
             return (
-                f"No stale function overloads detected "
-                f"({self.functions_checked} functions checked)"
+                f"No stale function overloads detected ({self.functions_checked} functions checked)"
             )
         return (
             f"{len(self.stale_overloads)} stale overload(s) detected "

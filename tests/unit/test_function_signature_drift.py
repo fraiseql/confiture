@@ -1,6 +1,5 @@
 """Unit tests for FunctionSignatureDriftDetector and related models."""
 
-
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
     StaleOverload,
@@ -46,7 +45,7 @@ class TestFunctionSignatureDriftDetectorStaleOverloads:
     def test_detects_stale_overload(self):
         source = [_sig("get_user", ("bigint",))]
         live = [
-            _sig("get_user", ("bigint",)),   # current
+            _sig("get_user", ("bigint",)),  # current
             _sig("get_user", ("integer",)),  # stale
         ]
         report = FunctionSignatureDriftDetector().compare(source, live)
