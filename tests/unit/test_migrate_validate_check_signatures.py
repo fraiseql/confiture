@@ -1,11 +1,17 @@
 """Unit tests for migrate validate --check-signatures CLI flag."""
 
+import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport
+
+
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text (needed when GITHUB_ACTIONS forces Rich colors)."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 def _empty_report() -> FunctionSignatureDriftReport:
@@ -45,7 +51,7 @@ runner = CliRunner()
 class TestCheckSignaturesFlag:
     def test_check_signatures_flag_exists(self):
         result = runner.invoke(app, ["migrate", "validate", "--help"])
-        assert "--check-signatures" in result.output
+        assert "--check-signatures" in _strip_ansi(result.output)
 
     def test_check_signatures_requires_schema_file(self, tmp_path):
         config = tmp_path / "confiture.yaml"
