@@ -5,6 +5,28 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-03-19
+
+### Added
+
+- **`--check-body` flag for `migrate validate --check-signatures`** (issue #82).
+  Detects function body drift — cases where a function was modified directly in the
+  database (e.g. via an ad-hoc `CREATE OR REPLACE`) without updating the source SQL.
+
+  - `FunctionBodyNormalizer` strips comments, collapses whitespace, and lowercases
+    before hashing, so cosmetic differences (formatting, comments, casing) are ignored.
+  - `FunctionSignatureParser.parse_with_bodies()` extracts raw dollar-quoted bodies
+    alongside signatures; returns `None` for `LANGUAGE C`/`LANGUAGE internal` functions.
+  - `FunctionBodyDriftDetector` compares normalised SHA-256 hashes for the intersection
+    of source and live signatures; `None`-body functions are counted but never reported.
+  - `LiveFunctionCatalog.get_bodies()` fetches `pg_proc.prosrc` from the live DB,
+    returning `None` for C/internal languages; caches alongside `get_signatures()` so
+    only one DB query is needed per invocation.
+  - CLI: `--check-body` requires `--check-signatures` (guard exits 2 otherwise).
+    Text output shows source hash vs DB hash with a hint to run `fix-signatures --apply`.
+    JSON output adds a `body_drift` key to the existing signature-drift response.
+    Exit code 1 if either signature drift **or** body drift is detected.
+
 ## [0.8.6] - 2026-03-19
 
 ### Fixed

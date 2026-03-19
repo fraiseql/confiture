@@ -283,6 +283,70 @@ class FunctionSignatureParser:
             return "character varying"
         return tokens[-1]
 
+    # Matches a dollar-quoted body:  AS $tag$...$tag$
+    # Group 1 captures the opening delimiter (e.g. $$ or $func$) so that \1
+    # closes it exactly.  re.DOTALL lets .* span newlines.
+    _BODY_RE = re.compile(
+        r"AS\s+(\$[^$]*\$)(.*?)\1",
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    def parse_with_bodies(self, sql: str) -> list[tuple[FunctionSignature, str | None]]:
+        """Parse signatures and extract raw function bodies.
+
+        Returns a list of (FunctionSignature, body_or_None) pairs.
+        ``body`` is ``None`` when the body cannot be extracted — e.g. for
+        LANGUAGE C / LANGUAGE internal functions whose AS clause is a single-
+        quoted symbol rather than a dollar-quoted SQL body.
+
+        Uses the regex path only (not pglast), because pglast AST nodes do not
+        expose original source text, making dollar-quote body extraction
+        impractical via the AST.
+        """
+        result: list[tuple[FunctionSignature, str | None]] = []
+
+        for match in _FUNC_HEADER_RE.finditer(sql):
+            schema_raw = match.group("schema")
+            schema = schema_raw.lower().strip('"') if schema_raw else "public"
+            name = match.group("name").lower().strip('"')
+
+            open_pos = match.end() - 1  # position of '('
+            args_raw = self._extract_balanced_args(sql, open_pos)
+            if args_raw is None:
+                continue
+            param_types = self._parse_args_regex(args_raw.strip())
+            sig = FunctionSignature(
+                schema=schema,
+                name=name,
+                param_types=tuple(param_types),
+            )
+
+            # Position just after the closing ')' of the parameter list.
+            # Formula: open_pos + len(args_raw) + 2
+            #   open_pos         → '('
+            #   open_pos + 1     → start of args
+            #   open_pos + 1 + N → closing ')'  (N = len(args_raw))
+            #   open_pos + N + 2 → char after ')'
+            args_end = open_pos + len(args_raw) + 2
+
+            # Search for the dollar-quoted body that follows this function header.
+            body_match = self._BODY_RE.search(sql, args_end)
+
+            if body_match is not None:
+                # Guard: if another FUNCTION header appears before this body,
+                # the body belongs to that later function, not the current one.
+                next_fn = _FUNC_HEADER_RE.search(sql, args_end)
+                if next_fn is None or next_fn.start() > body_match.start():
+                    body: str | None = body_match.group(2)
+                else:
+                    body = None
+            else:
+                body = None
+
+            result.append((sig, body))
+
+        return result
+
     def _normalise_type(self, raw: str) -> str:
         """Normalise a PostgreSQL type name to a canonical form.
 

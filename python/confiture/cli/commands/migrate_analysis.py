@@ -145,6 +145,30 @@ def migrate_diff(
         raise typer.Exit(1) from e
 
 
+def _display_body_drift_report(report: Any, console: Any) -> None:
+    """Print a FunctionBodyDriftReport to the console in human-readable form."""
+    if not report.has_drift:
+        console.print(
+            f"[green]✓[/green] 0 function body drift(s) detected "
+            f"({report.functions_checked} checked, "
+            f"{report.detection_time_ms:.1f}ms)"
+        )
+        return
+
+    console.print(
+        f"[yellow]⚠[/yellow]  {len(report.body_drifts)} function body "
+        f"drift(s) detected ({report.functions_checked} checked)"
+    )
+    for drift in report.body_drifts:
+        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
+        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
+        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        console.print(
+            "    Hint: function body differs — run "
+            "[bold]fix-signatures --apply[/bold] to re-apply from source"
+        )
+
+
 def migrate_validate(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -221,6 +245,15 @@ def migrate_validate(
             "Detects stale overloads created by CREATE OR REPLACE with changed param types. "
             "Companion to --require-migration (static pre-commit check, no DB needed). "
             "Requires --config (or --env) and --schema."
+        ),
+    ),
+    check_body: bool = typer.Option(
+        False,
+        "--check-body",
+        help=(
+            "Compare function bodies (prosrc) between source SQL and the live database. "
+            "Requires --check-signatures. Opt-in because body comparison is heavier than "
+            "signature-only comparison."
         ),
     ),
     check_signature_schemas: str = typer.Option(
@@ -466,6 +499,11 @@ def migrate_validate(
                 # At least one check failed in text mode
                 raise typer.Exit(1)
 
+        # Guard: --check-body requires --check-signatures
+        if check_body and not check_signatures:
+            error_console.print("[red]Error:[/red] --check-body requires --check-signatures")
+            raise typer.Exit(2)
+
         # Run live drift check
         if check_live_drift:
             live_drift_passed = True
@@ -596,16 +634,55 @@ def migrate_validate(
                     detector = FunctionSignatureDriftDetector()
                     drift_report = detector.compare(source_sigs, live_sigs, schemas_checked=schemas)
 
+                    body_report = None
+                    if check_body:
+                        from confiture.core.function_body_drift import (  # noqa: PLC0415
+                            FunctionBodyDriftDetector,
+                        )
+
+                        source_with_bodies = FunctionSignatureParser().parse_with_bodies(source_sql)
+                        source_bodies: dict[str, str | None] = {
+                            sig.signature_key(): body for sig, body in source_with_bodies
+                        }
+                        live_bodies = live_catalog.get_bodies(
+                            schemas=schemas,
+                            sig_keys=set(source_bodies),
+                        )
+                        body_report = FunctionBodyDriftDetector().compare(
+                            source_bodies, live_bodies
+                        )
+
                 if format_output == "json":
-                    _output_json(
-                        {"check": "function_signature_drift", **drift_report.to_dict()},
-                        output_file,
-                        console,
-                    )
+                    json_output: dict[str, Any] = {
+                        "check": "function_signature_drift",
+                        **drift_report.to_dict(),
+                    }
+                    if body_report is not None:
+                        json_output["body_drift"] = {
+                            "has_drift": body_report.has_drift,
+                            "body_drifts": [
+                                {
+                                    "schema": d.schema,
+                                    "name": d.name,
+                                    "signature_key": d.signature_key,
+                                    "source_hash": d.source_hash,
+                                    "db_hash": d.db_hash,
+                                }
+                                for d in body_report.body_drifts
+                            ],
+                            "functions_checked": body_report.functions_checked,
+                            "detection_time_ms": body_report.detection_time_ms,
+                        }
+                    _output_json(json_output, output_file, console)
                 else:
                     display_signature_drift_report(drift_report, console)
+                    if body_report is not None:
+                        _display_body_drift_report(body_report, console)
 
-                if drift_report.has_critical_drift:
+                has_any_drift = drift_report.has_critical_drift or (
+                    body_report is not None and body_report.has_drift
+                )
+                if has_any_drift:
                     raise typer.Exit(1)
                 return
             except typer.Exit:
