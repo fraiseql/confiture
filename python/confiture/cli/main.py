@@ -20,6 +20,7 @@ from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate_analysis import (
     migrate_diff,
     migrate_fix,
+    migrate_fix_signatures,
     migrate_introspect,
     migrate_validate,
     migrate_verify,
@@ -153,6 +154,7 @@ migrate_app.command("rebuild")(migrate_rebuild)
 migrate_app.command("diff")(migrate_diff)
 migrate_app.command("validate")(migrate_validate)
 migrate_app.command("fix")(migrate_fix)
+migrate_app.command("fix-signatures")(migrate_fix_signatures)
 migrate_app.command("introspect")(migrate_introspect)
 migrate_app.command("verify")(migrate_verify)
 

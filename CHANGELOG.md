@@ -5,6 +5,22 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-03-19
+
+### Added
+
+- **`confiture migrate fix-signatures`** — atomic remediation command for stale function
+  overloads detected by `--check-signatures` (issue #80).
+  - Dry-run by default: generates and prints `DROP FUNCTION <stale> + CREATE OR REPLACE`
+    SQL for every stale overload without touching the database.
+  - `--apply`: executes all fixes in a single transaction; rolls back on any error.
+  - After `--apply`, re-runs signature comparison to confirm zero residual drift.
+  - Never drops a function without recreating it: skips overloads whose source definition
+    cannot be found in the schema SQL (avoids leaving the function undefined).
+  - Same `--env` / `--config` / `--schema` / `--schemas` / `--ssh` / `--format` /
+    `--output` flags as `migrate validate --check-signatures`.
+  - Supports JSON output (`--format json`) for CI/CD integration.
+
 ## [0.8.4] - 2026-03-19
 
 ### Security
