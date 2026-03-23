@@ -621,7 +621,7 @@ class TestMigrateGenerateExternalGenerator:
         assert "Resolved command" in result.output or "Target file" in result.output
 
     def test_generator_exits_nonzero_surfaces_error(self, tmp_path):
-        """Non-zero generator exit → error message + exit 1."""
+        """Non-zero generator exit → error message + exit 3 (execution error)."""
         script_path = _make_fake_generator(tmp_path, exit_code=2)
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
@@ -656,10 +656,10 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 3
 
-    def test_generator_without_from_exits_1(self, tmp_path):
-        """--generator without --from → clear error, exit 1."""
+    def test_generator_without_from_exits_2(self, tmp_path):
+        """--generator without --from → clear error, exit 2 (validation error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         to_file = tmp_path / "v2.sql"
@@ -688,11 +688,11 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
         assert "--from" in result.output or "required" in result.output.lower()
 
-    def test_generator_without_to_exits_1(self, tmp_path):
-        """--generator without --to → clear error, exit 1."""
+    def test_generator_without_to_exits_2(self, tmp_path):
+        """--generator without --to → clear error, exit 2 (validation error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         from_file = tmp_path / "v1.sql"
@@ -721,11 +721,11 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
         assert "--to" in result.output or "required" in result.output.lower()
 
-    def test_unknown_generator_name_exits_1(self, tmp_path):
-        """Unknown generator name → clear error, exit 1."""
+    def test_unknown_generator_name_exits_2(self, tmp_path):
+        """Unknown generator name → clear error, exit 2 (validation error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         from_file = tmp_path / "v1.sql"
@@ -758,7 +758,7 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
         assert "nonexistent_generator" in result.output or "not found" in result.output.lower()
 
     def test_no_generator_flag_uses_python_template(self, tmp_path):
@@ -782,8 +782,8 @@ class TestMigrateGenerateExternalGenerator:
         assert len(py_files) == 1
         assert "class AddBarColumn" in py_files[0].read_text()
 
-    def test_config_with_no_migration_generators_exits_1(self, tmp_path):
-        """Config without migration_generators key → error + exit 1."""
+    def test_config_with_no_migration_generators_exits_2(self, tmp_path):
+        """Config without migration_generators key → error + exit 2 (validation error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         from_file = tmp_path / "v1.sql"
@@ -821,4 +821,4 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2

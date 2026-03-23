@@ -74,7 +74,7 @@ class TestMigrateUpDuplicateBlocking:
         # is verified in unit tests.
 
     def test_migrate_up_proceeds_without_duplicates(self, tmp_path):
-        """migrate up should not block when no duplicate versions exist."""
+        """migrate up should not block with duplicate-version exit code when no duplicates exist."""
         config_file = _make_config_file(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -94,8 +94,11 @@ class TestMigrateUpDuplicateBlocking:
             ],
         )
 
-        # Should not fail with exit code 3 (may fail for other reasons like DB)
-        assert result.exit_code != 3
+        # The duplicate-version check uses exit code 3 with a specific error message.
+        # Without a real DB connection this may still exit 3 for connection reasons,
+        # so we verify the duplicate-version error is NOT in the output.
+        output = (result.stdout or "") + (result.stderr if hasattr(result, "stderr") and result.stderr else "")
+        assert "Duplicate migration version" not in output
 
 
 @pytest.mark.integration

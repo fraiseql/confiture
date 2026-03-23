@@ -72,7 +72,7 @@ exclude_dirs: []
         )
 
         # Verify CLI behavior
-        assert result.exit_code == 1, "Should return non-zero exit code"
+        assert result.exit_code == 3, "Should return exit code 3 (migration execution error)"
 
         # Verify error message contains:
         output = result.stdout
