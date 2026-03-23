@@ -78,6 +78,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 ## Features
 
 ### Migration Management
+- **`migrate preflight`** — pre-deploy safety gate: checks reversibility, non-transactional statements, duplicate versions, and checksum tampering. JSON output for CI/CD.
 - **Semantic exit codes** — `0` success, `2` validation error, `3` SQL failure, `6` lock contention. Script with confidence.
 - **`migrate rebuild`** — drop and recreate from DDL + replay migrations in one command. Fast environment reset.
 - **`migrate validate`** — naming convention checks, schema drift detection, function signature and body drift.
@@ -110,7 +111,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - **PII anonymization** — built-in strategies for production sync.
 - **Optional Rust extension** — drop-in performance boost for SQL parsing and hashing.
 - **Python 3.11, 3.12, 3.13** — tested across all supported versions.
-- **4,420+ tests** passing.
+- **4,480+ tests** passing.
 
 ---
 

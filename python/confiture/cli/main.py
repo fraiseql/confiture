@@ -22,6 +22,7 @@ from confiture.cli.commands.migrate_analysis import (
     migrate_fix,
     migrate_fix_signatures,
     migrate_introspect,
+    migrate_preflight,
     migrate_validate,
     migrate_verify,
 )
@@ -157,6 +158,7 @@ migrate_app.command("fix")(migrate_fix)
 migrate_app.command("fix-signatures")(migrate_fix_signatures)
 migrate_app.command("introspect")(migrate_introspect)
 migrate_app.command("verify")(migrate_verify)
+migrate_app.command("preflight")(migrate_preflight)
 
 
 if __name__ == "__main__":

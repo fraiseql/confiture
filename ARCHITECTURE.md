@@ -1,6 +1,6 @@
 # Confiture Architecture
 
-**Version**: 0.8.9
+**Version**: 0.8.10
 **Last Updated**: 2026-03-23
 **Status**: Production-Ready
 
@@ -446,5 +446,5 @@ When mocking in tests, use these module-level targets:
 ---
 
 **Last Updated**: 2026-03-23
-**Version**: 0.8.9
+**Version**: 0.8.10
 **Status**: Production-Ready

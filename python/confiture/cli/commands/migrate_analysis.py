@@ -1612,3 +1612,97 @@ def migrate_fix_signatures(
     except Exception as e:
         error_console.print(f"[red]❌ fix-signatures failed: {e}[/red]")
         raise typer.Exit(2) from e
+
+
+def migrate_preflight(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory (default: db/migrations)",
+    ),
+    format_type: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table or json (default: table)",
+    ),
+) -> None:
+    """Check if pending migrations are safe to deploy.
+
+    Verifies reversibility (.down.sql exists), detects non-transactional
+    statements (CREATE INDEX CONCURRENTLY, etc.), checks for duplicate
+    versions, and verifies checksums of applied migrations.
+
+    EXAMPLES:
+      confiture migrate preflight
+        ↳ Check all migration files in db/migrations
+
+      confiture migrate preflight --format json
+        ↳ Output structured JSON for CI/CD integration
+
+      confiture migrate preflight --migrations-dir custom/migrations
+        ↳ Check migrations in a custom directory
+
+    EXIT CODES:
+      0 — all migrations safe to deploy
+      1 — one or more issues detected
+    """
+    from rich.table import Table
+
+    from confiture.core.preflight import run_preflight
+
+    result = run_preflight(migrations_dir)
+
+    if format_type == "json":
+        _output_json(result.to_dict(), None, console)
+        if not result.safe_to_deploy:
+            raise typer.Exit(1)
+        return
+
+    # Rich table output
+    table = Table(title="Pre-flight Check")
+    table.add_column("Version", style="cyan")
+    table.add_column("Name")
+    table.add_column("Reversible", justify="center")
+    table.add_column("Transactional", justify="center")
+
+    for m in result.migrations:
+        rev = "[green]✓[/green]" if m.reversible else "[red]✗[/red]"
+        if m.fully_transactional:
+            txn = "[green]✓[/green]"
+        else:
+            txn = "[red]✗[/red] " + "; ".join(m.non_transactional_statements)
+        table.add_row(m.version, m.name, rev, txn)
+
+    console.print(table)
+
+    # Summary
+    console.print(f"\nSummary: {len(result.migrations)} migrations checked")
+
+    if result.irreversible:
+        console.print(f"  [red]✗[/red] {len(result.irreversible)} irreversible (missing .down.sql)")
+    else:
+        console.print("  [green]✓[/green] All reversible")
+
+    if result.non_transactional:
+        total_stmts = sum(len(m.non_transactional_statements) for m in result.non_transactional)
+        console.print(f"  [red]✗[/red] {total_stmts} non-transactional statements")
+    else:
+        console.print("  [green]✓[/green] All transactional")
+
+    if result.has_duplicates:
+        console.print(f"  [red]✗[/red] {len(result.duplicate_versions)} duplicate version(s)")
+    else:
+        console.print("  [green]✓[/green] No duplicate versions")
+
+    if result.checksum_verified:
+        if result.has_checksum_mismatches:
+            console.print(f"  [red]✗[/red] {len(result.checksum_mismatches)} checksum mismatch(es)")
+        else:
+            console.print("  [green]✓[/green] Checksums verified")
+
+    if result.safe_to_deploy:
+        console.print("  [green]→ Safe to deploy[/green]")
+    else:
+        console.print("  [red]→ Not safe to deploy with rollback guarantee[/red]")
+        raise typer.Exit(1)

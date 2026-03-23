@@ -579,3 +579,100 @@ class DiffResult:
                 for c in self.changes
             ],
         }
+
+
+@dataclass
+class MigrationPreflightInfo:
+    """Pre-flight analysis of a single migration file."""
+
+    version: str
+    name: str
+    has_down: bool
+    non_transactional_statements: list[str] = field(default_factory=list)
+    checksum: str | None = None
+
+    @property
+    def reversible(self) -> bool:
+        """True if this migration has a rollback file."""
+        return self.has_down
+
+    @property
+    def fully_transactional(self) -> bool:
+        """True if all statements can run inside a transaction."""
+        return len(self.non_transactional_statements) == 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "version": self.version,
+            "name": self.name,
+            "has_down": self.has_down,
+            "reversible": self.reversible,
+            "fully_transactional": self.fully_transactional,
+            "non_transactional_statements": self.non_transactional_statements,
+            "checksum": self.checksum,
+        }
+
+
+@dataclass
+class PreflightResult:
+    """Result of migrate preflight check."""
+
+    migrations: list[MigrationPreflightInfo]
+    duplicate_versions: dict[str, list[str]] = field(default_factory=dict)
+    checksum_mismatches: list[str] = field(default_factory=list)
+    checksum_verified: bool = False
+
+    @property
+    def all_reversible(self) -> bool:
+        """True if every migration has a rollback file."""
+        return all(m.reversible for m in self.migrations)
+
+    @property
+    def all_transactional(self) -> bool:
+        """True if every migration is fully transactional."""
+        return all(m.fully_transactional for m in self.migrations)
+
+    @property
+    def has_duplicates(self) -> bool:
+        """True if any version prefix appears more than once."""
+        return len(self.duplicate_versions) > 0
+
+    @property
+    def has_checksum_mismatches(self) -> bool:
+        """True if any applied migration file was tampered with."""
+        return len(self.checksum_mismatches) > 0
+
+    @property
+    def irreversible(self) -> list[MigrationPreflightInfo]:
+        """Migrations missing a rollback file."""
+        return [m for m in self.migrations if not m.reversible]
+
+    @property
+    def non_transactional(self) -> list[MigrationPreflightInfo]:
+        """Migrations containing non-transactional statements."""
+        return [m for m in self.migrations if not m.fully_transactional]
+
+    @property
+    def safe_to_deploy(self) -> bool:
+        """True if all checks pass."""
+        return (
+            self.all_reversible
+            and self.all_transactional
+            and not self.has_duplicates
+            and not self.has_checksum_mismatches
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "safe_to_deploy": self.safe_to_deploy,
+            "all_reversible": self.all_reversible,
+            "all_transactional": self.all_transactional,
+            "has_duplicates": self.has_duplicates,
+            "has_checksum_mismatches": self.has_checksum_mismatches,
+            "checksum_verified": self.checksum_verified,
+            "migrations": [m.to_dict() for m in self.migrations],
+            "duplicate_versions": self.duplicate_versions,
+            "checksum_mismatches": self.checksum_mismatches,
+        }

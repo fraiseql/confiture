@@ -294,6 +294,7 @@ All migration commands are subcommands of `confiture migrate`:
 - `confiture migrate diff` - Compare schemas and detect changes
 - `confiture migrate up` - Apply pending migrations
 - `confiture migrate down` - Rollback applied migrations
+- `confiture migrate preflight` - Pre-deploy safety check
 
 ---
 
@@ -1113,6 +1114,148 @@ The `migrate status` and `migrate up` commands automatically warn about orphaned
 $ confiture migrate status
 ⚠️  WARNING: Orphaned migration files detected
   • 001_schema.sql → rename to: 001_schema.up.sql
+```
+
+---
+
+### `confiture migrate preflight`
+
+Pre-deploy safety check. Answers four questions before running `migrate up`:
+
+1. Are all pending migrations **reversible**? (`.down.sql` exists)
+2. Do any contain **non-transactional statements**? (`CREATE INDEX CONCURRENTLY`, `ALTER TYPE ... ADD VALUE`, etc.)
+3. Are there **duplicate migration versions** on disk?
+4. Have applied migration files been **tampered with**? (checksum verification, DB required)
+
+#### Usage
+
+```bash
+confiture migrate preflight [OPTIONS]
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--migrations-dir` | Path | `db/migrations` | Migrations directory |
+| `--format`, `-f` | String | `table` | Output format: `table` or `json` |
+
+#### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | All migrations safe to deploy |
+| `1` | One or more issues detected |
+
+#### Examples
+
+```bash
+# Basic check
+confiture migrate preflight
+
+# JSON output for CI/CD
+confiture migrate preflight --format json
+
+# Custom migrations directory
+confiture migrate preflight --migrations-dir custom/migrations
+```
+
+#### Table Output
+
+```
+Pre-flight Check
+──────────────────────────────────────────────────────────
+  Version    Name               Reversible  Transactional
+  20260301   create_users       ✓           ✓
+  20260302   add_status_enum    ✓           ✗ ALTER TYPE status ADD VALUE
+  20260303   add_index          ✗           ✗ CREATE INDEX CONCURRENTLY: idx_users_email
+
+Summary: 3 migrations checked
+  ✗ 1 irreversible (missing .down.sql)
+  ✗ 2 non-transactional statements
+  ✓ No duplicate versions
+  → Not safe to deploy with rollback guarantee
+```
+
+#### JSON Output
+
+```json
+{
+  "safe_to_deploy": false,
+  "all_reversible": false,
+  "all_transactional": false,
+  "has_duplicates": false,
+  "has_checksum_mismatches": false,
+  "checksum_verified": false,
+  "migrations": [
+    {
+      "version": "20260301",
+      "name": "create_users",
+      "has_down": true,
+      "reversible": true,
+      "fully_transactional": true,
+      "non_transactional_statements": [],
+      "checksum": null
+    }
+  ],
+  "duplicate_versions": {},
+  "checksum_mismatches": []
+}
+```
+
+#### Library API
+
+```python
+from confiture import Migrator
+
+# Mode 1: Without context (all files, no checksum verification)
+with Migrator.from_config("db/environments/prod.yaml") as m:
+    result = m.preflight()
+
+# Mode 2: Inside context (pending only + checksum verification)
+with Migrator.from_config("db/environments/prod.yaml") as m:
+    result = m.preflight()
+    if not result.safe_to_deploy:
+        for info in result.irreversible:
+            print(f"Missing .down.sql: {info.version}_{info.name}")
+        for info in result.non_transactional:
+            print(f"Non-transactional: {info.version} — {info.non_transactional_statements}")
+
+# Mode 3: Specific versions
+result = m.preflight(versions=["20260301", "20260303"])
+```
+
+#### Non-Transactional Statements Detected
+
+| Statement | Risk |
+|-----------|------|
+| `CREATE INDEX CONCURRENTLY` | Cannot run inside transaction |
+| `DROP INDEX CONCURRENTLY` | Cannot run inside transaction |
+| `ALTER TYPE ... ADD VALUE` | Non-transactional in PG < 16 |
+| `REINDEX ... CONCURRENTLY` | Cannot run inside transaction |
+| `CREATE DATABASE` / `DROP DATABASE` | Cannot run inside transaction |
+| `VACUUM` | Cannot run inside transaction |
+| `CLUSTER` | Cannot run inside transaction |
+
+Detection uses **pglast** (PostgreSQL's C parser) when available, with a **regex fallback** for environments without the `[ast]` extra.
+
+#### CI/CD Integration
+
+```bash
+# Gate deployment on preflight check
+confiture migrate preflight --format json | jq -e '.safe_to_deploy' || {
+  echo "Pre-flight check failed — aborting deployment"
+  exit 1
+}
+
+# Allow non-transactional but require reversibility
+result=$(confiture migrate preflight --format json)
+if echo "$result" | jq -e '.all_reversible' > /dev/null; then
+  confiture migrate up
+else
+  echo "Irreversible migrations detected — manual approval required"
+  exit 1
+fi
 ```
 
 ---

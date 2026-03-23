@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         MigrateRebuildResult,
         MigrateReinitResult,
         MigrateUpResult,
+        PreflightResult,
         StatusResult,
     )
 
@@ -540,6 +541,62 @@ class MigratorSession:
             backup_tracking=backup_tracking,
             migrations_dir=self._migrations_dir,
         )
+
+    def preflight(
+        self,
+        *,
+        versions: list[str] | None = None,
+    ) -> PreflightResult:
+        """Pre-flight check for pending migrations.
+
+        Verifies:
+        - All pending .up.sql files have matching .down.sql (reversibility)
+        - No pending migrations contain non-transactional statements
+        - No duplicate migration versions on disk
+        - Applied migration files haven't been tampered with (checksum, DB required)
+
+        No database connection required for reversibility, non-transactional, and
+        duplicate checks. Checksum verification is only performed when the session
+        is entered (DB connected).
+
+        Args:
+            versions: Specific versions to check. If None and session is
+                      entered (DB connected), checks pending migrations.
+                      If None and session is NOT entered, checks ALL
+                      migration files on disk.
+
+        Returns:
+            PreflightResult with per-migration analysis.
+        """
+        from confiture.core.preflight import run_preflight
+
+        # Determine which versions to check
+        check_versions = versions
+        if check_versions is None and self._migrator is not None:
+            # Inside context: check pending migrations only
+            status = self.status()
+            check_versions = status.pending if status.pending else None
+
+        result = run_preflight(self._migrations_dir, versions=check_versions)
+
+        # Checksum verification (only when DB is connected)
+        if self._conn is not None:
+            from confiture.core.checksum import (
+                ChecksumConfig,
+                ChecksumMismatchBehavior,
+                MigrationChecksumVerifier,
+            )
+
+            config = ChecksumConfig(on_mismatch=ChecksumMismatchBehavior.WARN)
+            verifier = MigrationChecksumVerifier(self._conn, config)
+            mismatches = verifier.verify_all(self._migrations_dir)
+            result.checksum_mismatches = [
+                f"{m.version}_{m.name}: expected {m.expected[:12]}..., got {m.actual[:12]}..."
+                for m in mismatches
+            ]
+            result.checksum_verified = True
+
+        return result
 
 
 # Avoid circular import: Migrator is defined in engine.py but MigratorSession

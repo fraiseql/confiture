@@ -5,6 +5,33 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.10] - 2026-03-23
+
+### Added
+
+- **Pre-flight migration check** (issue #88).
+  New `MigratorSession.preflight()` method and `confiture migrate preflight` CLI
+  command that answer four questions before deploying migrations:
+  - Are all pending migrations reversible? (`.down.sql` exists)
+  - Do any contain non-transactional statements? (`CREATE INDEX CONCURRENTLY`, etc.)
+  - Are there duplicate migration versions on disk?
+  - Have applied migration files been tampered with? (checksum verification)
+
+- **`MigrationAnalyzer`** — detects non-transactional SQL statements using pglast
+  (PostgreSQL's C parser) as primary path and regex as fallback. Detects:
+  `CREATE/DROP INDEX CONCURRENTLY`, `ALTER TYPE ... ADD VALUE`, `VACUUM`,
+  `CLUSTER`, `CREATE/DROP DATABASE`, `REINDEX CONCURRENTLY`.
+
+- **`PreflightResult` and `MigrationPreflightInfo`** dataclasses with
+  `safe_to_deploy`, `all_reversible`, `all_transactional`, `has_duplicates`,
+  `has_checksum_mismatches` properties and full `to_dict()` serialization.
+
+- **CLI `migrate preflight`** with rich table output and `--format json` for
+  CI/CD integration. Exit code 0 = safe, 1 = issues found.
+
+- Lazy exports: `PreflightResult`, `MigrationPreflightInfo`, `MigrationAnalyzer`
+  importable from top-level `confiture` package.
+
 ## [0.8.9] - 2026-03-23
 
 ### Added

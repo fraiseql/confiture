@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.8.9
+**Version**: 0.8.10
 **Last Updated**: 2026-03-23
 **Current Status**: Production-Ready
 
@@ -784,7 +784,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### v0.8.9
+### v0.8.10
 
 **Implemented Features**:
 - ✅ Schema builder (Medium 1) - Build from DDL
@@ -807,9 +807,10 @@ Closes #123
 - ✅ `migrate rebuild` command
 - ✅ Semantic exit codes for `migrate status`
 - ✅ JSON/CSV/YAML structured output for all commands
+- ✅ Pre-flight migration check (`migrate preflight` + `MigratorSession.preflight()`)
 
 **Test Metrics**:
-- **Unit tests passing**: 4,420+
+- **Unit tests passing**: 4,480+
 - **Python Support**: 3.11, 3.12, 3.13
 - **Documentation**: Comprehensive with guides and API references
 
@@ -925,7 +926,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-03-23
-**Version**: 0.8.9
+**Version**: 0.8.10
 
 ---
 

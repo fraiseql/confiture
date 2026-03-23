@@ -23,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.8.9"
+__version__ = "0.8.10"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -74,6 +74,10 @@ __all__ = [
     "DriftItem",
     "DriftType",
     "DriftSeverity",
+    # Preflight
+    "PreflightResult",
+    "MigrationPreflightInfo",
+    "MigrationAnalyzer",
     # Diff
     "DiffResult",
     # Result models
@@ -130,6 +134,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DriftItem": ("confiture.core.drift", "DriftItem"),
     "DriftType": ("confiture.core.drift", "DriftType"),
     "DriftSeverity": ("confiture.core.drift", "DriftSeverity"),
+    # Preflight
+    "PreflightResult": ("confiture.models.results", "PreflightResult"),
+    "MigrationPreflightInfo": ("confiture.models.results", "MigrationPreflightInfo"),
+    "MigrationAnalyzer": ("confiture.core.migration_analyzer", "MigrationAnalyzer"),
     # Diff
     "DiffResult": ("confiture.models.results", "DiffResult"),
     # Result models
