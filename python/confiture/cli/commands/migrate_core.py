@@ -15,7 +15,7 @@ from confiture.cli.helpers import (
     console,
     error_console,
 )
-from confiture.core.error_handler import print_error_to_console
+from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.migration_generator import MigrationGenerator
 
 
@@ -530,6 +530,13 @@ def migrate_up(
       confiture migrate status      - View migration history
       confiture migrate generate    - Create new migration template
 
+    EXIT CODES:
+      0  All migrations applied successfully.
+      1  Generic/unknown error.
+      2  Validation or configuration error (bad flags, missing config).
+      3  Migration execution error (SQL failure, duplicate versions).
+      6  Lock/pool error (retriable — another process holds the lock).
+
     OPTIONS:
       CORE: --target
         Which migration version to apply (default: all pending)
@@ -572,18 +579,18 @@ def migrate_up(
             error_console.print(
                 "[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         if (dry_run or dry_run_execute) and force:
             error_console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         # Validate format option
         if format_output not in ("text", "json"):
             error_console.print(
                 f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         # Validate checksum mismatch option
         valid_mismatch_behaviors = ("fail", "warn", "ignore")
@@ -592,7 +599,7 @@ def migrate_up(
                 f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
                 f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         # Build BatchConfig if --batched is requested
         if batched:
@@ -675,10 +682,29 @@ def migrate_up(
         if auto_detect_baseline and not migrator.tracking_table_exists():
             _resolved_snapshots_dir = snapshots_dir_up or Path("db/schema_history")
             if not _resolved_snapshots_dir.exists():
-                console.print(
-                    "[yellow]⚠️  --auto-detect-baseline: db/schema_history/ not found "
-                    "— no effect[/yellow]"
+                error_console.print(
+                    f"[red]❌ --auto-detect-baseline: snapshots directory not found: "
+                    f"{_resolved_snapshots_dir}[/red]"
                 )
+                error_console.print(
+                    "[yellow]💡 Generate snapshots with 'confiture migrate snapshot' "
+                    "or remove --auto-detect-baseline[/yellow]"
+                )
+                conn.close()
+                raise typer.Exit(2)
+
+            _snapshot_files = list(_resolved_snapshots_dir.glob("*.sql"))
+            if not _snapshot_files:
+                error_console.print(
+                    f"[red]❌ --auto-detect-baseline: no snapshot files found in "
+                    f"{_resolved_snapshots_dir}[/red]"
+                )
+                error_console.print(
+                    "[yellow]💡 Generate snapshots with 'confiture migrate snapshot' "
+                    "or remove --auto-detect-baseline[/yellow]"
+                )
+                conn.close()
+                raise typer.Exit(2)
             else:
                 from confiture.core.baseline_detector import BaselineDetector
 
@@ -978,7 +1004,7 @@ def migrate_up(
                     "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
                 )
             conn.close()
-            raise typer.Exit(1) from e
+            raise typer.Exit(6) from e
 
         # Handle results
         if failed_migration:
@@ -1005,7 +1031,7 @@ def migrate_up(
                 )
 
             conn.close()
-            raise typer.Exit(1)
+            raise typer.Exit(3)
         else:
             # Create success result
             success_result = MigrateUpResult(
@@ -1042,7 +1068,7 @@ def migrate_up(
         raise
     except Exception as e:
         print_error_to_console(e, error_console)
-        raise typer.Exit(1) from e
+        raise typer.Exit(handle_cli_error(e)) from e
 
 
 def migrate_down(
@@ -1131,10 +1157,10 @@ def migrate_down(
     try:
         # Validate format option
         if format_output not in ("text", "json"):
-            console.print(
+            error_console.print(
                 f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         # Load configuration
         config_data = load_config(config)
@@ -1285,9 +1311,11 @@ def migrate_down(
         )
         conn.close()
 
+    except typer.Exit:
+        raise
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        print_error_to_console(e, error_console)
+        raise typer.Exit(handle_cli_error(e)) from e
 
 
 def migrate_generate(
@@ -1379,10 +1407,10 @@ def migrate_generate(
     # External generator path
     if generator is not None:
         if from_schema is None or to_schema is None:
-            console.print(
+            error_console.print(
                 "[red]❌ Error: --from and --to are required when --generator is used[/red]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         env_config = None
         try:
@@ -1395,10 +1423,10 @@ def migrate_generate(
             pass
 
         if env_config is None or generator not in env_config.migration.migration_generators:
-            console.print(
+            error_console.print(
                 f"[red]❌ Error: Generator '{generator}' not found in migration_generators config[/red]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(2)
 
         gen_config = env_config.migration.migration_generators[generator]
         migrations_dir.mkdir(parents=True, exist_ok=True)
@@ -1415,11 +1443,11 @@ def migrate_generate(
                 dry_run=dry_run,
             )
         except FileNotFoundError as exc:
-            console.print(f"[red]❌ Error: {exc}[/red]")
-            raise typer.Exit(1) from exc
+            error_console.print(f"[red]❌ Error: {exc}[/red]")
+            raise typer.Exit(2) from exc
         except ExternalGeneratorError as exc:
-            console.print(f"[red]❌ Generator error: {exc}[/red]")
-            raise typer.Exit(1) from exc
+            error_console.print(f"[red]❌ Generator error: {exc}[/red]")
+            raise typer.Exit(3) from exc
 
         if dry_run:
             console.print(f"[dim]Resolved command:[/] {resolved_cmd}")

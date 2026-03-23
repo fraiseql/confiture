@@ -371,6 +371,27 @@ confiture migrate status --migrations-dir custom/migrations
 - Debug migration issues
 - Document current database state
 
+#### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | All migrations applied (nothing pending), or no `--config` provided |
+| `1` | Pending migrations exist in the target database |
+| `2` | Tracking table not found in the target database |
+| `3` | Fatal error (connection failure, bad config, permission denied) |
+
+#### Scripting Example
+
+```bash
+confiture migrate status -c db/environments/prod.yaml
+case $? in
+  0) echo "Up to date" ;;
+  1) echo "Pending migrations — run migrate up" ;;
+  2) echo "Tracking table missing — run migrate up or migrate baseline" ;;
+  3) echo "Fatal error" ; exit 1 ;;
+esac
+```
+
 ---
 
 ### `confiture migrate generate`
@@ -752,6 +773,29 @@ confiture migrate up --target 004
 - **Production deployment**: Apply migrations safely
 - **Environment sync**: Update staging to match production
 
+#### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | All migrations applied successfully |
+| `1` | Generic/unknown error |
+| `2` | Validation or configuration error (bad flags, missing config) |
+| `3` | Migration execution error (SQL failure, duplicate versions) |
+| `6` | Lock/pool error (retriable — another process holds the lock) |
+
+#### Scripting Example
+
+```bash
+confiture migrate up -c db/environments/prod.yaml
+case $? in
+  0) echo "Migrations applied successfully" ;;
+  2) echo "Configuration error — check flags" ; exit 1 ;;
+  3) echo "Migration failed — check SQL" ; exit 1 ;;
+  6) echo "Lock timeout — retry later" ; sleep 10 ; exit 1 ;;
+  *) echo "Unknown error" ; exit 1 ;;
+esac
+```
+
 ---
 
 ### `confiture migrate down`
@@ -843,6 +887,72 @@ confiture migrate down --steps 3
 - **Development iteration**: Test migration changes
 - **Production hotfix**: Emergency rollback of problematic changes
 - **Environment reset**: Return to known-good state
+
+---
+
+### `confiture migrate rebuild`
+
+Rebuild database from DDL schema and bootstrap tracking table.
+
+When staging/QA environments restored from production backups have large migration gaps (10+ pending), `migrate up` often fails due to lock exhaustion or cumulative DDL complexity. `rebuild` automates the manual workaround of: build DDL, apply with psql, hand-insert tracking rows.
+
+#### Usage
+
+```bash
+confiture migrate rebuild [OPTIONS]
+```
+
+#### Options
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file |
+| `--migrations-dir` | - | Path | `db/migrations` | Migrations directory |
+| `--drop-schemas` | - | Flag | `false` | Drop all user schemas before rebuild |
+| `--seed` | - | Flag | `false` | Apply seed files after DDL rebuild |
+| `--backup-tracking` | - | Flag | `false` | Dump tracking table to JSON before clearing |
+| `--verify` | - | Flag | `false` | Run status check after rebuild |
+| `--dry-run` | - | Flag | `false` | Show what would happen |
+| `--yes` | `-y` | Flag | `false` | Skip confirmation prompt |
+| `--format` | `-f` | String | `text` | Output format: `text` or `json` |
+
+#### Examples
+
+```bash
+# Drop all schemas, rebuild from DDL, bootstrap tracking
+confiture migrate rebuild --drop-schemas --yes
+
+# Preview what would happen without making changes
+confiture migrate rebuild --dry-run
+
+# Full rebuild with seeds and post-rebuild verification
+confiture migrate rebuild --drop-schemas --seed --verify --yes
+
+# Dump tracking table before rebuild (creates JSON backup file)
+confiture migrate rebuild --backup-tracking --drop-schemas --yes
+```
+
+#### Process
+
+1. **Backup** tracking table (if `--backup-tracking`)
+2. **Drop** all user schemas (if `--drop-schemas`)
+3. **Build** DDL from `db/schema/` via `SchemaBuilder`
+4. **Create** tracking table and mark all migration files as applied
+5. **Seed** (if `--seed`) — apply seed files after DDL rebuild
+6. **Verify** (if `--verify`) — run status check to confirm 0 pending
+
+#### Use Cases
+
+- **Staging/QA refresh**: Environments restored from production backups with large migration gaps
+- **Development reset**: Quickly rebuild a local database from scratch
+- **CI/CD**: Rebuild test databases before running integration tests
+
+#### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Rebuild completed successfully |
+| `1` | Error (config not found, migrations dir not found, database error) |
 
 ---
 

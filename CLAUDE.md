@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.8.2
-**Last Updated**: 2026-03-17
+**Version**: 0.8.9
+**Last Updated**: 2026-03-23
 **Current Status**: Beta (Not Yet Production-Tested)
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
@@ -784,7 +784,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### Beta (v0.8.2)
+### Beta (v0.8.9)
 
 > **⚠️ Not Production-Tested**: All features below are implemented and have passing tests, but have never been used in a real production environment.
 
@@ -811,7 +811,7 @@ Closes #123
 - ✅ JSON/CSV/YAML structured output for all commands
 
 **Test Metrics**:
-- **Unit tests passing**: 4,240+
+- **Unit tests passing**: 4,420+
 - **Python Support**: 3.11, 3.12, 3.13
 - **Documentation**: Comprehensive with guides and API references
 
@@ -883,7 +883,7 @@ except psycopg.OperationalError as e:
 
 ## 📊 Implementation Metrics
 
-- ✅ **Tests**: 4,240+ unit passing (2026-03-17)
+- ✅ **Tests**: 4,420+ unit passing (2026-03-23)
 - ✅ **CLI Commands**: 20+ implemented across schema, migrate, admin, seed, branch, coordinate, generate subgroups
 - ✅ **Documentation**: Comprehensive guides + API references
 - ✅ **Validation System**: 5-level prep-seed orchestrator with full database support
@@ -932,8 +932,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: 2026-03-17
-**Version**: 0.8.2 (Not Production-Tested)
+**Last Updated**: 2026-03-23
+**Version**: 0.8.9 (Not Production-Tested)
 
 ---
 

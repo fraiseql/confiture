@@ -327,8 +327,8 @@ class TestDryRunValidation:
             catch_exceptions=False,
         )
 
-        # Should fail (error message written to stderr)
-        assert result.exit_code == 1
+        # Should fail with validation error (exit 2)
+        assert result.exit_code == 2
 
     def test_dry_run_with_force_not_allowed(self):
         """Test that --dry-run and --force cannot be used together."""
@@ -338,8 +338,8 @@ class TestDryRunValidation:
             catch_exceptions=False,
         )
 
-        # Should fail (error message written to stderr)
-        assert result.exit_code == 1
+        # Should fail with validation error (exit 2)
+        assert result.exit_code == 2
 
     def test_invalid_format_option(self):
         """Test that invalid format option is rejected."""
@@ -349,8 +349,8 @@ class TestDryRunValidation:
             catch_exceptions=False,
         )
 
-        # Should fail (error message written to stderr)
-        assert result.exit_code == 1
+        # Should fail with validation error (exit 2)
+        assert result.exit_code == 2
 
     def test_migrate_down_invalid_format(self):
         """Test that invalid format is rejected in migrate down."""
@@ -360,9 +360,8 @@ class TestDryRunValidation:
             catch_exceptions=False,
         )
 
-        # Should fail
-        assert result.exit_code == 1
-        assert "Invalid format 'xml'" in result.stdout
+        # Should fail with validation error (exit 2)
+        assert result.exit_code == 2
 
 
 class TestDryRunExecution:

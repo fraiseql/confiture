@@ -5,6 +5,35 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.9] - 2026-03-23
+
+### Added
+
+- **Semantic exit codes for `migrate up`, `migrate down`, `migrate generate`** (issue #87).
+  Exit codes now differentiate error categories for scripting and CI/CD:
+  - `0`: success
+  - `1`: generic/unknown error
+  - `2`: validation or configuration error (bad flags, missing config)
+  - `3`: migration execution error (SQL failure, duplicate versions)
+  - `6`: lock/pool error (retriable — another process holds the lock)
+
+  The outer exception handlers in `migrate up` and `migrate down` now use
+  `handle_cli_error()` to derive exit codes from the error code registry.
+
+- **CLI reference: `migrate status` exit codes** (issue #85).
+  Documents the semantic exit codes (0/1/2/3) that have been available since v0.6.2
+  but were missing from the CLI reference.
+
+- **CLI reference: `migrate rebuild` command** (issue #86).
+  Full documentation section with usage, options, examples, process steps,
+  use cases, and exit codes.
+
+### Fixed
+
+- **`--auto-detect-baseline` now errors on missing or empty snapshots directory**
+  (issue #84). Previously printed a warning and silently continued; now exits 2
+  with an actionable hint to generate snapshots or remove the flag.
+
 ## [0.8.8] - 2026-03-19
 
 ### Added
