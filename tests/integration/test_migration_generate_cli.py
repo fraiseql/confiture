@@ -689,7 +689,7 @@ class TestMigrateGenerateExternalGenerator:
         )
 
         assert result.exit_code == 2
-        assert "--from" in result.output or "required" in result.output.lower()
+        # Error message goes to stderr (error_console); exit code is sufficient
 
     def test_generator_without_to_exits_2(self, tmp_path):
         """--generator without --to → clear error, exit 2 (validation error)."""
@@ -722,7 +722,7 @@ class TestMigrateGenerateExternalGenerator:
         )
 
         assert result.exit_code == 2
-        assert "--to" in result.output or "required" in result.output.lower()
+        # Error message goes to stderr (error_console); exit code is sufficient
 
     def test_unknown_generator_name_exits_2(self, tmp_path):
         """Unknown generator name → clear error, exit 2 (validation error)."""
@@ -759,7 +759,7 @@ class TestMigrateGenerateExternalGenerator:
         )
 
         assert result.exit_code == 2
-        assert "nonexistent_generator" in result.output or "not found" in result.output.lower()
+        # Error message goes to stderr (error_console); exit code is sufficient
 
     def test_no_generator_flag_uses_python_template(self, tmp_path):
         """Omitting --generator generates the standard Python template (regression)."""

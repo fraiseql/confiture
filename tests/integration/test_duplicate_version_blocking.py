@@ -97,7 +97,9 @@ class TestMigrateUpDuplicateBlocking:
         # The duplicate-version check uses exit code 3 with a specific error message.
         # Without a real DB connection this may still exit 3 for connection reasons,
         # so we verify the duplicate-version error is NOT in the output.
-        output = (result.stdout or "") + (result.stderr if hasattr(result, "stderr") and result.stderr else "")
+        output = (result.stdout or "") + (
+            result.stderr if hasattr(result, "stderr") and result.stderr else ""
+        )
         assert "Duplicate migration version" not in output
 
 
