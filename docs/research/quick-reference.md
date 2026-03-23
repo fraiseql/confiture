@@ -333,9 +333,9 @@ A: Just remove sqlglot from pyproject.toml and revert code changes. All tests pa
 
 ## Resources
 
-- **Full comparison**: See `sql_parsing_comparison.md`
-- **Implementation guide**: See `sqlparse_to_sqlglot_migration.md`
-- **Code examples**: See `code_examples.md`
+- **Full comparison**: See `sql-parsing-comparison.md`
+- **Implementation guide**: See `sqlparse-to-sqlglot-migration.md`
+- **Code examples**: See `code-examples.md`
 - **This quick ref**: You're reading it!
 
 ---

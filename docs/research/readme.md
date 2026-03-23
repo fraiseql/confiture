@@ -12,7 +12,7 @@ This research directory contains comprehensive analysis of SQL parsing tools/lib
 
 ## Documents in This Research
 
-### 1. [sql_parsing_comparison.md](./sql_parsing_comparison.md)
+### 1. [sql-parsing-comparison.md](./sql-parsing-comparison.md)
 **The Definitive Comparison**
 
 Comprehensive evaluation of 5 SQL parsing approaches:
@@ -36,7 +36,7 @@ Comprehensive evaluation of 5 SQL parsing approaches:
 
 ---
 
-### 2. [sqlparse_to_sqlglot_migration.md](./sqlparse_to_sqlglot_migration.md)
+### 2. [sqlparse-to-sqlglot-migration.md](./sqlparse-to-sqlglot-migration.md)
 **The Implementation Guide**
 
 Step-by-step migration plan to replace sqlparse with sqlglot in confiture.
@@ -58,7 +58,7 @@ Step-by-step migration plan to replace sqlparse with sqlglot in confiture.
 
 ---
 
-### 3. [code_examples.md](./code_examples.md)
+### 3. [code-examples.md](./code-examples.md)
 **The Practical Reference**
 
 Working code examples for each tool with confiture-relevant INSERT statements.
@@ -180,18 +180,18 @@ if ast.expression.find(exp.Concat):
 - Look at "Tool Comparison Matrix"
 
 ### 2. Deep Understanding (30 minutes)
-- Read `sql_parsing_comparison.md` (execution sections)
-- Read `code_examples.md` (1-3 tools of interest)
+- Read `sql-parsing-comparison.md` (execution sections)
+- Read `code-examples.md` (1-3 tools of interest)
 
 ### 3. Implementation Planning (60 minutes)
-- Read full `sql_parsing_comparison.md`
-- Read full `sqlparse_to_sqlglot_migration.md`
+- Read full `sql-parsing-comparison.md`
+- Read full `sqlparse-to-sqlglot-migration.md`
 - Outline implementation phases
 - Estimate team effort
 
 ### 4. Implementation (6-8 hours)
-- Follow `sqlparse_to_sqlglot_migration.md` step-by-step
-- Use `code_examples.md` for reference
+- Follow `sqlparse-to-sqlglot-migration.md` step-by-step
+- Use `code-examples.md` for reference
 - Run test suite continuously
 - Commit atomic changes with good messages
 
@@ -249,9 +249,9 @@ All code examples in these documents have been tested and validated.
 ```
 docs/research/
 ├── README.md                             # This file
-├── sql_parsing_comparison.md             # Detailed tool comparison
-├── sqlparse_to_sqlglot_migration.md     # Implementation guide
-└── code_examples.md                      # Working code examples
+├── sql-parsing-comparison.md             # Detailed tool comparison
+├── sqlparse-to-sqlglot-migration.md     # Implementation guide
+└── code-examples.md                      # Working code examples
 ```
 
 ---
@@ -315,8 +315,8 @@ A: Yes. Full docstrings, code examples, test cases included in migration guide.
 
 If you have questions about this research:
 1. Review the specific document section
-2. Check `code_examples.md` for practical usage
-3. Look at test examples in `sqlparse_to_sqlglot_migration.md`
+2. Check `code-examples.md` for practical usage
+3. Look at test examples in `sqlparse-to-sqlglot-migration.md`
 
 ---
 

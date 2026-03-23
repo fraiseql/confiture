@@ -628,8 +628,8 @@ pytest tests/unit/test_anonymization_*.py -v
 ## 📞 Support & Questions
 
 **Questions about seed management?**
-- Review `docs/security/THREAT_MODEL.md` for security details
-- Check `docs/security/GDPR_ARTICLE_30.md` for compliance requirements
+- Review `docs/security/threat-model.md` for security details
+- Check `docs/security/gdpr-article-30.md` for compliance requirements
 
 
 **Found a security issue?**

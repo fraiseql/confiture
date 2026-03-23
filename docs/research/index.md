@@ -3,13 +3,13 @@
 ## Quick Navigation
 
 ### Start Here
-1. **New to this research?** → Read [README.md](./README.md) (10 min)
-2. **In a hurry?** → Read [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) (5 min)
+1. **New to this research?** → Read [readme.md](./readme.md) (10 min)
+2. **In a hurry?** → Read [quick-reference.md](./quick-reference.md) (5 min)
 3. **Making a decision?** → Read tool comparison table below
 
 ### Research Documents
 
-#### [README.md](./README.md)
+#### [readme.md](./readme.md)
 **Purpose**: Overview and navigation guide
 **Length**: 339 lines, 10 minutes
 **Contains**:
@@ -23,7 +23,7 @@
 
 ---
 
-#### [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
+#### [quick-reference.md](./quick-reference.md)
 **Purpose**: One-page cheat sheet
 **Length**: 356 lines, 5 minutes
 **Contains**:
@@ -39,7 +39,7 @@
 
 ---
 
-#### [sql_parsing_comparison.md](./sql_parsing_comparison.md)
+#### [sql-parsing-comparison.md](./sql-parsing-comparison.md)
 **Purpose**: Definitive tool comparison
 **Length**: 931 lines, 15-20 minutes
 **Contains**:
@@ -56,7 +56,7 @@
 
 ---
 
-#### [sqlparse_to_sqlglot_migration.md](./sqlparse_to_sqlglot_migration.md)
+#### [sqlparse-to-sqlglot-migration.md](./sqlparse-to-sqlglot-migration.md)
 **Purpose**: Implementation guide
 **Length**: 924 lines, 20-30 minutes
 **Contains**:
@@ -74,7 +74,7 @@
 
 ---
 
-#### [code_examples.md](./code_examples.md)
+#### [code-examples.md](./code-examples.md)
 **Purpose**: Working code examples
 **Length**: 707 lines, 10-15 minutes
 **Contains**:
@@ -93,58 +93,58 @@
 
 | Tool | Recommended | Use When | Learn More |
 |------|---|---|---|
-| **sqlparse** | ✓ Keep as is | Zero new dependencies | [Comparison](./sql_parsing_comparison.md#1-sqlparse) |
-| **sqlglot** | ⭐ ADOPT | Code quality matters (DEFAULT) | [Comparison](./sql_parsing_comparison.md#2-sqlglot) |
-| **pg_query** | Consider v2 | Need 100% PostgreSQL guarantee | [Comparison](./sql_parsing_comparison.md#3-pg_query) |
-| **sqloxide** | Keep as option | Performance becomes bottleneck | [Comparison](./sql_parsing_comparison.md#4-sqloxide) |
-| **pyparsing** | Don't use | Don't use (400+ hours effort) | [Comparison](./sql_parsing_comparison.md#5-pyparsing) |
+| **sqlparse** | ✓ Keep as is | Zero new dependencies | [Comparison](./sql-parsing-comparison.md#1-sqlparse) |
+| **sqlglot** | ⭐ ADOPT | Code quality matters (DEFAULT) | [Comparison](./sql-parsing-comparison.md#2-sqlglot) |
+| **pg_query** | Consider v2 | Need 100% PostgreSQL guarantee | [Comparison](./sql-parsing-comparison.md#3-pg_query) |
+| **sqloxide** | Keep as option | Performance becomes bottleneck | [Comparison](./sql-parsing-comparison.md#4-sqloxide) |
+| **pyparsing** | Don't use | Don't use (400+ hours effort) | [Comparison](./sql-parsing-comparison.md#5-pyparsing) |
 
 ---
 
 ## Finding What You Need
 
 ### "I need to make a decision quickly"
-1. Read [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
+1. Read [quick-reference.md](./quick-reference.md)
 2. Look at tool scorecard
 3. Check decision tree
 
 ### "I want to understand the details"
-1. Read [README.md](./README.md) for context
-2. Read [sql_parsing_comparison.md](./sql_parsing_comparison.md) for analysis
-3. Reference [code_examples.md](./code_examples.md) for specifics
+1. Read [readme.md](./readme.md) for context
+2. Read [sql-parsing-comparison.md](./sql-parsing-comparison.md) for analysis
+3. Reference [code-examples.md](./code-examples.md) for specifics
 
 ### "I need to implement this"
-1. Read [sqlparse_to_sqlglot_migration.md](./sqlparse_to_sqlglot_migration.md) for plan
+1. Read [sqlparse-to-sqlglot-migration.md](./sqlparse-to-sqlglot-migration.md) for plan
 2. Follow the 5-phase migration guide
-3. Use [code_examples.md](./code_examples.md) for reference code
-4. Use [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) for checklist
+3. Use [code-examples.md](./code-examples.md) for reference code
+4. Use [quick-reference.md](./quick-reference.md) for checklist
 
 ### "I'm looking for specific tool information"
 
 **sqlparse**:
-- [Comparison](./sql_parsing_comparison.md#1-sqlparse)
-- [Examples](./code_examples.md#1-sqlparse-current)
+- [Comparison](./sql-parsing-comparison.md#1-sqlparse)
+- [Examples](./code-examples.md#1-sqlparse-current)
 
 **sqlglot**:
-- [Comparison](./sql_parsing_comparison.md#2-sqlglot)
-- [Examples](./code_examples.md#2-sqlglot-recommended)
-- [Migration guide](./sqlparse_to_sqlglot_migration.md)
+- [Comparison](./sql-parsing-comparison.md#2-sqlglot)
+- [Examples](./code-examples.md#2-sqlglot-recommended)
+- [Migration guide](./sqlparse-to-sqlglot-migration.md)
 
 **sqloxide**:
-- [Comparison](./sql_parsing_comparison.md#4-sqloxide)
-- [Examples](./code_examples.md#4-sqloxide-performance-option)
+- [Comparison](./sql-parsing-comparison.md#4-sqloxide)
+- [Examples](./code-examples.md#4-sqloxide-performance-option)
 
 **pg_query-python**:
-- [Comparison](./sql_parsing_comparison.md#3-pg_query)
-- [Examples](./code_examples.md#5-pg_query-python)
+- [Comparison](./sql-parsing-comparison.md#3-pg_query)
+- [Examples](./code-examples.md#5-pg_query-python)
 
 ### "I want to copy-paste working code"
-→ [code_examples.md](./code_examples.md#copy-paste-minimal-validator)
+→ [code-examples.md](./code-examples.md#copy-paste-minimal-validator)
 
 ### "I need performance data"
-→ [QUICK_REFERENCE.md](./QUICK_REFERENCE.md#real-world-performance)
-→ [sql_parsing_comparison.md](./sql_parsing_comparison.md#performance)
-→ [code_examples.md](./code_examples.md#5-performance-comparison)
+→ [quick-reference.md](./quick-reference.md#real-world-performance)
+→ [sql-parsing-comparison.md](./sql-parsing-comparison.md#performance)
+→ [code-examples.md](./code-examples.md#5-performance-comparison)
 
 ---
 
@@ -152,11 +152,11 @@
 
 | Document | Lines | Topics | Read Time |
 |----------|-------|--------|-----------|
-| README.md | 339 | Navigation, overview, FAQ | 10 min |
-| QUICK_REFERENCE.md | 356 | Decisions, checklist, reference | 5 min |
-| sql_parsing_comparison.md | 931 | Detailed analysis, examples | 20 min |
-| sqlparse_to_sqlglot_migration.md | 924 | Implementation guide, phases | 30 min |
-| code_examples.md | 707 | Working examples, patterns | 15 min |
+| readme.md | 339 | Navigation, overview, FAQ | 10 min |
+| quick-reference.md | 356 | Decisions, checklist, reference | 5 min |
+| sql-parsing-comparison.md | 931 | Detailed analysis, examples | 20 min |
+| sqlparse-to-sqlglot-migration.md | 924 | Implementation guide, phases | 30 min |
+| code-examples.md | 707 | Working examples, patterns | 15 min |
 | **TOTAL** | **3,257** | **Complete research** | **80 min** |
 
 ---
@@ -182,11 +182,11 @@
 
 ## How to Use This Index
 
-1. **First time?** → Click on [README.md](./README.md)
-2. **Need quick info?** → Click on [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
-3. **Need details?** → Click on [sql_parsing_comparison.md](./sql_parsing_comparison.md)
-4. **Ready to implement?** → Click on [sqlparse_to_sqlglot_migration.md](./sqlparse_to_sqlglot_migration.md)
-5. **Need code?** → Click on [code_examples.md](./code_examples.md)
+1. **First time?** → Click on [readme.md](./readme.md)
+2. **Need quick info?** → Click on [quick-reference.md](./quick-reference.md)
+3. **Need details?** → Click on [sql-parsing-comparison.md](./sql-parsing-comparison.md)
+4. **Ready to implement?** → Click on [sqlparse-to-sqlglot-migration.md](./sqlparse-to-sqlglot-migration.md)
+5. **Need code?** → Click on [code-examples.md](./code-examples.md)
 
 ---
 
@@ -197,11 +197,11 @@ All documents are in: `/home/lionel/code/confiture/docs/research/`
 ```
 docs/research/
 ├── INDEX.md                          ← You are here
-├── README.md                         ← Start here
-├── QUICK_REFERENCE.md               ← Quick info
-├── sql_parsing_comparison.md        ← Detailed analysis
-├── sqlparse_to_sqlglot_migration.md ← Implementation
-└── code_examples.md                 ← Working code
+├── readme.md                         ← Start here
+├── quick-reference.md               ← Quick info
+├── sql-parsing-comparison.md        ← Detailed analysis
+├── sqlparse-to-sqlglot-migration.md ← Implementation
+└── code-examples.md                 ← Working code
 ```
 
 ---
@@ -216,4 +216,4 @@ docs/research/
 
 ---
 
-**Start reading**: [README.md](./README.md)
+**Start reading**: [readme.md](./readme.md)

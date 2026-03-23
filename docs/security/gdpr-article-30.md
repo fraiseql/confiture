@@ -161,8 +161,8 @@ WHERE timestamp < NOW() - INTERVAL '30 days';
 
 ✅ **Documentation**:
 - This ROPA document
-- Threat Model (security/THREAT_MODEL.md)
-- Seed Management Guide (security/SEED_MANAGEMENT.md)
+- Threat Model (security/threat-model.md)
+- Seed Management Guide (security/seed-management.md)
 - Test Data Policy
 
 ✅ **Monitoring**:
@@ -251,7 +251,7 @@ We have found the following sync operations affecting your data:
 
 **DPIA Required?** ✅ YES - Document completed
 
-See: `docs/security/THREAT_MODEL.md` for detailed assessment
+See: `docs/security/threat-model.md` for detailed assessment
 
 ---
 
@@ -305,8 +305,8 @@ See: `docs/security/THREAT_MODEL.md` for detailed assessment
 ### A. Records Maintained
 
 ✅ **This ROPA** - Updated [Date]
-✅ **Threat Model** - `docs/security/THREAT_MODEL.md`
-✅ **Seed Management** - `docs/security/SEED_MANAGEMENT.md`
+✅ **Threat Model** - `docs/security/threat-model.md`
+✅ **Seed Management** - `docs/security/seed-management.md`
 ✅ **Audit Logs** - PostgreSQL `confiture_audit` table
 ✅ **DPA** - [Link to provider's DPA]
 ✅ **Data Retention Policy** - [Link to policy]

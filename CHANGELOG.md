@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Documentation updated** across `docs/index.md`, `docs/getting-started.md`,
   `docs/comparison-with-alembic.md`, `docs/api/index.md`, and
-  `docs/security/SEED_MANAGEMENT.md` to reflect production-ready status.
+  `docs/security/seed-management.md` to reflect production-ready status.
   Updated test count to 4,420+. Comparison table now shows production-tested.
 
 ### Fixed
@@ -725,7 +725,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integration with `confiture build --sequential --copy-format`
 
 - **Comprehensive Documentation** (2,067 new lines)
-  - **docs/guides/COPY-FORMAT-INDEX.md** - Master navigation guide with learning paths
+  - **docs/guides/copy-format-index.md** - Master navigation guide with learning paths
   - **docs/guides/copy-format-loading.md** - Complete guide (20+ min read)
     - What is COPY format and why it's faster
     - 3 quick start approaches
