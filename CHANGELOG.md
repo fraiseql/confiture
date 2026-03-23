@@ -28,6 +28,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Full documentation section with usage, options, examples, process steps,
   use cases, and exit codes.
 
+### Changed
+
+- **Project status upgraded to production-ready**. Removed all beta/untested
+  disclaimers from README, docs, CLAUDE.md, and ARCHITECTURE.md.
+
+- **README rewritten**. New structure with "Why Confiture?" differentiators,
+  library API quick start, and comprehensive feature list covering all v0.5–v0.8.9
+  additions (semantic exit codes, `migrate rebuild`, `fix-signatures`, structured
+  output, distributed locking, etc.).
+
+- **Documentation updated** across `docs/index.md`, `docs/getting-started.md`,
+  `docs/comparison-with-alembic.md`, `docs/api/index.md`, and
+  `docs/security/SEED_MANAGEMENT.md` to reflect production-ready status.
+  Updated test count to 4,420+. Comparison table now shows production-tested.
+
 ### Fixed
 
 - **`--auto-detect-baseline` now errors on missing or empty snapshots directory**

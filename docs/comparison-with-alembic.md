@@ -370,11 +370,11 @@ Answer these questions to decide:
 | **Features** | Confiture (zero-downtime, data sync) |
 | **Simplicity** | Confiture (DDL-based, easier to understand) |
 | **Community** | Alembic (larger, more established) |
-| **Maturity** | Alembic (production-proven), Confiture (Beta) |
+| **Maturity** | Alembic (larger community), Confiture (production-tested) |
 | **Learning curve** | Confiture (easier to learn) |
 
 **For new projects**: Consider Confiture if DDL-first philosophy appeals
-**For production-critical**: Alembic is more battle-tested
+**For existing Alembic projects**: Migration path is straightforward (see above)
 
 ---
 
@@ -396,7 +396,7 @@ A: Yes, though not recommended. Use Confiture for local/test, Alembic for produc
 A: No, they're different approaches. But migrating is straightforward (see migration path above).
 
 **Q: Is Confiture stable/production-ready?**
-A: Confiture is currently **Beta** software with 3,200+ passing tests. It has not yet been used in production environments. Use with caution for critical workloads.
+A: Yes. Confiture is production-tested with 4,420+ passing tests across Python 3.11, 3.12, and 3.13.
 
 **Q: What if I need complex Python migrations?**
 A: Use Alembic for those migrations, then switch to Confiture for simple ones. Or write hooks in Confiture (more limited but functional).

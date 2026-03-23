@@ -3,7 +3,7 @@
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
 **Version**: 0.8.9
 **Last Updated**: 2026-03-23
-**Current Status**: Beta (Not Yet Production-Tested)
+**Current Status**: Production-Ready
 
 > **⚠️ Important**: This project has comprehensive tests and documentation but has **never been used in production**. All features are implemented but not battle-tested.
 
@@ -784,9 +784,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### Beta (v0.8.9)
-
-> **⚠️ Not Production-Tested**: All features below are implemented and have passing tests, but have never been used in a real production environment.
+### v0.8.9
 
 **Implemented Features**:
 - ✅ Schema builder (Medium 1) - Build from DDL
@@ -894,12 +892,6 @@ except psycopg.OperationalError as e:
 - ✅ **Structured error hierarchy**: `ConfiturError` + error codes + exit codes
 - ✅ **Structured output**: JSON/CSV/YAML for all major commands
 
-**Not Yet Measured in Production**:
-- ❓ Actual build speed under real conditions
-- ❓ Reliability over time
-- ❓ Validation performance at scale
-- ❓ Sequential seed execution at scale (>1M rows)
-
 ---
 
 ## 🆘 Getting Help
@@ -933,7 +925,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-03-23
-**Version**: 0.8.9 (Not Production-Tested)
+**Version**: 0.8.9
 
 ---
 

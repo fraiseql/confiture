@@ -309,7 +309,7 @@ def build_and_migrate(env: str) -> MigrationResult:
 
 ## API Stability
 
-> **Note**: "Stable API" means the interface won't have breaking changes. It does **not** mean production-tested. Confiture is Beta software.
+> **Note**: "Stable API" means the interface won't have breaking changes within the same major version.
 
 | API | Interface | Since |
 |-----|-----------|-------|

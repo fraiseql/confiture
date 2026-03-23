@@ -1,7 +1,5 @@
 # Getting Started with Confiture
 
-> **⚠️ Beta Software**: Confiture has not yet been used in production. Use with caution for critical workloads.
-
 **Confiture** is a PostgreSQL schema evolution framework with built-in multi-agent coordination. Whether you're a solo developer or part of a team with AI agents, Confiture provides safe schema evolution with automatic conflict detection.
 
 ## Choose Your Workflow

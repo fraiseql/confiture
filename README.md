@@ -1,8 +1,8 @@
 # Confiture 🍓
 
-**PostgreSQL migrations with multi-agent coordination, timestamp-based versioning, and 4 flexible strategies**
+**PostgreSQL migrations, sweetly done.**
 
-Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent conflict detection. No merge conflicts (timestamp-based versioning). Production data sync with PII anonymization.
+Build fresh databases in <1 second. Apply incremental migrations. Sync production data with PII anonymization. Zero-downtime schema swaps via FDW. All from the same tool.
 
 [![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
 [![Quality Gate](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml)
@@ -14,34 +14,36 @@ Build fresh databases in <1 second. Zero-downtime migrations. Multi-agent confli
 
 ## Why Confiture?
 
-**Problem**: Traditional migration tools replay every migration on every build (slow, brittle, maintains technical debt).
-
-**Solution**: DDL files are the single source of truth. Just execute your schema once. Fresh databases in <1 second.
-
-**Multi-Agent Safe**: Automatic conflict detection prevents teams and agents from stepping on each other.
+- **DDL is the source of truth** — your `db/schema/` directory defines the database, not a chain of migrations. Fresh databases build in <1 second by executing DDL directly.
+- **Timestamp-based versioning** — migration filenames use `YYYYMMDDHHMMSS`, so parallel branches never collide. No more `003_add_users` merge conflicts.
+- **4 strategies, one tool** — build from DDL, incremental migrations, production sync with anonymization, and zero-downtime schema-to-schema via FDW. Pick the right one for each situation.
+- **Multi-agent coordination** — built-in intent registration and conflict detection so teams and AI agents don't step on each other's schema changes.
+- **CI/CD-native** — semantic exit codes, structured output (JSON/CSV/YAML), distributed locking, and dry-run with SAVEPOINT testing.
 
 ---
 
 ## Quick Start
 
 ### Installation
+
 ```bash
 pip install fraiseql-confiture
 
 # Recommended: include pglast for large-schema support
-# (uses PostgreSQL's own C parser — no token limits, handles schemas with bulk seed data)
+# (uses PostgreSQL's own C parser — no token limits)
 pip install "fraiseql-confiture[ast]"
 ```
 
-### Basic Usage
+### CLI
+
 ```bash
-# Initialize project
+# Initialize project structure
 confiture init
 
-# Write schema DDL files
+# Write your schema DDL files
 vim db/schema/10_tables/users.sql
 
-# Build database (<1 second)
+# Build database from DDL (<1 second)
 confiture build --env local
 
 # Generate and apply migrations
@@ -49,60 +51,66 @@ confiture migrate generate --name "add_bio"
 confiture migrate up
 ```
 
-### Team Workflow (Multi-Agent)
-```bash
-# Register intention before making changes
-confiture coordinate register --agent-id alice --tables-affected users
+### Library API
 
-# Check for conflicts (by other agent)
-confiture coordinate check --agent-id bob --tables-affected users
-# ⚠️ Conflict: alice is working on 'users'
+```python
+from confiture import Migrator
 
-# Complete when done
-confiture coordinate complete --intent-id int_abc123
+with Migrator.from_config("db/environments/prod.yaml") as m:
+    status = m.status()
+    if status.has_pending:
+        result = m.up()
 ```
 
 ---
 
-## Core Features
-
-### 🛠️ Four Migration Strategies
+## The Four Strategies
 
 | Strategy | Use Case | Command |
 |----------|----------|---------|
-| **Build from DDL** | Fresh DBs, testing | `confiture build --env local` |
-| **Incremental** | Existing databases | `confiture migrate up` |
-| **Production Sync** | Copy prod data (with anonymization) | `confiture sync --from production --anonymize users.email` |
+| **Build from DDL** | Fresh databases, testing, CI | `confiture build --env local` |
+| **Incremental Migrations** | Existing databases, production | `confiture migrate up` |
+| **Production Sync** | Copy data with PII anonymization | `confiture sync --from prod --anonymize users.email` |
 | **Zero-Downtime** | Complex migrations via FDW | `confiture migrate schema-to-schema` |
 
-### 🤝 Multi-Agent Coordination
-- ✅ Automatic conflict detection
-- ✅ Intent registration and tracking
-- ✅ JSON output for CI/CD
-- ✅ <10ms per operation
+---
 
-### 🌱 Seed Data Management
-- ✅ Sequential execution (solves PostgreSQL parser limits on 650+ row files)
-- ✅ Per-file savepoint isolation for error recovery
-- ✅ Continue-on-error mode (skip failed files)
-- ✅ Prep-seed validation (5-level orchestrator)
-- ✅ 5-level validation (static → full execution)
-- ✅ Catch NULL FKs before production
-- ✅ Pre-commit safe (Levels 1-3)
-- ✅ Database validation with SAVEPOINT safety
+## Features
 
-### 🔍 Git-Aware Validation
-- ✅ Detect schema drift vs. main branch
-- ✅ Enforce migrations for DDL changes
-- ✅ Pre-commit hook support
+### Migration Management
+- **Semantic exit codes** — `0` success, `2` validation error, `3` SQL failure, `6` lock contention. Script with confidence.
+- **`migrate rebuild`** — drop and recreate from DDL + replay migrations in one command. Fast environment reset.
+- **`migrate validate`** — naming convention checks, schema drift detection, function signature and body drift.
+- **`migrate fix-signatures`** — detect and atomically fix stale function overloads and body drift.
+- **Dry-run with SAVEPOINT testing** — `--dry-run-execute` runs migrations inside a savepoint, then rolls back.
+- **Checksum verification** — detect tampered migration files before applying.
+- **Distributed locking** — safe concurrent deployments via PostgreSQL advisory locks.
+- **Migration hooks** — run custom logic before/after each migration.
 
-### 🔧 Developer Experience
-- ✅ Dry-run mode (analyze before applying)
-- ✅ Migration hooks (pre/post)
-- ✅ Schema linting
-- ✅ PII anonymization
-- ✅ Optional Rust extension
-- ✅ Python 3.11, 3.12, 3.13
+### Schema Intelligence
+- **Schema diff detection** — two-tier parser: pglast (PostgreSQL's C parser) primary, sqlparse fallback.
+- **Schema linting** — configurable rules to catch common DDL mistakes.
+- **Function introspection** — `FunctionIntrospector`, `TypeMapper`, and `DependencyGraph` for deep schema analysis.
+- **Grant accompaniment checker** — detect permission changes without corresponding migrations.
+
+### Seed Data
+- **Sequential execution** — handles PostgreSQL parser limits on large seed files.
+- **Per-file savepoint isolation** — one bad seed file doesn't ruin the batch.
+- **5-level prep-seed validation** — static analysis through full execution, pre-commit safe at levels 1-3.
+
+### Multi-Agent Coordination
+- **Intent registration** — declare which tables you're changing before you start.
+- **Conflict detection** — automatic alerts when agents touch overlapping tables.
+- **JSON output** — machine-readable for CI/CD pipelines.
+
+### Developer Experience
+- **Structured output** — JSON, CSV, and YAML for all commands.
+- **Exception hierarchy** — typed errors with error codes and resolution hints.
+- **Git-aware validation** — detect schema drift vs. main branch, enforce migrations for DDL changes.
+- **PII anonymization** — built-in strategies for production sync.
+- **Optional Rust extension** — drop-in performance boost for SQL parsing and hashing.
+- **Python 3.11, 3.12, 3.13** — tested across all supported versions.
+- **4,420+ tests** passing.
 
 ---
 
@@ -115,42 +123,17 @@ confiture coordinate complete --intent-id int_abc123
 - [Incremental Migrations](docs/guides/02-incremental-migrations.md)
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
-- [Sequential Seed Execution](docs/guides/sequential-seed-execution.md) ⭐ NEW
+- [Sequential Seed Execution](docs/guides/sequential-seed-execution.md)
 - [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)
 - [Prep-Seed Validation](docs/guides/prep-seed-validation.md)
 - [Migration Decision Tree](docs/guides/migration-decision-tree.md)
 - [Dry-Run Mode](docs/guides/dry-run.md)
 
+**CLI Reference**: [docs/reference/cli.md](docs/reference/cli.md)
+
 **API Reference**: [docs/reference/](docs/reference/)
 
 **Examples**: [examples/](examples/)
-
----
-
-## Project Status
-
-✅ **v0.4.0** (February 4, 2026) - RELEASED
-
-**Phase 9 Addition (v0.4.0)**:
-- ✅ Sequential seed execution (solves PostgreSQL parser limits on 650+ row files)
-- ✅ Per-file savepoint isolation for error recovery
-- ✅ Continue-on-error mode for partial seeding
-- ✅ 29 new tests for seed workflow
-- ✅ Comprehensive documentation with 8 examples
-- ✅ Real database integration testing
-
-**What's Implemented**:
-- ✅ All 4 migration strategies
-- ✅ Sequential seed execution with savepoints (NEW in v0.4.0)
-- ✅ Multi-agent coordination (production-ready, 123+ tests)
-- ✅ Prep-seed validation (5 levels, 98+ tests)
-- ✅ Git-aware schema validation
-- ✅ Schema diff detection
-- ✅ CLI with rich output
-- ✅ Comprehensive tests (4,100+)
-- ✅ Complete documentation
-
-**⚠️ Beta Software**: All features implemented and tested, but not yet used in production. Use in staging/development first.
 
 ---
 

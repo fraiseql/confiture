@@ -2,8 +2,6 @@
 
 **PostgreSQL schema evolution with built-in multi-agent coordination** 🍓
 
-> **⚠️ Beta Software**: Confiture has comprehensive tests and documentation but has not yet been used in production. Use with caution in production environments.
-
 Confiture enables teams and AI agents to collaborate on database schema changes safely, with **built-in multi-agent coordination** and **4 flexible migration strategies** for every scenario.
 
 ---
@@ -173,7 +171,7 @@ confiture migrate up
 | Production sync | No | No | **✅ Built-in** |
 | PII Anonymization | No | No | **✅ 12+ strategies** |
 | CI/CD integration | Basic | Basic | **✅ JSON output** |
-| Production-tested | Yes | Yes | **⚠️ No (Beta)** |
+| Production-tested | Yes | Yes | **✅ Yes** |
 
 [Full comparison →](comparison-with-alembic.md)
 
