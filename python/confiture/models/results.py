@@ -184,6 +184,9 @@ class MigrateUpResult:
 
         dry_run: True if this was a dry-run analysis (no SQL executed).
 
+        dry_run_execute: True if SAVEPOINT-based verification was used.
+            When True, all SQL was executed then rolled back — nothing persisted.
+
         warnings: List of non-fatal warning messages. Empty if no warnings.
 
         skipped: List of migration versions that were already applied.
@@ -198,6 +201,7 @@ class MigrateUpResult:
     total_execution_time_ms: int
     checksums_verified: bool = True
     dry_run: bool = False
+    dry_run_execute: bool = False
     warnings: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -233,6 +237,7 @@ class MigrateUpResult:
             "total_duration_ms": self.total_execution_time_ms,
             "checksums_verified": self.checksums_verified,
             "dry_run": self.dry_run,
+            "dry_run_execute": self.dry_run_execute,
             "warnings": self.warnings,
         }
 

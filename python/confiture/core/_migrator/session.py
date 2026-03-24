@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         StatusResult,
     )
 
+from confiture.core.locking import LockConfig, MigrationLock
 from confiture.exceptions import MigrationError
 
 
@@ -65,7 +66,50 @@ class MigratorSession:
             self._conn = None
 
     # ------------------------------------------------------------------ #
-    # High-level library methods (implemented in B.3–B.6)                 #
+    # Lock inspection                                                    #
+    # ------------------------------------------------------------------ #
+
+    def is_locked(self) -> bool:
+        """Check if the migration lock is currently held by any process.
+
+        Returns:
+            True if another process holds the migration lock.
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+        """
+        from confiture.exceptions import ConfigurationError
+
+        if self._conn is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        lock = MigrationLock(self._conn, LockConfig())
+        return lock.is_locked()
+
+    def get_lock_holder(self) -> dict[str, Any] | None:
+        """Get diagnostic info about the process holding the migration lock.
+
+        Returns:
+            Dict with keys: pid, user, application, client_addr, started_at.
+            None if no lock is held.
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+        """
+        from confiture.exceptions import ConfigurationError
+
+        if self._conn is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        lock = MigrationLock(self._conn, LockConfig())
+        return lock.get_lock_holder()
+
+    # ------------------------------------------------------------------ #
+    # High-level library methods                                         #
     # ------------------------------------------------------------------ #
 
     def status(self) -> StatusResult:
@@ -182,10 +226,12 @@ class MigratorSession:
         *,
         target: str | None = None,
         dry_run: bool = False,
+        dry_run_execute: bool = False,
         verify_checksums: bool = True,
         force: bool = False,
         lock_timeout: int = 30000,
         no_lock: bool = False,
+        require_reversible: bool = False,
     ) -> MigrateUpResult:
         """Apply pending migrations up to target version.
 
@@ -198,10 +244,15 @@ class MigratorSession:
                     Example: "20260228180602"
             dry_run: If True, analyze migrations without executing SQL.
                      Shows which migrations would be applied.
+            dry_run_execute: If True, execute all SQL inside a SAVEPOINT then
+                     roll back. Catches real SQL errors without persisting changes.
+                     Mutually exclusive with ``dry_run``.
             verify_checksums: If True, verify migration file checksums.
             force: If True, re-apply all migrations including already-applied ones.
             lock_timeout: Lock timeout in milliseconds (default: 30000).
             no_lock: If True, skip distributed locking.
+            require_reversible: If True, abort before applying any migration
+                     if any pending migration lacks a ``.down.sql`` file.
 
         Returns:
             MigrateUpResult with:
@@ -240,6 +291,12 @@ class MigratorSession:
             raise ConfigurationError(
                 "MigratorSession must be used as a context manager",
                 resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+
+        if dry_run and dry_run_execute:
+            raise ConfigurationError(
+                "Cannot use both dry_run and dry_run_execute",
+                resolution_hint="Use dry_run for analysis-only, or dry_run_execute for SAVEPOINT-based verification.",
             )
 
         if not self._migrations_dir.exists():
@@ -283,6 +340,36 @@ class MigratorSession:
                 checksums_verified=verify_checksums,
                 dry_run=False,
                 skipped=skipped_versions,
+            )
+
+        # Reversibility gate — check before any SQL execution
+        if require_reversible:
+            preflight_result = self.preflight()
+            if not preflight_result.all_reversible:
+                names = ", ".join(m.version for m in preflight_result.irreversible)
+                return MigrateUpResult(
+                    success=False,
+                    migrations_applied=[],
+                    total_execution_time_ms=0,
+                    checksums_verified=verify_checksums,
+                    dry_run=False,
+                    errors=[
+                        f"Irreversible migrations detected (missing .down.sql): {names}. "
+                        f"Use require_reversible=False or add .down.sql files."
+                    ],
+                    skipped=skipped_versions,
+                )
+
+        # SAVEPOINT-based dry-run execution
+        if dry_run_execute:
+            return self._up_dry_run_execute(
+                pending_files=pending_files,
+                target=target,
+                force=force,
+                verify_checksums=verify_checksums,
+                lock_timeout=lock_timeout,
+                no_lock=no_lock,
+                skipped_versions=skipped_versions,
             )
 
         # Apply with distributed lock
@@ -341,6 +428,96 @@ class MigratorSession:
             dry_run=False,
             warnings=["Force mode enabled"] if force else [],
             skipped=skipped_versions,
+        )
+
+    def _up_dry_run_execute(
+        self,
+        *,
+        pending_files: list[Path],
+        target: str | None,
+        force: bool,
+        verify_checksums: bool,
+        lock_timeout: int,
+        no_lock: bool,
+        skipped_versions: list[str],
+    ) -> MigrateUpResult:
+        """Execute pending migrations inside a SAVEPOINT, then roll back.
+
+        This catches real SQL errors (syntax, constraints, type mismatches)
+        without persisting any changes.
+
+        Note:
+            Non-transactional DDL (e.g. ``CREATE INDEX CONCURRENTLY``) cannot
+            run inside a SAVEPOINT and will cause an error.
+        """
+        import time as _time
+
+        import confiture.core.migrator as _m
+        from confiture.models.results import MigrateUpResult, MigrationApplied
+
+        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+        lock = _m.MigrationLock(self._conn, lock_config)
+
+        migrations_tested: list[MigrationApplied] = []
+        total_time = 0
+        failed_exception: Exception | None = None
+
+        try:
+            with lock.acquire():
+                self._conn.execute("SAVEPOINT dry_run_execute")
+                try:
+                    for migration_file in pending_files:
+                        migration_class = _m.load_migration_class(migration_file)
+                        migration = migration_class(connection=self._conn)
+
+                        if target and migration.version > target:
+                            break
+
+                        try:
+                            start = _time.time()
+                            self._migrator.apply(
+                                migration, force=force, migration_file=migration_file
+                            )
+                            elapsed = int((_time.time() - start) * 1000)
+                            total_time += elapsed
+                            migrations_tested.append(
+                                MigrationApplied(
+                                    version=migration.version,
+                                    name=migration.name,
+                                    execution_time_ms=elapsed,
+                                )
+                            )
+                        except Exception as exc:
+                            failed_exception = exc
+                            break
+                finally:
+                    self._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
+                    self._conn.execute("RELEASE SAVEPOINT dry_run_execute")
+        except Exception as exc:
+            if failed_exception is None:
+                failed_exception = exc
+
+        if failed_exception is not None:
+            return MigrateUpResult(
+                success=False,
+                migrations_applied=migrations_tested,
+                total_execution_time_ms=total_time,
+                checksums_verified=verify_checksums,
+                dry_run=True,
+                dry_run_execute=True,
+                errors=[str(failed_exception)],
+                skipped=skipped_versions,
+            )
+
+        return MigrateUpResult(
+            success=True,
+            migrations_applied=migrations_tested,
+            total_execution_time_ms=total_time,
+            checksums_verified=verify_checksums,
+            dry_run=True,
+            dry_run_execute=True,
+            skipped=skipped_versions,
+            warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"],
         )
 
     def down(

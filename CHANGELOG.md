@@ -5,6 +5,38 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.11] - 2026-03-24
+
+### Added
+
+- **`MigrationLock` and `LockConfig` public exports** (issue #91).
+  Both classes are now importable from the top-level `confiture` package and
+  listed in `__all__`. Enables deployment orchestrators to inspect lock state
+  without reaching into internal modules.
+
+- **`MigratorSession.is_locked()` and `get_lock_holder()`** convenience methods
+  (issue #91). Check whether the migration advisory lock is held and retrieve
+  diagnostic info (PID, user, application, client address, session start time)
+  about the holder — all without acquiring the lock.
+
+- **`require_reversible` parameter on `MigratorSession.up()`** (issue #89).
+  When `True`, runs `preflight()` and aborts with `MigrateUpResult(success=False)`
+  listing the irreversible versions before any SQL is executed. Guarantees that
+  every applied migration can be rolled back.
+
+- **`--require-reversible` CLI flag on `confiture migrate up`** (issue #89).
+  Aborts with exit code 1 if any pending migration lacks a `.down.sql` file.
+  Supports `--format json` for structured error output.
+
+- **`dry_run_execute` parameter on `MigratorSession.up()`** (issue #90).
+  Runs all pending migrations inside a `SAVEPOINT`, verifies they succeed, then
+  rolls back — catching real SQL errors (syntax, constraints, type mismatches)
+  without persisting changes. Mutually exclusive with `dry_run`.
+
+- **`dry_run_execute` field on `MigrateUpResult`** (issue #90).
+  Distinguishes SAVEPOINT-based verification (`dry_run_execute=True`) from
+  analysis-only dry runs (`dry_run=True`). Included in `to_dict()` serialization.
+
 ## [0.8.10] - 2026-03-23
 
 ### Added

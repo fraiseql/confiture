@@ -489,6 +489,11 @@ def migrate_up(
         "--snapshots-dir",
         help="Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history)",
     ),
+    require_reversible: bool = typer.Option(
+        False,
+        "--require-reversible",
+        help="Abort if any pending migration lacks a .down.sql file (guarantees rollback capability).",
+    ),
     batched: bool = typer.Option(
         False,
         "--batched",
@@ -818,6 +823,31 @@ def migrate_up(
                 error_console.print(
                     "\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]"
                 )
+                conn.close()
+                raise typer.Exit(1)
+
+        # Reversibility gate
+        if require_reversible:
+            from confiture.core.preflight import run_preflight
+
+            _preflight = run_preflight(migrations_dir)
+            if not _preflight.all_reversible:
+                _irr_names = ", ".join(m.version for m in _preflight.irreversible)
+                error_msg = (
+                    f"Irreversible migrations detected (missing .down.sql): {_irr_names}. "
+                    f"Remove --require-reversible or add .down.sql files."
+                )
+                if format_output == "json":
+                    _output_json(
+                        {
+                            "success": False,
+                            "errors": [error_msg],
+                            "irreversible_versions": [m.version for m in _preflight.irreversible],
+                        },
+                        output_file,
+                    )
+                else:
+                    error_console.print(f"[red]❌ {error_msg}[/red]")
                 conn.close()
                 raise typer.Exit(1)
 
