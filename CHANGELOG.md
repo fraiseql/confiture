@@ -5,6 +5,16 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.12] - 2026-03-29
+
+### Fixed
+
+- **`MigratorSession.rebuild()` now forwards `env_config`** (issue #92).
+  The session wrapper was not passing the loaded `Environment` config to the
+  engine's `rebuild()`, causing `SchemaBuilder` to fall back to `env="rebuild"`
+  — a non-existent environment. The session now forwards `self._config` as
+  `env_config`, so the correct environment name is used.
+
 ## [0.8.11] - 2026-03-24
 
 ### Added
