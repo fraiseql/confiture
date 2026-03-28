@@ -717,6 +717,7 @@ class MigratorSession:
             apply_seeds=apply_seeds,
             backup_tracking=backup_tracking,
             migrations_dir=self._migrations_dir,
+            env_config=self._config,
         )
 
     def preflight(

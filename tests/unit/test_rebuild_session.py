@@ -46,6 +46,7 @@ class TestMigratorSessionRebuild:
             apply_seeds=False,
             backup_tracking=False,
             migrations_dir=Path("db/migrations"),
+            env_config=session._config,
         )
 
     def test_forwards_all_params(self):
@@ -74,6 +75,7 @@ class TestMigratorSessionRebuild:
             apply_seeds=True,
             backup_tracking=True,
             migrations_dir=Path("db/migrations"),
+            env_config=session._config,
         )
 
     def test_error_outside_context_manager(self):
