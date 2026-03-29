@@ -1069,6 +1069,8 @@ class Migrator:
             return []
 
         original_autocommit = self.connection.autocommit
+        # Close any open transaction before switching to autocommit (issue #93)
+        self.connection.rollback()
         self.connection.autocommit = True
         try:
             with self.connection.cursor() as cursor:
@@ -1110,6 +1112,8 @@ class Migrator:
         executed = 0
 
         original_autocommit = self.connection.autocommit
+        # Close any open transaction before switching to autocommit (issue #93)
+        self.connection.rollback()
         self.connection.autocommit = True
         try:
             with self.connection.cursor() as cursor:

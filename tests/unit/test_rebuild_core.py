@@ -118,6 +118,21 @@ class TestDropUserSchemas:
         dropped = migrator._drop_user_schemas([])
         assert dropped == []
 
+    def test_rollback_before_autocommit(self):
+        """Issue #93: rollback open transaction before setting autocommit."""
+        from confiture.core.migrator import Migrator
+
+        conn = MagicMock()
+        conn.autocommit = False
+        cursor = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        migrator = Migrator(connection=conn)
+        migrator._drop_user_schemas(["public"])
+
+        conn.rollback.assert_called_once()
+
 
 class TestApplyDdlString:
     """Cycle 2.3: _apply_ddl_string."""
@@ -204,6 +219,21 @@ class TestApplyDdlString:
         migrator = Migrator(connection=conn)
         migrator._apply_ddl_string("CREATE TABLE t (id INT);")
         assert conn.autocommit is False
+
+    def test_rollback_before_autocommit(self):
+        """Issue #93: rollback open transaction before setting autocommit."""
+        from confiture.core.migrator import Migrator
+
+        conn = MagicMock()
+        conn.autocommit = False
+        cursor = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        migrator = Migrator(connection=conn)
+        migrator._apply_ddl_string("CREATE TABLE t (id INT);")
+
+        conn.rollback.assert_called_once()
 
 
 class TestBackupTrackingTable:
