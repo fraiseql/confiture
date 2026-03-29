@@ -5,6 +5,25 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.14] - 2026-03-29
+
+### Added
+
+- **Two-pass FK emission for `confiture build`** (issue #94). New `--two-pass`
+  CLI flag and `build.two_pass` config option. When enabled, `REFERENCES` and
+  `FOREIGN KEY` clauses are stripped from `CREATE TABLE` statements (pass 1)
+  and emitted as `ALTER TABLE ADD CONSTRAINT` at the end (pass 2). Eliminates
+  cross-schema FK ordering failures without requiring directory restructuring
+  or deferred constraints.
+
+### Fixed
+
+- **Multi-line FK constraints now fully stripped in two-pass mode** (issue #95).
+  `CONSTRAINT name` on a separate line from `FOREIGN KEY` was left behind,
+  producing invalid SQL. The FK extractor now matches against the full table
+  body instead of line-by-line, correctly removing multi-line constraints and
+  cleaning up trailing commas.
+
 ## [0.8.13] - 2026-03-29
 
 ### Fixed
