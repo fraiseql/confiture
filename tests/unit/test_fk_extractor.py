@@ -232,6 +232,165 @@ CREATE TABLE orders (
         assert "CONSTRAINT" not in stripped
         assert "FOREIGN KEY" not in stripped
 
+    def test_issue_95_exact_ddl(self):
+        """Exact DDL from issue #95 — GENERATED ALWAYS AS IDENTITY + named multi-line FKs."""
+        sql = """\
+CREATE TABLE catalog.tb_industry (
+    pk_industry BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_parent_industry BIGINT,
+    fk_info BIGINT,
+    label TEXT NOT NULL,
+    CONSTRAINT tb_industry_fk_info_fkey
+        FOREIGN KEY (fk_info) REFERENCES catalog.tb_industry_info(pk_industry_info),
+    CONSTRAINT tb_industry_fk_parent_fkey
+        FOREIGN KEY (fk_parent_industry) REFERENCES catalog.tb_industry(pk_industry)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 2
+
+        # Verify no FK artifacts remain
+        assert "CONSTRAINT" not in stripped
+        assert "FOREIGN KEY" not in stripped
+        assert "REFERENCES" not in stripped
+
+        # Verify column defs preserved
+        assert "pk_industry BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY" in stripped
+        assert "fk_parent_industry BIGINT" in stripped
+        assert "fk_info BIGINT" in stripped
+        assert "label TEXT NOT NULL" in stripped
+
+        # Verify no trailing comma before );
+        assert ",\n);" not in stripped
+
+        # Verify ALTER output is correct
+        alter = generate_alter_statements(fks)
+        assert "tb_industry_fk_info_fkey" in alter
+        assert "tb_industry_fk_parent_fkey" in alter
+        assert "catalog.tb_industry_info" in alter
+        assert alter.count("ALTER TABLE") == 2
+
+    def test_multiline_fk_self_reference(self):
+        """Self-referencing FK (table references itself)."""
+        sql = """\
+CREATE TABLE categories (
+    id BIGINT PRIMARY KEY,
+    parent_id BIGINT,
+    name TEXT NOT NULL,
+    CONSTRAINT fk_parent
+        FOREIGN KEY (parent_id)
+        REFERENCES categories (id)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert fks[0].source_table == "categories"
+        assert fks[0].target_table == "categories"
+        assert "CONSTRAINT" not in stripped
+        assert "FOREIGN KEY" not in stripped
+
+    def test_multiline_fk_between_other_constraints(self):
+        """Multi-line FK between CHECK and UNIQUE constraints — both preserved."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    amount NUMERIC(10,2),
+    CHECK (amount > 0),
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+        ON DELETE CASCADE,
+    UNIQUE (customer_id, amount)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert fks[0].on_delete == "CASCADE"
+        assert "CONSTRAINT" not in stripped
+        assert "FOREIGN KEY" not in stripped
+        assert "CHECK (amount > 0)" in stripped
+        assert "UNIQUE" in stripped
+
+    def test_multiline_fk_with_all_modifiers(self):
+        """Multi-line FK with ON DELETE, ON UPDATE, and DEFERRABLE on separate lines."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+        ON DELETE CASCADE
+        ON UPDATE SET NULL
+        DEFERRABLE INITIALLY DEFERRED
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert fks[0].on_delete == "CASCADE"
+        assert fks[0].on_update == "SET NULL"
+        assert fks[0].deferrable == "DEFERRABLE INITIALLY DEFERRED"
+        assert "CONSTRAINT" not in stripped
+        assert "DEFERRABLE" not in stripped
+
+    def test_multiline_fk_multi_column(self):
+        """Multi-line multi-column FK constraint."""
+        sql = """\
+CREATE TABLE order_items (
+    id BIGINT PRIMARY KEY,
+    order_id BIGINT,
+    product_id BIGINT,
+    CONSTRAINT fk_order_product
+        FOREIGN KEY (order_id, product_id)
+        REFERENCES order_products (order_id, product_id)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert fks[0].source_columns == ["order_id", "product_id"]
+        assert fks[0].target_columns == ["order_id", "product_id"]
+        assert "FOREIGN KEY" not in stripped
+
+    def test_multiline_unnamed_fk(self):
+        """Multi-line FK without CONSTRAINT name."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+        ON DELETE CASCADE
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert fks[0].constraint_name is None
+        assert fks[0].on_delete == "CASCADE"
+        assert "FOREIGN KEY" not in stripped
+        assert "REFERENCES" not in stripped
+
+    def test_multiline_mixed_with_inline_fks(self):
+        """Mix of multi-line table-level FK and inline REFERENCES in same table."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    status_id BIGINT REFERENCES statuses(id),
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 2
+        assert "REFERENCES" not in stripped
+        assert "FOREIGN KEY" not in stripped
+        assert "CONSTRAINT" not in stripped
+        # Column defs preserved
+        assert "status_id BIGINT" in stripped
+        assert "customer_id BIGINT" in stripped
+
     def test_unnamed_table_level_fk(self):
         sql = """\
 CREATE TABLE orders (
@@ -346,6 +505,60 @@ CREATE TABLE orders (
         assert len(fks) == 2
         assert "FOREIGN KEY" not in stripped
         assert ",\n);" not in stripped
+
+    def test_multiline_fk_last_entry_comma_cleanup(self):
+        """Multi-line FK as the last entry — trailing comma on preceding line removed."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert ",\n);" not in stripped
+        assert "FOREIGN KEY" not in stripped
+
+    def test_multiline_fks_all_last_entries_comma_cleanup(self):
+        """Multiple multi-line FKs at the end — all removed, comma on last column cleaned."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    product_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id),
+    CONSTRAINT fk_product
+        FOREIGN KEY (product_id)
+        REFERENCES products (id)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 2
+        assert "FOREIGN KEY" not in stripped
+        assert "CONSTRAINT" not in stripped
+        assert ",\n);" not in stripped
+
+    def test_multiline_fk_middle_entry_preserves_commas(self):
+        """Multi-line FK in the middle — surrounding entries keep proper commas."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id),
+    CONSTRAINT uq_customer UNIQUE (customer_id)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert "UNIQUE" in stripped
+        assert "FOREIGN KEY" not in stripped
 
 
 # ── Mixed content (non-FK SQL preserved) ────────────────────────────────
@@ -714,3 +927,221 @@ CREATE TABLE orders (
         assert "FOREIGN KEY" not in stripped
         assert "customer_id BIGINT NOT NULL" in stripped
         assert "product_id BIGINT" in stripped
+
+    def test_mixed_inline_and_multiline_table_level(self):
+        """Mix of inline REFERENCES and multi-line CONSTRAINT/FOREIGN KEY."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    status_id BIGINT NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
+    customer_id BIGINT,
+    product_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id),
+    CONSTRAINT fk_product
+        FOREIGN KEY (product_id)
+        REFERENCES products (id)
+        ON DELETE SET NULL
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 3
+        assert "REFERENCES" not in stripped
+        assert "FOREIGN KEY" not in stripped
+        assert "CONSTRAINT" not in stripped
+        assert "status_id BIGINT NOT NULL" in stripped
+        assert ",\n);" not in stripped
+
+    def test_idempotent_multiline(self):
+        """Running extract twice on multi-line FKs produces same result."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+);
+"""
+        stripped1, fks1 = extract_and_strip_fks(sql)
+        stripped2, fks2 = extract_and_strip_fks(stripped1)
+        assert len(fks1) == 1
+        assert len(fks2) == 0
+        assert stripped1 == stripped2
+
+
+# ── SQL structure validity ──────────────────────────────────────────────
+
+
+class TestSqlStructureValidity:
+    """Verify stripped output has valid CREATE TABLE structure."""
+
+    @staticmethod
+    def _assert_valid_create_table(sql: str) -> None:
+        """Basic structural assertions for CREATE TABLE output."""
+        # Every CREATE TABLE has matching ( ... );
+        import re
+
+        for m in re.finditer(r"CREATE TABLE[^(]+\(", sql):
+            start = m.end()
+            depth = 1
+            pos = start
+            while pos < len(sql) and depth > 0:
+                if sql[pos] == "(":
+                    depth += 1
+                elif sql[pos] == ")":
+                    depth -= 1
+                pos += 1
+            assert depth == 0, f"Unmatched parentheses in CREATE TABLE at pos {m.start()}"
+
+        # No double commas
+        assert ",," not in re.sub(r"\s+", "", sql), "Double comma found"
+        # No comma before closing paren (ignoring whitespace)
+        assert not re.search(
+            r",\s*\)", sql
+        ), f"Trailing comma before ) found in:\n{sql}"
+        # No dangling CONSTRAINT keyword without content
+        for line in sql.split("\n"):
+            s = line.strip()
+            if s.upper().startswith("CONSTRAINT") and not any(
+                kw in s.upper()
+                for kw in ("CHECK", "UNIQUE", "PRIMARY", "EXCLUDE", "FOREIGN")
+            ):
+                # A CONSTRAINT keyword alone with no constraint type = leftover
+                msg = f"Dangling CONSTRAINT keyword: {line!r}"
+                raise AssertionError(msg)
+
+    def test_simple_inline_fk_valid(self):
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT REFERENCES customers(id)
+);
+"""
+        stripped, _ = extract_and_strip_fks(sql)
+        self._assert_valid_create_table(stripped)
+
+    def test_multiline_fk_valid(self):
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+);
+"""
+        stripped, _ = extract_and_strip_fks(sql)
+        self._assert_valid_create_table(stripped)
+
+    def test_issue_95_ddl_valid(self):
+        sql = """\
+CREATE TABLE catalog.tb_industry (
+    pk_industry BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_parent_industry BIGINT,
+    fk_info BIGINT,
+    label TEXT NOT NULL,
+    CONSTRAINT tb_industry_fk_info_fkey
+        FOREIGN KEY (fk_info) REFERENCES catalog.tb_industry_info(pk_industry_info),
+    CONSTRAINT tb_industry_fk_parent_fkey
+        FOREIGN KEY (fk_parent_industry) REFERENCES catalog.tb_industry(pk_industry)
+);
+"""
+        stripped, _ = extract_and_strip_fks(sql)
+        self._assert_valid_create_table(stripped)
+
+    def test_mixed_constraints_valid(self):
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    amount NUMERIC(10,2),
+    CHECK (amount > 0),
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+        ON DELETE CASCADE,
+    UNIQUE (customer_id, amount)
+);
+"""
+        stripped, _ = extract_and_strip_fks(sql)
+        self._assert_valid_create_table(stripped)
+
+    def test_multiple_tables_all_valid(self):
+        sql = """\
+CREATE TABLE identity.tb_org (
+    pk_org BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE identity.tb_contact (
+    pk_contact BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_org BIGINT NOT NULL,
+    email TEXT,
+    CONSTRAINT tb_contact_fk_org_fkey
+        FOREIGN KEY (fk_org) REFERENCES identity.tb_org(pk_org)
+);
+
+CREATE TABLE domain.tb_order (
+    pk_order BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_contact BIGINT NOT NULL REFERENCES identity.tb_contact(pk_contact),
+    fk_product BIGINT,
+    amount NUMERIC(10,2) CHECK (amount >= 0),
+    CONSTRAINT fk_order_product
+        FOREIGN KEY (fk_product)
+        REFERENCES domain.tb_product (pk_product)
+        ON DELETE SET NULL
+);
+
+CREATE TABLE domain.tb_product (
+    pk_product BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL,
+    price NUMERIC(10,2)
+);
+
+CREATE INDEX idx_order_contact ON domain.tb_order (fk_contact);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        self._assert_valid_create_table(stripped)
+        assert len(fks) == 3
+        assert "CREATE INDEX" in stripped
+        assert "CHECK" in stripped
+        # All tables still present
+        assert "CREATE TABLE identity.tb_org" in stripped
+        assert "CREATE TABLE identity.tb_contact" in stripped
+        assert "CREATE TABLE domain.tb_order" in stripped
+        assert "CREATE TABLE domain.tb_product" in stripped
+        # No FK artifacts
+        assert "REFERENCES" not in stripped
+        assert "FOREIGN KEY" not in stripped
+
+    def test_full_roundtrip_produces_valid_sql(self):
+        """Full two-pass output (pass 1 + pass 2) should be structurally valid."""
+        sql = """\
+CREATE TABLE catalog.tb_industry (
+    pk_industry BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_parent_industry BIGINT,
+    fk_info BIGINT,
+    label TEXT NOT NULL,
+    CONSTRAINT tb_industry_fk_info_fkey
+        FOREIGN KEY (fk_info) REFERENCES catalog.tb_industry_info(pk_industry_info),
+    CONSTRAINT tb_industry_fk_parent_fkey
+        FOREIGN KEY (fk_parent_industry) REFERENCES catalog.tb_industry(pk_industry)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        alter_sql = generate_alter_statements(fks)
+        full_output = stripped + "\n" + alter_sql
+
+        # Pass 1 valid
+        self._assert_valid_create_table(stripped)
+
+        # Pass 2 has correct ALTER TABLE statements
+        assert alter_sql.count("ALTER TABLE") == 2
+        assert "tb_industry_fk_info_fkey" in alter_sql
+        assert "tb_industry_fk_parent_fkey" in alter_sql
+
+        # Full output has both parts
+        assert "CREATE TABLE" in full_output
+        assert "ALTER TABLE" in full_output
