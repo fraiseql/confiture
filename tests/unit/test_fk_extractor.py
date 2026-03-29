@@ -187,6 +187,51 @@ CREATE TABLE orders (
         assert fks[0].target_columns == ["id"]
         assert "FOREIGN KEY" not in stripped
 
+    def test_multiline_named_table_level_fk(self):
+        """CONSTRAINT name on separate line from FOREIGN KEY (issue #95)."""
+        sql = """\
+CREATE TABLE catalog.tb_industry (
+    pk_industry BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_parent_industry BIGINT,
+    fk_info BIGINT,
+    CONSTRAINT tb_industry_fk_info_fkey
+        FOREIGN KEY (fk_info) REFERENCES catalog.tb_industry_info(pk_industry_info),
+    CONSTRAINT tb_industry_fk_parent_fkey
+        FOREIGN KEY (fk_parent_industry) REFERENCES catalog.tb_industry(pk_industry)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 2
+        assert fks[0].constraint_name == "tb_industry_fk_info_fkey"
+        assert fks[1].constraint_name == "tb_industry_fk_parent_fkey"
+        # No leftover CONSTRAINT or FOREIGN KEY in stripped output
+        assert "CONSTRAINT" not in stripped
+        assert "FOREIGN KEY" not in stripped
+        # No trailing comma before closing paren
+        assert ",\n);" not in stripped
+        # Column definitions should remain
+        assert "fk_parent_industry BIGINT" in stripped
+        assert "fk_info BIGINT" in stripped
+
+    def test_multiline_fk_with_actions(self):
+        """Multi-line FK with ON DELETE/ON UPDATE on separate lines."""
+        sql = """\
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    customer_id BIGINT,
+    CONSTRAINT fk_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers (id)
+        ON DELETE CASCADE
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        assert len(fks) == 1
+        assert fks[0].constraint_name == "fk_customer"
+        assert fks[0].on_delete == "CASCADE"
+        assert "CONSTRAINT" not in stripped
+        assert "FOREIGN KEY" not in stripped
+
     def test_unnamed_table_level_fk(self):
         sql = """\
 CREATE TABLE orders (

@@ -181,41 +181,87 @@ def _find_create_table_blocks(sql: str) -> list[tuple[int, int, str]]:
     return blocks
 
 
+def _strip_comments_from_body(body: str) -> str:
+    """Strip all comments from body text for matching purposes."""
+    # Remove block comments
+    result = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    # Remove line comments
+    result = re.sub(r"--[^\n]*", "", result)
+    return result
+
+
 def _extract_fks_from_body(body: str, table_name: str) -> tuple[str, list[ForeignKeyInfo]]:
-    """Extract FK constraints from a CREATE TABLE body and return cleaned body + FK list."""
+    """Extract FK constraints from a CREATE TABLE body and return cleaned body + FK list.
+
+    Operates on the full body text (not line-by-line) to handle multi-line
+    FK constraints where CONSTRAINT name and FOREIGN KEY are on separate lines.
+    """
     fks: list[ForeignKeyInfo] = []
-    lines = body.split("\n")
+    cleaned = body
+
+    # Step 1: Extract and remove table-level FK constraints (multi-line safe).
+    # We match against comment-stripped text but remove from original using positions.
+    # To handle position mapping, we repeatedly match-and-remove from the cleaned text.
+    while True:
+        check_text = _strip_comments_from_body(cleaned)
+        table_fk_match = _TABLE_FK_RE.search(check_text)
+        if not table_fk_match:
+            break
+
+        constraint_name = table_fk_match.group(1)
+        source_cols = _split_columns(table_fk_match.group(2))
+        target_table = table_fk_match.group(3)
+        target_cols = _split_columns(table_fk_match.group(4))
+        modifiers = table_fk_match.group(5) if table_fk_match.group(5) else ""
+        on_delete, on_update, deferrable = _parse_modifiers(modifiers)
+
+        fks.append(
+            ForeignKeyInfo(
+                constraint_name=constraint_name,
+                source_table=table_name,
+                source_columns=source_cols,
+                target_table=target_table,
+                target_columns=target_cols,
+                on_delete=on_delete,
+                on_update=on_update,
+                deferrable=deferrable,
+            )
+        )
+
+        # Now find the same match in the original cleaned text (with comments).
+        # The TABLE_FK_RE uses \s+ which matches newlines, so it works on multi-line.
+        orig_match = _TABLE_FK_RE.search(cleaned)
+        if orig_match:
+            start = orig_match.start()
+            end = orig_match.end()
+
+            # Expand start backwards to consume leading whitespace/newline
+            while start > 0 and cleaned[start - 1] in (" ", "\t"):
+                start -= 1
+            if start > 0 and cleaned[start - 1] == "\n":
+                start -= 1
+
+            # Expand end forward to consume trailing comma and whitespace
+            while end < len(cleaned) and cleaned[end] in (" ", "\t"):
+                end += 1
+            if end < len(cleaned) and cleaned[end] == ",":
+                end += 1
+            # Consume trailing newline
+            while end < len(cleaned) and cleaned[end] in (" ", "\t"):
+                end += 1
+            if end < len(cleaned) and cleaned[end] == "\n":
+                end += 1
+
+            cleaned = cleaned[:start] + cleaned[end:]
+
+    # Step 2: Extract and remove inline REFERENCES (line-by-line is fine here,
+    # since inline REFERENCES are always on the same line as the column definition).
+    lines = cleaned.split("\n")
     new_lines: list[str] = []
 
     for line in lines:
         stripped_for_check = _strip_comments(line)
 
-        # Check for table-level FOREIGN KEY
-        table_fk_match = _TABLE_FK_RE.search(stripped_for_check)
-        if table_fk_match:
-            constraint_name = table_fk_match.group(1)
-            source_cols = _split_columns(table_fk_match.group(2))
-            target_table = table_fk_match.group(3)
-            target_cols = _split_columns(table_fk_match.group(4))
-            modifiers = table_fk_match.group(5) if table_fk_match.group(5) else ""
-            on_delete, on_update, deferrable = _parse_modifiers(modifiers)
-
-            fks.append(
-                ForeignKeyInfo(
-                    constraint_name=constraint_name,
-                    source_table=table_name,
-                    source_columns=source_cols,
-                    target_table=target_table,
-                    target_columns=target_cols,
-                    on_delete=on_delete,
-                    on_update=on_update,
-                    deferrable=deferrable,
-                )
-            )
-            # Remove this entire line (FK constraint line)
-            continue
-
-        # Check for inline REFERENCES
         inline_match = _INLINE_REF_RE.search(stripped_for_check)
         if inline_match:
             constraint_name = inline_match.group(1)
@@ -246,21 +292,18 @@ def _extract_fks_from_body(body: str, table_name: str) -> tuple[str, list[Foreig
                 )
             )
 
-            # Strip the REFERENCES clause (and optional preceding CONSTRAINT) from original line
-            # We operate on the original line to preserve comments etc.
-            cleaned = _INLINE_REF_RE.sub("", line)
-            new_lines.append(cleaned)
+            # Strip the REFERENCES clause from the original line
+            new_line = _INLINE_REF_RE.sub("", line)
+            new_lines.append(new_line)
             continue
 
         new_lines.append(line)
 
-    # Clean up trailing commas: if the last non-empty content line before )
-    # ends with a comma, remove it
-    cleaned_body = "\n".join(new_lines)
+    result = "\n".join(new_lines)
     if fks:
-        cleaned_body = _fix_trailing_commas(cleaned_body)
+        result = _fix_trailing_commas(result)
 
-    return cleaned_body, fks
+    return result, fks
 
 
 def _fix_trailing_commas(body: str) -> str:
