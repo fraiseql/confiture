@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.8.12
+**Version**: 0.8.13
 **Last Updated**: 2026-03-24
 **Current Status**: Production-Ready
 
@@ -784,7 +784,7 @@ Closes #123
 
 ## 🎯 Current Status
 
-### v0.8.12
+### v0.8.13
 
 **Implemented Features**:
 - ✅ Schema builder (Medium 1) - Build from DDL
@@ -920,7 +920,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-03-24
-**Version**: 0.8.12
+**Version**: 0.8.13
 
 ---
 
