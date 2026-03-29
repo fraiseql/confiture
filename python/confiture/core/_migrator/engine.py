@@ -38,6 +38,8 @@ from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
 
+_VIEW_COLUMN_RENAME_RE = re.compile(r"cannot change name of view column", re.IGNORECASE)
+
 # Allows 'table_name' or 'schema.table_name' (letters, digits, underscores only)
 _VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
 
@@ -460,13 +462,20 @@ class Migrator:
             self._rollback_to_savepoint(savepoint_name)
             if isinstance(e, (MigrationError, HookError)):
                 raise
-            else:
-                raise MigrationError(
-                    f"Failed to apply migration {migration.version} ({migration.name}): {e}",
-                    migration.version,
-                    migration.name,
-                    resolution_hint="Check the migration SQL for errors and ensure the database is in the expected state",
-                ) from e
+            hint = "Check the migration SQL for errors and ensure the database is in the expected state"
+            if isinstance(e, psycopg.Error) and _VIEW_COLUMN_RENAME_RE.search(str(e)):
+                hint = (
+                    "Dependent views block this column change. "
+                    "Ensure 'migration.view_helpers' is not set to 'off' or 'manual' in your environment config, "
+                    "then call confiture.save_and_drop_dependent_views() before the ALTER "
+                    "and confiture.recreate_saved_views() after it"
+                )
+            raise MigrationError(
+                f"Failed to apply migration {migration.version} ({migration.name}): {e}",
+                migration.version,
+                migration.name,
+                resolution_hint=hint,
+            ) from e
 
     def _apply_non_transactional(
         self,
@@ -515,13 +524,21 @@ class Migrator:
                 f"Non-transactional migration {migration.version} failed. "
                 "Manual cleanup may be required."
             )
+            hint = "Inspect the database for partial changes and manually revert any applied DDL statements"
+            if isinstance(e, psycopg.Error) and _VIEW_COLUMN_RENAME_RE.search(str(e)):
+                hint = (
+                    "Dependent views block this column change. "
+                    "Ensure 'migration.view_helpers' is not set to 'off' or 'manual' in your environment config, "
+                    "then call confiture.save_and_drop_dependent_views() before the ALTER "
+                    "and confiture.recreate_saved_views() after it"
+                )
             raise MigrationError(
                 f"Failed to apply non-transactional migration "
                 f"{migration.version} ({migration.name}): {e}. "
                 "Manual cleanup may be required.",
                 migration.version,
                 migration.name,
-                resolution_hint="Inspect the database for partial changes and manually revert any applied DDL statements",
+                resolution_hint=hint,
             ) from e
 
         finally:

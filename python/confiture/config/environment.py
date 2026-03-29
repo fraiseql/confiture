@@ -51,7 +51,7 @@ File Discovery
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -202,7 +202,7 @@ class MigrationConfig(BaseModel):
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
     locking: LockingConfig = Field(default_factory=LockingConfig)
-    view_helpers: str = "manual"  # "auto" | "manual" | "off"
+    view_helpers: Literal["auto", "manual", "off"] = "auto"
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)
     snapshot_history: bool = True
     snapshots_dir: str = "db/schema_history"

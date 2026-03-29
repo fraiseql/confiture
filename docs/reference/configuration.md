@@ -802,6 +802,13 @@ exclude_dirs: array[string]     # Directories to exclude (default: [])
 migration_table: string         # Migration tracking table (default: confiture_migrations)
 auto_backup: boolean            # Auto-backup before migrations (default: true)
 require_confirmation: boolean   # Require user confirmation (default: true)
+
+# Migration section (nested)
+migration:
+  view_helpers: string          # "auto" | "manual" | "off" (default: "auto")
+  strict_mode: boolean          # Fail on warnings/notices (default: false)
+  tracking_table: string        # Tracking table name (default: tb_confiture)
+  snapshot_history: boolean     # Write schema snapshots (default: true)
 ```
 
 ### Database URL Format

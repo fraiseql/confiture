@@ -146,6 +146,7 @@ confiture migrate up
 
 ### Advanced Topics
 - [Git-Aware Schema Validation](guides/git-aware-validation.md) - Pre-commit hooks and CI/CD validation (NEW!)
+- [View Helpers](guides/view-helpers.md) - Manage dependent views during column changes
 - [Dry-Run Mode](guides/dry-run.md) - Test migrations safely
 - [Hooks](guides/hooks.md) - Before/after migration hooks
 - [Anonymization](guides/anonymization.md) - Custom data masking

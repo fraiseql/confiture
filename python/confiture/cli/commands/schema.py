@@ -119,6 +119,13 @@ database:
   database: myapp_local
   user: postgres
   password: postgres
+
+migration:
+  # View helper mode for ALTER COLUMN TYPE with dependent views.
+  #   auto   — install helper functions on first migrate up (default)
+  #   manual — you run `confiture admin install-helpers` yourself
+  #   off    — disabled; manage views in your migration SQL
+  view_helpers: auto
 """
         )
 

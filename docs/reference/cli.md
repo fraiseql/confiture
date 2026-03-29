@@ -1558,6 +1558,55 @@ For comprehensive guide including decision trees, integration examples, and best
 
 ---
 
+## `confiture admin`
+
+Administrative commands for database setup and maintenance.
+
+### `confiture admin install-helpers`
+
+Install view helper functions for managing dependent views during column changes.
+
+```bash
+confiture admin install-helpers [OPTIONS]
+```
+
+#### Options
+
+| Option | Description |
+|--------|-------------|
+| `--env, -e` | Environment name (default: `local`) |
+| `--config, -c` | Configuration file path |
+| `--dry-run` | Show SQL without executing |
+| `--force` | Reinstall even if already installed |
+
+#### What It Installs
+
+Creates a `confiture` schema with two PL/pgSQL functions:
+
+- `confiture.save_and_drop_dependent_views(schemas TEXT[])` — save and drop all views depending on tables in given schemas
+- `confiture.recreate_saved_views()` — recreate previously saved views in correct dependency order
+
+These are used in migrations that rename columns or change column types on tables with dependent views.
+
+#### Examples
+
+```bash
+# Install helpers for local environment
+confiture admin install-helpers
+
+# Preview the SQL that would run
+confiture admin install-helpers --dry-run
+
+# Reinstall after upgrading confiture
+confiture admin install-helpers --force
+```
+
+With `migration.view_helpers: auto` (the default), helpers are installed automatically on the first `confiture migrate up`. This command is only needed with `view_helpers: manual`.
+
+See the [View Helpers guide](../guides/view-helpers.md) for usage in migrations.
+
+---
+
 ## Error Handling
 
 ### Common Errors and Solutions
