@@ -466,9 +466,11 @@ class Migrator:
             if isinstance(e, psycopg.Error) and _VIEW_COLUMN_RENAME_RE.search(str(e)):
                 hint = (
                     "Dependent views block this column change. "
-                    "Ensure 'migration.view_helpers' is not set to 'off' or 'manual' in your environment config, "
-                    "then call confiture.save_and_drop_dependent_views() before the ALTER "
-                    "and confiture.recreate_saved_views() after it"
+                    "Call confiture.save_and_drop_dependent_views() before the ALTER "
+                    "and confiture.recreate_saved_views() after it. "
+                    "If you renamed a column, views referencing the old name cannot be "
+                    "auto-recreated — check SELECT schema_name, view_name, error_message, "
+                    "definition FROM confiture.saved_views for preserved definitions"
                 )
             raise MigrationError(
                 f"Failed to apply migration {migration.version} ({migration.name}): {e}",
@@ -528,9 +530,11 @@ class Migrator:
             if isinstance(e, psycopg.Error) and _VIEW_COLUMN_RENAME_RE.search(str(e)):
                 hint = (
                     "Dependent views block this column change. "
-                    "Ensure 'migration.view_helpers' is not set to 'off' or 'manual' in your environment config, "
-                    "then call confiture.save_and_drop_dependent_views() before the ALTER "
-                    "and confiture.recreate_saved_views() after it"
+                    "Call confiture.save_and_drop_dependent_views() before the ALTER "
+                    "and confiture.recreate_saved_views() after it. "
+                    "If you renamed a column, views referencing the old name cannot be "
+                    "auto-recreated — check SELECT schema_name, view_name, error_message, "
+                    "definition FROM confiture.saved_views for preserved definitions"
                 )
             raise MigrationError(
                 f"Failed to apply non-transactional migration "

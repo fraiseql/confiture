@@ -24,12 +24,18 @@ Usage in a Python migration::
 
             self.execute("ALTER TABLE tb_machine ALTER COLUMN pk_machine TYPE BIGINT")
 
-            vm.recreate_saved_views()
+            result = vm.recreate_saved_views()
+            if result.failed:
+                # Some views could not be recreated (e.g. after a column rename).
+                # Their definitions are preserved in vm.get_failed_views().
+                for view, error in result.failed:
+                    print(f"  WARNING: {view.schema}.{view.name}: {error}")
 """
 
 import logging
 from dataclasses import dataclass, field
 from importlib import resources
+from typing import Any
 
 import psycopg
 
@@ -134,6 +140,67 @@ class SavedView:
     indexes: list[SavedViewIndex] = field(default_factory=list)
     comment: str | None = None
 
+    @property
+    def qualified_name(self) -> str:
+        """Return schema.name for display."""
+        return f"{self.schema}.{self.name}"
+
+
+@dataclass
+class RecreateResult:
+    """Result of recreate_saved_views() — tracks successes and failures.
+
+    Attributes:
+        recreated: Views that were successfully recreated.
+        failed: Views that failed, each as a (SavedView, error_message) tuple.
+            The SavedView.definition contains the original SQL body that
+            the user needs to adapt manually.
+
+    Example::
+
+        result = vm.recreate_saved_views()
+        if result.failed:
+            for view, error in result.failed:
+                print(f"  {view.schema}.{view.name}: {error}")
+                print(f"  Definition: {view.definition[:80]}...")
+    """
+
+    recreated: list[SavedView] = field(default_factory=list)
+    failed: list[tuple[SavedView, str]] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        """Total number of views that were attempted."""
+        return len(self.recreated) + len(self.failed)
+
+    @property
+    def all_succeeded(self) -> bool:
+        """True if every view was recreated successfully."""
+        return len(self.failed) == 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "recreated_count": len(self.recreated),
+            "failed_count": len(self.failed),
+            "total": self.total,
+            "all_succeeded": self.all_succeeded,
+            "recreated": [
+                {"schema": v.schema, "name": v.name, "kind": v.kind}
+                for v in self.recreated
+            ],
+            "failed": [
+                {
+                    "schema": v.schema,
+                    "name": v.name,
+                    "kind": v.kind,
+                    "error": err,
+                    "definition": v.definition,
+                }
+                for v, err in self.failed
+            ],
+        }
+
 
 class ViewManager:
     """Manages view lifecycle during ALTER COLUMN TYPE migrations.
@@ -151,12 +218,16 @@ class ViewManager:
         vm = ViewManager(connection)
         vm.save_and_drop_dependent_views(schemas=["public"])
         # ... ALTER COLUMN TYPE statements ...
-        vm.recreate_saved_views()
+        result = vm.recreate_saved_views()
+        if result.failed:
+            for view, error in result.failed:
+                print(f"WARNING: {view.qualified_name}: {error}")
     """
 
     def __init__(self, connection: psycopg.Connection) -> None:
         self._conn = connection
         self._saved_views: list[SavedView] = []
+        self._failed_views: list[tuple[SavedView, str]] = []
 
     def install_helpers(self) -> None:
         """Install SQL helper functions in the target database.
@@ -258,6 +329,7 @@ class ViewManager:
             psycopg.Error: If a view cannot be dropped.
         """
         self._saved_views = self.discover_dependent_views(schemas)
+        self._failed_views = []
 
         if not self._saved_views:
             logger.info("No dependent views found — nothing to drop")
@@ -266,7 +338,7 @@ class ViewManager:
         logger.info(
             "Saving and dropping %d dependent view(s): %s",
             len(self._saved_views),
-            ", ".join(f"{v.schema}.{v.name}" for v in self._saved_views),
+            ", ".join(v.qualified_name for v in self._saved_views),
         )
 
         # Drop in reverse dependency order (deepest first — already sorted)
@@ -284,7 +356,7 @@ class ViewManager:
         self._conn.commit()
         return len(self._saved_views)
 
-    def recreate_saved_views(self) -> int:
+    def recreate_saved_views(self) -> RecreateResult:
         """Recreate all previously saved views in forward dependency order.
 
         Views are recreated shallowest-first so that views depending on
@@ -292,16 +364,26 @@ class ViewManager:
         views are created with ``WITH NO DATA`` then refreshed. Indexes
         and comments are restored.
 
-        Returns:
-            Number of views recreated.
+        **Resilient**: views that fail to recreate (e.g. after a column
+        rename that invalidates the saved definition) are skipped with a
+        warning. Their definitions are preserved in ``get_failed_views()``
+        so the caller can display diagnostics.
 
-        Raises:
-            RuntimeError: If no views have been saved (call save_and_drop first).
-            psycopg.Error: If a view cannot be recreated.
+        Returns:
+            RecreateResult with lists of recreated and failed views.
+
+        Example::
+
+            result = vm.recreate_saved_views()
+            if not result.all_succeeded:
+                for view, error in result.failed:
+                    print(f"  {view.qualified_name}: {error}")
         """
+        result = RecreateResult()
+
         if not self._saved_views:
             logger.info("No saved views to recreate")
-            return 0
+            return result
 
         # Recreate in forward order (shallowest first)
         ordered = sorted(self._saved_views, key=lambda v: (v.depth, v.schema, v.name))
@@ -309,7 +391,7 @@ class ViewManager:
         logger.info(
             "Recreating %d view(s): %s",
             len(ordered),
-            ", ".join(f"{v.schema}.{v.name}" for v in ordered),
+            ", ".join(v.qualified_name for v in ordered),
         )
 
         with self._conn.cursor() as cur:
@@ -317,34 +399,57 @@ class ViewManager:
                 qualified = f'"{view.schema}"."{view.name}"'
                 definition = view.definition.rstrip().rstrip(";")
 
-                if view.kind == "m":
-                    cur.execute(
-                        f"CREATE MATERIALIZED VIEW {qualified} AS {definition} WITH NO DATA"
+                # Use a savepoint so a single failure doesn't abort the batch
+                savepoint = f"recreate_{view.schema}_{view.name}"
+                cur.execute(f"SAVEPOINT {savepoint}")
+
+                try:
+                    if view.kind == "m":
+                        cur.execute(
+                            f"CREATE MATERIALIZED VIEW {qualified} AS {definition} WITH NO DATA"
+                        )
+                        cur.execute(f"REFRESH MATERIALIZED VIEW {qualified}")
+                    else:
+                        cur.execute(f"CREATE VIEW {qualified} AS {definition}")
+
+                    # Restore indexes (materialized views only)
+                    for idx in view.indexes:
+                        cur.execute(idx.definition)
+
+                    # Restore comment
+                    if view.comment:
+                        kind_label = "MATERIALIZED VIEW" if view.kind == "m" else "VIEW"
+                        escaped = view.comment.replace("'", "''")
+                        cur.execute(f"COMMENT ON {kind_label} {qualified} IS '{escaped}'")
+
+                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    result.recreated.append(view)
+                    logger.debug("Recreated %s %s", view.kind, qualified)
+
+                except psycopg.Error as e:
+                    cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    error_msg = str(e).strip()
+                    result.failed.append((view, error_msg))
+                    logger.warning(
+                        "Could not recreate %s %s: %s", view.kind, qualified, error_msg
                     )
-                    cur.execute(f"REFRESH MATERIALIZED VIEW {qualified}")
-                    logger.debug("Recreated MATERIALIZED VIEW %s", qualified)
-                else:
-                    cur.execute(f"CREATE VIEW {qualified} AS {definition}")
-                    logger.debug("Recreated VIEW %s", qualified)
-
-                # Restore indexes (materialized views only)
-                for idx in view.indexes:
-                    cur.execute(idx.definition)
-                    logger.debug("Recreated index %s", idx.name)
-
-                # Restore comment
-                if view.comment:
-                    kind_label = "MATERIALIZED VIEW" if view.kind == "m" else "VIEW"
-                    # COMMENT ON is DDL and doesn't support parameterized queries,
-                    # so we must use a literal. Escape single quotes for safety.
-                    escaped = view.comment.replace("'", "''")
-                    cur.execute(f"COMMENT ON {kind_label} {qualified} IS '{escaped}'")
 
         self._conn.commit()
 
-        count = len(self._saved_views)
+        # Keep failed views accessible; clear succeeded ones
+        self._failed_views = list(result.failed)
         self._saved_views = []
-        return count
+
+        if result.failed:
+            logger.warning(
+                "%d of %d view(s) could not be recreated. "
+                "Use get_failed_views() to inspect their saved definitions.",
+                len(result.failed),
+                result.total,
+            )
+
+        return result
 
     def get_saved_views(self) -> list[SavedView]:
         """Return the currently saved views (for inspection/debugging).
@@ -353,6 +458,20 @@ class ViewManager:
             List of SavedView objects currently held in memory.
         """
         return list(self._saved_views)
+
+    def get_failed_views(self) -> list[tuple[SavedView, str]]:
+        """Return views that failed to recreate, with their error messages.
+
+        Each entry is a ``(SavedView, error_message)`` tuple. The
+        ``SavedView.definition`` contains the original SQL body from
+        ``pg_get_viewdef`` — the user must adapt it to the new schema
+        and recreate the view manually.
+
+        Returns:
+            List of (SavedView, error_message) tuples. Empty if the last
+            ``recreate_saved_views()`` call succeeded fully.
+        """
+        return list(self._failed_views)
 
     # ------------------------------------------------------------------
     # Private helpers

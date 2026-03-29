@@ -47,7 +47,7 @@ class IdempotencyPattern(Enum):
             IdempotencyPattern.CREATE_UNIQUE_INDEX: "Use CREATE UNIQUE INDEX IF NOT EXISTS",
             IdempotencyPattern.CREATE_FUNCTION: "Use CREATE OR REPLACE FUNCTION",
             IdempotencyPattern.CREATE_PROCEDURE: "Use CREATE OR REPLACE PROCEDURE",
-            IdempotencyPattern.CREATE_VIEW: "Use CREATE OR REPLACE VIEW",
+            IdempotencyPattern.CREATE_VIEW: "Use DROP VIEW IF EXISTS CASCADE + CREATE VIEW",
             IdempotencyPattern.CREATE_TYPE: "Wrap in DO block with pg_type check",
             IdempotencyPattern.CREATE_EXTENSION: "Use CREATE EXTENSION IF NOT EXISTS",
             IdempotencyPattern.CREATE_SCHEMA: "Use CREATE SCHEMA IF NOT EXISTS",

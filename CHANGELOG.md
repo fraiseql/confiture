@@ -5,6 +5,33 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.15] - 2026-03-29
+
+### Fixed
+
+- **IdempotencyFixer no longer produces `CREATE OR REPLACE VIEW`** (issue #98).
+  The fixer rewrote `CREATE VIEW` → `CREATE OR REPLACE VIEW`, which PostgreSQL
+  rejects with "cannot change name of view column" when columns are renamed or
+  reordered. The safe idempotent pattern is now `DROP VIEW IF EXISTS CASCADE` +
+  `CREATE VIEW`. When a `DROP VIEW` already precedes the `CREATE VIEW`, the
+  fixer leaves it unchanged.
+
+- **Idempotency validator recognizes `DROP + CREATE VIEW` as idempotent**
+  (issue #98). `confiture migrate validate --idempotent` no longer reports
+  false positives after `confiture migrate fix --idempotent` has been applied.
+
+### Changed
+
+- **`recreate_saved_views()` is now resilient to partial failures** (issue #98).
+  Views that fail to recreate (e.g. after a column rename that invalidates their
+  saved definition) are skipped instead of aborting the entire batch. Failed
+  definitions are preserved in `confiture.saved_views` with an `error_message`
+  column for inspection. The SQL function emits `RAISE NOTICE` diagnostics and
+  the Python API returns a `RecreateResult` with `.recreated` / `.failed` lists.
+
+- **`RecreateResult` dataclass** added to `confiture.core.view_manager` with
+  structured output (`.to_dict()`) for JSON consumers.
+
 ## [0.8.14] - 2026-03-29
 
 ### Added

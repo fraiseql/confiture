@@ -236,15 +236,43 @@ class IdempotencyFixer:
         return pattern.sub("CREATE OR REPLACE PROCEDURE ", sql)
 
     def _fix_create_view(self, sql: str) -> str:
-        """Add OR REPLACE to CREATE VIEW statements."""
+        """Make CREATE VIEW idempotent via DROP IF EXISTS + CREATE VIEW.
+
+        Unlike functions/procedures, CREATE OR REPLACE VIEW is not safe for
+        views that rename or reorder columns — PostgreSQL rejects it with
+        "cannot change name of view column". The safe idempotent pattern is
+        DROP VIEW IF EXISTS CASCADE followed by CREATE VIEW.
+
+        If a DROP VIEW already precedes the CREATE VIEW for the same name,
+        the statement is already idempotent and is left unchanged.
+        """
         if not self._should_fix(IdempotencyPattern.CREATE_VIEW):
             return sql
 
-        pattern = re.compile(
-            r"CREATE\s+VIEW\s+(?!OR\s+REPLACE\b)",
+        # Find all CREATE VIEW statements (without OR REPLACE)
+        create_pattern = re.compile(
+            r"CREATE\s+VIEW\s+(?!OR\s+REPLACE\b)((?:(?:\w+|\"[^\"]+\")\.)?(?:\w+|\"[^\"]+\"))",
             re.IGNORECASE,
         )
-        return pattern.sub("CREATE OR REPLACE VIEW ", sql)
+        # Check for preceding DROP VIEW for the same view name
+        drop_pattern = re.compile(
+            r"DROP\s+VIEW\s+(?:IF\s+EXISTS\s+)?((?:(?:\w+|\"[^\"]+\")\.)?(?:\w+|\"[^\"]+\"))"
+            r"(?:\s+CASCADE|\s+RESTRICT)?\s*;",
+            re.IGNORECASE,
+        )
+
+        # Collect all view names that already have a preceding DROP VIEW
+        dropped_views: set[str] = set()
+        for m in drop_pattern.finditer(sql):
+            dropped_views.add(m.group(1).lower().replace('"', ""))
+
+        def _replace(match: re.Match[str]) -> str:
+            view_name = match.group(1).lower().replace('"', "")
+            if view_name in dropped_views:
+                return match.group(0)  # Already idempotent via DROP + CREATE
+            return f"DROP VIEW IF EXISTS {match.group(1)} CASCADE;\n{match.group(0)}"
+
+        return create_pattern.sub(_replace, sql)
 
     def _fix_create_extension(self, sql: str) -> str:
         """Add IF NOT EXISTS to CREATE EXTENSION statements."""

@@ -308,6 +308,43 @@ def _is_in_do_block(position: int, do_blocks: list[tuple[int, int]]) -> bool:
     return any(start <= position <= end for start, end in do_blocks)
 
 
+def _filter_drop_create_view_pairs(sql: str, matches: list[PatternMatch]) -> list[PatternMatch]:
+    """Remove CREATE VIEW violations that are preceded by DROP VIEW IF EXISTS.
+
+    The DROP IF EXISTS + CREATE VIEW pattern is the correct idempotent
+    approach for views (unlike CREATE OR REPLACE VIEW, it handles column
+    renames safely). This function detects pairs and removes the CREATE VIEW
+    violation from the match list.
+    """
+    # Collect view names that have a DROP VIEW IF EXISTS
+    drop_pattern = re.compile(
+        r"DROP\s+VIEW\s+IF\s+EXISTS\s+((?:(?:\w+|\"[^\"]+\")\.)?(?:\w+|\"[^\"]+\"))",
+        re.IGNORECASE,
+    )
+    dropped_views: set[str] = set()
+    for m in drop_pattern.finditer(sql):
+        dropped_views.add(m.group(1).lower().replace('"', ""))
+
+    if not dropped_views:
+        return matches
+
+    # Extract the view name from a CREATE VIEW match snippet
+    create_view_re = re.compile(
+        r"CREATE\s+VIEW\s+((?:(?:\w+|\"[^\"]+\")\.)?(?:\w+|\"[^\"]+\"))",
+        re.IGNORECASE,
+    )
+
+    filtered: list[PatternMatch] = []
+    for match in matches:
+        if match.pattern == IdempotencyPattern.CREATE_VIEW:
+            m = create_view_re.search(match.sql_snippet)
+            if m and m.group(1).lower().replace('"', "") in dropped_views:
+                continue  # Already idempotent via DROP + CREATE
+        filtered.append(match)
+
+    return filtered
+
+
 def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
     """Detect non-idempotent SQL patterns in the given SQL.
 
@@ -362,6 +399,12 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
                     end_pos=match.end(),
                 )
             )
+
+    # Filter out CREATE VIEW violations that are already idempotent via
+    # a preceding DROP VIEW IF EXISTS for the same view name.
+    # CREATE OR REPLACE VIEW is unsafe for column renames, so the correct
+    # idempotent pattern for views is DROP IF EXISTS + CREATE VIEW.
+    matches = _filter_drop_create_view_pairs(sql, matches)
 
     # Sort by position to maintain order
     matches.sort(key=lambda m: m.start_pos)

@@ -126,14 +126,16 @@ class TestCreateFunctionFix:
 class TestCreateViewFix:
     """Tests for CREATE VIEW auto-fix."""
 
-    def test_adds_or_replace_to_create_view(self):
-        """Adds OR REPLACE to CREATE VIEW."""
+    def test_adds_drop_if_exists_before_create_view(self):
+        """Adds DROP VIEW IF EXISTS CASCADE before CREATE VIEW (not OR REPLACE)."""
         sql = "CREATE VIEW v_users AS SELECT * FROM users;"
         fixer = IdempotencyFixer()
 
         result = fixer.fix(sql)
 
-        assert "CREATE OR REPLACE VIEW v_users" in result
+        assert "DROP VIEW IF EXISTS v_users CASCADE;" in result
+        assert "CREATE VIEW v_users" in result
+        assert "CREATE OR REPLACE VIEW" not in result
 
 
 class TestCreateProcedureFix:
