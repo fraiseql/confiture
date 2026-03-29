@@ -124,6 +124,7 @@ class BuildConfig(BaseModel):
     """Build configuration options."""
 
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
+    two_pass: bool = False  # Two-pass FK emission (issue #94)
     validate_comments: CommentValidationConfig = Field(default_factory=CommentValidationConfig)
     separators: SeparatorConfig = Field(default_factory=SeparatorConfig)
     lint: BuildLintConfig = Field(default_factory=BuildLintConfig)

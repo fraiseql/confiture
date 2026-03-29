@@ -204,6 +204,11 @@ def build(
         "--fail-on-spillover/--no-fail-on-spillover",
         help="Fail on comment spillover into next file (default: from config)",
     ),
+    two_pass: bool | None = typer.Option(
+        None,
+        "--two-pass/--no-two-pass",
+        help="Two-pass FK emission: strip REFERENCES from CREATE TABLE, emit ALTER TABLE after (default: from config)",
+    ),
     separator_style: str | None = typer.Option(
         None,
         "--separator-style",
@@ -270,7 +275,7 @@ def build(
       CORE: --env, --output
         Essential options for basic usage
 
-      ADVANCED: --show-hash, --schema-only, --separator-style, --separator-template
+      ADVANCED: --show-hash, --schema-only, --two-pass, --separator-style, --separator-template
         Optional parameters for customizing output format
 
       STRUCTURED OUTPUT: --format, --report
@@ -291,6 +296,10 @@ def build(
             builder.env_config.build.validate_comments.fail_on_unclosed_blocks = fail_on_unclosed
         if fail_on_spillover is not None:
             builder.env_config.build.validate_comments.fail_on_spillover = fail_on_spillover
+
+        # Apply CLI override for two-pass FK emission
+        if two_pass is not None:
+            builder.env_config.build.two_pass = two_pass
 
         # Apply CLI overrides for separator style
         if separator_style is not None:
@@ -318,6 +327,7 @@ def build(
         # Show overrides if any were applied
         overrides_applied = any(
             [
+                two_pass is not None,
                 validate_comments is not None,
                 fail_on_unclosed is not None,
                 fail_on_spillover is not None,
@@ -327,6 +337,8 @@ def build(
         )
         if overrides_applied:
             console.print("[cyan]📝 Configuration overrides applied:[/cyan]")
+            if two_pass is not None:
+                console.print(f"  • Two-pass FK emission: {two_pass}")
             if validate_comments is not None:
                 console.print(f"  • Comment validation: {validate_comments}")
             if fail_on_unclosed is not None:

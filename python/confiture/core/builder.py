@@ -571,6 +571,21 @@ class SchemaBuilder:
             # Pure Python implementation (fallback)
             schema = self._build_python(header, files, progress=progress)
 
+        # Two-pass FK processing: strip FK constraints from CREATE TABLE,
+        # then emit ALTER TABLE ADD CONSTRAINT at the end (issue #94)
+        if self.env_config.build.two_pass:
+            from confiture.core.fk_extractor import (
+                extract_and_strip_fks,
+                generate_alter_statements,
+            )
+
+            stripped_sql, fk_infos = extract_and_strip_fks(schema)
+            if fk_infos:
+                alter_block = generate_alter_statements(fk_infos)
+                schema = stripped_sql + "\n" + alter_block + "\n"
+            else:
+                schema = stripped_sql
+
         if progress and process_task is not None:
             progress.finish_task(process_task)
 
