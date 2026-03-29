@@ -300,9 +300,7 @@ class MigrationChecksumVerifier:
         for m in mismatches:
             expected = m.expected[:12] + "..." if m.expected else "(none)"
             actual = m.actual[:12] + "..."
-            msg_lines.append(
-                f"  - {m.version}_{m.name}: expected {expected}, got {actual}"
-            )
+            msg_lines.append(f"  - {m.version}_{m.name}: expected {expected}, got {actual}")
 
         message = "\n".join(msg_lines)
 

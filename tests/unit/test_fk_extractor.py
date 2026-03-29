@@ -998,15 +998,12 @@ class TestSqlStructureValidity:
         # No double commas
         assert ",," not in re.sub(r"\s+", "", sql), "Double comma found"
         # No comma before closing paren (ignoring whitespace)
-        assert not re.search(
-            r",\s*\)", sql
-        ), f"Trailing comma before ) found in:\n{sql}"
+        assert not re.search(r",\s*\)", sql), f"Trailing comma before ) found in:\n{sql}"
         # No dangling CONSTRAINT keyword without content
         for line in sql.split("\n"):
             s = line.strip()
             if s.upper().startswith("CONSTRAINT") and not any(
-                kw in s.upper()
-                for kw in ("CHECK", "UNIQUE", "PRIMARY", "EXCLUDE", "FOREIGN")
+                kw in s.upper() for kw in ("CHECK", "UNIQUE", "PRIMARY", "EXCLUDE", "FOREIGN")
             ):
                 # A CONSTRAINT keyword alone with no constraint type = leftover
                 msg = f"Dangling CONSTRAINT keyword: {line!r}"

@@ -252,7 +252,9 @@ class TestRecreateResult:
 
     def test_all_succeeded(self):
         """All succeeded when failed list is empty."""
-        view = SavedView(oid=1, schema="public", name="v1", kind="v", depth=0, definition="SELECT 1")
+        view = SavedView(
+            oid=1, schema="public", name="v1", kind="v", depth=0, definition="SELECT 1"
+        )
         result = RecreateResult(recreated=[view])
 
         assert result.total == 1
@@ -261,7 +263,14 @@ class TestRecreateResult:
     def test_partial_failure(self):
         """Partial failure correctly reported."""
         ok = SavedView(oid=1, schema="public", name="v1", kind="v", depth=0, definition="SELECT 1")
-        bad = SavedView(oid=2, schema="public", name="v2", kind="v", depth=1, definition="SELECT old_col FROM v1")
+        bad = SavedView(
+            oid=2,
+            schema="public",
+            name="v2",
+            kind="v",
+            depth=1,
+            definition="SELECT old_col FROM v1",
+        )
         result = RecreateResult(recreated=[ok], failed=[(bad, "column old_col does not exist")])
 
         assert result.total == 2
@@ -271,7 +280,9 @@ class TestRecreateResult:
 
     def test_to_dict(self):
         """to_dict produces correct structure."""
-        view = SavedView(oid=1, schema="public", name="v1", kind="v", depth=0, definition="SELECT 1")
+        view = SavedView(
+            oid=1, schema="public", name="v1", kind="v", depth=0, definition="SELECT 1"
+        )
         result = RecreateResult(
             recreated=[view],
             failed=[(view, "some error")],

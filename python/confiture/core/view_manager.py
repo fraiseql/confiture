@@ -186,8 +186,7 @@ class RecreateResult:
             "total": self.total,
             "all_succeeded": self.all_succeeded,
             "recreated": [
-                {"schema": v.schema, "name": v.name, "kind": v.kind}
-                for v in self.recreated
+                {"schema": v.schema, "name": v.name, "kind": v.kind} for v in self.recreated
             ],
             "failed": [
                 {
@@ -431,9 +430,7 @@ class ViewManager:
                     cur.execute(f"RELEASE SAVEPOINT {savepoint}")
                     error_msg = str(e).strip()
                     result.failed.append((view, error_msg))
-                    logger.warning(
-                        "Could not recreate %s %s: %s", view.kind, qualified, error_msg
-                    )
+                    logger.warning("Could not recreate %s %s: %s", view.kind, qualified, error_msg)
 
         self._conn.commit()
 
