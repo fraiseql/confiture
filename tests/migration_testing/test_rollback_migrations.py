@@ -528,11 +528,9 @@ def test_rollback_preserves_system_state(test_db_connection):
         test_db_connection.commit()
 
         # Get state after - should have new sequence for the serial column
-        cur.execute(
-            "SELECT count(*) FROM pg_sequences WHERE schemaname = 'public' AND sequencename LIKE '%rb_sys%'"
-        )
+        cur.execute("SELECT pg_get_serial_sequence('rb_sys', 'id')")
         result = cur.fetchone()
-        assert result is not None and result[0] >= 1, "Should have a sequence for BIGSERIAL"
+        assert result is not None and result[0] is not None, "Should have a sequence for BIGSERIAL"
 
 
 def test_rollback_idempotent_operations(test_db_connection):
