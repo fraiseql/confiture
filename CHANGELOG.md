@@ -5,6 +5,25 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.16] - 2026-03-29
+
+### Fixed
+
+- **`reinit()` no longer fails with NOT NULL violation on `tb_confiture.id`**
+  (issue #99). All tracking table INSERTs (`_record_migration`, `mark_applied`,
+  `reinit`) now explicitly provide `gen_random_uuid()` for the `id` column
+  instead of relying on the table's DEFAULT. This also removes the dependency
+  on the `uuid-ossp` extension for the tracking table — `gen_random_uuid()` is
+  built into PostgreSQL 13+ with no extension required.
+
+### Changed
+
+- **Tracking table creation uses `gen_random_uuid()`** instead of
+  `uuid_generate_v4()`. The `CREATE EXTENSION "uuid-ossp"` call has been
+  removed from `initialize()` since it is no longer needed for the tracking
+  table. User schemas that depend on `uuid-ossp` are unaffected — they should
+  declare the extension in their own DDL files.
+
 ## [0.8.15] - 2026-03-29
 
 ### Fixed

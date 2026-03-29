@@ -2,7 +2,7 @@
 -- External identifier: UUID, Internal sequence: BIGINT, Natural key: slug
 
 CREATE TABLE IF NOT EXISTS tb_confiture (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
     slug TEXT NOT NULL UNIQUE,
     version VARCHAR(255) NOT NULL UNIQUE,

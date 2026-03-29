@@ -250,9 +250,6 @@ class Migrator:
             MigrationError: If table creation fails
         """
         try:
-            # Enable UUID extension
-            self._execute_sql('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
-
             # Check if table exists (schema-aware)
             with self.connection.cursor() as cursor:
                 if self._table_schema is not None:
@@ -283,7 +280,7 @@ class Migrator:
                 self._execute_sql(
                     pgsql.SQL("""
                     CREATE TABLE {} (
-                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
                         slug TEXT NOT NULL UNIQUE,
                         version VARCHAR(255) NOT NULL UNIQUE,
@@ -597,8 +594,8 @@ class Migrator:
             cursor.execute(
                 pgsql.SQL("""
                 INSERT INTO {}
-                    (slug, version, name, execution_time_ms, checksum)
-                VALUES (%s, %s, %s, %s, %s)
+                    (id, slug, version, name, execution_time_ms, checksum)
+                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
                 """).format(self._table_ident),
                 (slug, migration.version, migration.name, execution_time_ms, checksum),
             )
@@ -659,8 +656,8 @@ class Migrator:
             cursor.execute(
                 pgsql.SQL("""
                 INSERT INTO {}
-                    (slug, version, name, execution_time_ms, checksum)
-                VALUES (%s, %s, %s, %s, %s)
+                    (id, slug, version, name, execution_time_ms, checksum)
+                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
                 """).format(self._table_ident),
                 (slug, migration.version, migration.name, 0, checksum),
             )
@@ -770,8 +767,8 @@ class Migrator:
                     cursor.execute(
                         pgsql.SQL("""
                         INSERT INTO {}
-                            (slug, version, name, execution_time_ms, checksum)
-                        VALUES (%s, %s, %s, %s, %s)
+                            (id, slug, version, name, execution_time_ms, checksum)
+                        VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
                         """).format(self._table_ident),
                         (slug, migration.version, migration.name, 0, checksum),
                     )
