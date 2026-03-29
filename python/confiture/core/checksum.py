@@ -64,7 +64,7 @@ class ChecksumMismatch:
     version: str
     name: str
     file_path: Path
-    expected: str
+    expected: str | None
     actual: str
 
 
@@ -298,8 +298,10 @@ class MigrationChecksumVerifier:
         # Build message
         msg_lines = ["Checksum verification found modified migrations:"]
         for m in mismatches:
+            expected = m.expected[:12] + "..." if m.expected else "(none)"
+            actual = m.actual[:12] + "..."
             msg_lines.append(
-                f"  - {m.version}_{m.name}: expected {m.expected[:12]}..., got {m.actual[:12]}..."
+                f"  - {m.version}_{m.name}: expected {expected}, got {actual}"
             )
 
         message = "\n".join(msg_lines)

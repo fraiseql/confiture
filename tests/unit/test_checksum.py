@@ -248,6 +248,52 @@ class TestMigrationChecksumVerifier:
         assert result[0].version == "001"
         assert result[0].expected is None
 
+    def test_verify_null_checksum_fail_does_not_crash(self, tmp_path):
+        """Test that NULL checksum with FAIL behavior raises without TypeError (issue #96)."""
+        migration_file = tmp_path / "001_create_users.py"
+        migration_file.write_text("def up(): pass")
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [
+            ("001", "create_users", None),
+        ]
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        config = ChecksumConfig(on_mismatch=ChecksumMismatchBehavior.FAIL)
+        verifier = MigrationChecksumVerifier(mock_conn, config)
+
+        with pytest.raises(ChecksumVerificationError) as exc_info:
+            verifier.verify_all(tmp_path)
+
+        assert len(exc_info.value.mismatches) == 1
+        assert exc_info.value.mismatches[0].expected is None
+
+    def test_verify_null_checksum_warn_does_not_crash(self, tmp_path, caplog):
+        """Test that NULL checksum with WARN behavior logs without TypeError (issue #96)."""
+        import logging
+
+        migration_file = tmp_path / "001_create_users.py"
+        migration_file.write_text("def up(): pass")
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [
+            ("001", "create_users", None),
+        ]
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        config = ChecksumConfig(on_mismatch=ChecksumMismatchBehavior.WARN)
+        verifier = MigrationChecksumVerifier(mock_conn, config)
+
+        with caplog.at_level(logging.WARNING):
+            result = verifier.verify_all(tmp_path)
+
+        assert len(result) == 1
+        assert "(none)" in caplog.text
+
     def test_verify_match(self, tmp_path):
         """Test verification when checksums match."""
         # Create migration file

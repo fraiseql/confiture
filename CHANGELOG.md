@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   body instead of line-by-line, correctly removing multi-line constraints and
   cleaning up trailing commas.
 
+- **Checksum verification crashes on NULL checksum** (issue #96). When a
+  migration record in `tb_confiture` has `checksum = NULL` (e.g. manually
+  inserted hotfix), `_handle_mismatches` crashed with `TypeError: 'NoneType'
+  object is not subscriptable`. NULL checksums are now displayed as `(none)`
+  and `ChecksumMismatch.expected` type annotation corrected to `str | None`.
+
 ## [0.8.13] - 2026-03-29
 
 ### Fixed
