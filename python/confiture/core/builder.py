@@ -797,6 +797,13 @@ class SchemaBuilder:
         The hash includes both file paths and content, ensuring that any change
         to the schema (content or structure) is detected.
 
+        The hash reflects **what** SQL is generated (``include_dirs`` file
+        contents and paths) — not **how** it is deployed.  In particular,
+        ``superuser_dirs`` (which only controls file partitioning in
+        ``build_split()``) is deliberately excluded so that adding or
+        changing it does not invalidate caches or trigger unnecessary
+        rebuilds (see issue #103).
+
         Performance: Uses Rust extension when available for 30-60x speedup.
 
         Returns:

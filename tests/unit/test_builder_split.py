@@ -138,6 +138,49 @@ include_dirs:
 class TestBuildSplitBackwardCompatibility:
     """Ensure build_split doesn't affect build()."""
 
+    def test_compute_hash_stable_with_superuser_dirs(self, tmp_path):
+        """compute_hash() must not change when superuser_dirs is added (issue #103).
+
+        superuser_dirs is a deployment-time concern that partitions the same
+        set of files — it does not change what SQL gets executed, only which
+        connection applies it.
+        """
+        schema_dir = tmp_path / "db" / "schema"
+        security_dir = schema_dir / "00_common" / "000_security"
+        tables_dir = schema_dir / "10_tables"
+        security_dir.mkdir(parents=True)
+        tables_dir.mkdir(parents=True)
+
+        (security_dir / "roles.sql").write_text("CREATE ROLE app_role;\n")
+        (security_dir / "extensions.sql").write_text("CREATE EXTENSION pgcrypto;\n")
+        (tables_dir / "users.sql").write_text("CREATE TABLE users (id serial);\n")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+
+        # Config WITHOUT superuser_dirs
+        (config_dir / "without.yaml").write_text(f"""
+name: without
+database_url: postgresql://localhost/test
+include_dirs:
+  - {schema_dir}
+""")
+
+        # Config WITH superuser_dirs (same include_dirs, same SQL files)
+        (config_dir / "with_su.yaml").write_text(f"""
+name: with_su
+database_url: postgresql://localhost/test
+include_dirs:
+  - {schema_dir}
+superuser_dirs:
+  - {security_dir}
+""")
+
+        builder_without = SchemaBuilder(env="without", project_dir=tmp_path)
+        builder_with_su = SchemaBuilder(env="with_su", project_dir=tmp_path)
+
+        assert builder_without.compute_hash() == builder_with_su.compute_hash()
+
     def test_build_still_produces_single_file(self, tmp_path):
         """build() is unaffected by superuser_dirs config."""
         schema_dir = tmp_path / "db" / "schema"

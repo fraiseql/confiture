@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`build_split()` accepts `str | Path` for `output_dir`**
   (fraiseql/fraiseql#161). Passing a plain string no longer raises `TypeError`.
 
+- **`compute_hash()` is now explicitly independent of `superuser_dirs`**
+  (issue #103). Adding or changing `superuser_dirs` in the environment YAML
+  no longer risks invalidating caches or triggering unnecessary rebuilds.
+  The hash reflects only file content and paths from `include_dirs`, not
+  deployment-time partitioning config. Added regression test.
+
 ## [0.8.17] - 2026-03-30
 
 ### Added
