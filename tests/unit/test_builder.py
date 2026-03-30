@@ -2,6 +2,7 @@
 
 import pytest
 
+from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
 from confiture.exceptions import ConfigurationError, SchemaError
 
@@ -798,3 +799,67 @@ database_url: postgresql://localhost/test
         assert "INSERT INTO users" not in schema_only
         # Full build should contain both
         assert "INSERT INTO users" in schema_all
+
+
+class TestSchemaBuilderAcceptsEnvironment:
+    """Test that SchemaBuilder accepts a pre-loaded Environment (issue #160)."""
+
+    def _make_project(self, tmp_path):
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+        (schema_dir / "tables.sql").write_text("CREATE TABLE t (id serial);\n")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        (config_dir / "test.yaml").write_text(f"""
+name: test
+database_url: postgresql://localhost/test
+include_dirs:
+  - {schema_dir}
+""")
+        return schema_dir
+
+    def test_init_with_environment_object(self, tmp_path):
+        """SchemaBuilder(env=Environment(...)) should work without re-loading."""
+        self._make_project(tmp_path)
+        env = Environment.load("test", project_dir=tmp_path)
+        builder = SchemaBuilder(env=env)
+
+        assert builder.env_config is env
+        files = builder.find_sql_files()
+        assert len(files) == 1
+
+    def test_init_with_string_still_works(self, tmp_path):
+        """SchemaBuilder(env='test') should keep working as before."""
+        self._make_project(tmp_path)
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+
+        files = builder.find_sql_files()
+        assert len(files) == 1
+
+
+class TestBuildSplitAcceptsStr:
+    """Test that build_split() accepts str for output_dir (issue #161)."""
+
+    def _make_project(self, tmp_path):
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+        (schema_dir / "tables.sql").write_text("CREATE TABLE t (id serial);\n")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        (config_dir / "test.yaml").write_text(f"""
+name: test
+database_url: postgresql://localhost/test
+include_dirs:
+  - {schema_dir}
+""")
+
+    def test_build_split_with_str_output_dir(self, tmp_path):
+        """build_split(str) should not raise TypeError."""
+        self._make_project(tmp_path)
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        out = tmp_path / "out"
+
+        result = builder.build_split(output_dir=str(out))
+        assert result.success is True

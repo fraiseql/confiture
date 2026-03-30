@@ -6,7 +6,7 @@ philosophy and 4 migration strategies.
 Example:
     >>> from confiture import __version__
     >>> print(__version__)
-    0.8.17
+    0.8.18
 
 Library API example::
 
@@ -23,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.8.17"
+__version__ = "0.8.18"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 

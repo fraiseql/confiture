@@ -47,14 +47,19 @@ class SchemaBuilder:
         15234
     """
 
-    def __init__(self, env: str, project_dir: Path | None = None):
+    def __init__(self, env: str | Environment, project_dir: Path | None = None):
         """Initialize SchemaBuilder with recursive directory support
 
         Args:
-            env: Environment name (e.g., "local", "production")
+            env: Environment name (e.g., "local", "production") or a
+                pre-loaded Environment instance.
             project_dir: Project root directory. If None, uses current directory.
+                Ignored when *env* is already an Environment.
         """
-        self.env_config = Environment.load(env, project_dir=project_dir)
+        if isinstance(env, Environment):
+            self.env_config = env
+        else:
+            self.env_config = Environment.load(env, project_dir=project_dir)
 
         # Validate include_dirs
         if not self.env_config.include_dirs:
@@ -694,7 +699,7 @@ class SchemaBuilder:
 
     def build_split(
         self,
-        output_dir: Path,
+        output_dir: str | Path,
         schema_only: bool = False,
     ) -> SplitBuildResult:
         """Build schema split into superuser and app SQL files.
@@ -717,6 +722,8 @@ class SchemaBuilder:
             SchemaError: If schema build fails.
         """
         import time
+
+        output_dir = Path(output_dir)
 
         start = time.monotonic()
 
