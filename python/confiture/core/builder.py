@@ -15,6 +15,7 @@ from confiture.config.environment import Environment
 from confiture.core.progress import ProgressManager
 from confiture.core.validators import CommentValidator
 from confiture.exceptions import SchemaError
+from confiture.models.results import SplitBuildResult
 
 # Try to import Rust extension for 10-50x performance boost
 _core: Any = None
@@ -153,6 +154,16 @@ class SchemaBuilder:
         # Base directory for relative path calculation
         # Find the common parent of all include directories
         self.base_dir = self._find_common_parent(self.include_dirs)
+
+        # Resolve superuser_dirs to absolute paths for file classification
+        self._superuser_paths: list[Path] = []
+        for su_dir in self.env_config.superuser_dirs:
+            if isinstance(su_dir, str):
+                self._superuser_paths.append(Path(su_dir).resolve())
+            elif isinstance(su_dir, dict):
+                self._superuser_paths.append(Path(su_dir["path"]).resolve())
+            elif hasattr(su_dir, "path"):
+                self._superuser_paths.append(Path(su_dir.path).resolve())
 
     def _find_common_parent(self, paths: list[Path]) -> Path:
         """Find common parent directory of all paths.
@@ -666,6 +677,112 @@ class SchemaBuilder:
         """
         # Rust layer now includes file separators, just prepend main header
         return header + content
+
+    def _is_superuser_file(self, file_path: Path) -> bool:
+        """Check if a file belongs to a superuser directory.
+
+        A file is a superuser file if its resolved path is under any of the
+        directories listed in ``superuser_dirs``.
+
+        Args:
+            file_path: Absolute path to check.
+
+        Returns:
+            True if the file is under a superuser directory.
+        """
+        return any(file_path.is_relative_to(su_dir) for su_dir in self._superuser_paths)
+
+    def build_split(
+        self,
+        output_dir: Path,
+        schema_only: bool = False,
+    ) -> SplitBuildResult:
+        """Build schema split into superuser and app SQL files.
+
+        Files from directories listed in ``superuser_dirs`` are written to a
+        separate superuser output file.  Everything else goes to the app file.
+        Sort order is preserved across both files.
+
+        If ``superuser_dirs`` is empty or unset, the superuser file will be
+        empty and all files go to the app output.
+
+        Args:
+            output_dir: Directory to write the two output files into.
+            schema_only: If True, exclude seed files.
+
+        Returns:
+            SplitBuildResult with paths and metadata for both files.
+
+        Raises:
+            SchemaError: If schema build fails.
+        """
+        import time
+
+        start = time.monotonic()
+
+        files = self.find_sql_files()
+
+        if schema_only:
+            schema_files, _ = self.categorize_sql_files()
+            files = schema_files
+
+        self._validate_comments(files)
+
+        # Partition files
+        superuser_files: list[Path] = []
+        app_files: list[Path] = []
+        for f in files:
+            if self._is_superuser_file(f):
+                superuser_files.append(f)
+            else:
+                app_files.append(f)
+
+        env_name = self.env_config.name
+        superuser_path = output_dir / f"schema_{env_name}_superuser.sql"
+        app_path = output_dir / f"schema_{env_name}_app.sql"
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build superuser SQL
+        if superuser_files:
+            header = self._generate_header(len(superuser_files))
+            superuser_sql = self._build_python(header, superuser_files)
+        else:
+            superuser_sql = ""
+        superuser_path.write_text(superuser_sql, encoding="utf-8")
+
+        # Build app SQL
+        header = self._generate_header(len(app_files))
+        app_sql = self._build_python(header, app_files)
+
+        if self.env_config.build.two_pass:
+            from confiture.core.fk_extractor import (
+                extract_and_strip_fks,
+                generate_alter_statements,
+            )
+
+            stripped_sql, fk_infos = extract_and_strip_fks(app_sql)
+            if fk_infos:
+                alter_block = generate_alter_statements(fk_infos)
+                app_sql = stripped_sql + "\n" + alter_block + "\n"
+            else:
+                app_sql = stripped_sql
+
+        app_path.write_text(app_sql, encoding="utf-8")
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+
+        return SplitBuildResult(
+            success=True,
+            superuser_path=str(superuser_path),
+            app_path=str(app_path),
+            superuser_files=len(superuser_files),
+            app_files=len(app_files),
+            superuser_size_bytes=len(superuser_sql.encode("utf-8")),
+            app_size_bytes=len(app_sql.encode("utf-8")),
+            hash=self.compute_hash(),
+            execution_time_ms=elapsed_ms,
+        )
 
     def compute_hash(self) -> str:
         """Compute deterministic SHA256 hash of schema

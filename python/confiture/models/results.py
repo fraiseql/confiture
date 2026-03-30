@@ -141,6 +141,43 @@ class BuildResult:
 
 
 @dataclass
+class SplitBuildResult:
+    """Result of a split schema build operation.
+
+    Separates superuser SQL (roles, extensions) from app SQL
+    (schemas, tables, views, data) for two-phase apply.
+    """
+
+    success: bool
+    superuser_path: str
+    app_path: str
+    superuser_files: int
+    app_files: int
+    superuser_size_bytes: int
+    app_size_bytes: int
+    hash: str | None = None
+    execution_time_ms: int = 0
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "success": self.success,
+            "superuser_path": self.superuser_path,
+            "app_path": self.app_path,
+            "superuser_files": self.superuser_files,
+            "app_files": self.app_files,
+            "superuser_size_bytes": self.superuser_size_bytes,
+            "app_size_bytes": self.app_size_bytes,
+            "hash": self.hash,
+            "execution_time_ms": self.execution_time_ms,
+            "warnings": self.warnings,
+            "error": self.error,
+        }
+
+
+@dataclass
 class MigrationApplied:
     """Single migration that was applied.
 

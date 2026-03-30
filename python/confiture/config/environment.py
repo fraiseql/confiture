@@ -402,6 +402,7 @@ class Environment(BaseModel):
     name: str
     database_url: str
     include_dirs: list[str | DirectoryConfig]
+    superuser_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     exclude_dirs: list[str] = Field(default_factory=list)
     auto_backup: bool = True
     require_confirmation: bool = True
@@ -546,6 +547,29 @@ class Environment(BaseModel):
                 abs_path = (project_dir / dir_path).resolve()
                 exclude_dirs.append(str(abs_path))
             data["exclude_dirs"] = exclude_dirs
+
+        # Resolve superuser_dirs if present
+        if "superuser_dirs" in data:
+            resolved_superuser_dirs: list[str | dict[str, Any]] = []
+            for item in data["superuser_dirs"]:
+                if isinstance(item, str):
+                    abs_path = (project_dir / item).resolve()
+                    resolved_superuser_dirs.append(str(abs_path))
+                elif isinstance(item, dict):
+                    path_str = item.get("path")
+                    if not path_str:
+                        raise ConfigurationError(
+                            f"Missing 'path' field in superuser_dirs item: {item}\nIn {config_path}"
+                        )
+                    abs_path = (project_dir / path_str).resolve()
+                    resolved_item = item.copy()
+                    resolved_item["path"] = str(abs_path)
+                    resolved_superuser_dirs.append(resolved_item)
+                else:
+                    raise ConfigurationError(
+                        f"Invalid superuser_dirs item type: {type(item)}. Expected str or dict.\nIn {config_path}"
+                    )
+            data["superuser_dirs"] = resolved_superuser_dirs
 
         # Set environment name
         data["name"] = env_name

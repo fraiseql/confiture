@@ -5,6 +5,20 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.17] - 2026-03-30
+
+### Added
+
+- **`superuser_dirs` config for split schema builds** (issue #100).
+  Environment YAML now accepts a `superuser_dirs` list to classify directories
+  whose SQL requires PostgreSQL superuser privileges (roles, extensions).
+  `SchemaBuilder.build_split()` partitions files into two output files —
+  `schema_{env}_superuser.sql` and `schema_{env}_app.sql` — for two-phase
+  apply by deployment tools. Existing `build()` is unaffected.
+
+- **`SplitBuildResult` dataclass** in `confiture.models.results` — captures
+  paths, file counts, and sizes for both superuser and app outputs.
+
 ## [0.8.16] - 2026-03-29
 
 ### Fixed
