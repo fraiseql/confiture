@@ -562,29 +562,3 @@ class TestSchemaAnalyzer:
         )
 
         assert len(issues) == 0
-
-
-class TestSchemaAnalyzerIntegration:
-    """Integration tests for SchemaAnalyzer with real database."""
-
-    @pytest.fixture
-    def db_connection(self):
-        """Create test database connection if available."""
-        try:
-            import psycopg
-
-            conn = psycopg.connect("postgresql://localhost/confiture_test")
-            yield conn
-            conn.close()
-        except Exception:
-            pytest.skip("Test database not available")
-
-    def test_get_schema_info_from_database(self, db_connection):
-        """Test retrieving schema info from real database."""
-        analyzer = SchemaAnalyzer(db_connection)
-        info = analyzer.get_schema_info()
-
-        # Should have at least the tb_confiture table
-        assert isinstance(info, SchemaInfo)
-        assert isinstance(info.tables, dict)
-        assert isinstance(info.indexes, dict)

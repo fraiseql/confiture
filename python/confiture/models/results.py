@@ -144,17 +144,22 @@ class BuildResult:
 class SplitBuildResult:
     """Result of a split schema build operation.
 
-    Separates superuser SQL (roles, extensions) from app SQL
-    (schemas, tables, views, data) for two-phase apply.
+    Separates SQL into three phases for deployment:
+    1. superuser_pre — roles, extensions, schemas (before app objects)
+    2. app — tables, views, functions, seed data
+    3. superuser_post — grants on specific objects, role settings (after app objects)
     """
 
     success: bool
-    superuser_path: str
+    superuser_pre_path: str
     app_path: str
-    superuser_files: int
+    superuser_post_path: str
+    superuser_pre_files: int
     app_files: int
-    superuser_size_bytes: int
+    superuser_post_files: int
+    superuser_pre_size_bytes: int
     app_size_bytes: int
+    superuser_post_size_bytes: int
     hash: str | None = None
     execution_time_ms: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -164,12 +169,15 @@ class SplitBuildResult:
         """Convert to dictionary for JSON serialization."""
         return {
             "success": self.success,
-            "superuser_path": self.superuser_path,
+            "superuser_pre_path": self.superuser_pre_path,
             "app_path": self.app_path,
-            "superuser_files": self.superuser_files,
+            "superuser_post_path": self.superuser_post_path,
+            "superuser_pre_files": self.superuser_pre_files,
             "app_files": self.app_files,
-            "superuser_size_bytes": self.superuser_size_bytes,
+            "superuser_post_files": self.superuser_post_files,
+            "superuser_pre_size_bytes": self.superuser_pre_size_bytes,
             "app_size_bytes": self.app_size_bytes,
+            "superuser_post_size_bytes": self.superuser_post_size_bytes,
             "hash": self.hash,
             "execution_time_ms": self.execution_time_ms,
             "warnings": self.warnings,

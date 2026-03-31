@@ -390,6 +390,7 @@ class Environment(BaseModel):
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
         include_dirs: Directories to include when building schema (supports both string and dict formats)
+        superuser_post_dirs: Directories routed to the post-schema superuser phase in build_split()
         exclude_dirs: Directories to exclude from schema build
         auto_backup: Whether to automatically backup before migrations
         require_confirmation: Whether to require user confirmation for risky operations
@@ -403,6 +404,7 @@ class Environment(BaseModel):
     database_url: str
     include_dirs: list[str | DirectoryConfig]
     superuser_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
+    superuser_post_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     exclude_dirs: list[str] = Field(default_factory=list)
     auto_backup: bool = True
     require_confirmation: bool = True
@@ -570,6 +572,29 @@ class Environment(BaseModel):
                         f"Invalid superuser_dirs item type: {type(item)}. Expected str or dict.\nIn {config_path}"
                     )
             data["superuser_dirs"] = resolved_superuser_dirs
+
+        # Resolve superuser_post_dirs if present
+        if "superuser_post_dirs" in data:
+            resolved_superuser_post_dirs: list[str | dict[str, Any]] = []
+            for item in data["superuser_post_dirs"]:
+                if isinstance(item, str):
+                    abs_path = (project_dir / item).resolve()
+                    resolved_superuser_post_dirs.append(str(abs_path))
+                elif isinstance(item, dict):
+                    path_str = item.get("path")
+                    if not path_str:
+                        raise ConfigurationError(
+                            f"Missing 'path' field in superuser_post_dirs item: {item}\nIn {config_path}"
+                        )
+                    abs_path = (project_dir / path_str).resolve()
+                    resolved_item = item.copy()
+                    resolved_item["path"] = str(abs_path)
+                    resolved_superuser_post_dirs.append(resolved_item)
+                else:
+                    raise ConfigurationError(
+                        f"Invalid superuser_post_dirs item type: {type(item)}. Expected str or dict.\nIn {config_path}"
+                    )
+            data["superuser_post_dirs"] = resolved_superuser_post_dirs
 
         # Set environment name
         data["name"] = env_name

@@ -12,14 +12,9 @@ Usage::
     # Then POST to http://localhost:8080/mcp
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from confiture import __version__
-
-if TYPE_CHECKING:
-    pass
 
 
 def create_app(

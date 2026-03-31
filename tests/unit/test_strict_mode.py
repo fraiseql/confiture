@@ -44,49 +44,6 @@ class TestStrictMode:
         # Class attribute should be accessible
         assert migration.strict_mode is True
 
-    def test_strict_mode_enabled_detects_warnings(self, test_db_connection):
-        """Strict mode should detect and report PostgreSQL warnings"""
-
-        class WarningMigration(Migration):
-            version = "001"
-            name = "test_warning"
-            strict_mode = True
-
-            def up(self):
-                # This creates a notice/warning but doesn't fail
-                self.execute("DO $$ BEGIN RAISE NOTICE 'Test notice'; END $$;")
-
-            def down(self):
-                pass
-
-        migration = WarningMigration(connection=test_db_connection)
-
-        # In strict mode, should detect notices and potentially fail
-        # For now, this test documents the intended behavior
-        # The actual implementation will depend on how we detect warnings
-        migration.up()  # Should succeed for now, but could be enhanced
-
-    def test_normal_mode_ignores_notices(self, test_db_connection):
-        """Normal mode should ignore PostgreSQL notices"""
-
-        class NoticeMigration(Migration):
-            version = "002"
-            name = "test_notice"
-            # strict_mode = False (default)
-
-            def up(self):
-                # Generate a notice
-                self.execute("DO $$ BEGIN RAISE NOTICE 'Test notice'; END $$;")
-                # This should succeed without issues
-
-            def down(self):
-                pass
-
-        migration = NoticeMigration(connection=test_db_connection)
-
-        # Should succeed without raising error
-        migration.up()  # No exception expected
-
     def test_cli_strict_flag_enables_strict_mode(self):
         """CLI --strict flag should enable strict mode on migrations"""
         # This test would verify CLI integration

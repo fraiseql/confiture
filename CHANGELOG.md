@@ -5,6 +5,42 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.20] - 2026-03-31
+
+### Added
+
+- **Three-phase `build_split()` with `superuser_post_dirs`** (issue #104).
+  Environment YAML now accepts `superuser_post_dirs` for SQL that requires both
+  superuser privileges and existing app objects (e.g. `GRANT SELECT ON table`).
+  `build_split()` produces three output files — `schema_{env}_superuser_pre.sql`,
+  `schema_{env}_app.sql`, and `schema_{env}_superuser_post.sql` — enabling correct
+  privilege separation in production deployments. Routing priority:
+  `superuser_post > superuser_pre > app`. Hash computation remains independent of
+  directory classification config.
+
+### Changed
+
+- **`SplitBuildResult` fields renamed** for three-phase clarity: `superuser_path` →
+  `superuser_pre_path`, `superuser_files` → `superuser_pre_files`,
+  `superuser_size_bytes` → `superuser_pre_size_bytes`. New fields added:
+  `superuser_post_path`, `superuser_post_files`, `superuser_post_size_bytes`.
+
+- **Split build output file renamed**: `schema_{env}_superuser.sql` →
+  `schema_{env}_superuser_pre.sql`.
+
+- **`fastapi` and `httpx` added to dev dependencies** so MCP HTTP server tests
+  run during development and CI.
+
+### Fixed
+
+- **MCP HTTP endpoint returned 422** when `fastapi` was installed. Caused by
+  `from __future__ import annotations` in `mcp_http.py` which turned FastAPI's
+  `Request` type hint into a string, breaking parameter resolution at runtime.
+
+- **6 database-dependent tests moved from `tests/unit/` to
+  `tests/integration/`** — drift detector, health check, schema analyzer, and
+  strict mode integration tests now live where they belong.
+
 ## [0.8.19] - 2026-03-30
 
 ### Fixed

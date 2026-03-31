@@ -406,38 +406,3 @@ class TestSchemaDriftDetector:
         # Incompatible pairs
         assert not detector._types_compatible("integer", "text")
         assert not detector._types_compatible("boolean", "integer")
-
-
-class TestDriftDetectorIntegration:
-    """Integration tests for drift detection with real database."""
-
-    @pytest.fixture
-    def db_connection(self):
-        """Create test database connection if available."""
-        try:
-            import psycopg
-
-            conn = psycopg.connect("postgresql://localhost/confiture_test")
-            yield conn
-            conn.close()
-        except Exception:
-            pytest.skip("Test database not available")
-
-    def test_get_live_schema(self, db_connection):
-        """Test getting live schema from database."""
-        detector = SchemaDriftDetector(db_connection)
-        schema = detector.get_live_schema()
-
-        assert isinstance(schema, SchemaInfo)
-        assert isinstance(schema.tables, dict)
-
-    def test_compare_with_expected(self, db_connection):
-        """Test comparing live schema with expected."""
-        detector = SchemaDriftDetector(db_connection)
-
-        # Empty expected schema should detect all tables as extra
-        expected = SchemaInfo(tables={})
-        report = detector.compare_with_expected(expected)
-
-        assert isinstance(report, DriftReport)
-        assert report.database_name == "confiture_test"

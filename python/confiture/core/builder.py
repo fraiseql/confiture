@@ -170,6 +170,16 @@ class SchemaBuilder:
             elif hasattr(su_dir, "path"):
                 self._superuser_paths.append(Path(su_dir.path).resolve())
 
+        # Resolve superuser_post_dirs to absolute paths for file classification
+        self._superuser_post_paths: list[Path] = []
+        for su_post_dir in self.env_config.superuser_post_dirs:
+            if isinstance(su_post_dir, str):
+                self._superuser_post_paths.append(Path(su_post_dir).resolve())
+            elif isinstance(su_post_dir, dict):
+                self._superuser_post_paths.append(Path(su_post_dir["path"]).resolve())
+            elif hasattr(su_post_dir, "path"):
+                self._superuser_post_paths.append(Path(su_post_dir.path).resolve())
+
     def _find_common_parent(self, paths: list[Path]) -> Path:
         """Find common parent directory of all paths.
 
@@ -697,26 +707,42 @@ class SchemaBuilder:
         """
         return any(file_path.is_relative_to(su_dir) for su_dir in self._superuser_paths)
 
+    def _is_superuser_post_file(self, file_path: Path) -> bool:
+        """Check if a file belongs to a superuser post directory.
+
+        A file is a superuser-post file if its resolved path is under any of
+        the directories listed in ``superuser_post_dirs``.
+
+        Args:
+            file_path: Absolute path to check.
+
+        Returns:
+            True if the file is under a superuser post directory.
+        """
+        return any(file_path.is_relative_to(su_dir) for su_dir in self._superuser_post_paths)
+
     def build_split(
         self,
         output_dir: str | Path,
         schema_only: bool = False,
     ) -> SplitBuildResult:
-        """Build schema split into superuser and app SQL files.
+        """Build schema split into three SQL files for phased deployment.
 
-        Files from directories listed in ``superuser_dirs`` are written to a
-        separate superuser output file.  Everything else goes to the app file.
-        Sort order is preserved across both files.
+        Files are routed to three phases based on directory classification:
 
-        If ``superuser_dirs`` is empty or unset, the superuser file will be
-        empty and all files go to the app output.
+        1. **superuser_pre** — from ``superuser_dirs`` (roles, extensions, schemas)
+        2. **app** — everything not in superuser_pre or superuser_post dirs
+        3. **superuser_post** — from ``superuser_post_dirs`` (grants on objects, role settings)
+
+        Sort order is preserved within each phase.  If a directory appears in
+        both ``superuser_post_dirs`` and ``superuser_dirs``, post takes priority.
 
         Args:
-            output_dir: Directory to write the two output files into.
+            output_dir: Directory to write the three output files into.
             schema_only: If True, exclude seed files.
 
         Returns:
-            SplitBuildResult with paths and metadata for both files.
+            SplitBuildResult with paths and metadata for all three files.
 
         Raises:
             SchemaError: If schema build fails.
@@ -735,28 +761,32 @@ class SchemaBuilder:
 
         self._validate_comments(files)
 
-        # Partition files
-        superuser_files: list[Path] = []
+        # Partition files — priority: superuser_post > superuser_pre > app
+        superuser_pre_files: list[Path] = []
+        superuser_post_files: list[Path] = []
         app_files: list[Path] = []
         for f in files:
-            if self._is_superuser_file(f):
-                superuser_files.append(f)
+            if self._is_superuser_post_file(f):
+                superuser_post_files.append(f)
+            elif self._is_superuser_file(f):
+                superuser_pre_files.append(f)
             else:
                 app_files.append(f)
 
         env_name = self.env_config.name
-        superuser_path = output_dir / f"schema_{env_name}_superuser.sql"
+        superuser_pre_path = output_dir / f"schema_{env_name}_superuser_pre.sql"
         app_path = output_dir / f"schema_{env_name}_app.sql"
+        superuser_post_path = output_dir / f"schema_{env_name}_superuser_post.sql"
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build superuser SQL
-        if superuser_files:
-            header = self._generate_header(len(superuser_files))
-            superuser_sql = self._build_python(header, superuser_files)
+        # Build superuser pre SQL
+        if superuser_pre_files:
+            header = self._generate_header(len(superuser_pre_files))
+            superuser_pre_sql = self._build_python(header, superuser_pre_files)
         else:
-            superuser_sql = ""
-        superuser_path.write_text(superuser_sql, encoding="utf-8")
+            superuser_pre_sql = ""
+        superuser_pre_path.write_text(superuser_pre_sql, encoding="utf-8")
 
         # Build app SQL
         header = self._generate_header(len(app_files))
@@ -777,16 +807,27 @@ class SchemaBuilder:
 
         app_path.write_text(app_sql, encoding="utf-8")
 
+        # Build superuser post SQL
+        if superuser_post_files:
+            header = self._generate_header(len(superuser_post_files))
+            superuser_post_sql = self._build_python(header, superuser_post_files)
+        else:
+            superuser_post_sql = ""
+        superuser_post_path.write_text(superuser_post_sql, encoding="utf-8")
+
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
         return SplitBuildResult(
             success=True,
-            superuser_path=str(superuser_path),
+            superuser_pre_path=str(superuser_pre_path),
             app_path=str(app_path),
-            superuser_files=len(superuser_files),
+            superuser_post_path=str(superuser_post_path),
+            superuser_pre_files=len(superuser_pre_files),
             app_files=len(app_files),
-            superuser_size_bytes=len(superuser_sql.encode("utf-8")),
+            superuser_post_files=len(superuser_post_files),
+            superuser_pre_size_bytes=len(superuser_pre_sql.encode("utf-8")),
             app_size_bytes=len(app_sql.encode("utf-8")),
+            superuser_post_size_bytes=len(superuser_post_sql.encode("utf-8")),
             hash=self.compute_hash(),
             execution_time_ms=elapsed_ms,
         )

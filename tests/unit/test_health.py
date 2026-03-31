@@ -319,27 +319,3 @@ class TestCheckDatabaseHealth:
 
         assert result["database_connected"] is True
         assert result["migration_table_exists"] is False
-
-
-class TestHealthIntegration:
-    """Integration tests for health checks with real database."""
-
-    @pytest.fixture
-    def db_connection(self):
-        """Create test database connection if available."""
-        try:
-            import psycopg
-
-            conn = psycopg.connect("postgresql://localhost/confiture_test")
-            yield conn
-            conn.close()
-        except Exception:
-            pytest.skip("Test database not available")
-
-    def test_real_database_health(self, db_connection):
-        """Test health check with real database."""
-        result = check_database_health(db_connection)
-
-        assert result["database_connected"] is True
-        assert result["database_name"] == "confiture_test"
-        assert result["error"] is None
