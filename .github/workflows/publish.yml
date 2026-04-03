@@ -62,20 +62,35 @@ jobs:
 
     - name: Create test databases
       run: |
-        # Wait for database to be ready and create additional test databases
+        # Wait for PostgreSQL to be ready and ensure user/database setup
         echo "Waiting for PostgreSQL to be ready..."
-        for i in {1..30}; do
+        for i in {1..60}; do
           if PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "SELECT 1;" >/dev/null 2>&1; then
-            echo "PostgreSQL is ready"
+            echo "PostgreSQL is ready - user and database exist"
             break
           fi
-          echo "Waiting for PostgreSQL... ($i/30)"
+          echo "Waiting for PostgreSQL... ($i/60)"
           sleep 2
         done
 
-        # Create additional test databases
-        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "CREATE DATABASE confiture_source_test;" || echo "Database confiture_source_test may already exist"
-        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "CREATE DATABASE confiture_target_test;" || echo "Database confiture_target_test may already exist"
+        # Verify connection works
+        if ! PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "SELECT 1;" >/dev/null 2>&1; then
+          echo "ERROR: Cannot connect to PostgreSQL after setup"
+          exit 1
+        fi
+
+        # Create additional test databases if they don't exist
+        echo "Creating additional test databases..."
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "CREATE DATABASE confiture_source_test;" 2>/dev/null || echo "Database confiture_source_test already exists or creation failed"
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "CREATE DATABASE confiture_target_test;" 2>/dev/null || echo "Database confiture_target_test already exists or creation failed"
+
+        # Verify all databases are accessible
+        echo "Verifying database access..."
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "SELECT current_database();" || exit 1
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_source_test -c "SELECT current_database();" || exit 1
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_target_test -c "SELECT current_database();" || exit 1
+
+        echo "✅ All databases ready for testing"
 
     - name: Run core tests with coverage
       run: |
