@@ -148,8 +148,8 @@ The `HookContext` object provides information about the migration.
 @dataclass
 class HookContext:
     # Migration Information
-    migration_name: str          # e.g., "001_create_users_table"
-    migration_version: str       # e.g., "001"
+    migration_name: str          # e.g., "20260403120000_create_users_table"
+    migration_version: str       # e.g., "20260403120000"
     environment: str             # e.g., "production"
 
     # Database Information
@@ -269,7 +269,7 @@ def log_migration(context: HookContext) -> None:
 
 **Output**:
 ```
-2026-01-15 14:23:45 INFO: Migration 001_create_users_table completed
+2026-01-15 14:23:45 INFO: Migration 20260403120000_create_users_table completed
   environment=production
   duration=2.34
   rows_affected=1000
@@ -312,7 +312,7 @@ def notify_slack(context: HookContext) -> None:
 **Slack Output**:
 ```
 ✅ Migration Completed
-Name: 001_create_users_table
+Name: 20260403120000_create_users_table
 Environment: production
 Duration: 0:00:02.34
 Rows: 1000
@@ -537,7 +537,7 @@ from my_hooks import validate_data, HookError
 def test_validation_passes_with_valid_data():
     """Test validation hook with valid data."""
     context = HookContext(
-        migration_name='001_create_users',
+        migration_name='20260403120000_create_users',
         environment='test',
         database_url='postgresql://localhost/test_db',
         status='success',

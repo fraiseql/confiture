@@ -88,13 +88,13 @@ with psycopg.connect("postgresql://localhost/mydb") as conn:
     migrator = Migrator(connection=conn)
 
     # Apply single migration
-    migrator.apply("001_create_users")
+    migrator.apply("20260403120000_create_users")
 
     # Apply all pending
     migrator.apply_all()
 
     # Rollback
-    migrator.rollback("001_create_users")
+    migrator.rollback("20260403120000_create_users")
 ```
 
 ### Medium 3: Sync Production Data
@@ -207,7 +207,7 @@ from confiture.exceptions import (
 )
 
 try:
-    migrator.apply("001_create_users")
+    migrator.apply("20260403120000_create_users")
 except MigrationError as e:
     print(f"Migration failed: {e}")
     print(f"SQL: {e.sql}")
@@ -232,7 +232,7 @@ async def migrate():
     schema = await builder.build_async()
 
     async with Migrator.connect_async("postgresql://localhost/mydb") as migrator:
-        await migrator.apply_async("001_create_users")
+        await migrator.apply_async("20260403120000_create_users")
 
 asyncio.run(migrate())
 ```

@@ -307,9 +307,9 @@ confiture seed apply
 **Example**:
 ```
 db/migrations/
-├── 001_initial_schema.up.sql      ❌ CONFLICT
-├── 001_create_users.up.sql         ❌ CONFLICT
-└── 002_add_posts.up.sql            ✅ OK
+├── 20260403120000_initial_schema.up.sql      ❌ CONFLICT
+├── 20260403120000_create_users.up.sql         ❌ CONFLICT
+└── 20260403120115_add_posts.up.sql            ✅ OK
 ```
 
 **How to fix**:
@@ -321,9 +321,8 @@ db/migrations/
 
 2. **Rename conflicting files**
    ```bash
-   # Rename second file to next available number
-   mv db/migrations/001_create_users.up.sql db/migrations/002_create_users.up.sql
-   mv db/migrations/002_add_posts.up.sql db/migrations/003_add_posts.up.sql
+    # Rename second file to different timestamp
+    mv db/migrations/20260403120000_create_users.up.sql db/migrations/20260403120100_create_users.up.sql
    ```
 
 3. **Verify resolution**
@@ -429,7 +428,7 @@ confiture seed validate --format json  # Get detailed report
 2. **Validate SQL manually**
    ```bash
    # Test the SQL in psql
-   psql postgresql://localhost/mydb -f db/migrations/001_schema.sql
+    psql postgresql://localhost/mydb -f db/migrations/20260403120000_schema.up.sql
    ```
 
 3. **Check for common issues**

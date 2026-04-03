@@ -223,10 +223,10 @@ confiture migrate validate --require-migration --base-ref origin/main
 **Solution**:
 ```bash
 # Create a migration file
-touch db/migrations/001_add_email_column.up.sql
+touch db/migrations/20260403120115_add_email_column.up.sql
 
 # Add the migration SQL
-echo "ALTER TABLE users ADD COLUMN email TEXT;" >> db/migrations/001_add_email_column.up.sql
+echo "ALTER TABLE users ADD COLUMN email TEXT;" >> db/migrations/20260403120115_add_email_column.up.sql
 
 # Run validation again
 confiture migrate validate --require-migration --base-ref origin/main
@@ -321,13 +321,13 @@ continues with exit code `0`. A genuine missing-migration failure still exits `1
 
 **Valid migration locations**:
 ```
-✅ db/migrations/001_create_users.up.sql
-✅ db/migrations/001_create_users.down.sql
-✅ db/migrations/v1.5/001_alter_posts.up.sql  (nested in db/migrations)
+✅ db/migrations/20260403120000_create_users.up.sql
+✅ db/migrations/20260403120000_create_users.down.sql
+✅ db/migrations/v1.5/20260403120115_alter_posts.up.sql  (nested in db/migrations)
 
-❌ src/migrations/001_create_users.up.sql (wrong parent directory)
-❌ migrations/001_create_users.up.sql (missing db/)
-❌ db/migrations/001_create_users.sql (missing .up suffix)
+❌ src/migrations/20260403120000_create_users.up.sql (wrong parent directory)
+❌ migrations/20260403120000_create_users.up.sql (missing db/)
+❌ db/migrations/20260403120000_create_users.sql (missing .up suffix)
 ```
 
 If your migrations are in a different location, adjust your setup or use `--require-migration=false` to skip this check.
@@ -443,17 +443,17 @@ git fetch origin
 **Check**:
 1. File is in `db/migrations/` directory
 2. File ends with `.up.sql`
-3. File follows pattern: `{NNN}_{name}.up.sql`
+3. File follows pattern: `{YYYYMMDDHHMMSS}_{name}.up.sql`
 
 **Valid examples**:
 ```
-db/migrations/001_create_users.up.sql     ✅
-db/migrations/002_add_email.up.sql        ✅
-db/migrations/1_initial.up.sql            ✅
+db/migrations/20260403120000_create_users.up.sql     ✅
+db/migrations/20260403120115_add_email.up.sql        ✅
+db/migrations/20260403120230_initial.up.sql          ✅
 
-migrations/001_create_users.up.sql        ❌ Wrong location
-db/migrations/001_create_users.sql        ❌ Missing .up
-db/migrations/create_users.up.sql         ❌ Missing number prefix
+migrations/20260403120000_create_users.up.sql        ❌ Wrong location
+db/migrations/20260403120000_create_users.sql        ❌ Missing .up
+db/migrations/create_users.up.sql                     ❌ Missing timestamp prefix
 ```
 
 ## Integration Examples
@@ -653,7 +653,7 @@ confiture migrate validate --check-drift --require-migration
 Always include a migration file that explains the change:
 
 ```sql
--- db/migrations/001_add_email_column.up.sql
+-- db/migrations/20260403120115_add_email_column.up.sql
 -- Adds email column to users table for user contact information
 -- Rolled out in: PR #123
 ALTER TABLE users ADD COLUMN email TEXT UNIQUE;

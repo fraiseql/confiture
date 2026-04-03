@@ -21,21 +21,21 @@ Confiture recognizes **exactly three** migration file patterns:
 ### 1. Python Class Migrations
 
 ```
-{NNN}_{name}.py
+{YYYYMMDDHHMMSS}_{name}.py
 
 Where:
-- {NNN}: Version number (001, 042, 100, etc.)
+- {YYYYMMDDHHMMSS}: Timestamp (e.g., 20260403120000, 20260403120115, etc.)
 - {name}: Descriptive snake_case name
 - .py: Python file extension
 ```
 
 **Examples**:
 ```
-001_create_users.py
-002_add_email.py
-003_create_posts.py
-042_add_user_bio.py
-100_refactor_schema.py
+20260403120000_create_users.py
+20260403120115_add_email.py
+20260403120230_create_posts.py
+20260403120345_add_user_bio.py
+20260403120400_refactor_schema.py
 ```
 
 **Requirements**:
@@ -47,10 +47,10 @@ Where:
 ### 2. SQL Forward Migrations
 
 ```
-{NNN}_{name}.up.sql
+{YYYYMMDDHHMMSS}_{name}.up.sql
 
 Where:
-- {NNN}: Version number (001, 042, 100, etc.)
+- {YYYYMMDDHHMMSS}: Timestamp (e.g., 20260403120000, 20260403120115, etc.)
 - {name}: Descriptive snake_case name
 - .up: Indicates forward migration
 - .sql: SQL file extension
@@ -58,11 +58,11 @@ Where:
 
 **Examples**:
 ```
-001_create_users.up.sql
-002_add_email.up.sql
-003_create_posts.up.sql
-042_add_user_bio.up.sql
-100_refactor_schema.up.sql
+20260403120000_create_users.up.sql
+20260403120115_add_email.up.sql
+20260403120230_create_posts.up.sql
+20260403120345_add_user_bio.up.sql
+20260403120400_refactor_schema.up.sql
 ```
 
 **Requirements**:
@@ -73,6 +73,23 @@ Where:
 
 ### 3. SQL Rollback Migrations
 
+```
+{YYYYMMDDHHMMSS}_{name}.down.sql
+
+Where:
+- {YYYYMMDDHHMMSS}: Same timestamp as corresponding .up.sql
+- {name}: Same name as corresponding .up.sql
+- .down: Indicates rollback migration
+- .sql: SQL file extension
+```
+
+**Examples**:
+```
+20260403120000_create_users.down.sql
+20260403120115_add_email.down.sql
+20260403120230_create_posts.down.sql
+20260403120345_add_user_bio.down.sql
+20260403120400_refactor_schema.down.sql
 ```
 {NNN}_{name}.down.sql
 
@@ -105,10 +122,10 @@ Where:
 
 ```
 ❌ WRONG:
-001_create_users.sql          # Missing .up!
+20260403120000_create_users.sql          # Missing .up!
 
 ✅ CORRECT:
-001_create_users.up.sql
+20260403120000_create_users.up.sql
 ```
 
 **What happens**: File is silently ignored, migration is never applied.
@@ -116,22 +133,22 @@ Where:
 **Fix**:
 ```bash
 # Rename manually
-mv db/migrations/001_create_users.sql db/migrations/001_create_users.up.sql
+mv db/migrations/20260403120000_create_users.sql db/migrations/20260403120000_create_users.up.sql
 
 # Or use auto-fix
 confiture migrate validate --fix-naming
 ```
 
-### ❌ Mistake 2: Inconsistent Version Numbers
+### ❌ Mistake 2: Inconsistent Timestamps
 
 ```
 ❌ WRONG:
-002_add_email.up.sql
-003_add_email.down.sql        # Version 003, but forward migration is 002!
+20260403120115_add_email.up.sql
+20260403120230_add_email.down.sql        # Different timestamp!
 
 ✅ CORRECT:
-002_add_email.up.sql
-002_add_email.down.sql        # Same version number
+20260403120115_add_email.up.sql
+20260403120115_add_email.down.sql        # Same timestamp
 ```
 
 **What happens**: Confiture might not pair them correctly.
@@ -158,12 +175,12 @@ confiture migrate validate --fix-naming
 
 ```
 ❌ WRONG:
-schema_001_create_users.py    # Doesn't start with number
-v001_create_users.py          # Starts with 'v'
-release_001_create_users.py   # Starts with text
+schema_20260403120000_create_users.py    # Doesn't start with timestamp
+v20260403120000_create_users.py          # Starts with 'v'
+release_20260403120000_create_users.py   # Starts with text
 
 ✅ CORRECT:
-001_create_users.py           # Starts with number
+20260403120000_create_users.py           # Starts with timestamp
 ```
 
 **What happens**: Confiture won't find the file.
@@ -174,47 +191,34 @@ release_001_create_users.py   # Starts with text
 
 ## Version Numbering Schemes
 
-### Simple Sequential (Most Projects)
+### Chronological Ordering (Recommended)
 
 ```
-001_create_users.up.sql
-002_add_email.up.sql
-003_create_posts.up.sql
-004_add_post_tags.up.sql
-005_add_indexes.up.sql
+20260403120000_create_users.up.sql
+20260403120115_add_email.up.sql
+20260403120230_create_posts.up.sql
+20260403120345_add_post_tags.up.sql
+20260403120400_add_indexes.up.sql
 ```
 
-**Pros**: Simple, obvious
-**Cons**: Hard to insert gaps
-
-### Decade Spacing (Good for Growth)
-
-```
-010_create_users.up.sql
-020_add_email.up.sql
-030_create_posts.up.sql
-040_add_post_tags.up.sql
-050_add_indexes.up.sql
-```
-
-**Pros**: Easy to insert `015_new_migration.up.sql` between 010 and 020
-**Cons**: Uses larger numbers (001-999)
+**Pros**: Natural chronological order, no merge conflicts, unlimited scale
+**Cons**: Less human-readable than sequential numbers
 
 ### Grouped by Layer (Complex Projects)
 
 ```
 # Users domain
-001_create_users.up.sql
-002_add_user_profile.up.sql
-003_add_user_settings.up.sql
+20260403120000_create_users.up.sql
+20260403120100_add_user_profile.up.sql
+20260403120200_add_user_settings.up.sql
 
 # Posts domain
-101_create_posts.up.sql
-102_add_post_tags.up.sql
-103_add_post_reactions.up.sql
+20260403120300_create_posts.up.sql
+20260403120400_add_post_tags.up.sql
+20260403120500_add_post_reactions.up.sql
 
 # Indexes (always last)
-201_add_all_indexes.up.sql
+20260403120600_add_all_indexes.up.sql
 ```
 
 **Pros**: Groups related migrations, easy to understand
@@ -223,27 +227,27 @@ release_001_create_users.py   # Starts with text
 ### Timestamp-Based (Distributed Teams)
 
 ```
-20260127_001_alice_add_users.up.sql
-20260127_002_bob_add_posts.up.sql
-20260127_003_alice_add_indexes.up.sql
+20260403120000_alice_add_users.up.sql
+20260403120115_bob_add_posts.up.sql
+20260403120230_alice_add_indexes.up.sql
 ```
 
 **Pros**: Prevents merge conflicts in distributed teams
-**Cons**: Harder to read and order correctly
+**Cons**: Less intuitive than sequential numbering
 
 ---
 
 ## Best Practices
 
-### 1. Use Decade Spacing from Day One
+### 1. Use Timestamps from Day One
 
-Even if you only have a few migrations, use spacing (010, 020, 030) instead of (001, 002, 003). You'll thank yourself later when you need to insert migrations:
+Always use timestamp-based versioning for new projects. The chronological ordering and merge-conflict prevention are worth the slightly less readable filenames:
 
 ```
-010_create_users.up.sql
-020_add_email.up.sql
-025_add_email_indexes.up.sql    # ← Easy to insert!
-030_create_posts.up.sql
+20260403120000_create_users.up.sql
+20260403120115_add_email.up.sql
+20260403120130_add_email_indexes.up.sql    # ← Chronological insertion works naturally
+20260403120245_create_posts.up.sql
 ```
 
 ### 2. Name Migrations Descriptively
@@ -396,15 +400,15 @@ Check that all `.sql` files in `db/migrations/` match the pattern:
 ls -1 db/migrations/
 
 # Expected output:
-001_create_users.py
-002_add_email.up.sql
-002_add_email.down.sql
-003_create_posts.up.sql
-003_create_posts.down.sql
+20260403120000_create_users.py
+20260403120115_add_email.up.sql
+20260403120115_add_email.down.sql
+20260403120230_create_posts.up.sql
+20260403120230_create_posts.down.sql
 
 # Unexpected output (❌ would be silently ignored):
-001_initial_schema.sql       # Missing .up
-002_add_columns.sql          # Missing .up
+20260403120000_initial_schema.sql       # Missing .up
+20260403120115_add_columns.sql          # Missing .up
 ```
 
 ---
@@ -414,24 +418,32 @@ ls -1 db/migrations/
 ### Python Migrations
 
 ```python
-# db/migrations/002_add_email.py
+# db/migrations/20260403120115_add_email.py
 """Add email column to users table with index"""
 
 from confiture.models.migration import Migration
 
 class AddEmail(Migration):
-    version = "002"
+    version = "20260403120115"
     name = "add_email"
+```
 
-    def up(self):
-        """Apply migration: add email column and index"""
-        self.execute("ALTER TABLE users ADD COLUMN email TEXT UNIQUE")
-        self.execute("CREATE INDEX idx_users_email ON users(email)")
+### SQL Migrations
 
-    def down(self):
-        """Rollback migration: remove email column and index"""
-        self.execute("DROP INDEX IF EXISTS idx_users_email")
-        self.execute("ALTER TABLE users DROP COLUMN IF EXISTS email")
+```sql
+-- db/migrations/20260403120115_add_email.up.sql
+-- Add email column to users table with index
+
+ALTER TABLE users ADD COLUMN email TEXT UNIQUE;
+CREATE INDEX idx_users_email ON users(email);
+```
+
+```sql
+-- db/migrations/20260403120115_add_email.down.sql
+-- Rollback: remove email column and index
+
+DROP INDEX IF EXISTS idx_users_email;
+ALTER TABLE users DROP COLUMN IF EXISTS email;
 ```
 
 ### SQL Migrations
@@ -484,15 +496,15 @@ confiture migrate validate --fix-naming
 
 ```
 ❌ INCONSISTENT (Don't do this):
-001_users.py
-002_add_email.sql         # Different pattern!
-003_add_posts.down.sql    # Different pattern!
+20260403120000_users.py
+20260403120115_add_email.sql         # Different pattern!
+20260403120230_add_posts.down.sql    # Different pattern!
 
 ✅ CONSISTENT:
-001_create_users.py
-002_add_email.up.sql
-002_add_email.down.sql
-003_create_posts.py
+20260403120000_create_users.py
+20260403120115_add_email.up.sql
+20260403120115_add_email.down.sql
+20260403120230_create_posts.py
 ```
 
 ### Q: What if I have 1000+ migrations?
@@ -507,16 +519,15 @@ confiture migrate validate --fix-naming
 ## Summary
 
 ✅ **DO**:
-- Start filenames with version number: `001`, `002`, `003`
+- Start filenames with timestamp: `20260403120000`, `20260403120115`, etc.
 - Use `.up.sql` and `.down.sql` suffixes for SQL migrations
 - Use snake_case for migration names
-- Use decade spacing: 001, 010, 020, 030 (not 001, 002, 003, 004)
 - Create `.down` migrations for every `.up` migration
 - Validate with `confiture migrate validate`
 
 ❌ **DON'T**:
 - Create `.sql` files without `.up` suffix
-- Mix version numbers for up/down pairs
+- Mix timestamps for up/down pairs
 - Use PascalCase or kebab-case names
 - Start filenames with non-numeric characters
 - Skip `.down` migrations

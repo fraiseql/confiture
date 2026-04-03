@@ -12,9 +12,9 @@ Alembic treats **migrations as the primary artifact**. Your database schema is d
 
 ```
 Migration Files (Primary Source)
-├─ 001_create_users.py
-├─ 002_add_email_column.py
-├─ 003_add_user_roles.py
+├─ 20260403120000_create_users.py
+├─ 20260403120115_add_email_column.py
+├─ 20260403120230_add_user_roles.py
 └─ ...
 
 Database = execute all migrations in order

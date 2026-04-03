@@ -132,12 +132,12 @@ confiture migrate diff db/schema/empty.sql db/schema/10_tables/users.sql \
     --name create_users_table
 ```
 
-This creates `db/migrations/001_create_users_table.py`:
+This creates `db/migrations/20260403120000_create_users_table.py`:
 
 ```python
 """Migration: create_users_table
 
-Version: 001
+Version: 20260403120000
 """
 
 from confiture.models.migration import Migration
@@ -195,7 +195,7 @@ Output:
 ```
 📦 Found 1 pending migration(s)
 
-⚡ Applying 001_create_users_table... ✅
+⚡ Applying 20260403120000_create_users_table... ✅
 
 ✅ Successfully applied 1 migration(s)!
 ```
@@ -246,7 +246,7 @@ confiture migrate diff db/schema/current.sql db/schema/10_tables/users.sql \
     --name add_user_bio
 ```
 
-This creates `db/migrations/002_add_user_bio.py`:
+This creates `db/migrations/20260403120115_add_user_bio.py`:
 
 ```python
 def up(self) -> None:
@@ -268,7 +268,7 @@ Output:
 ```
 📦 Found 1 pending migration(s)
 
-⚡ Applying 002_add_user_bio... ✅
+⚡ Applying 20260403120115_add_user_bio... ✅
 
 ✅ Successfully applied 1 migration(s)!
 ```
@@ -285,7 +285,7 @@ Output:
 ```
 📦 Rolling back 1 migration(s)
 
-⚡ Rolling back 002_add_user_bio... ✅
+⚡ Rolling back 20260403120115_add_user_bio... ✅
 
 ✅ Successfully rolled back 1 migration(s)!
 ```
@@ -375,8 +375,8 @@ git commit -m "Add phone column"
 
 ```bash
 # Add migration file
-echo "ALTER TABLE users ADD COLUMN phone TEXT;" > db/migrations/003_add_phone.up.sql
-git add db/migrations/003_add_phone.up.sql
+echo "ALTER TABLE users ADD COLUMN phone TEXT;" > db/migrations/20260403120230_add_phone.up.sql
+git add db/migrations/20260403120230_add_phone.up.sql
 
 # Commit now succeeds
 git commit -m "Add phone column with migration"

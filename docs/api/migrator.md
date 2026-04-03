@@ -110,7 +110,7 @@ def apply(
     Apply a single migration.
 
     Args:
-        migration: Migration name (e.g., "001_create_users") or Migration object.
+        migration: Migration name (e.g., "20260403120000_create_users") or Migration object.
         dry_run: If True, show SQL without executing.
 
     Returns:
@@ -121,7 +121,7 @@ def apply(
         MigrationAlreadyApplied: If migration was already applied.
 
     Example:
-        >>> result = migrator.apply("001_create_users")
+        >>> result = migrator.apply("20260403120000_create_users")
         >>> print(f"Applied in {result.duration}")
     """
 ```
@@ -130,10 +130,10 @@ def apply(
 
 ```python
 # Apply by name
-result = migrator.apply("001_create_users")
+result = migrator.apply("20260403120000_create_users")
 
 # Apply with dry-run
-result = migrator.apply("002_add_email", dry_run=True)
+result = migrator.apply("20260403120115_add_email", dry_run=True)
 print(result.sql)  # Shows SQL without executing
 
 # Apply Migration object
@@ -215,7 +215,7 @@ def rollback(
         MigrationNotApplied: If migration was not applied.
 
     Example:
-        >>> result = migrator.rollback("002_add_email")
+        >>> result = migrator.rollback("20260403120115_add_email")
         >>> print(f"Rolled back in {result.duration}")
     """
 ```
@@ -224,10 +224,10 @@ def rollback(
 
 ```python
 # Rollback last migration
-result = migrator.rollback("003_add_indexes")
+result = migrator.rollback("20260403120230_add_indexes")
 
 # Rollback with dry-run
-result = migrator.rollback("002_add_email", dry_run=True)
+result = migrator.rollback("20260403120115_add_email", dry_run=True)
 print(result.sql)
 ```
 
@@ -254,7 +254,7 @@ def rollback_to(
         List of MigrationResult for each rolled back migration.
 
     Example:
-        >>> results = migrator.rollback_to("001_create_users")
+        >>> results = migrator.rollback_to("20260403120000_create_users")
         >>> print(f"Rolled back {len(results)} migrations")
     """
 ```
@@ -423,13 +423,13 @@ class AddUserEmail(Migration):
 ### SQL File Migrations
 
 ```sql
--- db/migrations/002_add_user_email.sql
+-- db/migrations/20260403120115_add_user_email.up.sql
 
--- migrate:up
 ALTER TABLE users ADD COLUMN email VARCHAR(255);
 CREATE UNIQUE INDEX users_email_idx ON users(email);
 
--- migrate:down
+-- db/migrations/20260403120115_add_user_email.down.sql
+
 DROP INDEX IF EXISTS users_email_idx;
 ALTER TABLE users DROP COLUMN IF EXISTS email;
 ```
@@ -473,8 +473,8 @@ migrator.apply_all()  # Safe even if another process tries
 
 # Or manually control locking
 with migrator.lock():
-    migrator.apply("001_create_users")
-    migrator.apply("002_add_email")
+    migrator.apply("20260403120000_create_users")
+    migrator.apply("20260403120115_add_email")
 ```
 
 ---
@@ -490,7 +490,7 @@ from confiture.exceptions import (
 )
 
 try:
-    migrator.apply("001_create_users")
+    migrator.apply("20260403120000_create_users")
 except MigrationAlreadyApplied:
     print("Migration already applied")
 except MigrationError as e:
@@ -499,7 +499,7 @@ except MigrationError as e:
     print(f"Position: {e.position}")
 
 try:
-    migrator.rollback("001_create_users")
+    migrator.rollback("20260403120000_create_users")
 except MigrationNotApplied:
     print("Cannot rollback - not applied")
 ```

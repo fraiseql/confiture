@@ -58,14 +58,14 @@ Confiture has strict naming conventions for migration files. All migration filen
 {NNN}_{name}.down.sql       # Rollback migrations (SQL)
 ```
 
-**Important**: Files like `001_add_email.sql` (without `.up.sql`) are **silently ignored**!
+**Important**: Files like `20260403120115_add_email.sql` (without `.up.sql`) are **silently ignored**!
 
 **Examples**:
 ```
-001_create_users.py         ✅ Correct
-002_add_email.up.sql        ✅ Correct
-002_add_email.down.sql      ✅ Correct
-003_add_phone.sql           ❌ WRONG - missing .up suffix!
+20260403120000_create_users.py         ✅ Correct
+20260403120115_add_email.up.sql        ✅ Correct
+20260403120115_add_email.down.sql      ✅ Correct
+20260403120230_add_phone.sql           ❌ WRONG - missing .up suffix!
 ```
 
 **See** [Migration Naming Best Practices](migration-naming-best-practices.md) for complete guidelines.
@@ -73,13 +73,13 @@ Confiture has strict naming conventions for migration files. All migration filen
 ### Python Migrations
 
 ```python
-# db/migrations/002_add_user_bio.py
+# db/migrations/20260403120115_add_user_bio.py
 """Add bio column to users table"""
 
 from confiture.models.migration import Migration
 
 class AddUserBio(Migration):
-    version = "002"
+    version = "20260403120115"
     name = "add_user_bio"
 
     def up(self) -> None:
@@ -96,14 +96,14 @@ class AddUserBio(Migration):
 ### SQL Migrations
 
 ```sql
--- db/migrations/002_add_user_bio.up.sql
+-- db/migrations/20260403120115_add_user_bio.up.sql
 -- Add bio column to users table
 
 ALTER TABLE users ADD COLUMN bio TEXT;
 ```
 
 ```sql
--- db/migrations/002_add_user_bio.down.sql
+-- db/migrations/20260403120115_add_user_bio.down.sql
 -- Remove bio column from users table
 
 ALTER TABLE users DROP COLUMN IF EXISTS bio;
@@ -118,7 +118,7 @@ ALTER TABLE users DROP COLUMN IF EXISTS bio;
 Use `confiture migrate generate` to create a new migration template with auto-incrementing version numbers:
 
 ```bash
-# Basic usage - creates 001_add_users.py
+# Basic usage - creates timestamp-based migration file
 confiture migrate generate add_users
 
 # Preview before creating (dry-run mode)
@@ -150,10 +150,10 @@ confiture migrate generate add_users --dry-run
 # 🔍 Dry-run mode - no files will be created
 #
 # Would create migration:
-#   Version: 001
+#   Version: 20260403120000
 #   Name: add_users
 #   Class: AddUsers
-#   File: /path/to/db/migrations/001_add_users.py
+#   File: /path/to/db/migrations/20260403120000_add_users.py
 #
 # [Template preview...]
 ```
@@ -168,11 +168,10 @@ confiture migrate generate add_email --verbose
 # 🔍 Scanning migrations directory...
 #   Directory: /path/to/db/migrations
 #   Found 2 migration files:
-#     - 001_add_users.py (version: 001)
-#     - 002_add_posts.py (version: 002)
-#   Highest version: 002
-#   Next version: 003
-#   Target file: 003_add_email.py
+#     - 20260403120000_add_users.py (version: 20260403120000)
+#     - 20260403120115_add_posts.py (version: 20260403120115)
+#   Next version: 20260403120230 (current timestamp)
+#   Target file: 20260403120230_add_email.py
 ```
 
 #### JSON Output (for Automation)
@@ -187,13 +186,13 @@ Returns:
 ```json
 {
   "status": "success",
-  "version": "003",
+  "version": "20260403120230",
   "name": "add_email",
-  "filepath": "/path/to/db/migrations/003_add_email.py",
+  "filepath": "/path/to/db/migrations/20260403120230_add_email.py",
   "class_name": "AddEmail",
   "migrations_dir": "/path/to/db/migrations",
   "warnings": [],
-  "next_available_version": "003"
+  "next_available_version": "20260403120230"
 }
 ```
 
@@ -209,10 +208,9 @@ Example with warnings:
 
 ```bash
 $ confiture migrate generate add_users
-⚠️  Warning: Duplicate versions detected: 003, 005
 ⚠️  Warning: Migration name 'add_users' already exists in other versions
-    - 001_add_users.py
-    - 002_add_users.py
+    - 20260403120000_add_users.py
+    - 20260403120115_add_users.py
 ✅ Migration generated successfully!
 ```
 
@@ -234,9 +232,9 @@ confiture migrate validate --fix-naming --dry-run
 ```
 
 This catches common mistakes like:
-- Missing `.up.sql` suffix: `001_schema.sql`
-- Wrong suffix: `001_schema.sql` instead of `.up.sql`
-- Inconsistent version numbers: `001_add_email.up.sql` and `002_add_email.down.sql`
+- Missing `.up.sql` suffix: `20260403120000_schema.sql`
+- Wrong suffix: `20260403120000_schema.sql` instead of `.up.sql`
+- Inconsistent timestamps: `20260403120115_add_email.up.sql` and `20260403120230_add_email.down.sql`
 
 ---
 

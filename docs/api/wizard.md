@@ -84,9 +84,9 @@ result = await wizard.run_interactive()
 
 Step 1/5: Selecting migrations
 > Which migration to execute? (001, 002, 003)
-  ⓵ 001_create_users_table
-  ⓶ 002_add_email_to_users
-  ⓷ 003_create_posts_table
+  ⓵ 20260403120000_create_users_table
+  ⓶ 20260403120115_add_email_to_users
+  ⓷ 20260403120230_create_posts_table
 
 Select [1-3]: 2
 
@@ -113,7 +113,7 @@ Step 4/5: Approval workflow
 
 Step 5/5: Execution
   Ready to execute?
-  ├─ Migration: 002_add_email_to_users
+  ├─ Migration: 20260403120115_add_email_to_users
   ├─ Risk: MEDIUM
   ├─ Approvals: 1/1 ✅
   ├─ Execute now? [y/n]: y
@@ -129,7 +129,7 @@ Step 5/5: Execution
 confiture migrate --wizard --dry-run
 
 # Output shows what would happen without executing
-[DRY RUN] Migration 002_add_email_to_users
+[DRY RUN] Migration 20260403120115_add_email_to_users
 [DRY RUN] ├─ ADD COLUMN email VARCHAR
 [DRY RUN] ├─ Table: users (50000 rows)
 [DRY RUN] ├─ Risk: MEDIUM
@@ -147,7 +147,7 @@ confiture migrate --wizard --schedule "2026-01-15 02:00 AM"
 
 # Output
 ✅ Migration scheduled for 2026-01-15 02:00:00 AM
-   Migration: 002_add_email_to_users
+    Migration: 20260403120115_add_email_to_users
    ID: scheduled_20260115_0200_002
 
    Manage scheduled migrations:
@@ -249,7 +249,7 @@ class ApprovalRequest:
 ```python
 wizard = MigrationWizard(...)
 approval_request = await wizard.request_approval(
-    migration_id="002_add_email_to_users",
+    migration_id="20260403120115_add_email_to_users",
     risk_level=RiskLevel.MEDIUM,
     required_approvers=1,
     approver_groups=['backend_team']

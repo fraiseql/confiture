@@ -430,7 +430,7 @@ confiture migrate generate NAME [OPTIONS]
 ```bash
 # Generate new migration
 confiture migrate generate add_user_bio
-# Creates: db/migrations/003_add_user_bio.py
+# Creates: db/migrations/20260403120230_add_user_bio.py
 
 # Custom migrations directory
 confiture migrate generate add_timestamps --migrations-dir custom/migrations
@@ -485,8 +485,8 @@ confiture migrate generate add_email_column \
   --to   db/schema/v2.sql \
   --generator schema_diff \
   --dry-run
-# Resolved command: pgdiff --from '/abs/v1.sql' --to '/abs/v2.sql' --output '/abs/003_add_email_column.up.sql'
-# Target file:      db/migrations/003_add_email_column.up.sql
+# Resolved command: pgdiff --from '/abs/v1.sql' --to '/abs/v2.sql' --output '/abs/20260403120345_add_email_column.up.sql'
+# Target file:      db/migrations/20260403120345_add_email_column.up.sql
 ```
 
 #### Generated Template
@@ -608,7 +608,7 @@ confiture migrate diff old.sql new.sql \
 
 📈 Total changes: 3
 
-✅ Migration generated: 003_update_users.py
+✅ Migration generated: 20260403120230_update_users.py
 ```
 
 #### Detected Change Types
@@ -707,8 +707,8 @@ The `--force` flag **skips migration state checks** and applies all migrations r
 ```
 📦 Found 2 pending migration(s)
 
-⚡ Applying 002_add_user_bio... ✅
-⚡ Applying 003_add_timestamps... ✅
+⚡ Applying 20260403120115_add_user_bio... ✅
+⚡ Applying 20260403120230_add_timestamps... ✅
 
 ✅ Successfully applied 2 migration(s)!
 ```
@@ -721,9 +721,9 @@ This may cause issues if applied incorrectly. Use with caution!
 
 📦 Force mode: Found 3 migration(s) to apply
 
-⚡ Applying 001_create_users... ✅
-⚡ Applying 002_add_user_bio... ✅
-⚡ Applying 003_add_timestamps... ✅
+⚡ Applying 20260403120000_create_users... ✅
+⚡ Applying 20260403120115_add_user_bio... ✅
+⚡ Applying 20260403120230_add_timestamps... ✅
 
 ✅ Force mode: Successfully applied 3 migration(s)!
 ⚠️  Remember to verify your database state after force application
@@ -740,8 +740,8 @@ This may cause issues if applied incorrectly. Use with caution!
 ```
 📦 Found 2 pending migration(s)
 
-⚡ Applying 002_add_user_bio... ✅
-⚡ Applying 003_add_timestamps... ❌ Error: column "bio" already exists
+⚡ Applying 20260403120115_add_user_bio... ✅
+⚡ Applying 20260403120230_add_timestamps... ❌ Error: column "bio" already exists
 ```
 
 #### Transaction Behavior
@@ -838,8 +838,8 @@ confiture migrate down --migrations-dir custom/migrations
 ```
 📦 Rolling back 2 migration(s)
 
-⚡ Rolling back 003_add_timestamps... ✅
-⚡ Rolling back 002_add_user_bio... ✅
+⚡ Rolling back 20260403120230_add_timestamps... ✅
+⚡ Rolling back 20260403120115_add_user_bio... ✅
 
 ✅ Successfully rolled back 2 migration(s)!
 ```
@@ -1007,14 +1007,14 @@ Confiture only applies migrations that match these patterns:
 {NNN}_{name}.down.sql     # Rollback migration (SQL)
 
 Examples:
-001_create_users.py
-002_add_email.up.sql
-002_add_email.down.sql
-003_create_posts.py
+20260403120000_create_users.py
+20260403120115_add_email.up.sql
+20260403120115_add_email.down.sql
+20260403120230_create_posts.py
 
 ❌ NOT RECOGNIZED (Will be ignored):
-001_create_users.sql      # Missing .up suffix
-002_add_email.sql         # Missing .up suffix
+20260403120000_create_users.sql      # Missing .up suffix
+20260403120115_add_email.sql         # Missing .up suffix
 ```
 
 #### Orphaned Files Detection
@@ -1025,8 +1025,8 @@ The validator scans for `.sql` files that don't match the expected pattern and w
 $ confiture migrate validate
 ⚠️  WARNING: Orphaned migration files detected
 These SQL files exist but won't be applied by Confiture:
-  • 001_initial_schema.sql → rename to: 001_initial_schema.up.sql
-  • 002_add_columns.sql → rename to: 002_add_columns.up.sql
+  • 20260403120000_initial_schema.sql → rename to: 20260403120000_initial_schema.up.sql
+  • 20260403120115_add_columns.sql → rename to: 20260403120115_add_columns.up.sql
 
 To automatically fix these files, run:
   confiture migrate validate --fix-naming
@@ -1039,8 +1039,8 @@ The `--fix-naming` flag automatically renames orphaned files to match the naming
 ```bash
 $ confiture migrate validate --fix-naming
 ✅ Fixed orphaned migration files:
-  • 001_initial_schema.sql → 001_initial_schema.up.sql
-  • 002_add_columns.sql → 002_add_columns.up.sql
+  • 20260403120000_initial_schema.sql → 20260403120000_initial_schema.up.sql
+  • 20260403120115_add_columns.sql → 20260403120115_add_columns.up.sql
 ```
 
 **Important**: Files are renamed to `.up.sql` (forward migrations). For rollback migrations, rename to `.down.sql` manually.
@@ -1052,8 +1052,8 @@ Use `--dry-run` to preview changes before applying them:
 ```bash
 $ confiture migrate validate --fix-naming --dry-run
 📋 DRY-RUN: Would fix the following orphaned files:
-  • 001_users.sql → 001_users.up.sql
-  • 002_posts.sql → 002_posts.up.sql
+  • 20260403120000_users.sql → 20260403120000_users.up.sql
+  • 20260403120115_posts.sql → 20260403120115_posts.up.sql
 
 # Files are NOT renamed during dry-run
 ```
@@ -1068,8 +1068,8 @@ $ confiture migrate validate --format json
 {
   "status": "issues_found",
   "orphaned_files": [
-    "001_initial_schema.sql",
-    "002_add_columns.sql"
+    "20260403120000_initial_schema.sql",
+    "20260403120115_add_columns.sql"
   ]
 }
 
@@ -1078,8 +1078,8 @@ $ confiture migrate validate --fix-naming --format json
 {
   "status": "fixed",
   "fixed": [
-    ["001_initial_schema.sql", "001_initial_schema.up.sql"],
-    ["002_add_columns.sql", "002_add_columns.up.sql"]
+    ["20260403120000_initial_schema.sql", "20260403120000_initial_schema.up.sql"],
+    ["20260403120115_add_columns.sql", "20260403120115_add_columns.up.sql"]
   ],
   "errors": []
 }
@@ -1097,7 +1097,7 @@ $ confiture migrate validate --fix-naming --format json
 Silently ignored migration files create a dangerous scenario:
 
 ```
-1. Developer writes migration: 001_add_users_table.sql (forgot .up suffix)
+1. Developer writes migration: 20260403120000_add_users_table.sql (forgot .up suffix)
 2. confiture scans migrations: Doesn't match pattern, silently skips
 3. No error or warning: Developer thinks migration is discoverable
 4. Deploy to production: Code expects new schema, database is old
@@ -1113,7 +1113,7 @@ The `migrate status` and `migrate up` commands automatically warn about orphaned
 ```bash
 $ confiture migrate status
 ⚠️  WARNING: Orphaned migration files detected
-  • 001_schema.sql → rename to: 001_schema.up.sql
+  • 20260403120000_schema.sql → rename to: 20260403120000_schema.up.sql
 ```
 
 ---
@@ -1471,8 +1471,8 @@ confiture migrate validate --require-migration --base-ref origin/main
 # ❌ DDL changes without migration files
 
 # Fix: Create migration file
-touch db/migrations/001_add_email_column.up.sql
-git add db/migrations/001_add_email_column.up.sql
+touch db/migrations/20260403120115_add_email_column.up.sql
+git add db/migrations/20260403120115_add_email_column.up.sql
 confiture migrate validate --require-migration
 # ✅ Now passes
 ```
