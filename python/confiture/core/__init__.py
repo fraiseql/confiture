@@ -4,7 +4,6 @@ from confiture.core.dry_run import (
     DryRunError,
     DryRunExecutor,
     DryRunResult,
-    StatementResult,
 )
 from confiture.core.hooks import (
     CircuitBreaker,
