@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.core.hooks.base import HookResult
 from confiture.core.hooks.builtin.webhook_hook import WebhookConfig, WebhookNotificationHook
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.phases import HookPhase

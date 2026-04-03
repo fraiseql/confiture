@@ -72,7 +72,7 @@ class DangerousStrategy(AnonymizationStrategy):
         empty_file = tmp_path / "empty.py"
         empty_file.write_text("import hashlib")
 
-        with pytest.raises(Exception):  # ConfiturError
+        with pytest.raises(ConfiturError):
             load_strategy(empty_file)
 
         # File with multiple strategy classes
