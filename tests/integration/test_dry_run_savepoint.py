@@ -1,7 +1,6 @@
 """Integration tests for SAVEPOINT-based dry-run executor."""
 
 
-
 class TestDryRunSavepointIntegration:
     """Integration tests for SAVEPOINT dry-run with real database."""
 
