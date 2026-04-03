@@ -107,6 +107,18 @@ class FileSQLMigration(Migration):
 
         super().__init__(connection)
 
+    def get_up_sql_statements(self) -> list[str]:
+        """Get individual SQL statements from the .up.sql file.
+
+        Returns:
+            List of SQL statements parsed from the file
+        """
+        import sqlparse
+
+        sql, _ = strip_transaction_wrappers(self.up_file.read_text(), return_changed=True)
+        statements = sqlparse.split(sql)
+        return [stmt.strip() for stmt in statements if stmt.strip()]
+
     def up(self) -> None:
         """Apply the migration by executing the .up.sql file."""
         sql, changed = strip_transaction_wrappers(self.up_file.read_text(), return_changed=True)

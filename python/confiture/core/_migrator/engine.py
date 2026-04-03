@@ -1761,18 +1761,14 @@ class Migrator:
     def dry_run(self, migration: Migration) -> DryRunResult:
         """Test a migration without making permanent changes.
 
-        Executes the migration in dry-run mode using DryRunExecutor,
-        which automatically rolls back all changes. Useful for:
-        - Verifying migrations work before production deployment
-        - Estimating execution time
-        - Detecting constraint violations
-        - Identifying table locking issues
+        Executes the migration SQL statements inside a SAVEPOINT that gets
+        rolled back, providing accurate timing and constraint validation.
 
         Args:
             migration: Migration instance to test
 
         Returns:
-            DryRunResult with execution metrics and estimates
+            DryRunResult with execution metrics and real DB feedback
 
         Raises:
             DryRunError: If migration execution fails during dry-run
@@ -1781,11 +1777,19 @@ class Migrator:
             >>> migrator = Migrator(connection=conn)
             >>> migration = MyMigration(connection=conn)
             >>> result = migrator.dry_run(migration)
-            >>> print(f"Estimated time: {result.estimated_production_time_ms}ms")
-            >>> print(f"Confidence: {result.confidence_percent}%")
+            >>> print(f"Execution time: {result.total_time_ms}ms")
+            >>> print(f"Confidence: {result.confidence_pct}%")
         """
-        executor = DryRunExecutor()
-        return executor.run(self.connection, migration)
+        statements = migration.get_up_sql_statements()
+        if not statements:
+            # Fallback to old simulation mode for Python migrations
+            from confiture.core.dry_run import DryRunExecutor as OldDryRunExecutor
+
+            old_executor = OldDryRunExecutor()
+            return old_executor.run(self.connection, migration)
+
+        executor = DryRunExecutor(self.connection)
+        return executor.run(migration.name, statements)
 
     def check_preconditions(
         self,

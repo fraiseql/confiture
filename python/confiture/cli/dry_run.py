@@ -112,3 +112,49 @@ def display_dry_run_header(mode: str) -> None:
     else:
         msg = "[cyan]🔍 Analyzing migrations without execution...[/cyan]"
         console.print(msg + "\n")
+
+
+def display_dry_run_result(result, format_type: str = "text") -> None:
+    """Display dry-run result.
+
+    Args:
+        result: DryRunResult to display
+        format_type: Output format ('text' or 'json')
+    """
+    if format_type == "json":
+        print_json_report(result.__dict__)
+    else:
+        # Text format
+        status = "[green]✓ SUCCESS[/green]" if result.success else "[red]❌ FAILED[/red]"
+
+        console.print(f"Dry-run: {status}")
+        console.print(f"Migration: {result.migration_name}")
+        console.print(f"Total time: {result.total_time_ms:.1f}ms")
+        console.print(f"Confidence: {result.confidence_pct}%")
+
+        if result.error:
+            console.print(f"[red]Error: {result.error}[/red]")
+
+        # Statement details
+        if hasattr(result, "statements") and result.statements:
+            console.print("\n[bold]Statement Details:[/bold]")
+
+            from rich.table import Table
+
+            table = Table(show_header=True, header_style="bold")
+            table.add_column("SQL", style="dim", max_width=60)
+            table.add_column("Status", justify="center")
+            table.add_column("Time (ms)", justify="right")
+            table.add_column("Rows", justify="right")
+
+            for stmt in result.statements:
+                status_icon = "[green]✓[/green]" if stmt.success else "[red]❌[/red]"
+                sql_preview = stmt.sql[:57] + "..." if len(stmt.sql) > 60 else stmt.sql
+                table.add_row(sql_preview, status_icon, ".1f", str(stmt.rows_affected))
+
+            console.print(table)
+
+        console.print(f"\nTotal rows affected: {result.rows_affected}")
+
+        if hasattr(result, "failed_statements") and result.failed_statements:
+            console.print(f"[red]Failed statements: {len(result.failed_statements)}[/red]")

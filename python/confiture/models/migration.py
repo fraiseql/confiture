@@ -184,6 +184,18 @@ class Migration(ABC):
         """
         raise NotImplementedError(f"{self.__class__.__name__}.down() must be implemented")
 
+    def get_up_sql_statements(self) -> list[str]:
+        """Get the SQL statements that would be executed by up().
+
+        Returns:
+            List of SQL statements, or empty list if not applicable.
+
+        Note:
+            Base implementation returns empty list. Subclasses should override
+            for dry-run support.
+        """
+        return []
+
     def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         """Execute a SQL statement.
 
@@ -291,6 +303,17 @@ class SQLMigration(Migration):
             raise TypeError(f"{self.__class__.__name__} must define an 'up_sql' class attribute")
         if not hasattr(self.__class__, "down_sql") or self.__class__.down_sql is None:
             raise TypeError(f"{self.__class__.__name__} must define a 'down_sql' class attribute")
+
+    def get_up_sql_statements(self) -> list[str]:
+        """Get individual SQL statements from up_sql.
+
+        Returns:
+            List of SQL statements parsed from up_sql
+        """
+        import sqlparse
+
+        statements = sqlparse.split(self.up_sql)
+        return [stmt.strip() for stmt in statements if stmt.strip()]
 
     def up(self) -> None:
         """Apply the migration by executing up_sql."""
