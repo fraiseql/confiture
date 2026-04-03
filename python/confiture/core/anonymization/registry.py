@@ -55,6 +55,33 @@ class StrategyRegistry:
         cls._registry[name] = strategy_class
 
     @classmethod
+    def register_from_file(cls, path: str) -> str:
+        """Load a custom strategy from file (sandboxed) and register it.
+
+        Args:
+            path: Path to Python file containing strategy class
+
+        Returns:
+            Name of the registered strategy
+
+        Raises:
+            SandboxViolationError: If file contains blocked imports
+            ConfiturError: If no valid strategy class found
+
+        Example:
+            >>> name = StrategyRegistry.register_from_file("custom_strategy.py")
+            >>> strategy = StrategyRegistry.get(name)
+        """
+        from pathlib import Path
+
+        from confiture.core.anonymization.plugins.sandbox import load_strategy
+
+        strategy_class = load_strategy(Path(path))
+        name = strategy_class.__name__
+        cls.register(name, strategy_class)
+        return name
+
+    @classmethod
     def get(
         cls, name: str, config: dict[str, Any] | StrategyConfig | None = None
     ) -> AnonymizationStrategy:
