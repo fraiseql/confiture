@@ -206,24 +206,3 @@ class DryRunExecutor:
                 execution_time_ms=elapsed,
                 error=str(exc),
             )
-
-    def _execute_one(self, sql: str) -> StatementResult:
-        """Execute a single statement, capturing metrics."""
-        start = time.perf_counter()
-        try:
-            cur = self._conn.execute(sql)
-            elapsed = (time.perf_counter() - start) * 1000
-            return StatementResult(
-                sql=sql,
-                success=True,
-                execution_time_ms=elapsed,
-                rows_affected=cur.rowcount if cur.rowcount >= 0 else 0,
-            )
-        except Exception as exc:
-            elapsed = (time.perf_counter() - start) * 1000
-            return StatementResult(
-                sql=sql,
-                success=False,
-                execution_time_ms=elapsed,
-                error=str(exc),
-            )

@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from confiture.core._migrator.engine import Migrator
 from confiture.core.hooks.base import Hook, HookResult
 from confiture.core.hooks.context import ExecutionContext, HookContext
@@ -42,8 +40,7 @@ class TestHookIntegration:
         assert "before_execute" in migrator.hook_registry.hooks
         assert len(migrator.hook_registry.hooks["before_execute"]) == 1
 
-    @pytest.mark.asyncio
-    async def test_hook_triggering_during_migration(self):
+    def test_hook_triggering_during_migration(self):
         """Hooks should be triggered during migration execution."""
         mock_conn = MagicMock()
         migrator = Migrator(connection=mock_conn)
@@ -77,6 +74,7 @@ class TestHookIntegration:
         mock_migration.name = "test_migration"
         mock_migration.up = MagicMock()
         mock_migration.transactional = True
+        mock_migration.up_preconditions = []
 
         # Mock the savepoint methods
         migrator._create_savepoint = MagicMock()
@@ -85,18 +83,18 @@ class TestHookIntegration:
         migrator._record_migration = MagicMock()
         migrator._is_applied = MagicMock(return_value=False)
 
-        # Apply the migration
+        # Apply the migration (synchronous — no running event loop so hooks fire)
         migrator.apply(mock_migration)
 
         # Verify hooks were called
         assert len(hook_calls) == 2
 
-        # Check before execute call
-        before_call = next(call for call in hook_calls if call["phase"] == "before_execute")
+        # Check before execute call (phase is HookPhase enum, not string)
+        before_call = next(call for call in hook_calls if call["phase"] == HookPhase.BEFORE_EXECUTE)
         assert before_call["migration_name"] == "test_migration"
         assert before_call["success"] is False  # Before execution
 
         # Check after execute call
-        after_call = next(call for call in hook_calls if call["phase"] == "after_execute")
+        after_call = next(call for call in hook_calls if call["phase"] == HookPhase.AFTER_EXECUTE)
         assert after_call["migration_name"] == "test_migration"
         assert after_call["success"] is True  # After successful execution

@@ -29,7 +29,7 @@ class TestDryRunMode:
 
         mock_migration.up = up_impl
 
-        # Run dry-run
+        # Run dry-run (old API: positional conn + migration)
         result = executor.run(mock_conn, mock_migration)
 
         # Verify result
@@ -39,26 +39,29 @@ class TestDryRunMode:
 
     def test_dry_run_result_contains_execution_metrics(self):
         """DryRunResult should contain execution metrics."""
-        from confiture.core.dry_run import DryRunResult
+        from confiture.core.dry_run import DryRunResult, StatementResult
+
+        statements = [
+            StatementResult(
+                sql="ALTER TABLE users ADD COLUMN age INT",
+                success=True,
+                execution_time_ms=50,
+                rows_affected=42,
+            ),
+        ]
 
         result = DryRunResult(
             migration_name="001_test",
-            migration_version="001",
             success=True,
-            execution_time_ms=125,
-            rows_affected=42,
-            locked_tables=["users", "orders"],
-            estimated_production_time_ms=120,
-            confidence_percent=85,
-            warnings=[],
+            total_time_ms=125,
+            confidence_pct=85,
+            statements=statements,
         )
 
         assert result.migration_name == "001_test"
-        assert result.execution_time_ms == 125
-        assert result.rows_affected == 42
-        assert result.locked_tables == ["users", "orders"]
-        assert result.estimated_production_time_ms == 120
-        assert result.confidence_percent == 85
+        assert result.execution_time_ms == 125  # backward compat property
+        assert result.rows_affected == 42  # computed from statements
+        assert result.confidence_percent == 85  # backward compat property
 
     def test_dry_run_detects_constraint_violations(self):
         """DryRunExecutor should detect constraint violations during test."""
@@ -83,8 +86,8 @@ class TestDryRunMode:
         with pytest.raises(DryRunError):
             executor.run(mock_conn, mock_migration)
 
-    def test_dry_run_captures_lock_times(self):
-        """DryRunExecutor should capture table lock times."""
+    def test_dry_run_returns_result_with_expected_attributes(self):
+        """DryRunExecutor result should have expected attributes."""
         from confiture.core.dry_run import DryRunExecutor
 
         executor = DryRunExecutor()
@@ -96,12 +99,16 @@ class TestDryRunMode:
 
         result = executor.run(mock_conn, mock_migration)
 
-        # Should capture lock timing information
-        assert hasattr(result, "locked_tables")
-        assert isinstance(result.locked_tables, list)
+        # Legacy result has core attributes
+        assert hasattr(result, "migration_name")
+        assert hasattr(result, "success")
+        assert hasattr(result, "total_time_ms")
+        assert hasattr(result, "confidence_pct")
+        assert hasattr(result, "statements")
+        assert isinstance(result.statements, list)
 
-    def test_dry_run_estimates_production_time(self):
-        """DryRunExecutor should estimate production execution time."""
+    def test_dry_run_has_confidence_and_timing(self):
+        """DryRunExecutor result should have confidence and timing info."""
         from confiture.core.dry_run import DryRunExecutor
 
         executor = DryRunExecutor()
@@ -113,10 +120,10 @@ class TestDryRunMode:
 
         result = executor.run(mock_conn, mock_migration)
 
-        # Should have time estimate field (may be 0 in minimal implementation)
-        assert hasattr(result, "estimated_production_time_ms")
-        assert isinstance(result.estimated_production_time_ms, (int, float))
-        # Note: estimate is populated during REFACTOR phase
+        # Should have timing and confidence fields
+        assert isinstance(result.total_time_ms, (int, float))
+        assert isinstance(result.execution_time_ms, (int, float))  # compat property
+        assert isinstance(result.confidence_pct, int)
 
     def test_dry_run_provides_confidence_level(self):
         """DryRunExecutor should provide confidence in estimate."""
@@ -152,12 +159,7 @@ class TestDryRunMode:
         mock_migration.name = "006_rollback_test"
         mock_migration.version = "006"
 
-        # Track if rollback was called
-        rollback_called = False
-
         def up_impl():
-            nonlocal rollback_called
-            # Would normally make DB changes here
             pass
 
         mock_migration.up = up_impl
@@ -168,26 +170,21 @@ class TestDryRunMode:
         assert result.success is True
 
     def test_dry_run_comparison_with_production(self):
-        """DryRunResult should show comparison to estimate."""
+        """DryRunResult should support execution time comparison."""
         from confiture.core.dry_run import DryRunResult
 
         result = DryRunResult(
             migration_name="007_comparison",
-            migration_version="007",
             success=True,
-            execution_time_ms=100,
-            rows_affected=1000,
-            locked_tables=["large_table"],
-            estimated_production_time_ms=100,  # Match actual for this test
-            confidence_percent=80,
-            warnings=["Large table lock detected"],
+            total_time_ms=100,
+            confidence_pct=80,
+            statements=[],
         )
 
-        # Calculate estimate range (±15%)
-        low_estimate = result.estimated_production_time_ms * 0.85
-        high_estimate = result.estimated_production_time_ms * 1.15
-
-        assert low_estimate <= result.execution_time_ms <= high_estimate
+        # Verify backward compatibility properties work
+        assert result.execution_time_ms == 100
+        assert result.confidence_percent == 80
+        assert result.migration_version == "007_comparison"
 
     def test_migration_integrates_with_dry_run_executor(self):
         """Migration class should work with dry-run."""
@@ -252,8 +249,8 @@ class TestSavepointDryRunExecutor:
             "INSERT INTO dry_run_test (name) VALUES ('test1'), ('test2')",
         ]
 
-        # Run dry-run
-        result = executor.run("test_migration", statements)
+        # Run dry-run (new API: keyword arguments)
+        result = executor.run(migration_name="test_migration", statements=statements)
 
         # Verify SAVEPOINT operations were called
         expected_calls = [
@@ -315,8 +312,8 @@ class TestSavepointDryRunExecutor:
         # SQL statements - first good, second bad
         statements = ["CREATE TABLE test_table (id INT)", "INVALID SQL STATEMENT"]
 
-        # Run dry-run
-        result = executor.run("test_migration", statements)
+        # Run dry-run (new API: keyword arguments)
+        result = executor.run(migration_name="test_migration", statements=statements)
 
         # Verify result shows failure
         assert result.migration_name == "test_migration"

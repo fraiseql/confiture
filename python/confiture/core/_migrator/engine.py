@@ -1888,8 +1888,10 @@ class Migrator:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(self.hook_registry.trigger(phase, hook_context))
-            if not result.success:
-                logger.warning(f"Hook execution failed for phase {phase}: {result.errors}")
+            if result.failed_count > 0:
+                logger.warning(
+                    f"Hook execution failed for phase {phase}: {result.failed_count} hook(s) failed"
+                )
         except Exception as e:
             logger.error(f"Hook triggering failed for phase {phase}: {e}")
             # Don't let hook failures break migrations
@@ -1939,7 +1941,7 @@ class Migrator:
             )
 
         executor = DryRunExecutor(self.connection)
-        return executor.run(migration.name, statements)
+        return executor.run(migration_name=migration.name, statements=statements)
 
     def check_preconditions(
         self,

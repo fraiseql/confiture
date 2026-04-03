@@ -213,6 +213,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
         "confiture.integrations.pggit.coordination.models",
         "IntentStatus",
     ),
+    # Dry run
+    "DryRunError": ("confiture.core.dry_run", "DryRunError"),
+    "DryRunExecutor": ("confiture.core.dry_run", "DryRunExecutor"),
+    "DryRunResult": ("confiture.core.dry_run", "DryRunResult"),
+    "StatementResult": ("confiture.core.dry_run", "StatementResult"),
     # Schema export
     "generate_schema": ("confiture.core.schema_exporter", "generate_schema"),
     "export_all_schemas": ("confiture.core.schema_exporter", "export_all"),
