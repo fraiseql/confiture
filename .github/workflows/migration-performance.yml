@@ -16,6 +16,9 @@ on:
       - 'tests/migration_testing/test_load_testing.py'
       - '.github/workflows/migration-performance.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: migration-performance-${{ github.ref }}
   cancel-in-progress: true
@@ -226,7 +229,7 @@ jobs:
 
     - name: Upload Performance Artifacts
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: performance-metrics
         path: .performance-metrics/

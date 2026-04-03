@@ -17,6 +17,9 @@ on:
       - 'pyproject.toml'
       - '.github/workflows/migration-tests.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: migration-tests-${{ github.ref }}
   cancel-in-progress: true
