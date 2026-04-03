@@ -4,8 +4,6 @@ from unittest.mock import MagicMock, Mock, call
 
 import pytest
 
-import psycopg
-
 
 class TestDryRunMode:
     """Test suite for migration dry-run mode."""
@@ -218,8 +216,9 @@ class TestSavepointDryRunExecutor:
 
     def test_dry_run_executor_executes_sql_statements(self):
         """DryRunExecutor should execute SQL statements inside SAVEPOINT and rollback."""
+        from unittest.mock import Mock
+
         from confiture.core.dry_run import DryRunExecutor
-        from unittest.mock import Mock, MagicMock
 
         # Mock connection and cursors
         mock_conn = Mock()
@@ -288,8 +287,9 @@ class TestSavepointDryRunExecutor:
 
     def test_dry_run_executor_handles_sql_errors_and_rolls_back(self):
         """DryRunExecutor should handle SQL errors, capture error messages, and still rollback."""
-        from confiture.core.dry_run import DryRunExecutor
         from unittest.mock import Mock
+
+        from confiture.core.dry_run import DryRunExecutor
 
         # Mock connection
         mock_conn = Mock()
@@ -342,9 +342,10 @@ class TestSavepointDryRunExecutor:
 
     def test_migrator_dry_run_uses_savepoint_executor_for_sql_migrations(self):
         """Migrator.dry_run() should use SAVEPOINT executor for SQL migrations."""
-        from confiture.models.migration import SQLMigration
-        from confiture.core._migrator.engine import Migrator
         from unittest.mock import Mock
+
+        from confiture.core._migrator.engine import Migrator
+        from confiture.models.migration import SQLMigration
 
         # Create a test SQL migration
         class TestSQLMigration(SQLMigration):
@@ -389,10 +390,11 @@ class TestSavepointDryRunExecutor:
 
     def test_cli_display_formats_dry_run_result_with_statements(self):
         """CLI display should format DryRunResult with per-statement details."""
-        from confiture.core.dry_run import DryRunResult, StatementResult
-        from confiture.cli.dry_run import display_dry_run_result
-        from io import StringIO
         import sys
+        from io import StringIO
+
+        from confiture.cli.dry_run import display_dry_run_result
+        from confiture.core.dry_run import DryRunResult, StatementResult
 
         # Create a mock result with statements
         statements = [

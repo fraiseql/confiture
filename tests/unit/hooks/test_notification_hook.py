@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.core.hooks.base import HookResult
 from confiture.core.hooks.builtin.notification_hook import (
     SlackConfig,
     SlackNotificationHook,

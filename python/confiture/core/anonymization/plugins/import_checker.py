@@ -76,14 +76,17 @@ def check_source(source: str) -> list[ImportViolation]:
                             col=node.col_offset,
                         )
                     )
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.split(".")[0] in BLOCKED_MODULES:
-                violations.append(
-                    ImportViolation(
-                        module=node.module,
-                        line=node.lineno,
-                        col=node.col_offset,
-                    )
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.split(".")[0] in BLOCKED_MODULES
+        ):
+            violations.append(
+                ImportViolation(
+                    module=node.module,
+                    line=node.lineno,
+                    col=node.col_offset,
                 )
+            )
 
     return violations

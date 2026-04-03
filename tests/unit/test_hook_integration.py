@@ -1,7 +1,8 @@
 """Test hook integration with migration engine."""
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from confiture.core._migrator.engine import Migrator
 from confiture.core.hooks.base import Hook, HookResult

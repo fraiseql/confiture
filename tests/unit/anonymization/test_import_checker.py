@@ -3,9 +3,8 @@
 import pytest
 
 from confiture.core.anonymization.plugins.import_checker import (
-    check_source,
-    ImportViolation,
     BLOCKED_MODULES,
+    check_source,
 )
 
 
@@ -88,7 +87,7 @@ from subprocess import call
     def test_check_source_detects_dynamic_imports(self):
         """check_source() should detect dynamic __import__ calls."""
         source = '__import__("os")'
-        violations = check_source(source)
+        check_source(source)
         # Note: AST doesn't parse dynamic imports easily, this might not be detected
         # This is an edge case for future enhancement
         pass  # Placeholder for now

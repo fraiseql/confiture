@@ -1,12 +1,10 @@
 """Unit tests for builtin backup hook."""
 
 import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from confiture.core.hooks.base import HookResult
 from confiture.core.hooks.builtin.backup_hook import BackupConfig, BackupHook
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.phases import HookPhase

@@ -1,6 +1,7 @@
 """Core migration execution and schema building components."""
 
 from confiture.core.dry_run import (
+    DryRunError,
     DryRunExecutor,
     DryRunResult,
     StatementResult,

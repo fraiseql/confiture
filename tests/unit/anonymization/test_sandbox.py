@@ -1,16 +1,17 @@
 """Unit tests for strategy sandbox security."""
 
-import pytest
-from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from confiture.core.anonymization.plugins.sandbox import (
-    load_strategy,
-    execute_sandboxed,
-    SandboxViolationError,
     SandboxResult,
+    SandboxViolationError,
+    execute_sandboxed,
+    load_strategy,
 )
 from confiture.core.anonymization.strategy import AnonymizationStrategy
+from confiture.exceptions import ConfiturError
 
 
 class TestStrategySandbox:
@@ -86,7 +87,7 @@ class Strategy2(AnonymizationStrategy):
     def anonymize(self, value): return value
 """)
 
-        with pytest.raises(Exception):  # ConfiturError
+        with pytest.raises(ConfiturError):
             load_strategy(multi_file)
 
     def test_execute_sandboxed_captures_timing(self):
@@ -138,7 +139,7 @@ class Strategy2(AnonymizationStrategy):
         strategy = SlowStrategy()
 
         with patch("confiture.core.anonymization.plugins.sandbox.logger") as mock_logger:
-            result = execute_sandboxed(strategy, "test", timeout_s=0.005)  # 5ms timeout
+            execute_sandboxed(strategy, "test", timeout_s=0.005)  # 5ms timeout
 
             # Should log warning about timeout
             mock_logger.warning.assert_called_once()

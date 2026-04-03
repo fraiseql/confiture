@@ -1,6 +1,6 @@
 """Unit tests for builtin hook registration."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,8 +16,9 @@ class TestBuiltinRegistration:
         """Should be able to register BackupHook with HookRegistry."""
         registry = HookRegistry()
 
-        from confiture.core.hooks.builtin.backup_hook import BackupConfig
         from pathlib import Path
+
+        from confiture.core.hooks.builtin.backup_hook import BackupConfig
 
         config = BackupConfig(
             backup_dir=Path("/tmp/backups"),
@@ -88,8 +89,9 @@ class TestBuiltinRegistration:
         mock_subprocess.return_value = mock_proc
 
         # Register backup hook
-        from confiture.core.hooks.builtin.backup_hook import BackupConfig
         from pathlib import Path
+
+        from confiture.core.hooks.builtin.backup_hook import BackupConfig
 
         config = BackupConfig(
             backup_dir=Path("/tmp/backups"),

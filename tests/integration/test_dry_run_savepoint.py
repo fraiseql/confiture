@@ -1,7 +1,5 @@
 """Integration tests for SAVEPOINT-based dry-run executor."""
 
-import pytest
-import psycopg
 
 
 class TestDryRunSavepointIntegration:

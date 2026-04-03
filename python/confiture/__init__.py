@@ -23,7 +23,7 @@ from typing import Any
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.8.21"
+__version__ = "0.8.22"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -92,6 +92,11 @@ __all__ = [
     "MigrateReinitResult",
     "MigrateRebuildResult",
     "MigrationApplied",
+    # Dry run
+    "DryRunError",
+    "DryRunExecutor",
+    "DryRunResult",
+    "StatementResult",
     # Table/schema introspection
     "SchemaIntrospector",
     "IntrospectionResult",
