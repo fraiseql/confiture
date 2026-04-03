@@ -62,9 +62,20 @@ jobs:
 
     - name: Create test databases
       run: |
-        PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_test;" || true
-        PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;" || true
-        PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;" || true
+        # Wait for database to be ready and create additional test databases
+        echo "Waiting for PostgreSQL to be ready..."
+        for i in {1..30}; do
+          if PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "SELECT 1;" >/dev/null 2>&1; then
+            echo "PostgreSQL is ready"
+            break
+          fi
+          echo "Waiting for PostgreSQL... ($i/30)"
+          sleep 2
+        done
+
+        # Create additional test databases
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "CREATE DATABASE confiture_source_test;" || echo "Database confiture_source_test may already exist"
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -c "CREATE DATABASE confiture_target_test;" || echo "Database confiture_target_test may already exist"
 
     - name: Run core tests with coverage
       run: |
