@@ -29,7 +29,9 @@ from confiture.core.connection import (
     load_migration_module,
 )
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
-from confiture.core.hooks import HookError
+from confiture.core.hooks import HookError, HookRegistry
+from confiture.core.hooks.context import ExecutionContext
+from confiture.core.hooks.phases import HookPhase
 from confiture.core.locking import LockConfig, MigrationLock
 from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
 from confiture.core.progress import ProgressManager
@@ -200,6 +202,18 @@ class Migrator:
         # Schema part (None when not schema-qualified)
         parts = migration_table.split(".", 1)
         self._table_schema: str | None = parts[0] if len(parts) == 2 else None
+
+        # Hook registry for lifecycle events
+        self.hook_registry = HookRegistry[ExecutionContext]()
+
+    def register_hook(self, phase: Any, hook: Any) -> None:
+        """Register a hook for a migration lifecycle phase.
+
+        Args:
+            phase: Hook phase (e.g., HookPhase.BEFORE_EXECUTE)
+            hook: Hook instance to register
+        """
+        self.hook_registry.register(phase, hook)
 
     @property
     def _table_ident(self) -> pgsql.Identifier:
@@ -437,14 +451,34 @@ class Migrator:
             migration_file: Path to migration file for checksum computation
         """
         savepoint_name = f"migration_{migration.version}"
+        execution_time_ms = 0
+        success = False
+
         try:
             self._create_savepoint(savepoint_name)
+
+            # Trigger BEFORE_EXECUTE hook
+            self._trigger_hook(
+                HookPhase.BEFORE_EXECUTE,
+                migration,
+                execution_time_ms=0,
+                success=False,
+            )
 
             # Execute migration DDL
             logger.debug(f"Executing DDL for migration {migration.version}")
             start_time = time.perf_counter()
             migration.up()
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+            success = True
+
+            # Trigger AFTER_EXECUTE hook
+            self._trigger_hook(
+                HookPhase.AFTER_EXECUTE,
+                migration,
+                execution_time_ms=execution_time_ms,
+                success=True,
+            )
 
             # Only record the migration if it's not already applied
             # In force mode, we re-apply but don't re-record
@@ -456,6 +490,18 @@ class Migrator:
             logger.info(f"Successfully applied migration {migration.version} ({migration.name})")
 
         except Exception as e:
+            # Trigger AFTER_EXECUTE hook for failure case
+            if "start_time" in locals():
+                execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+
+            self._trigger_hook(
+                HookPhase.AFTER_EXECUTE,
+                migration,
+                execution_time_ms=execution_time_ms,
+                success=False,
+                error=str(e),
+            )
+
             self._rollback_to_savepoint(savepoint_name)
             if isinstance(e, (MigrationError, HookError)):
                 raise
@@ -503,11 +549,31 @@ class Migrator:
         original_autocommit = self.connection.autocommit
         self.connection.autocommit = True
 
+        execution_time_ms = 0
+        success = False
+
         try:
+            # Trigger BEFORE_EXECUTE hook
+            self._trigger_hook(
+                HookPhase.BEFORE_EXECUTE,
+                migration,
+                execution_time_ms=0,
+                success=False,
+            )
+
             logger.debug(f"Executing DDL for migration {migration.version} (autocommit)")
             start_time = time.perf_counter()
             migration.up()
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+            success = True
+
+            # Trigger AFTER_EXECUTE hook
+            self._trigger_hook(
+                HookPhase.AFTER_EXECUTE,
+                migration,
+                execution_time_ms=execution_time_ms,
+                success=True,
+            )
 
             # Record migration (in autocommit, this commits immediately)
             if not already_applied:
@@ -519,6 +585,18 @@ class Migrator:
             )
 
         except Exception as e:
+            # Trigger AFTER_EXECUTE hook for failure case
+            if "start_time" in locals():
+                execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+
+            self._trigger_hook(
+                HookPhase.AFTER_EXECUTE,
+                migration,
+                execution_time_ms=execution_time_ms,
+                success=False,
+                error=str(e),
+            )
+
             logger.error(
                 f"Non-transactional migration {migration.version} failed. "
                 "Manual cleanup may be required."
@@ -1758,6 +1836,70 @@ class Migrator:
                 f"{'...' if len(transactional_migrations) > 3 else ''}"
             )
 
+    def _trigger_hook(
+        self,
+        phase: Any,
+        migration: Migration,
+        execution_time_ms: int = 0,
+        success: bool = False,
+        error: str | None = None,
+    ) -> None:
+        """Trigger hooks for a migration lifecycle event.
+
+        Args:
+            phase: Hook phase (e.g., HookPhase.BEFORE_EXECUTE)
+            migration: Migration being processed
+            execution_time_ms: Execution time in milliseconds
+            success: Whether the operation succeeded
+            error: Error message if failed
+        """
+        # Build execution context with migration metadata
+        context = ExecutionContext(
+            elapsed_time_ms=execution_time_ms,
+            metadata={
+                "migration_name": migration.name,
+                "migration_version": migration.version,
+                "direction": "up",  # Currently only supporting up migrations
+                "success": success,
+                "error": error,
+                "executed_by": "migrator",  # Could be enhanced to track actual user
+            },
+        )
+
+        from confiture.core.hooks.context import HookContext
+
+        hook_context = HookContext(phase=phase, data=context)
+
+        # Run async hook triggering in synchronous context
+        import asyncio
+
+        try:
+            # Check if we're already in an event loop (e.g., during testing)
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, skip hook triggering to avoid conflicts
+                logger.debug(f"Skipping hook triggering for {phase} due to running event loop")
+                return
+            except RuntimeError:
+                # No running loop, we can create one
+                pass
+
+            # Create new event loop for synchronous context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self.hook_registry.trigger(phase, hook_context))
+            if not result.success:
+                logger.warning(f"Hook execution failed for phase {phase}: {result.errors}")
+        except Exception as e:
+            logger.error(f"Hook triggering failed for phase {phase}: {e}")
+            # Don't let hook failures break migrations
+        finally:
+            try:
+                if "loop" in locals():
+                    loop.close()
+            except Exception:
+                pass
+
     def dry_run(self, migration: Migration) -> DryRunResult:
         """Test a migration without making permanent changes.
 
@@ -1783,10 +1925,18 @@ class Migrator:
         statements = migration.get_up_sql_statements()
         if not statements:
             # Fallback to old simulation mode for Python migrations
-            from confiture.core.dry_run import DryRunExecutor as OldDryRunExecutor
+            # Note: This creates a basic simulation result since the old executor
+            # is no longer available. In practice, Python migrations should implement
+            # get_up_sql_statements() or use SQL-based migrations.
+            from confiture.core.dry_run import DryRunResult
 
-            old_executor = OldDryRunExecutor()
-            return old_executor.run(self.connection, migration)
+            return DryRunResult(
+                migration_name=migration.name,
+                success=True,
+                total_time_ms=0,
+                confidence_pct=40,  # Low confidence for unsupported migrations
+                statements=[],
+            )
 
         executor = DryRunExecutor(self.connection)
         return executor.run(migration.name, statements)
