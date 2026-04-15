@@ -20,13 +20,17 @@ Usage:
 
 from __future__ import annotations
 
+import importlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.core.scaffold.emitter import EmittedFunction
+from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.tree_allocator import TreeAllocator
 
 # Create Rich console for pretty output
@@ -85,6 +89,105 @@ def alloc_filename(
         print(json.dumps({"path": str(next_path)}))
     else:
         console.print(str(next_path))
+
+
+# ---------------------------------------------------------------------------
+# generate scaffold
+# ---------------------------------------------------------------------------
+
+
+def _load_emitter_callable(spec: str) -> Callable[[], list[EmittedFunction]]:
+    """Load and return an emitter callable from a ``module.path:name`` spec.
+
+    Args:
+        spec: Dotted-module path and callable name separated by ``":"``,
+            e.g. ``"myproject.generators:emit_crud"``.
+
+    Returns:
+        A callable that, when invoked with no arguments, returns a list of
+        :class:`~confiture.core.scaffold.emitter.EmittedFunction`.
+
+    Raises:
+        ValueError: If *spec* is malformed, the module cannot be imported,
+            or the attribute does not exist.
+    """
+    if ":" not in spec:
+        raise ValueError(f"Invalid --from format '{spec}': expected 'module.path:callable_name'")
+    module_path, callable_name = spec.rsplit(":", 1)
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise ValueError(f"Cannot import emitter module '{module_path}': {exc}") from exc
+    if not hasattr(module, callable_name):
+        raise ValueError(f"Module '{module_path}' has no attribute '{callable_name}'")
+    return getattr(module, callable_name)  # type: ignore[no-any-return]
+
+
+@generate_app.command("scaffold")
+def scaffold_functions(
+    from_spec: str = typer.Option(
+        ...,
+        "--from",
+        help="Emitter callable as 'module.path:callable_name'. Called with no args; "
+        "must return list[EmittedFunction].",
+    ),
+    schema_dir: Path = typer.Option(
+        Path("db/schema"),
+        "--schema-dir",
+        help="Root of the schema tree (default: db/schema).",
+    ),
+    overrides_dir: Path | None = typer.Option(
+        None,
+        "--overrides-dir",
+        help="Override mirror directory. Files present here are skipped during scaffold.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be written without touching disk.",
+    ),
+    output_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit a JSON object {results: [{path, action}, ...]} instead of plain text.",
+    ),
+) -> None:
+    """Write SQL files produced by a pluggable framework emitter.
+
+    Loads the callable identified by ``--from``, calls it with no arguments
+    to obtain a list of :class:`EmittedFunction` objects, allocates
+    sort-stable filenames for each, and writes them with a ``-- GENERATED``
+    header.  Files with a matching path in ``--overrides-dir`` are skipped.
+
+    Examples::
+
+        confiture generate scaffold --from myproject.gen:emit_crud
+        confiture generate scaffold --from myproject.gen:emit_crud --dry-run
+        confiture generate scaffold --from myproject.gen:emit_crud --json
+    """
+    try:
+        factory = _load_emitter_callable(from_spec)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    functions: list[EmittedFunction] = factory()
+
+    orchestrator = ScaffoldOrchestrator(
+        schema_dir=schema_dir,
+        overrides_dir=overrides_dir,
+        dry_run=dry_run,
+    )
+    results = orchestrator.run(functions)
+
+    if output_json:
+        print(json.dumps({"results": [{"path": str(r.path), "action": r.action} for r in results]}))
+        return
+
+    dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
+    for r in results:
+        icon = "[yellow]~[/yellow]" if r.action == "skip" else "[green]✓[/green]"
+        console.print(f"{icon} {r.action}{dry_tag}: {r.path}")
 
 
 def _get_generator(config_path: Path):

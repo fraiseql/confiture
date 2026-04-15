@@ -119,6 +119,9 @@ __all__ = [
     # Schema export
     "generate_schema",
     "export_all_schemas",
+    # Scaffold / generate tree
+    "EmittedFunction",
+    "ConfitureEmitter",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -221,6 +224,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Schema export
     "generate_schema": ("confiture.core.schema_exporter", "generate_schema"),
     "export_all_schemas": ("confiture.core.schema_exporter", "export_all"),
+    # Scaffold / generate tree
+    "EmittedFunction": ("confiture.core.scaffold.emitter", "EmittedFunction"),
+    "ConfitureEmitter": ("confiture.core.scaffold.emitter", "ConfitureEmitter"),
 }
 
 
