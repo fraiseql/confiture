@@ -1,10 +1,18 @@
-"""CLI commands for migration generation from pgGit.
+"""CLI commands for the `confiture generate` subcommand group.
 
-These commands generate Confiture migration files from pgGit branch history.
-The generated migrations can be deployed to any environment, including
-production databases that do NOT have pgGit installed.
+Commands
+--------
+alloc       Return the next sort-stable filename for a schema subtree.
+scaffold    Write SQL files emitted by a pluggable emitter (phase 3).
+renumber    Move a file or subtree and rewrite cross-references (phase 4).
+from-branch Generate migrations from a pgGit branch.
+preview     Preview what migrations would be generated from a branch.
+diff        Show a detailed diff between two pgGit branches.
+pgtap       Generate pgTAP test scaffolds for stored functions.
+stubs       Generate typed Python wrapper functions for stored procedures.
 
 Usage:
+    confiture generate alloc db/schema/functions/catalog/ --verb create
     confiture generate from-branch feature/payments
     confiture generate from-branch feature/payments --combined
     confiture generate preview feature/payments
@@ -12,20 +20,71 @@ Usage:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.core.tree_allocator import TreeAllocator
+
 # Create Rich console for pretty output
 console = Console()
 
 # Create generate subcommand group
 generate_app = typer.Typer(
-    help="Generate migrations from pgGit branches",
+    help="Generate migrations and SQL function tree files",
     no_args_is_help=True,
 )
+
+
+@generate_app.command("alloc")
+def alloc_filename(
+    target_dir: Path = typer.Argument(
+        ...,
+        help="Directory in which to allocate the next filename (must be within --schema-dir).",
+        exists=False,  # validated manually so we can emit a clean error message
+    ),
+    schema_dir: Path = typer.Option(
+        Path("db/schema"),
+        "--schema-dir",
+        help="Root of the schema tree (default: db/schema).",
+    ),
+    verb: str | None = typer.Option(
+        None,
+        "--verb",
+        help="Verb suffix appended after the prefix, e.g. 'create' → '00001_create.sql'.",
+    ),
+    output_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit a JSON object {path: ...} instead of plain text.",
+    ),
+) -> None:
+    """Return the next sort-stable filename for a schema subtree.
+
+    Scans TARGET_DIR for existing ``.sql`` files, auto-detects the
+    numbering scheme (decimal or hex) and prefix width, then prints the
+    next available filename.
+
+    Examples::
+
+        confiture generate alloc db/schema/functions/catalog/manufacturer/
+        confiture generate alloc db/schema/functions/ --verb create
+        confiture generate alloc db/schema/functions/ --verb create --json
+    """
+    try:
+        allocator = TreeAllocator(schema_dir)
+        next_path = allocator.alloc(target_dir, verb=verb)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    if output_json:
+        print(json.dumps({"path": str(next_path)}))
+    else:
+        console.print(str(next_path))
 
 
 def _get_generator(config_path: Path):
