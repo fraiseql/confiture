@@ -89,7 +89,7 @@ def alloc_filename(
     if output_json:
         print(json.dumps({"path": str(next_path)}))
     else:
-        console.print(str(next_path))
+        typer.echo(str(next_path))
 
 
 # ---------------------------------------------------------------------------
