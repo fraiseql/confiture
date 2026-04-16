@@ -463,6 +463,44 @@ class SchemaLinter:
         # Check that it only contains alphanumeric and underscore
         return bool(re.match(r"^[a-z_][a-z0-9_]*$", identifier, re.IGNORECASE))
 
+    def lint_tree(
+        self,
+        schema_dir: Path,
+        overrides_dir: Path | None = None,
+    ) -> LintReport:
+        """Lint a schema file tree for structural consistency (GEN001–GEN004).
+
+        Args:
+            schema_dir: Root of the schema tree to scan.
+            overrides_dir: Optional overrides mirror directory (for GEN004).
+
+        Returns:
+            LintReport with all violations found.
+        """
+        from confiture.core.linting.libraries.generate import (
+            Gen001PrefixUnique,
+            Gen002VerbSuffix,
+            Gen003GapPolicy,
+            Gen004OrphanedOverride,
+        )
+
+        report = LintReport()
+
+        for violation in Gen001PrefixUnique().check(schema_dir):
+            report.add_violation(violation)
+
+        for violation in Gen002VerbSuffix().check(schema_dir):
+            report.add_violation(violation)
+
+        for violation in Gen003GapPolicy().check(schema_dir):
+            report.add_violation(violation)
+
+        if overrides_dir is not None:
+            for violation in Gen004OrphanedOverride().check(schema_dir, overrides_dir):
+                report.add_violation(violation)
+
+        return report
+
     @staticmethod
     def _is_likely_junction_table(table_name: str) -> bool:
         """Check if table looks like a junction/bridge table.
