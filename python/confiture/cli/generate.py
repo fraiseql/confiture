@@ -32,6 +32,7 @@ from rich.table import Table
 from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.tree_allocator import TreeAllocator
+from confiture.core.tree_renumber import TreeRenumber
 
 # Create Rich console for pretty output
 console = Console()
@@ -188,6 +189,105 @@ def scaffold_functions(
     for r in results:
         icon = "[yellow]~[/yellow]" if r.action == "skip" else "[green]✓[/green]"
         console.print(f"{icon} {r.action}{dry_tag}: {r.path}")
+
+
+# ---------------------------------------------------------------------------
+# generate renumber
+# ---------------------------------------------------------------------------
+
+
+@generate_app.command("renumber")
+def renumber_path(
+    old_path: Path = typer.Argument(
+        ...,
+        help="Source file or directory to move.",
+    ),
+    new_path: Path = typer.Argument(
+        ...,
+        help="Target file path or directory. "
+        "When a directory is given, the next available prefix is allocated automatically.",
+    ),
+    schema_dir: Path = typer.Option(
+        Path("db/schema"),
+        "--schema-dir",
+        help="Root of the schema tree (default: db/schema).",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would move and what refs would be rewritten, without touching disk.",
+    ),
+    output_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit structured JSON output.",
+    ),
+) -> None:
+    """Move a SQL file or subtree and rewrite cross-references.
+
+    Allocates sort-stable filenames at the target, scans the schema tree
+    for calls to the moved function(s), and rewrites them when the function
+    stem changes.  Exits with code 2 when dangling references remain after
+    the rewrite pass (e.g. inside string literals).
+
+    Examples::
+
+        confiture generate renumber db/schema/functions/00001_create_item.sql \\
+                                    db/schema/functions/00005_create_item.sql
+        confiture generate renumber db/schema/functions/catalog/ \\
+                                    db/schema/functions/public/ --dry-run
+    """
+    renumber = TreeRenumber(schema_dir)
+
+    try:
+        plans = renumber.build_plans(old_path, new_path)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    result = renumber.execute(plans, dry_run=dry_run)
+
+    if output_json:
+        print(
+            json.dumps(
+                {
+                    "moves": [
+                        {"old": str(p.old_path), "new": str(p.new_path)} for p in result.plans
+                    ],
+                    "ref_rewrites": [
+                        {
+                            "file": str(rw.ref_file),
+                            "old_name": rw.old_name,
+                            "new_name": rw.new_name,
+                        }
+                        for rw in result.ref_rewrites
+                    ],
+                    "dangling_refs": [
+                        {"file": str(f), "name": name} for f, name in result.dangling_refs
+                    ],
+                }
+            )
+        )
+    else:
+        dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
+        for plan in result.plans:
+            console.print(f"[green]→[/green] move{dry_tag}: {plan.old_path} → {plan.new_path}")
+        for rw in result.ref_rewrites:
+            if rw.old_name != rw.new_name:
+                console.print(
+                    f"[cyan]~[/cyan] rewrite{dry_tag}: {rw.ref_file} "
+                    f"({rw.old_name} → {rw.new_name})"
+                )
+            else:
+                console.print(f"[dim]ℹ refs:[/dim] {rw.ref_file} calls {rw.old_name}")
+        for ref_file, name in result.dangling_refs:
+            console.print(
+                f"[red]⚠ dangling:[/red] {ref_file} still references '{name}' "
+                f"(likely inside a string literal — fix manually)"
+            )
+
+    if result.dangling_refs:
+        raise typer.Exit(2)
 
 
 def _get_generator(config_path: Path):
