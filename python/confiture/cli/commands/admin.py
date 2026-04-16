@@ -221,7 +221,8 @@ def verify(
         for m in mismatches:
             console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
             console.print(f"    File: {m.file_path}")
-            console.print(f"    Expected: {m.expected[:16]}...")
+            expected_preview = m.expected[:16] if m.expected else "(none)"
+            console.print(f"    Expected: {expected_preview}...")
             console.print(f"    Actual:   {m.actual[:16]}...")
             console.print()
 

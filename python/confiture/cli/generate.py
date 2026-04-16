@@ -3,8 +3,8 @@
 Commands
 --------
 alloc       Return the next sort-stable filename for a schema subtree.
-scaffold    Write SQL files emitted by a pluggable emitter (phase 3).
-renumber    Move a file or subtree and rewrite cross-references (phase 4).
+scaffold    Write SQL files emitted by a pluggable emitter.
+renumber    Move a file or subtree and rewrite cross-references.
 from-branch Generate migrations from a pgGit branch.
 preview     Preview what migrations would be generated from a branch.
 diff        Show a detailed diff between two pgGit branches.

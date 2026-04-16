@@ -776,7 +776,8 @@ def migrate_up(
                 error_console.print("[red]❌ Checksum verification failed![/red]\n")
                 for m in e.mismatches:
                     error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-                    error_console.print(f"    Expected: {m.expected[:16]}...")
+                    expected_preview = m.expected[:16] if m.expected else "(none)"
+                    error_console.print(f"    Expected: {expected_preview}...")
                     error_console.print(f"    Actual:   {m.actual[:16]}...")
                 error_console.print(
                     "\n[yellow]💡 Tip: Use 'confiture verify --fix' to update checksums, "
@@ -845,6 +846,7 @@ def migrate_up(
                             "irreversible_versions": [m.version for m in _preflight.irreversible],
                         },
                         output_file,
+                        console,
                     )
                 else:
                     error_console.print(f"[red]❌ {error_msg}[/red]")

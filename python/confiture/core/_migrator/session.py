@@ -769,7 +769,7 @@ class MigratorSession:
             verifier = MigrationChecksumVerifier(self._conn, config)
             mismatches = verifier.verify_all(self._migrations_dir)
             result.checksum_mismatches = [
-                f"{m.version}_{m.name}: expected {m.expected[:12]}..., got {m.actual[:12]}..."
+                f"{m.version}_{m.name}: expected {(m.expected or '')[:12]}..., got {m.actual[:12]}..."
                 for m in mismatches
             ]
             result.checksum_verified = True
