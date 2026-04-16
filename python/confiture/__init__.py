@@ -3,11 +3,6 @@
 Confiture is a modern PostgreSQL migration tool with a build-from-scratch
 philosophy and 4 migration strategies.
 
-Example:
-    >>> from confiture import __version__
-    >>> print(__version__)
-    0.9.0
-
 Library API example::
 
     from confiture import Migrator
@@ -18,12 +13,17 @@ Library API example::
             result = m.up()
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _metadata_version
 from typing import Any
 
 from confiture.core.linting import SchemaLinter
 from confiture.exceptions import ExternalGeneratorError
 
-__version__ = "0.9.0"
+try:
+    __version__ = _metadata_version("fraiseql-confiture")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
