@@ -29,10 +29,10 @@ jobs:
           - 5432:5432
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
@@ -114,9 +114,9 @@ jobs:
     name: Lint (Required for Release)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
     - name: Install uv
@@ -135,9 +135,9 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true  # Don't block release on type errors
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
     - name: Install uv
@@ -153,9 +153,9 @@ jobs:
     name: Security (Required for Release)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
     - name: Install uv
@@ -173,7 +173,7 @@ jobs:
     needs: [test, lint, type-check, security]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -188,7 +188,7 @@ jobs:
         args: --out dist
 
     - name: Upload sdist
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: sdist
         path: dist/*.tar.gz
@@ -208,12 +208,12 @@ jobs:
             python-version: '3.x'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -244,7 +244,7 @@ jobs:
         PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"
 
     - name: Upload wheels
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: wheels-${{ matrix.os }}
         path: dist/*.whl
@@ -256,7 +256,7 @@ jobs:
 
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         pattern: '{wheels-*,sdist}'
         merge-multiple: true
@@ -301,7 +301,7 @@ jobs:
 
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         pattern: '{wheels-*,sdist}'
         merge-multiple: true
@@ -326,10 +326,10 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Download artifacts for release
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         pattern: '{wheels-*,sdist}'
         merge-multiple: true

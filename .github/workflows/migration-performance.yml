@@ -45,10 +45,10 @@ jobs:
           - 5432:5432
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
@@ -229,7 +229,7 @@ jobs:
 
     - name: Upload Performance Artifacts
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: performance-metrics
         path: .performance-metrics/
@@ -237,7 +237,7 @@ jobs:
 
     - name: Comment Performance Results
       if: github.event_name == 'push' && always()
-      uses: actions/github-script@v7
+      uses: actions/github-script@v9
       with:
         script: |
           const fs = require('fs');
