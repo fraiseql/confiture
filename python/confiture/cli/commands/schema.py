@@ -23,6 +23,21 @@ from confiture.core.seed_applier import SeedApplier
 LINT_FORMATS = ("table", "json", "csv")
 
 
+def _violation_to_unified_issue(v, tool: str, file=None):
+    """Convert a LintViolation to a UnifiedLintIssue."""
+    from confiture.models.lint import LintSeverity
+    from confiture.models.unified_lint import UnifiedLintIssue
+
+    return UnifiedLintIssue(
+        tool=tool,
+        file=file if file is not None else (v.file_path or v.object_name),
+        line=v.line_number,
+        message=v.message,
+        severity=LintSeverity(v.severity.value),
+        rule=v.rule_id if tool == "tree" else v.rule_name,
+    )
+
+
 def init(
     path: Path = typer.Argument(
         Path("."),
@@ -673,7 +688,7 @@ def lint_unified(
         None,
         "--check",
         "-c",
-        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter). "
+        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (GEN001–GEN004 file-numbering). "
         "Default: all.",
     ),
     git_diff: bool = typer.Option(
@@ -686,6 +701,16 @@ def lint_unified(
         "--env",
         "-e",
         help="Environment for schema lint (default: local)",
+    ),
+    schema_dir: Path | None = typer.Option(
+        None,
+        "--schema-dir",
+        help="Root of the DDL file tree for --check tree (default: inferred from env config).",
+    ),
+    overrides_dir: Path | None = typer.Option(
+        None,
+        "--overrides-dir",
+        help="Overrides mirror directory for GEN004 orphan check (optional).",
     ),
     format_type: str = typer.Option(
         "table",
@@ -720,6 +745,7 @@ def lint_unified(
 
     # Handle schema checks separately (uses SchemaLinter)
     run_schema = checks is None or "schema" in (checks or [])
+    run_tree = checks is None or "tree" in (checks or [])
     run_tool_checks = checks is None or any(c in (checks or []) for c in ("safety", "format"))
 
     all_issues: list = []
@@ -732,25 +758,34 @@ def lint_unified(
     if run_schema:
         from confiture.core.linting import SchemaLinter
         from confiture.core.linting.schema_linter import LintConfig as LinterConfig
-        from confiture.models.unified_lint import UnifiedLintIssue
 
         schema_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
         schema_linter = SchemaLinter(env=env, config=schema_config)
         try:
             linter_report = schema_linter.lint()
             for v in linter_report.errors + linter_report.warnings + linter_report.info:
-                all_issues.append(
-                    UnifiedLintIssue(
-                        tool="schema",
-                        file=env,
-                        line=None,
-                        message=v.message,
-                        severity=v.severity,
-                        rule=v.rule_name,
-                    )
-                )
+                all_issues.append(_violation_to_unified_issue(v, "schema", file=env))
         except Exception as e:
             console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
+
+    if run_tree:
+        from confiture.core.linting import SchemaLinter
+        from confiture.core.linting.schema_linter import LintConfig as LinterConfig
+
+        # Resolve schema_dir: CLI flag > default "db/schema"
+        resolved_schema_dir: Path = schema_dir if schema_dir is not None else Path("db/schema")
+
+        tree_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
+        tree_linter = SchemaLinter(env=env, config=tree_config)
+        try:
+            tree_report = tree_linter.lint_tree(
+                schema_dir=resolved_schema_dir,
+                overrides_dir=overrides_dir,
+            )
+            for v in tree_report.errors + tree_report.warnings + tree_report.info:
+                all_issues.append(_violation_to_unified_issue(v, "tree"))
+        except Exception as e:
+            console.print(f"[yellow]Tree lint skipped: {e}[/yellow]")
 
     from confiture.models.unified_lint import UnifiedLintResult
 
@@ -759,7 +794,7 @@ def lint_unified(
     if format_type == "json":
         import json
 
-        console.print(json.dumps(unified_result.to_dict(), indent=2))
+        print(json.dumps(unified_result.to_dict(), indent=2))
     else:
         if not unified_result.issues:
             console.print("[green]No issues found.[/green]")

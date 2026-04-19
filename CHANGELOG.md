@@ -5,6 +5,18 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-04-19
+
+### Added
+
+- **`lint-unified --check tree`** — Issue #112
+  - Integrates GEN001–GEN004 file-numbering lint rules into `confiture lint-unified`.
+  - New `--schema-dir` option to specify the DDL file tree root (defaults to `db/schema`).
+  - New `--overrides-dir` option for GEN004 orphan check.
+  - `tree` is included in the default run (no `--check` flag) alongside `safety`, `format`, and `schema`.
+  - JSON output includes `"tool": "tree"` on each issue for downstream CI parsing.
+  - 7 new unit tests covering flag acceptance, per-rule reporting, JSON output, inclusion/exclusion logic, and `--overrides-dir` forwarding.
+
 ## [0.9.0] - 2026-04-16
 
 ### Added
