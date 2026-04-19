@@ -724,7 +724,7 @@ def lint_unified(
         help="Exit with code 1 if errors found (default: on)",
     ),
 ) -> None:
-    """Run unified SQL lint checks (Squawk, SQLFluff, and/or SchemaLinter).
+    """Run unified SQL lint checks (Squawk, SQLFluff, SchemaLinter, and/or tree numbering).
 
     EXAMPLES:
       confiture lint-unified db/migrations/
@@ -735,6 +735,10 @@ def lint_unified(
 
       confiture lint-unified --check schema --env local
         Run only SchemaLinter checks on the local environment.
+
+      confiture lint-unified --check tree --schema-dir db/schema/
+        Check DDL file-tree numbering rules (GEN001–GEN004): duplicate prefixes,
+        verb suffixes, sequence gaps, and orphaned overrides.
 
       confiture lint-unified --git-diff
         Lint only SQL files changed in the current git diff.
