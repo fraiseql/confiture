@@ -247,6 +247,16 @@ def migrate_validate(
             "Requires --config (or --env) and --schema."
         ),
     ),
+    check_imports: bool = typer.Option(
+        False,
+        "--check-imports",
+        help=(
+            "Import-check pending Python migration modules. "
+            "Level 1: catches syntax errors and missing imports. "
+            "Level 2: verifies version, name, up(), down() are defined. "
+            "No database connection required."
+        ),
+    ),
     check_body: bool = typer.Option(
         False,
         "--check-body",
@@ -336,6 +346,9 @@ def migrate_validate(
 
       confiture migrate validate --check-signatures --env production --ssh lionel@printoptim.io
         ↳ Live: reach production DB through an SSH tunnel (no manual ssh -L needed)
+
+      confiture migrate validate --check-imports
+        ↳ Static: import-check all Python migration modules (no DB needed)
 
       confiture migrate validate --check-live-drift --check-signatures --env production --schema schema.sql
         ↳ Live: check both column/table drift AND function overload drift
@@ -503,6 +516,41 @@ def migrate_validate(
         if check_body and not check_signatures:
             error_console.print("[red]Error:[/red] --check-body requires --check-signatures")
             raise typer.Exit(2)
+
+        # Run import check on Python migration modules
+        if check_imports:
+            from confiture.core.import_checker import ImportChecker
+
+            checker = ImportChecker(migrations_dir)
+            import_result = checker.check()
+
+            if format_output == "json":
+                _output_json(
+                    {"check": "imports", **import_result.to_dict()},
+                    output_file,
+                    console,
+                )
+            else:
+                if import_result.success:
+                    console.print(
+                        f"[green]✅ All {import_result.checked} Python migration(s) passed import check[/green]"
+                    )
+                    if import_result.skipped_sql:
+                        console.print(
+                            f"  [dim]({import_result.skipped_sql} SQL migration(s) skipped)[/dim]"
+                        )
+                else:
+                    console.print(
+                        f"[red]❌ Import check failed: {import_result.failed}/{import_result.checked} file(s) have issues[/red]"
+                    )
+                    for v in import_result.violations:
+                        console.print(
+                            f"  [red]✗[/red] [{v.rule}] {Path(v.file_path).name}: {v.message}"
+                        )
+
+            if not import_result.success:
+                raise typer.Exit(1)
+            return
 
         # Run live drift check
         if check_live_drift:
