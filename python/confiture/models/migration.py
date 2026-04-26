@@ -1,6 +1,7 @@
 """Migration base class for database migrations."""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -76,6 +77,17 @@ class Migration(ABC):
         ...
         ...     def down(self):
         ...         self.execute('DROP TABLE analytics')
+
+    Example using execute_file to load SQL from a file:
+        >>> class UpdateFunction(Migration):
+        ...     version = "20260301100000"
+        ...     name = "update_function"
+        ...
+        ...     def up(self):
+        ...         self.execute_file("db/schema/functions/my_function.sql")
+        ...
+        ...     def down(self):
+        ...         self.execute_file("db/schema/functions/my_function_old.sql")
 
     Example non-transactional (CREATE INDEX CONCURRENTLY):
         >>> class AddSearchIndex(Migration):
@@ -195,6 +207,40 @@ class Migration(ABC):
             for dry-run support.
         """
         return []
+
+    def execute_file(self, path: str | Path) -> None:
+        """Execute SQL read from a file.
+
+        Reads the file contents and delegates to :meth:`execute`. Paths are
+        resolved relative to the current working directory, consistent with
+        how the CLI resolves ``db/schema/`` and ``db/migrations/`` paths.
+
+        Args:
+            path: Path to a ``.sql`` file (absolute or relative to CWD).
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+            ValueError: If the file is empty or contains only whitespace.
+            SQLError: If the SQL execution fails.
+
+        Example:
+            >>> class UpdateFunction(Migration):
+            ...     version = "20260426120000"
+            ...     name = "update_function"
+            ...
+            ...     def up(self):
+            ...         self.execute_file("db/schema/functions/my_function.sql")
+            ...
+            ...     def down(self):
+            ...         pass
+        """
+        resolved = Path(path)
+        if not resolved.is_file():
+            raise FileNotFoundError(f"SQL file not found: {resolved}")
+        sql = resolved.read_text(encoding="utf-8")
+        if not sql.strip():
+            raise ValueError(f"SQL file is empty: {resolved}")
+        self.execute(sql)
 
     def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         """Execute a SQL statement.
