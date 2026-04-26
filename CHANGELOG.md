@@ -5,6 +5,30 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-04-27
+
+### Added
+
+- **`Migration.execute_file()`** — Issue #113
+  - New method on the `Migration` base class to load and execute SQL from external `.sql` files.
+  - Accepts `str` or `Path`, resolves relative to CWD (consistent with CLI conventions).
+  - Clear errors for missing files (`FileNotFoundError`) and empty files (`ValueError`).
+  - Enables hybrid Python+SQL migrations without inlining hundreds of lines of SQL.
+
+- **`migrate validate --check-imports`** — Issue #114
+  - Three-level import validation for pending Python migration modules:
+    - **Level 1** (IMP001–IMP002): Catches syntax errors, missing imports, absent Migration subclass.
+    - **Level 2** (IMP003–IMP007): Verifies `version`, `name`, `up()`, `down()` are defined and well-formed.
+    - **Level 3** (IMP008–IMP009): AST-based static analysis detects calls to nonexistent `self.` methods.
+  - **File reference validation** (IMP010–IMP011): Verifies `self.execute_file("path")` references exist on disk; warns on dynamic paths that cannot be validated.
+  - Supports `--format json` for CI integration.
+  - No database connection required — purely static analysis.
+
+### Technical
+
+- New module: `confiture.core.import_checker` — `ImportChecker`, `ImportCheckResult`, `ImportCheckViolation`.
+- 44 new unit tests (11 for `execute_file`, 33 for `--check-imports`).
+
 ## [0.9.1] - 2026-04-19
 
 ### Added
