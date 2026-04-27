@@ -70,7 +70,9 @@ class TestLintUnifiedTree:
             mock_linter.lint_tree.return_value = mock_tree_report
 
             # Run command
-            result = runner.invoke(app, ["lint-unified", "--check", "tree", "--schema-dir", str(schema_dir)])
+            result = runner.invoke(
+                app, ["lint-unified", "--check", "tree", "--schema-dir", str(schema_dir)]
+            )
 
             # Should fail due to ERROR severity
             assert result.exit_code == 1
@@ -103,7 +105,9 @@ class TestLintUnifiedTree:
             mock_linter.lint_tree.return_value = mock_tree_report
 
             # Run command
-            result = runner.invoke(app, ["lint-unified", "--check", "tree", "--schema-dir", str(schema_dir)])
+            result = runner.invoke(
+                app, ["lint-unified", "--check", "tree", "--schema-dir", str(schema_dir)]
+            )
 
             # Should succeed (exit code 0, WARNING not ERROR)
             assert result.exit_code == 0
@@ -137,7 +141,15 @@ class TestLintUnifiedTree:
             # Run command with JSON format
             result = runner.invoke(
                 app,
-                ["lint-unified", "--check", "tree", "--format", "json", "--schema-dir", str(schema_dir)]
+                [
+                    "lint-unified",
+                    "--check",
+                    "tree",
+                    "--format",
+                    "json",
+                    "--schema-dir",
+                    str(schema_dir),
+                ],
             )
 
             assert result.exit_code == 1  # Has errors
@@ -205,7 +217,9 @@ class TestLintUnifiedTree:
             mock_linter.lint.return_value = mock_schema_report
 
             # Run command with --check schema only
-            result = runner.invoke(app, ["lint-unified", "--check", "schema", "--schema-dir", str(schema_dir)])
+            result = runner.invoke(
+                app, ["lint-unified", "--check", "schema", "--schema-dir", str(schema_dir)]
+            )
 
             # Should succeed (no tree checks run)
             assert result.exit_code == 0
@@ -233,7 +247,15 @@ class TestLintUnifiedTree:
             # Run command with --overrides-dir
             result = runner.invoke(
                 app,
-                ["lint-unified", "--check", "tree", "--overrides-dir", str(overrides_dir), "--schema-dir", str(schema_dir)]
+                [
+                    "lint-unified",
+                    "--check",
+                    "tree",
+                    "--overrides-dir",
+                    str(overrides_dir),
+                    "--schema-dir",
+                    str(schema_dir),
+                ],
             )
 
             # Should succeed (exit code 0, no crash)
