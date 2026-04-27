@@ -5,6 +5,21 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-04-27
+
+### Fixed
+
+- **`migrate up` crash: `'Composed' object has no attribute 'strip'`** — Issue #115
+  - `_execute_sql` passed `psycopg.sql.Composable` queries directly to `SQLError`,
+    whose constructor called `.strip()` on the SQL, expecting a plain string.
+  - Any database error during table initialization, index creation, or migration
+    recording was masked by this secondary `AttributeError`.
+  - **Fix 1 (engine):** `_execute_sql` now renders the query to a string before
+    raising `SQLError`, using `as_string(connection)` with a `as_string(None)` fallback.
+  - **Fix 2 (exceptions):** `SQLError.__init__` defensively normalises its `sql`
+    parameter so it never crashes regardless of input type.
+  - 4 new tests covering both fixes.
+
 ## [0.9.2] - 2026-04-27
 
 ### Added

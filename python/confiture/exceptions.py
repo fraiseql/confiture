@@ -387,7 +387,7 @@ class SQLError(ConfiturError):
 
     def __init__(
         self,
-        sql: str,
+        sql: str | Any,
         params: tuple[str, ...] | None,
         original_error: Exception,
         *,
@@ -403,9 +403,13 @@ class SQLError(ConfiturError):
         # Create detailed error message
         message_parts = ["SQL execution failed"]
 
+        # Normalise sql to a plain string — callers may pass
+        # psycopg.sql.Composable objects (Composed, SQL, Identifier …).
+        sql_str: str = sql.as_string(None) if hasattr(sql, "as_string") else str(sql)
+
         # Add SQL snippet (first 100 chars)
-        sql_preview = sql.strip()[:100]
-        if len(sql.strip()) > 100:
+        sql_preview = sql_str.strip()[:100]
+        if len(sql_str.strip()) > 100:
             sql_preview += "..."
         message_parts.append(f"SQL: {sql_preview}")
 

@@ -243,3 +243,24 @@ class TestSQLErrorBackwardCompatibility:
 
         assert error.sql == "SELECT 1"
         assert error.error_code == "SQL_700"
+
+    def test_sql_error_accepts_composable(self) -> None:
+        """Test that SQLError handles psycopg.sql.Composable without crashing (issue #115)."""
+        from psycopg import sql as pgsql
+
+        composed = pgsql.SQL("CREATE TABLE {} (id INT)").format(pgsql.Identifier("my_table"))
+        error = SQLError(composed, None, Exception("permission denied"))
+
+        message = str(error)
+        assert "SQL execution failed" in message
+        assert "permission denied" in message
+        # The composed SQL should be rendered as a string in the preview
+        assert "CREATE TABLE" in message
+
+    def test_sql_error_composable_preserved_in_attribute(self) -> None:
+        """Test that original Composable is preserved in .sql attribute."""
+        from psycopg import sql as pgsql
+
+        composed = pgsql.SQL("SELECT 1")
+        error = SQLError(composed, None, Exception("err"))
+        assert error.sql is composed

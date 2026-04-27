@@ -243,8 +243,15 @@ class Migrator:
                 else:
                     cursor.execute(query)
         except Exception as e:
+            if hasattr(query, "as_string"):
+                try:
+                    sql_text = query.as_string(self.connection)
+                except Exception:
+                    sql_text = query.as_string(None)
+            else:
+                sql_text = str(query)
             raise SQLError(
-                query,
+                sql_text,
                 params,
                 e,
                 resolution_hint="Check the SQL syntax and ensure the target database objects exist",

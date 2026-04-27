@@ -173,6 +173,61 @@ class TestMigratorFindMigrationFiles:
         assert files == []
 
 
+class TestExecuteSqlComposable:
+    """Test that _execute_sql properly handles Composable queries in error paths (issue #115)."""
+
+    def test_execute_sql_error_with_composable_query(self):
+        """Composable query should produce a readable SQLError, not AttributeError."""
+        from psycopg import sql as pgsql
+
+        from confiture.exceptions import SQLError
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Simulate a database error during execution
+        mock_cursor.execute.side_effect = psycopg.Error("permission denied")
+
+        migrator = Migrator(connection=mock_conn)
+
+        composed_query = pgsql.SQL("CREATE TABLE {} (id INT)").format(pgsql.Identifier("my_table"))
+
+        with pytest.raises(SQLError, match="permission denied") as exc_info:
+            migrator._execute_sql(composed_query)
+
+        # The sql attribute should be a rendered string, not a Composed object
+        assert isinstance(exc_info.value.sql, str)
+        assert "CREATE TABLE" in exc_info.value.sql
+
+    def test_initialize_error_surfaces_original_message(self):
+        """initialize() should surface the real DB error, not 'Composed has no strip'."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Table exists check succeeds, table doesn't exist
+        mock_cursor.fetchone.return_value = (False,)
+        # CREATE TABLE fails with a permissions error
+        call_count = 0
+
+        def execute_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First call is the EXISTS check — succeeds
+                return
+            # Second call is CREATE TABLE — fails
+            raise psycopg.Error("permission denied for schema public")
+
+        mock_cursor.execute.side_effect = execute_side_effect
+
+        migrator = Migrator(connection=mock_conn)
+
+        with pytest.raises(MigrationError, match="permission denied for schema public"):
+            migrator.initialize()
+
+
 class TestMigratorVersionExtraction:
     """Test _version_from_filename helper."""
 
