@@ -99,26 +99,16 @@ def test_no_filter_returns_all(tmp_path):
 
 def test_config_detects_pending(tmp_path):
     with (
-        patch(
-            "confiture.cli.commands.migrate_analysis._resolve_config"
-        ) as mock_rc,
-        patch(
-            "confiture.cli.commands.migrate_analysis.load_config"
-        ) as mock_lc,
-        patch(
-            "confiture.cli.commands.migrate_analysis.create_connection"
-        ) as mock_cc,
-        patch(
-            "confiture.cli.commands.migrate_analysis.Migrator"
-        ) as MockMigrator,
+        patch("confiture.cli.commands.migrate_analysis._resolve_config") as mock_rc,
+        patch("confiture.cli.commands.migrate_analysis.load_config") as mock_lc,
+        patch("confiture.cli.commands.migrate_analysis.create_connection") as mock_cc,
+        patch("confiture.cli.commands.migrate_analysis.Migrator") as MockMigrator,
     ):
         mock_rc.return_value = Path("db/environments/prod.yaml")
         mock_lc.return_value = {"database_url": "postgresql://prod/db"}
         mock_cc.return_value = MagicMock()
         mock_migrator = MagicMock()
-        mock_migrator.find_pending.return_value = [
-            tmp_path / "20260429000000_new.up.sql"
-        ]
+        mock_migrator.find_pending.return_value = [tmp_path / "20260429000000_new.up.sql"]
         MockMigrator.return_value = mock_migrator
 
         files = _resolve_preflight_pending(
@@ -178,9 +168,7 @@ def test_against_failure_exits_1(runner, tmp_path):
 
     against_result = PreflightAgainstResult(
         migrations=[
-            PreflightAgainstMigration(
-                "20260428000000", "a", False, error="column does not exist"
-            ),
+            PreflightAgainstMigration("20260428000000", "a", False, error="column does not exist"),
         ],
         against_url="postgresql://localhost/preflight",
     )
@@ -374,3 +362,96 @@ def test_against_unreachable_url_exits_2(runner, tmp_path):
         )
 
     assert result.exit_code == 2
+
+
+# ---------------------------------------------------------------------------
+# CLI: db_consumed warning in text + JSON output
+# ---------------------------------------------------------------------------
+
+
+def test_db_consumed_warning_shown_in_text(runner, tmp_path):
+    """db_consumed=True shows the 'reprovision' warning."""
+    (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
+    (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
+
+    against_result = PreflightAgainstResult(
+        migrations=[PreflightAgainstMigration("20260428000000", "a", True)],
+        against_url="postgresql://localhost/preflight",
+        db_consumed=True,
+    )
+
+    with patch(
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        return_value=_mock_session(against_result),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--migrations-dir",
+                str(tmp_path),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "reprovision" in result.output.lower()
+    assert "Rolled back" not in result.output
+
+
+def test_db_consumed_in_json_envelope(runner, tmp_path):
+    """db_consumed=True appears in the JSON against envelope."""
+    (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
+    (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
+
+    against_result = PreflightAgainstResult(
+        migrations=[PreflightAgainstMigration("20260428000000", "a", True)],
+        against_url="postgresql://localhost/preflight",
+        db_consumed=True,
+    )
+
+    with patch(
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        return_value=_mock_session(against_result),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--format",
+                "json",
+                "--migrations-dir",
+                str(tmp_path),
+            ],
+        )
+
+    data = json.loads(result.output)
+    assert data["against"]["db_consumed"] is True
+
+
+# ---------------------------------------------------------------------------
+# _resolve_preflight_pending: .py migration files included
+# ---------------------------------------------------------------------------
+
+
+def test_py_migrations_included_in_all(tmp_path):
+    """Both .up.sql and .py files (non-underscore) are collected when no filter."""
+    (tmp_path / "20260401000000_a.up.sql").write_text("")
+    (tmp_path / "20260401000001_b.py").write_text("")
+    (tmp_path / "__init__.py").write_text("")  # should be excluded
+
+    files = _resolve_preflight_pending(
+        tmp_path,
+        config_path=None,
+        env_name=None,
+        since=None,
+    )
+    names = [f.name for f in files]
+    assert "20260401000000_a.up.sql" in names
+    assert "20260401000001_b.py" in names
+    assert "__init__.py" not in names

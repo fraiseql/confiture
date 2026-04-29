@@ -254,3 +254,98 @@ def test_non_transactional_failure_when_allowed():
     assert m.success is False
     assert m.error is not None
     assert result.db_consumed is True
+
+
+# ---------------------------------------------------------------------------
+# Per-migration SAVEPOINT mechanics
+# ---------------------------------------------------------------------------
+
+
+def test_per_migration_savepoint_set_and_released_on_success():
+    """SAVEPOINT sp_{version} is set and RELEASED when migration succeeds."""
+    session, mock_conn = _make_session()
+    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+        mock_lmc.return_value = _mock_migration_class(version="20260428000000", fail=False)
+        session.run_against(
+            [Path("db/migrations/20260428000000_a.up.sql")],
+            against_url="postgresql://localhost/preflight",
+        )
+    calls = [str(c) for c in mock_conn.execute.call_args_list]
+    assert any("SAVEPOINT sp_20260428000000" in c for c in calls)
+    assert any("RELEASE SAVEPOINT sp_20260428000000" in c for c in calls)
+
+
+def test_per_migration_savepoint_rolled_back_on_failure():
+    """ROLLBACK TO SAVEPOINT + RELEASE are called when migration fails."""
+    session, mock_conn = _make_session()
+    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+        mock_lmc.return_value = _mock_migration_class(version="20260428111111", fail=True)
+        session.run_against(
+            [Path("db/migrations/20260428111111_bad.up.sql")],
+            against_url="postgresql://localhost/preflight",
+        )
+    calls = [str(c) for c in mock_conn.execute.call_args_list]
+    assert any("ROLLBACK TO SAVEPOINT sp_20260428111111" in c for c in calls)
+    assert any("RELEASE SAVEPOINT sp_20260428111111" in c for c in calls)
+
+
+def test_outer_rollback_runs_even_on_first_migration_failure():
+    """ROLLBACK TO SAVEPOINT preflight_run fires in finally even if first migration fails."""
+    session, mock_conn = _make_session()
+    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+        mock_lmc.return_value = _mock_migration_class(fail=True)
+        session.run_against(
+            [Path("db/migrations/20260428000000_bad.up.sql")],
+            against_url="postgresql://localhost/preflight",
+        )
+    rollback_calls = [
+        c
+        for c in mock_conn.execute.call_args_list
+        if "ROLLBACK TO SAVEPOINT preflight_run" in str(c)
+    ]
+    assert len(rollback_calls) == 1
+
+
+def test_up_called_not_apply():
+    """migration.up() is called directly — migrator.apply() must never be called."""
+    session, mock_conn = _make_session()
+    up_called = []
+
+    class _TrackedMigration:
+        version = "20260428000000"
+        name = "tracked"
+        transactional = True
+
+        def __init__(self, connection):
+            pass
+
+        def up(self):
+            up_called.append(True)
+
+    with patch("confiture.core.migrator.load_migration_class", return_value=_TrackedMigration):
+        session.run_against(
+            [Path("db/migrations/20260428000000_tracked.up.sql")],
+            against_url="postgresql://localhost/preflight",
+        )
+
+    assert len(up_called) == 1
+    # _migrator is a MagicMock — verify apply() was never called on it
+    session._migrator.apply.assert_not_called()
+
+
+def test_outer_sp_active_false_skips_rollback_in_finally():
+    """When allow_non_transactional=True triggers a commit, no ROLLBACK TO preflight_run."""
+    session, mock_conn = _make_session()
+    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+        mock_lmc.return_value = _mock_migration_class(transactional=False, fail=False)
+        session.run_against(
+            [Path("db/migrations/20260428000000_idx.up.sql")],
+            against_url="postgresql://localhost/preflight",
+            allow_non_transactional=True,
+        )
+    rollback_calls = [
+        c
+        for c in mock_conn.execute.call_args_list
+        if "ROLLBACK TO SAVEPOINT preflight_run" in str(c)
+    ]
+    assert len(rollback_calls) == 0

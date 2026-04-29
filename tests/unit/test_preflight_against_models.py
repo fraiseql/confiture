@@ -133,6 +133,26 @@ def test_to_dict_no_password_unchanged():
     assert result.to_dict()["against_url"] == "postgresql://localhost/preflight"
 
 
+def test_to_dict_url_user_no_password_unchanged():
+    """Username without password → URL returned as-is."""
+    result = PreflightAgainstResult(
+        migrations=[PreflightAgainstMigration("001", "a", True)],
+        against_url="postgresql://app_user@localhost/preflight",
+    )
+    assert result.to_dict()["against_url"] == "postgresql://app_user@localhost/preflight"
+
+
+def test_to_dict_url_password_no_username_strips_password():
+    """Password without username → password removed, host preserved."""
+    result = PreflightAgainstResult(
+        migrations=[PreflightAgainstMigration("001", "a", True)],
+        against_url="postgresql://:s3cr3t@localhost/preflight",
+    )
+    d = result.to_dict()
+    assert "s3cr3t" not in d["against_url"]
+    assert "localhost" in d["against_url"]
+
+
 def test_to_dict_structure():
     result = PreflightAgainstResult(
         migrations=[
