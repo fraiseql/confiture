@@ -16,10 +16,12 @@ from confiture.cli.helpers import (
     console,
     error_console,
 )
+from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
 from confiture.core.differ import SchemaDiffer
 from confiture.core.drift import SchemaDriftDetector
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.core.migrator import Migrator
 
 
 def migrate_diff(
@@ -1662,6 +1664,108 @@ def migrate_fix_signatures(
         raise typer.Exit(2) from e
 
 
+def _preflight_version_from_filename(filename: str) -> str:
+    """Extract version prefix from a migration filename."""
+    for suffix in (".up.sql", ".py"):
+        if filename.endswith(suffix):
+            filename = filename[: -len(suffix)]
+            break
+    return filename.split("_")[0]
+
+
+def _resolve_preflight_pending(
+    migrations_dir: Path,
+    *,
+    config_path: Path | None,
+    env_name: str | None,
+    since: str | None,
+) -> list[Path]:
+    """Return migration files to test in a preflight --against run.
+
+    Priority order:
+    1. --config / --env: connect to configured DB, return pending files.
+    2. --since: all local files with version >= since (no DB required).
+    3. Neither: all local migration files.
+    """
+    if config_path is not None or env_name is not None:
+        from confiture.cli.helpers import _get_tracking_table, _resolve_config  # noqa: PLC0415
+
+        resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
+        config_data = load_config(resolved)
+        conn = create_connection(config_data)
+        try:
+            migrator = Migrator(
+                connection=conn,
+                migration_table=_get_tracking_table(config_data),
+            )
+            return migrator.find_pending(migrations_dir=migrations_dir)
+        finally:
+            conn.close()
+
+    all_files: list[Path] = sorted(
+        list(migrations_dir.glob("*.up.sql"))
+        + [f for f in migrations_dir.glob("*.py") if not f.name.startswith("_")],
+        key=lambda f: _preflight_version_from_filename(f.name),
+    )
+
+    if since is not None:
+        return [f for f in all_files if _preflight_version_from_filename(f.name) >= since]
+
+    return all_files
+
+
+def _display_against_result(
+    result: Any,
+    format_type: str,
+    cons: Any,
+) -> None:
+    """Render --against execution results to the console."""
+    from confiture.models.results import PreflightAgainstResult  # noqa: PLC0415
+
+    if format_type == "json":
+        return
+
+    safe_url = PreflightAgainstResult._redact_url(result.against_url)
+    cons.print(
+        f"\nExecution check: {len(result.migrations)} migration(s) against [dim]{safe_url}[/dim]"
+    )
+
+    for m in result.migrations:
+        if m.skipped:
+            cons.print(f"  [yellow]⤳[/yellow]  {m.version}  {m.name:<40}  [dim](skipped)[/dim]")
+            if m.skipped_reason:
+                cons.print(f"       [dim]{m.skipped_reason}[/dim]")
+        elif m.success:
+            cons.print(
+                f"  [green]✓[/green]  {m.version}  {m.name:<40}  "
+                f"({m.execution_time_ms / 1000:.2f}s)"
+            )
+        else:
+            cons.print(f"  [red]✗[/red]  {m.version}  {m.name:<40}")
+            if m.error:
+                first_line = m.error.splitlines()[0][:120]
+                cons.print(f"       [red]Error:[/red] {first_line}")
+
+    cons.print()
+    if result.all_passed:
+        if result.has_skipped:
+            cons.print(
+                f"  [green]✓[/green] All {len(result.migrations)} migration(s) passed "
+                f"({len(result.skipped_migrations)} skipped)."
+            )
+        else:
+            cons.print(f"  [green]✓[/green] All {len(result.migrations)} migration(s) passed.")
+    else:
+        cons.print(
+            f"  [red]✗[/red] {len(result.failures)} of "
+            f"{len(result.migrations)} migration(s) would fail."
+        )
+    if result.db_consumed:
+        cons.print("  [yellow]⚠[/yellow]  Preflight DB consumed — reprovision before next run.")
+    else:
+        cons.print("  [dim](Rolled back — preflight DB unchanged)[/dim]")
+
+
 def migrate_preflight(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -1673,6 +1777,47 @@ def migrate_preflight(
         "--format",
         "-f",
         help="Output format: table or json (default: table)",
+    ),
+    against: str | None = typer.Option(
+        None,
+        "--against",
+        help=(
+            "PostgreSQL URL of the preflight database to test migrations against. "
+            "Typically seeded from pg_dump --schema-only. "
+            "Migrations are executed inside a transaction that is always rolled back."
+        ),
+    ),
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help=(
+            "Config file for pending-migration detection. "
+            "Connects to the configured database to read the tracking table."
+        ),
+    ),
+    env: str | None = typer.Option(
+        None,
+        "--env",
+        help="Environment shortcut — db/environments/{name}.yaml (e.g. --env production).",
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help=(
+            "Test migrations with version >= SINCE (e.g. --since 20260428000000). "
+            "Inclusive. Alternative to --config when no second DB connection is available."
+        ),
+    ),
+    allow_non_transactional: bool = typer.Option(
+        False,
+        "--allow-non-transactional",
+        help=(
+            "Run non-transactional migrations (CREATE INDEX CONCURRENTLY, etc.) "
+            "outside the rollback SAVEPOINT in autocommit mode. "
+            "The preflight DB will be permanently modified (db_consumed=True). "
+            "By default such migrations are skipped."
+        ),
     ),
 ) -> None:
     """Check if pending migrations are safe to deploy.
@@ -1691,9 +1836,25 @@ def migrate_preflight(
       confiture migrate preflight --migrations-dir custom/migrations
         ↳ Check migrations in a custom directory
 
+      confiture migrate preflight --against postgresql://localhost/myapp_preflight
+        ↳ Test all local migrations against a schema-only preflight DB
+
+      confiture migrate preflight --against postgresql://localhost/myapp_preflight --env production
+        ↳ Test only pending migrations (detected from production tracking table)
+
+      confiture migrate preflight --against postgresql://localhost/myapp_preflight --since 20260428000000
+        ↳ Test migrations at or after version 20260428000000 (inclusive)
+
+      confiture migrate preflight --against postgresql://localhost/myapp_preflight --allow-non-transactional
+        ↳ Also run non-transactional migrations in autocommit mode (preflight DB consumed)
+
+      confiture migrate preflight --against postgresql://localhost/myapp_preflight --format json
+        ↳ Output static + execution results as JSON
+
     EXIT CODES:
-      0 — all migrations safe to deploy
-      1 — one or more issues detected
+      0 — all migrations safe to deploy (skipped non-transactional migrations are neutral)
+      1 — one or more issues detected or execution failures
+      2 — config or connection error
     """
     from rich.table import Table
 
@@ -1701,56 +1862,101 @@ def migrate_preflight(
 
     result = run_preflight(migrations_dir)
 
-    if format_type == "json":
-        _output_json(result.to_dict(), None, console)
-        if not result.safe_to_deploy:
+    if against is None:
+        # Backward-compatible path: flat output, no --against execution.
+        if format_type == "json":
+            _output_json(result.to_dict(), None, console)
+            if not result.safe_to_deploy:
+                raise typer.Exit(1)
+            return
+
+        table = Table(title="Pre-flight Check")
+        table.add_column("Version", style="cyan")
+        table.add_column("Name")
+        table.add_column("Reversible", justify="center")
+        table.add_column("Transactional", justify="center")
+
+        for m in result.migrations:
+            rev = "[green]✓[/green]" if m.reversible else "[red]✗[/red]"
+            if m.fully_transactional:
+                txn = "[green]✓[/green]"
+            else:
+                txn = "[red]✗[/red] " + "; ".join(m.non_transactional_statements)
+            table.add_row(m.version, m.name, rev, txn)
+
+        console.print(table)
+        console.print(f"\nSummary: {len(result.migrations)} migrations checked")
+
+        if result.irreversible:
+            console.print(
+                f"  [red]✗[/red] {len(result.irreversible)} irreversible (missing .down.sql)"
+            )
+        else:
+            console.print("  [green]✓[/green] All reversible")
+
+        if result.non_transactional:
+            total_stmts = sum(len(m.non_transactional_statements) for m in result.non_transactional)
+            console.print(f"  [red]✗[/red] {total_stmts} non-transactional statements")
+        else:
+            console.print("  [green]✓[/green] All transactional")
+
+        if result.has_duplicates:
+            console.print(f"  [red]✗[/red] {len(result.duplicate_versions)} duplicate version(s)")
+        else:
+            console.print("  [green]✓[/green] No duplicate versions")
+
+        if result.checksum_verified:
+            if result.has_checksum_mismatches:
+                console.print(
+                    f"  [red]✗[/red] {len(result.checksum_mismatches)} checksum mismatch(es)"
+                )
+            else:
+                console.print("  [green]✓[/green] Checksums verified")
+
+        if result.safe_to_deploy:
+            console.print("  [green]→ Safe to deploy[/green]")
+        else:
+            console.print("  [red]→ Not safe to deploy with rollback guarantee[/red]")
             raise typer.Exit(1)
         return
 
-    # Rich table output
-    table = Table(title="Pre-flight Check")
-    table.add_column("Version", style="cyan")
-    table.add_column("Name")
-    table.add_column("Reversible", justify="center")
-    table.add_column("Transactional", justify="center")
+    # --against path: static analysis + exhaustive execution against preflight DB.
+    try:
+        pending_files = _resolve_preflight_pending(
+            migrations_dir=migrations_dir,
+            config_path=config,
+            env_name=env,
+            since=since,
+        )
+    except Exception as e:
+        error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")
+        raise typer.Exit(2) from e
 
-    for m in result.migrations:
-        rev = "[green]✓[/green]" if m.reversible else "[red]✗[/red]"
-        if m.fully_transactional:
-            txn = "[green]✓[/green]"
-        else:
-            txn = "[red]✗[/red] " + "; ".join(m.non_transactional_statements)
-        table.add_row(m.version, m.name, rev, txn)
+    try:
+        session = MigratorSession(
+            config=None,
+            migrations_dir=migrations_dir,
+            database_url_override=against,
+            migration_table_override="tb_confiture",
+        )
+        with session:
+            against_result = session.run_against(
+                pending_files,
+                against_url=against,
+                allow_non_transactional=allow_non_transactional,
+            )
+    except Exception as e:
+        error_console.print(f"[red]❌ Connection to --against URL failed: {e}[/red]")
+        raise typer.Exit(2) from e
 
-    console.print(table)
-
-    # Summary
-    console.print(f"\nSummary: {len(result.migrations)} migrations checked")
-
-    if result.irreversible:
-        console.print(f"  [red]✗[/red] {len(result.irreversible)} irreversible (missing .down.sql)")
+    if format_type == "json":
+        _output_json(
+            {"static": result.to_dict(), "against": against_result.to_dict()},
+            None,
+            console,
+        )
     else:
-        console.print("  [green]✓[/green] All reversible")
+        _display_against_result(against_result, format_type, console)
 
-    if result.non_transactional:
-        total_stmts = sum(len(m.non_transactional_statements) for m in result.non_transactional)
-        console.print(f"  [red]✗[/red] {total_stmts} non-transactional statements")
-    else:
-        console.print("  [green]✓[/green] All transactional")
-
-    if result.has_duplicates:
-        console.print(f"  [red]✗[/red] {len(result.duplicate_versions)} duplicate version(s)")
-    else:
-        console.print("  [green]✓[/green] No duplicate versions")
-
-    if result.checksum_verified:
-        if result.has_checksum_mismatches:
-            console.print(f"  [red]✗[/red] {len(result.checksum_mismatches)} checksum mismatch(es)")
-        else:
-            console.print("  [green]✓[/green] Checksums verified")
-
-    if result.safe_to_deploy:
-        console.print("  [green]→ Safe to deploy[/green]")
-    else:
-        console.print("  [red]→ Not safe to deploy with rollback guarantee[/red]")
+    if not against_result.all_passed:
         raise typer.Exit(1)
