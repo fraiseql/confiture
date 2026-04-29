@@ -80,6 +80,8 @@ __all__ = [
     # Preflight
     "PreflightResult",
     "MigrationPreflightInfo",
+    "PreflightAgainstMigration",
+    "PreflightAgainstResult",
     "MigrationAnalyzer",
     # Diff
     "DiffResult",
@@ -151,6 +153,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Preflight
     "PreflightResult": ("confiture.models.results", "PreflightResult"),
     "MigrationPreflightInfo": ("confiture.models.results", "MigrationPreflightInfo"),
+    "PreflightAgainstMigration": ("confiture.models.results", "PreflightAgainstMigration"),
+    "PreflightAgainstResult": ("confiture.models.results", "PreflightAgainstResult"),
     "MigrationAnalyzer": ("confiture.core.migration_analyzer", "MigrationAnalyzer"),
     # Diff
     "DiffResult": ("confiture.models.results", "DiffResult"),

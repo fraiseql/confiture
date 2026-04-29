@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         MigrateRebuildResult,
         MigrateReinitResult,
         MigrateUpResult,
+        PreflightAgainstResult,
         PreflightResult,
         StatusResult,
     )
@@ -37,21 +38,47 @@ class MigratorSession:
                 m.up()
     """
 
-    def __init__(self, config: Environment, migrations_dir: Path) -> None:
+    def __init__(
+        self,
+        config: Environment | None,
+        migrations_dir: Path,
+        *,
+        database_url_override: str | None = None,
+        migration_table_override: str | None = None,
+    ) -> None:
         self._config = config
         self._migrations_dir = migrations_dir
         self._conn: Connection | None = None
         self._migrator: Migrator | None = None
+        self._database_url_override = database_url_override
+        self._migration_table_override = migration_table_override
 
     def __enter__(self) -> MigratorSession:
         # Import through confiture.core.migrator so tests can patch
         # confiture.core.migrator.create_connection and have it intercepted here.
         import confiture.core.migrator as _m
 
-        self._conn = _m.create_connection(self._config.database_url)
+        if self._database_url_override is not None:
+            url: str = self._database_url_override
+            migration_table: str = self._migration_table_override or "tb_confiture"
+        elif self._config is not None:
+            url = self._config.database_url
+            migration_table = self._config.migration.tracking_table
+        else:
+            from confiture.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                "MigratorSession requires either a config or database_url_override",
+                resolution_hint=(
+                    "Use Migrator.from_config(...) or pass database_url_override= "
+                    "to MigratorSession directly."
+                ),
+            )
+
+        self._conn = _m.create_connection(url)
         self._migrator = Migrator(
             connection=self._conn,
-            migration_table=self._config.migration.tracking_table,
+            migration_table=migration_table,
         )
         return self
 
@@ -775,6 +802,166 @@ class MigratorSession:
             result.checksum_verified = True
 
         return result
+
+    def run_against(
+        self,
+        pending_files: list[Path],
+        against_url: str,
+        *,
+        allow_non_transactional: bool = False,
+    ) -> PreflightAgainstResult:
+        """Execute pending migrations via SAVEPOINTs, then roll back all DDL.
+
+        Calls ``migration.up()`` directly — bypasses ``apply()``'s
+        commit/tracking/hooks.  An outer SAVEPOINT envelopes the entire loop;
+        the ``finally`` block rolls back to it, leaving the database in its
+        original state (when ``allow_non_transactional=False``).
+
+        Non-transactional migrations (``getattr(migration, 'transactional', True)
+        is False``) contain statements that PostgreSQL rejects inside any
+        transaction block (e.g. ``CREATE INDEX CONCURRENTLY``,
+        ``ALTER TYPE … ADD VALUE``).
+
+        - ``allow_non_transactional=False`` (default): such migrations are skipped
+          and recorded as ``skipped=True``.  The DB is always left unchanged.
+        - ``allow_non_transactional=True``: the current transaction is committed
+          (releasing the outer SAVEPOINT), then the migration runs in autocommit
+          mode.  When a non-transactional migration is encountered, the outer
+          SAVEPOINT is released via commit().  Any transactional DDL that executed
+          before that point is also permanently committed — not just the
+          non-transactional migration.  The preflight DB must be reprovisioned
+          before the next run (``db_consumed=True``).
+
+        Args:
+            pending_files: Migration files to test, in version order.
+            against_url: URL of the preflight database (used in result only;
+                connection is already open on ``self._conn``).
+            allow_non_transactional: When ``True``, non-transactional migrations
+                run outside the SAVEPOINT at the cost of consuming the preflight DB.
+
+        Returns:
+            PreflightAgainstResult with one entry per migration.
+
+        Raises:
+            ConfigurationError: If called outside a ``with`` block (``self._conn``
+                is ``None``).
+        """
+        import time as _time
+
+        import confiture.core.migrator as _m
+        from confiture.exceptions import ConfigurationError
+        from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
+
+        if self._conn is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with MigratorSession(...) as s: s.run_against(...)",
+            )
+
+        results: list[PreflightAgainstMigration] = []
+        db_consumed = False
+        outer_sp = "preflight_run"
+        outer_sp_active = True
+
+        # Outer SAVEPOINT: ROLLBACK TO here at the end undoes all migration DDL.
+        # No initialize() call — tracking table never needed (we skip apply()).
+        self._conn.execute(f"SAVEPOINT {outer_sp}")
+        try:
+            for migration_file in pending_files:
+                migration_class = _m.load_migration_class(migration_file)
+                migration = migration_class(connection=self._conn)
+
+                # Non-transactional migration: cannot run inside a SAVEPOINT.
+                # Use getattr with default True so migrations without the attribute
+                # are treated as transactional (safe — they run inside SAVEPOINT).
+                if not getattr(migration, "transactional", True):
+                    if not allow_non_transactional:
+                        results.append(
+                            PreflightAgainstMigration(
+                                version=migration.version,
+                                name=migration.name,
+                                success=False,
+                                skipped=True,
+                                skipped_reason=("non-transactional: cannot run inside SAVEPOINT"),
+                            )
+                        )
+                        continue
+
+                    # allow_non_transactional=True: commit() ends the outer SAVEPOINT
+                    # and permanently applies ALL DDL executed so far — including any
+                    # transactional migrations that ran before this one.
+                    # The preflight DB is now consumed regardless of what follows.
+                    if outer_sp_active:
+                        self._conn.commit()
+                        outer_sp_active = False
+                    db_consumed = True
+
+                    self._conn.autocommit = True
+                    try:
+                        start = _time.time()
+                        migration.up()
+                        elapsed = int((_time.time() - start) * 1000)
+                        results.append(
+                            PreflightAgainstMigration(
+                                version=migration.version,
+                                name=migration.name,
+                                success=True,
+                                execution_time_ms=elapsed,
+                            )
+                        )
+                    except Exception as exc:
+                        results.append(
+                            PreflightAgainstMigration(
+                                version=migration.version,
+                                name=migration.name,
+                                success=False,
+                                error=str(exc),
+                            )
+                        )
+                    finally:
+                        self._conn.autocommit = False
+                    continue
+
+                # Transactional migration: per-migration SAVEPOINT.
+                per_sp = f"sp_{migration.version}"
+                self._conn.execute(f"SAVEPOINT {per_sp}")
+                try:
+                    start = _time.time()
+                    migration.up()  # Direct call — no commit, no tracking
+                    elapsed = int((_time.time() - start) * 1000)
+                    self._conn.execute(f"RELEASE SAVEPOINT {per_sp}")
+                    results.append(
+                        PreflightAgainstMigration(
+                            version=migration.version,
+                            name=migration.name,
+                            success=True,
+                            execution_time_ms=elapsed,
+                        )
+                    )
+                except Exception as exc:
+                    # ROLLBACK TO resets to before per_sp without destroying outer_sp.
+                    self._conn.execute(f"ROLLBACK TO SAVEPOINT {per_sp}")
+                    self._conn.execute(f"RELEASE SAVEPOINT {per_sp}")
+                    results.append(
+                        PreflightAgainstMigration(
+                            version=migration.version,
+                            name=migration.name,
+                            success=False,
+                            error=str(exc),
+                        )
+                    )
+        finally:
+            # Roll back all migration DDL — only meaningful when outer_sp is still
+            # active (i.e. no non-transactional migration triggered a commit).
+            if outer_sp_active:
+                self._conn.execute(f"ROLLBACK TO SAVEPOINT {outer_sp}")
+                self._conn.execute(f"RELEASE SAVEPOINT {outer_sp}")
+
+        return PreflightAgainstResult(
+            migrations=results,
+            against_url=against_url,
+            db_consumed=db_consumed,
+        )
 
 
 # Avoid circular import: Migrator is defined in engine.py but MigratorSession

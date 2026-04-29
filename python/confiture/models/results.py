@@ -726,3 +726,87 @@ class PreflightResult:
             "duplicate_versions": self.duplicate_versions,
             "checksum_mismatches": self.checksum_mismatches,
         }
+
+
+@dataclass
+class PreflightAgainstMigration:
+    """Execution result for a single migration in a run_against() call."""
+
+    version: str
+    name: str
+    success: bool
+    error: str | None = None
+    skipped: bool = False
+    skipped_reason: str | None = None
+    execution_time_ms: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "name": self.name,
+            "success": self.success,
+            "error": self.error,
+            "skipped": self.skipped,
+            "skipped_reason": self.skipped_reason,
+            "execution_time_ms": self.execution_time_ms,
+        }
+
+
+@dataclass
+class PreflightAgainstResult:
+    """Aggregated result of a run_against() call."""
+
+    migrations: list[PreflightAgainstMigration]
+    against_url: str
+    db_consumed: bool = False
+    """True when non-transactional migrations ran outside the SAVEPOINT (allow_non_transactional=True).
+    The preflight DB is no longer in its original state; reprovision before the next run."""
+
+    @property
+    def all_passed(self) -> bool:
+        """True if all non-skipped migrations succeeded."""
+        return all(m.success for m in self.migrations if not m.skipped)
+
+    @property
+    def has_skipped(self) -> bool:
+        """True if any non-transactional migration was skipped."""
+        return any(m.skipped for m in self.migrations)
+
+    @property
+    def failures(self) -> list[PreflightAgainstMigration]:
+        """Migrations that failed (not skipped)."""
+        return [m for m in self.migrations if not m.skipped and not m.success]
+
+    @property
+    def skipped_migrations(self) -> list[PreflightAgainstMigration]:
+        """Migrations skipped because they are non-transactional."""
+        return [m for m in self.migrations if m.skipped]
+
+    @staticmethod
+    def _redact_url(url: str) -> str:
+        """Return URL with password replaced by ***, username preserved."""
+        from urllib.parse import urlparse, urlunparse
+
+        parsed = urlparse(url)
+        if not parsed.password:
+            return url
+
+        host_part = parsed.hostname or ""
+        if parsed.port:
+            host_part = f"{host_part}:{parsed.port}"
+        if parsed.username:
+            host_part = f"{parsed.username}@{host_part}"
+
+        return urlunparse(parsed._replace(netloc=host_part))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "against_url": self._redact_url(self.against_url),
+            "all_passed": self.all_passed,
+            "total": len(self.migrations),
+            "passed": sum(1 for m in self.migrations if m.success),
+            "failed": len(self.failures),
+            "skipped": len(self.skipped_migrations),
+            "db_consumed": self.db_consumed,
+            "migrations": [m.to_dict() for m in self.migrations],
+        }
