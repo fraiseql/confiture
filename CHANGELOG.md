@@ -5,6 +5,26 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-04-29
+
+### Added
+
+- **`confiture migrate preflight --against <url>`** — Issue #116
+  Test pending migrations against a disposable database (e.g. seeded from
+  `pg_dump --schema-only`) and report **all failures in one pass** using
+  per-migration SAVEPOINTs. The outer transaction is always rolled back,
+  leaving the preflight DB unchanged. Supports:
+  - `--config` / `--env` for pending-migration detection from a live tracking table
+  - `--since <version>` as a lightweight alternative (no second DB connection)
+  - `--allow-non-transactional` to run non-transactional migrations
+    (e.g. `CREATE INDEX CONCURRENTLY`) in autocommit mode
+  - `--format json` outputs a `{"static": …, "against": …}` envelope
+  - Exit 0 if all pass (skipped non-transactional migrations are neutral),
+    exit 1 on failures, exit 2 on config/connection errors
+  Also adds `PreflightAgainstMigration` and `PreflightAgainstResult` to the
+  public API (`from confiture import PreflightAgainstResult`), and
+  `MigratorSession.run_against()` as a public method for library callers.
+
 ## [0.9.3] - 2026-04-27
 
 ### Fixed
