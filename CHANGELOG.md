@@ -5,6 +5,25 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2026-05-12
+
+### Added
+
+- **`confiture migrate generate --live-snapshot`** — Issue #117
+  Snapshot schema via a temporary database + `pg_dump --schema-only`, capturing
+  objects created dynamically by DO blocks (e.g. partition tables generated with
+  `EXECUTE format(...)`). Static snapshots miss these objects, causing false
+  positives in `migrate introspect` and `--auto-detect-baseline`.
+  - New `TempDatabase` context manager creates a throwaway PostgreSQL database,
+    applies the full schema DDL (including DO blocks), dumps the result with
+    `pg_dump`, and drops the temp DB on exit.
+  - `pg_dump` output is cleaned: `SET` session variables, `SELECT pg_catalog`,
+    `CREATE/COMMENT ON EXTENSION`, and version comments are stripped.
+  - Non-fatal fallback: if the live snapshot fails (no DB connection, missing
+    `pg_dump`), confiture falls back to a static snapshot with a warning.
+  - Config-level default: `migration.live_snapshot: true` in environment YAML.
+  - JSON output includes `"snapshot_mode": "live"` or `"static"`.
+
 ## [0.9.4] - 2026-04-29
 
 ### Added
