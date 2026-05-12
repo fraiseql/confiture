@@ -1410,6 +1410,11 @@ def migrate_generate(
         "--snapshots-dir",
         help="Override snapshot output directory (default: db/schema_history)",
     ),
+    live_snapshot: bool | None = typer.Option(
+        None,
+        "--live-snapshot/--no-live-snapshot",
+        help="Snapshot via temp database + pg_dump (captures DO-block objects)",
+    ),
 ) -> None:
     """Generate a new migration file with timestamp-based version.
 
@@ -1655,7 +1660,21 @@ class {class_name}(Migration):
                 else True
             )
 
+        _snapshot_mode = "static"
         if _should_snapshot:
+            # Resolve live-snapshot mode from CLI flag or config
+            _use_live = live_snapshot
+            if _use_live is None:
+                _use_live = (
+                    _snapshot_env_config.migration.live_snapshot
+                    if _snapshot_env_config is not None
+                    else False
+                )
+
+            _live_db_url: str | None = None
+            if _use_live and _snapshot_env_config is not None:
+                _live_db_url = _snapshot_env_config.database_url
+
             try:
                 from confiture.core.schema_snapshot import SchemaSnapshotGenerator
 
@@ -1668,9 +1687,30 @@ class {class_name}(Migration):
                 _snap_gen = SchemaSnapshotGenerator(snapshots_dir=_resolved_snapshots_dir)
                 _snap_env_name = config.stem
                 _snap_project_dir = config.parent.parent.parent
-                _snapshot_path = _snap_gen.write_snapshot(
-                    _snap_env_name, version, name, _snap_project_dir
-                )
+
+                if _live_db_url:
+                    try:
+                        _snapshot_path = _snap_gen.write_snapshot(
+                            _snap_env_name,
+                            version,
+                            name,
+                            _snap_project_dir,
+                            database_url=_live_db_url,
+                        )
+                        _snapshot_mode = "live"
+                    except Exception as _live_err:
+                        if format_output == "text":
+                            console.print(
+                                f"[yellow]⚠️  Live snapshot failed, falling back to static: {_live_err}[/yellow]"
+                            )
+                        _snapshot_path = _snap_gen.write_snapshot(
+                            _snap_env_name, version, name, _snap_project_dir
+                        )
+                        _snapshot_mode = "static"
+                else:
+                    _snapshot_path = _snap_gen.write_snapshot(
+                        _snap_env_name, version, name, _snap_project_dir
+                    )
             except Exception as _snap_err:
                 if format_output == "text":
                     console.print(
@@ -1688,6 +1728,7 @@ class {class_name}(Migration):
                 "migrations_dir": str(migrations_dir.absolute()),
                 "next_available_version": version,
                 "snapshot": str(_snapshot_path.absolute()) if _snapshot_path else None,
+                "snapshot_mode": _snapshot_mode if _snapshot_path else None,
                 "warnings": warnings,
             }
             print(json.dumps(output, indent=2))

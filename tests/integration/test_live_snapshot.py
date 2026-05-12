@@ -1,0 +1,194 @@
+"""Integration tests for live-snapshot mode.
+
+Requires a running PostgreSQL server. Skipped when DATABASE_URL is not set.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from confiture.core.schema_snapshot import SchemaSnapshotGenerator
+from confiture.core.temp_database import TempDatabase, clean_pg_dump_output, pg_dump_schema
+
+
+@pytest.fixture
+def db_url() -> str:
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        pytest.skip("DATABASE_URL not set -- skipping integration tests")
+    return url
+
+
+class TestTempDatabaseIntegration:
+    """Integration tests for TempDatabase lifecycle."""
+
+    def test_creates_and_drops_database(self, db_url: str) -> None:
+        td = TempDatabase(db_url)
+        with td as temp_url:
+            assert td._db_name in temp_url
+
+            # Verify the database exists
+            import psycopg
+
+            with psycopg.connect(temp_url) as conn:
+                row = conn.execute("SELECT current_database()").fetchone()
+                assert row is not None
+                assert row[0] == td._db_name
+
+        # After exit, the temp database should be dropped.
+        # Attempting to connect should fail.
+        with pytest.raises(psycopg.OperationalError):
+            psycopg.connect(temp_url)
+
+    def test_apply_schema_with_do_block(self, db_url: str) -> None:
+        """DO blocks execute and create objects in the temp database."""
+        schema_sql = """
+CREATE TABLE events (
+    id bigint GENERATED ALWAYS AS IDENTITY,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+DO $$
+DECLARE
+    m int;
+BEGIN
+    FOR m IN 1..3 LOOP
+        EXECUTE format(
+            'CREATE TABLE events_2026_%s PARTITION OF events '
+            'FOR VALUES FROM (%L) TO (%L)',
+            lpad(m::text, 2, '0'),
+            format('2026-%s-01', lpad(m::text, 2, '0')),
+            format('2026-%s-01', lpad((m + 1)::text, 2, '0'))
+        );
+    END LOOP;
+END
+$$;
+"""
+        td = TempDatabase(db_url)
+        with td as temp_url:
+            td.apply_schema(temp_url, schema_sql)
+
+            import psycopg
+
+            with psycopg.connect(temp_url) as conn:
+                rows = conn.execute(
+                    "SELECT tablename FROM pg_tables "
+                    "WHERE schemaname = 'public' AND tablename LIKE 'events_%' "
+                    "ORDER BY tablename"
+                ).fetchall()
+                table_names = [r[0] for r in rows]
+                assert "events_2026_01" in table_names
+                assert "events_2026_02" in table_names
+                assert "events_2026_03" in table_names
+
+
+class TestPgDumpIntegration:
+    """Integration tests for pg_dump wrapper."""
+
+    def test_pg_dump_returns_ddl(self, db_url: str) -> None:
+        td = TempDatabase(db_url)
+        with td as temp_url:
+            td.apply_schema(temp_url, "CREATE TABLE test_table (id bigint NOT NULL);")
+            output = pg_dump_schema(temp_url)
+
+        assert "CREATE TABLE" in output
+        assert "test_table" in output
+
+
+class TestLiveSnapshotIntegration:
+    """Integration test: full pipeline with DO-block partitions."""
+
+    def test_live_snapshot_captures_do_block_partitions(self, db_url: str, tmp_path: Path) -> None:
+        """Live snapshot captures tables created by DO blocks.
+
+        This is the core use case for issue #117: DO blocks that create
+        partition tables are invisible to static snapshots.
+        """
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+        (schema_dir / "01_tables.sql").write_text(
+            """
+CREATE TABLE events (
+    id bigint GENERATED ALWAYS AS IDENTITY,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+DO $func$
+DECLARE
+    m int;
+BEGIN
+    FOR m IN 1..5 LOOP
+        EXECUTE format(
+            'CREATE TABLE events_2026_%s PARTITION OF events '
+            'FOR VALUES FROM (%L) TO (%L)',
+            lpad(m::text, 2, '0'),
+            format('2026-%s-01', lpad(m::text, 2, '0')),
+            format('2026-%s-01', lpad((m + 1)::text, 2, '0'))
+        );
+    END LOOP;
+END
+$func$;
+"""
+        )
+
+        # Create minimal env config
+        env_dir = tmp_path / "db" / "environments"
+        env_dir.mkdir(parents=True)
+        (env_dir / "local.yaml").write_text(
+            f"database_url: {db_url}\ninclude_dirs:\n  - db/schema\n"
+        )
+
+        snapshots_dir = tmp_path / "db" / "schema_history"
+        gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
+
+        # Live snapshot
+        path = gen.write_snapshot(
+            "local",
+            "001",
+            "init",
+            tmp_path,
+            database_url=db_url,
+        )
+
+        content = path.read_text()
+
+        # Header present
+        assert "Live snapshot generated by confiture" in content
+
+        # All 5 partition tables captured
+        for m in range(1, 6):
+            partition_name = f"events_2026_{m:02d}"
+            assert partition_name in content, (
+                f"Expected partition {partition_name} in live snapshot"
+            )
+
+        # Compare: static snapshot would NOT have partition tables
+        static_path = gen.write_snapshot("local", "002", "static_check", tmp_path)
+        static_content = static_path.read_text()
+
+        # Static snapshot should have DO block but NOT the individual partitions
+        assert "DO $func$" in static_content or "DO $$" in static_content
+        assert "events_2026_01" not in static_content
+
+    def test_clean_pg_dump_output_on_real_dump(self, db_url: str) -> None:
+        """Verify that clean_pg_dump_output strips noise from real pg_dump output."""
+        td = TempDatabase(db_url)
+        with td as temp_url:
+            td.apply_schema(temp_url, "CREATE TABLE clean_test (id int NOT NULL);")
+            raw = pg_dump_schema(temp_url)
+
+        cleaned = clean_pg_dump_output(raw)
+
+        # Should not contain SET statements
+        for line in cleaned.splitlines():
+            stripped = line.strip()
+            if stripped:
+                assert not stripped.startswith("SET "), f"Unexpected SET line: {line}"
+
+        # Should still contain the table
+        assert "clean_test" in cleaned

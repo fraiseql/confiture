@@ -196,6 +196,7 @@ class MigrationConfig(BaseModel):
         migration_generators: Named external generator commands
         snapshot_history: Write schema snapshot alongside each generated migration (default: True)
         snapshots_dir: Directory for schema history snapshots (default: db/schema_history)
+        live_snapshot: Use live-snapshot mode (temp DB + pg_dump) by default (default: False)
         tracking_table: Name of the confiture tracking table, optionally schema-qualified
             (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``.
     """
@@ -206,6 +207,7 @@ class MigrationConfig(BaseModel):
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)
     snapshot_history: bool = True
     snapshots_dir: str = "db/schema_history"
+    live_snapshot: bool = False
     tracking_table: str = "tb_confiture"
     rebuild_threshold: int = 5
     grant_dir: str = "db/7_grant"
