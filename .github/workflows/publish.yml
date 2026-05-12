@@ -222,7 +222,7 @@ jobs:
 
     - name: Build wheels (Linux with multiple Python versions)
       if: matrix.os == 'ubuntu-latest'
-      uses: pypa/cibuildwheel@v2.20.0
+      uses: pypa/cibuildwheel@v2.23
       with:
         output-dir: dist
       env:
