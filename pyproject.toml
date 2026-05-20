@@ -79,6 +79,10 @@ mcp-http = [
     "uvicorn[standard]>=0.29",
 ]
 
+notifications = [
+    "jinja2>=3.1",
+]
+
 [project.urls]
 Homepage = "https://github.com/fraiseql/confiture"
 Documentation = "https://github.com/fraiseql/confiture"
