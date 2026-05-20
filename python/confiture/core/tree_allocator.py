@@ -65,6 +65,10 @@ _HEX_PREFIX_RE = re.compile(r"^([0-9a-fA-F]+)_")
 _DECIMAL_PREFIX_RE = re.compile(r"^(\d+)_")
 # Detects at least one letter (a-f/A-F) that makes a prefix truly hex.
 _HEX_LETTER_RE = re.compile(r"[a-fA-F]")
+# Allowed characters in a verb: ASCII letters, digits, underscore, hyphen, dot.
+# Rejects path separators (``/``, ``\``) and ``..`` sequences that would let a
+# verb escape the target directory via ``Path.mkdir(parents=True)``.
+_SAFE_VERB_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$")
 
 
 def _parse_prefix(filename: str, base: int = 10) -> int | None:
@@ -146,13 +150,26 @@ class TreeAllocator:
         """
         resolved = target_dir.resolve()
         self._validate_target(resolved)
+        if verb is not None:
+            self._validate_verb(verb)
 
         config = self._explicit_config or self._detect_config(resolved)
         existing = self._collect_prefixes(resolved, config.scheme)
         next_value = (max(existing) + config.step) if existing else config.start
         prefix_str = self._format_prefix(next_value, config)
         stem = f"{prefix_str}_{verb}" if verb else prefix_str
-        return resolved / f"{stem}.sql"
+        output_path = resolved / f"{stem}.sql"
+
+        # Defence in depth: confirm the final path is still inside schema_dir
+        # after resolution.  Catches symlink tricks and any verb-validation
+        # bypass that might slip through.
+        try:
+            output_path.resolve().relative_to(self.schema_dir)
+        except ValueError:
+            raise ValueError(
+                f"allocated path {output_path!s} escapes schema root {self.schema_dir!s}"
+            ) from None
+        return output_path
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -168,6 +185,21 @@ class TreeAllocator:
             target_dir.relative_to(self.schema_dir)
         except ValueError:
             raise ValueError(f"{target_dir} is not within schema root {self.schema_dir}") from None
+
+    @staticmethod
+    def _validate_verb(verb: str) -> None:
+        """Reject verbs that could escape the target directory.
+
+        A verb is interpolated into the output filename as
+        ``{prefix}_{verb}.sql``.  Allowing path separators or ``..`` segments
+        would let an emitter write outside ``schema_dir`` via
+        ``Path.mkdir(parents=True)`` / ``write_text``.
+        """
+        if not _SAFE_VERB_RE.match(verb):
+            raise ValueError(
+                f"invalid verb {verb!r}: must match {_SAFE_VERB_RE.pattern} "
+                "(letters, digits, underscore, hyphen, dot; no path separators)"
+            )
 
     def _detect_config(self, directory: Path) -> PrefixConfig:
         """Auto-detect :class:`PrefixConfig` from files in *directory*.

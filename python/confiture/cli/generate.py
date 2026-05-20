@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -33,6 +34,32 @@ from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.tree_allocator import TreeAllocator
 from confiture.core.tree_renumber import TreeRenumber
+
+
+def _detect_repo_root(schema_dir: Path) -> Path:
+    """Detect the repo root for cross-repo reference scanning.
+
+    Tries ``git rev-parse --show-toplevel`` first; falls back to the
+    grandparent of ``schema_dir`` (which is ``db/schema`` → repo root in
+    the canonical layout).
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(schema_dir if schema_dir.exists() else Path.cwd()),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if out.returncode == 0:
+            top = out.stdout.strip()
+            if top:
+                return Path(top)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return schema_dir.resolve().parent.parent
+
 
 # Create Rich console for pretty output
 console = Console()
@@ -217,6 +244,12 @@ def renumber_path(
         "--dry-run",
         help="Show what would move and what refs would be rewritten, without touching disk.",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Proceed even if the old filename is referenced outside the db/ tree "
+        "(e.g. by application code that loads SQL files by literal path).",
+    ),
     output_json: bool = typer.Option(
         False,
         "--json",
@@ -228,7 +261,10 @@ def renumber_path(
     Allocates sort-stable filenames at the target, scans the schema tree
     for calls to the moved function(s), and rewrites them when the function
     stem changes.  Exits with code 2 when dangling references remain after
-    the rewrite pass (e.g. inside string literals).
+    the rewrite pass (e.g. inside string literals).  Refuses to proceed
+    when the old filename is referenced outside the ``db/`` tree (e.g. by
+    application code that loads SQL files by literal path) — use
+    ``--force`` to override.
 
     Examples::
 
@@ -237,7 +273,8 @@ def renumber_path(
         confiture generate renumber db/schema/functions/catalog/ \\
                                     db/schema/functions/public/ --dry-run
     """
-    renumber = TreeRenumber(schema_dir)
+    repo_root = _detect_repo_root(schema_dir)
+    renumber = TreeRenumber(schema_dir, repo_root=repo_root)
 
     try:
         plans = renumber.build_plans(old_path, new_path)
@@ -245,7 +282,11 @@ def renumber_path(
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1) from exc
 
-    result = renumber.execute(plans, dry_run=dry_run)
+    try:
+        result = renumber.execute(plans, dry_run=dry_run, force=force)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
 
     if output_json:
         print(
@@ -265,6 +306,7 @@ def renumber_path(
                     "dangling_refs": [
                         {"file": str(f), "name": name} for f, name in result.dangling_refs
                     ],
+                    "cross_repo_refs": [str(p) for p in result.cross_repo_refs],
                 }
             )
         )
@@ -285,6 +327,10 @@ def renumber_path(
                 f"[red]⚠ dangling:[/red] {ref_file} still references '{name}' "
                 f"(likely inside a string literal — fix manually)"
             )
+        if result.cross_repo_refs:
+            console.print("[yellow]⚠ proceeded with --force despite cross-repo refs:[/yellow]")
+            for p in result.cross_repo_refs:
+                console.print(f"  {p}")
 
     if result.dangling_refs:
         raise typer.Exit(2)

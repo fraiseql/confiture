@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator, ScaffoldResult
 
@@ -275,3 +277,67 @@ class TestScaffoldDryRun:
         results = orch.run([_single_fn(funcs, "create")])
 
         assert results[0].action == "skip"
+
+
+# ---------------------------------------------------------------------------
+# Schema-dir confinement — security boundary (#111)
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaDirConfinement:
+    """An external emitter must not be able to write outside the schema dir.
+
+    The risk vector is ``EmittedFunction.verb``: ``TreeAllocator.alloc`` builds
+    the output path as ``{prefix}_{verb}.sql``.  If ``verb`` contains path
+    separators or ``..`` segments, ``Path.mkdir(parents=True)`` and
+    ``write_text`` interpret them, escaping the schema root.
+    """
+
+    @pytest.mark.parametrize(
+        "bad_verb",
+        [
+            "../escape",
+            "../../../etc/passwd",
+            "subdir/escape",
+            "..",
+            "./relative",
+            "x/y",
+        ],
+    )
+    def test_scaffold_refuses_verb_with_path_separator_or_dotdot(
+        self, tmp_path: Path, bad_verb: str
+    ) -> None:
+        schema, funcs = _make_env(tmp_path)
+        orch = ScaffoldOrchestrator(schema)
+
+        with pytest.raises(ValueError, match="verb"):
+            orch.run([_single_fn(funcs, verb=bad_verb)])
+
+    def test_scaffold_does_not_write_outside_schema_dir_via_verb(self, tmp_path: Path) -> None:
+        """The deepest concern: with a sufficiently malicious verb, a file
+        could land outside ``schema_dir`` entirely.  Verify nothing escapes."""
+        schema, funcs = _make_env(tmp_path)
+        # Build a verb with enough ``..`` segments to escape any nesting.
+        bad_verb = "../" * 20 + "owned_outside"
+
+        orch = ScaffoldOrchestrator(schema)
+        with pytest.raises(ValueError):
+            orch.run([_single_fn(funcs, verb=bad_verb)])
+
+        # Defense-in-depth: even if validation were bypassed, nothing landed
+        # outside the schema dir.  Walk tmp_path and confirm every file is
+        # inside schema/.
+        all_files = [p for p in tmp_path.rglob("*") if p.is_file()]
+        for f in all_files:
+            assert schema in f.resolve().parents or f.resolve() == schema, (
+                f"File escaped schema dir: {f}"
+            )
+
+    def test_scaffold_accepts_normal_verbs(self, tmp_path: Path) -> None:
+        """Regression net — common verbs must keep working."""
+        schema, funcs = _make_env(tmp_path)
+        orch = ScaffoldOrchestrator(schema)
+
+        for ok_verb in ["create", "update", "delete_by_id", "find-all", "v1_2"]:
+            results = orch.run([_single_fn(funcs, verb=ok_verb)])
+            assert results[0].action == "write"

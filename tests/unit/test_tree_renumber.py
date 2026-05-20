@@ -488,3 +488,135 @@ class TestSubtreeMove:
         plans = TreeRenumber(schema).build_plans(src, dst)
 
         assert len(plans) == 1
+
+
+# ---------------------------------------------------------------------------
+# Cycle 3: refusal modes — collision + cross-repo references
+# ---------------------------------------------------------------------------
+
+
+class TestRenumberRefusesOnCollision:
+    """A renumber that would clobber an existing file at the target must refuse."""
+
+    def test_execute_raises_when_target_already_exists(self, tmp_path: Path) -> None:
+        schema = _schema(tmp_path)
+        funcs = _funcs(schema, "functions")
+        old = funcs / "00001_create.sql"
+        old.write_text("-- old")
+        existing_target = funcs / "00005_create.sql"
+        existing_target.write_text("-- already here")
+
+        renum = TreeRenumber(schema)
+        plans = renum.build_plans(old, existing_target)
+        with pytest.raises(ValueError, match="collision|exists|already"):
+            renum.execute(plans)
+
+        # Both files still exist; nothing was moved.
+        assert old.exists()
+        assert existing_target.read_text() == "-- already here"
+
+    def test_build_plans_does_not_raise_on_collision(self, tmp_path: Path) -> None:
+        """build_plans is read-only; collision must surface at execute."""
+        schema = _schema(tmp_path)
+        funcs = _funcs(schema, "functions")
+        old = funcs / "00001_create.sql"
+        old.write_text("-- old")
+        existing_target = funcs / "00005_create.sql"
+        existing_target.write_text("-- already here")
+
+        renum = TreeRenumber(schema)
+        plans = renum.build_plans(old, existing_target)  # must not raise
+        assert len(plans) == 1
+
+
+class TestRenumberCrossRepoReferences:
+    """``execute`` must refuse when the old filename appears outside ``db/``.
+
+    Application code or templates that reference SQL filenames literally
+    (``Path("db/schema/00001_users.sql").read_text()``) would silently break
+    after a renumber.  The plan calls for a ``git grep`` (or fs walk) of the
+    whole repo, refusal if any non-``db/`` hit is found, and a ``force=True``
+    escape hatch.
+    """
+
+    def _make_repo(self, tmp_path: Path) -> tuple[Path, Path]:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "db" / "schema" / "functions").mkdir(parents=True)
+        return repo, repo / "db" / "schema"
+
+    def test_execute_refuses_when_old_filename_referenced_outside_db_dir(
+        self, tmp_path: Path
+    ) -> None:
+        repo, schema = self._make_repo(tmp_path)
+        old = schema / "functions" / "00001_create_item.sql"
+        old.write_text("-- old")
+        new = schema / "functions" / "00005_create_item.sql"
+
+        # Application code references the literal filename outside db/.
+        (repo / "app").mkdir()
+        (repo / "app" / "loader.py").write_text(
+            'SQL = Path("db/schema/functions/00001_create_item.sql").read_text()\n'
+        )
+
+        renum = TreeRenumber(schema, repo_root=repo)
+        plans = renum.build_plans(old, new)
+        with pytest.raises(ValueError, match="referenced outside"):
+            renum.execute(plans)
+
+        # Nothing moved.
+        assert old.exists()
+        assert not new.exists()
+
+    def test_execute_proceeds_when_force_set_despite_cross_repo_hit(self, tmp_path: Path) -> None:
+        repo, schema = self._make_repo(tmp_path)
+        old = schema / "functions" / "00001_create_item.sql"
+        old.write_text("-- old")
+        new = schema / "functions" / "00005_create_item.sql"
+        (repo / "app").mkdir()
+        (repo / "app" / "loader.py").write_text(
+            'SQL = Path("db/schema/functions/00001_create_item.sql").read_text()\n'
+        )
+
+        renum = TreeRenumber(schema, repo_root=repo)
+        plans = renum.build_plans(old, new)
+        result = renum.execute(plans, force=True)
+
+        # Move went through.
+        assert not old.exists()
+        assert new.exists()
+        # The cross-repo hit is reported on the result for visibility.
+        assert any("loader.py" in str(p) for p in result.cross_repo_refs)
+
+    def test_execute_ignores_hits_inside_db_dir(self, tmp_path: Path) -> None:
+        """Other SQL files referencing the old name are handled by the regular
+        ref-rewrite path — they must not count as cross-repo refusals."""
+        repo, schema = self._make_repo(tmp_path)
+        old = schema / "functions" / "00001_create_item.sql"
+        old.write_text("-- defines create_item")
+        new = schema / "functions" / "00005_update_item.sql"
+        # A sibling SQL file references the old name — fine.
+        (schema / "functions" / "00010_caller.sql").write_text("SELECT create_item();\n")
+
+        renum = TreeRenumber(schema, repo_root=repo)
+        plans = renum.build_plans(old, new)
+        # Must not raise — sibling SQL ref is handled by ref-rewrite path.
+        result = renum.execute(plans)
+        assert not old.exists()
+        assert new.exists()
+        assert result.cross_repo_refs == []
+
+    def test_execute_works_without_repo_root_param(self, tmp_path: Path) -> None:
+        """When ``repo_root`` is None, the scan is best-effort and must not crash."""
+        schema = _schema(tmp_path)
+        funcs = _funcs(schema, "functions")
+        old = funcs / "00001_create.sql"
+        old.write_text("-- old")
+        new = funcs / "00005_create.sql"
+
+        renum = TreeRenumber(schema)  # no repo_root
+        plans = renum.build_plans(old, new)
+        result = renum.execute(plans)  # must not raise
+        assert not old.exists()
+        assert new.exists()
+        assert isinstance(result.cross_repo_refs, list)

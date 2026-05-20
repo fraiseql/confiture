@@ -1,0 +1,14 @@
+# Example 07 — External Emitter
+#
+# This file exists so editor tooling can detect the example as a Confiture
+# project.  The CLI itself does not read confiture.toml; the example runs
+# through `confiture generate scaffold --from emitter:emit --schema-dir db/schema`
+# entirely on the command line.
+
+[project]
+name = "example-07-external-emitter"
+description = "Minimal working example of a ConfitureEmitter callable."
+
+[generate]
+default_emitter = "emitter:emit"
+default_schema_dir = "db/schema"

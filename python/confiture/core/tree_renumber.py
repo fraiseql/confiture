@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import subprocess
 from pathlib import Path
 
 from confiture.core.tree_allocator import PrefixConfig, TreeAllocator
@@ -120,11 +121,16 @@ class RenumberResult:
         dangling_refs: ``(file, old_name)`` pairs where *old_name* still
             appears (e.g. inside string literals) after the rewrite pass.
             Require manual correction.  Non-empty → CLI exits with code 2.
+        cross_repo_refs: Paths outside the ``db/`` tree that mention one of
+            the moved filenames by name.  Populated only when ``force=True``
+            is passed; otherwise ``execute`` raises ``ValueError`` before
+            returning.
     """
 
     plans: list[RenumberPlan]
     ref_rewrites: list[RefRewrite]
     dangling_refs: list[tuple[Path, str]]
+    cross_repo_refs: list[Path] = dataclasses.field(default_factory=list)
 
 
 class TreeRenumber:
@@ -133,10 +139,17 @@ class TreeRenumber:
     Args:
         schema_dir: Root of the schema tree.  All source and target paths
             must be within this directory.
+        repo_root: Optional repository root for cross-repo reference scanning.
+            When provided, :meth:`execute` searches the repo for occurrences
+            of the old filename outside the ``db/`` tree and refuses to
+            proceed without ``force=True``.  When ``None`` the cross-repo
+            scan is skipped (best-effort default for non-git or unusual
+            project layouts).
     """
 
-    def __init__(self, schema_dir: Path) -> None:
+    def __init__(self, schema_dir: Path, repo_root: Path | None = None) -> None:
         self.schema_dir = schema_dir.resolve()
+        self.repo_root = repo_root.resolve() if repo_root is not None else None
 
     # ------------------------------------------------------------------
     # Public API
@@ -177,30 +190,57 @@ class TreeRenumber:
         self,
         plans: list[RenumberPlan],
         dry_run: bool = False,
+        force: bool = False,
     ) -> RenumberResult:
         """Execute *plans*, optionally in dry-run mode.
 
         Steps:
 
-        1. Collect all ``.sql`` files in the schema tree that are not part
+        1. Refuse if any plan would clobber an existing file at the target.
+        2. Refuse if any moved filename is referenced outside the ``db/``
+           tree (skipped when ``repo_root`` is None or ``force=True``).
+        3. Collect all ``.sql`` files in the schema tree that are not part
            of this move (potential reference files).
-        2. Move files (skipped when *dry_run*).
-        3. For each plan, scan other files for calls to *old_name* and
+        4. Move files (skipped when *dry_run*).
+        5. For each plan, scan other files for calls to *old_name* and
            record :class:`RefRewrite` entries.
-        4. When *old_name != new_name* and *not dry_run*: rewrite the
+        6. When *old_name != new_name* and *not dry_run*: rewrite the
            references outside string literals.
-        5. Detect dangling references that survive the rewrite.
+        7. Detect dangling references that survive the rewrite.
 
         Args:
             plans: Plans produced by :meth:`build_plans`.
             dry_run: When *True*, no files are modified.
+            force: When *True*, skip the cross-repo reference refusal.
+                Cross-repo hits are still reported on the result.
 
         Returns:
-            :class:`RenumberResult` summarising moves, rewrites, and
-            any dangling references.
+            :class:`RenumberResult` summarising moves, rewrites, dangling
+            references, and any cross-repo references that were detected.
+
+        Raises:
+            ValueError: If a plan would clobber an existing file, or if
+                cross-repo references exist and ``force`` is not set.
         """
         moved_old = {p.old_path for p in plans}
         moved_new = {p.new_path for p in plans}
+
+        # 1. Collision check — refuse to clobber existing files.
+        for plan in plans:
+            if plan.new_path.exists() and plan.new_path.resolve() != plan.old_path.resolve():
+                raise ValueError(
+                    f"renumber collision: target {plan.new_path!s} already exists "
+                    "— refusing to overwrite"
+                )
+
+        # 2. Cross-repo reference scan.
+        cross_repo_refs = self._scan_cross_repo_refs(plans) if self.repo_root else []
+        if cross_repo_refs and not force:
+            ref_list = "\n  ".join(str(p) for p in cross_repo_refs)
+            raise ValueError(
+                "renumber refused: filename(s) referenced outside the db/ tree:\n  "
+                f"{ref_list}\nUse force=True (CLI: --force) to proceed anyway."
+            )
 
         # Gather other schema files before any moves.
         other_files = [
@@ -251,11 +291,95 @@ class TreeRenumber:
             plans=plans,
             ref_rewrites=ref_rewrites,
             dangling_refs=dangling_refs,
+            cross_repo_refs=cross_repo_refs,
         )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _scan_cross_repo_refs(self, plans: list[RenumberPlan]) -> list[Path]:
+        """Find non-``db/`` files mentioning any moved filename.
+
+        Uses ``git grep -l`` when ``repo_root`` is inside a git work tree,
+        otherwise falls back to a filesystem walk.  Both paths return only
+        files outside the ``db/`` subtree, since references inside ``db/``
+        are handled by the regular ref-rewrite path.
+        """
+        if self.repo_root is None:
+            return []
+        filenames = [p.old_path.name for p in plans]
+        if not filenames:
+            return []
+        db_root = self.repo_root / "db"
+
+        # Prefer git grep — fast and respects .gitignore.
+        hits = self._git_grep_filenames(filenames)
+        if hits is None:
+            hits = self._fs_walk_filenames(filenames)
+
+        # Exclude paths inside db/, and the moved files themselves.
+        out: list[Path] = []
+        seen: set[Path] = set()
+        for hit in hits:
+            resolved = hit.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            try:
+                resolved.relative_to(db_root.resolve())
+            except ValueError:
+                out.append(resolved)
+                continue
+            # Inside db/ — ignored.
+        return sorted(out)
+
+    def _git_grep_filenames(self, filenames: list[str]) -> list[Path] | None:
+        """Run ``git grep -l`` for the union of *filenames*.
+
+        Returns *None* when the repo root is not a git work tree (caller
+        should fall back to fs walk).
+        """
+        if self.repo_root is None:
+            return None
+        # Compose an OR pattern that git grep can handle.
+        pattern = "|".join(re.escape(f) for f in filenames)
+        try:
+            proc = subprocess.run(
+                ["git", "grep", "-lE", "--", pattern],
+                cwd=str(self.repo_root),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+        # Exit 128 → not a git repo.  Exit 1 → no matches (treated as empty).
+        if proc.returncode == 128:
+            return None
+        if proc.returncode not in (0, 1):
+            return None
+        return [self.repo_root / line for line in proc.stdout.splitlines() if line]
+
+    def _fs_walk_filenames(self, filenames: list[str]) -> list[Path]:
+        """Filesystem fallback: walk repo_root, grep each file for *filenames*."""
+        if self.repo_root is None:
+            return []
+        needles = [re.escape(name) for name in filenames]
+        pattern = re.compile("|".join(needles))
+        hits: list[Path] = []
+        for path in self.repo_root.rglob("*"):
+            if not path.is_file():
+                continue
+            # Skip likely-binary files and large blobs.
+            try:
+                text = path.read_text(errors="replace")
+            except OSError:
+                continue
+            if pattern.search(text):
+                hits.append(path)
+        return hits
 
     def _plans_for_file(self, old_path: Path, new_path: Path) -> list[RenumberPlan]:
         if new_path.is_dir() or (not new_path.suffix and not new_path.exists()):
