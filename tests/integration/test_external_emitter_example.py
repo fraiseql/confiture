@@ -70,8 +70,17 @@ def test_example_emitter_runs_end_to_end(tmp_path: Path) -> None:
         sys.modules.pop("emitter", None)
 
 
-def test_example_override_mechanism(tmp_path: Path) -> None:
-    """The README claims an override mirror skips that path on the next run."""
+def test_example_override_mechanism_skips_overridden_path(tmp_path: Path) -> None:
+    """When an override exists at the path the orchestrator would allocate,
+    scaffold reports ``skip`` and does NOT write that path in db/schema/.
+
+    The override mechanism matches by *allocated path*, so the workflow that
+    exercises it is wipe-then-regen: the user clears db/schema/functions/sandbox/
+    before each run, ensures any files they own live in overrides/, and
+    scaffold writes only the non-overridden paths.
+    """
+    import json
+
     work = tmp_path / "ex07"
     shutil.copytree(EXAMPLE_DIR, work)
 
@@ -82,22 +91,13 @@ def test_example_override_mechanism(tmp_path: Path) -> None:
 
         os.chdir(work)
 
-        # First run — generate.
-        result = runner.invoke(
-            app,
-            ["generate", "scaffold", "--from", "emitter:emit", "--schema-dir", "db/schema"],
-        )
-        assert result.exit_code == 0, result.output
-
-        # Set up an override.
+        # Set up an override BEFORE the first scaffold so the allocator's
+        # first-allocated path (00001_ping.sql) hits the override.
         overrides = work / "overrides" / "functions" / "sandbox"
         overrides.mkdir(parents=True)
-        # Override 00001_ping.sql with custom content.
         (overrides / "00001_ping.sql").write_text("-- USER OVERRIDE\n")
 
-        # Second run with --overrides-dir — the orchestrator allocates the next
-        # available prefix (00003, 00004) since the on-disk 00001 and 00002 already
-        # exist.  Verify the override file itself is untouched.
+        # Run with --overrides-dir against an empty schema dir.
         result = runner.invoke(
             app,
             [
@@ -113,9 +113,30 @@ def test_example_override_mechanism(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 0, result.output
+        payload = json.loads(result.stdout)
 
-        # The user's override is untouched.
+        # Two results: 00001_ping.sql skipped (overridden), an echo_ping file written.
+        # Note: because the skip didn't write to disk, the allocator's next call
+        # still sees an empty dir and allocates 00001_ — for the second function.
+        # The skipped path is unique by verb (ping), the written path is the next
+        # available numeric prefix in an otherwise-empty dir.
+        assert len(payload["results"]) == 2
+        skipped = [r for r in payload["results"] if r["action"] == "skip"]
+        written = [r for r in payload["results"] if r["action"] == "write"]
+        assert len(skipped) == 1, payload
+        assert len(written) == 1, payload
+        assert "_ping.sql" in skipped[0]["path"]
+        assert "_echo_ping.sql" in written[0]["path"]
+
+        # On disk: the skipped path must NOT exist in db/schema/; the override file
+        # is untouched; the echo file landed under db/schema/.
+        sandbox = work / "db" / "schema" / "functions" / "sandbox"
+        assert not (sandbox / "00001_ping.sql").exists(), (
+            "Override mechanism failed: scaffold wrote a file the override should have skipped."
+        )
         assert (overrides / "00001_ping.sql").read_text() == "-- USER OVERRIDE\n"
+        echo_files = list(sandbox.glob("*_echo_ping.sql"))
+        assert len(echo_files) == 1, f"Expected one echo file, got: {echo_files}"
     finally:
         os.chdir(old_cwd)
         sys.path.remove(str(work))

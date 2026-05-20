@@ -51,14 +51,17 @@ CREATE OR REPLACE FUNCTION ping()
 
 ## Try the override mechanism
 
-Take ownership of `00001_ping.sql` by copying it under `overrides/`:
+The override mechanism matches by **allocated path**, so the workflow that exercises it is **wipe-then-regen**: clear the generated directory, ensure any files you own live in `overrides/`, run scaffold.
 
 ```bash
+# Put your version where the orchestrator will look for it.
 mkdir -p overrides/functions/sandbox/
 cp db/schema/functions/sandbox/00001_ping.sql overrides/functions/sandbox/
 # Edit overrides/functions/sandbox/00001_ping.sql — make it your own.
 
-# Re-run scaffold WITH --overrides-dir:
+# Wipe the previously generated files and re-run with --overrides-dir.
+# The orchestrator will allocate 00001 first, see the override, and skip.
+rm -f db/schema/functions/sandbox/*.sql
 confiture generate scaffold --from emitter:emit \
                             --schema-dir db/schema \
                             --overrides-dir overrides/
@@ -71,7 +74,9 @@ Output:
 ✓ write: db/schema/functions/sandbox/00002_echo_ping.sql
 ```
 
-The orchestrator detected the override and left the generated file alone. Re-runs will keep skipping it until the override is removed.
+The orchestrator allocated `00001_ping.sql`, saw a matching path under `overrides/`, and reported skip. The file in `db/schema/` was never written — you'll consume the override directly from the build step (`confiture build` concatenates DDL from `db/schema/` only by default; wire the overrides into your build by adding `overrides/` to `include_dirs` in your environment YAML).
+
+**Caveat**: the mechanism is path-keyed, not verb-keyed. If you don't wipe before re-running, the allocator allocates a *new* prefix (`00003_ping.sql`) and the override won't match, so the file lands in `db/schema/` and you end up with both versions.
 
 ## What to learn from this
 

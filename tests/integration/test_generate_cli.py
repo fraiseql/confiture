@@ -55,8 +55,15 @@ def test_alloc_returns_next_filename_in_empty_dir(project) -> None:
     assert "00001" in Path(payload["path"]).name
 
 
-def test_alloc_rejects_unsafe_verb(project) -> None:
-    """The security fix from Phase 02 Cycle 2 must surface through the CLI."""
+def test_alloc_rejects_unsafe_verb(project, tmp_path: Path) -> None:
+    """The security fix from Phase 02 Cycle 2 must surface through the CLI.
+
+    Tighter than the original: asserts that no ``.sql`` file landed outside
+    the schema dir, so this test can't pass on the wrong code path (e.g. an
+    unrelated CLI error whose message happens to include the word "verb").
+    """
+    sql_before = list(tmp_path.rglob("*.sql"))
+
     result = runner.invoke(
         app,
         [
@@ -70,7 +77,14 @@ def test_alloc_rejects_unsafe_verb(project) -> None:
         ],
     )
     assert result.exit_code != 0
-    assert "verb" in result.output
+    # Specific to the verb validation error message — not just "any error".
+    assert "invalid verb" in result.output or "no path separators" in result.output
+
+    # Nothing landed on disk, anywhere under tmp_path.
+    sql_after = list(tmp_path.rglob("*.sql"))
+    assert sql_after == sql_before, (
+        f"Files appeared on disk after a rejected verb: {set(sql_after) - set(sql_before)}"
+    )
 
 
 def test_scaffold_then_renumber_full_flow(project, tmp_path: Path) -> None:

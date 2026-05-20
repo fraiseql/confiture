@@ -342,6 +342,11 @@ class TreeRenumber:
         """
         if self.repo_root is None:
             return None
+        # Filenames containing newlines would corrupt ``git grep -l``'s
+        # newline-delimited output (we'd split a single match into two paths).
+        # Reject them rather than scan with split risk.
+        if any("\n" in f or "\r" in f for f in filenames):
+            return None
         # Compose an OR pattern that git grep can handle.
         pattern = "|".join(re.escape(f) for f in filenames)
         try:

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import psycopg
@@ -163,5 +165,68 @@ def test_baseline_recipe_works_against_pre_existing_history(
         )
         assert rerun.exit_code == 0
         assert "skipped 4 already applied" in rerun.output
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_envsubst_secret_substitution_pattern(
+    clean_db: psycopg.Connection, db_url: str, tmp_path: Path
+) -> None:
+    """The prerequisites doc points users at ``envsubst`` to inject the DSN.
+
+    Verify the documented workflow actually round-trips: write a template
+    with the literal ``${DATABASE_URL}``, run ``envsubst`` over it, hand the
+    rendered YAML to confiture.  If this stops working the prerequisites
+    doc has gone stale.
+    """
+    if shutil.which("envsubst") is None:
+        pytest.skip("envsubst not installed — skipping shell-substitution path")
+
+    _apply_migrations_by_hand(clean_db)
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    migrations_dir = project_dir / "db" / "migrations"
+    _write_migration_files(migrations_dir)
+    env_dir = project_dir / "db" / "environments"
+    env_dir.mkdir(parents=True)
+
+    # Template uses the literal ${DATABASE_URL} the docs tell readers to write.
+    template = env_dir / "production.template.yaml"
+    template.write_text(
+        "name: production\n"
+        "database_url: ${DATABASE_URL}\n"
+        "include_dirs:\n"
+        "  - db/schema\n"
+        "migration:\n"
+        "  tracking_table: tb_confiture\n"
+    )
+
+    # The docs say: run envsubst before invoking the CLI.
+    rendered = env_dir / "production.yaml"
+    with rendered.open("w") as out:
+        subprocess.run(
+            ["envsubst"],
+            stdin=template.open(),
+            stdout=out,
+            env={**os.environ, "DATABASE_URL": db_url},
+            check=True,
+        )
+
+    # Confirm the rendered file no longer contains ${DATABASE_URL}.
+    assert "${DATABASE_URL}" not in rendered.read_text()
+    assert db_url in rendered.read_text()
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(project_dir)
+        result = runner.invoke(
+            app,
+            ["migrate", "baseline", "--through", "004", "-c", str(rendered)],
+        )
+        assert result.exit_code == 0, (
+            f"baseline with envsubst-rendered YAML failed:\n{result.output}"
+        )
+        assert "Marked 4 migration(s) as applied" in result.output
     finally:
         os.chdir(old_cwd)
