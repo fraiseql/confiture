@@ -2,7 +2,7 @@
 
 **PostgreSQL migrations, sweetly done.**
 
-Build fresh databases in <1 second. Apply incremental migrations. Sync production data with PII anonymization. Zero-downtime schema swaps via FDW. All from the same tool.
+Build from DDL. Adopt on day one against a database that already has migrations applied. Preflight every deploy against a parallel database with structural diff. Sync production data with PII anonymization.
 
 [![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
 [![Quality Gate](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml)
@@ -12,46 +12,190 @@ Build fresh databases in <1 second. Apply incremental migrations. Sync productio
 
 ---
 
-## Why Confiture?
+## In 30 seconds
 
-- **DDL is the source of truth** — your `db/schema/` directory defines the database, not a chain of migrations. Fresh databases build in <1 second by executing DDL directly.
-- **Timestamp-based versioning** — migration filenames use `YYYYMMDDHHMMSS`, so parallel branches never collide. No more `003_add_users` merge conflicts.
-- **4 strategies, one tool** — build from DDL, incremental migrations, production sync with anonymization, and zero-downtime schema-to-schema via FDW. Pick the right one for each situation.
-- **Multi-agent coordination** — built-in intent registration and conflict detection so teams and AI agents don't step on each other's schema changes.
-- **CI/CD-native** — semantic exit codes, structured output (JSON/CSV/YAML), distributed locking, and dry-run with SAVEPOINT testing.
+```bash
+# 1. You already have a database at migration 004 (applied by hand or by another tool).
+#    Tell Confiture about that history without re-running the SQL:
+$ confiture migrate baseline --through 004 -c db/environments/production.yaml
+  ✅ 001 create_users (marked as applied)
+  ✅ 002 create_orders (marked as applied)
+  ✅ 003 add_user_email (marked as applied)
+  ✅ 004 add_user_preferences (marked as applied)
+✅ Marked 4 migration(s) as applied, skipped 0 already applied
+
+# 2. Machine-readable proof that the tracking is healthy:
+$ confiture migrate status -c db/environments/production.yaml --format json | jq '.applied | length'
+4
+
+# 3. Preflight the next deploy end-to-end against a parallel database:
+$ confiture migrate preflight --against "$PREFLIGHT_URL" -c db/environments/production.yaml
+▸ Replaying pending migrations on preflight DB …
+  ✓ 20260520143015_add_user_bio                 applied in 24 ms
+▸ Comparing resulting schema vs. db/schema/ …
+  ✓ No drift — preflight matches db/schema/
+✓ Preflight passed. Safe to deploy.
+exit 0
+```
+
+That's the loop. **Baseline once → status to confirm → preflight every deploy.**
 
 ---
 
-## Quick Start
+## Already have migrations?
 
-### Installation
-
-```bash
-pip install fraiseql-confiture
-
-# Recommended: include pglast for large-schema support
-# (uses PostgreSQL's own C parser — no token limits)
-pip install "fraiseql-confiture[ast]"
-```
-
-### CLI
+The single biggest reason migration tools fail adoption is the day-one cliff: existing tables already exist, so any tool that tries to apply migrations from scratch crashes on the first `CREATE TABLE`. Confiture's answer is `migrate baseline`:
 
 ```bash
-# Initialize project structure
-confiture init
-
-# Write your schema DDL files
-vim db/schema/10_tables/users.sql
-
-# Build database from DDL (<1 second)
-confiture build --env local
-
-# Generate and apply migrations
-confiture migrate generate --name "add_bio"
-confiture migrate up
+confiture migrate baseline --through <last-applied-version>
 ```
 
-### Library API
+The walkthrough — including failure modes, the integration test that backs the recipe, and what `tb_confiture` ends up looking like — is in [docs/guides/legacy-bootstrap.md](docs/guides/legacy-bootstrap.md).
+
+---
+
+## When to use Confiture?
+
+| Capability | Confiture | Flyway | Alembic | dbmate | sqlx-cli | plain psql |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Source of truth | DDL files | migration chain | model classes | migration chain | migration chain | DDL files |
+| Tracking table | yes | yes | yes | yes | yes | no |
+| Rollback (`down.sql`) | yes | paid | yes | yes | yes | no |
+| Preflight against a copy DB | **yes (structural diff)** | no | no | no | no | no |
+| Build from scratch in <1s | **yes** | no | no | no | no | yes (manual) |
+| Production sync + anonymization | **yes** | no | no | no | no | no |
+| Zero-downtime via FDW | **yes** | no | no | no | no | no |
+| Multi-agent coordination | **yes** | no | no | no | no | no |
+| Ecosystem maturity / stars | early | very mature | mature | mature | mature | n/a |
+
+Confiture wins on **build-from-DDL**, **structural-diff preflight**, **production sync**, and **multi-agent coordination**. It loses on ecosystem age — Flyway and Alembic have a decade of community knowledge. Pick honestly.
+
+### Adoption checklist
+
+| Situation | Recommended tool |
+|---|---|
+| 1 environment + 1 contributor, schema rarely changes | plain `psql` |
+| 2+ environments, schema changes weekly | Confiture, Flyway, Alembic, or dbmate |
+| Multi-agent / AI-driven development on shared schemas | **Confiture** |
+| You want `db/schema/` to be source of truth, not a migration chain | **Confiture** |
+| You need zero-downtime schema swaps with `postgres_fdw` | **Confiture** (Medium 4) |
+| You're committed to SQLAlchemy ORM | Alembic |
+| You're committed to a JVM stack | Flyway |
+
+---
+
+## CI integration
+
+A `migrate preflight` gate on every PR, a `migrate up` step on deploy. Exit codes are semantic, so the CI configuration stays simple:
+
+```yaml
+# .github/workflows/db.yml
+name: DB
+
+on:
+  pull_request:
+    paths:
+      - 'db/**'
+  push:
+    branches: [main]
+
+jobs:
+  preflight:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: x }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install --system "fraiseql-confiture[ast]"
+      - name: Restore production snapshot to preflight DB
+        run: ./scripts/restore-snapshot.sh   # your own; pg_restore from S3/GCS
+      - name: Confiture preflight
+        env:
+          PREFLIGHT_URL: postgresql://postgres:x@localhost:5432/preflight
+        run: |
+          confiture migrate preflight \
+            --against "$PREFLIGHT_URL" \
+            -c db/environments/preflight.yaml \
+            --format json --output preflight.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preflight-report
+          path: preflight.json
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install --system "fraiseql-confiture[ast]"
+      - run: confiture migrate up -c db/environments/production.yaml
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+```
+
+Exit codes: `0` success, `2` config error, `3` SQL failure, `6` lock contention, `7` structural drift. See [the dry-run guide](docs/guides/dry-run.md) for what each one means.
+
+---
+
+## Python project snippet
+
+Add Confiture as a dev dependency. The `[ast]` extra pulls in `pglast` for full PostgreSQL parsing — recommended for schemas with bulk seed data.
+
+```toml
+# pyproject.toml
+[dependency-groups]
+dev = [
+  "fraiseql-confiture[ast]>=0.9",
+  "pytest>=8",
+]
+```
+
+```just
+# justfile
+default:
+    just --list
+
+db-build:
+    confiture build --env local
+
+db-up:
+    confiture migrate up
+
+db-status:
+    confiture migrate status
+
+db-preflight:
+    confiture migrate preflight --against "$PREFLIGHT_URL"
+```
+
+Or as a `Makefile`:
+
+```makefile
+db-build:
+	confiture build --env local
+
+db-up:
+	confiture migrate up
+
+db-status:
+	confiture migrate status
+```
+
+---
+
+## Library API
+
+Confiture is a CLI first, but the migrator is fully usable from Python:
 
 ```python
 from confiture import Migrator
@@ -60,6 +204,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
     status = m.status()
     if status.has_pending:
         result = m.up()
+        print(f"Applied {len(result.applied)} migrations")
 ```
 
 ---
@@ -67,7 +212,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 ## The Four Strategies
 
 | Strategy | Use Case | Command |
-|----------|----------|---------|
+|---|---|---|
 | **Build from DDL** | Fresh databases, testing, CI | `confiture build --env local` |
 | **Incremental Migrations** | Existing databases, production | `confiture migrate up` |
 | **Production Sync** | Copy data with PII anonymization | `confiture sync --from prod --anonymize users.email` |
@@ -75,66 +220,28 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 
 ---
 
-## Features
-
-### Migration Management
-- **`migrate preflight`** — pre-deploy safety gate: checks reversibility, non-transactional statements, duplicate versions, and checksum tampering. JSON output for CI/CD.
-- **Semantic exit codes** — `0` success, `2` validation error, `3` SQL failure, `6` lock contention. Script with confidence.
-- **`migrate rebuild`** — drop and recreate from DDL + replay migrations in one command. Fast environment reset.
-- **`migrate validate`** — naming convention checks, schema drift detection, function signature and body drift.
-- **`migrate fix-signatures`** — detect and atomically fix stale function overloads and body drift.
-- **Dry-run with SAVEPOINT testing** — `--dry-run-execute` runs migrations inside a savepoint, then rolls back.
-- **Checksum verification** — detect tampered migration files before applying.
-- **Distributed locking** — safe concurrent deployments via PostgreSQL advisory locks.
-- **Migration hooks** — run custom logic before/after each migration.
-
-### Schema Intelligence
-- **Schema diff detection** — two-tier parser: pglast (PostgreSQL's C parser) primary, sqlparse fallback.
-- **Schema linting** — configurable rules to catch common DDL mistakes.
-- **Function introspection** — `FunctionIntrospector`, `TypeMapper`, and `DependencyGraph` for deep schema analysis.
-- **Grant accompaniment checker** — detect permission changes without corresponding migrations.
-
-### Seed Data
-- **Sequential execution** — handles PostgreSQL parser limits on large seed files.
-- **Per-file savepoint isolation** — one bad seed file doesn't ruin the batch.
-- **5-level prep-seed validation** — static analysis through full execution, pre-commit safe at levels 1-3.
-
-### Multi-Agent Coordination
-- **Intent registration** — declare which tables you're changing before you start.
-- **Conflict detection** — automatic alerts when agents touch overlapping tables.
-- **JSON output** — machine-readable for CI/CD pipelines.
-
-### Developer Experience
-- **Structured output** — JSON, CSV, and YAML for all commands.
-- **Exception hierarchy** — typed errors with error codes and resolution hints.
-- **Git-aware validation** — detect schema drift vs. main branch, enforce migrations for DDL changes.
-- **PII anonymization** — built-in strategies for production sync.
-- **Optional Rust extension** — drop-in performance boost for SQL parsing and hashing.
-- **Python 3.11, 3.12, 3.13** — tested across all supported versions.
-- **4,480+ tests** passing.
-
----
-
 ## Documentation
 
-**Getting Started**: [docs/getting-started.md](docs/getting-started.md)
+**Start here**
+- [Getting started](docs/getting-started.md) — first 5 minutes.
+- [Legacy bootstrap guide](docs/guides/legacy-bootstrap.md) — adopting on an existing database.
+- [Prerequisites](docs/reference/prerequisites.md) — PostgreSQL version, roles, secret stores.
 
-**Guides**:
+**Guides**
 - [Build from DDL](docs/guides/01-build-from-ddl.md)
-- [Incremental Migrations](docs/guides/02-incremental-migrations.md)
+- [Incremental Migrations](docs/guides/02-incremental-migrations.md) — `up`, `down`, rollback.
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
-- [Sequential Seed Execution](docs/guides/sequential-seed-execution.md)
+- [Dry-Run + Preflight](docs/guides/dry-run.md)
+- [Named Schemas](docs/guides/named-schemas.md)
+- [Hooks](docs/guides/hooks.md)
 - [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)
-- [Prep-Seed Validation](docs/guides/prep-seed-validation.md)
-- [Migration Decision Tree](docs/guides/migration-decision-tree.md)
-- [Dry-Run Mode](docs/guides/dry-run.md)
 
-**CLI Reference**: [docs/reference/cli.md](docs/reference/cli.md)
-
-**API Reference**: [docs/reference/](docs/reference/)
-
-**Examples**: [examples/](examples/)
+**Reference**
+- [Tracking table (`tb_confiture`)](docs/reference/tracking-table.md)
+- [CLI](docs/reference/cli.md)
+- [Configuration YAML](docs/reference/configuration.md)
+- [Complete feature list](docs/features/overview.md)
 
 ---
 
@@ -155,7 +262,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [CLAUDE.md](CLAUDE.md).
 
 **Vibe-engineered by [Lionel Hamayon](https://github.com/LionelHamayon)** 🍓
 
-MIT License - Copyright (c) 2025 Lionel Hamayon
+MIT License — Copyright (c) 2025 Lionel Hamayon
 
 ---
 

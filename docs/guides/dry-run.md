@@ -18,12 +18,15 @@ confiture migrate up --dry-run-execute
 
 ---
 
-## Two Modes
+## Three Modes
 
 | Mode | Flag | Effect |
 |------|------|--------|
-| **Analyze** | `--dry-run` | Shows impact without execution |
-| **Test** | `--dry-run-execute` | Executes in SAVEPOINT, rolls back |
+| **Analyze** | `migrate up --dry-run` | Static analysis; no DB connection needed |
+| **SAVEPOINT test** | `migrate up --dry-run-execute` | Executes in a SAVEPOINT against the live DB, then rolls back |
+| **Preflight against a copy** | `migrate preflight --against <preflight-db>` | Runs every pending migration end-to-end on a parallel database, with structural diff |
+
+For pre-deploy CI gates, `migrate preflight --against` is the strongest check. Use the others for quick local feedback.
 
 ---
 
@@ -133,6 +136,89 @@ if [ "$unsafe" -gt 0 ]; then
   exit 1
 fi
 ```
+
+---
+
+## Preflight against a parallel database
+
+`migrate preflight --against <url>` is the strongest dry-run mode confiture ships. It:
+
+1. Reads the live tracking table on `<url>` to determine which migrations are already applied there.
+2. Replays every pending `up.sql` (and `down.sql`, if `--include-down`) end-to-end on that database.
+3. Diffs the resulting schema against the source-of-truth DDL in `db/schema/`.
+4. Reports structural drift, transaction safety, and reversibility — exits non-zero if anything fails.
+
+The intended pattern: provision a throwaway database (RDS snapshot restore, `pg_dump | pg_restore` to a scratch DB, a Neon branch), point `--against` at it, and gate your deploy pipeline on the exit code.
+
+### What does the operator see?
+
+```text
+$ confiture migrate preflight --against postgresql://localhost/myapp_preflight
+
+▸ Connecting to preflight database … ok
+▸ Reading tracking table from preflight DB … 12 migrations applied
+▸ Discovering pending migrations from db/migrations/ … 2 pending
+
+  ► 20260520143015_add_user_bio.up.sql      transactional   reversible   no checksum drift
+  ► 20260520151200_add_orders_index.up.sql  non-transactional ⚠           reversible   no checksum drift
+
+▸ Replaying pending migrations on preflight DB …
+  ✓ 20260520143015_add_user_bio                 applied in 24 ms
+  ✓ 20260520151200_add_orders_index             applied in 1,820 ms (CREATE INDEX CONCURRENTLY)
+
+▸ Comparing resulting schema vs. db/schema/ …
+
+  Structural diff — preflight DB vs source DDL:
+    + public.users.bio TEXT NULL                  (new in preflight, matches db/schema/10_tables/users.sql)
+    + public.orders.idx_orders_customer_id        (new in preflight, matches db/schema/10_tables/orders.sql)
+
+  ✓ No drift — preflight matches db/schema/
+
+▸ Summary
+    Pending:        2
+    Applied OK:     2
+    Failed:         0
+    Drift items:    0
+    Non-tx warns:   1 (orders index — confirmed CONCURRENTLY)
+
+✓ Preflight passed. Safe to deploy.
+exit 0
+```
+
+When something does go wrong, the structural-diff section is where the signal lives. Typical failure modes:
+
+```text
+✗ Drift — preflight differs from db/schema/
+
+  - public.users.email VARCHAR(255) NOT NULL    (preflight has this; db/schema/ does not)
+
+  Hint: db/schema/10_tables/users.sql declares 'email TEXT NOT NULL', but the
+  migration 20260520143015_change_email_type.up.sql leaves the column as VARCHAR(255).
+  Either:
+    • Update db/schema/10_tables/users.sql to match the migration outcome, or
+    • Add ALTER TABLE public.users ALTER COLUMN email TYPE TEXT; to the migration.
+
+exit 7  (drift detected)
+```
+
+The exit code is **semantic** — wire it to your CI gate:
+
+| Exit | Meaning |
+|---|---|
+| 0 | Preflight passed |
+| 2 | Configuration error (bad YAML, unreachable preflight URL) |
+| 3 | SQL execution failure during replay |
+| 6 | Lock contention (another preflight is running) |
+| 7 | Structural drift between preflight DB and `db/schema/` |
+
+### Capturing the report for review
+
+```bash
+confiture migrate preflight --against "$PREFLIGHT_URL" \
+  --format json --output preflight-report.json
+```
+
+`preflight-report.json` is the same data the human transcript is rendered from. It is the canonical artifact to attach to a deploy PR.
 
 ---
 

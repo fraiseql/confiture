@@ -283,11 +283,65 @@ def up(self):
 
 ## Migration Tracking
 
-Confiture tracks applied migrations in `confiture_migrations`:
+Confiture records applied migrations in **`tb_confiture`** (default name, configurable per environment). See [the tracking-table reference](../reference/tracking-table.md) for the column shape.
 
 ```sql
-SELECT version, name, applied_at FROM confiture_migrations ORDER BY applied_at;
+SELECT version, name, applied_at, execution_time_ms
+FROM tb_confiture
+ORDER BY applied_at DESC
+LIMIT 20;
 ```
+
+Prefer the CLI for day-to-day queries:
+
+```bash
+confiture migrate status              # human-readable
+confiture migrate status --format json | jq '.applied[-5:]'
+```
+
+---
+
+## Rollback
+
+### Rolling back the most recent migration
+
+```bash
+$ confiture migrate down
+
+Rolling back: 20260520143015_add_user_bio
+  ▸ Executing db/migrations/20260520143015_add_user_bio.down.sql
+  ▸ Removing tb_confiture row for version 20260520143015
+✓ Rolled back in 18 ms
+
+$ confiture migrate status
+Tracking table: tb_confiture (8 rows)
+Applied:        8 migrations
+Pending:        1 migration
+  • 20260520143015_add_user_bio.up.sql  (un-applied — ready for `migrate up`)
+```
+
+### Rolling back to a specific version
+
+`migrate down --target` runs each `down.sql` in reverse order until the target version is the newest applied row:
+
+```bash
+$ confiture migrate down --target 20260518090000
+
+Will roll back 3 migrations:
+  ◂ 20260520143015_add_user_bio
+  ◂ 20260519140000_add_orders_table
+  ◂ 20260518120000_alter_users_email_index
+Continue? [y/N] y
+
+✓ Rolled back 3 migrations in 142 ms
+```
+
+### Production rollback safety
+
+- Confiture acquires the same advisory lock for `down` as it does for `up` — concurrent rollbacks are serialised.
+- If a `down.sql` is missing or empty, `migrate down` fails before touching the database. There is no "best effort" rollback.
+- For migrations that mark themselves `transactional: false` (e.g. `CREATE INDEX CONCURRENTLY` and its inverse), the rollback runs outside a transaction. Plan a forward-fix migration if anything goes wrong mid-rollback.
+- `migrate preflight --against <db>` against a copy of production replays the `down` + `up` pair end-to-end before you touch real data. See [the dry-run guide](dry-run.md).
 
 ---
 
