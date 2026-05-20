@@ -113,8 +113,14 @@ def _version_above(candidate: str, through: str) -> bool:
     """Return True when *candidate* is strictly above *through* in version order.
 
     Confiture supports both numeric/zero-padded prefixes (``001``, ``002``)
-    and timestamp prefixes (``YYYYMMDDHHMMSS``).  Both compare correctly
-    as strings when they share a format; we therefore use a lex
-    comparison directly.
+    and timestamp prefixes (``YYYYMMDDHHMMSS``).  Lex comparison is correct
+    *within* a single format (``001 < 002`` and ``20260101000000 <
+    20260102000000`` both order as expected).
+
+    Mixing pad widths within the same database (e.g. source has ``0042``
+    while local files have ``42``) is not handled here — those rows are
+    caught upstream by the ``local_versions`` set-membership check in
+    :func:`_select_rows_to_copy` and surface as ``source_only`` warnings,
+    not silent miscompares.
     """
     return candidate > through

@@ -88,7 +88,17 @@ Templates may contain only `{{ expr }}` expressions and `{# comment #}` comments
 - `{% import %}`
 - `{% raw %}`
 
-The check parses the template's AST after compile and refuses anything that is not `Output`, `TemplateData`, `Name`, `Getattr`, `Filter`, or `Const`. Block tags would let an attacker chain object walks across statements; refusing them at parse time eliminates the class.
+The check parses the template's AST after compile and refuses any node not on the expression allow-list:
+
+- **Structural:** `Template`, `Output`, `TemplateData`, `Const`
+- **Name access:** `Name`, `Getattr`, `Getitem`
+- **Filters:** `Filter` (filter *names* are checked separately — see below)
+- **Conditional:** `CondExpr`, `Compare`, `Operand`
+- **Arithmetic:** `Pos`, `Neg`, `Add`, `Sub`, `Mul`, `Div`, `FloorDiv`, `Mod`, `Pow`, `Concat`
+- **Boolean:** `Not`, `And`, `Or`
+- **Literal containers:** `Tuple`, `List`, `Dict`, `Pair`
+
+Block tags would let an attacker chain object walks across statements; refusing them at parse time eliminates the class. Expression-level operators are allowed because they cannot read attributes the sandbox would otherwise block — they only combine values already resolvable from the flat context dict.
 
 ### Allow-listed filters only
 

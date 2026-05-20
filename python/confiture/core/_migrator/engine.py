@@ -815,12 +815,12 @@ class Migrator:
         copied: list[dict[str, Any]] = []
         skipped: list[str] = []
 
-        for row in selection.rows:
+        for index, row in enumerate(selection.rows):
             if row["version"] in applied_versions:
                 skipped.append(row["version"])
                 continue
             if not dry_run:
-                self._insert_baseline_row(row)
+                self._insert_baseline_row(row, index=index)
             copied.append(row)
 
         if not dry_run:
@@ -876,18 +876,23 @@ class Migrator:
 
         return [dict(zip(columns, row, strict=False)) for row in rows]
 
-    def _insert_baseline_row(self, row: dict[str, Any]) -> None:
+    def _insert_baseline_row(self, row: dict[str, Any], *, index: int = 0) -> None:
         """Insert one source row into the target tracking table.
 
         The target row gets a freshly generated ``id`` and a ``slug``
         that records the copy operation, so the audit trail is clear.
         ``applied_at``, ``execution_time_ms``, and ``checksum`` are
         preserved verbatim from the source.
+
+        ``index`` is the row's position in the copy batch and is
+        embedded in the slug so that two source rows sharing the same
+        ``name`` within the same wall-clock second do not collide on
+        the ``slug`` UNIQUE constraint.
         """
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = f"{row['name']}_{timestamp}_baseline_from_db"
+        slug = f"{row['name']}_{timestamp}_{index:04d}_baseline_from_db"
 
         with self.connection.cursor() as cursor:
             cursor.execute(
