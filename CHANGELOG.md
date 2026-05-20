@@ -7,12 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.0] - 2026-05-20
 
-Coordinated release bundling three phases of work: README repositioning + new
-reference docs (Phase 01, #118), `generate scaffold/renumber` hardening +
-emitter protocol docs (Phase 02, #111), and a full notification rewrite
-behind a single YAML config surface (Phase 03, #105–#110).
+Coordinated release bundling three phases of work plus the
+`migrate baseline --from-db` primitive: README repositioning + new reference
+docs (Phase 01, #118), `generate scaffold/renumber` hardening + emitter
+protocol docs (Phase 02, #111), a full notification rewrite behind a single
+YAML config surface (Phase 03, #105–#110), and `baseline --from-db` (#119).
 
 ### Added
+
+- **`confiture migrate baseline --from-db <DSN>`** (#119) — copy
+  `tb_confiture` rows from another database verbatim, preserving `version`,
+  `name`, `applied_at`, `execution_time_ms`, and `checksum`. Removes the
+  manual-checkpoint guesswork when refreshing a target from a `pg_restore`
+  of another environment.
+  - Compatible with `--through <version>` for capping the copy at a known
+    checkpoint; the CLI warns when the cap excludes source rows.
+  - Filters to the intersection of source-applied versions and locally
+    present migration files — orphan source rows surface as warnings rather
+    than silently copying history the operator can't reproduce.
+  - Optional `--source-table` for when the source's tracking table is
+    named differently from the target's.
+  - Honours `--dry-run`.
 
 - **Notification hooks — Transport / Renderer / Hook architecture** (#105 #106 #107 #108 #109 #110)
   A single layered architecture replaces five per-service hook classes.
