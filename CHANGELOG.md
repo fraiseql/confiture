@@ -5,6 +5,63 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-05-20
+
+Coordinated release bundling three phases of work: README repositioning + new
+reference docs (Phase 01, #118), `generate scaffold/renumber` hardening +
+emitter protocol docs (Phase 02, #111), and a full notification rewrite
+behind a single YAML config surface (Phase 03, #105–#110).
+
+### Added
+
+- **Notification hooks — Transport / Renderer / Hook architecture** (#105 #106 #107 #108 #109 #110)
+  A single layered architecture replaces five per-service hook classes.
+  Configure via the `notifications:` block in the environment YAML:
+  ```yaml
+  notifications:
+    hooks:
+      - id: prod-slack
+        phase: after_execute
+        transport: {type: http, url: ${SLACK_WEBHOOK_URL}, retry: {attempts: 3}}
+        renderer: {type: slack, mention_on_failure: "@oncall"}
+  ```
+  - Transports: `http`, `smtp`, `stdout`.
+  - Renderers: `slack`, `discord`, `teams`, `email`, `pagerduty`, `opsgenie`,
+    `raw_json`, `jinja`.
+  - HTTP retries fire on 5xx + connection errors only; 4xx is final.
+  - SMTP passwords use `pydantic.SecretStr`; tracebacks are scrubbed so
+    `rich.traceback(show_locals=True)` / Sentry cannot leak the cleartext.
+  - PagerDuty + OpsGenie are stateless (one event per migration; success
+    resolves the dedup_key, failure triggers).
+  - Jinja renderer is opt-in via `notifications.allow_templated_renderers: true`
+    with a v1 security envelope (flat-dict context, no block tags, allow-listed
+    filters, `threading.Timer` timeout). New optional `[notifications]` extra
+    for the Jinja dependency.
+  - Discriminated-union validation surfaces typos with the valid options.
+  - `${VAR}` substitution fails loud on missing env vars at config-load.
+- **`confiture hooks test [--id <id>] [--no-dry-run]`** — fire a synthetic
+  event through a configured notification hook for verification.  Defaults
+  to dry-run (swaps the configured transport for `StdoutTransport`).
+- **Documentation**
+  - `docs/guides/notifications.md` — user-facing recipes, one example per renderer.
+  - `docs/reference/notification-architecture.md` — three-layer design doc.
+  - `docs/reference/notification-context.md` — Jinja context vars + security envelope.
+- **Reference + adoption docs landing for Phase 01** (#118): repositioned
+  README plus new reference and adoption guides authored against the
+  evaluator's missing-section checklist.
+- **`generate scaffold` + `generate renumber` hardening** (#111): atomic
+  rename, repo-root sandbox enforcement, cross-repo grep refusal without
+  `--force`. Emitter protocol documented in
+  `docs/reference/emitter-protocol.md`.
+
+### Removed
+
+- **Five per-service notification hook classes**: `SlackNotificationHook`,
+  `DiscordNotificationHook`, `TeamsNotificationHook`, `EmailNotificationHook`,
+  `WebhookNotificationHook`. The new `confiture.core.hooks.notifications`
+  package is the only notification surface. Net deletion: ~1,250 LoC across
+  source + tests.
+
 ## [0.9.5] - 2026-05-12
 
 ### Added

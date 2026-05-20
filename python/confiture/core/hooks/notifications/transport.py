@@ -142,8 +142,8 @@ class HttpTransport(Transport):
         url: Destination URL.  Must be HTTPS in production; HTTP is allowed
             for tests but logged with a warning.
         timeout_seconds: Per-attempt socket-read timeout.  Does NOT cover
-            DNS resolution — for that, the calling ``NotificationHook``
-            wraps execution in a process-wide watchdog (Cycle 7).
+            DNS resolution — for that, the calling phase's hook timeout
+            governs the wall-clock cap.
         retry: When *None*, no retries (attempts=1).  Otherwise applies on
             5xx and connection errors only; 4xx is final to avoid duplicate
             notifications on non-idempotent receivers.
