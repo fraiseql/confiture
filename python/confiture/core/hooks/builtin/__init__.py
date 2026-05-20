@@ -1,29 +1,18 @@
-"""Builtin migration hooks for production deployments."""
+"""Builtin migration hooks for production deployments.
+
+Notification hooks live in :mod:`confiture.core.hooks.notifications` —
+the layered Transport / Renderer / Hook architecture, configured via
+YAML.  Per-service helper classes used to live here but have been
+removed; pick a transport + renderer from the notifications package
+instead.
+"""
 
 from confiture.core.hooks.builtin.audit_hook import AuditConfig, AuditHook
 from confiture.core.hooks.builtin.backup_hook import BackupConfig, BackupHook
-from confiture.core.hooks.builtin.discord_hook import DiscordConfig, DiscordNotificationHook
-from confiture.core.hooks.builtin.email_hook import EmailConfig, EmailNotificationHook
-from confiture.core.hooks.builtin.notification_hook import (
-    SlackConfig,
-    SlackNotificationHook,
-)
-from confiture.core.hooks.builtin.teams_hook import TeamsConfig, TeamsNotificationHook
-from confiture.core.hooks.builtin.webhook_hook import WebhookConfig, WebhookNotificationHook
 
 __all__ = [
     "AuditConfig",
     "AuditHook",
     "BackupConfig",
     "BackupHook",
-    "DiscordConfig",
-    "DiscordNotificationHook",
-    "EmailConfig",
-    "EmailNotificationHook",
-    "SlackConfig",
-    "SlackNotificationHook",
-    "TeamsConfig",
-    "TeamsNotificationHook",
-    "WebhookConfig",
-    "WebhookNotificationHook",
 ]

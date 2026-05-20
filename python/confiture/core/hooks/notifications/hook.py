@@ -1,8 +1,11 @@
 """NotificationHook — the single Hook subclass that ties Transport + Renderer.
 
-Replaces the legacy per-service Hook classes (SlackNotificationHook,
-DiscordHook, TeamsHook, EmailHook, WebhookHook).  Cycle 9 ships shims that
-keep those names importable but emit DeprecationWarning.
+All notification delivery flows through this class: the hook builds a
+:class:`NotificationContext` from the live :class:`ExecutionContext`,
+hands it to the configured :class:`Renderer`, and ships the resulting
+:class:`TransportPayload` via the configured :class:`Transport`.
+Transport errors are logged and swallowed — a migration never blocks
+on a notification failure.
 """
 
 from __future__ import annotations

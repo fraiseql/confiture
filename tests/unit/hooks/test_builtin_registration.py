@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from confiture.core.hooks.builtin import AuditHook, BackupHook, SlackNotificationHook
+from confiture.core.hooks.builtin import AuditHook, BackupHook
 from confiture.core.hooks.phases import HookPhase
 from confiture.core.hooks.registry import HookRegistry
 
@@ -55,24 +55,24 @@ class TestBuiltinRegistration:
         assert len(registry.hooks["after_execute"]) == 1
         assert registry.hooks["after_execute"][0].id == "builtin.audit"
 
-    def test_register_slack_hook(self):
-        """Should be able to register SlackNotificationHook with HookRegistry."""
+    def test_register_notification_hook(self):
+        """Should be able to register a NotificationHook with HookRegistry."""
         registry = HookRegistry()
 
-        from confiture.core.hooks.builtin.notification_hook import SlackConfig
+        from confiture.core.hooks.notifications.hook import NotificationHook
+        from confiture.core.hooks.notifications.renderer import RawJsonRenderer
+        from confiture.core.hooks.notifications.transport import StdoutTransport
 
-        config = SlackConfig(
-            webhook_url="https://hooks.slack.com/test",
+        hook = NotificationHook(
+            hook_id="notifications.test",
+            transport=StdoutTransport(),
+            renderer=RawJsonRenderer(),
         )
-        hook = SlackNotificationHook(config)
-
-        # Register hook
         registry.register("after_execute", hook)
 
-        # Verify registration
         assert "after_execute" in registry.hooks
         assert len(registry.hooks["after_execute"]) == 1
-        assert registry.hooks["after_execute"][0].id == "builtin.slack"
+        assert registry.hooks["after_execute"][0].id == "notifications.test"
 
     @pytest.mark.asyncio
     @patch("asyncio.create_subprocess_exec")

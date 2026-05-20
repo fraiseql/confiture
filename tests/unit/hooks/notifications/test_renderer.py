@@ -66,12 +66,10 @@ class TestRendererABC:
 
 
 class TestSlackRenderer:
-    def test_success_payload_matches_legacy_shape(self) -> None:
-        """Byte-for-byte compatibility with the legacy SlackNotificationHook.
-
-        Specifically pins the field order, color, title, text, and the four
-        ``fields`` rows.  If this snapshot drifts, the deprecation shim for
-        ``SlackNotificationHook`` (Cycle 9) will surface a behavioural diff.
+    def test_success_payload_snapshot(self) -> None:
+        """Snapshot the Slack success payload — pins color, title, text, and
+        the four ``fields`` rows so future renderer edits surface as a
+        deliberate change to the test data, not a silent format drift.
         """
         payload = SlackRenderer().render(_ctx())
         body = _decode(payload)
@@ -252,7 +250,7 @@ class TestTeamsRenderer:
         assert section["activityTitle"] == "Migration Succeeded"
         assert "(up)" in section["activitySubtitle"]
         assert section["markdown"] is True
-        # Facts in the legacy order.
+        # Facts in canonical order.
         names = [f["name"] for f in section["facts"]]
         assert names == ["Migration", "Direction", "Duration", "Time"]
 

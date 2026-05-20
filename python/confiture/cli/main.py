@@ -16,6 +16,7 @@ from confiture.cli.commands.admin import (
 from confiture.cli.commands.debug import debug_app
 from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
+from confiture.cli.commands.hooks import hooks_app
 from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate_analysis import (
     migrate_diff,
@@ -95,6 +96,9 @@ app.add_typer(mcp_app, name="mcp")
 
 # Add debug subcommand group (CTE debugger)
 app.add_typer(debug_app, name="debug")
+
+# Add hooks subcommand group (notification hook testing)
+app.add_typer(hooks_app, name="hooks")
 
 
 def version_callback(value: bool) -> None:

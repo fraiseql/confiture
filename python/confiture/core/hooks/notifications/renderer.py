@@ -5,16 +5,17 @@ Renderers are *pure functions* from :class:`NotificationContext` to
 the timestamp), no environment lookups.  This keeps them snapshot-
 comparable across tests and trivially recombinable with any transport.
 
-Cycle 2 ships:
+Concrete renderers:
 
-- :class:`Renderer` — the ABC.
-- :class:`SlackRenderer` — byte-for-byte compatible with the legacy
-  ``SlackNotificationHook._build_payload`` shape.
+- :class:`SlackRenderer` — Slack incoming-webhook attachments payload.
 - :class:`DiscordRenderer` — Discord webhook embed format.
 - :class:`TeamsRenderer` — Microsoft Teams adaptive-card MessageCard format.
-
-Cycles 3-6 will add ``RawJsonRenderer``, ``JinjaRenderer``, ``EmailRenderer``,
-``PagerDutyRenderer``, ``OpsGenieRenderer``.
+- :class:`EmailRenderer` — email body + SMTP metadata for :class:`SmtpTransport`.
+- :class:`PagerDutyRenderer` — PagerDuty Events API v2 payload (stateless).
+- :class:`OpsGenieRenderer` — OpsGenie alert payload (stateless).
+- :class:`RawJsonRenderer` — canonical confiture migration-event JSON.
+- :class:`JinjaRenderer` — opt-in templated payload (lives in
+  :mod:`confiture.core.hooks.notifications.jinja_renderer`).
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ class Renderer(ABC):
 
 
 # ---------------------------------------------------------------------------
-# Slack — byte-for-byte compatible with legacy SlackNotificationHook output.
+# Slack — incoming-webhook attachments format.
 # ---------------------------------------------------------------------------
 
 
