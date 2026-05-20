@@ -7,12 +7,109 @@ import typer
 from confiture.cli.helpers import console, error_console
 
 
+def _baseline_from_db_flow(
+    *,
+    from_db: str,
+    through: str | None,
+    source_table: str | None,
+    migrations_dir: Path,
+    config: Path,
+    dry_run: bool,
+) -> None:
+    """Drive the ``--from-db`` copy path.
+
+    Connects to the target database via the standard config flow,
+    delegates to :meth:`Migrator.baseline_from_db`, and renders the
+    resulting report to the operator.  Issue #119.
+    """
+    from confiture.cli.helpers import _get_tracking_table
+    from confiture.core.connection import create_connection, load_config
+    from confiture.core.migrator import Migrator
+
+    config_data = load_config(config)
+    conn = create_connection(config_data)
+
+    try:
+        migrator = Migrator(
+            connection=conn,
+            migration_table=_get_tracking_table(config_data),
+        )
+        migrator.initialize()
+
+        if through is not None:
+            console.print(
+                "[yellow]⚠️  --through with --from-db caps the copy at "
+                f"version {through!r}; source rows above the cap will be "
+                "skipped.[/yellow]"
+            )
+
+        report = migrator.baseline_from_db(
+            source_dsn=from_db,
+            migrations_dir=migrations_dir,
+            through=through,
+            dry_run=dry_run,
+            source_table=source_table,
+        )
+
+        for warning in report["warnings"]:
+            console.print(f"[yellow]⚠️  {warning}[/yellow]")
+
+        if dry_run:
+            console.print("\n[yellow]🔍 DRY RUN - no changes will be made[/yellow]")
+
+        copied = report["copied"]
+        skipped = report["skipped"]
+
+        if not copied and not skipped:
+            console.print("\n[yellow]No rows to copy.[/yellow]")
+        else:
+            console.print(f"\n[cyan]📋 Baseline from {from_db}[/cyan]\n")
+            for row in copied:
+                marker = "would copy" if dry_run else "copied"
+                console.print(f"  [green]✅ {row['version']} {row['name']} ({marker})[/green]")
+            for version in skipped:
+                console.print(f"  [dim]⏭️  {version} (already applied on target)[/dim]")
+
+        if dry_run:
+            console.print(
+                f"\n[cyan]📊 Would copy {len(copied)} row(s); "
+                f"{len(skipped)} already applied.[/cyan]"
+            )
+            console.print("[yellow]Run without --dry-run to apply changes.[/yellow]")
+        else:
+            console.print(
+                f"\n[green]✅ Copied {len(copied)} row(s); {len(skipped)} already applied.[/green]"
+            )
+    finally:
+        conn.close()
+
+
 def migrate_baseline(
     through: str = typer.Option(
-        ...,
+        None,
         "--through",
         "-t",
-        help="Mark all migrations through this version as applied (required)",
+        help=(
+            "Mark all migrations through this version as applied.  Required "
+            "unless --from-db is given."
+        ),
+    ),
+    from_db: str = typer.Option(
+        None,
+        "--from-db",
+        help=(
+            "Source DSN to copy tb_confiture rows from.  When set, history "
+            "is copied from another database rather than marked manually.  "
+            "Combined with --through, the copy is capped at the named version."
+        ),
+    ),
+    source_table: str = typer.Option(
+        None,
+        "--source-table",
+        help=(
+            "Override the source DB's tracking table name when it differs "
+            "from the target (default: same as target)."
+        ),
     ),
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -38,18 +135,23 @@ def migrate_baseline(
       Useful for establishing a baseline when adopting confiture on existing
       databases, setting up from backups, or recovering from failed states.
 
+      With --from-db, copies the tracking-table rows from another database
+      verbatim (preserving version, name, applied_at, execution_time_ms,
+      checksum).  Use this after a pg_restore from another environment when
+      tb_confiture has been lost — see Issue #119.
+
     EXAMPLES:
       confiture migrate baseline --through 002
-        ↳ Mark migrations 001-002 as applied
+        ↳ Mark migrations 001-002 as applied (manual baseline)
 
       confiture migrate baseline --through 005 --dry-run
         ↳ Preview what would be marked, without making changes
 
-      confiture migrate baseline -t 003 -c db/environments/production.yaml
-        ↳ Mark through version 003 in production database
+      confiture migrate baseline --from-db postgresql://prod-host/myapp
+        ↳ Copy production's migration history into the local database
 
-      confiture migrate baseline -t 010 --force
-        ↳ Force marking without state checks
+      confiture migrate baseline --from-db postgresql://prod/myapp --through 042
+        ↳ Copy production's history, but stop at version 042
 
     RELATED:
       confiture migrate up       - Apply migrations normally
@@ -61,6 +163,13 @@ def migrate_baseline(
     from confiture.core.migrator import Migrator
 
     try:
+        if through is None and from_db is None:
+            console.print(
+                "[red]❌ Missing required option.  Pass either --through <version> "
+                "or --from-db <DSN>.[/red]"
+            )
+            raise typer.Exit(1)
+
         if not config.exists():
             console.print(f"[red]❌ Config file not found: {config}[/red]")
             console.print(
@@ -71,6 +180,17 @@ def migrate_baseline(
         if not migrations_dir.exists():
             console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
             raise typer.Exit(1)
+
+        if from_db is not None:
+            _baseline_from_db_flow(
+                from_db=from_db,
+                through=through,
+                source_table=source_table,
+                migrations_dir=migrations_dir,
+                config=config,
+                dry_run=dry_run,
+            )
+            return
 
         # Check for duplicate migration versions (hard block, no DB needed)
         from confiture.core.migrator import find_duplicate_migration_versions as _baseline_find

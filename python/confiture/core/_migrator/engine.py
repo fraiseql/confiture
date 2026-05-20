@@ -754,6 +754,158 @@ class Migrator:
 
         return migration.version
 
+    def baseline_from_db(
+        self,
+        source_dsn: str,
+        migrations_dir: Path,
+        *,
+        through: str | None = None,
+        dry_run: bool = False,
+        source_table: str | None = None,
+    ) -> dict[str, Any]:
+        """Copy tracking-table rows from another database.
+
+        Connects to *source_dsn*, reads ``tb_confiture`` (or
+        *source_table* when given), filters to the intersection of
+        source-applied versions and locally present migration files,
+        and inserts the surviving rows into the target's tracking table.
+        Rows already present on the target are skipped.
+
+        Args:
+            source_dsn: PostgreSQL connection string for the source DB.
+            migrations_dir: Local migrations directory; used to compute
+                the version intersection.
+            through: Optional version cap.  Source rows with versions
+                strictly above this are excluded and surfaced as a
+                warning to make the operator aware of the skipped state.
+            dry_run: When ``True``, no INSERTs are executed; the returned
+                dict still describes what *would* have been copied.
+            source_table: Override the source tracking-table name when
+                it differs from the target.  Defaults to the target
+                table name.
+
+        Returns:
+            A dict with keys ``copied`` (list of row dicts inserted),
+            ``skipped`` (list of versions already on the target),
+            ``source_only`` (list of versions in source but not local),
+            ``warnings`` (list of human-readable diagnostics), and
+            ``dry_run`` (bool).
+
+        Raises:
+            ConfigurationError: If *through* names a version that is not
+                in source or local migration files.
+            MigrationError: If the source connection fails or its table
+                cannot be read.
+        """
+        from confiture.core._migrator.baseline_copy import _select_rows_to_copy
+
+        local_files = self.find_migration_files(migrations_dir)
+        local_versions = {self._version_from_filename(f.name) for f in local_files}
+
+        source_table_name = source_table or self.migration_table
+        source_rows = self._read_source_tracking_table(source_dsn, source_table_name)
+
+        selection = _select_rows_to_copy(
+            source_rows,
+            local_versions=local_versions,
+            through=through,
+        )
+
+        applied_versions = set(self.get_applied_versions())
+        copied: list[dict[str, Any]] = []
+        skipped: list[str] = []
+
+        for row in selection.rows:
+            if row["version"] in applied_versions:
+                skipped.append(row["version"])
+                continue
+            if not dry_run:
+                self._insert_baseline_row(row)
+            copied.append(row)
+
+        if not dry_run:
+            self.connection.commit()
+
+        return {
+            "copied": copied,
+            "skipped": skipped,
+            "source_only": selection.source_only,
+            "warnings": selection.warnings,
+            "dry_run": dry_run,
+        }
+
+    def _read_source_tracking_table(
+        self,
+        source_dsn: str,
+        source_table: str,
+    ) -> list[dict[str, Any]]:
+        """Open *source_dsn* and SELECT all rows from *source_table*.
+
+        Returns rows as dicts keyed by column name, ordered by version
+        ascending.  Closes the source connection before returning.
+        """
+        if not _VALID_TABLE_RE.match(source_table):
+            raise MigrationError(
+                f"Invalid source table name: {source_table!r}.",
+                resolution_hint="Pass --source-table with a valid identifier.",
+            )
+        src_parts = source_table.split(".", 1)
+        if len(src_parts) == 2:
+            src_ident = pgsql.Identifier(src_parts[0], src_parts[1])
+        else:
+            src_ident = pgsql.Identifier(src_parts[0])
+
+        try:
+            with psycopg.connect(source_dsn) as src_conn, src_conn.cursor() as cursor:
+                cursor.execute(
+                    pgsql.SQL(
+                        "SELECT version, name, applied_at, execution_time_ms, "
+                        "checksum FROM {} ORDER BY version ASC"
+                    ).format(src_ident)
+                )
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in (cursor.description or [])]
+        except psycopg.Error as exc:
+            raise MigrationError(
+                f"Could not read source tracking table {source_table!r}: {exc}",
+                resolution_hint=(
+                    "Verify the DSN, that the source DB is reachable, and that "
+                    "the tracking table exists and is readable."
+                ),
+            ) from exc
+
+        return [dict(zip(columns, row, strict=False)) for row in rows]
+
+    def _insert_baseline_row(self, row: dict[str, Any]) -> None:
+        """Insert one source row into the target tracking table.
+
+        The target row gets a freshly generated ``id`` and a ``slug``
+        that records the copy operation, so the audit trail is clear.
+        ``applied_at``, ``execution_time_ms``, and ``checksum`` are
+        preserved verbatim from the source.
+        """
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        slug = f"{row['name']}_{timestamp}_baseline_from_db"
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                pgsql.SQL("""
+                INSERT INTO {}
+                    (id, slug, version, name, applied_at, execution_time_ms, checksum)
+                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
+                """).format(self._table_ident),
+                (
+                    slug,
+                    row["version"],
+                    row["name"],
+                    row.get("applied_at"),
+                    row.get("execution_time_ms") or 0,
+                    row.get("checksum"),
+                ),
+            )
+
     def _clear_tracking_table(self) -> int:
         """Delete all entries from the tracking table.
 

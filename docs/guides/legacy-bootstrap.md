@@ -132,6 +132,36 @@ confiture migrate reinit   # clears the tracking table and re-baselines from dis
 
 `reinit` is the bigger hammer. Prefer `baseline` unless you know you need it.
 
+## Alternative: copy history from another database (`--from-db`)
+
+When you're refreshing a target from another environment — typical staging-from-production refresh or a DR drill — the `pg_restore` ought to bring `tb_confiture` over with the rest of the schema. When that doesn't happen (or when the dump excluded the table for size or sensitivity reasons), `confiture migrate baseline --through <version>` forces the operator to know the right checkpoint by hand. That's brittle.
+
+`--from-db` removes the manual step. Point it at a database that's already correct, and the rows get copied:
+
+```bash
+$ confiture migrate baseline --from-db postgresql://prod-host/myapp \
+    -c db/environments/staging.yaml
+⚠️  Source DB has 1 version(s) not present in local migrations: 042.  These rows will NOT be copied.
+📋 Baseline from postgresql://prod-host/myapp
+  ✅ 001 create_users (copied)
+  ✅ 002 add_posts (copied)
+  ✅ 003 add_comments (copied)
+✅ Copied 3 row(s); 0 already applied.
+```
+
+What it does:
+
+1. Opens the source DSN and reads its `tb_confiture`.
+2. Filters to versions that exist in both the source DB **and** the local `db/migrations/` directory — orphan source rows are surfaced as warnings, not silently copied.
+3. Inserts the surviving rows verbatim into the target's tracking table, preserving `version`, `name`, `applied_at`, `execution_time_ms`, and `checksum`. The target gets a fresh `id` and a `slug` that records the copy operation.
+4. Rows already present on the target are skipped.
+
+Combined with `--through`, the copy is capped at the named version — useful when the target should intentionally lag behind the source. The CLI warns when the cap excludes source rows so the asymmetry is visible.
+
+Use `--dry-run` to preview without writing.
+
+`--source-table` overrides the source's tracking-table name when it differs from the target (the default is to use the same name on both ends).
+
 ## Done — what just happened?
 
 You now have a populated `tb_confiture` matching the live database state, and `migrate up` will apply only new migrations from this point forward. The on-disk migrations `001`-`004` are immutable history — don't edit them.
