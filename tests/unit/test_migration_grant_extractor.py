@@ -5,7 +5,10 @@ tuples out of a migration's SQL text.  pglast is the primary parser
 (no token limits, accurate names); sqlparse + regex is the fallback
 when pglast isn't installed.
 
-Both parser paths must agree on every fixture below.
+Both parser paths must agree on every fixture below — the
+``test_pglast_sqlparse_parity_*`` block at the bottom of the file is
+the contract: if you add a fixture there, both backends MUST produce
+the same result.  That's the point of this file.
 """
 
 from __future__ import annotations
@@ -174,3 +177,110 @@ def test_pglast_is_the_default_parser() -> None:
     from confiture.core import migration_grant_extractor as mod
 
     assert mod._HAS_PGLAST is True
+
+
+# ---------------------------------------------------------------------------
+# Parity harness — every fixture runs against BOTH backends and the
+# results MUST match.  If you add a case here, you are pinning that the
+# pglast primary path and the sqlparse fallback agree on it.
+# ---------------------------------------------------------------------------
+
+
+# Each fixture is (method, sql, expected) where method names the
+# extractor method to invoke.  ``set(...)`` comparison so ordering
+# differences between backends don't trip the parity gate.
+_PARITY_FIXTURES: list[tuple[str, str, set]] = [
+    # Multi-target GRANT — pglast splits via stmt.objects; sqlparse must
+    # split the comma-list manually.
+    (
+        "extract_grants",
+        "GRANT SELECT ON a, b, c TO r;",
+        {
+            ("public", "a", "r", frozenset({"SELECT"})),
+            ("public", "b", "r", frozenset({"SELECT"})),
+            ("public", "c", "r", frozenset({"SELECT"})),
+        },
+    ),
+    # Multi-target DROP TABLE.
+    (
+        "extract_drops",
+        "DROP TABLE a, b, c;",
+        {("public", "a"), ("public", "b"), ("public", "c")},
+    ),
+    # ``WITH GRANT OPTION`` must be stripped from the role list, not
+    # absorbed into the role name.
+    (
+        "extract_grants",
+        "GRANT SELECT ON foo TO r WITH GRANT OPTION;",
+        {("public", "foo", "r", frozenset({"SELECT"}))},
+    ),
+    # PUBLIC pseudo-role: both paths emit the literal "PUBLIC".
+    (
+        "extract_grants",
+        "GRANT SELECT ON foo TO PUBLIC;",
+        {("public", "foo", "PUBLIC", frozenset({"SELECT"}))},
+    ),
+    # CREATE TEMP TABLE: both paths exclude (TEMP doesn't persist).
+    (
+        "extract_creates",
+        "CREATE TEMP TABLE foo (id int);",
+        set(),
+    ),
+    # CREATE UNLOGGED TABLE: both paths include (UNLOGGED is permanent).
+    (
+        "extract_creates",
+        "CREATE UNLOGGED TABLE foo (id int);",
+        {("public", "foo")},
+    ),
+    # Partitioned parent: both paths include (grants applied here
+    # propagate to all children).
+    (
+        "extract_creates",
+        "CREATE TABLE foo (id int, d date) PARTITION BY RANGE (d);",
+        {("public", "foo")},
+    ),
+    # Partition child: both paths exclude (the child inherits grants
+    # from the parent — flagging it would be a false positive).
+    (
+        "extract_creates",
+        "CREATE TABLE foo_2026 PARTITION OF foo FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');",
+        set(),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "method,sql,expected",
+    _PARITY_FIXTURES,
+    ids=[
+        "grant_multi_target",
+        "drop_multi_target",
+        "grant_with_grant_option",
+        "grant_to_public",
+        "create_temp_table",
+        "create_unlogged_table",
+        "create_partitioned_parent",
+        "create_partition_child",
+    ],
+)
+def test_pglast_sqlparse_parity(
+    method: str,
+    sql: str,
+    expected: set,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both extractor backends must return the same set for the same SQL."""
+    extractor = MigrationGrantExtractor()
+
+    # pglast path (default).
+    pglast_result = set(getattr(extractor, method)(sql))
+
+    # sqlparse fallback path.
+    monkeypatch.setattr("confiture.core.migration_grant_extractor._HAS_PGLAST", False)
+    sqlparse_result = set(getattr(MigrationGrantExtractor(), method)(sql))
+
+    assert pglast_result == expected, f"pglast diverged on {sql!r}"
+    assert sqlparse_result == expected, f"sqlparse diverged on {sql!r}"
+    assert pglast_result == sqlparse_result, (
+        f"backends disagree on {sql!r}: pglast={pglast_result} sqlparse={sqlparse_result}"
+    )

@@ -22,10 +22,30 @@ from pathlib import Path
 
 from confiture.config.environment import AclExpectation, AclGrant
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
-from confiture.core.migration_grant_extractor import MigrationGrantExtractor
+from confiture.core.migration_grant_extractor import (
+    MigrationGrantExtractor,
+    _parse_qualified_name,
+)
 
-_OWNER_ONLY_RE = re.compile(r"--\s*confiture:owner-only", re.IGNORECASE)
-_CREATE_TABLE_LINE_RE = re.compile(r"^\s*CREATE\s+TABLE\b", re.IGNORECASE | re.MULTILINE)
+# Directive marker: a single-line comment whose first non-whitespace
+# tokens are ``confiture:owner-only``.  Trailing characters on the line
+# are ignored so a follow-on comment ("-- confiture:owner-only — audit
+# table") still matches.
+_OWNER_ONLY_RE = re.compile(r"--\s*confiture:owner-only\b", re.IGNORECASE)
+# Capture the relname from the line that starts a CREATE TABLE.  Anchored
+# to the start of line so we can pair each match with its line number for
+# the directive walk-back.
+_CREATE_TABLE_STMT_RE = re.compile(
+    r"""
+    ^\s*CREATE\s+
+    (?:(?:GLOBAL|LOCAL)\s+)?
+    (?:(?:TEMP(?:ORARY)?|UNLOGGED)\s+)?
+    TABLE\s+
+    (?:IF\s+NOT\s+EXISTS\s+)?
+    (?P<qname>(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?)
+    """,
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
 
 
 def _has_owner_only_directive(text: str, table_line: int) -> bool:
@@ -56,6 +76,29 @@ def _has_owner_only_directive(text: str, table_line: int) -> bool:
         # Non-comment, non-blank → contiguous block ended.
         return False
     return False
+
+
+def _collect_owner_only_relnames(text: str) -> set[tuple[str, str]]:
+    """Return the set of ``(schema, relname)`` pairs opted out by the directive.
+
+    Walks every ``CREATE TABLE`` statement in *text*, captures its
+    relname, and checks the immediately-preceding contiguous comment
+    block for ``-- confiture:owner-only``.  Built once per file so the
+    coverage check stays O(N) instead of O(N²) substring scans.
+
+    The directive applies only to the CREATE TABLE on the line directly
+    after the comment block — adjacent or substring-prefix relnames are
+    correctly distinguished.  Inline directives (``-- confiture:owner-only``
+    on the same line as the CREATE TABLE) and block-comment forms
+    (``/* confiture:owner-only */``) are NOT recognized — the directive
+    must be on its own ``--`` line above the statement.
+    """
+    opted_out: set[tuple[str, str]] = set()
+    for m in _CREATE_TABLE_STMT_RE.finditer(text):
+        line_no = text.count("\n", 0, m.start()) + 1
+        if _has_owner_only_directive(text, table_line=line_no):
+            opted_out.add(_parse_qualified_name(m.group("qname")))
+    return opted_out
 
 
 def _matches_apply_to(
@@ -141,6 +184,7 @@ class Acl001GrantCoverage:
             creates = self._extractor.extract_creates(text)
             drops = self._extractor.extract_drops(text)
             grants = self._extractor.extract_grants(text)
+            file_owner_only = _collect_owner_only_relnames(text)
 
             # Net out tables that are created and dropped in the same file.
             for s, t in drops:
@@ -148,7 +192,7 @@ class Acl001GrantCoverage:
 
             for schema, table in creates:
                 created.append((schema, table, migration))
-                if self._is_owner_only(text, table):
+                if (schema, table) in file_owner_only:
                     owner_only.add((schema, table))
 
             for schema, table, role, privs in grants:
@@ -189,21 +233,6 @@ class Acl001GrantCoverage:
     # ------------------------------------------------------------------ #
     # Helpers                                                             #
     # ------------------------------------------------------------------ #
-
-    def _is_owner_only(self, text: str, table: str) -> bool:
-        """Check the magic-comment opt-out for one ``CREATE TABLE`` line."""
-        target_relname = table.lower()
-        for m in _CREATE_TABLE_LINE_RE.finditer(text):
-            line_no = text.count("\n", 0, m.start()) + 1
-            # Cheap check: extract just enough to know which table this line refers to.
-            # Reusing the extractor would re-parse the whole file; for the magic-comment
-            # path a line-level lookahead is sufficient.
-            tail = text[m.start() : m.end() + 200]
-            if target_relname not in tail.lower():
-                continue
-            if _has_owner_only_directive(text, table_line=line_no):
-                return True
-        return False
 
     def _format_violation(
         self,

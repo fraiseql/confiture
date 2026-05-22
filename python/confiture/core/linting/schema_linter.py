@@ -216,10 +216,12 @@ class SchemaLinter:
         if self.config.check_security:
             self._check_security(report)
 
-        # ACL coverage (ACL001) — no-op when the environment has no `acls:`
-        # block, so existing projects see zero change.  Otherwise checks
-        # every CREATE TABLE in db/migrations/ has a matching GRANT.
-        if self.environment.acls:
+        # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
+        # the environment YAML.  The mere presence of an ``acls:`` block
+        # used to auto-fire this rule, but that surprised users who set
+        # ``acls:`` only for ``confiture drift --check-acls``.  Explicit
+        # opt-in keeps the two surfaces independently controllable.
+        if self.environment.acls_lint_enabled and self.environment.acls:
             migrations_dir = self.project_dir / "db" / "migrations"
             if migrations_dir.exists():
                 grant_dir_str = self.environment.migration.grant_dir

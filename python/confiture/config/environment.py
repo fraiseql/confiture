@@ -422,8 +422,13 @@ class AclGrant(BaseModel):
         return value
 
 
-class AclExpectation(BaseModel):
-    """One ``acls:`` entry — a schema-scoped set of expected grants.
+class AclTableExpectation(BaseModel):
+    """One ``acls:`` entry — a schema-scoped set of expected table grants.
+
+    Named ``AclTableExpectation`` to leave namespace open for future
+    column-level (``AclColumnExpectation``) and sequence-level
+    (``AclSequenceExpectation``) variants.  The legacy ``AclExpectation``
+    alias remains importable for back-compat through the 0.12.x line.
 
     ``apply_to`` is either the literal string ``"ALL_TABLES"`` (every base
     table in the schema except those matching ``ignore``) or a list of
@@ -438,6 +443,12 @@ class AclExpectation(BaseModel):
     apply_to: Literal["ALL_TABLES"] | list[str]
     ignore: list[str] = Field(default_factory=list)
     grants: list[AclGrant]
+
+
+# Back-compat alias.  Kept as a plain assignment (not a subclass) so
+# ``isinstance(x, AclExpectation)`` and ``isinstance(x, AclTableExpectation)``
+# behave identically — they're the same class.
+AclExpectation = AclTableExpectation
 
 
 class Environment(BaseModel):
@@ -473,6 +484,12 @@ class Environment(BaseModel):
     seed: SeedConfig = Field(default_factory=SeedConfig)
     ssh_tunnel: SshTunnelConfig | None = None
     acls: list[AclExpectation] = Field(default_factory=list)
+    # Opt-in switch for the ACL coverage lint rule.  Defaults to False so a
+    # project that merely defines ``acls:`` for the drift command doesn't
+    # have lint failures injected without explicitly asking for them.  Set
+    # via the nested YAML shape ``acls: { lint_enabled: true, expectations:
+    # [...] }``; the flat-list form (``acls: [...]``) keeps this False.
+    acls_lint_enabled: bool = False
 
     @property
     def database(self) -> DatabaseConfig:
@@ -658,6 +675,23 @@ class Environment(BaseModel):
 
         # Set environment name
         data["name"] = env_name
+
+        # Normalize the ``acls:`` block — accept both shapes:
+        #   1. Flat list (legacy)       :  ``acls: [ {...}, {...} ]``
+        #   2. Nested dict (preferred)  :  ``acls: { lint_enabled: true, expectations: [...] }``
+        # Flatten the nested form into the model's split fields so the rest
+        # of the loader (env-var expansion, Pydantic validation) stays
+        # blissfully unaware of the dual shape.
+        if "acls" in data and isinstance(data["acls"], dict):
+            acl_block = data["acls"]
+            unknown = set(acl_block) - {"lint_enabled", "expectations"}
+            if unknown:
+                raise ConfigurationError(
+                    f"Unknown key(s) in acls block: {sorted(unknown)}. "
+                    f"Allowed: 'lint_enabled', 'expectations'."
+                )
+            data["acls_lint_enabled"] = bool(acl_block.get("lint_enabled", False))
+            data["acls"] = acl_block.get("expectations", [])
 
         # Expand ${VAR} placeholders inside the acls: subtree at load time —
         # role names commonly parameterize across envs.  Missing variables

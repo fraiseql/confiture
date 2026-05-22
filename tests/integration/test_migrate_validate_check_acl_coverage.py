@@ -1,7 +1,9 @@
-"""Integration tests for ``confiture migrate validate --check-acl-coverage`` (issue #120).
+"""Integration tests for ``confiture migrate validate --check-acls`` (issue #120).
 
 Wires the ACL coverage lint rule into the ``migrate validate`` command
-so a CI gate can refuse PRs that ship uncovered tables.
+so a CI gate can refuse PRs that ship uncovered tables.  ``--check-acls``
+is the canonical flag from 0.12.0 onward; ``--check-acl-coverage`` is
+kept as a deprecated alias and covered by one dedicated test.
 """
 
 from __future__ import annotations
@@ -59,7 +61,7 @@ def test_validate_check_acl_coverage_exits_1_on_uncovered_table(tmp_path: Path) 
         [
             "migrate",
             "validate",
-            "--check-acl-coverage",
+            "--check-acls",
             "--config",
             str(cfg),
             "--migrations-dir",
@@ -84,7 +86,7 @@ def test_validate_check_acl_coverage_passes_when_covered_inline(tmp_path: Path) 
         [
             "migrate",
             "validate",
-            "--check-acl-coverage",
+            "--check-acls",
             "--config",
             str(cfg),
             "--migrations-dir",
@@ -105,7 +107,7 @@ def test_validate_check_acl_coverage_passes_with_global_grant_sweep(tmp_path: Pa
         [
             "migrate",
             "validate",
-            "--check-acl-coverage",
+            "--check-acls",
             "--config",
             str(cfg),
             "--migrations-dir",
@@ -137,7 +139,7 @@ def test_validate_check_acl_coverage_no_op_when_acls_absent(tmp_path: Path) -> N
         [
             "migrate",
             "validate",
-            "--check-acl-coverage",
+            "--check-acls",
             "--config",
             str(cfg),
             "--migrations-dir",
@@ -145,3 +147,25 @@ def test_validate_check_acl_coverage_no_op_when_acls_absent(tmp_path: Path) -> N
         ],
     )
     assert result.exit_code == 0, result.output
+
+
+def test_validate_check_acl_coverage_deprecated_alias_still_works(tmp_path: Path) -> None:
+    """``--check-acl-coverage`` keeps working as a back-compat alias (0.12.0)."""
+    cfg, migrations = _project_with_migrations(
+        tmp_path,
+        {"20260522120000_add_uncovered.up.sql": ("CREATE TABLE uncovered (id int);\n")},
+    )
+    result = CliRunner().invoke(
+        app,
+        [
+            "migrate",
+            "validate",
+            "--check-acl-coverage",
+            "--config",
+            str(cfg),
+            "--migrations-dir",
+            str(migrations),
+        ],
+    )
+    # Same behavior as ``--check-acls``: exits 1 because ``uncovered`` has no GRANT.
+    assert result.exit_code == 1, result.output

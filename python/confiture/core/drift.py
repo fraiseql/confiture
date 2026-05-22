@@ -597,8 +597,8 @@ class AclDriftDetector:
 
         env = Environment.load("production")
         with psycopg.connect(env.database_url) as conn:
-            items = AclDriftDetector(conn).check(env.acls)
-            if any(i.severity == DriftSeverity.CRITICAL for i in items):
+            report = AclDriftDetector(conn).check(env.acls)
+            if report.has_critical_drift:
                 raise SystemExit(1)
     """
 
@@ -609,30 +609,56 @@ class AclDriftDetector:
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def check(self, expectations: "list[AclExpectation]") -> list[DriftItem]:
+    def check(self, expectations: "list[AclExpectation]") -> DriftReport:
         """Compare every expectation against the live ACL state.
 
-        Returns a flat list of :class:`DriftItem`s.  An empty list means
-        the live ACLs match the spec.
+        Returns a :class:`DriftReport` with the originating database name
+        baked in and one :class:`DriftItem` per ``(schema, table, role,
+        priv)`` gap.  ``report.has_drift is False`` means the live ACLs
+        match the spec.
+
+        The shape matches :meth:`SchemaDriftDetector.compare_with_schema_file`
+        so library consumers can compose both detectors uniformly — see
+        :meth:`DriftReport` for the available helpers.
         """
-        items: list[DriftItem] = []
+        report = DriftReport(
+            database_name=self._get_database_name(),
+            expected_schema_source="acls",
+        )
         for expectation in expectations:
             tables = self._discover_tables(
                 expectation.schema_, expectation.apply_to, expectation.ignore
             )
             for table in tables:
+                report.tables_checked += 1
                 for grant in expectation.grants:
                     missing = self._check_missing(expectation.schema_, table, grant)
                     if missing is not None:
-                        items.append(missing)
+                        report.drift_items.append(missing)
                     extras = self._check_extra(expectation.schema_, table, grant)
                     if extras is not None:
-                        items.append(extras)
-        return items
+                        report.drift_items.append(extras)
+        return report
+
+    def _get_database_name(self) -> str:
+        """Return the current database name for inclusion in the report."""
+        with self.connection.cursor() as cur:
+            cur.execute("SELECT current_database()")
+            row = cur.fetchone()
+            return row[0] if row else "unknown"
 
     # ------------------------------------------------------------------ #
     # Table discovery                                                    #
     # ------------------------------------------------------------------ #
+
+    # relkind values that count as "a table whose grants we care about":
+    #   ``r`` — regular base tables.
+    #   ``p`` — partitioned parents (relkind='p').  Grants here propagate
+    #          to children automatically, so we MUST include parents in
+    #          discovery or we'd silently miss their coverage gaps.
+    # Excluded: ``v`` (view), ``m`` (materialized view), ``f`` (foreign),
+    # ``i``/``I`` (indexes), ``t`` (TOAST), ``S`` (sequence).
+    _INCLUDED_RELKINDS = ("r", "p")
 
     def _discover_tables(
         self,
@@ -642,10 +668,12 @@ class AclDriftDetector:
     ) -> list[str]:
         """Return base-table relnames in *schema* matching *apply_to*, less *ignore*.
 
-        Only ``relkind = 'r'`` — views, materialized views, and foreign
-        tables are out of scope for v1 (their grant semantics differ).
-        Glob filtering happens in Python via :mod:`fnmatch`; the SQL
-        side only constrains the schema.
+        Includes regular tables (``relkind = 'r'``) and partitioned parents
+        (``relkind = 'p'``).  Partition *children* (``relispartition = true``)
+        are excluded — grants on the parent propagate, and listing the child
+        as a separate target would spuriously surface ``EXTRA_GRANT`` items
+        for the inherited privileges.  Glob filtering happens in Python
+        via :mod:`fnmatch`; the SQL side only constrains the schema.
         """
         with self.connection.cursor() as cur:
             cur.execute(
@@ -654,10 +682,11 @@ class AclDriftDetector:
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = %s
-                  AND c.relkind = 'r'
+                  AND c.relkind = ANY(%s)
+                  AND c.relispartition = false
                 ORDER BY c.relname
                 """,
-                (schema,),
+                (schema, list(self._INCLUDED_RELKINDS)),
             )
             relnames = [row[0] for row in cur.fetchall()]
 
@@ -693,30 +722,63 @@ class AclDriftDetector:
         does not enumerate, so checking the direct-grants view here
         would produce false positives for any role that inherits a
         privilege.
+
+        Identifiers are quoted via :class:`psycopg.sql.Identifier` so
+        mixed-case tables created with ``CREATE TABLE "MyTable" …`` are
+        resolved without case-folding.  Without the quoting, the
+        ``::regclass`` cast would fold ``public.MyTable`` to
+        ``public.mytable`` and throw ``UndefinedTable`` for a perfectly
+        valid identifier.
         """
-        qualified = f"{schema}.{table}"
+        from psycopg import sql as _sql  # local import to keep the top tidy
+
+        qualified_text = f'"{schema}"."{table}"'
+        # ``has_table_privilege(role, table_oid, priv)`` takes a regclass.
+        # Passing the literal SQL via ``psycopg.sql.Identifier`` ensures
+        # any mixed-case relname survives without quoting tricks.
+        regclass_sql = _sql.SQL("{schema}.{table}::regclass").format(
+            schema=_sql.Identifier(schema),
+            table=_sql.Identifier(table),
+        )
+        priv_query = _sql.SQL("SELECT has_table_privilege(%s, {regclass}, %s)").format(
+            regclass=regclass_sql
+        )
+
         missing: list[str] = []
         for priv in grant.privileges:
             with self.connection.cursor() as cur:
                 try:
-                    cur.execute(
-                        "SELECT has_table_privilege(%s, %s::regclass, %s)",
-                        (grant.role, qualified, priv),
-                    )
+                    cur.execute(priv_query, (grant.role, priv))
                     row = cur.fetchone()
-                except psycopg.errors.UndefinedObject as e:
+                except (
+                    psycopg.errors.UndefinedObject,
+                    psycopg.errors.UndefinedTable,
+                ) as e:
                     # Role or table doesn't exist.  Treat as informational
                     # warning (role-not-present is itself a finding worth
                     # reporting, but it isn't a CRITICAL coverage gap).
                     self.connection.rollback()
+                    cause = str(e)
+                    # When the missing object looks like the table itself
+                    # (i.e. an unquoted lookup of a quoted relname),
+                    # surface that explicitly so the operator can fix it
+                    # rather than chasing the role.
+                    if "does not exist" in cause and table.lower() != table:
+                        hint = (
+                            " (mixed-case identifier — check that the live "
+                            "table name in pg_class matches the spec exactly)"
+                        )
+                    else:
+                        hint = ""
                     return DriftItem(
                         drift_type=DriftType.MISSING_GRANT,
                         severity=DriftSeverity.WARNING,
-                        object_name=f"{qualified}({grant.role})",
+                        object_name=f"{qualified_text}({grant.role})",
                         expected=", ".join(grant.privileges),
                         actual=None,
                         message=(
-                            f"Cannot verify grants for role '{grant.role}' on '{qualified}': {e}"
+                            f"Cannot verify grants for role '{grant.role}' "
+                            f"on '{qualified_text}': {cause}{hint}"
                         ),
                     )
                 if row is not None and row[0] is False:
@@ -726,11 +788,12 @@ class AclDriftDetector:
         return DriftItem(
             drift_type=DriftType.MISSING_GRANT,
             severity=DriftSeverity.CRITICAL,
-            object_name=f"{qualified}({grant.role})",
+            object_name=f"{qualified_text}({grant.role})",
             expected=", ".join(grant.privileges),
             actual=None,
             message=(
-                f"Role '{grant.role}' is missing grant(s) {', '.join(missing)} on '{qualified}'"
+                f"Role '{grant.role}' is missing grant(s) "
+                f"{', '.join(missing)} on '{qualified_text}'"
             ),
         )
 

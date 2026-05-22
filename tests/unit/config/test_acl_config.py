@@ -187,3 +187,123 @@ def test_acls_missing_env_var_fails_loud(tmp_path: Path, monkeypatch: pytest.Mon
     )
     with pytest.raises(ConfigurationError, match="APP_ROLE"):
         Environment.load("test", project)
+
+
+# ---------------------------------------------------------------------------
+# ``acls.lint_enabled`` opt-in (phase 03 of post-review fixes)
+# ---------------------------------------------------------------------------
+
+
+def test_acls_lint_enabled_defaults_false_for_legacy_list_shape(tmp_path: Path) -> None:
+    """Old flat-list YAML loads with ``lint_enabled=False``."""
+    project = _write_env_yaml(
+        tmp_path,
+        """
+        acls:
+          - schema: tenant
+            apply_to: ALL_TABLES
+            grants:
+              - role: my_app
+                privileges: [SELECT]
+        """,
+    )
+    env = Environment.load("test", project)
+    assert env.acls_lint_enabled is False
+    assert len(env.acls) == 1  # back-compat: env.acls still a list
+
+
+def test_acls_lint_enabled_true_when_set_in_nested_shape(tmp_path: Path) -> None:
+    """Nested YAML with ``lint_enabled: true`` flips the flag."""
+    project = _write_env_yaml(
+        tmp_path,
+        """
+        acls:
+          lint_enabled: true
+          expectations:
+            - schema: tenant
+              apply_to: ALL_TABLES
+              grants:
+                - role: my_app
+                  privileges: [SELECT]
+        """,
+    )
+    env = Environment.load("test", project)
+    assert env.acls_lint_enabled is True
+    # env.acls still presents as a list of AclExpectation for back-compat.
+    assert len(env.acls) == 1
+    assert env.acls[0].schema_ == "tenant"
+
+
+def test_acls_lint_enabled_false_explicit_in_nested_shape(tmp_path: Path) -> None:
+    project = _write_env_yaml(
+        tmp_path,
+        """
+        acls:
+          lint_enabled: false
+          expectations:
+            - schema: tenant
+              apply_to: ALL_TABLES
+              grants: []
+        """,
+    )
+    env = Environment.load("test", project)
+    assert env.acls_lint_enabled is False
+    assert len(env.acls) == 1
+
+
+def test_acls_nested_shape_without_lint_enabled_defaults_false(tmp_path: Path) -> None:
+    """Nested shape omitting ``lint_enabled`` is treated as opt-out."""
+    project = _write_env_yaml(
+        tmp_path,
+        """
+        acls:
+          expectations:
+            - schema: tenant
+              apply_to: ALL_TABLES
+              grants: []
+        """,
+    )
+    env = Environment.load("test", project)
+    assert env.acls_lint_enabled is False
+    assert len(env.acls) == 1
+
+
+# ---------------------------------------------------------------------------
+# ``AclExpectation`` → ``AclTableExpectation`` rename (phase 07)
+#
+# The new name lives in confiture.config.environment.  The old name keeps
+# working as a deprecated alias so existing imports don't break.
+# ---------------------------------------------------------------------------
+
+
+def test_acl_table_expectation_is_importable() -> None:
+    """``AclTableExpectation`` is the new canonical name."""
+    from confiture.config.environment import AclTableExpectation
+
+    e = AclTableExpectation(
+        schema="public",
+        apply_to="ALL_TABLES",
+        grants=[AclGrant(role="r", privileges=["SELECT"])],
+    )
+    assert e.schema_ == "public"
+
+
+def test_acl_expectation_alias_still_resolves_to_same_class() -> None:
+    """Old import path remains for back-compat."""
+    from confiture.config.environment import AclExpectation, AclTableExpectation
+
+    assert AclExpectation is AclTableExpectation
+
+
+def test_acls_lint_enabled_with_no_expectations(tmp_path: Path) -> None:
+    """Setting the flag without expectations is a no-op for the lint rule."""
+    project = _write_env_yaml(
+        tmp_path,
+        """
+        acls:
+          lint_enabled: true
+        """,
+    )
+    env = Environment.load("test", project)
+    assert env.acls_lint_enabled is True
+    assert env.acls == []

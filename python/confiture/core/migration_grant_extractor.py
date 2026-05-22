@@ -36,33 +36,54 @@ _ALL_TABLE_PRIVILEGES: frozenset[str] = frozenset(
 )
 
 # Regex helpers for the sqlparse fallback path.
+#
+# A *qname* is a possibly-schema-qualified identifier with quoting support.
+# A *qname list* is one or more qnames separated by commas (Postgres allows
+# ``GRANT … ON a, s.b, c TO …`` and ``DROP TABLE a, b, c``).
+_QNAME = r"""(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?"""
+_QNAME_LIST = rf"""(?:{_QNAME})(?:\s*,\s*(?:{_QNAME}))*"""
+
 _CREATE_TABLE_RE = re.compile(
-    r"""
-    \bCREATE\s+TABLE\s+
+    rf"""
+    \bCREATE\s+
+    (?:(?:GLOBAL|LOCAL)\s+)?
+    (?P<modifier>TEMP(?:ORARY)?|UNLOGGED)?\s*
+    TABLE\s+
     (?:IF\s+NOT\s+EXISTS\s+)?
-    (?P<qname>(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?)
+    (?P<qname>{_QNAME})
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+# ``CREATE TABLE foo_2026 PARTITION OF foo FOR VALUES …`` — partition
+# child detection for the sqlparse fallback path.  Matched against the
+# small lookahead window after each qname; mirrors pglast's
+# ``stmt.partbound is not None`` test.
+_PARTITION_OF_RE = re.compile(r"^\s*PARTITION\s+OF\b", re.IGNORECASE)
 _DROP_TABLE_RE = re.compile(
-    r"""
+    rf"""
     \bDROP\s+TABLE\s+
     (?:IF\s+EXISTS\s+)?
-    (?P<qname>(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?)
+    (?P<qnames>{_QNAME_LIST})
     """,
     re.IGNORECASE | re.VERBOSE,
 )
 _GRANT_RE = re.compile(
-    r"""
+    rf"""
     \bGRANT\s+
     (?P<privs>.+?)
     \s+ON\s+(?:TABLE\s+)?
-    (?P<qname>(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?)
+    (?P<qnames>{_QNAME_LIST})
     \s+TO\s+
     (?P<roles>.+?)
     \s*;
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+# Trailing modifiers that follow the role list in a GRANT.  See the
+# ``role_specification`` grammar in the PostgreSQL docs.
+_WITH_OPTION_SUFFIX_RE = re.compile(
+    r"\s+WITH\s+(?:GRANT|HIERARCHY|ADMIN)\s+OPTION\s*;?\s*$",
+    re.IGNORECASE,
 )
 _DYNAMIC_SQL_RE = re.compile(r"\bEXECUTE\s+(?:format\s*\(|['\"])", re.IGNORECASE)
 
@@ -105,6 +126,47 @@ def _parse_qualified_name(qname: str) -> tuple[str, str]:
     return (_strip_quotes(parts[0]), _strip_quotes(parts[1]))
 
 
+def _split_qname_list(qnames: str) -> list[str]:
+    """Split a comma-separated qname list, respecting quoted identifiers.
+
+    Postgres permits ``"weird,name"`` as a legal table name; the embedded
+    comma must not split the list.  Iterates char-by-char tracking quote
+    state, only splitting on top-level commas.
+    """
+    items: list[str] = []
+    current: list[str] = []
+    inside_quote = False
+    for ch in qnames:
+        if ch == '"':
+            inside_quote = not inside_quote
+            current.append(ch)
+        elif ch == "," and not inside_quote:
+            items.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    last = "".join(current).strip()
+    if last:
+        items.append(last)
+    return items
+
+
+def _normalize_grantee(name: str) -> str:
+    """Map a parsed grantee string to its canonical form.
+
+    Strips surrounding double quotes (preserving case for quoted names),
+    leaves unquoted names as-is (Postgres folds them to lower-case at
+    parse time, but the role lookup is case-insensitive in
+    ``has_table_privilege``).  ``PUBLIC`` and other pseudo-roles flow
+    through unchanged from the sqlparse path; the pglast path emits the
+    literal ``"PUBLIC"`` string when ``roletype == ROLESPEC_PUBLIC``.
+    """
+    name = name.strip()
+    if name.startswith('"') and name.endswith('"'):
+        return name[1:-1]
+    return name
+
+
 class MigrationGrantExtractor:
     """Pull ``CREATE TABLE``, ``DROP TABLE``, and ``GRANT`` statements out of SQL."""
 
@@ -131,7 +193,15 @@ class MigrationGrantExtractor:
         return self._drops_sqlparse(sql)
 
     def extract_grants(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
-        """Return ``(schema, table, role, privileges)`` for every ``GRANT``."""
+        """Return ``(schema, table, role, privileges)`` for every ``GRANT``.
+
+        Multi-target grants (``GRANT … ON a, b, c TO …``) expand to one
+        tuple per ``(target, role)`` pair.  ``GRANT … TO PUBLIC`` emits
+        the literal role name ``"PUBLIC"``.  ``WITH GRANT OPTION`` /
+        ``WITH HIERARCHY OPTION`` / ``WITH ADMIN OPTION`` suffixes are
+        stripped before parsing the role list — Confiture treats the
+        grant itself, not its propagation flag, as the unit of coverage.
+        """
         if _HAS_PGLAST:
             try:
                 return self._grants_pglast(sql)
@@ -163,11 +233,28 @@ class MigrationGrantExtractor:
             stmt = raw.stmt
             kind = type(stmt).__name__
             if kind == "CreateStmt":
+                # TEMP tables don't persist beyond the session, so ACL
+                # coverage doesn't apply.  UNLOGGED tables are permanent
+                # objects with normal grant semantics — include them.
+                # relpersistence: 'p'=permanent, 'u'=unlogged, 't'=temp.
+                if stmt.relation.relpersistence == "t":
+                    continue
+                # Partition children (``CREATE TABLE foo_2026 PARTITION
+                # OF foo FOR VALUES …``) inherit grants from the parent.
+                # Excluding them keeps coverage focused on the schema
+                # surface the operator actually grants against — a
+                # partitioned parent — and avoids false positives that
+                # would multiply with every new partition.  partbound
+                # is set on children, None on parents and plain tables.
+                if stmt.partbound is not None:
+                    continue
                 schema = stmt.relation.schemaname or "public"
                 out.append((schema, stmt.relation.relname))
             elif kind == "CreateTableAsStmt":
                 # CREATE TABLE … AS SELECT — same shape for ACL purposes.
                 rel = stmt.into.rel
+                if rel.relpersistence == "t":
+                    continue
                 schema = rel.schemaname or "public"
                 out.append((schema, rel.relname))
         return out
@@ -194,7 +281,11 @@ class MigrationGrantExtractor:
 
     def _grants_pglast(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
         import pglast  # noqa: PLC0415
-        from pglast.enums.parsenodes import GrantTargetType, ObjectType  # noqa: PLC0415
+        from pglast.enums.parsenodes import (  # noqa: PLC0415
+            GrantTargetType,
+            ObjectType,
+            RoleSpecType,
+        )
 
         out: list[tuple[str, str, str, frozenset[str]]] = []
         for raw in pglast.parse_sql(sql):
@@ -215,7 +306,16 @@ class MigrationGrantExtractor:
             else:
                 privs = frozenset(p.priv_name.upper() for p in stmt.privileges)
 
-            roles = [g.rolename for g in stmt.grantees or [] if g.rolename]
+            # PUBLIC is a real grantee target — Postgres treats grants
+            # to PUBLIC as a wildcard, and ``has_table_privilege`` honours
+            # them.  Emit the literal "PUBLIC" so library consumers see
+            # the same shape both backends produce.
+            roles: list[str] = []
+            for g in stmt.grantees or []:
+                if g.roletype == RoleSpecType.ROLESPEC_PUBLIC:
+                    roles.append("PUBLIC")
+                elif g.rolename:
+                    roles.append(g.rolename)
             for obj in stmt.objects or []:
                 # obj is a RangeVar for table grants.
                 schema = obj.schemaname or "public"
@@ -230,11 +330,30 @@ class MigrationGrantExtractor:
 
     def _creates_sqlparse(self, sql: str) -> list[tuple[str, str]]:
         cleaned = sqlparse.format(sql, strip_comments=True)
-        return [_parse_qualified_name(m.group("qname")) for m in _CREATE_TABLE_RE.finditer(cleaned)]
+        out: list[tuple[str, str]] = []
+        for m in _CREATE_TABLE_RE.finditer(cleaned):
+            modifier = (m.group("modifier") or "").upper()
+            # TEMP tables don't persist; ACL coverage doesn't apply.
+            # UNLOGGED tables are permanent — keep them.
+            if modifier.startswith("TEMP"):
+                continue
+            # Partition children inherit grants from the parent.  Peek
+            # at the small window immediately after the qname for the
+            # ``PARTITION OF`` clause — same exclusion the pglast path
+            # applies via ``stmt.partbound``.
+            tail = cleaned[m.end() : m.end() + 32]
+            if _PARTITION_OF_RE.match(tail):
+                continue
+            out.append(_parse_qualified_name(m.group("qname")))
+        return out
 
     def _drops_sqlparse(self, sql: str) -> list[tuple[str, str]]:
         cleaned = sqlparse.format(sql, strip_comments=True)
-        return [_parse_qualified_name(m.group("qname")) for m in _DROP_TABLE_RE.finditer(cleaned)]
+        out: list[tuple[str, str]] = []
+        for m in _DROP_TABLE_RE.finditer(cleaned):
+            for qname in _split_qname_list(m.group("qnames")):
+                out.append(_parse_qualified_name(qname))
+        return out
 
     def _grants_sqlparse(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
         cleaned = sqlparse.format(sql, strip_comments=True)
@@ -245,15 +364,17 @@ class MigrationGrantExtractor:
                 privs: frozenset[str] = _ALL_TABLE_PRIVILEGES
             else:
                 privs = frozenset(p.strip() for p in priv_text.split(","))
-            schema, table = _parse_qualified_name(m.group("qname"))
-            for role_raw in m.group("roles").split(","):
-                role = role_raw.strip().rstrip(";").strip()
-                # Strip trailing/leading whitespace; preserve quoted role
-                # case via _strip_quotes only when it actually has quotes.
-                if role.startswith('"') and role.endswith('"'):
-                    role = role[1:-1]
-                if role:
-                    out.append((schema, table, role, privs))
+            # Strip ``WITH GRANT/HIERARCHY/ADMIN OPTION`` so the suffix
+            # doesn't leak into the role list.  pglast handles this in
+            # the AST via the ``grant_option`` flag.
+            roles_text = _WITH_OPTION_SUFFIX_RE.sub("", m.group("roles"))
+            qnames = _split_qname_list(m.group("qnames"))
+            for qname in qnames:
+                schema, table = _parse_qualified_name(qname)
+                for role_raw in roles_text.split(","):
+                    role = _normalize_grantee(role_raw.rstrip(";"))
+                    if role:
+                        out.append((schema, table, role, privs))
         return out
 
 

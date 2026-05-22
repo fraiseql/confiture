@@ -268,14 +268,16 @@ def migrate_validate(
             "signature-only comparison."
         ),
     ),
-    check_acl_coverage: bool = typer.Option(
+    check_acls: bool = typer.Option(
         False,
-        "--check-acl-coverage",
+        "--check-acls",
+        "--check-acl-coverage",  # back-compat alias (deprecated in 0.12.0)
         help=(
             "Static: verify every `CREATE TABLE` in db/migrations/ has a matching "
             "`GRANT` either in the same migration or in the configured global grant "
             "sweep directory (defaults to db/7_grant). No-op when the config has no "
-            "`acls:` block. No database connection required."
+            "`acls:` block. No database connection required.  "
+            "Use --check-acls; --check-acl-coverage is a deprecated alias."
         ),
     ),
     check_signature_schemas: str = typer.Option(
@@ -530,7 +532,7 @@ def migrate_validate(
             raise typer.Exit(2)
 
         # Run ACL coverage check on migration files (static, no DB).
-        if check_acl_coverage:
+        if check_acls:
             from confiture.cli.acl_loader import load_acl_expectations
             from confiture.core.linting.schema_linter import SchemaLinter
 

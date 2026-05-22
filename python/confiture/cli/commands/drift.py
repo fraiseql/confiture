@@ -123,24 +123,22 @@ def drift(
         conn = create_connection(config_data)
 
         try:
+            structural_report: DriftReport | None = None
             if schema is not None:
-                detector = SchemaDriftDetector(conn)
-                drift_report = detector.compare_with_schema_file(str(schema))
-            else:
-                # ACL-only run: build a minimal report shell so downstream
-                # formatters / exit-code logic still see a DriftReport.
-                drift_report = DriftReport(
-                    database_name="",
-                    expected_schema_source=f"acls:{config}",
-                )
-                with conn.cursor() as cur:
-                    cur.execute("SELECT current_database()")
-                    row = cur.fetchone()
-                    drift_report.database_name = row[0] if row else "unknown"
+                structural_report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema))
 
             if check_acls:
-                acl_items = AclDriftDetector(conn).check(expectations)
-                drift_report.drift_items.extend(acl_items)
+                acl_report = AclDriftDetector(conn).check(expectations)
+                if structural_report is None:
+                    drift_report = acl_report
+                else:
+                    # Compose both into the structural report so downstream
+                    # formatters / exit-code logic see a single DriftReport.
+                    structural_report.drift_items.extend(acl_report.drift_items)
+                    drift_report = structural_report
+            else:
+                assert structural_report is not None  # guarded by --schema/--check-acls check above
+                drift_report = structural_report
         finally:
             conn.close()
 

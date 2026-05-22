@@ -206,6 +206,78 @@ class TestDriftCommand:
 
         assert result.exit_code == 2
 
+    def test_drift_exits_2_when_no_flags_and_no_acls(self, tmp_path):
+        """Without --schema and without --check-acls, the command can't proceed."""
+        config_file = tmp_path / "confiture.yaml"
+        config_file.write_text("database_url: postgresql://localhost/test\n")
+
+        result = runner.invoke(app, ["drift", "--config", str(config_file)])
+        assert result.exit_code == 2
+
+    def test_drift_check_acls_without_acls_block_exits_2(self, tmp_path):
+        """``--check-acls`` requires an ``acls:`` block in the config."""
+        config_file = tmp_path / "confiture.yaml"
+        config_file.write_text("database_url: postgresql://localhost/test\n")
+        result = runner.invoke(
+            app,
+            [
+                "drift",
+                "--check-acls",
+                "--config",
+                str(config_file),
+            ],
+        )
+        # Either exit 2 (no acls block) or a clear error — never silently 0.
+        assert result.exit_code == 2
+
+    def test_drift_check_acls_propagates_env_var_error(self, tmp_path, monkeypatch):
+        """An unresolvable ``${VAR}`` in ``acls:`` surfaces as exit 2."""
+        monkeypatch.delenv("MISSING_VAR_FOR_TEST", raising=False)
+        config_file = tmp_path / "confiture.yaml"
+        config_file.write_text(
+            "database_url: postgresql://localhost/test\n"
+            "acls:\n"
+            "  - schema: public\n"
+            "    apply_to: ALL_TABLES\n"
+            "    grants:\n"
+            "      - role: ${MISSING_VAR_FOR_TEST}\n"
+            "        privileges: [SELECT]\n"
+        )
+        result = runner.invoke(
+            app,
+            [
+                "drift",
+                "--check-acls",
+                "--config",
+                str(config_file),
+            ],
+        )
+        # The env-var error path must produce exit 2, not crash unrecognised.
+        assert result.exit_code == 2
+
+    def test_drift_check_acls_propagates_unsupported_env_var_syntax(self, tmp_path, monkeypatch):
+        """``${VAR:-default}`` is rejected loudly (phase 05)."""
+        config_file = tmp_path / "confiture.yaml"
+        config_file.write_text(
+            "database_url: postgresql://localhost/test\n"
+            "acls:\n"
+            "  - schema: public\n"
+            "    apply_to: ALL_TABLES\n"
+            "    grants:\n"
+            "      - role: ${ROLE:-app}\n"
+            "        privileges: [SELECT]\n"
+        )
+        result = runner.invoke(
+            app,
+            [
+                "drift",
+                "--check-acls",
+                "--config",
+                str(config_file),
+            ],
+        )
+        assert result.exit_code == 2
+
 
 class TestMigrateValidateCheckLiveDrift:
     """Tests for --check-live-drift flag on migrate validate."""

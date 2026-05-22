@@ -5,6 +5,79 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-05-22
+
+Post-review tightening of the ACL coverage feature (#120): parser parity
+between pglast and sqlparse, correct owner-only directive scoping, an
+opt-in lint gate, a consistent library API, fail-loud env-var expansion,
+and proper declarative-partition handling.
+
+### Breaking
+
+- `confiture lint` no longer auto-runs the ACL coverage rule when
+  `acls:` is configured.  Set `acls.lint_enabled: true` in the
+  environment YAML (nested shape) to restore the previous behavior.
+  The flat-list YAML form (`acls: [...]`) keeps loading; it simply
+  defaults `lint_enabled` to `false`.
+- `AclDriftDetector.check()` now returns `DriftReport` instead of
+  `list[DriftItem]`.  Migrate library callers by accessing
+  `result.drift_items`.
+- `AclExpectation` renamed to `AclTableExpectation` to leave namespace
+  open for future column- and sequence-level variants.  The old name
+  remains importable as a back-compat alias.
+
+### Added
+
+- `confiture migrate validate --check-acls` — canonical spelling on the
+  `migrate validate` command.  `--check-acl-coverage` is preserved as a
+  deprecated alias.
+- Declarative partitioning is handled correctly: partitioned parents
+  (`relkind = 'p'`) are included in runtime drift discovery; partition
+  children (`relispartition = true`) are excluded from both static lint
+  and runtime checks because their grants are inherited from the parent.
+- Mixed-case identifiers (`CREATE TABLE "MyTable"`) resolve correctly in
+  the drift detector via `psycopg.sql.Identifier`-based quoting; the
+  WARNING diagnostic now hints at the casing cause when resolution
+  fails.
+
+### Fixed
+
+- **Parser parity:** `MigrationGrantExtractor`'s sqlparse fallback now
+  matches the pglast path on multi-target `GRANT a, b, c TO r;`,
+  multi-target `DROP TABLE a, b, c;`, `WITH GRANT OPTION` role
+  normalization, `PUBLIC` pseudo-role (now emitted as the literal
+  `"PUBLIC"` by both paths), and `CREATE TEMP/UNLOGGED TABLE` (TEMP
+  tables are excluded from coverage; UNLOGGED tables are included).
+- **Owner-only directive scoping:** `-- confiture:owner-only` no longer
+  leaks to adjacent or substring-prefix tables.  The directive now
+  applies only to the immediately-following `CREATE TABLE`, and
+  uppercase / CRLF variants are accepted.  Inline and block-comment
+  forms remain unsupported by design.
+- **`${VAR}` expansion** now raises `ConfigurationError` on
+  `${VAR:-default}`, lowercase var names, unclosed braces, and nested
+  forms instead of silently passing them through to psycopg.  The
+  error message names the unsupported syntax.
+
+### Docs
+
+- New "Adopting on an existing project" section in
+  `docs/guides/acl-coverage.md` with a backfill recipe that emits a
+  YAML draft from `information_schema.role_table_grants`.
+- "Use sparingly" warning on the `-- confiture:owner-only` directive.
+- Exit code table rewritten with one-line cause + one-line operator
+  action per row.
+- Implementation rationale block trimmed to a single sentence; full
+  discussion lives in `python/confiture/core/drift.py`.
+
+### Tests
+
+- New `test_pglast_sqlparse_parity` parametrized harness runs every
+  fixture against both backends.  Add a case there to pin both
+  backends to the same answer.
+- Integration tests for role inheritance, PUBLIC pseudo-role,
+  ownership, `WITH GRANT OPTION`, partition handling, and quoted
+  mixed-case identifiers.
+
 ## [0.11.0] - 2026-05-22
 
 ACL coverage — catch tables that ship without their expected `GRANT`s,

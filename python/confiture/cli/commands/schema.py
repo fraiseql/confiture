@@ -593,9 +593,17 @@ def lint(
     """Validate schema against best practices.
 
     PROCESS:
-      Checks schema against 6 rules: naming conventions (snake_case), primary
-      keys on all tables, documentation, multi-tenant columns, FK indexes, and
-      security (no passwords/secrets). Results in table or JSON format.
+      Checks schema against 6 default rules (naming conventions, primary keys,
+      documentation, multi-tenant columns, FK indexes, security) plus an
+      opt-in ACL coverage rule (acl_001). Results in table or JSON format.
+
+    RULES:
+      naming, primary keys, documentation, multi-tenant columns, FK indexes,
+      security — always on (toggle via LintConfig fields).
+
+      ACL coverage (acl_001) — opt-in. Set ``acls.lint_enabled: true`` in
+      the environment YAML to enable.  Merely defining ``acls:`` no longer
+      auto-fires the rule (changed in 0.12.0).  See ``docs/guides/acl-coverage.md``.
 
     EXAMPLES:
       confiture lint
