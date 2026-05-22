@@ -58,7 +58,9 @@ jobs:
 
         echo "=== Installing built wheel with dependencies ==="
         WHEEL=$(ls dist/fraiseql_confiture-*.whl)
-        uv pip install "$WHEEL[dev]" --no-cache
+        # Include [notifications] and [ast] so the test gate has jinja2 and
+        # pglast — matches the install line in quality-gate.yml.
+        uv pip install "$WHEEL[dev,notifications,ast]" --no-cache
 
         echo "=== Verifying bundled Rust extension ==="
         uv run python -c "from confiture.core.builder import HAS_RUST; print(f'Rust extension available: {HAS_RUST}')"

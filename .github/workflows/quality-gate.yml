@@ -59,8 +59,10 @@ jobs:
         # Create virtual environment with uv
         uv venv
 
-        # Install all dependencies
-        uv pip install ".[dev]"
+        # Install all dependencies, including the [notifications] and [ast]
+        # extras — tests/unit/hooks/notifications/ requires jinja2, and the
+        # SQL parsers depend on pglast for the primary path.
+        uv pip install ".[dev,notifications,ast]"
 
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv

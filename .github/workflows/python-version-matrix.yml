@@ -71,7 +71,9 @@ jobs:
         uv venv
 
         echo "=== Installing Confiture dependencies ==="
-        uv pip install ".[dev]"
+        # Include [notifications] (jinja2) and [ast] (pglast) so the full
+        # test suite has its optional dependencies satisfied.
+        uv pip install ".[dev,notifications,ast]"
 
         echo "=== Building Rust extension with maturin ==="
         uv run maturin develop --uv
