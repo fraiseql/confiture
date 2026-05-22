@@ -46,7 +46,7 @@ class TestRenumberHappyPath:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert new.exists()
         assert not old.exists()
 
@@ -69,7 +69,7 @@ class TestRenumberHappyPath:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert old.exists()
         assert not new.exists()
 
@@ -92,7 +92,7 @@ class TestRenumberHappyPath:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         data = json.loads(result.stdout)
         assert "moves" in data
         assert "ref_rewrites" in data
@@ -142,7 +142,7 @@ class TestRenumberHappyPath:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         data = json.loads(result.stdout)
         assert len(data["moves"]) == 1
 
@@ -167,7 +167,7 @@ class TestRenumberHappyPath:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert len(list(dst.glob("*.sql"))) == 2
 
     def test_ref_rewrite_reported_in_json(self, tmp_path: Path) -> None:
@@ -191,7 +191,7 @@ class TestRenumberHappyPath:
             ],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         data = json.loads(result.stdout)
         assert len(data["ref_rewrites"]) == 1
 
@@ -219,7 +219,7 @@ class TestRenumberErrorPaths:
             ],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 1, result.output
 
     def test_dangling_refs_exit_2(self, tmp_path: Path) -> None:
         schema, funcs = _schema(tmp_path)
@@ -242,4 +242,4 @@ class TestRenumberErrorPaths:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 2, result.output

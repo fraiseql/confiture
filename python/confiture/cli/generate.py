@@ -36,17 +36,23 @@ from confiture.core.tree_allocator import TreeAllocator
 from confiture.core.tree_renumber import TreeRenumber
 
 
-def _detect_repo_root(schema_dir: Path) -> Path:
+def _detect_repo_root(schema_dir: Path) -> Path | None:
     """Detect the repo root for cross-repo reference scanning.
 
-    Tries ``git rev-parse --show-toplevel`` first; falls back to the
-    grandparent of ``schema_dir`` (which is ``db/schema`` → repo root in
-    the canonical layout).
+    Tries ``git rev-parse --show-toplevel`` first.  When that fails (no
+    git repo, git not installed), falls back to the canonical layout
+    ``<repo>/db/schema/`` — but only if ``schema_dir.parent.name == "db"``.
+    Otherwise returns ``None`` to signal "no scannable repo root":
+    :class:`TreeRenumber` then skips the cross-repo scan rather than
+    walking an unrelated parent directory (e.g. a pytest session dir
+    when the test layout is ``tmp_path/schema/`` rather than
+    ``tmp_path/db/schema/``).
     """
+    resolved = schema_dir.resolve()
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            cwd=str(schema_dir if schema_dir.exists() else Path.cwd()),
+            cwd=str(resolved if resolved.exists() else Path.cwd()),
             capture_output=True,
             text=True,
             check=False,
@@ -58,7 +64,10 @@ def _detect_repo_root(schema_dir: Path) -> Path:
                 return Path(top)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    return schema_dir.resolve().parent.parent
+    # Canonical layout fallback only — don't guess outside it.
+    if resolved.parent.name == "db":
+        return resolved.parent.parent
+    return None
 
 
 # Create Rich console for pretty output
