@@ -4,15 +4,19 @@ Compares live database schema against expected state from migrations
 to detect unauthorized changes or migration mishaps.
 """
 
+import fnmatch
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg
 
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
+
+if TYPE_CHECKING:
+    from confiture.config.environment import AclExpectation, AclGrant
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,8 @@ class DriftType(Enum):
     EXTRA_INDEX = "extra_index"
     MISSING_CONSTRAINT = "missing_constraint"
     EXTRA_CONSTRAINT = "extra_constraint"
+    MISSING_GRANT = "missing_grant"
+    EXTRA_GRANT = "extra_grant"
 
 
 class DriftSeverity(Enum):
@@ -562,3 +568,220 @@ class SchemaDriftDetector:
             cur.execute("SELECT current_database()")
             result = cur.fetchone()
             return result[0] if result else "unknown"
+
+
+class AclDriftDetector:
+    """Detect ACL drift between live ``pg_class.relacl`` and the ``acls:`` config.
+
+    Two query paths — kept visually separate by design:
+
+    * :meth:`_check_missing` uses ``has_table_privilege(role, table, priv)``.
+      That's a hypothesis-check: it answers "does this role hold this
+      privilege?" and transparently handles role-membership inheritance,
+      ``PUBLIC``, and ownership.  One question per ``(table, role, priv)``.
+
+    * :meth:`_check_extra` uses ``information_schema.role_table_grants``.
+      That's an enumeration of *directly granted* privileges per role on
+      a table.  We need enumeration here because ``has_table_privilege``
+      cannot say what *else* a role holds, only confirm or deny a guess.
+      Privileges held only via ``PUBLIC`` (or via owner-implicit rules)
+      are deliberately not in this view, so they don't show up as extras.
+
+    System tables (``tb_confiture`` etc.) are excluded via the same
+    :pyattr:`SchemaDriftDetector.SYSTEM_TABLES` set.
+
+    Example::
+
+        from confiture.config.environment import Environment
+        from confiture.core.drift import AclDriftDetector
+
+        env = Environment.load("production")
+        with psycopg.connect(env.database_url) as conn:
+            items = AclDriftDetector(conn).check(env.acls)
+            if any(i.severity == DriftSeverity.CRITICAL for i in items):
+                raise SystemExit(1)
+    """
+
+    # Reuse the same exclusion set as the structural detector so confiture's
+    # own tracking tables never count as drift.
+    SYSTEM_TABLES = SchemaDriftDetector.SYSTEM_TABLES
+
+    def __init__(self, connection: psycopg.Connection) -> None:
+        self.connection = connection
+
+    def check(self, expectations: "list[AclExpectation]") -> list[DriftItem]:
+        """Compare every expectation against the live ACL state.
+
+        Returns a flat list of :class:`DriftItem`s.  An empty list means
+        the live ACLs match the spec.
+        """
+        items: list[DriftItem] = []
+        for expectation in expectations:
+            tables = self._discover_tables(
+                expectation.schema_, expectation.apply_to, expectation.ignore
+            )
+            for table in tables:
+                for grant in expectation.grants:
+                    missing = self._check_missing(expectation.schema_, table, grant)
+                    if missing is not None:
+                        items.append(missing)
+                    extras = self._check_extra(expectation.schema_, table, grant)
+                    if extras is not None:
+                        items.append(extras)
+        return items
+
+    # ------------------------------------------------------------------ #
+    # Table discovery                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _discover_tables(
+        self,
+        schema: str,
+        apply_to: "str | list[str]",
+        ignore: list[str],
+    ) -> list[str]:
+        """Return base-table relnames in *schema* matching *apply_to*, less *ignore*.
+
+        Only ``relkind = 'r'`` — views, materialized views, and foreign
+        tables are out of scope for v1 (their grant semantics differ).
+        Glob filtering happens in Python via :mod:`fnmatch`; the SQL
+        side only constrains the schema.
+        """
+        with self.connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT c.relname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = %s
+                  AND c.relkind = 'r'
+                ORDER BY c.relname
+                """,
+                (schema,),
+            )
+            relnames = [row[0] for row in cur.fetchall()]
+
+        # Drop confiture's own tracking tables.
+        relnames = [r for r in relnames if r not in self.SYSTEM_TABLES]
+
+        # Apply pattern filter unless "ALL_TABLES".
+        if apply_to != "ALL_TABLES":
+            patterns = list(apply_to)
+            relnames = [r for r in relnames if any(fnmatch.fnmatchcase(r, p) for p in patterns)]
+
+        # Drop tables matching any ignore glob.
+        if ignore:
+            relnames = [
+                r for r in relnames if not any(fnmatch.fnmatchcase(r, p) for p in ignore)
+            ]
+
+        return relnames
+
+    # ------------------------------------------------------------------ #
+    # MISSING_GRANT — hypothesis check via has_table_privilege            #
+    # ------------------------------------------------------------------ #
+
+    def _check_missing(
+        self,
+        schema: str,
+        table: str,
+        grant: "AclGrant",
+    ) -> DriftItem | None:
+        """Return a single ``MISSING_GRANT`` item if *role* lacks any expected priv.
+
+        Uses ``has_table_privilege`` because it transparently handles
+        ``PUBLIC``, role-membership inheritance, and ownership — those
+        confer privileges that ``information_schema.role_table_grants``
+        does not enumerate, so checking the direct-grants view here
+        would produce false positives for any role that inherits a
+        privilege.
+        """
+        qualified = f"{schema}.{table}"
+        missing: list[str] = []
+        for priv in grant.privileges:
+            with self.connection.cursor() as cur:
+                try:
+                    cur.execute(
+                        "SELECT has_table_privilege(%s, %s::regclass, %s)",
+                        (grant.role, qualified, priv),
+                    )
+                    row = cur.fetchone()
+                except psycopg.errors.UndefinedObject as e:
+                    # Role or table doesn't exist.  Treat as informational
+                    # warning (role-not-present is itself a finding worth
+                    # reporting, but it isn't a CRITICAL coverage gap).
+                    self.connection.rollback()
+                    return DriftItem(
+                        drift_type=DriftType.MISSING_GRANT,
+                        severity=DriftSeverity.WARNING,
+                        object_name=f"{qualified}({grant.role})",
+                        expected=", ".join(grant.privileges),
+                        actual=None,
+                        message=(
+                            f"Cannot verify grants for role '{grant.role}' on "
+                            f"'{qualified}': {e}"
+                        ),
+                    )
+                if row is not None and row[0] is False:
+                    missing.append(priv)
+        if not missing:
+            return None
+        return DriftItem(
+            drift_type=DriftType.MISSING_GRANT,
+            severity=DriftSeverity.CRITICAL,
+            object_name=f"{qualified}({grant.role})",
+            expected=", ".join(grant.privileges),
+            actual=None,
+            message=(
+                f"Role '{grant.role}' is missing grant(s) "
+                f"{', '.join(missing)} on '{qualified}'"
+            ),
+        )
+
+    # ------------------------------------------------------------------ #
+    # EXTRA_GRANT — enumeration via information_schema.role_table_grants  #
+    # ------------------------------------------------------------------ #
+
+    def _check_extra(
+        self,
+        schema: str,
+        table: str,
+        grant: "AclGrant",
+    ) -> DriftItem | None:
+        """Return an ``EXTRA_GRANT`` item if *role* directly holds privileges beyond expected.
+
+        Enumeration via ``information_schema.role_table_grants`` lists
+        only *directly granted* privileges; ``PUBLIC`` and ownership
+        rules are not in that view by design, so privileges held
+        indirectly do not surface as extras (matches operator intent —
+        you can't revoke what you didn't grant).
+        """
+        qualified = f"{schema}.{table}"
+        with self.connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT privilege_type
+                FROM information_schema.role_table_grants
+                WHERE grantee = %s
+                  AND table_schema = %s
+                  AND table_name = %s
+                """,
+                (grant.role, schema, table),
+            )
+            actual = {row[0].upper() for row in cur.fetchall()}
+
+        expected = set(grant.privileges)
+        extras = sorted(actual - expected)
+        if not extras:
+            return None
+        return DriftItem(
+            drift_type=DriftType.EXTRA_GRANT,
+            severity=DriftSeverity.WARNING,
+            object_name=f"{qualified}({grant.role})",
+            expected=", ".join(sorted(expected)) or "(none)",
+            actual=", ".join(extras),
+            message=(
+                f"Role '{grant.role}' has unexpected grant(s) "
+                f"{', '.join(extras)} on '{qualified}'"
+            ),
+        )

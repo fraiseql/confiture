@@ -31,12 +31,11 @@ at the root.  Default off.
 
 from __future__ import annotations
 
-import os
-import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
+from confiture.config._env_vars import expand_env_vars
 from confiture.exceptions import ConfigurationError
 
 _KNOWN_RENDERER_TYPES = (
@@ -51,29 +50,10 @@ _KNOWN_RENDERER_TYPES = (
 )
 _KNOWN_TRANSPORT_TYPES = ("http", "smtp", "stdout", "file")
 
-_ENV_VAR_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
-
 
 def _expand_env_vars(value: Any) -> Any:
-    """Walk *value* recursively, expanding ``${VAR}`` in any string."""
-    if isinstance(value, str):
-
-        def _sub(match: re.Match) -> str:
-            var = match.group(1)
-            if var not in os.environ:
-                raise ConfigurationError(
-                    f"Environment variable {var!r} referenced in notifications config "
-                    f"is not set.  Missing variables fail loud — they never expand to "
-                    f"an empty string."
-                )
-            return os.environ[var]
-
-        return _ENV_VAR_RE.sub(_sub, value)
-    if isinstance(value, dict):
-        return {k: _expand_env_vars(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_expand_env_vars(v) for v in value]
-    return value
+    """Backwards-compatible wrapper around the shared expander."""
+    return expand_env_vars(value, context="notifications config")
 
 
 # ---------------------------------------------------------------------------

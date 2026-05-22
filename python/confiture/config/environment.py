@@ -54,9 +54,24 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from confiture.config._env_vars import expand_env_vars
 from confiture.exceptions import ConfigurationError
+
+# Privileges that PostgreSQL's GRANT statement allows on tables.  Sequences,
+# functions, schemas, etc. use a different vocabulary and are out of scope
+# for the ACL coverage feature (see #120 README "Out of scope").
+_TABLE_PRIVILEGES: tuple[str, ...] = (
+    "SELECT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "TRUNCATE",
+    "REFERENCES",
+    "TRIGGER",
+)
+_TablePrivilege = Literal["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
 
 # SSH parameter validation patterns
 _VALID_SSH_HOST_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-._]*$")
@@ -383,6 +398,46 @@ class DatabaseConfig(BaseModel):
         }
 
 
+class AclGrant(BaseModel):
+    """A single role's expected privileges on a table.
+
+    Privileges are normalized uppercase regardless of YAML casing; the
+    PostgreSQL grant vocabulary is case-insensitive but mixing styles in
+    config is noisy, so we pick one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: str
+    privileges: list[_TablePrivilege]
+
+    @field_validator("privileges", mode="before")
+    @classmethod
+    def _normalize_privileges(cls, value: Any) -> Any:
+        """Uppercase incoming privilege names so YAML can be case-insensitive."""
+        if isinstance(value, list):
+            return [v.upper() if isinstance(v, str) else v for v in value]
+        return value
+
+
+class AclExpectation(BaseModel):
+    """One ``acls:`` entry — a schema-scoped set of expected grants.
+
+    ``apply_to`` is either the literal string ``"ALL_TABLES"`` (every base
+    table in the schema except those matching ``ignore``) or a list of
+    ``fnmatch`` glob patterns evaluated against the bare relname.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    # ``schema`` shadows ``BaseModel.schema`` (the JSON-schema accessor) so we
+    # store it on the attribute ``schema_`` and let YAML use the natural key.
+    schema_: str = Field(alias="schema")
+    apply_to: Literal["ALL_TABLES"] | list[str]
+    ignore: list[str] = Field(default_factory=list)
+    grants: list[AclGrant]
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -415,6 +470,7 @@ class Environment(BaseModel):
     pggit: PgGitConfig = Field(default_factory=PgGitConfig)
     seed: SeedConfig = Field(default_factory=SeedConfig)
     ssh_tunnel: SshTunnelConfig | None = None
+    acls: list[AclExpectation] = Field(default_factory=list)
 
     @property
     def database(self) -> DatabaseConfig:
@@ -600,6 +656,12 @@ class Environment(BaseModel):
 
         # Set environment name
         data["name"] = env_name
+
+        # Expand ${VAR} placeholders inside the acls: subtree at load time —
+        # role names commonly parameterize across envs.  Missing variables
+        # raise ConfigurationError; we never substitute empty strings.
+        if "acls" in data:
+            data["acls"] = expand_env_vars(data["acls"], context="acls")
 
         # Create Environment instance
         try:

@@ -83,11 +83,26 @@ def display_drift_report(report: Any, console: Console) -> None:
         f"{report.warning_count} warnings, "
         f"{report.info_count} info"
     )
-    for item in report.drift_items:
+
+    # Partition items so structural and ACL drift are visually distinct.
+    acl_types = {"missing_grant", "extra_grant"}
+    structural_items = [i for i in report.drift_items if i.drift_type.value not in acl_types]
+    acl_items = [i for i in report.drift_items if i.drift_type.value in acl_types]
+
+    def _emit(item: Any) -> None:
         color = "red" if item.severity.value == "critical" else "yellow"
         console.print(
-            f"  [{color}]{item.severity.value.upper()}[/{color}] {item.object_name}: {item.message}"
+            f"  [{color}]{item.severity.value.upper()}[/{color}] "
+            f"{item.drift_type.value.upper()} "
+            f"{item.object_name}: {item.message}"
         )
+
+    for item in structural_items:
+        _emit(item)
+    if acl_items:
+        console.print("\n[bold]ACL drift[/bold]")
+        for item in acl_items:
+            _emit(item)
 
 
 def display_signature_drift_report(report: Any, console: Console) -> None:
