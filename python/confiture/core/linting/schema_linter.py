@@ -541,9 +541,9 @@ class SchemaLinter:
         from confiture.core.linting.libraries.acl import Acl001GrantCoverage
 
         report = LintReport()
-        for violation in Acl001GrantCoverage(
-            expectations=expectations, grant_dir=grant_dir
-        ).check(migrations_dir):
+        for violation in Acl001GrantCoverage(expectations=expectations, grant_dir=grant_dir).check(
+            migrations_dir
+        ):
             report.add_violation(violation)
         return report
 

@@ -567,11 +567,7 @@ def migrate_validate(
                                 "message": v.message,
                                 "file_path": v.file_path,
                             }
-                            for v in (
-                                acl_report.errors
-                                + acl_report.warnings
-                                + acl_report.info
-                            )
+                            for v in (acl_report.errors + acl_report.warnings + acl_report.info)
                         ],
                     },
                     output_file,
@@ -584,9 +580,7 @@ def migrate_validate(
                 )
                 for v in acl_report.errors:
                     # Escape the rule_id brackets so Rich doesn't read them as markup.
-                    console.print(
-                        f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}"
-                    )
+                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
             else:
                 console.print("[green]✅ All migrations have ACL coverage[/green]")
 

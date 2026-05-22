@@ -1,8 +1,7 @@
-"""Integration tests for ``confiture migrate validate --check-acl-coverage``.
+"""Integration tests for ``confiture migrate validate --check-acl-coverage`` (issue #120).
 
-Issue #120, Phase 2 Cycle 3 — wires the ACL coverage lint rule into the
-``migrate validate`` command so a CI gate can refuse PRs that ship
-uncovered tables.
+Wires the ACL coverage lint rule into the ``migrate validate`` command
+so a CI gate can refuse PRs that ship uncovered tables.
 """
 
 from __future__ import annotations
@@ -76,8 +75,7 @@ def test_validate_check_acl_coverage_passes_when_covered_inline(tmp_path: Path) 
         tmp_path,
         {
             "20260522120000_add_foo.up.sql": (
-                "CREATE TABLE foo (id int);\n"
-                "GRANT SELECT, INSERT ON foo TO my_app;\n"
+                "CREATE TABLE foo (id int);\nGRANT SELECT, INSERT ON foo TO my_app;\n"
             )
         },
     )

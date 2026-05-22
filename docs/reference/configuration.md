@@ -435,6 +435,62 @@ db/backups/
 
 ---
 
+### `acls`
+
+**Type**: Array of `AclExpectation` (optional)
+**Default**: `[]`
+**Description**: Expected `GRANT`s per schema. Read by `confiture drift --check-acls` (runtime) and `confiture lint` / `confiture migrate validate --check-acl-coverage` (static).
+
+```yaml
+acls:
+  - schema: tenant
+    apply_to: ALL_TABLES               # or list of relname glob patterns
+    ignore: [tb_*_legacy, "*_tmp"]     # optional, evaluated against bare relname
+    grants:
+      - role: ${APP_ROLE}              # ${VAR} expansion at config-load time
+        privileges: [SELECT, INSERT, UPDATE, DELETE]
+      - role: ${ETL_ROLE}
+        privileges: [SELECT, INSERT, UPDATE, DELETE]
+  - schema: public
+    apply_to: ALL_TABLES
+    grants:
+      - role: ${APP_ROLE}
+        privileges: [SELECT, INSERT, UPDATE, DELETE, TRUNCATE]
+```
+
+**`AclExpectation` fields**:
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `schema` | string | required | PostgreSQL schema name |
+| `apply_to` | `"ALL_TABLES"` or list of glob patterns | required | `ALL_TABLES` = every base table (`relkind='r'`); list = `fnmatch` against bare relname |
+| `ignore` | list of glob patterns | `[]` | Exempt tables matching any pattern |
+| `grants` | list of `AclGrant` | required | Per-role expected privileges |
+
+**`AclGrant` fields**:
+
+| Field | Type | Notes |
+|---|---|---|
+| `role` | string | Role name; supports `${VAR}` expansion |
+| `privileges` | list | Subset of `{SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER}`; case-insensitive on load |
+
+**Validation**:
+- Unknown keys rejected (`extra="forbid"`).
+- Unknown privileges (e.g. `EXECUTE` — for functions, not tables) rejected with a model-level error.
+- `${VAR}` referenced but not in `os.environ` raises `ConfigurationError`. Empty-string fallback is never used.
+- Views, materialized views, and foreign tables are out of scope for v1 (their grant semantics differ from base tables); coverage applies to `pg_class.relkind = 'r'` only.
+
+**Opt-out**: Mark a table owner-only with a magic comment in the contiguous comment block above its `CREATE TABLE`:
+
+```sql
+-- confiture:owner-only
+CREATE TABLE catalog.tb_audit_ledger ( ... );
+```
+
+**See [ACL Coverage](../guides/acl-coverage.md)** for the full guide.
+
+---
+
 ### `require_confirmation`
 
 **Type**: Boolean

@@ -1270,9 +1270,17 @@ Enable automatic validation of database schema changes using git history. Perfec
 |--------|------|---------|-------------|
 | `--check-drift` | Flag | `False` | Detect schema differences between git refs |
 | `--require-migration` | Flag | `False` | Ensure DDL changes have migration files |
+| `--check-acl-coverage` | Flag | `False` | Static: every `CREATE TABLE` in migrations must have a matching `GRANT` (same file or `db/7_grant/`). No-op when the config has no `acls:` block. See [ACL Coverage](../guides/acl-coverage.md) |
 | `--base-ref` | String | `origin/main` | Reference point for comparison (branch, tag, or commit) |
 | `--since` | String | None | Alias for `--base-ref` (e.g., `--since origin/dev`) |
 | `--staged` | Flag | `False` | Only validate staged files (pre-commit hook mode) |
+
+**`--check-acl-coverage`** runs the `ACL001` lint rule against the migrations directory. It exits 1 on any uncovered table and 0 otherwise. Compatible with `--format json`; violations are surfaced under `check: "acl_coverage"`.
+
+```bash
+# Static, no database connection.  Pre-merge gate.
+confiture migrate validate --check-acl-coverage --config confiture.yaml
+```
 
 #### Examples
 
@@ -1555,6 +1563,71 @@ git fetch origin
 #### Detailed Documentation
 
 For comprehensive guide including decision trees, integration examples, and best practices, see **[Git-Aware Schema Validation Guide](../guides/git-aware-validation.md)**.
+
+---
+
+## `confiture drift`
+
+Compare the live database schema against expected DDL and/or the configured `acls:` block.
+
+### Usage
+
+```bash
+confiture drift [OPTIONS]
+```
+
+### Options
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--config` | `-c` | Path | `confiture.yaml` | Configuration file |
+| `--schema` | - | Path | None | Schema SQL file to compare against (optional when `--check-acls` is set) |
+| `--check-acls` | - | Flag | `False` | Compare live `pg_class.relacl` against the `acls:` block. See [ACL Coverage](../guides/acl-coverage.md) |
+| `--warn-only` | - | Flag | `False` | Demote `MISSING_GRANT` items from CRITICAL to WARNING (progressive rollout) |
+| `--format` | `-f` | Text | `table` | Output format: `table` or `json` |
+| `--fail-on-warning` | - | Flag | `False` | Exit with code 1 on warnings as well as critical drift |
+
+### Exit Codes
+
+| Code | Meaning |
+|---|---|
+| 0 | No drift detected |
+| 1 | Critical drift detected (or any drift with `--fail-on-warning`) |
+| 2 | Connection or configuration error (e.g. `--check-acls` without an `acls:` block) |
+
+### Examples
+
+**Structural drift only:**
+
+```bash
+confiture drift --config confiture.yaml --schema db/generated/schema.sql
+```
+
+**ACL drift only (no structural diff):**
+
+```bash
+confiture drift --check-acls --config confiture.yaml
+```
+
+**Both structural and ACL drift:**
+
+```bash
+confiture drift --check-acls --schema db/generated/schema.sql --config confiture.yaml
+```
+
+**Soft launch — surface gaps without failing CI:**
+
+```bash
+confiture drift --check-acls --warn-only --config confiture.yaml
+```
+
+**JSON output (back-compat — new ACL items live inside the existing `drift_items` array):**
+
+```bash
+confiture drift --check-acls --format json --config confiture.yaml
+```
+
+See **[ACL Coverage](../guides/acl-coverage.md)** for the full guide, including the asymmetry between the `MISSING_GRANT` and `EXTRA_GRANT` query paths.
 
 ---
 

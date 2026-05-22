@@ -71,7 +71,9 @@ _TABLE_PRIVILEGES: tuple[str, ...] = (
     "REFERENCES",
     "TRIGGER",
 )
-_TablePrivilege = Literal["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
+_TablePrivilege = Literal[
+    "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"
+]
 
 # SSH parameter validation patterns
 _VALID_SSH_HOST_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-._]*$")

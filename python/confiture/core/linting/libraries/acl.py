@@ -25,9 +25,7 @@ from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.migration_grant_extractor import MigrationGrantExtractor
 
 _OWNER_ONLY_RE = re.compile(r"--\s*confiture:owner-only", re.IGNORECASE)
-_CREATE_TABLE_LINE_RE = re.compile(
-    r"^\s*CREATE\s+TABLE\b", re.IGNORECASE | re.MULTILINE
-)
+_CREATE_TABLE_LINE_RE = re.compile(r"^\s*CREATE\s+TABLE\b", re.IGNORECASE | re.MULTILINE)
 
 
 def _has_owner_only_directive(text: str, table_line: int) -> bool:
@@ -154,15 +152,11 @@ class Acl001GrantCoverage:
                     owner_only.add((schema, table))
 
             for schema, table, role, privs in grants:
-                covered.setdefault((schema, table), set()).update(
-                    (role, p) for p in privs
-                )
+                covered.setdefault((schema, table), set()).update((role, p) for p in privs)
 
         # Layer in the global grant sweep (db/7_grant/*.sql).
         for schema, table, role, privs in _load_global_grants(self.grant_dir, self._extractor):
-            covered.setdefault((schema, table), set()).update(
-                (role, p) for p in privs
-            )
+            covered.setdefault((schema, table), set()).update((role, p) for p in privs)
 
         # Now compare each created (in-scope) table against expectations.
         violations: list[LintViolation] = []

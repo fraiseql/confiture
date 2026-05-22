@@ -1,4 +1,4 @@
-"""Unit tests for :class:`MigrationGrantExtractor` (issue #120, Phase 2 Cycle 1).
+"""Unit tests for :class:`MigrationGrantExtractor` (issue #120).
 
 The extractor pulls ``CREATE TABLE`` targets and ``GRANT … ON … TO …``
 tuples out of a migration's SQL text.  pglast is the primary parser
@@ -57,9 +57,7 @@ def test_extracts_create_table_sqlparse_fallback(
     expected: list[tuple[str, str]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "confiture.core.migration_grant_extractor._HAS_PGLAST", False
-    )
+    monkeypatch.setattr("confiture.core.migration_grant_extractor._HAS_PGLAST", False)
     assert MigrationGrantExtractor().extract_creates(sql) == expected
 
 
@@ -80,7 +78,9 @@ def test_drop_table_within_same_text_is_extractable() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _grant(schema: str, table: str, role: str, privs: set[str]) -> tuple[str, str, str, frozenset[str]]:
+def _grant(
+    schema: str, table: str, role: str, privs: set[str]
+) -> tuple[str, str, str, frozenset[str]]:
     return (schema, table, role, frozenset(privs))
 
 
@@ -137,9 +137,7 @@ def test_extracts_grants_sqlparse_fallback(
     expected: list,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "confiture.core.migration_grant_extractor._HAS_PGLAST", False
-    )
+    monkeypatch.setattr("confiture.core.migration_grant_extractor._HAS_PGLAST", False)
     assert MigrationGrantExtractor().extract_grants(sql) == expected
 
 

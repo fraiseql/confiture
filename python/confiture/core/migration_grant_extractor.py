@@ -79,9 +79,10 @@ def _strip_quotes(ident: str) -> str:
 def _parse_qualified_name(qname: str) -> tuple[str, str]:
     """Split a possibly-qualified identifier into ``(schema, relname)``.
 
-    Unqualified names default to schema ``"public"`` — matches the
-    documented v1 behavior (see Phase 2 "Risks" section for the
-    ``search_path`` caveat).
+    Unqualified names default to schema ``"public"``.  Migrations that
+    rely on ``SET search_path`` to land tables in a non-public schema
+    won't be picked up correctly; explicit qualification is the
+    documented recommendation (see :doc:`/guides/acl-coverage`).
     """
     qname = qname.strip()
     # Split on a dot that isn't inside double quotes.
@@ -129,9 +130,7 @@ class MigrationGrantExtractor:
                 pass
         return self._drops_sqlparse(sql)
 
-    def extract_grants(
-        self, sql: str
-    ) -> list[tuple[str, str, str, frozenset[str]]]:
+    def extract_grants(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
         """Return ``(schema, table, role, privileges)`` for every ``GRANT``."""
         if _HAS_PGLAST:
             try:
@@ -193,9 +192,7 @@ class MigrationGrantExtractor:
                     out.append((parts[0], parts[1]))
         return out
 
-    def _grants_pglast(
-        self, sql: str
-    ) -> list[tuple[str, str, str, frozenset[str]]]:
+    def _grants_pglast(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
         import pglast  # noqa: PLC0415
         from pglast.enums.parsenodes import GrantTargetType, ObjectType  # noqa: PLC0415
 
@@ -239,9 +236,7 @@ class MigrationGrantExtractor:
         cleaned = sqlparse.format(sql, strip_comments=True)
         return [_parse_qualified_name(m.group("qname")) for m in _DROP_TABLE_RE.finditer(cleaned)]
 
-    def _grants_sqlparse(
-        self, sql: str
-    ) -> list[tuple[str, str, str, frozenset[str]]]:
+    def _grants_sqlparse(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
         cleaned = sqlparse.format(sql, strip_comments=True)
         out: list[tuple[str, str, str, frozenset[str]]] = []
         for m in _GRANT_RE.finditer(cleaned):

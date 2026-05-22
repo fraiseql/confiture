@@ -386,5 +386,6 @@ Always update both `db/schema/` files and migrations together.
 
 - [Build from DDL](./01-build-from-ddl.md) - For fresh databases
 - [Schema-to-Schema](./04-schema-to-schema.md) - For zero-downtime
+- [ACL Coverage](./acl-coverage.md) - Catch tables that ship without `GRANT`s
 - [Dry-Run Guide](./dry-run.md) - Test migrations safely
 - [CLI Reference](../reference/cli.md) - All migrate commands

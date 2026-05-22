@@ -671,9 +671,7 @@ class AclDriftDetector:
 
         # Drop tables matching any ignore glob.
         if ignore:
-            relnames = [
-                r for r in relnames if not any(fnmatch.fnmatchcase(r, p) for p in ignore)
-            ]
+            relnames = [r for r in relnames if not any(fnmatch.fnmatchcase(r, p) for p in ignore)]
 
         return relnames
 
@@ -718,8 +716,7 @@ class AclDriftDetector:
                         expected=", ".join(grant.privileges),
                         actual=None,
                         message=(
-                            f"Cannot verify grants for role '{grant.role}' on "
-                            f"'{qualified}': {e}"
+                            f"Cannot verify grants for role '{grant.role}' on '{qualified}': {e}"
                         ),
                     )
                 if row is not None and row[0] is False:
@@ -733,8 +730,7 @@ class AclDriftDetector:
             expected=", ".join(grant.privileges),
             actual=None,
             message=(
-                f"Role '{grant.role}' is missing grant(s) "
-                f"{', '.join(missing)} on '{qualified}'"
+                f"Role '{grant.role}' is missing grant(s) {', '.join(missing)} on '{qualified}'"
             ),
         )
 
@@ -781,7 +777,6 @@ class AclDriftDetector:
             expected=", ".join(sorted(expected)) or "(none)",
             actual=", ".join(extras),
             message=(
-                f"Role '{grant.role}' has unexpected grant(s) "
-                f"{', '.join(extras)} on '{qualified}'"
+                f"Role '{grant.role}' has unexpected grant(s) {', '.join(extras)} on '{qualified}'"
             ),
         )

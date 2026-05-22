@@ -674,6 +674,7 @@ CREATE INDEX idx_users_email ON users(email);
 
 ## Related Documentation
 
+- [ACL Coverage](./acl-coverage.md) — pair structural drift with `--check-acls` to catch `GRANT` gaps live
 - [Migration Naming Best Practices](./migration-naming-best-practices.md)
 - [Migration Strategies](./migration-decision-tree.md)
 - [Pre-Commit Hooks Setup](https://pre-commit.com/)

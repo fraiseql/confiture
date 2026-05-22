@@ -1,4 +1,4 @@
-"""Unit tests for the ACL coverage lint rule (issue #120, Phase 2 Cycle 2).
+"""Unit tests for the ACL coverage lint rule (issue #120).
 
 The rule walks a migrations directory, extracts ``CREATE TABLE``s and
 ``GRANT``s, then checks each created table against the ``acls:`` block
@@ -85,14 +85,10 @@ def test_table_without_grant_anywhere(tmp_path: Path) -> None:
 def test_table_covered_by_global_grant_sweep(tmp_path: Path) -> None:
     migrations = tmp_path / "migrations"
     migrations.mkdir()
-    _write_migration(
-        migrations, "20260522120000_add_foo.up.sql", "CREATE TABLE foo (id int);"
-    )
+    _write_migration(migrations, "20260522120000_add_foo.up.sql", "CREATE TABLE foo (id int);")
     grant_dir = tmp_path / "7_grant"
     grant_dir.mkdir()
-    (grant_dir / "grants.sql").write_text(
-        "GRANT SELECT, INSERT ON foo TO my_app;"
-    )
+    (grant_dir / "grants.sql").write_text("GRANT SELECT, INSERT ON foo TO my_app;")
 
     rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=grant_dir)
     assert rule.check(migrations) == []
@@ -101,9 +97,7 @@ def test_table_covered_by_global_grant_sweep(tmp_path: Path) -> None:
 def test_grant_dir_missing_does_not_crash(tmp_path: Path) -> None:
     migrations = tmp_path / "migrations"
     migrations.mkdir()
-    _write_migration(
-        migrations, "20260522120000_add_foo.up.sql", "CREATE TABLE foo (id int);"
-    )
+    _write_migration(migrations, "20260522120000_add_foo.up.sql", "CREATE TABLE foo (id int);")
     rule = Acl001GrantCoverage(
         expectations=_make_expectations(), grant_dir=tmp_path / "does_not_exist"
     )
@@ -184,9 +178,7 @@ def test_table_created_then_dropped_in_same_migration_emits_no_violation(
 
 def test_table_outside_apply_to_pattern_is_not_checked(tmp_path: Path) -> None:
     """Pattern list filters which tables the rule applies to."""
-    _write_migration(
-        tmp_path, "20260522120000.up.sql", "CREATE TABLE skip_me (id int);"
-    )
+    _write_migration(tmp_path, "20260522120000.up.sql", "CREATE TABLE skip_me (id int);")
     rule = Acl001GrantCoverage(
         expectations=[
             AclExpectation(
@@ -221,9 +213,7 @@ def test_ignore_globs_exempt_tables(tmp_path: Path) -> None:
 
 
 def test_table_in_unrelated_schema_is_ignored(tmp_path: Path) -> None:
-    _write_migration(
-        tmp_path, "20260522120000.up.sql", "CREATE TABLE other.foo (id int);"
-    )
+    _write_migration(tmp_path, "20260522120000.up.sql", "CREATE TABLE other.foo (id int);")
     rule = Acl001GrantCoverage(
         expectations=[
             AclExpectation(
@@ -245,9 +235,7 @@ def test_table_in_unrelated_schema_is_ignored(tmp_path: Path) -> None:
 
 def test_empty_expectations_emits_no_violations(tmp_path: Path) -> None:
     """If config has no acls: block, the rule never fires."""
-    _write_migration(
-        tmp_path, "20260522120000.up.sql", "CREATE TABLE foo (id int);"
-    )
+    _write_migration(tmp_path, "20260522120000.up.sql", "CREATE TABLE foo (id int);")
     rule = Acl001GrantCoverage(expectations=[], grant_dir=None)
     assert rule.check(tmp_path) == []
 
@@ -264,9 +252,7 @@ def test_down_files_are_not_scanned(tmp_path: Path) -> None:
         "CREATE TABLE foo (id int);\nGRANT SELECT, INSERT ON foo TO my_app;",
     )
     # A .down.sql with a CREATE TABLE shouldn't be considered.
-    _write_migration(
-        tmp_path, "20260522120000.down.sql", "CREATE TABLE ghost (id int);"
-    )
+    _write_migration(tmp_path, "20260522120000.down.sql", "CREATE TABLE ghost (id int);")
     rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
     assert rule.check(tmp_path) == []
 
@@ -279,9 +265,7 @@ def test_down_files_are_not_scanned(tmp_path: Path) -> None:
         "20260522120000.up.sql",  # bare timestamp
     ],
 )
-def test_handles_various_migration_filename_styles(
-    tmp_path: Path, filename: str
-) -> None:
+def test_handles_various_migration_filename_styles(tmp_path: Path, filename: str) -> None:
     _write_migration(
         tmp_path,
         filename,

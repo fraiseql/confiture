@@ -1,4 +1,4 @@
-"""Integration tests for :class:`AclDriftDetector` (issue #120, Phase 1 Cycle 2).
+"""Integration tests for :class:`AclDriftDetector` (issue #120).
 
 Requires a running PostgreSQL accessible via ``CONFITURE_TEST_DB_URL``.
 
@@ -168,7 +168,7 @@ def test_apply_to_pattern_list_filters_tables(acl_db: psycopg.Connection) -> Non
 
 
 # ---------------------------------------------------------------------------
-# PUBLIC inheritance asymmetry (Cycle 2 CLEANUP requirement)
+# PUBLIC inheritance asymmetry — directly granted vs inherited via PUBLIC
 # ---------------------------------------------------------------------------
 
 

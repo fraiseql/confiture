@@ -1,4 +1,4 @@
-"""Unit tests for the ``acls:`` config block (issue #120, Phase 1 Cycle 1).
+"""Unit tests for the ``acls:`` config block (issue #120).
 
 These tests exercise the public loader path — ``Environment.load(env_name,
 project_dir)`` — because env-var expansion lives inside that method, not at
@@ -172,9 +172,7 @@ def test_acls_expands_env_vars(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert env.acls[0].grants[0].role == "realapp"
 
 
-def test_acls_missing_env_var_fails_loud(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_acls_missing_env_var_fails_loud(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("APP_ROLE", raising=False)
     project = _write_env_yaml(
         tmp_path,

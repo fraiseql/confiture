@@ -5,6 +5,86 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-05-22
+
+ACL coverage — catch tables that ship without their expected `GRANT`s,
+both before they merge (static lint, issue #120 phase 2) and after they
+reach a real database (runtime drift, phase 1).
+
+### Added
+
+- **`confiture drift --check-acls`** (#120) — compares live
+  `pg_class.relacl` against a new `acls:` block in the environment
+  config.  Two distinct query paths kept visually separate by design:
+  `MISSING_GRANT` uses `has_table_privilege` (hypothesis-checking; sees
+  PUBLIC, inheritance, ownership), `EXTRA_GRANT` uses
+  `information_schema.role_table_grants` (enumeration of *direct*
+  grants only, so PUBLIC-inherited privileges don't surface as
+  extras).  Operates on base tables only (`relkind = 'r'`); views,
+  materialized views, and foreign tables are out of scope for v1.
+  - `--warn-only` demotes `MISSING_GRANT` to WARNING for progressive
+    rollouts.
+  - `--schema` is optional when `--check-acls` is set, so the ACL
+    check can run on its own.
+  - Exit 2 with a helpful message when `--check-acls` is used without
+    an `acls:` block in the config.
+  - JSON shape preserved — new items live inside the existing
+    `drift_items` array.
+  - Missing roles emit a single WARNING `DriftItem` instead of
+    crashing.
+
+- **`acls:` config block** (#120) — declarative expectation of which
+  roles should hold which privileges on which tables:
+  ```yaml
+  acls:
+    - schema: tenant
+      apply_to: ALL_TABLES               # or list of relname glob patterns
+      ignore: [tb_*_legacy, "*_tmp"]
+      grants:
+        - role: ${APP_ROLE}              # ${VAR} expansion, missing var fails loud
+          privileges: [SELECT, INSERT, UPDATE, DELETE]
+  ```
+  Pydantic-validated (`extra="forbid"`, privilege whitelist,
+  case-normalized).  Same block feeds the runtime check and the static
+  lint rule.
+
+- **`confiture lint` / `confiture migrate validate --check-acl-coverage`**
+  (#120) — static `ACL001` rule.  Parses every `*.up.sql` in
+  `db/migrations/`, builds an `(schema, table) → {(role, privilege)}`
+  coverage map from both inline `GRANT`s and the configured global
+  grant sweep directory (`db/7_grant/` by default), then flags any
+  in-scope `CREATE TABLE` whose expected coverage is incomplete.
+  - On by default in `confiture lint` when the environment has an
+    `acls:` block; no-op otherwise.
+  - Flag-gated in `confiture migrate validate` (parallel to
+    `--require-migration` and friends).
+  - Two-tier SQL parsing — pglast primary (limit-free, syntax-accurate),
+    sqlparse + regex fallback.  Both paths exercised by parameterized
+    tests against identical fixtures.
+  - Tables created and dropped in the same migration net out.
+  - Magic-comment opt-out: `-- confiture:owner-only` in the contiguous
+    comment block immediately preceding `CREATE TABLE`.  Line-based
+    detection (parser-agnostic; survives `pg_format` re-indenting).
+  - Violation messages include a paste-ready `GRANT` statement.
+
+- **Documentation**
+  - `docs/guides/acl-coverage.md` — full guide covering runtime and
+    static checks, YAML, magic-comment opt-out, CI/CD recipe, and the
+    `MISSING_GRANT` / `EXTRA_GRANT` query-path asymmetry.
+  - `docs/reference/configuration.md` — `acls:` block reference with
+    all options.
+  - `docs/reference/cli.md` — `confiture drift` section added;
+    `--check-acls`, `--warn-only`, `--check-acl-coverage` flags
+    documented.
+
+### Changed
+
+- `_expand_env_vars` lifted from `core/hooks/notifications/config.py`
+  into a shared `config/_env_vars.py` module.  One source of truth for
+  `${VAR}` expansion across the notifications block, the new `acls:`
+  block, and future YAML-fed features.  Notifications behavior
+  unchanged.
+
 ## [0.10.0] - 2026-05-20
 
 Coordinated release bundling three phases of work plus the

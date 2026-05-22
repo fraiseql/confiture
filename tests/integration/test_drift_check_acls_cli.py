@@ -1,4 +1,4 @@
-"""Integration tests for ``confiture drift --check-acls`` (issue #120, Phase 1 Cycle 3).
+"""Integration tests for ``confiture drift --check-acls`` (issue #120).
 
 Drives the Typer CLI end-to-end against a real Postgres instance.
 """
@@ -202,9 +202,7 @@ def test_warn_only_demotes_missing_grant(
                 privileges: [SELECT, INSERT]
         """,
     )
-    result = CliRunner().invoke(
-        app, ["drift", "--check-acls", "--warn-only", "--config", str(cfg)]
-    )
+    result = CliRunner().invoke(app, ["drift", "--check-acls", "--warn-only", "--config", str(cfg)])
     # MISSING_GRANT becomes WARNING, so without --fail-on-warning the exit is 0.
     assert result.exit_code == 0, result.output
 
