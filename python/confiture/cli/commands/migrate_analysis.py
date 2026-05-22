@@ -268,6 +268,16 @@ def migrate_validate(
             "signature-only comparison."
         ),
     ),
+    check_acl_coverage: bool = typer.Option(
+        False,
+        "--check-acl-coverage",
+        help=(
+            "Static: verify every `CREATE TABLE` in db/migrations/ has a matching "
+            "`GRANT` either in the same migration or in the configured global grant "
+            "sweep directory (defaults to db/7_grant). No-op when the config has no "
+            "`acls:` block. No database connection required."
+        ),
+    ),
     check_signature_schemas: str = typer.Option(
         "public",
         "--schemas",
@@ -518,6 +528,71 @@ def migrate_validate(
         if check_body and not check_signatures:
             error_console.print("[red]Error:[/red] --check-body requires --check-signatures")
             raise typer.Exit(2)
+
+        # Run ACL coverage check on migration files (static, no DB).
+        if check_acl_coverage:
+            from confiture.cli.acl_loader import load_acl_expectations
+            from confiture.core.linting.schema_linter import SchemaLinter
+
+            if not config.exists():
+                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                raise typer.Exit(2)
+
+            config_data = load_config(config)
+            # No-op when the project hasn't adopted the `acls:` block yet.
+            expectations = load_acl_expectations(config_data, config, require=False)
+
+            grant_dir_raw = (
+                config_data.get("migration", {}).get("grant_dir")
+                if isinstance(config_data, dict)
+                else None
+            ) or "db/7_grant"
+            grant_dir = (config.parent / grant_dir_raw).resolve()
+
+            acl_report = SchemaLinter().lint_migrations(
+                migrations_dir=migrations_dir,
+                expectations=expectations,
+                grant_dir=grant_dir if grant_dir.exists() else None,
+            )
+
+            if format_output == "json":
+                _output_json(
+                    {
+                        "check": "acl_coverage",
+                        "violations": [
+                            {
+                                "rule_id": v.rule_id,
+                                "severity": v.severity.value,
+                                "object_name": v.object_name,
+                                "message": v.message,
+                                "file_path": v.file_path,
+                            }
+                            for v in (
+                                acl_report.errors
+                                + acl_report.warnings
+                                + acl_report.info
+                            )
+                        ],
+                    },
+                    output_file,
+                    console,
+                )
+            elif acl_report.has_errors:
+                console.print(
+                    f"[red]❌ ACL coverage check failed: "
+                    f"{len(acl_report.errors)} violation(s)[/red]"
+                )
+                for v in acl_report.errors:
+                    # Escape the rule_id brackets so Rich doesn't read them as markup.
+                    console.print(
+                        f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}"
+                    )
+            else:
+                console.print("[green]✅ All migrations have ACL coverage[/green]")
+
+            if acl_report.has_errors:
+                raise typer.Exit(1)
+            return
 
         # Run import check on Python migration modules
         if check_imports:

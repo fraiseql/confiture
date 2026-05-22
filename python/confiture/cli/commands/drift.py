@@ -2,14 +2,12 @@
 
 import json
 from pathlib import Path
-from typing import Any
 
 import typer
-from pydantic import ValidationError
 
+from confiture.cli.acl_loader import load_acl_expectations
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, error_console
-from confiture.config._env_vars import expand_env_vars
 from confiture.config.environment import AclExpectation
 from confiture.core.connection import create_connection, load_config
 from confiture.core.drift import (
@@ -20,30 +18,6 @@ from confiture.core.drift import (
     SchemaDriftDetector,
 )
 from confiture.exceptions import ConfigurationError
-
-
-def _load_acl_expectations(
-    config_data: dict[str, Any], config_path: Path
-) -> list[AclExpectation]:
-    """Pull ``acls:`` from the raw config dict, expand env vars, validate.
-
-    Mirrors the load-time expansion done by ``Environment.load`` so the
-    ``confiture drift --config confiture.yaml`` path supports ``${VAR}``
-    the same way other consumers do.
-    """
-    raw = config_data.get("acls")
-    if not raw:
-        error_console.print(
-            f"[red]❌ --check-acls requires an `acls:` block in {config_path}[/red]"
-        )
-        raise typer.Exit(2)
-
-    expanded = expand_env_vars(raw, context="acls")
-    try:
-        return [AclExpectation.model_validate(item) for item in expanded]
-    except ValidationError as exc:
-        error_console.print(f"[red]❌ Invalid acls: block in {config_path}: {exc}[/red]")
-        raise typer.Exit(2) from exc
 
 
 def _demote_missing_grant_warnings(report: DriftReport) -> None:
@@ -144,7 +118,7 @@ def drift(
         # even open a database connection.
         expectations: list[AclExpectation] = []
         if check_acls:
-            expectations = _load_acl_expectations(config_data, config)
+            expectations = load_acl_expectations(config_data, config, require=True)
 
         conn = create_connection(config_data)
 

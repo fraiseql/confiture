@@ -216,6 +216,21 @@ class SchemaLinter:
         if self.config.check_security:
             self._check_security(report)
 
+        # ACL coverage (ACL001) — no-op when the environment has no `acls:`
+        # block, so existing projects see zero change.  Otherwise checks
+        # every CREATE TABLE in db/migrations/ has a matching GRANT.
+        if self.environment.acls:
+            migrations_dir = self.project_dir / "db" / "migrations"
+            if migrations_dir.exists():
+                grant_dir_str = self.environment.migration.grant_dir
+                grant_dir = (self.project_dir / grant_dir_str).resolve()
+                for violation in self.lint_migrations(
+                    migrations_dir=migrations_dir,
+                    expectations=self.environment.acls,
+                    grant_dir=grant_dir if grant_dir.exists() else None,
+                ).errors:
+                    report.add_violation(violation)
+
         return report
 
     def _load_schema(self) -> None:
@@ -499,6 +514,37 @@ class SchemaLinter:
             for violation in Gen004OrphanedOverride().check(schema_dir, overrides_dir):
                 report.add_violation(violation)
 
+        return report
+
+    def lint_migrations(
+        self,
+        migrations_dir: Path,
+        expectations: list[Any],
+        grant_dir: Path | None = None,
+    ) -> LintReport:
+        """Lint a migrations directory for ACL coverage (ACL001).
+
+        No-op when ``expectations`` is empty — projects without an
+        ``acls:`` block see zero violations regardless of what their
+        migrations contain.
+
+        Args:
+            migrations_dir: Directory of ``*.up.sql`` migration files.
+            expectations: Parsed ``acls:`` block (list of
+                :class:`~confiture.config.environment.AclExpectation`).
+            grant_dir: Optional global grant sweep directory (typically
+                ``db/7_grant``).
+
+        Returns:
+            :class:`LintReport` with any ACL001 violations.
+        """
+        from confiture.core.linting.libraries.acl import Acl001GrantCoverage
+
+        report = LintReport()
+        for violation in Acl001GrantCoverage(
+            expectations=expectations, grant_dir=grant_dir
+        ).check(migrations_dir):
+            report.add_violation(violation)
         return report
 
     @staticmethod
