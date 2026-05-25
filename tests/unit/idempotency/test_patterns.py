@@ -331,7 +331,7 @@ CREATE FUNCTION fn_bad() RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE plpgsql;
 
 
 class TestAlterTableAddConstraintCheck:
-    """Phase 03 Cycle 1-2: ADD CONSTRAINT ... CHECK detection."""
+    """ADD CONSTRAINT ... CHECK detection."""
 
     def test_detect_add_constraint_check(self):
         sql = "ALTER TABLE foo ADD CONSTRAINT chk_x CHECK (id > 0);"
@@ -357,7 +357,7 @@ class TestAlterTableAddConstraintCheck:
 
 
 class TestAlterTableAddConstraintPrimaryKey:
-    """Phase 03 Cycle 3: ADD CONSTRAINT ... PRIMARY KEY detection."""
+    """ADD CONSTRAINT ... PRIMARY KEY detection."""
 
     def test_detect_add_constraint_primary_key(self):
         sql = "ALTER TABLE foo ADD CONSTRAINT foo_pk PRIMARY KEY (id);"
@@ -367,7 +367,7 @@ class TestAlterTableAddConstraintPrimaryKey:
 
 
 class TestAlterTableAddConstraintUnique:
-    """Phase 03 Cycle 4: ADD CONSTRAINT ... UNIQUE detection."""
+    """ADD CONSTRAINT ... UNIQUE detection."""
 
     def test_detect_add_constraint_unique(self):
         sql = "ALTER TABLE foo ADD CONSTRAINT foo_uq UNIQUE (email);"
@@ -377,7 +377,7 @@ class TestAlterTableAddConstraintUnique:
 
 
 class TestDropAddConstraintPair:
-    """Phase 03 Cycle 5: DROP CONSTRAINT IF EXISTS + ADD CONSTRAINT pair recognizer."""
+    """DROP CONSTRAINT IF EXISTS + ADD CONSTRAINT pair recognizer."""
 
     def test_drop_then_add_constraint_check_is_idempotent(self):
         sql = (
@@ -407,7 +407,7 @@ class TestDropAddConstraintPair:
 
 
 class TestAlterTableRenameColumn:
-    """Phase 03 Cycle 6-7: ALTER TABLE ... RENAME COLUMN detection."""
+    """ALTER TABLE ... RENAME COLUMN detection."""
 
     def test_detect_rename_column(self):
         sql = "ALTER TABLE foo RENAME COLUMN old TO new;"
@@ -433,7 +433,7 @@ class TestAlterTableRenameColumn:
 
 
 class TestOwnerToDetection:
-    """Phase 03 Cycle 8: ALTER (TABLE|VIEW|MATERIALIZED VIEW) ... OWNER TO."""
+    """ALTER (TABLE|VIEW|MATERIALIZED VIEW) ... OWNER TO."""
 
     def test_detect_alter_table_owner_to(self):
         sql = "ALTER TABLE foo OWNER TO alice;"
@@ -487,7 +487,6 @@ class TestPhase03KnownLimitations:
         assert len(matches) == 1
 
 
-# Phase 04 Cycle 2: PatternDefinition.severity plumbing
 class TestPatternSeverityPlumbing:
     def test_pattern_definition_default_severity_error(self):
         from confiture.core.idempotency.patterns import PATTERNS
@@ -512,7 +511,6 @@ class TestPatternSeverityPlumbing:
         assert matches[0].severity == "info"
 
 
-# Phase 04 Cycle 3-4: CREATE OR REPLACE VIEW shape-risk note
 class TestCreateOrReplaceViewNote:
     def test_bare_cor_view_emits_info_finding(self):
         sql = "CREATE OR REPLACE VIEW v_users AS SELECT id FROM users;"
@@ -528,7 +526,6 @@ class TestCreateOrReplaceViewNote:
         assert matches == []
 
 
-# Phase 04 Cycle 5-6: CREATE OR REPLACE FUNCTION / PROCEDURE notes
 class TestCreateOrReplaceFunctionNote:
     def test_bare_cor_function_emits_info_finding(self):
         sql = "CREATE OR REPLACE FUNCTION f_summary() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;"

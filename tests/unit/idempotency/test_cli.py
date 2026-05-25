@@ -402,7 +402,7 @@ def _write_py_migration(
 
 
 class TestIdempotencyValidatePythonMigrations:
-    """Phase 02: --idempotent now scans .py migrations alongside .up.sql."""
+    """--idempotent scans .py migrations alongside .up.sql."""
 
     def test_python_only_dir_with_non_idempotent_create_table_exits_1(self, tmp_path: Path) -> None:
         migrations_dir = tmp_path / "db" / "migrations"
@@ -430,7 +430,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert "CREATE TABLE" in result.stdout or "CREATE_TABLE" in result.stdout
 
     def test_violation_carries_source_line_in_json(self, tmp_path: Path) -> None:
-        """Cycle 2: source_line is the .py line of the self.execute() call."""
+        """source_line is the .py line of the self.execute() call."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         py_path = _write_py_migration(
@@ -463,7 +463,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert v["source_line"] == 9  # body starts at indented line 9 of template
 
     def test_sql_violation_omits_source_line(self, tmp_path: Path) -> None:
-        """Cycle 2: SQL-origin violations still have no source_line key."""
+        """SQL-origin violations still have no source_line key."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         (migrations_dir / "001_x.up.sql").write_text("CREATE TABLE foo (id int);")
@@ -487,7 +487,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert "source_line" not in payload["violations"][0]
 
     def test_mixed_sql_and_python_directory(self, tmp_path: Path) -> None:
-        """Cycle 3: violations from both kinds appear in the same report."""
+        """Violations from both kinds appear in the same report."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         (migrations_dir / "001_sqlonly.up.sql").write_text("CREATE TABLE sql_one (id int);")
@@ -514,7 +514,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert "20260101000002_pyonly.py" in result.stdout
 
     def test_dynamic_only_python_migration_warns_but_passes(self, tmp_path: Path) -> None:
-        """Cycle 4: dynamic-only migration prints warnings, exit 0."""
+        """Dynamic-only migration prints warnings, exit 0."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _write_py_migration(
@@ -541,7 +541,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert "dynamic" in result.stdout.lower()
 
     def test_warnings_in_json_output(self, tmp_path: Path) -> None:
-        """Cycle 5: JSON has warnings and has_warnings keys."""
+        """JSON has warnings and has_warnings keys."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _write_py_migration(
@@ -576,7 +576,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert isinstance(w["message"], str)
 
     def test_violations_and_warnings_together(self, tmp_path: Path) -> None:
-        """Cycle 6: static violation + dynamic warning render together; exit 1."""
+        """Static violation + dynamic warning render together; exit 1."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _write_py_migration(
@@ -608,7 +608,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert "⚠️" in result.stdout
 
     def test_execute_file_validates_referenced_sql(self, tmp_path: Path) -> None:
-        """Cycle 7: execute_file("...") flows its SQL through the validator."""
+        """execute_file("...") flows its SQL through the validator."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         schema_dir = tmp_path / "db" / "schema"
@@ -643,7 +643,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert "CREATE TABLE" in result.stdout or "CREATE_TABLE" in result.stdout
 
     def test_init_and_underscore_py_files_are_ignored(self, tmp_path: Path) -> None:
-        """Cycle 8: __init__.py, _helpers.py, no-digit-prefix files are skipped."""
+        """__init__.py, _helpers.py, no-digit-prefix files are skipped."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         (migrations_dir / "__init__.py").write_text(
@@ -694,10 +694,10 @@ class TestIdempotencyValidatePythonMigrations:
 
 
 class TestIdempotencyFixPythonMigrations:
-    """Phase 02b: migrate fix --idempotent is Python-aware."""
+    """migrate fix --idempotent is Python-aware."""
 
     def test_python_only_dir_no_writes_applied(self, tmp_path: Path) -> None:
-        """Cycle 1: .py-only dir, no fixes applied; .py file never rewritten."""
+        """.py-only dir: no fixes applied, .py file never rewritten."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         py_path = _write_py_migration(
@@ -728,7 +728,7 @@ class TestIdempotencyFixPythonMigrations:
         assert "20260601000000_needs_fix.py" in result.stdout
 
     def test_mixed_dir_sql_fixed_python_untouched(self, tmp_path: Path) -> None:
-        """Cycle 2: .sql is rewritten in place; .py left untouched."""
+        """.sql is rewritten in place; .py left untouched."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 
@@ -767,7 +767,7 @@ class TestIdempotencyFixPythonMigrations:
         assert "cannot be auto-fixed" in result.stdout
 
     def test_json_output_includes_manual_fix_required(self, tmp_path: Path) -> None:
-        """Cycle 3: JSON output lists .py files under manual_fix_required."""
+        """JSON output lists .py files under manual_fix_required."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 
@@ -808,7 +808,7 @@ class TestIdempotencyFixPythonMigrations:
         )
 
     def test_dry_run_does_not_write_either_kind(self, tmp_path: Path) -> None:
-        """Cycle 4: --dry-run leaves both .sql and .py on disk untouched."""
+        """--dry-run leaves both .sql and .py on disk untouched."""
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 

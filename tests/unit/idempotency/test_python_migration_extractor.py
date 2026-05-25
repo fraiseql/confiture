@@ -18,7 +18,6 @@ def _write(tmp_path: Path, name: str, body: str) -> Path:
     return path
 
 
-# Cycle 1: skeleton + happy-path constant string
 class TestSingleConstantExecute:
     def test_extracts_single_constant_execute(self, tmp_path: Path) -> None:
         migration = _write(
@@ -47,7 +46,6 @@ class TestSingleConstantExecute:
         assert snippet.sql_file is None
 
 
-# Cycle 2: multiple statements in one file, deterministic ordering
 class TestMultipleStatementOrdering:
     def test_extracts_multiple_executes_sorted_by_line(self, tmp_path: Path) -> None:
         migration = _write(
@@ -78,7 +76,6 @@ class TestMultipleStatementOrdering:
         assert [s.source_line for s in result.snippets] == [7, 8, 9, 11]
 
 
-# Cycle 3: f-strings with only static parts
 class TestStaticFString:
     def test_extracts_static_fstring(self, tmp_path: Path) -> None:
         migration = _write(
@@ -126,7 +123,6 @@ class TestStaticFString:
         assert "CREATE TABLE foo (id int);" in result.snippets[0].sql
 
 
-# Cycle 4: dynamic f-string emits warning
 class TestDynamicFStringWarning:
     def test_dynamic_fstring_emits_unresolved_warning(self, tmp_path: Path) -> None:
         migration = _write(
@@ -154,7 +150,6 @@ class TestDynamicFStringWarning:
         assert warn.source_line == 8
 
 
-# Cycle 5: dynamic variable execute emits warning
 class TestDynamicExecuteWarning:
     def test_variable_execute_emits_dynamic_warning(self, tmp_path: Path) -> None:
         migration = _write(
@@ -181,7 +176,6 @@ class TestDynamicExecuteWarning:
         assert warn.source_line == 8
 
 
-# Cycle 6: constant string concatenation via `+`
 class TestConstantConcatenation:
     def test_extracts_constant_plus_constant(self, tmp_path: Path) -> None:
         migration = _write(
@@ -227,7 +221,6 @@ class TestConstantConcatenation:
         assert result.warnings[0].kind == WarningKind.DYNAMIC_EXECUTE
 
 
-# Cycle 7: self.execute_file(constant_path) — bounded to project root
 class TestExecuteFileConstantPath:
     def test_execute_file_reads_referenced_sql(self, tmp_path: Path) -> None:
         (tmp_path / "db" / "migrations").mkdir(parents=True)
@@ -268,7 +261,6 @@ class TestExecuteFileConstantPath:
         assert snippet.source_line == 7
 
 
-# Cycle 7b: execute_file("../../../escapes") emits EXECUTE_FILE_ESCAPED
 class TestExecuteFileEscape:
     def test_path_outside_project_root_is_rejected(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         # Two sibling directories. The project root contains a `db/` anchor;
@@ -318,7 +310,6 @@ class TestExecuteFileEscape:
         assert warn.source_line == 7
 
 
-# Cycle 8: execute_file(missing_file) emits warning
 class TestExecuteFileMissing:
     def test_missing_constant_path_emits_warning(self, tmp_path: Path) -> None:
         (tmp_path / "db" / "migrations").mkdir(parents=True)
@@ -351,7 +342,6 @@ class TestExecuteFileMissing:
         assert result.warnings[0].kind == WarningKind.EXECUTE_FILE_MISSING
 
 
-# Cycle 9: execute_file(var) emits DYNAMIC_EXECUTE_FILE
 class TestDynamicExecuteFile:
     def test_dynamic_path_emits_warning(self, tmp_path: Path) -> None:
         migration = _write(
@@ -379,7 +369,6 @@ class TestDynamicExecuteFile:
         assert WarningKind.DYNAMIC_EXECUTE_FILE in kinds
 
 
-# Cycle 10: syntactically invalid .py
 class TestSyntaxError:
     def test_invalid_syntax_returns_warning_not_exception(self, tmp_path: Path) -> None:
         migration = _write(
@@ -396,7 +385,6 @@ class TestSyntaxError:
         assert result.warnings[0].source_file == migration
 
 
-# Cycle 11: ignore non-self attribute calls
 class TestNonSelfReceiverIgnored:
     def test_logger_and_other_object_executes_are_ignored(self, tmp_path: Path) -> None:
         migration = _write(
@@ -422,7 +410,6 @@ class TestNonSelfReceiverIgnored:
         assert result.warnings == []
 
 
-# Cycle 12: positional-only first arg, plus sql= keyword form
 class TestKeywordSqlArgument:
     def test_positional_arg_extracted_kwargs_ignored(self, tmp_path: Path) -> None:
         migration = _write(

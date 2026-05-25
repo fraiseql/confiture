@@ -166,7 +166,6 @@ class TestIdempotencyReport:
         assert len(by_file["002_more.up.sql"]) == 1
 
 
-# Phase 04 Cycle 1: severity field + has_blocking_violations
 class TestSeverityField:
     def test_default_severity_is_error(self):
         from confiture.core.idempotency.models import (

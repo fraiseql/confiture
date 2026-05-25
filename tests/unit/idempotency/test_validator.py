@@ -251,7 +251,6 @@ class TestReportGeneration:
         assert "test.sql" in json_str
 
 
-# Phase 03 Cycle 9: validate_directory library API scans .py migrations
 class TestValidateDirectoryPythonMigrations:
     def test_validate_directory_scans_python_migrations(self, tmp_path):
         """Default include_python=True picks up .py files."""
