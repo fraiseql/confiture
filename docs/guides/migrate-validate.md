@@ -96,6 +96,74 @@ Adding a preceding `DROP <KIND> IF EXISTS <name>` for the same object
 silences the note — that's the explicit "I've thought about this"
 signal.
 
+### Closing the transitive-dependent gap with `migrate preflight --check-dependents`
+
+The `CREATE OR REPLACE` info-severity note above is purely static: it
+flags any bare CoR statement, but can't tell you *which* of the
+object's live dependents are about to break.
+
+`confiture migrate preflight --against <url> --check-dependents` closes
+that gap. Against a live preflight DB, it enumerates the views,
+matviews, and functions that depend on each `CREATE OR REPLACE` target
+in the pending migrations (via `pg_depend`).
+
+```bash
+# Fail the gate if any CoR target has live dependents
+confiture migrate preflight --against postgresql://localhost/preflight \
+  --check-dependents fail
+
+# Render dependents informationally; exit code unaffected
+confiture migrate preflight --against postgresql://localhost/preflight \
+  --check-dependents warn
+
+# Off by default — no behavior change unless you opt in
+confiture migrate preflight --against postgresql://localhost/preflight
+```
+
+When `--check-dependents` is on without `--against`, the check prints a
+loud skip message and exits 0 (it's deliberately not silent — the
+absence of a preflight DB is something you should see). When `--against`
+is set but the live DB connection fails, the report status flips to
+`skipped` with a `connection_failed` reason.
+
+`--check-dependents` requires the `[ast]` extra
+(`pip install fraiseql-confiture[ast]`). Without pglast installed, the
+flag emits a clean install hint instead of silently passing.
+
+**Object types covered**: views, materialized views, functions, and
+procedures referenced by CoR statements. Tables, composite types, and
+trigger functions are out of scope for now. The check enumerates
+dependents — it does not predict which will actually break. Use the
+list as a checklist for manual review.
+
+JSON output adds a top-level `dependent_analysis` entry:
+
+```json
+{
+  "dependent_analysis": {
+    "status": "ok",
+    "has_blocking": true,
+    "entries": [
+      {
+        "kind": "view",
+        "qualified": "public.v_users",
+        "source_file": "db/migrations/001_cor.up.sql",
+        "source_line": null,
+        "severity": "error",
+        "dependents": [
+          {
+            "kind": "view",
+            "schema": "public",
+            "name": "v_active_users",
+            "referenced_columns": ["email", "id"]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ### What gets scanned
 
 - Every `*.up.sql` file in the migrations directory.
