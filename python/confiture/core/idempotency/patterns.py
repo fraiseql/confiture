@@ -1,16 +1,32 @@
 """Pattern detection for non-idempotent SQL statements.
 
-This module provides regex-based detection of SQL patterns that are not
-idempotent by default and may fail when re-run.
+This module exposes :func:`detect_non_idempotent_patterns`, a dispatcher
+that prefers the pglast-backed AST detector when available and falls
+back to a regex-only implementation otherwise. The fallback is also the
+slim-install path for users who don't have the ``[ast]`` extra.
+
+Setting ``CONFITURE_IDEMPOTENCY_FORCE_REGEX=1`` pins the dispatcher to
+the regex backend — kept as an escape hatch for one release after the
+0.14.0 cutover in case a user hits an AST regression.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from confiture.core.idempotency.ast_detector import _detect_via_ast, is_pglast_available
 from confiture.core.idempotency.models import IdempotencyPattern
+
+_FORCE_REGEX_ENV = "CONFITURE_IDEMPOTENCY_FORCE_REGEX"
+
+
+def _force_regex() -> bool:
+    """Return True when the force-regex env var is set to a truthy value."""
+    value = os.environ.get(_FORCE_REGEX_ENV, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -530,8 +546,10 @@ def _filter_drop_create_view_pairs(sql: str, matches: list[PatternMatch]) -> lis
 def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
     """Detect non-idempotent SQL patterns in the given SQL.
 
-    Scans the SQL for patterns that are not idempotent by default,
-    such as CREATE TABLE without IF NOT EXISTS.
+    Dispatches to the pglast-backed AST detector when available, falling
+    back to the regex detector when pglast isn't installed, when
+    ``CONFITURE_IDEMPOTENCY_FORCE_REGEX`` is set, or when pglast raises
+    a parse error (typically on partial/templated SQL).
 
     Args:
         sql: The SQL string to analyze
@@ -546,6 +564,24 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
         1
         >>> matches[0].pattern
         <IdempotencyPattern.CREATE_TABLE: 'CREATE_TABLE'>
+    """
+    if is_pglast_available() and not _force_regex():
+        try:
+            return _detect_via_ast(sql)
+        except Exception:  # noqa: BLE001 — pglast.parser.ParseError + defensive fallback
+            # The AST backend is best-effort; any failure (parse error,
+            # unexpected node shape) falls through to the regex backend
+            # so partial/templated SQL is still scanned.
+            pass
+    return _detect_via_regex(sql)
+
+
+def _detect_via_regex(sql: str) -> list[PatternMatch]:
+    """Regex-only implementation of :func:`detect_non_idempotent_patterns`.
+
+    Preserved unchanged from the pre-0.14.0 implementation so the slim
+    install path and the force-regex escape hatch keep their existing
+    behavior bit-for-bit.
     """
     matches: list[PatternMatch] = []
 

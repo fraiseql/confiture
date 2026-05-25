@@ -7,7 +7,9 @@ and strings for non-idempotent patterns.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.core.idempotency.models import (
     IdempotencyPattern,
@@ -17,6 +19,76 @@ from confiture.core.idempotency.models import (
 from confiture.core.idempotency.patterns import (
     detect_non_idempotent_patterns,
 )
+
+if TYPE_CHECKING:
+    from confiture.core.idempotency.python_migration_extractor import ExtractedSQL
+
+
+@dataclass(frozen=True)
+class _SnippetOrigin:
+    """Where a ``.py``-extracted snippet lives in the combined SQL.
+
+    The combined SQL is the concatenation of every ``self.execute(...)``
+    snippet extracted from a single migration file, joined with ``";\\n"``.
+    Each origin records the line range the snippet occupies in the
+    combined string plus the ``self.execute()`` call's source line in
+    the ``.py`` file, so violations can be back-mapped to the user-visible
+    call site.
+    """
+
+    combined_start_line: int
+    combined_end_line: int
+    source_line: int
+
+
+def _combine_python_snippets(
+    snippets: list[ExtractedSQL],
+) -> tuple[str, list[_SnippetOrigin]]:
+    """Concatenate Python-extracted snippets into one parseable SQL string.
+
+    Each snippet is appended with a terminating ``;`` (added when absent
+    so the next statement parses cleanly) and joined with newlines. The
+    returned origins let :func:`_map_combined_line_to_source` translate
+    a violation in the combined SQL back to its ``self.execute()`` call.
+
+    A single :func:`detect_non_idempotent_patterns` pass over the
+    combined string is what makes cross-snippet DROP+CREATE pairs
+    recognizable — previously each snippet went through the detector
+    independently, so a DROP in one call and a CREATE in the next looked
+    like an unpaired violation.
+    """
+    parts: list[str] = []
+    origins: list[_SnippetOrigin] = []
+    cursor_line = 1
+    for snippet in snippets:
+        sql = snippet.sql.rstrip()
+        if not sql.endswith(";"):
+            sql = sql + ";"
+        line_count = sql.count("\n") + 1
+        origins.append(
+            _SnippetOrigin(
+                combined_start_line=cursor_line,
+                combined_end_line=cursor_line + line_count - 1,
+                source_line=snippet.source_line,
+            )
+        )
+        parts.append(sql)
+        # ``"\n".join`` doesn't add an extra blank line between parts —
+        # snippet N+1's first line is the line right after snippet N's
+        # last, so advancing the cursor by ``line_count`` lands us on
+        # the next snippet's starting line.
+        cursor_line += line_count
+    return "\n".join(parts), origins
+
+
+def _map_combined_line_to_source(
+    combined_line: int, origins: list[_SnippetOrigin]
+) -> _SnippetOrigin | None:
+    """Find the snippet origin that owns ``combined_line``, or None."""
+    for origin in origins:
+        if origin.combined_start_line <= combined_line <= origin.combined_end_line:
+            return origin
+    return None
 
 
 class IdempotencyValidator:
@@ -175,11 +247,22 @@ class IdempotencyValidator:
                 extraction = extract_sql_from_python_migration(py_path)
                 report.add_file_scanned(str(py_path))
                 report.warnings.extend(extraction.warnings)
-                for snippet in extraction.snippets:
-                    snippet_report = self.validate_sql(snippet.sql, file_path=str(py_path))
-                    for violation in snippet_report.violations:
-                        violation.source_line = snippet.source_line
-                        report.add_violation(violation)
+                if not extraction.snippets:
+                    continue
+                combined_sql, origins = _combine_python_snippets(extraction.snippets)
+                combined_report = self.validate_sql(combined_sql, file_path=str(py_path))
+                for violation in combined_report.violations:
+                    origin = _map_combined_line_to_source(violation.line_number, origins)
+                    if origin is not None:
+                        # Preserve the pre-0.14.0 contract: ``line_number``
+                        # is snippet-local (so users can see "line 1 of
+                        # the snippet"); ``source_line`` is the .py file
+                        # line of the originating ``self.execute()`` call.
+                        violation.line_number = (
+                            violation.line_number - origin.combined_start_line + 1
+                        )
+                        violation.source_line = origin.source_line
+                    report.add_violation(violation)
 
         return report
 

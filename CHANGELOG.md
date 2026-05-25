@@ -5,6 +5,60 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-05-25
+
+`migrate validate --idempotent` now uses PostgreSQL's own parser (via
+[pglast](https://github.com/lelit/pglast)) instead of regex. The cutover
+closes four regex-specific defects that issue #122 surfaced.
+
+### Fixed
+
+- **Schema-qualified `ADD COLUMN IF NOT EXISTS` no longer produces a
+  phantom violation.** Pre-0.14.0, `ALTER TABLE app.users ADD COLUMN IF
+  NOT EXISTS email TEXT;` was incorrectly reported as a
+  `ALTER_TABLE_ADD_COLUMN` violation because the regex's negative
+  lookahead competed with the schema-prefix capture (issue #122 Bug 1).
+- **Long identifiers in DROP+CREATE pairs are now recognized as
+  idempotent.** The regex pair recognizer truncated `pg_constraint` /
+  view / function names past a certain length, so the DROP and CREATE
+  appeared to target different objects (issue #122 Bug 2).
+- **Quoted identifiers** (`"My-Table"`, `"chk-x"`) are now flagged when
+  non-idempotent and matched correctly by pair recognizers. The regex
+  backend's `\w+` capture skipped them entirely.
+- **Multi-clause `ALTER TABLE` statements** flag every clause. The regex
+  backend only saw the first `ADD CONSTRAINT` in a comma-separated list.
+
+### Added
+
+- **Cross-snippet pair recognition for `.py` migrations.** A `DROP X IF
+  EXISTS` in one `self.execute()` followed by `CREATE X` in the next is
+  now treated as the idempotent pattern (pre-0.14.0 the second call was
+  flagged because each snippet went through the detector independently).
+- **`CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` escape hatch.** Pins the
+  detector to the regex backend for one release. Use if you hit an AST
+  regression; the variable will be removed in a future release.
+
+### Changed
+
+- `detect_non_idempotent_patterns` now dispatches to a two-tier
+  implementation: pglast-backed `_detect_via_ast` when available,
+  regex-only `_detect_via_regex` as the slim-install fallback. The
+  public interface is unchanged.
+- `IdempotencyValidator.validate_directory` combines all snippets per
+  `.py` file before running detection (the change that enables
+  cross-snippet pair recognition). `PatternMatch` and
+  `IdempotencyViolation` shapes are unchanged — `IdempotencyFixer`
+  produces byte-identical `fix()` and `dry_run()` output on both
+  backends (verified by `test_backend_dispatch.py`).
+
+### Performance
+
+- AST backend benchmarked against the regex backend over three
+  representative fixtures (4 KB → 11 KB schemas, 1000 iterations each):
+  AST is faster on the largest file (0.65 ms vs 1.52 ms p95) and ≤1.6×
+  slower on the smallest. All measurements under 1.5 ms p95 — well
+  under the 50 ms threshold from the cutover plan.
+
 ## [0.13.0] - 2026-05-25
 
 `migrate validate --idempotent` overhaul plus a live-DB dependent-objects

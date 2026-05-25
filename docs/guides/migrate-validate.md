@@ -53,6 +53,43 @@ The detector recognizes:
 is recognized as already-idempotent and not flagged (matches the existing
 `DROP VIEW IF EXISTS` + `CREATE VIEW` recognizer).
 
+### AST-backed detector (default in 0.14.0)
+
+Starting in 0.14.0 the detector uses PostgreSQL's own parser (via
+[pglast](https://github.com/lelit/pglast)) to recognize statements
+structurally instead of via regex. The cutover closes four cases the
+regex backend mishandled or missed:
+
+- **`ADD COLUMN IF NOT EXISTS` on a schema-qualified table** — previously
+  reported a phantom `ALTER_TABLE_ADD_COLUMN` violation (issue #122 Bug 1).
+- **Long constraint / view / function names in `DROP IF EXISTS` + `CREATE`
+  pairs** — previously the pair recognizer truncated the name, so the
+  pair wasn't recognized as idempotent (issue #122 Bug 2).
+- **Quoted identifiers** (`"My-Table"`, `"chk-x"`) — previously slipped
+  through every regex pattern because `\w+` doesn't match `-`.
+- **Multi-clause `ALTER`** — `ALTER TABLE foo ADD CONSTRAINT a …, ADD
+  CONSTRAINT b …` now flags both clauses (regex only saw the first).
+
+The detector also recognizes cross-snippet DROP+CREATE pairs in
+``.py`` migrations: a `DROP VIEW IF EXISTS v;` in one `self.execute()`
+followed by `CREATE VIEW v …` in the next is now treated as the
+idempotent DROP+CREATE pattern (pre-0.14.0 the second call was flagged).
+
+The regex backend is preserved as the slim-install fallback (installing
+`fraiseql-confiture` without the `[ast]` extra still works). It also
+serves as an escape hatch: set
+`CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` to pin the dispatcher to the
+regex path for one release if you hit an AST regression. The env var
+will be removed in a future release.
+
+```bash
+# Install with the AST backend (recommended)
+pip install "fraiseql-confiture[ast]"
+
+# Pin to regex (one-release escape hatch)
+CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 confiture migrate validate --idempotent
+```
+
 ### Three signal types
 
 The report uses three distinct words. Keep them straight:

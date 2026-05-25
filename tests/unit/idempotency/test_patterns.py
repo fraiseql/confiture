@@ -1,5 +1,7 @@
 """Tests for idempotency pattern detection."""
 
+import pytest
+
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import (
     PatternMatch,
@@ -469,26 +471,31 @@ class TestOwnerToDetection:
         }
 
 
-class TestPhase03KnownLimitations:
-    """Document quoted-identifier and multi-clause limitations of the regex detector."""
+class TestRegexBackendLimitations:
+    """Document quoted-identifier and multi-clause limitations of the regex detector.
 
-    def test_quoted_identifier_currently_slips_through(self):
-        # Known limitation: \w+ does not match quoted identifiers.
-        # A future pglast-backed detector will close this gap.
+    Both tests assert behavior specific to the regex backend (still the
+    slim-install fallback, so the limitations are still real on that
+    path). The AST backend has its own coverage for these cases in
+    ``test_ast_visitors.py`` asserting the opposite outcome — both
+    files exist deliberately, one per backend.
+    """
+
+    @pytest.mark.regex_only(reason="AST backend correctly flags quoted identifiers")
+    def test_quoted_identifier_slips_through_regex(self):
         sql = 'ALTER TABLE "My-Table" ADD CONSTRAINT "chk-x" CHECK (id > 0);'
         matches = detect_non_idempotent_patterns(sql)
-        assert matches == []  # currently missed
+        assert matches == []  # regex's \w+ doesn't match quoted identifiers.
 
-    def test_multi_clause_alter_only_first_constraint_flagged(self):
-        # Known limitation: only the first ADD CONSTRAINT in a multi-clause
-        # ALTER is detected. Comma-split parsing belongs in a future AST upgrade.
+    @pytest.mark.regex_only(reason="AST backend flags every cmd in a multi-clause ALTER")
+    def test_multi_clause_alter_only_first_clause_flagged_by_regex(self):
         sql = "ALTER TABLE foo ADD CONSTRAINT a CHECK (id > 0), ADD CONSTRAINT b CHECK (id < 10);"
         matches = detect_non_idempotent_patterns(sql)
-        assert len(matches) == 1
+        assert len(matches) == 1  # regex matches only the first comma-separated clause.
 
 
 class TestPatternSeverityPlumbing:
-    def test_pattern_definition_default_severity_error(self):
+    def test_pattern_definition_default_severity_error(self):  # backend-agnostic
         from confiture.core.idempotency.patterns import PATTERNS
 
         # All pre-0.13.0 patterns default to "error". Only the three

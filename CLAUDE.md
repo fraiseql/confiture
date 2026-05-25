@@ -120,18 +120,33 @@ dev = [
 
 ### SQL Parsing Architecture
 
-`SchemaDiffer` uses a two-tier parsing strategy:
+Two modules use the same two-tier strategy — **pglast primary, regex
+fallback** — so behavior stays consistent across the codebase:
+
+- **`SchemaDiffer`** (`python/confiture/core/differ.py`): parses `CREATE
+  TABLE` / `CREATE INDEX` / `CREATE TYPE AS ENUM` / `CREATE SEQUENCE` /
+  `ALTER TABLE ADD CONSTRAINT` for schema diffs.
+- **`detect_non_idempotent_patterns`** (`python/confiture/core/idempotency/patterns.py`,
+  AST visitors in `ast_detector.py`): recognizes non-idempotent CREATE
+  / ALTER / DROP for the `migrate validate --idempotent` gate. AST
+  cutover landed in 0.14.0 (see `docs/guides/migrate-validate.md`).
+  Set `CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` to pin to the regex
+  backend (one-release escape hatch).
+
+The two backends:
 
 1. **Primary — pglast** (`[ast]` extra, `pip install "fraiseql-confiture[ast]"`):
    Uses PostgreSQL's own C parser via `libpg_query`. No token/recursion limits,
    full PostgreSQL syntax support, handles schemas of any size including bulk seed data.
 
-2. **Fallback — sqlparse**: Used when pglast is not installed. Splits SQL into
-   individual statements before parsing (avoids `MAX_GROUPING_TOKENS = 10000` crash)
-   and filters to DDL-only, so non-DDL content (INSERT, COPY, GRANT) is ignored.
+2. **Fallback — sqlparse / regex**: Used when pglast is not installed.
+   `SchemaDiffer` splits SQL into individual statements before parsing
+   (avoids `MAX_GROUPING_TOKENS = 10000` crash) and filters to DDL-only.
+   The idempotency detector falls through to a regex-only implementation
+   that's frozen at pre-0.14.0 behavior.
 
-Both paths share the same regex pass for `CREATE INDEX`, `CREATE TYPE AS ENUM`,
-`CREATE SEQUENCE`, and `ALTER TABLE ADD CONSTRAINT`.
+In `SchemaDiffer`, both paths share the same regex pass for `CREATE INDEX`,
+`CREATE TYPE AS ENUM`, `CREATE SEQUENCE`, and `ALTER TABLE ADD CONSTRAINT`.
 
 ### Rust Extension (Optional Performance)
 
