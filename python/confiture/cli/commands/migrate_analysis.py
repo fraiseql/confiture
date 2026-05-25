@@ -1846,6 +1846,95 @@ def _display_against_result(
         cons.print("  [dim](Rolled back — preflight DB unchanged)[/dim]")
 
 
+def _run_dependent_check(
+    *,
+    mode: str,
+    pending_files: list[Path],
+    migrations_dir: Path,
+    against_url: str,
+) -> Any:
+    """Resolve pending migrations' CoR targets and run the pg_depend check.
+
+    On any error (pglast missing, connection failure, query failure) returns
+    a skipped report with a clear reason rather than raising — the caller
+    decides how to surface that. ``mode`` is ``"fail"`` (severity=error) or
+    ``"warn"`` (severity=info).
+    """
+    from confiture.models.preflight import DependentAnalysisReport
+
+    try:
+        from confiture.core.cor_extractor import find_cor_targets_in_file
+    except ImportError:
+        error_console.print(
+            "[red]❌ Dependent check requires pglast. "
+            "Install with: pip install fraiseql-confiture[ast][/red]"
+        )
+        return DependentAnalysisReport(
+            entries=[], status="skipped", skip_reason="pglast_not_installed"
+        )
+
+    targets: list[Any] = []
+    for migration_file in pending_files:
+        targets.extend(find_cor_targets_in_file(migration_file, project_root=migrations_dir))
+
+    if not targets:
+        return DependentAnalysisReport(entries=[], status="ok")
+
+    import psycopg
+
+    from confiture.core.dependent_objects import DependentObjectsChecker
+
+    severity = "info" if mode == "warn" else "error"
+    try:
+        with psycopg.connect(against_url) as conn:
+            return DependentObjectsChecker(severity=severity).check(targets, conn)
+    except psycopg.Error as e:
+        error_console.print(f"[red]❌ Dependent check connection failed: {e}[/red]")
+        return DependentAnalysisReport(
+            entries=[], status="skipped", skip_reason="connection_failed"
+        )
+
+
+def _display_dependent_analysis(report: Any, cons: Any) -> None:
+    """Render the dependent-objects analysis section."""
+    cons.print()
+    if report.status == "skipped":
+        cons.print(
+            f"[yellow]⚠️  Dependent analysis skipped[/yellow] [dim]({report.skip_reason})[/dim]"
+        )
+        return
+
+    if not report.entries:
+        cons.print("[green]✓[/green] No CREATE OR REPLACE targets in pending migrations.")
+        return
+
+    blocking = report.has_blocking()
+    if blocking:
+        cons.print("[red]Dependent analysis — live dependents found:[/red]")
+    elif any(e.dependents for e in report.entries):
+        cons.print("[yellow]Dependent analysis — live dependents (informational):[/yellow]")
+    else:
+        cons.print("[green]✓[/green] No dependents found for replaced objects.")
+        return
+
+    for entry in report.entries:
+        if not entry.dependents:
+            continue
+        sev = entry.severity
+        marker = "[red]✗[/red]" if sev == "error" else "[yellow]ℹ[/yellow]"
+        cons.print(
+            f"  {marker} {entry.target.kind} [cyan]{entry.target.qualified}[/cyan] "
+            f"is being replaced; {len(entry.dependents)} dependent(s):"
+        )
+        for dep in entry.dependents:
+            cols = (
+                f"  [dim](references: {', '.join(dep.referenced_columns)})[/dim]"
+                if dep.referenced_columns
+                else ""
+            )
+            cons.print(f"      - {dep.kind} [cyan]{dep.schema}.{dep.name}[/cyan]{cols}")
+
+
 def migrate_preflight(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -1899,6 +1988,17 @@ def migrate_preflight(
             "By default such migrations are skipped."
         ),
     ),
+    check_dependents: str = typer.Option(
+        "off",
+        "--check-dependents",
+        help=(
+            "Enumerate live dependents of CREATE OR REPLACE targets via "
+            "pg_depend on the --against preflight DB. "
+            "'off' (default), 'fail' (exit 1 on dependents found), or "
+            "'warn' (render dependents as informational, exit code unchanged). "
+            "Requires the [ast] extra (pglast)."
+        ),
+    ),
 ) -> None:
     """Check if pending migrations are safe to deploy.
 
@@ -1940,12 +2040,31 @@ def migrate_preflight(
 
     from confiture.core.preflight import run_preflight
 
+    if check_dependents not in {"off", "fail", "warn"}:
+        error_console.print(
+            f"[red]❌ Invalid --check-dependents value: {check_dependents!r}. "
+            "Must be one of 'off', 'fail', 'warn'.[/red]"
+        )
+        raise typer.Exit(2)
+
     result = run_preflight(migrations_dir)
 
     if against is None:
         # Backward-compatible path: flat output, no --against execution.
+        dependent_skip_payload: dict[str, Any] | None = None
+        if check_dependents != "off":
+            dependent_skip_payload = {
+                "status": "skipped",
+                "entries": [],
+                "has_blocking": False,
+                "skip_reason": "no_preflight_db",
+            }
+
         if format_type == "json":
-            _output_json(result.to_dict(), None, console)
+            payload = result.to_dict()
+            if dependent_skip_payload is not None:
+                payload["dependent_analysis"] = dependent_skip_payload
+            _output_json(payload, None, console)
             if not result.safe_to_deploy:
                 raise typer.Exit(1)
             return
@@ -1998,6 +2117,12 @@ def migrate_preflight(
         else:
             console.print("  [red]→ Not safe to deploy with rollback guarantee[/red]")
             raise typer.Exit(1)
+
+        if check_dependents != "off":
+            console.print(
+                "[yellow]⚠️  Dependent check skipped: no preflight DB configured. "
+                "Pass --against <url> to enable.[/yellow]"
+            )
         return
 
     # --against path: static analysis + exhaustive execution against preflight DB.
@@ -2029,14 +2154,29 @@ def migrate_preflight(
         error_console.print(f"[red]❌ Connection to --against URL failed: {e}[/red]")
         raise typer.Exit(2) from e
 
-    if format_type == "json":
-        _output_json(
-            {"static": result.to_dict(), "against": against_result.to_dict()},
-            None,
-            console,
+    dependent_report = None
+    if check_dependents != "off":
+        dependent_report = _run_dependent_check(
+            mode=check_dependents,
+            pending_files=pending_files,
+            migrations_dir=migrations_dir,
+            against_url=against,
         )
+
+    if format_type == "json":
+        payload: dict[str, Any] = {
+            "static": result.to_dict(),
+            "against": against_result.to_dict(),
+        }
+        if dependent_report is not None:
+            payload["dependent_analysis"] = dependent_report.to_dict()
+        _output_json(payload, None, console)
     else:
         _display_against_result(against_result, format_type, console)
+        if dependent_report is not None:
+            _display_dependent_analysis(dependent_report, console)
 
     if not against_result.all_passed:
+        raise typer.Exit(1)
+    if dependent_report is not None and dependent_report.has_blocking():
         raise typer.Exit(1)
