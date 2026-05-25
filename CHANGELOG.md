@@ -5,6 +5,160 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-05-25
+
+`migrate validate --idempotent` overhaul plus a live-DB dependent-objects
+check in `migrate preflight`: Python migrations are now scanned, pattern
+coverage is broader, `CREATE OR REPLACE` shape-risk heuristics surface a
+class of fragile statements that previously slipped through silently, and
+the new `--check-dependents` flag closes the transitive-dependent blind
+spot by walking `pg_depend` against a live preflight DB.
+
+### Fixed
+
+- `confiture migrate validate --idempotent` now discovers `*.py` Confiture
+  migrations alongside `*.up.sql`. Inline `self.execute(...)` and
+  `self.execute_file(...)` SQL is extracted via the stdlib `ast` module and
+  run through the existing idempotency validator. Mixed `.up.sql` + `.py`
+  directories are supported; previously, Python-only migration directories
+  reported "✅ No migration files found to validate" and exited 0, making
+  any CI gate built on this command a no-op.
+
+### Added — Python migration support
+
+- New `confiture.core.idempotency.python_migration_extractor` module
+  (`extract_sql_from_python_migration`) is part of the public API for
+  callers who want to do their own preflight checks against Python
+  migrations. The extractor never imports or executes the migration file
+  — it parses the source with `ast.parse`. `execute_file()` paths are
+  bounded to a configurable `project_root`; paths that resolve outside
+  the root are rejected with an `EXECUTE_FILE_ESCAPED` warning instead
+  of being read.
+
+- Extractor warnings: when a `.py` migration contains dynamic SQL
+  (`self.execute(var)`, f-strings with interpolated values), the
+  validator emits a structured warning rather than silently treating the
+  file as validated. Warnings appear in both human and JSON output
+  (`warnings: [...]`, `has_warnings: bool`).
+
+- `IdempotencyViolation.source_line: int | None` — line number within
+  the originating `.py` file where `self.execute()` was called. `None`
+  for `.sql`-origin violations (back-compat preserved). `to_dict()`
+  omits the key when `None`, so JSON output for `.sql`-only runs is
+  byte-identical to 0.12.0.
+
+- `confiture migrate fix --idempotent` is now Python-aware: `.py`
+  migrations with violations are reported under `manual_fix_required` in
+  JSON and listed in text output. `.py` source is **never** written to —
+  AST-unparsing would lose formatting and comments.
+
+- `IdempotencyValidator.validate_directory()` now scans `*.py` migrations
+  alongside SQL via a new `include_python: bool = True` parameter. Library
+  callers that previously relied on the directory glob seeing only `.sql`
+  files can pass `include_python=False` for the old behavior.
+
+- `confiture.core.idempotency.is_migration_file` is exported (shared
+  between the CLI, the validator, and the fix command).
+
+### Added — pattern coverage
+
+- **New non-idempotent patterns detected by `migrate validate --idempotent`**:
+  - `ALTER TABLE … ADD CONSTRAINT <name> CHECK (…)`
+  - `ALTER TABLE … ADD CONSTRAINT <name> PRIMARY KEY (…)`
+  - `ALTER TABLE … ADD CONSTRAINT <name> UNIQUE (…)`
+  - `ALTER TABLE … RENAME COLUMN`
+  - `ALTER TABLE … OWNER TO`, `ALTER VIEW … OWNER TO`, and
+    `ALTER MATERIALIZED VIEW … OWNER TO` — all flagged together (same root
+    cause: the prior `CREATE` may have been rolled back)
+
+  Each new pattern has actionable suggestion text. Auto-fix is **not**
+  available — the safe form is a state-dependent DO block that users should
+  write by hand.
+
+- `DROP CONSTRAINT IF EXISTS <name>; ALTER TABLE … ADD CONSTRAINT <name> …`
+  pairs are now recognized as idempotent and not flagged (matching the
+  existing recognizer for `DROP VIEW IF EXISTS` + `CREATE VIEW`).
+
+### Added — CREATE OR REPLACE shape-risk heuristics
+
+- **Info-severity findings** for `CREATE OR REPLACE VIEW`,
+  `CREATE OR REPLACE FUNCTION`, and `CREATE OR REPLACE PROCEDURE`
+  statements not preceded by a matching `DROP … IF EXISTS`. CoR is
+  *almost* idempotent but fails on shape changes (view column add/remove,
+  function parameter rename); the heuristic surfaces awareness without
+  failing the gate.
+
+- New `--strict-cor` flag on `confiture migrate validate --idempotent`
+  treats info-severity findings as blocking (exit 1). Severity stays
+  `info`; only the gate's reaction changes.
+
+- `IdempotencyViolation.severity: "error" | "info"` field (default
+  `"error"`, so existing constructions are byte-identical). Reflected in
+  `to_dict()` always (cheap, avoids consumer ambiguity).
+
+- `IdempotencyReport.has_blocking_violations` property — True only when at
+  least one `error`-severity violation exists. Use this in CI gates;
+  `has_violations` still counts all severities for back-compat.
+
+### Added — live dependent-objects check in preflight
+
+- New `confiture migrate preflight --check-dependents` flag enumerates the
+  views, matviews, functions, and procedures that depend on each
+  `CREATE OR REPLACE` target in the pending migrations, via `pg_depend`
+  against the `--against` preflight DB. Closes the transitive-dependent
+  blind spot that the static CoR heuristic above cannot reach.
+
+  - `--check-dependents=fail` (or just `--check-dependents fail`): exit 1
+    when any target has live dependents.
+  - `--check-dependents=warn`: render dependents as informational; exit
+    code unaffected.
+  - Default `off` — no behavior change on upgrade.
+
+- Without `--against`, the check prints a loud "skipped" message and
+  exits 0 (deliberately not silent). When `--against` is set but the
+  live DB connection fails, the report status flips to `skipped` with a
+  `connection_failed` reason.
+
+- `--check-dependents` requires the `[ast]` extra (`pglast`). Without it
+  installed, the flag emits a clean install hint and exits with the
+  report's `pglast_not_installed` skip reason.
+
+- New public modules: `confiture.core.cor_extractor`
+  (`find_cor_targets`, `find_cor_targets_in_file`) — pglast walker for
+  CoR targets, supports both `.sql` and `.py` migrations via the Phase 01
+  extractor; `confiture.core.dependent_objects`
+  (`DependentObjectsChecker`) — runs the `pg_depend` queries.
+
+- New types in `confiture.models.preflight`: `CorTarget`,
+  `DependentObject`, `DependentEntry`, `DependentAnalysisReport` — all
+  with `to_dict()` for JSON output.
+
+### Contract notes
+
+- `IdempotencyReport.to_dict()` is additive-only across releases. Existing
+  keys keep their names and types. Consumers using
+  `.get("violations", [])` stay safe; consumers asserting on exact key
+  sets must update for the new `warnings`, `has_warnings`,
+  `has_blocking_violations`, per-violation `severity`, and per-violation
+  `source_line` keys.
+
+### Known limitations
+
+- Quoted identifiers (e.g. `ALTER TABLE "My-Table" ADD CONSTRAINT "chk-x"
+  CHECK …`) are not matched by the regex-based detectors. Documented
+  per-pattern; a future `pglast`-backed detector will close this gap
+  uniformly.
+- Multi-clause `ALTER TABLE foo ADD CONSTRAINT a, ADD CONSTRAINT b`
+  flags only the first clause. Comma-split parsing belongs in a future
+  SQL-AST upgrade.
+- Subclassed helpers (`self.run_template(...)` wrapping `self.execute`)
+  are not statically detectable. Documented in the migrate-validate
+  guide; use `execute()` directly for migration SQL.
+- `--check-dependents` covers views, matviews, functions, and
+  procedures. Composite types and trigger functions are out of scope
+  for this release. The check enumerates dependents — it does not
+  predict which will actually break (no static shape diff yet).
+
 ## [0.12.0] - 2026-05-22
 
 Post-review tightening of the ACL coverage feature (#120): parser parity
