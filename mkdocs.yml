@@ -84,6 +84,7 @@ nav:
       - Organizing SQL Files: organizing-sql-files.md
       - Meaningful Test UUIDs: meaningful-test-uuids.md
       - Migration Strategies: migration-strategies.md
+      - Validate Migrations: guides/migrate-validate.md
   - Reference:
       - CLI Commands: reference/cli.md
       - Configuration: reference/configuration.md
