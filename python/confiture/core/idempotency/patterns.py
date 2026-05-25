@@ -23,6 +23,9 @@ class PatternMatch:
         line_number: Line number where the match starts
         start_pos: Character position where match starts
         end_pos: Character position where match ends
+        severity: ``"error"`` (default — fails the gate) or ``"info"``
+            (heuristic finding — rendered but doesn't fail the gate
+            unless ``--strict-cor`` is passed at the CLI layer).
     """
 
     pattern: IdempotencyPattern
@@ -30,6 +33,7 @@ class PatternMatch:
     line_number: int
     start_pos: int
     end_pos: int
+    severity: str = "error"
 
 
 class PatternDefinition(NamedTuple):
@@ -38,6 +42,7 @@ class PatternDefinition(NamedTuple):
     pattern: IdempotencyPattern
     regex: re.Pattern[str]
     skip_regex: re.Pattern[str] | None = None
+    severity: str = "error"
 
 
 # Compile regex patterns for performance
@@ -144,12 +149,96 @@ PATTERNS: list[PatternDefinition] = [
     PatternDefinition(
         pattern=IdempotencyPattern.ALTER_TABLE_ADD_COLUMN,
         regex=re.compile(
-            r"ALTER\s+TABLE\s+(\w+\.)?(\w+)\s+ADD\s+(?:COLUMN\s+)?(?!IF\s+NOT\s+EXISTS\b)(\w+)",
+            r"ALTER\s+TABLE\s+(\w+\.)?(\w+)\s+ADD\s+(?:COLUMN\s+)?(?!IF\s+NOT\s+EXISTS\b)"
+            r"(?!CONSTRAINT\b)(\w+)",
             re.IGNORECASE | re.MULTILINE,
         ),
         skip_regex=re.compile(
             r"ALTER\s+TABLE\s+\w+\s+ADD\s+(?:COLUMN\s+)?IF\s+NOT\s+EXISTS", re.IGNORECASE
         ),
+    ),
+    # ALTER TABLE ADD CONSTRAINT ... PRIMARY KEY (must match before generic CHECK)
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY,
+        regex=re.compile(
+            r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:\w+\.)?\w+\s+ADD\s+CONSTRAINT\s+\w+\s+PRIMARY\s+KEY\b",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # ALTER TABLE ADD CONSTRAINT ... UNIQUE
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE,
+        regex=re.compile(
+            r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:\w+\.)?\w+\s+ADD\s+CONSTRAINT\s+\w+\s+UNIQUE\b",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # ALTER TABLE ADD CONSTRAINT ... CHECK
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK,
+        regex=re.compile(
+            r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:\w+\.)?\w+\s+ADD\s+CONSTRAINT\s+\w+\s+CHECK\b",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # ALTER TABLE RENAME COLUMN
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_TABLE_RENAME_COLUMN,
+        regex=re.compile(
+            r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:\w+\.)?\w+\s+RENAME\s+(?:COLUMN\s+)?\w+\s+TO\s+\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # ALTER MATERIALIZED VIEW ... OWNER TO (must come before plain VIEW)
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_MATVIEW_OWNER,
+        regex=re.compile(
+            r"ALTER\s+MATERIALIZED\s+VIEW\s+(?:\w+\.)?\w+\s+OWNER\s+TO\s+\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # ALTER VIEW ... OWNER TO
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_VIEW_OWNER,
+        regex=re.compile(
+            r"ALTER\s+VIEW\s+(?:\w+\.)?\w+\s+OWNER\s+TO\s+\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # ALTER TABLE ... OWNER TO
+    PatternDefinition(
+        pattern=IdempotencyPattern.ALTER_TABLE_OWNER,
+        regex=re.compile(
+            r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:\w+\.)?\w+\s+OWNER\s+TO\s+\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+    ),
+    # CREATE OR REPLACE VIEW — shape-change risk (info severity)
+    PatternDefinition(
+        pattern=IdempotencyPattern.CREATE_OR_REPLACE_VIEW_SHAPE_RISK,
+        regex=re.compile(
+            r"CREATE\s+OR\s+REPLACE\s+VIEW\s+(?:\w+\.)?\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+        severity="info",
+    ),
+    # CREATE OR REPLACE FUNCTION — parameter-rename risk (info severity)
+    PatternDefinition(
+        pattern=IdempotencyPattern.CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK,
+        regex=re.compile(
+            r"CREATE\s+OR\s+REPLACE\s+FUNCTION\s+(?:\w+\.)?\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+        severity="info",
+    ),
+    # CREATE OR REPLACE PROCEDURE — parameter-rename risk (info severity)
+    PatternDefinition(
+        pattern=IdempotencyPattern.CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK,
+        regex=re.compile(
+            r"CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+(?:\w+\.)?\w+",
+            re.IGNORECASE | re.MULTILINE,
+        ),
+        severity="info",
     ),
     # DROP TABLE without IF EXISTS
     PatternDefinition(
@@ -228,6 +317,13 @@ DO_BLOCK_TYPE_CHECK_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Pattern to detect DO blocks guarded by a pg_constraint existence check —
+# the safe wrapper for ALTER TABLE … ADD CONSTRAINT.
+DO_BLOCK_CONSTRAINT_CHECK_PATTERN = re.compile(
+    r"DO\s+\$\$.*?pg_constraint.*?ADD\s+CONSTRAINT.*?\$\$",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def _get_line_number(sql: str, position: int) -> int:
     """Get the line number for a character position in SQL.
@@ -283,15 +379,13 @@ def _find_do_blocks(sql: str) -> list[tuple[int, int]]:
         List of (start, end) positions for protected DO blocks
     """
     blocks = []
-
-    # Find DO blocks with EXCEPTION handlers
-    for match in DO_BLOCK_PATTERN.finditer(sql):
-        blocks.append((match.start(), match.end()))
-
-    # Find DO blocks with type existence checks
-    for match in DO_BLOCK_TYPE_CHECK_PATTERN.finditer(sql):
-        blocks.append((match.start(), match.end()))
-
+    for pattern in (
+        DO_BLOCK_PATTERN,
+        DO_BLOCK_TYPE_CHECK_PATTERN,
+        DO_BLOCK_CONSTRAINT_CHECK_PATTERN,
+    ):
+        for match in pattern.finditer(sql):
+            blocks.append((match.start(), match.end()))
     return blocks
 
 
@@ -306,6 +400,94 @@ def _is_in_do_block(position: int, do_blocks: list[tuple[int, int]]) -> bool:
         True if position is inside a DO block
     """
     return any(start <= position <= end for start, end in do_blocks)
+
+
+_ADD_CONSTRAINT_PATTERNS = frozenset(
+    {
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK,
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY,
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE,
+    }
+)
+
+
+def _filter_drop_add_constraint_pairs(sql: str, matches: list[PatternMatch]) -> list[PatternMatch]:
+    """Suppress ADD CONSTRAINT violations paired with DROP CONSTRAINT IF EXISTS.
+
+    Mirrors :func:`_filter_drop_create_view_pairs`: collects constraint
+    names dropped earlier in the same SQL, then strips any matching
+    ``ADD CONSTRAINT <name>`` violation. Constraint-name lookup is
+    case-insensitive.
+    """
+    drop_pattern = re.compile(
+        r"DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+((?:\w+|\"[^\"]+\"))",
+        re.IGNORECASE,
+    )
+    dropped: set[str] = {m.group(1).lower().replace('"', "") for m in drop_pattern.finditer(sql)}
+    if not dropped:
+        return matches
+
+    name_re = re.compile(
+        r"ADD\s+CONSTRAINT\s+((?:\w+|\"[^\"]+\"))",
+        re.IGNORECASE,
+    )
+    filtered: list[PatternMatch] = []
+    for match in matches:
+        if match.pattern in _ADD_CONSTRAINT_PATTERNS:
+            m = name_re.search(match.sql_snippet)
+            if m and m.group(1).lower().replace('"', "") in dropped:
+                continue
+        filtered.append(match)
+    return filtered
+
+
+_COR_SHAPE_RISK_KINDS: dict[IdempotencyPattern, str] = {
+    IdempotencyPattern.CREATE_OR_REPLACE_VIEW_SHAPE_RISK: "VIEW",
+    IdempotencyPattern.CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK: "FUNCTION",
+    IdempotencyPattern.CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK: "PROCEDURE",
+}
+
+
+def _earlier_drop_targets(sql: str, kind: str) -> set[str]:
+    """Collect object names dropped earlier in the same SQL with DROP IF EXISTS.
+
+    ``kind`` is one of ``"VIEW"``, ``"FUNCTION"``, ``"PROCEDURE"``. Returns
+    a set of lowercased, dequoted object names.
+    """
+    pattern = re.compile(
+        rf"DROP\s+{kind}\s+IF\s+EXISTS\s+((?:(?:\w+|\"[^\"]+\")\.)?(?:\w+|\"[^\"]+\"))",
+        re.IGNORECASE,
+    )
+    return {m.group(1).lower().replace('"', "") for m in pattern.finditer(sql)}
+
+
+def _filter_cor_shape_risk_with_drop(sql: str, matches: list[PatternMatch]) -> list[PatternMatch]:
+    """Suppress ``CREATE OR REPLACE`` shape-risk notes paired with a DROP IF EXISTS.
+
+    When the user explicitly chose the safer DROP+CREATE pattern, we don't
+    nag them with the heuristic note.
+    """
+    if not any(m.pattern in _COR_SHAPE_RISK_KINDS for m in matches):
+        return matches
+
+    drop_targets_by_kind = {
+        kind: _earlier_drop_targets(sql, kind) for kind in {"VIEW", "FUNCTION", "PROCEDURE"}
+    }
+
+    name_re = re.compile(
+        r"CREATE\s+OR\s+REPLACE\s+(?:VIEW|FUNCTION|PROCEDURE)\s+"
+        r"((?:(?:\w+|\"[^\"]+\")\.)?(?:\w+|\"[^\"]+\"))",
+        re.IGNORECASE,
+    )
+    filtered: list[PatternMatch] = []
+    for match in matches:
+        kind = _COR_SHAPE_RISK_KINDS.get(match.pattern)
+        if kind is not None:
+            m = name_re.search(match.sql_snippet)
+            if m and m.group(1).lower().replace('"', "") in drop_targets_by_kind[kind]:
+                continue
+        filtered.append(match)
+    return filtered
 
 
 def _filter_drop_create_view_pairs(sql: str, matches: list[PatternMatch]) -> list[PatternMatch]:
@@ -397,6 +579,7 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
                     line_number=_get_line_number(sql, match.start()),
                     start_pos=match.start(),
                     end_pos=match.end(),
+                    severity=pattern_def.severity,
                 )
             )
 
@@ -405,6 +588,8 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
     # CREATE OR REPLACE VIEW is unsafe for column renames, so the correct
     # idempotent pattern for views is DROP IF EXISTS + CREATE VIEW.
     matches = _filter_drop_create_view_pairs(sql, matches)
+    matches = _filter_drop_add_constraint_pairs(sql, matches)
+    matches = _filter_cor_shape_risk_with_drop(sql, matches)
 
     # Sort by position to maintain order
     matches.sort(key=lambda m: m.start_pos)

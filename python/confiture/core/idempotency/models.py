@@ -9,7 +9,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from confiture.core.idempotency.python_migration_extractor import ExtractionWarning
 
 
 class IdempotencyPattern(Enum):
@@ -30,6 +33,13 @@ class IdempotencyPattern(Enum):
     CREATE_SCHEMA = "CREATE_SCHEMA"
     CREATE_SEQUENCE = "CREATE_SEQUENCE"
     ALTER_TABLE_ADD_COLUMN = "ALTER_TABLE_ADD_COLUMN"
+    ALTER_TABLE_ADD_CONSTRAINT_CHECK = "ALTER_TABLE_ADD_CONSTRAINT_CHECK"
+    ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY = "ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY"
+    ALTER_TABLE_ADD_CONSTRAINT_UNIQUE = "ALTER_TABLE_ADD_CONSTRAINT_UNIQUE"
+    ALTER_TABLE_RENAME_COLUMN = "ALTER_TABLE_RENAME_COLUMN"
+    ALTER_TABLE_OWNER = "ALTER_TABLE_OWNER"
+    ALTER_VIEW_OWNER = "ALTER_VIEW_OWNER"
+    ALTER_MATVIEW_OWNER = "ALTER_MATVIEW_OWNER"
     DROP_TABLE = "DROP_TABLE"
     DROP_INDEX = "DROP_INDEX"
     DROP_FUNCTION = "DROP_FUNCTION"
@@ -37,6 +47,9 @@ class IdempotencyPattern(Enum):
     DROP_TYPE = "DROP_TYPE"
     DROP_SCHEMA = "DROP_SCHEMA"
     DROP_SEQUENCE = "DROP_SEQUENCE"
+    CREATE_OR_REPLACE_VIEW_SHAPE_RISK = "CREATE_OR_REPLACE_VIEW_SHAPE_RISK"
+    CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK = "CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK"
+    CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK = "CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK"
 
     @property
     def suggestion(self) -> str:
@@ -55,6 +68,34 @@ class IdempotencyPattern(Enum):
             IdempotencyPattern.ALTER_TABLE_ADD_COLUMN: (
                 "Wrap in DO block with EXCEPTION handler for duplicate_column"
             ),
+            IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK: (
+                "Use DROP CONSTRAINT IF EXISTS <name> before ADD, or wrap in a "
+                "DO block guarded by a pg_constraint existence check"
+            ),
+            IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY: (
+                "Use DROP CONSTRAINT IF EXISTS <name> before ADD, or guard with "
+                "a pg_constraint check on contype = 'p'"
+            ),
+            IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE: (
+                "Use DROP CONSTRAINT IF EXISTS <name> before ADD, or wrap in a "
+                "DO block guarded by a pg_constraint existence check"
+            ),
+            IdempotencyPattern.ALTER_TABLE_RENAME_COLUMN: (
+                "Wrap in DO block guarded by information_schema.columns lookups "
+                "for both the source and destination column names"
+            ),
+            IdempotencyPattern.ALTER_TABLE_OWNER: (
+                "Wrap in DO block with a pg_class existence check before "
+                "issuing OWNER TO (the prior CREATE may have been undone)"
+            ),
+            IdempotencyPattern.ALTER_VIEW_OWNER: (
+                "Wrap in DO block with a pg_class existence check before "
+                "issuing OWNER TO on the view"
+            ),
+            IdempotencyPattern.ALTER_MATVIEW_OWNER: (
+                "Wrap in DO block with a pg_matviews existence check before "
+                "issuing OWNER TO on the materialized view"
+            ),
             IdempotencyPattern.DROP_TABLE: "Use DROP TABLE IF EXISTS",
             IdempotencyPattern.DROP_INDEX: "Use DROP INDEX IF EXISTS",
             IdempotencyPattern.DROP_FUNCTION: "Use DROP FUNCTION IF EXISTS",
@@ -62,6 +103,23 @@ class IdempotencyPattern(Enum):
             IdempotencyPattern.DROP_TYPE: "Use DROP TYPE IF EXISTS",
             IdempotencyPattern.DROP_SCHEMA: "Use DROP SCHEMA IF EXISTS",
             IdempotencyPattern.DROP_SEQUENCE: "Use DROP SEQUENCE IF EXISTS",
+            IdempotencyPattern.CREATE_OR_REPLACE_VIEW_SHAPE_RISK: (
+                "CREATE OR REPLACE VIEW only succeeds when the column set is "
+                "unchanged. For shape changes, use DROP VIEW IF EXISTS + "
+                "CREATE VIEW. If other views or functions depend on this "
+                "view's columns, they will also break on shape change."
+            ),
+            IdempotencyPattern.CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK: (
+                "CREATE OR REPLACE FUNCTION fails when an input parameter is "
+                "renamed. For signature changes, use DROP FUNCTION IF EXISTS "
+                "+ CREATE FUNCTION. Note: DROP+CREATE drops privileges and "
+                "dependencies, unlike a true OR REPLACE."
+            ),
+            IdempotencyPattern.CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK: (
+                "CREATE OR REPLACE PROCEDURE fails on parameter renames. For "
+                "signature changes, use DROP PROCEDURE IF EXISTS + CREATE "
+                "PROCEDURE."
+            ),
         }
         return suggestions.get(self, "Make statement idempotent")
 
@@ -105,6 +163,8 @@ class IdempotencyViolation:
     sql_snippet: str
     line_number: int
     file_path: str
+    source_line: int | None = None
+    severity: str = "error"
 
     @property
     def suggestion(self) -> str:
@@ -125,15 +185,23 @@ class IdempotencyViolation:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
+        """Convert to dictionary for serialization.
+
+        ``source_line`` is omitted when ``None`` so .sql-origin output is
+        byte-identical to releases before 0.12.1.
+        """
+        payload: dict[str, Any] = {
             "pattern": self.pattern.name,
             "sql_snippet": self.sql_snippet,
             "line_number": self.line_number,
             "file_path": self.file_path,
             "suggestion": self.suggestion,
             "fix_available": self.fix_available,
+            "severity": self.severity,
         }
+        if self.source_line is not None:
+            payload["source_line"] = self.source_line
+        return payload
 
 
 @dataclass
@@ -152,11 +220,27 @@ class IdempotencyReport:
 
     violations: list[IdempotencyViolation] = field(default_factory=list)
     scanned_files: list[str] = field(default_factory=list)
+    warnings: list[ExtractionWarning] = field(default_factory=list)
 
     @property
     def has_violations(self) -> bool:
         """Check if any violations were found."""
         return len(self.violations) > 0
+
+    @property
+    def has_blocking_violations(self) -> bool:
+        """Check if any error-severity violations exist.
+
+        ``info``-severity findings (e.g. ``CREATE OR REPLACE VIEW`` heuristic
+        notes) don't fail the gate by default; this property is what the
+        CLI consults for its exit-code branch.
+        """
+        return any(v.severity == "error" for v in self.violations)
+
+    @property
+    def has_warnings(self) -> bool:
+        """Check if any extractor warnings were collected."""
+        return len(self.warnings) > 0
 
     @property
     def violation_count(self) -> int:
@@ -201,6 +285,9 @@ class IdempotencyReport:
 
         Returns:
             Dictionary representation suitable for JSON serialization
+
+        ``warnings`` and ``has_warnings`` were added in 0.12.1; existing keys
+        keep their names and types (additive-only contract).
         """
         return {
             "violations": [v.to_dict() for v in self.violations],
@@ -208,6 +295,17 @@ class IdempotencyReport:
             "files_scanned": self.files_scanned,
             "scanned_files": self.scanned_files,
             "has_violations": self.has_violations,
+            "has_blocking_violations": self.has_blocking_violations,
+            "warnings": [
+                {
+                    "kind": w.kind.value,
+                    "source_file": str(w.source_file),
+                    "source_line": w.source_line,
+                    "message": w.message,
+                }
+                for w in self.warnings
+            ],
+            "has_warnings": self.has_warnings,
         }
 
     def __str__(self) -> str:

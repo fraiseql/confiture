@@ -187,6 +187,15 @@ def migrate_validate(
         "--idempotent",
         help="Validate migrations are idempotent, can re-run (default: off)",
     ),
+    strict_cor: bool = typer.Option(
+        False,
+        "--strict-cor",
+        help=(
+            "Treat info-severity CREATE OR REPLACE shape-risk findings as "
+            "blocking (exit 1). Off by default — info findings are still "
+            "rendered but don't fail the gate."
+        ),
+    ),
     check_drift: bool = typer.Option(
         False,
         "--check-drift",
@@ -822,7 +831,7 @@ def migrate_validate(
 
         # Handle idempotency validation
         if idempotent:
-            _validate_idempotency(migrations_dir, format_output, output_file)
+            _validate_idempotency(migrations_dir, format_output, output_file, strict_cor=strict_cor)
             return
 
         # Use Migrator to find orphaned files (needs instance for method)

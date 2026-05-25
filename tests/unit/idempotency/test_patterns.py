@@ -93,12 +93,17 @@ class TestCreateFunctionDetection:
         assert matches[0].pattern == IdempotencyPattern.CREATE_FUNCTION
 
     def test_skip_create_or_replace_function(self):
-        """Skips CREATE OR REPLACE FUNCTION."""
+        """CREATE OR REPLACE FUNCTION is never an error-severity violation.
+
+        It may emit an info-severity shape-risk note (added in 0.13.0);
+        that's not a gate failure, so we only assert on error-severity
+        matches here.
+        """
         sql = """CREATE OR REPLACE FUNCTION add_numbers(a INT, b INT)
         RETURNS INT AS $$ SELECT a + b; $$ LANGUAGE sql;"""
         matches = detect_non_idempotent_patterns(sql)
 
-        assert len(matches) == 0
+        assert [m for m in matches if m.severity == "error"] == []
 
     def test_detect_create_procedure_without_or_replace(self):
         """Detects CREATE PROCEDURE without OR REPLACE."""
@@ -121,11 +126,15 @@ class TestCreateViewDetection:
         assert matches[0].pattern == IdempotencyPattern.CREATE_VIEW
 
     def test_skip_create_or_replace_view(self):
-        """Skips CREATE OR REPLACE VIEW."""
+        """CREATE OR REPLACE VIEW is never an error-severity violation.
+
+        Since 0.13.0 a bare CoR VIEW emits an info-severity shape-risk
+        note; the gate isn't affected.
+        """
         sql = "CREATE OR REPLACE VIEW v_users AS SELECT * FROM users;"
         matches = detect_non_idempotent_patterns(sql)
 
-        assert len(matches) == 0
+        assert [m for m in matches if m.severity == "error"] == []
 
 
 class TestCreateTypeDetection:
@@ -301,7 +310,11 @@ DROP TABLE old_table;
         assert IdempotencyPattern.DROP_TABLE in patterns
 
     def test_mixed_idempotent_and_non_idempotent(self):
-        """Correctly distinguishes idempotent from non-idempotent."""
+        """Distinguishes idempotent from non-idempotent (gate-relevant only).
+
+        Since 0.13.0, ``CREATE OR REPLACE FUNCTION`` emits an info-severity
+        shape-risk note. The gate only cares about error-severity matches.
+        """
         sql = """
 CREATE TABLE IF NOT EXISTS users (id INT);
 CREATE TABLE orders (id INT);
@@ -309,9 +322,242 @@ CREATE OR REPLACE FUNCTION fn_test() RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE p
 CREATE FUNCTION fn_bad() RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE plpgsql;
 """
         matches = detect_non_idempotent_patterns(sql)
+        error_matches = [m for m in matches if m.severity == "error"]
 
-        assert len(matches) == 2
-        # Only CREATE TABLE orders and CREATE FUNCTION fn_bad should be flagged
-        snippets = [m.sql_snippet for m in matches]
+        assert len(error_matches) == 2
+        snippets = [m.sql_snippet for m in error_matches]
         assert any("orders" in s for s in snippets)
         assert any("fn_bad" in s for s in snippets)
+
+
+class TestAlterTableAddConstraintCheck:
+    """Phase 03 Cycle 1-2: ADD CONSTRAINT ... CHECK detection."""
+
+    def test_detect_add_constraint_check(self):
+        sql = "ALTER TABLE foo ADD CONSTRAINT chk_x CHECK (id > 0);"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK
+        assert matches[0].pattern.fix_available is False
+
+    def test_detect_schema_qualified_add_constraint_check(self):
+        sql = "ALTER TABLE app.foo ADD CONSTRAINT chk_x CHECK (id > 0);"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK
+
+    def test_skip_add_constraint_check_in_do_block(self):
+        sql = """DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='chk_x') THEN
+                ALTER TABLE foo ADD CONSTRAINT chk_x CHECK (id > 0);
+            END IF;
+        END $$;"""
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 0
+
+
+class TestAlterTableAddConstraintPrimaryKey:
+    """Phase 03 Cycle 3: ADD CONSTRAINT ... PRIMARY KEY detection."""
+
+    def test_detect_add_constraint_primary_key(self):
+        sql = "ALTER TABLE foo ADD CONSTRAINT foo_pk PRIMARY KEY (id);"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY
+
+
+class TestAlterTableAddConstraintUnique:
+    """Phase 03 Cycle 4: ADD CONSTRAINT ... UNIQUE detection."""
+
+    def test_detect_add_constraint_unique(self):
+        sql = "ALTER TABLE foo ADD CONSTRAINT foo_uq UNIQUE (email);"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE
+
+
+class TestDropAddConstraintPair:
+    """Phase 03 Cycle 5: DROP CONSTRAINT IF EXISTS + ADD CONSTRAINT pair recognizer."""
+
+    def test_drop_then_add_constraint_check_is_idempotent(self):
+        sql = (
+            "ALTER TABLE foo DROP CONSTRAINT IF EXISTS chk_x;"
+            "ALTER TABLE foo ADD CONSTRAINT chk_x CHECK (id > 0);"
+        )
+        matches = detect_non_idempotent_patterns(sql)
+        assert matches == []
+
+    def test_drop_then_add_constraint_primary_key_is_idempotent(self):
+        sql = (
+            "ALTER TABLE foo DROP CONSTRAINT IF EXISTS foo_pk;"
+            "ALTER TABLE foo ADD CONSTRAINT foo_pk PRIMARY KEY (id);"
+        )
+        matches = detect_non_idempotent_patterns(sql)
+        assert matches == []
+
+    def test_drop_unrelated_does_not_silence_violation(self):
+        # DROP for a *different* constraint name does NOT silence the ADD
+        sql = (
+            "ALTER TABLE foo DROP CONSTRAINT IF EXISTS chk_other;"
+            "ALTER TABLE foo ADD CONSTRAINT chk_x CHECK (id > 0);"
+        )
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK
+
+
+class TestAlterTableRenameColumn:
+    """Phase 03 Cycle 6-7: ALTER TABLE ... RENAME COLUMN detection."""
+
+    def test_detect_rename_column(self):
+        sql = "ALTER TABLE foo RENAME COLUMN old TO new;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_RENAME_COLUMN
+        assert matches[0].pattern.fix_available is False
+
+    def test_detect_rename_column_implicit(self):
+        # PG allows omitting "COLUMN"
+        sql = "ALTER TABLE foo RENAME old TO new;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_RENAME_COLUMN
+
+    def test_skip_rename_column_in_do_block_with_exception(self):
+        sql = """DO $$ BEGIN
+            ALTER TABLE foo RENAME COLUMN old TO new;
+        EXCEPTION WHEN undefined_column THEN NULL;
+        END $$;"""
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 0
+
+
+class TestOwnerToDetection:
+    """Phase 03 Cycle 8: ALTER (TABLE|VIEW|MATERIALIZED VIEW) ... OWNER TO."""
+
+    def test_detect_alter_table_owner_to(self):
+        sql = "ALTER TABLE foo OWNER TO alice;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_TABLE_OWNER
+
+    def test_detect_alter_view_owner_to(self):
+        sql = "ALTER VIEW v_foo OWNER TO alice;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].pattern == IdempotencyPattern.ALTER_VIEW_OWNER
+
+    def test_detect_alter_materialized_view_owner_to(self):
+        sql = "ALTER MATERIALIZED VIEW mv_foo OWNER TO alice;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        # MATERIALIZED VIEW must NOT also match the plain VIEW pattern
+        assert matches[0].pattern == IdempotencyPattern.ALTER_MATVIEW_OWNER
+
+    def test_owner_to_all_three_in_one_sql(self):
+        sql = (
+            "ALTER TABLE foo OWNER TO alice;"
+            "ALTER VIEW v_foo OWNER TO alice;"
+            "ALTER MATERIALIZED VIEW mv_foo OWNER TO alice;"
+        )
+        matches = detect_non_idempotent_patterns(sql)
+        kinds = {m.pattern for m in matches}
+        assert kinds == {
+            IdempotencyPattern.ALTER_TABLE_OWNER,
+            IdempotencyPattern.ALTER_VIEW_OWNER,
+            IdempotencyPattern.ALTER_MATVIEW_OWNER,
+        }
+
+
+class TestPhase03KnownLimitations:
+    """Document quoted-identifier and multi-clause limitations of the regex detector."""
+
+    def test_quoted_identifier_currently_slips_through(self):
+        # Known limitation: \w+ does not match quoted identifiers.
+        # A future pglast-backed detector will close this gap.
+        sql = 'ALTER TABLE "My-Table" ADD CONSTRAINT "chk-x" CHECK (id > 0);'
+        matches = detect_non_idempotent_patterns(sql)
+        assert matches == []  # currently missed
+
+    def test_multi_clause_alter_only_first_constraint_flagged(self):
+        # Known limitation: only the first ADD CONSTRAINT in a multi-clause
+        # ALTER is detected. Comma-split parsing belongs in a future AST upgrade.
+        sql = "ALTER TABLE foo ADD CONSTRAINT a CHECK (id > 0), ADD CONSTRAINT b CHECK (id < 10);"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+
+
+# Phase 04 Cycle 2: PatternDefinition.severity plumbing
+class TestPatternSeverityPlumbing:
+    def test_pattern_definition_default_severity_error(self):
+        from confiture.core.idempotency.patterns import PATTERNS
+
+        # All pre-0.13.0 patterns default to "error". Only the three
+        # new CoR shape-risk detectors are info-severity.
+        info_patterns = {
+            "CREATE_OR_REPLACE_VIEW_SHAPE_RISK",
+            "CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK",
+            "CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK",
+        }
+        for pd in PATTERNS:
+            if pd.pattern.value in info_patterns:
+                assert pd.severity == "info", pd.pattern
+            else:
+                assert pd.severity == "error", pd.pattern
+
+    def test_create_or_replace_view_finding_has_info_severity(self):
+        sql = "CREATE OR REPLACE VIEW v_users AS SELECT id FROM users;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        assert matches[0].severity == "info"
+
+
+# Phase 04 Cycle 3-4: CREATE OR REPLACE VIEW shape-risk note
+class TestCreateOrReplaceViewNote:
+    def test_bare_cor_view_emits_info_finding(self):
+        sql = "CREATE OR REPLACE VIEW v_users AS SELECT id FROM users;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert len(matches) == 1
+        m = matches[0]
+        assert m.pattern == IdempotencyPattern.CREATE_OR_REPLACE_VIEW_SHAPE_RISK
+        assert m.severity == "info"
+
+    def test_drop_view_if_exists_then_cor_silences_note(self):
+        sql = "DROP VIEW IF EXISTS v_users;CREATE OR REPLACE VIEW v_users AS SELECT id FROM users;"
+        matches = detect_non_idempotent_patterns(sql)
+        assert matches == []
+
+
+# Phase 04 Cycle 5-6: CREATE OR REPLACE FUNCTION / PROCEDURE notes
+class TestCreateOrReplaceFunctionNote:
+    def test_bare_cor_function_emits_info_finding(self):
+        sql = "CREATE OR REPLACE FUNCTION f_summary() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;"
+        matches = detect_non_idempotent_patterns(sql)
+        info_matches = [m for m in matches if m.severity == "info"]
+        assert len(info_matches) == 1
+        assert info_matches[0].pattern == IdempotencyPattern.CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK
+
+    def test_drop_function_if_exists_then_cor_silences_note(self):
+        sql = (
+            "DROP FUNCTION IF EXISTS f_summary;"
+            "CREATE OR REPLACE FUNCTION f_summary() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;"
+        )
+        matches = detect_non_idempotent_patterns(sql)
+        assert [m for m in matches if m.severity == "info"] == []
+
+
+class TestCreateOrReplaceProcedureNote:
+    def test_bare_cor_procedure_emits_info_finding(self):
+        sql = "CREATE OR REPLACE PROCEDURE p_sync() AS $$ BEGIN END; $$ LANGUAGE plpgsql;"
+        matches = detect_non_idempotent_patterns(sql)
+        info_matches = [m for m in matches if m.severity == "info"]
+        assert len(info_matches) == 1
+        assert info_matches[0].pattern == IdempotencyPattern.CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK
+
+    def test_drop_procedure_if_exists_then_cor_silences_note(self):
+        sql = (
+            "DROP PROCEDURE IF EXISTS p_sync;"
+            "CREATE OR REPLACE PROCEDURE p_sync() AS $$ BEGIN END; $$ LANGUAGE plpgsql;"
+        )
+        matches = detect_non_idempotent_patterns(sql)
+        assert [m for m in matches if m.severity == "info"] == []

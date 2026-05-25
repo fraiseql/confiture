@@ -73,7 +73,11 @@ class TestIdempotencyValidator:
         assert report.files_scanned == 1
 
     def test_idempotent_migration_returns_clean_report(self):
-        """Fully idempotent SQL produces no violations."""
+        """Fully idempotent SQL produces no error-severity violations.
+
+        Since 0.13.0 ``CREATE OR REPLACE FUNCTION`` emits an info-severity
+        shape-risk note. The gate only fails on error-severity findings.
+        """
         sql = dedent("""
             CREATE TABLE IF NOT EXISTS users (id INT);
             CREATE INDEX IF NOT EXISTS idx_users ON users(id);
@@ -84,7 +88,7 @@ class TestIdempotencyValidator:
         validator = IdempotencyValidator()
         report = validator.validate_sql(sql, file_path="test.sql")
 
-        assert not report.has_violations
+        assert not report.has_blocking_violations
 
     def test_violations_include_correct_file_path(self, tmp_path: Path):
         """Violations reference the correct source file."""
@@ -156,7 +160,13 @@ class TestValidatorEdgeCases:
     """Tests for edge cases and complex SQL."""
 
     def test_handles_dollar_quoted_strings(self):
-        """Correctly handles PostgreSQL dollar-quoted strings."""
+        """Correctly handles PostgreSQL dollar-quoted strings.
+
+        ``CREATE OR REPLACE FUNCTION`` emits an info-severity shape-risk
+        note since 0.13.0; the gate-relevant check is
+        ``has_blocking_violations``. The fake table inside the dollar-quoted
+        string body must still be ignored.
+        """
         sql = dedent("""
             CREATE OR REPLACE FUNCTION test_fn() RETURNS VOID AS $$
             BEGIN
@@ -169,8 +179,7 @@ class TestValidatorEdgeCases:
         validator = IdempotencyValidator()
         report = validator.validate_sql(sql, file_path="test.sql")
 
-        # CREATE OR REPLACE is idempotent, fake table in string should be ignored
-        assert not report.has_violations
+        assert not report.has_blocking_violations
 
     def test_handles_comments(self):
         """Ignores SQL in comments."""
@@ -240,3 +249,79 @@ class TestReportGeneration:
 
         assert "CREATE_TABLE" in json_str
         assert "test.sql" in json_str
+
+
+# Phase 03 Cycle 9: validate_directory library API scans .py migrations
+class TestValidateDirectoryPythonMigrations:
+    def test_validate_directory_scans_python_migrations(self, tmp_path):
+        """Default include_python=True picks up .py files."""
+        from pathlib import Path
+
+        from confiture.core.idempotency import IdempotencyValidator
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "20260101000000_demo.py").write_text(
+            "from confiture.models.migration import Migration\n"
+            "class Demo(Migration):\n"
+            '    version = "20260101000000"\n'
+            '    name = "demo"\n'
+            "    def up(self) -> None:\n"
+            '        self.execute("CREATE TABLE foo (id int);")\n'
+            "    def down(self) -> None:\n"
+            "        pass\n",
+            encoding="utf-8",
+        )
+
+        validator = IdempotencyValidator()
+        report = validator.validate_directory(Path(migrations_dir))
+        assert report.has_violations
+        assert any(".py" in p for p in report.scanned_files)
+
+    def test_validate_directory_include_python_false_preserves_old_behavior(self, tmp_path):
+        """Library callers can opt out of .py scanning for back-compat."""
+        from pathlib import Path
+
+        from confiture.core.idempotency import IdempotencyValidator
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "20260101000000_demo.py").write_text(
+            "from confiture.models.migration import Migration\n"
+            "class Demo(Migration):\n"
+            '    version = "20260101000000"\n'
+            '    name = "demo"\n'
+            "    def up(self) -> None:\n"
+            '        self.execute("CREATE TABLE foo (id int);")\n'
+            "    def down(self) -> None:\n"
+            "        pass\n",
+            encoding="utf-8",
+        )
+
+        validator = IdempotencyValidator()
+        report = validator.validate_directory(Path(migrations_dir), include_python=False)
+        assert not report.has_violations
+        assert all(".py" not in p for p in report.scanned_files)
+
+    def test_validate_directory_python_violation_carries_source_line(self, tmp_path):
+        from pathlib import Path
+
+        from confiture.core.idempotency import IdempotencyValidator
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "20260101000000_demo.py").write_text(
+            "from confiture.models.migration import Migration\n"
+            "class Demo(Migration):\n"
+            '    version = "20260101000000"\n'
+            '    name = "demo"\n'
+            "    def up(self) -> None:\n"
+            '        self.execute("CREATE TABLE foo (id int);")\n'
+            "    def down(self) -> None:\n"
+            "        pass\n",
+            encoding="utf-8",
+        )
+
+        validator = IdempotencyValidator()
+        report = validator.validate_directory(Path(migrations_dir))
+        assert report.violations[0].source_line == 6

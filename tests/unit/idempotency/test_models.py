@@ -164,3 +164,81 @@ class TestIdempotencyReport:
 
         assert len(by_file["001_init.up.sql"]) == 2
         assert len(by_file["002_more.up.sql"]) == 1
+
+
+# Phase 04 Cycle 1: severity field + has_blocking_violations
+class TestSeverityField:
+    def test_default_severity_is_error(self):
+        from confiture.core.idempotency.models import (
+            IdempotencyPattern,
+            IdempotencyViolation,
+        )
+
+        v = IdempotencyViolation(
+            pattern=IdempotencyPattern.CREATE_TABLE,
+            sql_snippet="CREATE TABLE foo",
+            line_number=1,
+            file_path="x.sql",
+        )
+        assert v.severity == "error"
+
+    def test_severity_roundtrips_through_to_dict(self):
+        from confiture.core.idempotency.models import (
+            IdempotencyPattern,
+            IdempotencyViolation,
+        )
+
+        info_v = IdempotencyViolation(
+            pattern=IdempotencyPattern.CREATE_TABLE,
+            sql_snippet="CREATE TABLE foo",
+            line_number=1,
+            file_path="x.sql",
+            severity="info",
+        )
+        d = info_v.to_dict()
+        assert d["severity"] == "info"
+
+        # Error-severity also emitted explicitly (no ambiguity).
+        err_v = IdempotencyViolation(
+            pattern=IdempotencyPattern.CREATE_TABLE,
+            sql_snippet="CREATE TABLE foo",
+            line_number=1,
+            file_path="x.sql",
+        )
+        assert err_v.to_dict()["severity"] == "error"
+
+    def test_has_blocking_violations_only_counts_errors(self):
+        from confiture.core.idempotency.models import (
+            IdempotencyPattern,
+            IdempotencyReport,
+            IdempotencyViolation,
+        )
+
+        report = IdempotencyReport()
+        report.add_violation(
+            IdempotencyViolation(
+                pattern=IdempotencyPattern.CREATE_VIEW,
+                sql_snippet="x",
+                line_number=1,
+                file_path="x.sql",
+                severity="info",
+            )
+        )
+        assert report.has_violations is True
+        assert report.has_blocking_violations is False
+
+        report.add_violation(
+            IdempotencyViolation(
+                pattern=IdempotencyPattern.CREATE_TABLE,
+                sql_snippet="y",
+                line_number=2,
+                file_path="x.sql",
+            )
+        )
+        assert report.has_blocking_violations is True
+
+    def test_report_to_dict_includes_has_blocking_violations(self):
+        from confiture.core.idempotency.models import IdempotencyReport
+
+        d = IdempotencyReport().to_dict()
+        assert d["has_blocking_violations"] is False

@@ -9,6 +9,9 @@ from typing import Any
 
 from rich.console import Console
 
+from confiture.core.idempotency.python_migration_extractor import (
+    is_migration_file as _is_migration_file,
+)
 from confiture.core.linting.schema_linter import (
     LintReport as LinterReport,
 )
@@ -282,17 +285,69 @@ def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) 
     console.print("[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]")
 
 
+def _collect_idempotency_report(
+    sql_files: list[Path],
+    py_files: list[Path],
+    validator: Any,
+    project_root: Path | None = None,
+) -> Any:
+    """Run the idempotency validator against .sql files and Python migrations.
+
+    Returns a merged :class:`IdempotencyReport`. Python-origin violations
+    carry the ``source_line`` of the originating ``self.execute()`` call;
+    extractor warnings ride on the report's ``warnings`` list.
+
+    ``project_root`` is forwarded to the extractor for ``execute_file``
+    path-boundary checking; passing ``None`` lets the extractor auto-detect
+    the root (the nearest ancestor with ``pyproject.toml``, ``.git``, or
+    ``db/``).
+    """
+    from confiture.core.idempotency.models import IdempotencyReport
+    from confiture.core.idempotency.python_migration_extractor import (
+        extract_sql_from_python_migration,
+    )
+
+    combined = IdempotencyReport()
+
+    for sql_path in sorted(sql_files):
+        if not sql_path.is_file():
+            continue
+        file_report = validator.validate_file(sql_path)
+        for scanned in file_report.scanned_files:
+            combined.add_file_scanned(scanned)
+        for violation in file_report.violations:
+            combined.add_violation(violation)
+
+    for py_path in sorted(py_files):
+        extraction = extract_sql_from_python_migration(py_path, project_root=project_root)
+        combined.add_file_scanned(str(py_path))
+        combined.warnings.extend(extraction.warnings)
+        for snippet in extraction.snippets:
+            snippet_report = validator.validate_sql(snippet.sql, file_path=str(py_path))
+            for violation in snippet_report.violations:
+                violation.source_line = snippet.source_line
+                combined.add_violation(violation)
+
+    combined.scanned_files.sort()
+    return combined
+
+
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
     output_file: Path | None,
+    *,
+    strict_cor: bool = False,
 ) -> None:
-    """Validate idempotency of SQL migration files.
+    """Validate idempotency of SQL and Python migration files.
 
     Args:
         migrations_dir: Directory containing migration files
         format_output: Output format (text or json)
         output_file: Optional file to save output to
+        strict_cor: If True, info-severity CREATE OR REPLACE findings flip
+            the exit code to 1 (default False — info findings render but
+            don't fail the gate).
     """
     import typer
 
@@ -300,11 +355,10 @@ def _validate_idempotency(
 
     validator = IdempotencyValidator()
 
-    # Find all SQL migration files
-    sql_files = list(migrations_dir.glob("*.up.sql"))
-    sql_files.sort()
+    sql_files = sorted(migrations_dir.glob("*.up.sql"))
+    py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
 
-    if not sql_files:
+    if not sql_files and not py_files:
         if format_output == "json":
             result: dict[str, Any] = {
                 "status": "ok",
@@ -316,53 +370,93 @@ def _validate_idempotency(
             console.print("[green]✅ No migration files found to validate[/green]")
         return
 
-    # Validate all files
-    combined_report = validator.validate_directory(migrations_dir, pattern="*.up.sql")
+    combined_report = _collect_idempotency_report(sql_files, py_files, validator)
+    fail = combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
 
     if format_output == "json":
         result = combined_report.to_dict()
-        result["status"] = "issues_found" if combined_report.has_violations else "ok"
+        result["status"] = "issues_found" if fail else "ok"
         _output_json(result, output_file, console)
-        if combined_report.has_violations:
+        if fail:
             raise typer.Exit(1)
-    else:
-        if not combined_report.has_violations:
+        return
+
+    blocking = [v for v in combined_report.violations if v.severity == "error"]
+    info = [v for v in combined_report.violations if v.severity == "info"]
+
+    if not blocking and not info:
+        console.print("[green]✅ All migrations are idempotent[/green]")
+        console.print(f"   Scanned {combined_report.files_scanned} file(s)")
+        _render_extractor_warnings(combined_report)
+        return
+
+    if blocking:
+        console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]\n")
+        _render_violations_by_file(blocking)
+
+    if info:
+        if not blocking:
             console.print("[green]✅ All migrations are idempotent[/green]")
             console.print(f"   Scanned {combined_report.files_scanned} file(s)")
-            return
-
-        # Display violations
         console.print(
-            f"[red]❌ Found {combined_report.violation_count} idempotency violation(s)[/red]\n"
+            f"\n[yellow]ℹ️  {len(info)} heuristic note(s) "
+            "(informational, do not fail the gate)[/yellow]\n"
         )
+        _render_violations_by_file(info)
+        if not strict_cor:
+            console.print("[dim]Pass --strict-cor to treat these as blocking.[/dim]\n")
 
-        # Group violations by file
-        violations_by_file: dict[str, list[Any]] = {}
-        for violation in combined_report.violations:
-            file_path = violation.file_path
-            if file_path not in violations_by_file:
-                violations_by_file[file_path] = []
-            violations_by_file[file_path].append(violation)
+    _render_extractor_warnings(combined_report)
 
-        for file_path, violations in violations_by_file.items():
-            file_name = Path(file_path).name
-            console.print(f"[yellow]{file_name}[/yellow]")
-            for v in violations:
-                console.print(f"  Line {v.line_number}: {v.pattern.value}")
-                console.print(
-                    f"    [dim]{v.sql_snippet[:60]}...[/dim]"
-                    if len(v.sql_snippet) > 60
-                    else f"    [dim]{v.sql_snippet}[/dim]"
-                )
-                console.print(f"    💡 {v.suggestion}")
-            console.print()
-
-        console.print("[cyan]To auto-fix these issues, run:[/cyan]")
+    if blocking:
+        console.print("[cyan]To auto-fix .sql files, run:[/cyan]")
         console.print(
             f"[cyan]  confiture migrate fix --idempotent --migrations-dir {migrations_dir}[/cyan]"
         )
+        console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
+    if fail:
         raise typer.Exit(1)
+
+
+def _render_violations_by_file(violations: list[Any]) -> None:
+    """Render violations grouped by file (shared by error + info sections)."""
+    by_file: dict[str, list[Any]] = {}
+    for violation in violations:
+        by_file.setdefault(violation.file_path, []).append(violation)
+    for file_path, group in by_file.items():
+        file_name = Path(file_path).name
+        console.print(f"[yellow]{file_name}[/yellow]")
+        for v in group:
+            location = (
+                f"Line {v.source_line} (SQL line {v.line_number})"
+                if v.source_line is not None
+                else f"Line {v.line_number}"
+            )
+            console.print(f"  {location}: {v.pattern.value}")
+            console.print(
+                f"    [dim]{v.sql_snippet[:60]}...[/dim]"
+                if len(v.sql_snippet) > 60
+                else f"    [dim]{v.sql_snippet}[/dim]"
+            )
+            console.print(f"    💡 {v.suggestion}")
+        console.print()
+
+
+def _render_extractor_warnings(report: Any) -> None:
+    """Render extractor warnings (dynamic SQL the validator couldn't reach)."""
+    if not report.has_warnings:
+        return
+    console.print(
+        f"[yellow]⚠️  {len(report.warnings)} dynamic SQL call(s) "
+        "could not be statically analyzed:[/yellow]"
+    )
+    for warn in report.warnings:
+        source = Path(str(warn.source_file)).name
+        console.print(f"  {source}:{warn.source_line} — {warn.kind.value}")
+        console.print(f"    [dim]{warn.message}[/dim]")
+    console.print("    [dim]These calls were skipped. Idempotency cannot be guaranteed.[/dim]")
+    console.print()
 
 
 def _fix_idempotency(
@@ -373,21 +467,25 @@ def _fix_idempotency(
 ) -> None:
     """Fix idempotency issues in SQL migration files.
 
+    Python migrations are never rewritten — unparsing the AST would lose
+    comments and formatting. Any violations in ``.py`` files are surfaced
+    under ``manual_fix_required`` so users know to edit them by hand.
+
     Args:
         migrations_dir: Directory containing migration files
         dry_run: If True, preview changes without modifying files
         format_output: Output format (text or json)
         output_file: Optional file to save output to
     """
-    from confiture.core.idempotency import IdempotencyFixer
+    from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
 
     fixer = IdempotencyFixer()
+    validator = IdempotencyValidator()
 
-    # Find all SQL migration files
-    sql_files = list(migrations_dir.glob("*.up.sql"))
-    sql_files.sort()
+    sql_files = sorted(migrations_dir.glob("*.up.sql"))
+    py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
 
-    if not sql_files:
+    if not sql_files and not py_files:
         if format_output == "json":
             result: dict[str, Any] = {
                 "status": "ok",
@@ -399,7 +497,6 @@ def _fix_idempotency(
             console.print("[green]✅ No migration files found to fix[/green]")
         return
 
-    # Process each file
     files_changed: list[dict[str, Any]] = []
 
     for sql_file in sql_files:
@@ -407,9 +504,7 @@ def _fix_idempotency(
         fixed_content = fixer.fix(original_content)
 
         if fixed_content != original_content:
-            # Get list of changes for reporting
             changes = fixer.dry_run(original_content)
-
             file_info: dict[str, Any] = {
                 "file": sql_file.name,
                 "changes": [
@@ -425,23 +520,41 @@ def _fix_idempotency(
                 ],
             }
             files_changed.append(file_info)
-
             if not dry_run:
                 sql_file.write_text(fixed_content)
 
-    # Output results
+    # Surface .py violations without rewriting the source.
+    manual_report = _collect_idempotency_report([], py_files, validator)
+    py_violations_by_file: dict[str, list[Any]] = {}
+    for violation in manual_report.violations:
+        py_violations_by_file.setdefault(violation.file_path, []).append(violation)
+    manual_fix_required = sorted(py_violations_by_file.keys())
+
     if format_output == "json":
+        status = (
+            "fixed"
+            if not dry_run and (files_changed or manual_fix_required)
+            else "preview"
+            if dry_run
+            else "ok"
+        )
         result = {
-            "status": "fixed" if not dry_run and files_changed else "preview" if dry_run else "ok",
+            "status": status,
             "files": files_changed,
             "total_files_changed": len(files_changed),
+            "manual_fix_required": manual_fix_required,
         }
+        if manual_report.has_warnings:
+            result["warnings"] = manual_report.to_dict()["warnings"]
         _output_json(result, output_file, console)
-    else:
-        if not files_changed:
-            console.print("[green]✅ All migrations are already idempotent[/green]")
-            return
+        return
 
+    if not files_changed and not manual_fix_required:
+        console.print("[green]✅ All migrations are already idempotent[/green]")
+        _render_extractor_warnings(manual_report)
+        return
+
+    if files_changed:
         if dry_run:
             console.print("[cyan]📋 DRY-RUN: Would apply the following fixes:[/cyan]\n")
         else:
@@ -455,8 +568,27 @@ def _fix_idempotency(
                 console.print(f"    + {change['suggested_fix']}")
             console.print()
 
-        if dry_run:
-            console.print(f"[cyan]Would fix {len(files_changed)} file(s)[/cyan]")
-            console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
-        else:
-            console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
+    if manual_fix_required:
+        console.print(
+            "[yellow]Python migrations cannot be auto-fixed; "
+            "please edit the following files manually:[/yellow]"
+        )
+        for file_path in manual_fix_required:
+            file_name = Path(file_path).name
+            console.print(f"[yellow]  • {file_name}[/yellow]")
+            for v in py_violations_by_file[file_path]:
+                location = (
+                    f"line {v.source_line}"
+                    if v.source_line is not None
+                    else f"line {v.line_number}"
+                )
+                console.print(f"    {location}: {v.pattern.value} — 💡 {v.suggestion}")
+        console.print()
+
+    _render_extractor_warnings(manual_report)
+
+    if files_changed and dry_run:
+        console.print(f"[cyan]Would fix {len(files_changed)} file(s)[/cyan]")
+        console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
+    elif files_changed:
+        console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")

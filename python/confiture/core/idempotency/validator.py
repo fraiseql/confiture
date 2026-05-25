@@ -93,6 +93,7 @@ class IdempotencyValidator:
                 sql_snippet=match.sql_snippet,
                 line_number=original_line,
                 file_path=file_path,
+                severity=match.severity,
             )
             report.add_violation(violation)
 
@@ -123,13 +124,18 @@ class IdempotencyValidator:
         directory: Path,
         pattern: str = "*.sql",
         recursive: bool = False,
+        include_python: bool = True,
     ) -> IdempotencyReport:
         """Validate all SQL files in a directory.
 
         Args:
             directory: Directory to scan for SQL files
-            pattern: Glob pattern for matching files (default: "*.sql")
+            pattern: Glob pattern for matching files (default: ``"*.sql"``)
             recursive: If True, scan subdirectories recursively
+            include_python: When True (default), also scan ``*.py`` Confiture
+                migrations in the directory using the AST extractor. Set to
+                False to preserve the pre-0.13.0 SQL-only behavior. Added in
+                0.13.0.
 
         Returns:
             IdempotencyReport with violations from all files
@@ -141,26 +147,39 @@ class IdempotencyValidator:
             ...     pattern="*.up.sql"
             ... )
         """
+        from confiture.core.idempotency.python_migration_extractor import (
+            extract_sql_from_python_migration,
+            is_migration_file,
+        )
+
         report = IdempotencyReport()
 
-        # Find matching files
+        # Find matching SQL files
         files = list(directory.rglob(pattern)) if recursive else list(directory.glob(pattern))
-
-        # Sort for deterministic ordering
         files.sort()
 
-        # Validate each file
         for file_path in files:
             if not file_path.is_file():
                 continue
 
             file_report = self.validate_file(file_path)
-
-            # Merge into combined report
             for scanned in file_report.scanned_files:
                 report.add_file_scanned(scanned)
             for violation in file_report.violations:
                 report.add_violation(violation)
+
+        if include_python:
+            py_iter = directory.rglob("*.py") if recursive else directory.glob("*.py")
+            py_files = sorted(p for p in py_iter if is_migration_file(p))
+            for py_path in py_files:
+                extraction = extract_sql_from_python_migration(py_path)
+                report.add_file_scanned(str(py_path))
+                report.warnings.extend(extraction.warnings)
+                for snippet in extraction.snippets:
+                    snippet_report = self.validate_sql(snippet.sql, file_path=str(py_path))
+                    for violation in snippet_report.violations:
+                        violation.source_line = snippet.source_line
+                        report.add_violation(violation)
 
         return report
 
