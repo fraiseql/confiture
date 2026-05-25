@@ -11,9 +11,22 @@ from confiture.core.idempotency.models import (
     IdempotencyViolation,
 )
 from confiture.core.idempotency.patterns import PatternMatch, detect_non_idempotent_patterns
+from confiture.core.idempotency.python_migration_extractor import (
+    ExtractedSQL,
+    ExtractionKind,
+    ExtractionResult,
+    ExtractionWarning,
+    WarningKind,
+    extract_sql_from_python_migration,
+    is_migration_file,
+)
 from confiture.core.idempotency.validator import IdempotencyValidator
 
 __all__ = [
+    "ExtractedSQL",
+    "ExtractionKind",
+    "ExtractionResult",
+    "ExtractionWarning",
     "FixChange",
     "IdempotencyFixer",
     "IdempotencyPattern",
@@ -21,5 +34,8 @@ __all__ = [
     "IdempotencyValidator",
     "IdempotencyViolation",
     "PatternMatch",
+    "WarningKind",
     "detect_non_idempotent_patterns",
+    "extract_sql_from_python_migration",
+    "is_migration_file",
 ]
