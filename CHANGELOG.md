@@ -5,6 +5,23 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.1] - 2026-05-27
+
+### Fixed
+
+- **`confiture build` no longer corrupts `CREATE TABLE` bodies when a `--`
+  comment sits between table-level `CONSTRAINT … FOREIGN KEY` clauses.**
+  The FK extractor was running its regex twice — once on a
+  comment-stripped view, once on the original — and the start/end
+  whitespace expansion ate the comment's terminating newline, gluing the
+  comment onto the previous column line and leaving a trailing comma
+  before `)`. Now positions are projected back via an index map, and
+  newline consumption is skipped on either side of a comment-only line,
+  so the comment stays on its own line and `_fix_trailing_commas` walks
+  back through comment/blank lines to find the last data column. FKs are
+  still extracted correctly into the Pass-2 ALTER block. Closes
+  [#128](https://github.com/evoludigit/confiture/issues/128).
+
 ## [0.16.0] - 2026-05-27
 
 Agent-experience punch-list for the idempotency stack. Closes
