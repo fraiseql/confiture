@@ -125,27 +125,17 @@ class IdempotencyPattern(Enum):
 
     @property
     def fix_available(self) -> bool:
-        """Check if automatic fix is available for this pattern."""
-        fixable = {
-            IdempotencyPattern.CREATE_TABLE,
-            IdempotencyPattern.CREATE_INDEX,
-            IdempotencyPattern.CREATE_UNIQUE_INDEX,
-            IdempotencyPattern.CREATE_FUNCTION,
-            IdempotencyPattern.CREATE_PROCEDURE,
-            IdempotencyPattern.CREATE_VIEW,
-            IdempotencyPattern.CREATE_EXTENSION,
-            IdempotencyPattern.CREATE_SCHEMA,
-            IdempotencyPattern.CREATE_SEQUENCE,
-            IdempotencyPattern.ALTER_TABLE_ADD_COLUMN,
-            IdempotencyPattern.DROP_TABLE,
-            IdempotencyPattern.DROP_INDEX,
-            IdempotencyPattern.DROP_FUNCTION,
-            IdempotencyPattern.DROP_VIEW,
-            IdempotencyPattern.DROP_TYPE,
-            IdempotencyPattern.DROP_SCHEMA,
-            IdempotencyPattern.DROP_SEQUENCE,
-        }
-        return self in fixable
+        """Check if automatic fix is available for this pattern.
+
+        Reads from :data:`confiture.core.idempotency.fixer.FIXABLE_PATTERNS`,
+        which is derived from the fixer's dispatch table — the single
+        source of truth. Lazy import avoids a models→fixer cycle at
+        package-load time.
+        """
+        # Lazy import to break models→fixer→models cycle.
+        from confiture.core.idempotency.fixer import FIXABLE_PATTERNS
+
+        return self in FIXABLE_PATTERNS
 
 
 @dataclass

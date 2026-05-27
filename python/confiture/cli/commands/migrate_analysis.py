@@ -148,6 +148,44 @@ def migrate_diff(
         raise typer.Exit(1) from e
 
 
+def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
+    """Render the idempotency pattern catalog.
+
+    Read-only: no DB, no config, no migrations directory.
+
+    Args:
+        format_output: ``"text"`` for a Rich table, ``"json"`` for the
+            machine-readable catalog envelope.
+        output_file: Optional path to write JSON output; ignored for text.
+    """
+    from confiture.core.idempotency.patterns import list_patterns
+
+    entries = list_patterns()
+
+    if format_output == "json":
+        _output_json({"version": "1", "patterns": entries}, output_file, console)
+        return
+
+    # Text mode: compact table for human eyes.
+    from rich.table import Table
+
+    table = Table(title="Idempotency detection patterns", expand=False)
+    table.add_column("id", style="cyan", no_wrap=True)
+    table.add_column("severity")
+    table.add_column("skip", justify="center")
+    table.add_column("auto-fix", justify="center")
+    table.add_column("description")
+    for entry in entries:
+        table.add_row(
+            entry["id"],
+            entry["severity"],
+            "yes" if entry["has_skip_regex"] else "no",
+            "yes" if entry["has_auto_fix"] else "no",
+            entry["description"],
+        )
+    console.print(table)
+
+
 def _display_body_drift_report(report: Any, console: Any) -> None:
     """Print a FunctionBodyDriftReport to the console in human-readable form."""
     if not report.has_drift:
@@ -187,6 +225,14 @@ def migrate_validate(
         False,
         "--idempotent",
         help="Validate migrations are idempotent, can re-run (default: off)",
+    ),
+    list_patterns: bool = typer.Option(
+        False,
+        "--list-patterns",
+        help=(
+            "Print machine-readable catalog of detection patterns "
+            "(read-only, no DB needed). Use with `--format json` for tooling."
+        ),
     ),
     strict_cor: bool = typer.Option(
         False,
@@ -399,6 +445,19 @@ def migrate_validate(
                 f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]"
             )
             raise typer.Exit(1)
+
+        # --list-patterns is a read-only catalog query. Short-circuit before
+        # touching config / migrations directory / DB. Must run before
+        # _resolve_config so projects without a confiture.yaml can still
+        # introspect the pattern catalog.
+        if list_patterns:
+            if idempotent:
+                error_console.print(
+                    "[red]Error:[/red] --list-patterns is mutually exclusive with --idempotent"
+                )
+                raise typer.Exit(2)
+            _emit_pattern_catalog(format_output, output_file)
+            return
 
         # Resolve --env / --config to a single config path
         try:
