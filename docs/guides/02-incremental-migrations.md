@@ -6,6 +6,19 @@
 
 ---
 
+## Use this guide if you're a migration-only project
+
+`confiture build` (Medium 1) requires a `db/schema/` directory. **Every
+other command in this guide does not.** `migrate up`, `migrate down`,
+`migrate status`, `migrate baseline`, and `migrate preflight --against`
+all operate on a pure migration chain — no canonical DDL required.
+
+If your project is laid out as `db/migrations/001_*.sql … 005_*.sql` with
+no `db/schema/` directory, this guide is your entry point. Skip the
+build-from-DDL strategy entirely; the rest of confiture works.
+
+---
+
 ## Overview
 
 Incremental migrations apply targeted changes (ALTER TABLE, CREATE INDEX) to existing databases while preserving data.

@@ -69,6 +69,32 @@ confiture migrate down --dry-run --steps 3
 
 ---
 
+## Need a structural diff?
+
+`migrate up --dry-run` and `--dry-run-execute` answer *"would this run?"*
+They print row-count / time / disk estimates and verify the SQL executes
+inside a SAVEPOINT — but they don't show **what would change** in
+schema terms ("this would add column `users.bio TEXT NULL`, drop index
+`idx_legacy_users_email` …").
+
+For that, use `migrate preflight --against <preflight-db>` (covered in
+[Preflight against a parallel database](#preflight-against-a-parallel-database)
+below). Preflight replays every pending migration on a parallel database,
+then emits a structural diff against `db/schema/` — the human-readable
+"what's about to change" output that lets you pull the trigger on a prod
+apply with confidence.
+
+**Quick decision**:
+
+| You want to … | Use |
+|---|---|
+| Verify the SQL parses + executes inside a transaction | `migrate up --dry-run-execute` |
+| See row-count / time / disk estimates | `migrate up --dry-run` |
+| See "this would add table X, drop column Y" | `migrate preflight --against <preflight-db>` |
+| Gate a CI pipeline on schema drift | `migrate preflight --against` (exit 7 on drift) |
+
+---
+
 ## SAVEPOINT Testing
 
 Execute migrations with guaranteed rollback:

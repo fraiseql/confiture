@@ -503,7 +503,10 @@ class MigratorSession:
                         try:
                             start = _time.time()
                             self._migrator.apply(
-                                migration, force=force, migration_file=migration_file
+                                migration,
+                                force=force,
+                                migration_file=migration_file,
+                                commit=False,
                             )
                             elapsed = int((_time.time() - start) * 1000)
                             total_time += elapsed

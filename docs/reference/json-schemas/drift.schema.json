@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/drift.schema.json",
+  "title": "confiture drift --format json",
+  "description": "Schema drift report comparing the live database to expected DDL. Used by `confiture drift` (structural drift only). When `--check-acls` is also passed, ACL drift items are appended to the same `drift_items` array — see drift-check-acls.schema.json for the augmented contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "database_name",
+    "expected_schema_source",
+    "has_drift",
+    "has_critical_drift",
+    "critical_count",
+    "warning_count",
+    "info_count",
+    "tables_checked",
+    "columns_checked",
+    "indexes_checked",
+    "detection_time_ms",
+    "drift_items",
+    "hints"
+  ],
+  "properties": {
+    "database_name": { "type": "string" },
+    "expected_schema_source": {
+      "type": "string",
+      "description": "Either `\"migrations\"` or a file path."
+    },
+    "has_drift": { "type": "boolean" },
+    "has_critical_drift": { "type": "boolean" },
+    "critical_count": { "type": "integer", "minimum": 0 },
+    "warning_count": { "type": "integer", "minimum": 0 },
+    "info_count": { "type": "integer", "minimum": 0 },
+    "tables_checked": { "type": "integer", "minimum": 0 },
+    "columns_checked": { "type": "integer", "minimum": 0 },
+    "indexes_checked": { "type": "integer", "minimum": 0 },
+    "detection_time_ms": { "type": "integer", "minimum": 0 },
+    "drift_items": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/DriftItem" }
+    },
+    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+  }
+}

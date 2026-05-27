@@ -49,7 +49,9 @@ from confiture.core.idempotency._ast_visitor import (
     _line_for_stmt,
     _StatementContext,
 )
+from confiture.core.idempotency._captures import captures_from_ast
 from confiture.core.idempotency.models import IdempotencyPattern
+from confiture.core.idempotency.suggestion_templates import suggestion_for
 
 if TYPE_CHECKING:
     from confiture.core.idempotency.patterns import PatternMatch
@@ -250,6 +252,7 @@ def _make_match(
 ) -> PatternMatch:
     from confiture.core.idempotency.patterns import PatternMatch  # noqa: PLC0415
 
+    captures = captures_from_ast(pattern, ctx.stmt)
     return PatternMatch(
         pattern=pattern,
         sql_snippet=_extract_snippet_from_stmt(sql, ctx.stmt_location, ctx.stmt_len),
@@ -257,6 +260,7 @@ def _make_match(
         start_pos=ctx.stmt_location,
         end_pos=ctx.stmt_location + ctx.stmt_len,
         severity=severity,
+        suggestion=suggestion_for(pattern, captures),
     )
 
 

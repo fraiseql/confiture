@@ -7,6 +7,7 @@ from typing import Any
 import typer
 
 from confiture.cli.helpers import (
+    _emit_hint,
     _find_orphaned_sql_files,
     _get_tracking_table,
     _output_json,
@@ -89,6 +90,10 @@ def migrate_status(
       confiture migrate status --format json --output migrations.json
         ↳ Save status report to file
 
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schema
+      (migrate-status.schema.json).
+
     RELATED:
       confiture migrate up       - Apply pending migrations
       confiture migrate down     - Rollback applied migrations
@@ -135,6 +140,7 @@ def migrate_status(
                     "current": None,
                     "total": 0,
                     "migrations": [],
+                    "hints": [],
                 }
                 if orphaned_sql_files:
                     result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
@@ -219,6 +225,19 @@ def migrate_status(
         # Determine current version (highest applied)
         current_version = applied_list[-1] if applied_list else None
 
+        status_hints: list[str] = []
+        # The tracking table missing on the target DB is a quiet-success
+        # ambiguity: every migration shows "pending" even though the
+        # database may already match the schema. Emit a hint so agents
+        # don't blindly run `migrate up` on a possibly-baselined DB.
+        if tracking_table_absent:
+            _emit_hint(
+                "Tracking table not found in this database. All migrations "
+                "are reported 'pending' — if the schema is already applied, "
+                "run `confiture migrate baseline --through <version>` first.",
+                hints_list=status_hints,
+                format_=output_format,
+            )
         if output_format == "json":
             result: dict[str, Any] = {
                 "tracking_table": status_tracking_table,
@@ -232,6 +251,7 @@ def migrate_status(
                     "pending": len(pending_list),
                     "total": len(migration_files),
                 },
+                "hints": status_hints,
             }
             if db_error:
                 result["warning"] = f"Could not connect to database: {db_error}"
@@ -548,6 +568,11 @@ def migrate_up(
 
       DRY-RUN: --dry-run, --dry-run-execute, --verbose, --format, --output
         Analyze migrations before executing, with optional SAVEPOINT testing
+
+      STRUCTURAL DIFF: --dry-run does not emit a structural diff (column adds,
+        index drops, etc.). For that, use `migrate preflight --against <url>`
+        which replays migrations on a parallel database and diffs the result
+        against db/schema/. See docs/guides/dry-run.md#need-a-structural-diff.
 
       SAFETY: --verify-checksums, --on-checksum-mismatch, --strict, --no-lock, --lock-timeout
         Control verification and locking behavior for production safety

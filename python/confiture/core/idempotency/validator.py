@@ -166,6 +166,7 @@ class IdempotencyValidator:
                 line_number=original_line,
                 file_path=file_path,
                 severity=match.severity,
+                suggestion=match.suggestion,
             )
             report.add_violation(violation)
 

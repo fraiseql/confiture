@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-fix.schema.json",
+  "title": "confiture migrate fix --idempotent --format json",
+  "description": "Report from `migrate fix --idempotent`. SQL files are rewritten in place (unless --dry-run). Python migrations are listed under `manual_fix_required` — never rewritten, since unparsing the AST would lose comments and formatting.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "files", "total_files_changed", "manual_fix_required", "hints"],
+      "description": "Standard fix-report shape (and the empty-migrations-dir shape uses the same envelope with empty arrays).",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "fixed", "preview"],
+          "description": "`ok` — nothing to fix. `fixed` — changes applied to disk. `preview` — --dry-run, no changes written."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["file", "changes"],
+            "properties": {
+              "file": { "type": "string" },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["pattern", "original", "suggested_fix", "line"],
+                  "properties": {
+                    "pattern": { "type": "string" },
+                    "original": { "type": "string" },
+                    "suggested_fix": { "type": "string" },
+                    "line": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "total_files_changed": { "type": "integer", "minimum": 0 },
+        "manual_fix_required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths of .py migration files containing non-idempotent SQL. The user must edit them by hand."
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "_common.schema.json#/$defs/ExtractorWarning" },
+          "description": "Optional. Present only when the extractor encountered dynamic SQL it couldn't analyse statically."
+        },
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "message", "files", "hints"],
+      "description": "Empty-input shape: no migration files found.",
+      "properties": {
+        "status": { "type": "string", "const": "ok" },
+        "message": { "type": "string" },
+        "files": { "type": "array", "maxItems": 0 },
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+      }
+    }
+  ]
+}

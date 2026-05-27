@@ -9,7 +9,9 @@ import typer
 
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
+    _emit_hint,
     _fix_idempotency,
+    _fix_ownership,
     _output_json,
     _resolve_config,
     _validate_idempotency,
@@ -147,6 +149,53 @@ def migrate_diff(
         raise typer.Exit(1) from e
 
 
+def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
+    """Render the idempotency pattern catalog.
+
+    Read-only: no DB, no config, no migrations directory.
+
+    Args:
+        format_output: ``"text"`` for a Rich table, ``"json"`` for the
+            machine-readable catalog envelope.
+        output_file: Optional path to write JSON output; ignored for text.
+    """
+    from confiture.core.idempotency.patterns import list_patterns
+
+    entries = list_patterns()
+
+    if format_output == "json":
+        # `hints` is pre-allocated per the documented JSON-schema contract
+        # (docs/reference/json-schemas/migrate-validate-list-patterns.schema.json).
+        # `--list-patterns` is a read-only catalog query with no ambiguous
+        # success state, so the list is always empty; the key still
+        # appears so consumers can code against a stable shape.
+        _output_json(
+            {"version": "1", "patterns": entries, "hints": []},
+            output_file,
+            console,
+        )
+        return
+
+    # Text mode: compact table for human eyes.
+    from rich.table import Table
+
+    table = Table(title="Idempotency detection patterns", expand=False)
+    table.add_column("id", style="cyan", no_wrap=True)
+    table.add_column("severity")
+    table.add_column("skip", justify="center")
+    table.add_column("auto-fix", justify="center")
+    table.add_column("description")
+    for entry in entries:
+        table.add_row(
+            entry["id"],
+            entry["severity"],
+            "yes" if entry["has_skip_regex"] else "no",
+            "yes" if entry["has_auto_fix"] else "no",
+            entry["description"],
+        )
+    console.print(table)
+
+
 def _display_body_drift_report(report: Any, console: Any) -> None:
     """Print a FunctionBodyDriftReport to the console in human-readable form."""
     if not report.has_drift:
@@ -186,6 +235,14 @@ def migrate_validate(
         False,
         "--idempotent",
         help="Validate migrations are idempotent, can re-run (default: off)",
+    ),
+    list_patterns: bool = typer.Option(
+        False,
+        "--list-patterns",
+        help=(
+            "Print machine-readable catalog of detection patterns "
+            "(read-only, no DB needed). Use with `--format json` for tooling."
+        ),
     ),
     strict_cor: bool = typer.Option(
         False,
@@ -289,6 +346,16 @@ def migrate_validate(
             "Use --check-acls; --check-acl-coverage is a deprecated alias."
         ),
     ),
+    check_ownership_coverage: bool = typer.Option(
+        False,
+        "--check-ownership-coverage",
+        help=(
+            "Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
+            "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
+            "in the same file.  No-op when the config has no `ownership:` block, or when "
+            "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast)."
+        ),
+    ),
     check_signature_schemas: str = typer.Option(
         "public",
         "--schemas",
@@ -376,6 +443,27 @@ def migrate_validate(
       confiture migrate validate --check-live-drift --check-signatures --env production --schema schema.sql
         ↳ Live: check both column/table drift AND function overload drift
 
+      confiture migrate validate --list-patterns --format json
+        ↳ Print the catalog of every detection pattern (machine-readable, no DB needed)
+
+      confiture migrate validate --check-acls -c db/environments/prod.yaml
+        ↳ Static: verify every CREATE TABLE has a matching GRANT (no DB needed)
+
+    FLAG INTERACTIONS:
+      --check-signatures takes both a singular --schema and a plural --schemas:
+        --schema FILE       Path to a *SQL file* to compare function signatures against.
+                            If omitted, schema is auto-built from db/schema/ DDL files.
+        --schemas LIST      Comma-separated list of *database schema names* (default: public)
+                            to scan in the live DB for stale overloads.
+        They're different things — file path vs. DB schema names — and both flags can
+        appear in the same invocation.
+
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schemas:
+        - --idempotent: migrate-validate-idempotent.schema.json
+        - --list-patterns: migrate-validate-list-patterns.schema.json
+        - --check-acls: migrate-validate-check-acl-coverage.schema.json
+
     RELATED:
       confiture migrate generate - Create new migration file
       confiture migrate fix      - Auto-fix non-idempotent migrations
@@ -388,6 +476,19 @@ def migrate_validate(
                 f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]"
             )
             raise typer.Exit(1)
+
+        # --list-patterns is a read-only catalog query. Short-circuit before
+        # touching config / migrations directory / DB. Must run before
+        # _resolve_config so projects without a confiture.yaml can still
+        # introspect the pattern catalog.
+        if list_patterns:
+            if idempotent:
+                error_console.print(
+                    "[red]Error:[/red] --list-patterns is mutually exclusive with --idempotent"
+                )
+                raise typer.Exit(2)
+            _emit_pattern_catalog(format_output, output_file)
+            return
 
         # Resolve --env / --config to a single config path
         try:
@@ -580,6 +681,7 @@ def migrate_validate(
                             }
                             for v in (acl_report.errors + acl_report.warnings + acl_report.info)
                         ],
+                        "hints": [],
                     },
                     output_file,
                     console,
@@ -596,6 +698,61 @@ def migrate_validate(
                 console.print("[green]✅ All migrations have ACL coverage[/green]")
 
             if acl_report.has_errors:
+                raise typer.Exit(1)
+            return
+
+        # Run ownership coverage check on migration files (static, no DB).
+        if check_ownership_coverage:
+            from confiture.cli.ownership_loader import load_ownership_expectation
+            from confiture.core.linting.libraries.ownership import (
+                Own001OwnershipCoverage,
+            )
+
+            if not config.exists():
+                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                raise typer.Exit(2)
+
+            config_data = load_config(config)
+            # No-op when the project hasn't adopted the `ownership:` block yet.
+            ownership_exp = load_ownership_expectation(config_data, config, require=False)
+
+            ownership_violations = []
+            if ownership_exp is not None:
+                ownership_violations = Own001OwnershipCoverage(expectation=ownership_exp).check(
+                    migrations_dir
+                )
+
+            if format_output == "json":
+                _output_json(
+                    {
+                        "check": "ownership_coverage",
+                        "violations": [
+                            {
+                                "rule_id": v.rule_id,
+                                "severity": v.severity.value,
+                                "object_name": v.object_name,
+                                "message": v.message,
+                                "file_path": v.file_path,
+                                "line_number": v.line_number,
+                            }
+                            for v in ownership_violations
+                        ],
+                    },
+                    output_file,
+                    console,
+                )
+            elif ownership_violations:
+                console.print(
+                    f"[red]❌ Ownership coverage check failed: "
+                    f"{len(ownership_violations)} violation(s)[/red]"
+                )
+                for v in ownership_violations:
+                    # Escape the rule_id brackets so Rich doesn't read them as markup.
+                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+            else:
+                console.print("[green]✅ All migrations have ownership coverage[/green]")
+
+            if ownership_violations:
                 raise typer.Exit(1)
             return
 
@@ -964,6 +1121,30 @@ def migrate_fix(
         "--idempotent",
         help="Fix non-idempotent SQL statements (default: off)",
     ),
+    ownership: bool = typer.Option(
+        False,
+        "--ownership",
+        help=(
+            "Insert missing `ALTER … OWNER TO <expected_owner>` after each "
+            "CREATE that lacks one.  Requires an `ownership:` block in the "
+            "config and the [ast] extra (pglast)."
+        ),
+    ),
+    config_path: Path = typer.Option(
+        Path("confiture.yaml"),
+        "-c",
+        "--config",
+        help="Config file (needed for --ownership; defaults to confiture.yaml)",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "With --ownership --apply: rewrite migration files even when "
+            "their checksum is already recorded in the local tracking table.  "
+            "Use with care — downstream `migrate verify` will report drift."
+        ),
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -999,6 +1180,10 @@ def migrate_fix(
       confiture migrate fix --idempotent --format json --output fixes.json
         ↳ Generate JSON report of all transformations
 
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schema
+      (migrate-fix.schema.json).
+
     RELATED:
       confiture migrate validate - Check migration quality
       confiture migrate up       - Apply migrations
@@ -1020,13 +1205,24 @@ def migrate_fix(
                 console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
             raise typer.Exit(1)
 
-        if not idempotent:
+        if not idempotent and not ownership:
             console.print(
-                "[yellow]⚠️  No fix type specified. Use --idempotent to fix idempotency issues.[/yellow]"
+                "[yellow]⚠️  No fix type specified.  Use --idempotent and/or --ownership.[/yellow]"
             )
             return
 
-        _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
+        if idempotent:
+            _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
+
+        if ownership:
+            _fix_ownership(
+                migrations_dir=migrations_dir,
+                config_path=config_path,
+                dry_run=dry_run,
+                force=force,
+                format_output=format_output,
+                output_file=output_file,
+            )
 
     except typer.Exit:
         raise
@@ -1753,6 +1949,32 @@ def _preflight_version_from_filename(filename: str) -> str:
     return filename.split("_")[0]
 
 
+def _target_tracking_table_is_empty(session: MigratorSession) -> bool:
+    """Return True when the preflight target's ``tb_confiture`` is empty / missing.
+
+    A best-effort probe: any database error (table missing, permission
+    denied, connection drop) is treated as "looks empty" — the worst
+    case is emitting an extra hint, which is advisory anyway.
+    """
+    import contextlib
+
+    conn = getattr(session, "_conn", None)
+    if conn is None:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM tb_confiture LIMIT 1")
+            row = cur.fetchone()
+        # Roll back any aborted transaction state so run_against starts clean.
+        with contextlib.suppress(Exception):
+            conn.rollback()
+        return row is None
+    except Exception:  # noqa: BLE001 — best-effort: missing table / perm denied
+        with contextlib.suppress(Exception):
+            conn.rollback()
+        return True
+
+
 def _resolve_preflight_pending(
     migrations_dir: Path,
     *,
@@ -2006,6 +2228,23 @@ def migrate_preflight(
     statements (CREATE INDEX CONCURRENTLY, etc.), checks for duplicate
     versions, and verifies checksums of applied migrations.
 
+    MODES:
+      Default mode — static analysis only. No --against, no DB connection.
+        Scans local migration files and reports per-file reversibility +
+        transactionality. Cannot detect "is this migration already
+        applied?" because there's no source of truth to compare against.
+
+      Explicit source mode — --against <url> [+ --config OR --env OR --since]
+        Replays pending migrations inside a SAVEPOINT against a preflight
+        DB and reports per-migration success/failure. Source of "pending"
+        is determined by the flag combination:
+          • --against alone        → all local files
+          • --against + --config   → pending files (read tb_confiture from
+                                     the --config DB, not from --against)
+          • --against + --env      → same, using db/environments/{env}.yaml
+          • --against + --since V  → all files with version >= V (no DB
+                                     needed for pending detection)
+
     EXAMPLES:
       confiture migrate preflight
         ↳ Check all migration files in db/migrations
@@ -2035,6 +2274,11 @@ def migrate_preflight(
       0 — all migrations safe to deploy (skipped non-transactional migrations are neutral)
       1 — one or more issues detected or execution failures
       2 — config or connection error
+
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schemas:
+        - default: migrate-preflight.schema.json
+        - with --against: migrate-preflight-against.schema.json
     """
     from rich.table import Table
 
@@ -2064,6 +2308,7 @@ def migrate_preflight(
             payload = result.to_dict()
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
+            payload["hints"] = []
             _output_json(payload, None, console)
             if not result.safe_to_deploy:
                 raise typer.Exit(1)
@@ -2137,6 +2382,7 @@ def migrate_preflight(
         error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")
         raise typer.Exit(2) from e
 
+    target_tracking_empty = False
     try:
         session = MigratorSession(
             config=None,
@@ -2145,6 +2391,11 @@ def migrate_preflight(
             migration_table_override="tb_confiture",
         )
         with session:
+            # Snapshot whether the target's tracking table is empty BEFORE
+            # the SAVEPOINT-bounded run_against — used to emit a
+            # quiet-success hint when the target looks like a restored
+            # backup with the tracking table stripped.
+            target_tracking_empty = _target_tracking_table_is_empty(session)
             against_result = session.run_against(
                 pending_files,
                 against_url=against,
@@ -2163,10 +2414,21 @@ def migrate_preflight(
             against_url=against,
         )
 
+    preflight_hints: list[str] = []
+    if target_tracking_empty and pending_files:
+        _emit_hint(
+            "`tb_confiture` on the target is empty. If --against points at a "
+            "restored backup, was the tracking table dropped during "
+            "anonymization?",
+            hints_list=preflight_hints,
+            format_=format_type,
+        )
+
     if format_type == "json":
         payload: dict[str, Any] = {
             "static": result.to_dict(),
             "against": against_result.to_dict(),
+            "hints": preflight_hints,
         }
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()

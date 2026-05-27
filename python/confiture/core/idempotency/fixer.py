@@ -145,26 +145,35 @@ class IdempotencyFixer:
             return True
         return pattern in self.fix_patterns
 
+    # Dispatch table: pattern → fixer-method name. The set of keys is the
+    # single source of truth for ``FIXABLE_PATTERNS`` (and therefore for
+    # ``IdempotencyPattern.fix_available``) — keep them in sync.
+    _FIX_METHOD_NAMES: dict[IdempotencyPattern, str] = {
+        IdempotencyPattern.CREATE_TABLE: "_fix_create_table",
+        IdempotencyPattern.CREATE_INDEX: "_fix_create_index",
+        IdempotencyPattern.CREATE_UNIQUE_INDEX: "_fix_create_unique_index",
+        IdempotencyPattern.CREATE_FUNCTION: "_fix_create_function",
+        IdempotencyPattern.CREATE_PROCEDURE: "_fix_create_procedure",
+        IdempotencyPattern.CREATE_VIEW: "_fix_create_view",
+        IdempotencyPattern.CREATE_EXTENSION: "_fix_create_extension",
+        IdempotencyPattern.CREATE_SCHEMA: "_fix_create_schema",
+        IdempotencyPattern.CREATE_SEQUENCE: "_fix_create_sequence",
+        IdempotencyPattern.ALTER_TABLE_ADD_COLUMN: "_fix_alter_table_add_column",
+        IdempotencyPattern.DROP_TABLE: "_fix_drop_table",
+        IdempotencyPattern.DROP_INDEX: "_fix_drop_index",
+        IdempotencyPattern.DROP_FUNCTION: "_fix_drop_function",
+        IdempotencyPattern.DROP_VIEW: "_fix_drop_view",
+        IdempotencyPattern.DROP_TYPE: "_fix_drop_type",
+        IdempotencyPattern.DROP_SCHEMA: "_fix_drop_schema",
+        IdempotencyPattern.DROP_SEQUENCE: "_fix_drop_sequence",
+    }
+
     def _get_suggested_fix(self, pattern: IdempotencyPattern, original: str) -> str:
         """Get the suggested fix for a pattern."""
-        # Apply the specific fix and return the result
-        fix_methods = {
-            IdempotencyPattern.CREATE_TABLE: self._fix_create_table,
-            IdempotencyPattern.CREATE_INDEX: self._fix_create_index,
-            IdempotencyPattern.CREATE_UNIQUE_INDEX: self._fix_create_unique_index,
-            IdempotencyPattern.CREATE_FUNCTION: self._fix_create_function,
-            IdempotencyPattern.CREATE_PROCEDURE: self._fix_create_procedure,
-            IdempotencyPattern.CREATE_VIEW: self._fix_create_view,
-            IdempotencyPattern.DROP_TABLE: self._fix_drop_table,
-            IdempotencyPattern.DROP_INDEX: self._fix_drop_index,
-            IdempotencyPattern.DROP_FUNCTION: self._fix_drop_function,
-            IdempotencyPattern.DROP_VIEW: self._fix_drop_view,
-            IdempotencyPattern.ALTER_TABLE_ADD_COLUMN: self._fix_alter_table_add_column,
-        }
-        fix_method = fix_methods.get(pattern)
-        if fix_method:
-            return fix_method(original)
-        return original
+        method_name = self._FIX_METHOD_NAMES.get(pattern)
+        if method_name is None:
+            return original
+        return getattr(self, method_name)(original)
 
     def _fix_create_table(self, sql: str) -> str:
         """Add IF NOT EXISTS to CREATE TABLE statements."""
@@ -406,3 +415,11 @@ class IdempotencyFixer:
             re.IGNORECASE,
         )
         return pattern.sub(r"DROP SEQUENCE IF EXISTS \1\2", sql)
+
+
+# Single source of truth for which patterns have an automatic fix.
+# Built from the dispatch table so ``dry_run`` and ``fix`` agree, and
+# ``IdempotencyPattern.fix_available`` reads from the same set.
+FIXABLE_PATTERNS: frozenset[IdempotencyPattern] = frozenset(
+    IdempotencyFixer._FIX_METHOD_NAMES.keys()
+)

@@ -26,6 +26,39 @@ _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 console = Console()
 error_console = Console(file=sys.stderr)
 
+_MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
+
+
+def _emit_hint(
+    hint: str,
+    *,
+    hints_list: list[str],
+    format_: str,
+    error_console: Console | None = None,
+) -> None:
+    """Emit an advisory "looks unusual" hint via the right channel.
+
+    Hints are dual-channel based on the output format:
+
+    - ``format_ == "text"`` → write to ``error_console`` (stderr).
+    - ``format_ in {"json", "csv", "yaml"}`` → append to ``hints_list``
+      so it lands in the machine-readable payload under ``"hints": [...]``;
+      nothing goes to stderr (agents pipe stdout, not stderr).
+
+    Hints never change the exit code — they are pure agent-experience
+    breadcrumbs.
+
+    ``error_console`` defaults to the module-level :data:`error_console`
+    looked up at call time, so test fixtures that monkeypatch the
+    module-level binding take effect.
+    """
+    if format_ in _MACHINE_OUTPUT_FORMATS:
+        hints_list.append(hint)
+        return
+    target = error_console or globals()["error_console"]
+    target.print(f"[dim]Hint: {hint}[/dim]")
+
+
 # Common command names for "Did you mean?" suggestions
 COMMON_COMMANDS = [
     "init",
@@ -332,6 +365,34 @@ def _collect_idempotency_report(
     return combined
 
 
+def _idempotent_backend_banner(format_output: str) -> dict[str, str]:
+    """Report which idempotency backend is active.
+
+    Text mode prints a one-line banner to ``console`` (stdout) — it's a
+    status line, not an error. JSON / CSV / YAML modes print *nothing*:
+    the backend is reported via ``payload["meta"]["backend"]`` so that
+    pipe-able output stays valid.
+
+    Returns:
+        A ``meta`` dict the caller folds into its JSON payload. Always
+        contains ``{"backend": "ast" | "regex"}``.
+    """
+    from confiture.core.idempotency.patterns import is_pglast_available
+
+    backend = "ast" if is_pglast_available() else "regex"
+    if format_output == "text":
+        if backend == "ast":
+            console.print("[green]✓ AST backend (pglast)[/green]")
+        else:
+            # Escape the [ast] brackets so Rich doesn't read them as markup.
+            console.print(
+                "[yellow]⚠ Regex fallback — install with "
+                '`pip install "fraiseql-confiture\\[ast]"` '
+                "for AST-backed detection[/yellow]"
+            )
+    return {"backend": backend}
+
+
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
@@ -355,15 +416,32 @@ def _validate_idempotency(
 
     validator = IdempotencyValidator()
 
+    # Backend banner (text) + meta accumulator (json) — printed before
+    # file enumeration so users see which detector is running.
+    meta = _idempotent_backend_banner(format_output)
+
     sql_files = sorted(migrations_dir.glob("*.up.sql"))
     py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
 
     if not sql_files and not py_files:
+        # Quiet-success ambiguity: "no migrations" can mean the user
+        # intentionally validated an empty directory, but more often
+        # they pointed --migrations-dir at the wrong path. Emit a hint
+        # to make the success state legible to agents.
+        zero_files_hints: list[str] = []
+        _emit_hint(
+            f"Migration directory `{migrations_dir}` exists but contains no files. "
+            "Did you mean to pass --migrations-dir <other>?",
+            hints_list=zero_files_hints,
+            format_=format_output,
+        )
         if format_output == "json":
             result: dict[str, Any] = {
                 "status": "ok",
                 "message": "No migration files found",
                 "violations": [],
+                "meta": meta,
+                "hints": zero_files_hints,
             }
             _output_json(result, output_file, console)
         else:
@@ -376,6 +454,8 @@ def _validate_idempotency(
     if format_output == "json":
         result = combined_report.to_dict()
         result["status"] = "issues_found" if fail else "ok"
+        result["meta"] = meta
+        result["hints"] = []
         _output_json(result, output_file, console)
         if fail:
             raise typer.Exit(1)
@@ -491,6 +571,7 @@ def _fix_idempotency(
                 "status": "ok",
                 "message": "No migration files found",
                 "files": [],
+                "hints": [],
             }
             _output_json(result, output_file, console)
         else:
@@ -543,6 +624,7 @@ def _fix_idempotency(
             "files": files_changed,
             "total_files_changed": len(files_changed),
             "manual_fix_required": manual_fix_required,
+            "hints": [],
         }
         if manual_report.has_warnings:
             result["warnings"] = manual_report.to_dict()["warnings"]
@@ -592,3 +674,158 @@ def _fix_idempotency(
         console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
     elif files_changed:
         console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
+
+
+def _fix_ownership(
+    migrations_dir: Path,
+    config_path: Path,
+    dry_run: bool,
+    force: bool,
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Insert missing ``ALTER … OWNER TO`` statements in migration files (issue #124).
+
+    Loads ``ownership:`` from *config_path* and uses
+    :class:`~confiture.core.ownership_fixer.OwnershipFixer` to rewrite
+    files in place.  In ``--apply`` mode (i.e. not ``--dry-run``), the
+    helper first probes the local tracking table — any file whose
+    version is already recorded gets refused unless ``--force`` is also
+    set.
+
+    No-op when:
+    - ``ownership:`` block is absent from *config_path*
+    - ``ownership.lint_enabled`` is False
+    - pglast (the [ast] extra) is not installed
+    """
+    from confiture.cli.ownership_loader import load_ownership_expectation
+    from confiture.core.connection import load_config
+    from confiture.core.ownership_fixer import OwnershipFixer
+
+    if not config_path.exists():
+        error_console.print(f"[red]❌ Config file not found: {config_path}[/red]")
+        raise SystemExit(2)
+
+    config_data = load_config(config_path)
+    expectation = load_ownership_expectation(config_data, config_path, require=False)
+    if expectation is None:
+        if format_output == "json":
+            _output_json(
+                {"status": "skipped", "reason": "no ownership: block in config"},
+                output_file,
+                console,
+            )
+        else:
+            console.print(
+                "[yellow]⚠️  --ownership: config has no `ownership:` block — nothing to fix.[/yellow]"
+            )
+        return
+
+    fixer = OwnershipFixer(expectation=expectation)
+    previews = fixer.preview(migrations_dir)
+
+    refused: list[tuple[Path, str]] = []
+    applicable_previews = previews
+    if not dry_run and previews:
+        # Checksum-drift guard: ask the local DB which migration versions
+        # are already recorded.  Refuse to rewrite those unless --force.
+        applied_versions = _query_applied_versions(config_data)
+        if applied_versions:
+            safe: list = []
+            for preview in previews:
+                version = _extract_version(preview.file.name)
+                if version and version in applied_versions and not force:
+                    refused.append((preview.file, "already applied locally"))
+                else:
+                    safe.append(preview)
+            applicable_previews = safe
+
+    modified: list[Path] = []
+    if not dry_run:
+        for preview in applicable_previews:
+            preview.file.write_text(preview.after)
+            modified.append(preview.file)
+
+    if format_output == "json":
+        _output_json(
+            {
+                "status": "preview" if dry_run else "fixed",
+                "previews": [
+                    {
+                        "file": str(p.file),
+                        "before": p.before,
+                        "after": p.after,
+                    }
+                    for p in previews
+                ],
+                "modified": [str(p) for p in modified],
+                "refused": [{"file": str(f), "reason": r} for f, r in refused],
+            },
+            output_file,
+            console,
+        )
+        if refused and not force:
+            raise SystemExit(2)
+        return
+
+    if not previews:
+        console.print("[green]✅ All migrations have ownership coverage[/green]")
+        return
+
+    label = "Would insert" if dry_run else "Inserted"
+    console.print(f"[green]{label} `ALTER … OWNER TO` in:[/green]")
+    for preview in previews:
+        console.print(f"  [green]✓[/green] {preview.file.name}")
+
+    if refused:
+        console.print(
+            f"\n[red]Refused {len(refused)} file(s) "
+            f"(already applied — pass --force to rewrite anyway):[/red]"
+        )
+        for file_path, reason in refused:
+            console.print(f"  [red]✗[/red] {file_path.name}: {reason}")
+        if not force:
+            raise SystemExit(2)
+
+
+def _extract_version(filename: str) -> str | None:
+    """Pull the leading version token out of a migration filename.
+
+    Confiture migration files are named ``<version>_<name>.up.sql`` where
+    ``<version>`` is either ``NNN`` (legacy) or ``YYYYMMDDHHMMSS`` (post-0.6.0).
+    Both forms parse as a leading run of digits.
+    """
+    m = re.match(r"^(\d+)", filename)
+    return m.group(1) if m else None
+
+
+def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
+    """Return the set of migration versions present in the local tracking table.
+
+    Returns an empty set on any failure (no DB, no table, no rows) so
+    the fixer can fall through to the "rewrite everything" path —
+    a checksum guard that can't open a connection is no guard at all,
+    so we'd rather degrade gracefully than block the fix.
+    """
+    from confiture.core.connection import create_connection
+
+    try:
+        conn = create_connection(config_data)
+    except Exception:
+        return set()
+
+    table = _get_tracking_table(config_data)
+    try:
+        with conn.cursor() as cur:
+            # Schema-qualified identifier needs splitting + quoting.
+            schema, _, name = table.partition(".")
+            if not name:
+                schema, name = "public", table
+            cur.execute(
+                f'SELECT version FROM "{schema}"."{name}"'  # noqa: S608 — names quoted, no user input
+            )
+            return {row[0] for row in cur.fetchall()}
+    except Exception:
+        return set()
+    finally:
+        conn.close()

@@ -181,13 +181,36 @@ def _find_create_table_blocks(sql: str) -> list[tuple[int, int, str]]:
     return blocks
 
 
-def _strip_comments_from_body(body: str) -> str:
-    """Strip all comments from body text for matching purposes."""
-    # Remove block comments
-    result = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
-    # Remove line comments
-    result = re.sub(r"--[^\n]*", "", result)
-    return result
+def _line_has_data(line: str) -> bool:
+    """Return True if `line` has any content beyond whitespace and `--` comments."""
+    return _strip_comments(line).strip() != ""
+
+
+def _strip_comments_with_map(body: str) -> tuple[str, list[int]]:
+    """Strip line and block comments, returning the stripped text and an index map.
+
+    `orig_idx[i]` is the position in `body` of the character that ends up at
+    position `i` in the returned stripped string. The map lets a regex match on
+    the stripped text be projected back onto exact positions in the original,
+    without a second regex pass that can re-snag on the very comment we stripped.
+    """
+    stripped_chars: list[str] = []
+    orig_idx: list[int] = []
+    i = 0
+    n = len(body)
+    while i < n:
+        if body[i : i + 2] == "/*":
+            end = body.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        if body[i : i + 2] == "--":
+            end = body.find("\n", i + 2)
+            i = n if end == -1 else end
+            continue
+        stripped_chars.append(body[i])
+        orig_idx.append(i)
+        i += 1
+    return "".join(stripped_chars), orig_idx
 
 
 def _extract_fks_from_body(body: str, table_name: str) -> tuple[str, list[ForeignKeyInfo]]:
@@ -200,10 +223,12 @@ def _extract_fks_from_body(body: str, table_name: str) -> tuple[str, list[Foreig
     cleaned = body
 
     # Step 1: Extract and remove table-level FK constraints (multi-line safe).
-    # We match against comment-stripped text but remove from original using positions.
-    # To handle position mapping, we repeatedly match-and-remove from the cleaned text.
+    # Positions are obtained by running the regex on a comment-stripped view of
+    # the text, then mapped back to original-text positions via orig_idx. A
+    # second regex search against the original text would re-snag on whatever
+    # whitespace abuts a stripped comment and cause comment displacement (#128).
     while True:
-        check_text = _strip_comments_from_body(cleaned)
+        check_text, orig_idx = _strip_comments_with_map(cleaned)
         table_fk_match = _TABLE_FK_RE.search(check_text)
         if not table_fk_match:
             break
@@ -228,31 +253,39 @@ def _extract_fks_from_body(body: str, table_name: str) -> tuple[str, list[Foreig
             )
         )
 
-        # Now find the same match in the original cleaned text (with comments).
-        # The TABLE_FK_RE uses \s+ which matches newlines, so it works on multi-line.
-        orig_match = _TABLE_FK_RE.search(cleaned)
-        if orig_match:
-            start = orig_match.start()
-            end = orig_match.end()
+        start = orig_idx[table_fk_match.start()]
+        end = orig_idx[table_fk_match.end() - 1] + 1
 
-            # Expand start backwards to consume leading whitespace/newline
-            while start > 0 and cleaned[start - 1] in (" ", "\t"):
+        # Expand start backwards to consume leading whitespace/newline.
+        # The leading-newline pass is suppressed when the preceding line is
+        # comment-only: consuming its terminator would glue the comment onto
+        # whatever follows the deletion (#128).
+        while start > 0 and cleaned[start - 1] in (" ", "\t"):
+            start -= 1
+        if start > 0 and cleaned[start - 1] == "\n":
+            line_start = cleaned.rfind("\n", 0, start - 1) + 1
+            preceding_line = cleaned[line_start : start - 1]
+            if _line_has_data(preceding_line):
                 start -= 1
-            if start > 0 and cleaned[start - 1] == "\n":
-                start -= 1
 
-            # Expand end forward to consume trailing comma and whitespace
-            while end < len(cleaned) and cleaned[end] in (" ", "\t"):
-                end += 1
-            if end < len(cleaned) and cleaned[end] == ",":
-                end += 1
-            # Consume trailing newline
-            while end < len(cleaned) and cleaned[end] in (" ", "\t"):
-                end += 1
-            if end < len(cleaned) and cleaned[end] == "\n":
+        # Expand end forward to consume trailing comma and whitespace.
+        # The trailing-newline pass is suppressed when the following line is
+        # comment-only: consuming its leading newline would glue the comment
+        # onto the previous data line (#128).
+        while end < len(cleaned) and cleaned[end] in (" ", "\t"):
+            end += 1
+        if end < len(cleaned) and cleaned[end] == ",":
+            end += 1
+        while end < len(cleaned) and cleaned[end] in (" ", "\t"):
+            end += 1
+        if end < len(cleaned) and cleaned[end] == "\n":
+            after_nl = end + 1
+            next_nl = cleaned.find("\n", after_nl)
+            following_line = cleaned[after_nl:next_nl] if next_nl != -1 else cleaned[after_nl:]
+            if _line_has_data(following_line) or following_line == "":
                 end += 1
 
-            cleaned = cleaned[:start] + cleaned[end:]
+        cleaned = cleaned[:start] + cleaned[end:]
 
     # Step 2: Extract and remove inline REFERENCES (line-by-line is fine here,
     # since inline REFERENCES are always on the same line as the column definition).
@@ -322,13 +355,15 @@ def _fix_trailing_commas(body: str) -> str:
     while lines and not lines[-1].strip():
         lines.pop()
 
-    # Find the last non-blank line and strip its trailing comma
+    # Find the last line that carries actual column / constraint content
+    # (skip blank and comment-only lines) and strip its trailing comma.
     for i in range(len(lines) - 1, -1, -1):
+        if not _line_has_data(lines[i]):
+            continue
         rstripped = lines[i].rstrip()
-        if rstripped:
-            if rstripped.endswith(","):
-                lines[i] = rstripped[:-1]
-            break
+        if rstripped.endswith(","):
+            lines[i] = rstripped[:-1]
+        break
 
     # Restore trailing newline
     return "\n".join(lines) + "\n"

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-status.schema.json",
+  "title": "confiture migrate status --format json",
+  "description": "Migration status report. Without --config the per-migration `status` is `unknown` (file-based listing only). With --config, status is `applied` or `pending` and `applied_at` is populated for `applied` entries.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Empty-input shape: no migration files in the directory.",
+      "required": ["applied", "pending", "current", "total", "migrations", "hints"],
+      "properties": {
+        "applied": { "type": "array", "maxItems": 0 },
+        "pending": { "type": "array", "maxItems": 0 },
+        "current": { "type": "null" },
+        "total": { "type": "integer", "const": 0 },
+        "migrations": { "type": "array", "maxItems": 0 },
+        "orphaned_migrations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Populated shape: at least one migration file in the directory.",
+      "required": [
+        "tracking_table",
+        "applied",
+        "pending",
+        "current",
+        "total",
+        "migrations",
+        "summary",
+        "hints"
+      ],
+      "properties": {
+        "tracking_table": {
+          "type": ["string", "null"],
+          "description": "Configured tracking table name. NULL when no --config was supplied."
+        },
+        "applied": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Version prefixes of applied migrations."
+        },
+        "pending": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "current": {
+          "type": ["string", "null"],
+          "description": "Highest applied version, or NULL if none applied."
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "migrations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["version", "name", "status", "applied_at"],
+            "properties": {
+              "version": { "type": "string" },
+              "name": { "type": "string" },
+              "status": {
+                "type": "string",
+                "enum": ["applied", "pending", "unknown"],
+                "description": "`unknown` when no --config was provided or the DB connection failed; `applied`/`pending` otherwise."
+              },
+              "applied_at": {
+                "description": "Timestamp the migration was applied. NULL for `pending` and `unknown` entries."
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["applied", "pending", "total"],
+          "properties": {
+            "applied": { "type": "integer", "minimum": 0 },
+            "pending": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "warning": {
+          "type": "string",
+          "description": "Present when the tracking table is missing or the DB connection failed; the message tells the user what to do next."
+        },
+        "orphaned_migrations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "duplicate_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Map of version-prefix → list of file names sharing that prefix."
+        },
+        "rebuild_recommended": { "type": "boolean" },
+        "rebuild_reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+      }
+    }
+  ]
+}

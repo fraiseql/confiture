@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/_common.schema.json",
+  "title": "Confiture common JSON-Schema definitions",
+  "description": "Shared sub-schemas referenced by per-command output schemas in this directory. Stable contract: changes require a top-level version bump in each consuming schema.",
+  "$defs": {
+    "HintsArray": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Advisory hints emitted on quiet-success states (e.g. zero migration files found, empty tracking table). Always present. Empty list when no hints are applicable. Hints never change the exit code — agents may treat presence of items as 'this success looks unusual'."
+    },
+    "Violation": {
+      "type": "object",
+      "description": "A single non-idempotent SQL pattern detected in a migration file.",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Stable pattern id (see migrate-validate-list-patterns.schema.json for the full enumeration)."
+        },
+        "sql_snippet": { "type": "string" },
+        "line_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line number where the violation starts. For .py migrations this is the line within the embedded SQL; see `source_line` for the .py file line."
+        },
+        "file_path": { "type": "string" },
+        "source_line": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Line number in the source file (.py file or .sql file). Only present when different from `line_number` — i.e. SQL embedded in a Python migration. NOTE: field name is `source_line`, NOT `line_number`."
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Suggested fix template. Placeholders may be filled with captured identifiers (table name, constraint name, etc.) when available."
+        },
+        "fix_available": {
+          "type": "boolean",
+          "description": "True when `confiture migrate fix --idempotent` can rewrite this violation automatically."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "info"],
+          "description": "`error` fails the gate (exit 1). `info` is a heuristic finding (e.g. CREATE OR REPLACE VIEW shape-risk) that's rendered but does NOT fail the gate unless `--strict-cor` is passed."
+        }
+      },
+      "required": [
+        "pattern",
+        "sql_snippet",
+        "line_number",
+        "file_path",
+        "suggestion",
+        "fix_available",
+        "severity"
+      ]
+    },
+    "ExtractorWarning": {
+      "type": "object",
+      "description": "A dynamic-SQL call the validator could not statically reach (e.g. f-string SQL, computed identifiers). Recorded so the user knows idempotency cannot be guaranteed for these snippets.",
+      "properties": {
+        "kind": { "type": "string" },
+        "source_file": { "type": "string" },
+        "source_line": { "type": "integer", "minimum": 1 },
+        "message": { "type": "string" }
+      },
+      "required": ["kind", "source_file", "source_line", "message"]
+    },
+    "DriftItem": {
+      "type": "object",
+      "description": "A single schema-drift finding between live database and expected DDL.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "missing_table",
+            "extra_table",
+            "missing_column",
+            "extra_column",
+            "type_mismatch",
+            "nullable_mismatch",
+            "default_mismatch",
+            "missing_index",
+            "extra_index",
+            "missing_constraint",
+            "extra_constraint",
+            "missing_grant",
+            "extra_grant",
+            "wrong_owner"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "warning", "info"]
+        },
+        "object": { "type": "string" },
+        "expected": { "type": ["string", "null"] },
+        "actual": { "type": ["string", "null"] },
+        "message": { "type": "string" }
+      },
+      "required": ["type", "severity", "object", "message"]
+    }
+  }
+}

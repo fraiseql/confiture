@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-check-acl-coverage.schema.json",
+  "title": "confiture migrate validate --check-acls --format json",
+  "description": "Static ACL coverage report: every `CREATE TABLE` in db/migrations/ must have a matching `GRANT` in the same migration or in the configured grant-sweep directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["check", "violations", "hints"],
+  "properties": {
+    "check": {
+      "type": "string",
+      "const": "acl_coverage"
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "severity", "object_name", "message", "file_path"],
+        "properties": {
+          "rule_id": { "type": "string" },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning", "info"]
+          },
+          "object_name": { "type": "string" },
+          "message": { "type": "string" },
+          "file_path": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+  }
+}

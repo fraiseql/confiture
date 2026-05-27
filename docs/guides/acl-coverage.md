@@ -1,8 +1,10 @@
 # ACL Coverage
 
-[← Back to Guides](../index.md) · [Drift Detection](git-aware-validation.md) · [Schema Linting](schema-linting.md)
+[← Back to Guides](../index.md) · [Ownership Coverage](ownership-coverage.md) · [Drift Detection](git-aware-validation.md) · [Schema Linting](schema-linting.md)
 
 Catch tables that ship without their expected `GRANT`s — both before they merge (static lint) and after they reach a database (runtime drift).
+
+> **Sister feature** — [Ownership Coverage](ownership-coverage.md) covers the same drift class on the ownership axis (`pg_class.relowner`). Most projects want both: ACL coverage catches missing grants, ownership coverage catches the missing `ALTER … OWNER TO` that *causes* schema-wide grants to fail. The two features share a parallel CLI surface (`--check-acls` / `--check-ownership` for runtime; `--check-acl-coverage` / `--check-ownership-coverage` for the static lint).
 
 ---
 

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-list-patterns.schema.json",
+  "title": "confiture migrate validate --list-patterns --format json",
+  "description": "Machine-readable catalog of every idempotency detection pattern. Read-only — no DB connection, no config file, no migrations directory required. Stable contract: frozen at `version: \"1\"`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "patterns", "hints"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1",
+      "description": "Catalog shape version. Bumps to \"2\" only if fields are removed or semantics change; additions are additive and keep version \"1\"."
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description",
+          "severity",
+          "has_skip_regex",
+          "skip_hint",
+          "has_auto_fix",
+          "template_fillable"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "IdempotencyPattern enum name. Stable identifier — safe to depend on."
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of what the pattern detects."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "info"]
+          },
+          "has_skip_regex": {
+            "type": "boolean",
+            "description": "True when the validator recognises an idempotent form for this pattern (e.g. CREATE TABLE IF NOT EXISTS)."
+          },
+          "skip_hint": {
+            "type": ["string", "null"],
+            "description": "Human-friendly text describing the idempotent form (e.g. \"CREATE TABLE IF NOT EXISTS\"). NULL when has_skip_regex is false."
+          },
+          "has_auto_fix": {
+            "type": "boolean",
+            "description": "True when `migrate fix --idempotent` can rewrite this pattern automatically."
+          },
+          "template_fillable": {
+            "type": "boolean",
+            "description": "True when the validator can fill a captures-driven SQL suggestion template for this pattern (e.g. inlining table/constraint names). False when the suggestion stays generic and explicitly says manual fix required."
+          }
+        }
+      }
+    },
+    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+  }
+}
