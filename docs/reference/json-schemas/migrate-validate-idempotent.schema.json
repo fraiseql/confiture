@@ -17,6 +17,7 @@
         "has_blocking_violations",
         "warnings",
         "has_warnings",
+        "meta",
         "hints"
       ],
       "properties": {
@@ -44,13 +45,24 @@
           "items": { "$ref": "_common.schema.json#/$defs/ExtractorWarning" }
         },
         "has_warnings": { "type": "boolean" },
+        "meta": {
+          "type": "object",
+          "required": ["backend"],
+          "properties": {
+            "backend": {
+              "type": "string",
+              "enum": ["ast", "regex"],
+              "description": "Which detection backend ran. `ast` = pglast-backed AST (preferred); `regex` = fallback when pglast is missing or CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 is set."
+            }
+          }
+        },
         "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
       }
     },
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "message", "violations", "hints"],
+      "required": ["status", "message", "violations", "meta", "hints"],
       "description": "Empty-input shape: no migration files found.",
       "properties": {
         "status": { "type": "string", "const": "ok" },
@@ -58,6 +70,13 @@
         "violations": {
           "type": "array",
           "maxItems": 0
+        },
+        "meta": {
+          "type": "object",
+          "required": ["backend"],
+          "properties": {
+            "backend": { "type": "string", "enum": ["ast", "regex"] }
+          }
         },
         "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
       }

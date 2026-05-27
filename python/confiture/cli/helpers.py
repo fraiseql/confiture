@@ -332,6 +332,34 @@ def _collect_idempotency_report(
     return combined
 
 
+def _idempotent_backend_banner(format_output: str) -> dict[str, str]:
+    """Report which idempotency backend is active.
+
+    Text mode prints a one-line banner to ``console`` (stdout) — it's a
+    status line, not an error. JSON / CSV / YAML modes print *nothing*:
+    the backend is reported via ``payload["meta"]["backend"]`` so that
+    pipe-able output stays valid.
+
+    Returns:
+        A ``meta`` dict the caller folds into its JSON payload. Always
+        contains ``{"backend": "ast" | "regex"}``.
+    """
+    from confiture.core.idempotency.patterns import is_pglast_available
+
+    backend = "ast" if is_pglast_available() else "regex"
+    if format_output == "text":
+        if backend == "ast":
+            console.print("[green]✓ AST backend (pglast)[/green]")
+        else:
+            # Escape the [ast] brackets so Rich doesn't read them as markup.
+            console.print(
+                "[yellow]⚠ Regex fallback — install with "
+                '`pip install "fraiseql-confiture\\[ast]"` '
+                "for AST-backed detection[/yellow]"
+            )
+    return {"backend": backend}
+
+
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
@@ -355,6 +383,10 @@ def _validate_idempotency(
 
     validator = IdempotencyValidator()
 
+    # Backend banner (text) + meta accumulator (json) — printed before
+    # file enumeration so users see which detector is running.
+    meta = _idempotent_backend_banner(format_output)
+
     sql_files = sorted(migrations_dir.glob("*.up.sql"))
     py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
 
@@ -364,6 +396,7 @@ def _validate_idempotency(
                 "status": "ok",
                 "message": "No migration files found",
                 "violations": [],
+                "meta": meta,
                 "hints": [],
             }
             _output_json(result, output_file, console)
@@ -377,6 +410,7 @@ def _validate_idempotency(
     if format_output == "json":
         result = combined_report.to_dict()
         result["status"] = "issues_found" if fail else "ok"
+        result["meta"] = meta
         result["hints"] = []
         _output_json(result, output_file, console)
         if fail:

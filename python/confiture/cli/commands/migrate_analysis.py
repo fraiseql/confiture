@@ -441,6 +441,27 @@ def migrate_validate(
       confiture migrate validate --check-live-drift --check-signatures --env production --schema schema.sql
         ↳ Live: check both column/table drift AND function overload drift
 
+      confiture migrate validate --list-patterns --format json
+        ↳ Print the catalog of every detection pattern (machine-readable, no DB needed)
+
+      confiture migrate validate --check-acls -c db/environments/prod.yaml
+        ↳ Static: verify every CREATE TABLE has a matching GRANT (no DB needed)
+
+    FLAG INTERACTIONS:
+      --check-signatures takes both a singular --schema and a plural --schemas:
+        --schema FILE       Path to a *SQL file* to compare function signatures against.
+                            If omitted, schema is auto-built from db/schema/ DDL files.
+        --schemas LIST      Comma-separated list of *database schema names* (default: public)
+                            to scan in the live DB for stale overloads.
+        They're different things — file path vs. DB schema names — and both flags can
+        appear in the same invocation.
+
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schemas:
+        - --idempotent: migrate-validate-idempotent.schema.json
+        - --list-patterns: migrate-validate-list-patterns.schema.json
+        - --check-acls: migrate-validate-check-acl-coverage.schema.json
+
     RELATED:
       confiture migrate generate - Create new migration file
       confiture migrate fix      - Auto-fix non-idempotent migrations
@@ -2183,6 +2204,23 @@ def migrate_preflight(
     Verifies reversibility (.down.sql exists), detects non-transactional
     statements (CREATE INDEX CONCURRENTLY, etc.), checks for duplicate
     versions, and verifies checksums of applied migrations.
+
+    MODES:
+      Default mode — static analysis only. No --against, no DB connection.
+        Scans local migration files and reports per-file reversibility +
+        transactionality. Cannot detect "is this migration already
+        applied?" because there's no source of truth to compare against.
+
+      Explicit source mode — --against <url> [+ --config OR --env OR --since]
+        Replays pending migrations inside a SAVEPOINT against a preflight
+        DB and reports per-migration success/failure. Source of "pending"
+        is determined by the flag combination:
+          • --against alone        → all local files
+          • --against + --config   → pending files (read tb_confiture from
+                                     the --config DB, not from --against)
+          • --against + --env      → same, using db/environments/{env}.yaml
+          • --against + --since V  → all files with version >= V (no DB
+                                     needed for pending detection)
 
     EXAMPLES:
       confiture migrate preflight
