@@ -5,6 +5,45 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-05-27
+
+Agent-experience punch-list for the idempotency stack. Closes
+[#123](https://github.com/fraiseql/confiture/issues/123).
+
+### Added
+
+- **`migrate validate --list-patterns`** — machine-readable catalog of
+  every idempotency detection pattern. Read-only (no DB, no config, no
+  migrations directory required). JSON output frozen at `version: "1"`,
+  documented under `docs/reference/json-schemas/`. Each entry now carries
+  `template_fillable: bool` alongside `has_skip_regex`, `skip_hint`, and
+  `has_auto_fix`.
+- **JSON schemas under `docs/reference/json-schemas/`** — nine schemas
+  covering every machine-readable CLI output, plus a shared
+  `_common.schema.json` for the `HintsArray` and `BackendMeta` refs.
+  Every documented success-path emitter pre-allocates `"hints": []`.
+- **`--idempotent` backend banner** — `payload["meta"]["backend"]`
+  ("ast" or "regex") in JSON output; a one-line annotated banner in
+  text mode so the active backend is never silent.
+- **Captures-driven suggestion templates.** Idempotency violations now
+  carry copy-pasteable SQL fix templates with captured identifiers
+  inlined (schema/table/constraint/column). Both the regex and the AST
+  backend feed a normalized `Captures` instance through the shared
+  template module, so the rendered suggestion is identical regardless
+  of which backend matched.
+- **Quiet-success hints.** `migrate validate --idempotent` on an empty
+  directory, `migrate status` against a database with no tracking
+  table, and `migrate preflight --against` against an empty
+  `tb_confiture` now emit advisory hints — stderr in text mode,
+  `payload["hints"][…]` in JSON mode. Hints never change exit codes.
+
+### Reference
+
+- New: `docs/reference/json-schemas.md` and the directory of nine
+  schemas it links.
+- Updated: `migrate-validate-list-patterns.schema.json` documents the
+  new `template_fillable` field.
+
 ## [0.15.0] - 2026-05-27
 
 Ownership coverage — the ownership axis of the same drift class that

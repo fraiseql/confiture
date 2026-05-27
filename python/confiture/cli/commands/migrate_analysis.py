@@ -166,8 +166,9 @@ def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
     if format_output == "json":
         # `hints` is pre-allocated per the documented JSON-schema contract
         # (docs/reference/json-schemas/migrate-validate-list-patterns.schema.json).
-        # Phase 05 will populate it on quiet-success ambiguities; today it's
-        # an empty array so consumers can code against a stable shape.
+        # `--list-patterns` is a read-only catalog query with no ambiguous
+        # success state, so the list is always empty; the key still
+        # appears so consumers can code against a stable shape.
         _output_json(
             {"version": "1", "patterns": entries, "hints": []},
             output_file,

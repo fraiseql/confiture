@@ -243,6 +243,11 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - [Configuration YAML](docs/reference/configuration.md)
 - [Complete feature list](docs/features/overview.md)
 
+**For agents and tooling**
+- Every machine-readable CLI output has a published JSON schema under [`docs/reference/json-schemas/`](docs/reference/json-schemas/) — see [`docs/reference/json-schemas.md`](docs/reference/json-schemas.md).
+- `confiture migrate validate --list-patterns --format json` exposes the full idempotency-detection catalog (read-only, no DB / config / migrations directory needed).
+- Quiet-success ambiguities surface advisory hints in `payload["hints"]` (or on stderr in text mode) — exit codes are unaffected.
+
 ---
 
 ## Contributing
