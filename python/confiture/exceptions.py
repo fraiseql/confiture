@@ -405,7 +405,8 @@ class SQLError(ConfiturError):
 
         # Normalise sql to a plain string — callers may pass
         # psycopg.sql.Composable objects (Composed, SQL, Identifier …).
-        sql_str: str = sql.as_string(None) if hasattr(sql, "as_string") else str(sql)
+        as_string = getattr(sql, "as_string", None)
+        sql_str: str = as_string(None) if callable(as_string) else str(sql)
 
         # Add SQL snippet (first 100 chars)
         sql_preview = sql_str.strip()[:100]

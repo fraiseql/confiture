@@ -243,10 +243,10 @@ class Migrator:
                 else:
                     cursor.execute(query)
         except Exception as e:
-            if hasattr(query, "as_string"):
+            if isinstance(query, pgsql.Composable):
                 try:
                     sql_text = query.as_string(self.connection)
-                except Exception:
+                except Exception:  # noqa: BLE001 — fall through to context-free render
                     sql_text = query.as_string(None)
             else:
                 sql_text = str(query)
