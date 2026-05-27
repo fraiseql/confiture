@@ -26,6 +26,39 @@ _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 console = Console()
 error_console = Console(file=sys.stderr)
 
+_MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
+
+
+def _emit_hint(
+    hint: str,
+    *,
+    hints_list: list[str],
+    format_: str,
+    error_console: Console | None = None,
+) -> None:
+    """Emit an advisory "looks unusual" hint via the right channel.
+
+    Hints are dual-channel based on the output format:
+
+    - ``format_ == "text"`` → write to ``error_console`` (stderr).
+    - ``format_ in {"json", "csv", "yaml"}`` → append to ``hints_list``
+      so it lands in the machine-readable payload under ``"hints": [...]``;
+      nothing goes to stderr (agents pipe stdout, not stderr).
+
+    Hints never change the exit code — they are pure agent-experience
+    breadcrumbs.
+
+    ``error_console`` defaults to the module-level :data:`error_console`
+    looked up at call time, so test fixtures that monkeypatch the
+    module-level binding take effect.
+    """
+    if format_ in _MACHINE_OUTPUT_FORMATS:
+        hints_list.append(hint)
+        return
+    target = error_console or globals()["error_console"]
+    target.print(f"[dim]Hint: {hint}[/dim]")
+
+
 # Common command names for "Did you mean?" suggestions
 COMMON_COMMANDS = [
     "init",
@@ -391,13 +424,24 @@ def _validate_idempotency(
     py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
 
     if not sql_files and not py_files:
+        # Quiet-success ambiguity: "no migrations" can mean the user
+        # intentionally validated an empty directory, but more often
+        # they pointed --migrations-dir at the wrong path. Emit a hint
+        # to make the success state legible to agents.
+        zero_files_hints: list[str] = []
+        _emit_hint(
+            f"Migration directory `{migrations_dir}` exists but contains no files. "
+            "Did you mean to pass --migrations-dir <other>?",
+            hints_list=zero_files_hints,
+            format_=format_output,
+        )
         if format_output == "json":
             result: dict[str, Any] = {
                 "status": "ok",
                 "message": "No migration files found",
                 "violations": [],
                 "meta": meta,
-                "hints": [],
+                "hints": zero_files_hints,
             }
             _output_json(result, output_file, console)
         else:

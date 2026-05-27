@@ -27,7 +27,7 @@ def test_schema_is_valid_draft_2020_12(schemas_dir):
 
 
 def test_empty_migrations_dir_validates(tmp_path, schemas_dir, schema_registry):
-    """No migration files in directory → minimal ok-envelope."""
+    """No migration files in directory → ok-envelope + quiet-success hint."""
     (tmp_path / "db" / "migrations").mkdir(parents=True)
     runner = CliRunner()
     result = runner.invoke(
@@ -46,7 +46,8 @@ def test_empty_migrations_dir_validates(tmp_path, schemas_dir, schema_registry):
     payload = json.loads(result.stdout)
     _validator(schemas_dir, schema_registry).validate(payload)
     assert payload["status"] == "ok"
-    assert payload["hints"] == []
+    # Phase 05: empty migration directory triggers a quiet-success hint.
+    assert any("exists but contains no files" in h for h in payload["hints"])
 
 
 def test_idempotent_migrations_validates(tmp_path, schemas_dir, schema_registry):

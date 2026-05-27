@@ -9,6 +9,7 @@ import typer
 
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
+    _emit_hint,
     _fix_idempotency,
     _fix_ownership,
     _output_json,
@@ -1952,6 +1953,32 @@ def _preflight_version_from_filename(filename: str) -> str:
     return filename.split("_")[0]
 
 
+def _target_tracking_table_is_empty(session: MigratorSession) -> bool:
+    """Return True when the preflight target's ``tb_confiture`` is empty / missing.
+
+    A best-effort probe: any database error (table missing, permission
+    denied, connection drop) is treated as "looks empty" — the worst
+    case is emitting an extra hint, which is advisory anyway.
+    """
+    import contextlib
+
+    conn = getattr(session, "_conn", None)
+    if conn is None:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM tb_confiture LIMIT 1")
+            row = cur.fetchone()
+        # Roll back any aborted transaction state so run_against starts clean.
+        with contextlib.suppress(Exception):
+            conn.rollback()
+        return row is None
+    except Exception:  # noqa: BLE001 — best-effort: missing table / perm denied
+        with contextlib.suppress(Exception):
+            conn.rollback()
+        return True
+
+
 def _resolve_preflight_pending(
     migrations_dir: Path,
     *,
@@ -2359,6 +2386,7 @@ def migrate_preflight(
         error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")
         raise typer.Exit(2) from e
 
+    target_tracking_empty = False
     try:
         session = MigratorSession(
             config=None,
@@ -2367,6 +2395,11 @@ def migrate_preflight(
             migration_table_override="tb_confiture",
         )
         with session:
+            # Snapshot whether the target's tracking table is empty BEFORE
+            # the SAVEPOINT-bounded run_against — used to emit a
+            # quiet-success hint when the target looks like a restored
+            # backup with the tracking table stripped.
+            target_tracking_empty = _target_tracking_table_is_empty(session)
             against_result = session.run_against(
                 pending_files,
                 against_url=against,
@@ -2385,11 +2418,21 @@ def migrate_preflight(
             against_url=against,
         )
 
+    preflight_hints: list[str] = []
+    if target_tracking_empty and pending_files:
+        _emit_hint(
+            "`tb_confiture` on the target is empty. If --against points at a "
+            "restored backup, was the tracking table dropped during "
+            "anonymization?",
+            hints_list=preflight_hints,
+            format_=format_type,
+        )
+
     if format_type == "json":
         payload: dict[str, Any] = {
             "static": result.to_dict(),
             "against": against_result.to_dict(),
-            "hints": [],
+            "hints": preflight_hints,
         }
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
