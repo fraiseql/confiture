@@ -5,6 +5,26 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.2] - 2026-05-27
+
+### Documentation
+
+- **Migration-only positioning.** README now answers "Can I use confiture
+  without a `db/schema/` directory?" above the fold. The comparison
+  grid's "Source of truth" row lists *DDL files or migration chain*, an
+  adoption-checklist row covers migration-chain projects, and
+  `docs/guides/02-incremental-migrations.md` opens with a callout
+  pointing migration-only readers at the rest of the guide. Closes
+  [#125](https://github.com/evoludigit/confiture/issues/125).
+- **Dry-run ↔ preflight cross-link.** `docs/guides/dry-run.md` gains a
+  "Need a structural diff?" section explaining that `--dry-run` /
+  `--dry-run-execute` answer *would this run?* while
+  `migrate preflight --against` answers *what would change?*, plus a
+  decision table for picking between them. `migrate up --help` mentions
+  preflight in a STRUCTURAL DIFF block. Closing
+  [#127](https://github.com/evoludigit/confiture/issues/127) as docs
+  option B; the structural-diff flag remains a future feature ask.
+
 ## [0.16.1] - 2026-05-27
 
 ### Fixed

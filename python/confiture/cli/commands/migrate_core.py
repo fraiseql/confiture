@@ -569,6 +569,11 @@ def migrate_up(
       DRY-RUN: --dry-run, --dry-run-execute, --verbose, --format, --output
         Analyze migrations before executing, with optional SAVEPOINT testing
 
+      STRUCTURAL DIFF: --dry-run does not emit a structural diff (column adds,
+        index drops, etc.). For that, use `migrate preflight --against <url>`
+        which replays migrations on a parallel database and diffs the result
+        against db/schema/. See docs/guides/dry-run.md#need-a-structural-diff.
+
       SAFETY: --verify-checksums, --on-checksum-mismatch, --strict, --no-lock, --lock-timeout
         Control verification and locking behavior for production safety
 

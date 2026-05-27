@@ -28,7 +28,7 @@ $ confiture migrate baseline --through 004 -c db/environments/production.yaml
 $ confiture migrate status -c db/environments/production.yaml --format json | jq '.applied | length'
 4
 
-# 3. Preflight the next deploy end-to-end against a parallel database:
+# 3. Preflight: replay pending migrations on a parallel DB, emit a structural diff vs. db/schema/.
 $ confiture migrate preflight --against "$PREFLIGHT_URL" -c db/environments/production.yaml
 ▸ Replaying pending migrations on preflight DB …
   ✓ 20260520143015_add_user_bio                 applied in 24 ms
@@ -54,11 +54,26 @@ The walkthrough — including failure modes, the integration test that backs the
 
 ---
 
+## No `db/schema/` directory? That works too.
+
+`confiture migrate up`, `down`, `status`, `baseline`, and `preflight` are
+the migration runner — they don't require a `db/schema/` directory. The
+"Build from DDL" pitch above the fold sells one of confiture's four
+strategies; the other three (incremental migrations, production sync,
+schema-to-schema FDW migration) work against a project whose only source
+of truth is the migration chain itself.
+
+If you're evaluating confiture against Flyway / Alembic / dbmate / sqlx-cli
+as a pure migration runner, skip `confiture build` and use everything else.
+Walkthrough: [docs/guides/02-incremental-migrations.md](docs/guides/02-incremental-migrations.md).
+
+---
+
 ## When to use Confiture?
 
 | Capability | Confiture | Flyway | Alembic | dbmate | sqlx-cli | plain psql |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Source of truth | DDL files | migration chain | model classes | migration chain | migration chain | DDL files |
+| Source of truth | DDL files *or* migration chain | migration chain | model classes | migration chain | migration chain | DDL files |
 | Tracking table | yes | yes | yes | yes | yes | no |
 | Rollback (`down.sql`) | yes | paid | yes | yes | yes | no |
 | Preflight against a copy DB | **yes (structural diff)** | no | no | no | no | no |
@@ -67,6 +82,8 @@ The walkthrough — including failure modes, the integration test that backs the
 | Zero-downtime via FDW | **yes** | no | no | no | no | no |
 | Multi-agent coordination | **yes** | no | no | no | no | no |
 | Ecosystem maturity / stars | early | very mature | mature | mature | mature | n/a |
+
+> **Note on "source of truth":** confiture can run as a pure migration tool against a project that has no `db/schema/` directory — the DDL workflow is opt-in. See [No `db/schema/` directory?](#no-dbschema-directory-that-works-too) above.
 
 Confiture wins on **build-from-DDL**, **structural-diff preflight**, **production sync**, and **multi-agent coordination**. It loses on ecosystem age — Flyway and Alembic have a decade of community knowledge. Pick honestly.
 
@@ -77,6 +94,7 @@ Confiture wins on **build-from-DDL**, **structural-diff preflight**, **productio
 | 1 environment + 1 contributor, schema rarely changes | plain `psql` |
 | 2+ environments, schema changes weekly | Confiture, Flyway, Alembic, or dbmate |
 | Multi-agent / AI-driven development on shared schemas | **Confiture** |
+| You have a migration chain (no `db/schema/`) and want preflight + tracking | **Confiture** (use everything except `confiture build`) |
 | You want `db/schema/` to be source of truth, not a migration chain | **Confiture** |
 | You need zero-downtime schema swaps with `postgres_fdw` | **Confiture** (Medium 4) |
 | You're committed to SQLAlchemy ORM | Alembic |
