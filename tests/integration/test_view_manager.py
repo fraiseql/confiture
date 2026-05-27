@@ -292,7 +292,8 @@ class TestRecreateSavedViews:
         vm_db.commit()
 
         # Recreate
-        count = vm.recreate_saved_views()
+        result = vm.recreate_saved_views()
+        count = result.total
         assert count == 1
 
         # View should exist again
@@ -326,7 +327,8 @@ class TestRecreateSavedViews:
             cur.execute("ALTER TABLE tb_machine ALTER COLUMN pk_machine TYPE BIGINT")
         vm_db.commit()
 
-        count = vm.recreate_saved_views()
+        result = vm.recreate_saved_views()
+        count = result.total
         assert count == 2
 
         # Both views should exist
@@ -358,7 +360,8 @@ class TestRecreateSavedViews:
         vm = ViewManager(vm_db)
         vm.save_and_drop_dependent_views(schemas=["public"])
 
-        count = vm.recreate_saved_views()
+        result = vm.recreate_saved_views()
+        count = result.total
         assert count == 1
 
         # Check materialized view exists
@@ -466,7 +469,7 @@ class TestRecreateSavedViews:
         vm_db.commit()
 
         # Step 3: Recreate
-        recreated = vm.recreate_saved_views()
+        recreated = vm.recreate_saved_views().total
         assert recreated >= 2
 
         # Verify everything is back
@@ -752,7 +755,7 @@ class TestEdgeCases:
             cur.execute("ALTER TABLE tb_machine ALTER COLUMN pk_machine TYPE BIGINT")
         vm_db.commit()
 
-        recreated = vm.recreate_saved_views()
+        recreated = vm.recreate_saved_views().total
         assert recreated == 3
 
     def test_no_views_returns_zero(self, vm_db: psycopg.Connection) -> None:
@@ -766,7 +769,8 @@ class TestEdgeCases:
         assert count == 0
 
         # Recreate should also return 0
-        count = vm.recreate_saved_views()
+        result = vm.recreate_saved_views()
+        count = result.total
         assert count == 0
 
     def test_schemas_default_none_scans_all_user_schemas(self, vm_db: psycopg.Connection) -> None:
@@ -800,7 +804,7 @@ class TestEdgeCases:
             cur.execute("ALTER TABLE catalog.tb_product ALTER COLUMN pk_product TYPE BIGINT")
         vm_db.commit()
 
-        recreated = vm.recreate_saved_views()
+        recreated = vm.recreate_saved_views().total
         assert recreated >= 1
 
 
@@ -856,7 +860,8 @@ class TestCrossSchemaViews:
             cur.execute("ALTER TABLE catalog.tb_product ALTER COLUMN pk_product TYPE BIGINT")
         vm_db.commit()
 
-        count = vm.recreate_saved_views()
+        result = vm.recreate_saved_views()
+        count = result.total
         assert count == 1
 
         with vm_db.cursor() as cur:
