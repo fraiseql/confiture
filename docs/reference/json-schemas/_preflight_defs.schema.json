@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/_preflight_defs.schema.json",
+  "title": "Confiture preflight $defs",
+  "description": "Sub-schemas shared by migrate-preflight.schema.json and migrate-preflight-against.schema.json.",
+  "$defs": {
+    "StaticPreflight": {
+      "type": "object",
+      "description": "Static analysis output (PreflightResult.to_dict). Reports per-migration reversibility and transactionality.",
+      "required": [
+        "safe_to_deploy",
+        "all_reversible",
+        "all_transactional",
+        "has_duplicates",
+        "has_checksum_mismatches",
+        "checksum_verified",
+        "migrations",
+        "duplicate_versions",
+        "checksum_mismatches"
+      ],
+      "properties": {
+        "safe_to_deploy": { "type": "boolean" },
+        "all_reversible": { "type": "boolean" },
+        "all_transactional": { "type": "boolean" },
+        "has_duplicates": { "type": "boolean" },
+        "has_checksum_mismatches": { "type": "boolean" },
+        "checksum_verified": { "type": "boolean" },
+        "migrations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "version",
+              "name",
+              "has_down",
+              "reversible",
+              "fully_transactional",
+              "non_transactional_statements",
+              "checksum"
+            ],
+            "properties": {
+              "version": { "type": "string" },
+              "name": { "type": "string" },
+              "has_down": { "type": "boolean" },
+              "reversible": { "type": "boolean" },
+              "fully_transactional": { "type": "boolean" },
+              "non_transactional_statements": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "checksum": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "duplicate_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "checksum_mismatches": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "DependentAnalysis": {
+      "type": "object",
+      "description": "Live-DB dependent-object analysis for CREATE OR REPLACE targets in pending migrations.",
+      "required": ["status", "entries", "has_blocking"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "skipped"]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "schema",
+              "name",
+              "qualified",
+              "source_file",
+              "source_line",
+              "severity",
+              "dependents"
+            ],
+            "properties": {
+              "kind": { "type": "string" },
+              "schema": { "type": "string" },
+              "name": { "type": "string" },
+              "qualified": { "type": "string" },
+              "source_file": { "type": ["string", "null"] },
+              "source_line": { "type": ["integer", "null"] },
+              "severity": {
+                "type": "string",
+                "enum": ["error", "info"]
+              },
+              "dependents": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["kind", "schema", "name", "referenced_columns"],
+                  "properties": {
+                    "kind": { "type": "string" },
+                    "schema": { "type": "string" },
+                    "name": { "type": "string" },
+                    "referenced_columns": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "has_blocking": { "type": "boolean" },
+        "skip_reason": {
+          "type": "string",
+          "description": "Present only when status == \"skipped\". Identifies why the check didn't run (e.g. \"no_preflight_db\", \"no_pglast\")."
+        }
+      }
+    }
+  }
+}

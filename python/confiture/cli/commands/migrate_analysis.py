@@ -163,7 +163,15 @@ def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
     entries = list_patterns()
 
     if format_output == "json":
-        _output_json({"version": "1", "patterns": entries}, output_file, console)
+        # `hints` is pre-allocated per the documented JSON-schema contract
+        # (docs/reference/json-schemas/migrate-validate-list-patterns.schema.json).
+        # Phase 05 will populate it on quiet-success ambiguities; today it's
+        # an empty array so consumers can code against a stable shape.
+        _output_json(
+            {"version": "1", "patterns": entries, "hints": []},
+            output_file,
+            console,
+        )
         return
 
     # Text mode: compact table for human eyes.
@@ -650,6 +658,7 @@ def migrate_validate(
                             }
                             for v in (acl_report.errors + acl_report.warnings + acl_report.info)
                         ],
+                        "hints": [],
                     },
                     output_file,
                     console,
@@ -1151,6 +1160,10 @@ def migrate_fix(
 
       confiture migrate fix --idempotent --format json --output fixes.json
         ↳ Generate JSON report of all transformations
+
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schema
+      (migrate-fix.schema.json).
 
     RELATED:
       confiture migrate validate - Check migration quality
@@ -2200,6 +2213,11 @@ def migrate_preflight(
       0 — all migrations safe to deploy (skipped non-transactional migrations are neutral)
       1 — one or more issues detected or execution failures
       2 — config or connection error
+
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schemas:
+        - default: migrate-preflight.schema.json
+        - with --against: migrate-preflight-against.schema.json
     """
     from rich.table import Table
 
@@ -2229,6 +2247,7 @@ def migrate_preflight(
             payload = result.to_dict()
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
+            payload["hints"] = []
             _output_json(payload, None, console)
             if not result.safe_to_deploy:
                 raise typer.Exit(1)
@@ -2332,6 +2351,7 @@ def migrate_preflight(
         payload: dict[str, Any] = {
             "static": result.to_dict(),
             "against": against_result.to_dict(),
+            "hints": [],
         }
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()

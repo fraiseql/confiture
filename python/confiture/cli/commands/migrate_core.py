@@ -89,6 +89,10 @@ def migrate_status(
       confiture migrate status --format json --output migrations.json
         ↳ Save status report to file
 
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schema
+      (migrate-status.schema.json).
+
     RELATED:
       confiture migrate up       - Apply pending migrations
       confiture migrate down     - Rollback applied migrations
@@ -135,6 +139,7 @@ def migrate_status(
                     "current": None,
                     "total": 0,
                     "migrations": [],
+                    "hints": [],
                 }
                 if orphaned_sql_files:
                     result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
@@ -232,6 +237,7 @@ def migrate_status(
                     "pending": len(pending_list),
                     "total": len(migration_files),
                 },
+                "hints": [],
             }
             if db_error:
                 result["warning"] = f"Could not connect to database: {db_error}"

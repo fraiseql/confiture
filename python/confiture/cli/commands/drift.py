@@ -97,6 +97,12 @@ def drift(
       1 - Drift detected (critical, or warning when --fail-on-warning)
       2 - Connection or configuration error
 
+    JSON SCHEMA:
+      See docs/reference/json-schemas.md for the JSON output schemas:
+        - default: drift.schema.json
+        - with --check-acls: drift-check-acls.schema.json (same shape;
+          missing_grant / extra_grant items may appear in drift_items)
+
     RELATED:
       confiture migrate validate --check-live-drift - Validate within migrate workflow
       confiture migrate diff                        - Compare two schema files
@@ -164,7 +170,12 @@ def drift(
             _demote_missing_grant_warnings(drift_report)
 
         if format_output == "json":
-            print(json.dumps(drift_report.to_dict(), indent=2, default=str))
+            payload = drift_report.to_dict()
+            # `hints` is pre-allocated per the documented JSON-schema contract
+            # (docs/reference/json-schemas/drift.schema.json). Empty by default;
+            # Phase 05 may populate it on quiet-success ambiguities.
+            payload["hints"] = []
+            print(json.dumps(payload, indent=2, default=str))
         else:
             display_drift_report(drift_report, console)
 

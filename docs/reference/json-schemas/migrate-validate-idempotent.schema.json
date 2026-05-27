@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-idempotent.schema.json",
+  "title": "confiture migrate validate --idempotent --format json",
+  "description": "Idempotency validation report — scans every migration file (SQL + Python) for non-idempotent SQL patterns. Empty-input shape (no migration files found) replaces the violations report with a `message` field.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "violations",
+        "violation_count",
+        "files_scanned",
+        "scanned_files",
+        "has_violations",
+        "has_blocking_violations",
+        "warnings",
+        "has_warnings",
+        "hints"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "issues_found"]
+        },
+        "violations": {
+          "type": "array",
+          "items": { "$ref": "_common.schema.json#/$defs/Violation" }
+        },
+        "violation_count": { "type": "integer", "minimum": 0 },
+        "files_scanned": { "type": "integer", "minimum": 0 },
+        "scanned_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "has_violations": { "type": "boolean" },
+        "has_blocking_violations": {
+          "type": "boolean",
+          "description": "True when any violation has severity=error. info-only findings keep this false unless --strict-cor is passed."
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "_common.schema.json#/$defs/ExtractorWarning" }
+        },
+        "has_warnings": { "type": "boolean" },
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "message", "violations", "hints"],
+      "description": "Empty-input shape: no migration files found.",
+      "properties": {
+        "status": { "type": "string", "const": "ok" },
+        "message": { "type": "string" },
+        "violations": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+      }
+    }
+  ]
+}

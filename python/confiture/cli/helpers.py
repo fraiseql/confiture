@@ -364,6 +364,7 @@ def _validate_idempotency(
                 "status": "ok",
                 "message": "No migration files found",
                 "violations": [],
+                "hints": [],
             }
             _output_json(result, output_file, console)
         else:
@@ -376,6 +377,7 @@ def _validate_idempotency(
     if format_output == "json":
         result = combined_report.to_dict()
         result["status"] = "issues_found" if fail else "ok"
+        result["hints"] = []
         _output_json(result, output_file, console)
         if fail:
             raise typer.Exit(1)
@@ -491,6 +493,7 @@ def _fix_idempotency(
                 "status": "ok",
                 "message": "No migration files found",
                 "files": [],
+                "hints": [],
             }
             _output_json(result, output_file, console)
         else:
@@ -543,6 +546,7 @@ def _fix_idempotency(
             "files": files_changed,
             "total_files_changed": len(files_changed),
             "manual_fix_required": manual_fix_required,
+            "hints": [],
         }
         if manual_report.has_warnings:
             result["warnings"] = manual_report.to_dict()["warnings"]
