@@ -34,6 +34,7 @@ class PatternCatalogEntry(TypedDict):
     has_skip_regex: bool
     skip_hint: str | None
     has_auto_fix: bool
+    template_fillable: bool
 
 _FORCE_REGEX_ENV = "CONFITURE_IDEMPOTENCY_FORCE_REGEX"
 
@@ -57,6 +58,10 @@ class PatternMatch:
         severity: ``"error"`` (default — fails the gate) or ``"info"``
             (heuristic finding — rendered but doesn't fail the gate
             unless ``--strict-cor`` is passed at the CLI layer).
+        suggestion: Filled-in fix template (captures-driven) or ``None``
+            to fall back to :attr:`IdempotencyPattern.suggestion`. The
+            validator copies this onto the resulting
+            :class:`~confiture.core.idempotency.models.IdempotencyViolation`.
     """
 
     pattern: IdempotencyPattern
@@ -65,6 +70,7 @@ class PatternMatch:
     start_pos: int
     end_pos: int
     severity: str = "error"
+    suggestion: str | None = None
 
 
 class PatternDefinition(NamedTuple):
@@ -389,6 +395,60 @@ _DESCRIPTIONS: dict[IdempotencyPattern, str] = {
     ),
 }
 
+# Classification of patterns by whether a captures-driven suggestion
+# template can be filled from the match. Both sets together cover every
+# :class:`IdempotencyPattern` member; the two sets are disjoint.
+#
+# ``TEMPLATE_FILLABLE`` patterns expose at least one identifier
+# (table, index, constraint, column, …) that the AST / regex backend
+# can extract reliably, so the violation's ``suggestion`` is a
+# copy-pasteable SQL block with that identifier inlined.
+#
+# ``TEMPLATE_NOT_AVAILABLE`` patterns can be detected but their
+# corrective fix has no mechanical structure — the suggestion stays
+# generic and explicitly says so.
+TEMPLATE_FILLABLE: frozenset[IdempotencyPattern] = frozenset(
+    {
+        IdempotencyPattern.CREATE_TABLE,
+        IdempotencyPattern.CREATE_INDEX,
+        IdempotencyPattern.CREATE_UNIQUE_INDEX,
+        IdempotencyPattern.CREATE_VIEW,
+        IdempotencyPattern.CREATE_TYPE,
+        IdempotencyPattern.CREATE_SCHEMA,
+        IdempotencyPattern.CREATE_SEQUENCE,
+        IdempotencyPattern.CREATE_EXTENSION,
+        IdempotencyPattern.ALTER_TABLE_ADD_COLUMN,
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK,
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY,
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE,
+        IdempotencyPattern.ALTER_TABLE_RENAME_COLUMN,
+        IdempotencyPattern.ALTER_TABLE_OWNER,
+        IdempotencyPattern.ALTER_VIEW_OWNER,
+        IdempotencyPattern.ALTER_MATVIEW_OWNER,
+        IdempotencyPattern.DROP_TABLE,
+        IdempotencyPattern.DROP_INDEX,
+        IdempotencyPattern.DROP_VIEW,
+        IdempotencyPattern.DROP_TYPE,
+        IdempotencyPattern.DROP_SCHEMA,
+        IdempotencyPattern.DROP_SEQUENCE,
+        IdempotencyPattern.CREATE_OR_REPLACE_VIEW_SHAPE_RISK,
+    }
+)
+
+# Patterns that can be detected but whose fix has no mechanical
+# template — the regex doesn't pin a single identifier to substitute
+# in, or the fix structurally requires user judgement (e.g. DROP
+# FUNCTION needs a parameter signature, not just a name).
+TEMPLATE_NOT_AVAILABLE: frozenset[IdempotencyPattern] = frozenset(
+    {
+        IdempotencyPattern.CREATE_FUNCTION,
+        IdempotencyPattern.CREATE_PROCEDURE,
+        IdempotencyPattern.DROP_FUNCTION,
+        IdempotencyPattern.CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK,
+        IdempotencyPattern.CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK,
+    }
+)
+
 # Human-friendly hints describing what idempotent form the validator
 # skips over. Only set for patterns with a ``skip_regex`` — patterns
 # that have no simple skip (e.g. CREATE TYPE) map to ``None``.
@@ -434,6 +494,7 @@ def list_patterns() -> list[PatternCatalogEntry]:
                 has_skip_regex=has_skip,
                 skip_hint=_SKIP_HINTS.get(pdef.pattern) if has_skip else None,
                 has_auto_fix=pdef.pattern.fix_available,
+                template_fillable=pdef.pattern in TEMPLATE_FILLABLE,
             )
         )
     return catalog
@@ -726,6 +787,18 @@ def _detect_via_regex(sql: str) -> list[PatternMatch]:
                 if "UNIQUE" in pre_match.upper():
                     continue
 
+            # Build the filled suggestion at detection time so violations
+            # carry a copy-pasteable fix block instead of the generic
+            # placeholder text. ``captures_from_regex`` returns an
+            # all-None ``Captures`` for patterns it can't extract from;
+            # ``suggestion_for`` handles that by falling back to the
+            # generic suggestion automatically.
+            from confiture.core.idempotency._captures import captures_from_regex  # noqa: PLC0415
+            from confiture.core.idempotency.suggestion_templates import (  # noqa: PLC0415
+                suggestion_for,
+            )
+
+            captures = captures_from_regex(pattern_def.pattern, match)
             matches.append(
                 PatternMatch(
                     pattern=pattern_def.pattern,
@@ -734,6 +807,7 @@ def _detect_via_regex(sql: str) -> list[PatternMatch]:
                     start_pos=match.start(),
                     end_pos=match.end(),
                     severity=pattern_def.severity,
+                    suggestion=suggestion_for(pattern_def.pattern, captures),
                 )
             )
 

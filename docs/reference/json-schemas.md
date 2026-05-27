@@ -64,7 +64,8 @@ Minimal example:
       "severity": "error",
       "has_skip_regex": true,
       "skip_hint": "CREATE TABLE IF NOT EXISTS",
-      "has_auto_fix": true
+      "has_auto_fix": true,
+      "template_fillable": true
     }
   ],
   "hints": []

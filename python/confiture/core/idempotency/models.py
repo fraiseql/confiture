@@ -147,6 +147,9 @@ class IdempotencyViolation:
         sql_snippet: The SQL code that triggered the violation
         line_number: Line number in the file where violation occurs
         file_path: Path to the migration file
+        suggestion: Filled-in fix template (set by the detector) or the
+            generic pattern suggestion when no captures were available.
+            Pass ``None`` to fall back to :attr:`IdempotencyPattern.suggestion`.
     """
 
     pattern: IdempotencyPattern
@@ -155,11 +158,11 @@ class IdempotencyViolation:
     file_path: str
     source_line: int | None = None
     severity: str = "error"
+    suggestion: str | None = None
 
-    @property
-    def suggestion(self) -> str:
-        """Get suggestion for fixing this violation."""
-        return self.pattern.suggestion
+    def __post_init__(self) -> None:
+        if self.suggestion is None:
+            self.suggestion = self.pattern.suggestion
 
     @property
     def fix_available(self) -> bool:

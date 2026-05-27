@@ -89,6 +89,7 @@ class TestListPatternsJsonOutput:
                 "has_skip_regex",
                 "skip_hint",
                 "has_auto_fix",
+                "template_fillable",
             }
 
 

@@ -21,7 +21,7 @@ class TestListPatternsShape:
         assert len(catalog) > 0
 
     def test_each_entry_has_required_fields(self):
-        """Every entry has the documented 6 keys, nothing more."""
+        """Every entry has the documented 7 keys, nothing more."""
         catalog = list_patterns()
         expected = {
             "id",
@@ -30,6 +30,7 @@ class TestListPatternsShape:
             "has_skip_regex",
             "skip_hint",
             "has_auto_fix",
+            "template_fillable",
         }
         for entry in catalog:
             assert set(entry.keys()) == expected, entry
@@ -42,6 +43,7 @@ class TestListPatternsShape:
             assert entry["severity"] in {"error", "info"}
             assert isinstance(entry["has_skip_regex"], bool)
             assert isinstance(entry["has_auto_fix"], bool)
+            assert isinstance(entry["template_fillable"], bool)
             # skip_hint is either None or a human-friendly string
             assert entry["skip_hint"] is None or isinstance(entry["skip_hint"], str)
 

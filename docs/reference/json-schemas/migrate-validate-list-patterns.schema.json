@@ -23,7 +23,8 @@
           "severity",
           "has_skip_regex",
           "skip_hint",
-          "has_auto_fix"
+          "has_auto_fix",
+          "template_fillable"
         ],
         "properties": {
           "id": {
@@ -49,6 +50,10 @@
           "has_auto_fix": {
             "type": "boolean",
             "description": "True when `migrate fix --idempotent` can rewrite this pattern automatically."
+          },
+          "template_fillable": {
+            "type": "boolean",
+            "description": "True when the validator can fill a captures-driven SQL suggestion template for this pattern (e.g. inlining table/constraint names). False when the suggestion stays generic and explicitly says manual fix required."
           }
         }
       }
