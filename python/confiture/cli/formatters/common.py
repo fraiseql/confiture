@@ -84,10 +84,16 @@ def display_drift_report(report: Any, console: Console) -> None:
         f"{report.info_count} info"
     )
 
-    # Partition items so structural and ACL drift are visually distinct.
+    # Partition items so structural, ACL, and ownership drift are visually distinct.
     acl_types = {"missing_grant", "extra_grant"}
-    structural_items = [i for i in report.drift_items if i.drift_type.value not in acl_types]
+    ownership_types = {"wrong_owner"}
+    structural_items = [
+        i
+        for i in report.drift_items
+        if i.drift_type.value not in acl_types and i.drift_type.value not in ownership_types
+    ]
     acl_items = [i for i in report.drift_items if i.drift_type.value in acl_types]
+    ownership_items = [i for i in report.drift_items if i.drift_type.value in ownership_types]
 
     def _emit(item: Any) -> None:
         color = "red" if item.severity.value == "critical" else "yellow"
@@ -102,6 +108,10 @@ def display_drift_report(report: Any, console: Console) -> None:
     if acl_items:
         console.print("\n[bold]ACL drift[/bold]")
         for item in acl_items:
+            _emit(item)
+    if ownership_items:
+        console.print("\n[bold]Ownership drift[/bold]")
+        for item in ownership_items:
             _emit(item)
 
 

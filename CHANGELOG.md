@@ -5,6 +5,57 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-05-27
+
+Ownership coverage — the ownership axis of the same drift class that
+[#120](https://github.com/fraiseql/confiture/issues/120) covered on the
+ACL axis. Catches relations that ship with the wrong `pg_class.relowner`
+before schema-wide `GRANT` statements blow up in production with
+`grantor must own the object`. Closes
+[#124](https://github.com/fraiseql/confiture/issues/124).
+
+### Added
+
+- **`ownership:` block in environment YAML.** Single declaration: one
+  canonical `expected_owner` per environment, with per-schema `apply_to`
+  + `relkinds` filters, an `ignore` glob list, and a `lint_enabled` flag
+  (defaults to `True`, opt-in by default).
+- **`confiture drift --check-ownership`** — runtime check against
+  `pg_class.relowner`. Composes with `--check-acls` and `--schema` in a
+  single report. JSON output includes a `wrong_owner` drift type.
+- **`migrate validate --check-ownership-coverage`** — static lint rule
+  `own_001` that flags `CREATE { TABLE | VIEW | MATERIALIZED VIEW |
+  SEQUENCE }` without a matching `ALTER … OWNER TO <expected_owner>`
+  later in the same migration file. AST-only (requires the `[ast]`
+  extra); a single skip notice is emitted when pglast is missing.
+- **`-- confiture:owner-skip`** directive opts the next CREATE out of
+  the rule (for genuinely extension-owned objects).
+- **`-- confiture:run-as <role>`** front-matter directive skips the
+  whole file when the declared role matches `expected_owner`. The
+  directive is declarative only — the runtime drift detector is the
+  production-time check.
+- **`migrate fix --ownership`** — auto-inserts the missing
+  `ALTER … OWNER TO` line immediately after each offending CREATE.
+  Composable with `--idempotent`. Includes a checksum-drift guard that
+  refuses to rewrite already-applied migrations unless `--force` is set.
+- **Docs:** `docs/guides/ownership-coverage.md`, sibling to
+  `docs/guides/acl-coverage.md` with cross-references.
+
+### Fixed
+
+- **`AclDriftDetector.check()` no longer crashes** with `missing
+  FROM-clause entry` on every invocation. The inline
+  `"schema"."table"::regclass` was parsed as a column reference; the
+  qualified name is now passed as a TEXT parameter through the
+  `::regclass` cast (pre-existing bug surfaced when the suite was
+  re-run from scratch).
+- **`DryRunExecutor.run()` accepts positional `(migration_name,
+  statements)`** to match the documented new-API call sites; the legacy
+  keyword form remains supported.
+- **`ViewManager.recreate_saved_views()` integration tests** updated to
+  the `RecreateResult` return type (the previous int-return API was
+  replaced before 0.14.0; tests had drifted).
+
 ## [0.14.0] - 2026-05-25
 
 `migrate validate --idempotent` now uses PostgreSQL's own parser (via

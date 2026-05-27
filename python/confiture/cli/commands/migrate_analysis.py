@@ -10,6 +10,7 @@ import typer
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
     _fix_idempotency,
+    _fix_ownership,
     _output_json,
     _resolve_config,
     _validate_idempotency,
@@ -287,6 +288,16 @@ def migrate_validate(
             "sweep directory (defaults to db/7_grant). No-op when the config has no "
             "`acls:` block. No database connection required.  "
             "Use --check-acls; --check-acl-coverage is a deprecated alias."
+        ),
+    ),
+    check_ownership_coverage: bool = typer.Option(
+        False,
+        "--check-ownership-coverage",
+        help=(
+            "Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
+            "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
+            "in the same file.  No-op when the config has no `ownership:` block, or when "
+            "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast)."
         ),
     ),
     check_signature_schemas: str = typer.Option(
@@ -596,6 +607,65 @@ def migrate_validate(
                 console.print("[green]✅ All migrations have ACL coverage[/green]")
 
             if acl_report.has_errors:
+                raise typer.Exit(1)
+            return
+
+        # Run ownership coverage check on migration files (static, no DB).
+        if check_ownership_coverage:
+            from confiture.cli.ownership_loader import load_ownership_expectation
+            from confiture.core.linting.libraries.ownership import (
+                Own001OwnershipCoverage,
+            )
+
+            if not config.exists():
+                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                raise typer.Exit(2)
+
+            config_data = load_config(config)
+            # No-op when the project hasn't adopted the `ownership:` block yet.
+            ownership_exp = load_ownership_expectation(
+                config_data, config, require=False
+            )
+
+            ownership_violations = []
+            if ownership_exp is not None:
+                ownership_violations = Own001OwnershipCoverage(
+                    expectation=ownership_exp
+                ).check(migrations_dir)
+
+            if format_output == "json":
+                _output_json(
+                    {
+                        "check": "ownership_coverage",
+                        "violations": [
+                            {
+                                "rule_id": v.rule_id,
+                                "severity": v.severity.value,
+                                "object_name": v.object_name,
+                                "message": v.message,
+                                "file_path": v.file_path,
+                                "line_number": v.line_number,
+                            }
+                            for v in ownership_violations
+                        ],
+                    },
+                    output_file,
+                    console,
+                )
+            elif ownership_violations:
+                console.print(
+                    f"[red]❌ Ownership coverage check failed: "
+                    f"{len(ownership_violations)} violation(s)[/red]"
+                )
+                for v in ownership_violations:
+                    # Escape the rule_id brackets so Rich doesn't read them as markup.
+                    console.print(
+                        f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}"
+                    )
+            else:
+                console.print("[green]✅ All migrations have ownership coverage[/green]")
+
+            if ownership_violations:
                 raise typer.Exit(1)
             return
 
@@ -964,6 +1034,30 @@ def migrate_fix(
         "--idempotent",
         help="Fix non-idempotent SQL statements (default: off)",
     ),
+    ownership: bool = typer.Option(
+        False,
+        "--ownership",
+        help=(
+            "Insert missing `ALTER … OWNER TO <expected_owner>` after each "
+            "CREATE that lacks one.  Requires an `ownership:` block in the "
+            "config and the [ast] extra (pglast)."
+        ),
+    ),
+    config_path: Path = typer.Option(
+        Path("confiture.yaml"),
+        "-c",
+        "--config",
+        help="Config file (needed for --ownership; defaults to confiture.yaml)",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "With --ownership --apply: rewrite migration files even when "
+            "their checksum is already recorded in the local tracking table.  "
+            "Use with care — downstream `migrate verify` will report drift."
+        ),
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -1020,13 +1114,25 @@ def migrate_fix(
                 console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
             raise typer.Exit(1)
 
-        if not idempotent:
+        if not idempotent and not ownership:
             console.print(
-                "[yellow]⚠️  No fix type specified. Use --idempotent to fix idempotency issues.[/yellow]"
+                "[yellow]⚠️  No fix type specified.  "
+                "Use --idempotent and/or --ownership.[/yellow]"
             )
             return
 
-        _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
+        if idempotent:
+            _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
+
+        if ownership:
+            _fix_ownership(
+                migrations_dir=migrations_dir,
+                config_path=config_path,
+                dry_run=dry_run,
+                force=force,
+                format_output=format_output,
+                output_file=output_file,
+            )
 
     except typer.Exit:
         raise

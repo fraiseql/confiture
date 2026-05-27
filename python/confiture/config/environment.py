@@ -451,6 +451,72 @@ class AclTableExpectation(BaseModel):
 AclExpectation = AclTableExpectation
 
 
+# Postgres ``pg_class.relkind`` values in scope for ownership coverage
+# (table, sequence, view, materialized view).  Functions and procedures
+# have separate ownership semantics — not in scope for v1.
+_OWNERSHIP_RELKINDS: frozenset[str] = frozenset({"r", "S", "v", "m"})
+
+# Strict regex for a Postgres role identifier: unquoted ``[a-z_][a-z0-9_]*``
+# (matches the unquoted-identifier rule), or any double-quoted form
+# ``"..."`` permitting whitespace and mixed case.
+_ROLE_IDENT_RE = re.compile(r'^("[^"]+"|[a-z_][a-z0-9_]*)$')
+
+
+class OwnershipApplyTo(BaseModel):
+    """One schema-scoped entry in the ``ownership.apply_to`` list (issue #124).
+
+    ``relkinds`` accepts only ``r`` (regular table), ``S`` (sequence),
+    ``v`` (view), or ``m`` (materialized view).  Default covers all four.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_: str = Field(alias="schema")
+    relkinds: list[str] = Field(default_factory=lambda: ["r", "S", "v", "m"])
+
+    @field_validator("relkinds")
+    @classmethod
+    def _validate_relkinds(cls, v: list[str]) -> list[str]:
+        bad = set(v) - _OWNERSHIP_RELKINDS
+        if bad:
+            raise ValueError(
+                f"Invalid relkinds: {sorted(bad)}. "
+                f"Must be a subset of {sorted(_OWNERSHIP_RELKINDS)}."
+            )
+        return v
+
+
+class OwnershipExpectation(BaseModel):
+    """The ``ownership:`` block in environment YAML (issue #124).
+
+    A single declaration — unlike :class:`AclExpectation` which is a
+    list — because ownership has exactly one canonical owner per
+    environment.
+
+    Mirrors the structure of :class:`AclTableExpectation` (#120) but on
+    the ownership axis.  Opt-in by default: ``lint_enabled`` defaults
+    to ``True`` per the issue's Definition of done.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_owner: str
+    apply_to: list[OwnershipApplyTo]
+    ignore: list[str] = Field(default_factory=list)
+    lint_enabled: bool = True
+
+    @field_validator("expected_owner")
+    @classmethod
+    def _validate_owner_name(cls, v: str) -> str:
+        if not _ROLE_IDENT_RE.match(v):
+            raise ValueError(
+                f"Invalid role identifier: {v!r}. "
+                f"Use an unquoted ``[a-z_][a-z0-9_]*`` form, or a double-quoted "
+                f'``"Name"`` form for mixed-case roles.'
+            )
+        return v
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -490,6 +556,10 @@ class Environment(BaseModel):
     # via the nested YAML shape ``acls: { lint_enabled: true, expectations:
     # [...] }``; the flat-list form (``acls: [...]``) keeps this False.
     acls_lint_enabled: bool = False
+    # Issue #124 — ownership coverage.  Single declaration (one canonical
+    # owner per env), unlike ``acls:`` which is a list.  ``None`` means
+    # the project hasn't opted into ownership coverage at all.
+    ownership: OwnershipExpectation | None = None
 
     @property
     def database(self) -> DatabaseConfig:
@@ -698,6 +768,11 @@ class Environment(BaseModel):
         # raise ConfigurationError; we never substitute empty strings.
         if "acls" in data:
             data["acls"] = expand_env_vars(data["acls"], context="acls")
+
+        # Same treatment for the ``ownership:`` subtree (issue #124) — the
+        # ``expected_owner`` field commonly parameterizes across envs.
+        if "ownership" in data and data["ownership"] is not None:
+            data["ownership"] = expand_env_vars(data["ownership"], context="ownership")
 
         # Create Environment instance
         try:

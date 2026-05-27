@@ -8,13 +8,15 @@ import typer
 from confiture.cli.acl_loader import load_acl_expectations
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, error_console
-from confiture.config.environment import AclExpectation
+from confiture.cli.ownership_loader import load_ownership_expectation
+from confiture.config.environment import AclExpectation, OwnershipExpectation
 from confiture.core.connection import create_connection, load_config
 from confiture.core.drift import (
     AclDriftDetector,
     DriftReport,
     DriftSeverity,
     DriftType,
+    OwnershipDriftDetector,
     SchemaDriftDetector,
 )
 from confiture.exceptions import ConfigurationError
@@ -43,6 +45,11 @@ def drift(
         False,
         "--check-acls",
         help="Also compare live grants against the `acls:` block in the config",
+    ),
+    check_ownership: bool = typer.Option(
+        False,
+        "--check-ownership",
+        help="Also compare live `pg_class.relowner` against the `ownership:` block",
     ),
     warn_only: bool = typer.Option(
         False,
@@ -105,20 +112,26 @@ def drift(
             error_console.print(f"[red]❌ Config file not found: {config}[/red]")
             raise typer.Exit(2)
 
-        if schema is None and not check_acls:
+        if schema is None and not check_acls and not check_ownership:
             error_console.print(
-                "[red]❌ --schema is required (or use --check-acls). "
+                "[red]❌ --schema is required (or use --check-acls / --check-ownership). "
                 "Provide a schema SQL file to compare against.[/red]"
             )
             raise typer.Exit(2)
 
         config_data = load_config(config)
 
-        # Load ACL expectations up-front so config errors fail before we
-        # even open a database connection.
+        # Load ACL + ownership expectations up-front so config errors fail
+        # before we even open a database connection.
         expectations: list[AclExpectation] = []
         if check_acls:
             expectations = load_acl_expectations(config_data, config, require=True)
+
+        ownership_expectation: OwnershipExpectation | None = None
+        if check_ownership:
+            ownership_expectation = load_ownership_expectation(
+                config_data, config, require=True
+            )
 
         conn = create_connection(config_data)
 
@@ -127,18 +140,23 @@ def drift(
             if schema is not None:
                 structural_report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema))
 
+            drift_report: DriftReport | None = structural_report
             if check_acls:
                 acl_report = AclDriftDetector(conn).check(expectations)
-                if structural_report is None:
+                if drift_report is None:
                     drift_report = acl_report
                 else:
-                    # Compose both into the structural report so downstream
-                    # formatters / exit-code logic see a single DriftReport.
-                    structural_report.drift_items.extend(acl_report.drift_items)
-                    drift_report = structural_report
-            else:
-                assert structural_report is not None  # guarded by --schema/--check-acls check above
-                drift_report = structural_report
+                    drift_report.drift_items.extend(acl_report.drift_items)
+
+            if check_ownership:
+                assert ownership_expectation is not None  # require=True above
+                own_report = OwnershipDriftDetector(conn).check(ownership_expectation)
+                if drift_report is None:
+                    drift_report = own_report
+                else:
+                    drift_report.drift_items.extend(own_report.drift_items)
+
+            assert drift_report is not None  # guarded by the schema/--check-* check above
         finally:
             conn.close()
 

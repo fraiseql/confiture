@@ -592,3 +592,160 @@ def _fix_idempotency(
         console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
     elif files_changed:
         console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
+
+
+def _fix_ownership(
+    migrations_dir: Path,
+    config_path: Path,
+    dry_run: bool,
+    force: bool,
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Insert missing ``ALTER … OWNER TO`` statements in migration files (issue #124).
+
+    Loads ``ownership:`` from *config_path* and uses
+    :class:`~confiture.core.ownership_fixer.OwnershipFixer` to rewrite
+    files in place.  In ``--apply`` mode (i.e. not ``--dry-run``), the
+    helper first probes the local tracking table — any file whose
+    version is already recorded gets refused unless ``--force`` is also
+    set.
+
+    No-op when:
+    - ``ownership:`` block is absent from *config_path*
+    - ``ownership.lint_enabled`` is False
+    - pglast (the [ast] extra) is not installed
+    """
+    from confiture.cli.ownership_loader import load_ownership_expectation
+    from confiture.core.connection import load_config
+    from confiture.core.ownership_fixer import OwnershipFixer
+
+    if not config_path.exists():
+        error_console.print(f"[red]❌ Config file not found: {config_path}[/red]")
+        raise SystemExit(2)
+
+    config_data = load_config(config_path)
+    expectation = load_ownership_expectation(config_data, config_path, require=False)
+    if expectation is None:
+        if format_output == "json":
+            _output_json(
+                {"status": "skipped", "reason": "no ownership: block in config"},
+                output_file,
+                console,
+            )
+        else:
+            console.print(
+                "[yellow]⚠️  --ownership: config has no `ownership:` block — nothing to fix.[/yellow]"
+            )
+        return
+
+    fixer = OwnershipFixer(expectation=expectation)
+    previews = fixer.preview(migrations_dir)
+
+    refused: list[tuple[Path, str]] = []
+    applicable_previews = previews
+    if not dry_run and previews:
+        # Checksum-drift guard: ask the local DB which migration versions
+        # are already recorded.  Refuse to rewrite those unless --force.
+        applied_versions = _query_applied_versions(config_data)
+        if applied_versions:
+            safe: list = []
+            for preview in previews:
+                version = _extract_version(preview.file.name)
+                if version and version in applied_versions and not force:
+                    refused.append((preview.file, "already applied locally"))
+                else:
+                    safe.append(preview)
+            applicable_previews = safe
+
+    modified: list[Path] = []
+    if not dry_run:
+        for preview in applicable_previews:
+            preview.file.write_text(preview.after)
+            modified.append(preview.file)
+
+    if format_output == "json":
+        _output_json(
+            {
+                "status": "preview" if dry_run else "fixed",
+                "previews": [
+                    {
+                        "file": str(p.file),
+                        "before": p.before,
+                        "after": p.after,
+                    }
+                    for p in previews
+                ],
+                "modified": [str(p) for p in modified],
+                "refused": [
+                    {"file": str(f), "reason": r} for f, r in refused
+                ],
+            },
+            output_file,
+            console,
+        )
+        if refused and not force:
+            raise SystemExit(2)
+        return
+
+    if not previews:
+        console.print("[green]✅ All migrations have ownership coverage[/green]")
+        return
+
+    label = "Would insert" if dry_run else "Inserted"
+    console.print(f"[green]{label} `ALTER … OWNER TO` in:[/green]")
+    for preview in previews:
+        console.print(f"  [green]✓[/green] {preview.file.name}")
+
+    if refused:
+        console.print(
+            f"\n[red]Refused {len(refused)} file(s) "
+            f"(already applied — pass --force to rewrite anyway):[/red]"
+        )
+        for file_path, reason in refused:
+            console.print(f"  [red]✗[/red] {file_path.name}: {reason}")
+        if not force:
+            raise SystemExit(2)
+
+
+def _extract_version(filename: str) -> str | None:
+    """Pull the leading version token out of a migration filename.
+
+    Confiture migration files are named ``<version>_<name>.up.sql`` where
+    ``<version>`` is either ``NNN`` (legacy) or ``YYYYMMDDHHMMSS`` (post-0.6.0).
+    Both forms parse as a leading run of digits.
+    """
+    m = re.match(r"^(\d+)", filename)
+    return m.group(1) if m else None
+
+
+def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
+    """Return the set of migration versions present in the local tracking table.
+
+    Returns an empty set on any failure (no DB, no table, no rows) so
+    the fixer can fall through to the "rewrite everything" path —
+    a checksum guard that can't open a connection is no guard at all,
+    so we'd rather degrade gracefully than block the fix.
+    """
+    from confiture.core.connection import create_connection
+
+    try:
+        conn = create_connection(config_data)
+    except Exception:
+        return set()
+
+    table = _get_tracking_table(config_data)
+    try:
+        with conn.cursor() as cur:
+            # Schema-qualified identifier needs splitting + quoting.
+            schema, _, name = table.partition(".")
+            if not name:
+                schema, name = "public", table
+            cur.execute(
+                f'SELECT version FROM "{schema}"."{name}"'  # noqa: S608 — names quoted, no user input
+            )
+            return {row[0] for row in cur.fetchall()}
+    except Exception:
+        return set()
+    finally:
+        conn.close()
