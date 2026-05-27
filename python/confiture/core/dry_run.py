@@ -116,6 +116,9 @@ class DryRunExecutor:
 
     def run(
         self,
+        migration_name_or_conn=None,
+        statements_or_migration=None,
+        *,
         _conn: psycopg.Connection | None = None,
         migration=None,
         migration_name: str | None = None,
@@ -126,12 +129,33 @@ class DryRunExecutor:
         Supports two APIs for backward compatibility:
 
         Old API (deprecated):
-            executor.run(_conn=None, migration=migration_obj)
+            executor.run(migration=migration_obj)
 
         New API:
             executor = DryRunExecutor(conn)
+            executor.run("migration_name", ["SQL...", ...])
+            # or equivalently:
             executor.run(migration_name="name", statements=["SQL..."])
         """
+        # Reconcile positional new-API args with keyword form.  The first
+        # positional may be either the migration_name (new API) or — in
+        # very old call sites — a connection object that's now ignored.
+        if migration_name_or_conn is not None and migration_name is None:
+            if isinstance(migration_name_or_conn, str):
+                migration_name = migration_name_or_conn
+            elif isinstance(migration_name_or_conn, psycopg.Connection):
+                # Pre-instance-conn callers passed conn first; silently
+                # accepted for compatibility.
+                pass
+            elif hasattr(migration_name_or_conn, "up"):
+                # Legacy: caller passed a migration object positionally.
+                migration = migration_name_or_conn
+        if statements_or_migration is not None and statements is None:
+            if isinstance(statements_or_migration, list):
+                statements = statements_or_migration
+            elif hasattr(statements_or_migration, "up"):
+                migration = statements_or_migration
+
         # Handle old API
         if migration is not None:
             # Old simulation API - fallback to basic timing

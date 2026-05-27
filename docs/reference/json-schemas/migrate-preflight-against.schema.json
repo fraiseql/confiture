@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-preflight-against.schema.json",
+  "title": "confiture migrate preflight --against <url> --format json",
+  "description": "Static preflight + exhaustive execution against a preflight database. The static section is the same shape as migrate-preflight without --against; the against section reports per-migration execution outcomes.\n\nField-name traps (per issue #123):\n• `against.migrations[].success` — NOT `passed`. Use `against.passed` (integer count) and `against.all_passed` (boolean aggregate) for the totals.\n• Each migration has both `success` (per-migration) and `skipped` (skipped non-transactional). A `skipped` migration is NOT a failure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["static", "against", "hints"],
+  "properties": {
+    "static": { "$ref": "_preflight_defs.schema.json#/$defs/StaticPreflight" },
+    "against": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "against_url",
+        "all_passed",
+        "total",
+        "passed",
+        "failed",
+        "skipped",
+        "db_consumed",
+        "migrations"
+      ],
+      "properties": {
+        "against_url": {
+          "type": "string",
+          "description": "Preflight database URL with the password stripped (the username is preserved)."
+        },
+        "all_passed": { "type": "boolean" },
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of migrations that succeeded. NOT a per-migration boolean field — see `migrations[].success` for that."
+        },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "db_consumed": {
+          "type": "boolean",
+          "description": "True when non-transactional migrations ran outside the SAVEPOINT (--allow-non-transactional). The preflight DB is no longer in its original state."
+        },
+        "migrations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "name",
+              "success",
+              "error",
+              "skipped",
+              "skipped_reason",
+              "execution_time_ms"
+            ],
+            "properties": {
+              "version": { "type": "string" },
+              "name": { "type": "string" },
+              "success": {
+                "type": "boolean",
+                "description": "Per-migration execution result. NOTE: field is named `success`, NOT `passed`."
+              },
+              "error": { "type": ["string", "null"] },
+              "skipped": { "type": "boolean" },
+              "skipped_reason": { "type": ["string", "null"] },
+              "execution_time_ms": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "dependent_analysis": {
+      "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"
+    },
+    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+  }
+}

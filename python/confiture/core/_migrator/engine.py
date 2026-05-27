@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     )
 
 import psycopg
+import psycopg.pq
 from psycopg import sql as pgsql
 
 from confiture.core._migrator.discovery import find_duplicate_migration_versions
@@ -243,10 +244,10 @@ class Migrator:
                 else:
                     cursor.execute(query)
         except Exception as e:
-            if hasattr(query, "as_string"):
+            if isinstance(query, pgsql.Composable):
                 try:
                     sql_text = query.as_string(self.connection)
-                except Exception:
+                except Exception:  # noqa: BLE001 — fall through to context-free render
                     sql_text = query.as_string(None)
             else:
                 sql_text = str(query)
@@ -359,6 +360,8 @@ class Migrator:
         force: bool = False,
         migration_file: Path | None = None,
         skip_preconditions: bool = False,
+        *,
+        commit: bool = True,
     ) -> None:
         """Apply a migration and record it in the tracking table.
 
@@ -381,6 +384,11 @@ class Migrator:
             force: If True, skip the "already applied" check
             migration_file: Path to migration file for checksum computation
             skip_preconditions: If True, skip precondition validation (not recommended)
+            commit: If False, the final ``connection.commit()`` after a
+                successful transactional apply is suppressed. Used by
+                ``--dry-run-execute`` where the caller owns an outer
+                SAVEPOINT that must outlive the per-migration apply. Has
+                no effect on non-transactional migrations.
 
         Raises:
             MigrationError: If migration fails or hooks fail
@@ -404,7 +412,7 @@ class Migrator:
             )
 
         if migration.transactional:
-            self._apply_transactional(migration, already_applied, migration_file)
+            self._apply_transactional(migration, already_applied, migration_file, commit=commit)
         else:
             self._apply_non_transactional(migration, already_applied, migration_file)
 
@@ -449,6 +457,8 @@ class Migrator:
         migration: Migration,
         already_applied: bool,
         migration_file: Path | None = None,
+        *,
+        commit: bool = True,
     ) -> None:
         """Apply migration within a transaction using savepoints.
 
@@ -456,6 +466,11 @@ class Migrator:
             migration: Migration instance to apply
             already_applied: Whether migration was already applied (force mode)
             migration_file: Path to migration file for checksum computation
+            commit: If False, suppress the final ``connection.commit()``. The
+                migration DDL and tracking-table row stay inside the caller's
+                outer transaction; the caller is responsible for either
+                committing or rolling back. Used by ``--dry-run-execute``,
+                whose outer SAVEPOINT would otherwise be discarded by COMMIT.
         """
         savepoint_name = f"migration_{migration.version}"
         execution_time_ms = 0
@@ -477,6 +492,39 @@ class Migrator:
             start_time = time.perf_counter()
             migration.up()
             execution_time_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # #133: a migration body that issues COMMIT/ROLLBACK silently
+            # breaks confiture's outer transaction envelope. After a clean
+            # up() we expect the connection to be INTRANS; INERROR is handled
+            # by the surrounding exception path. Any other status means the
+            # body committed/rolled back and we cannot safely record the
+            # migration.
+            #
+            # Guard against test doubles: if a unit test passes a mock
+            # connection whose ``info.transaction_status`` isn't an actual
+            # ``TransactionStatus`` value, skip the check rather than
+            # false-positive on the mock.
+            tx_status = self.connection.info.transaction_status
+            if isinstance(tx_status, psycopg.pq.TransactionStatus) and tx_status not in (
+                psycopg.pq.TransactionStatus.INTRANS,
+                psycopg.pq.TransactionStatus.INERROR,
+            ):
+                raise MigrationError(
+                    f"Migration {migration.version} ({migration.name}) issued "
+                    f"an explicit COMMIT or ROLLBACK in its body, breaking "
+                    f"confiture's transaction envelope "
+                    f"(connection status: {tx_status.name}).",
+                    migration.version,
+                    migration.name,
+                    error_code="MIGR_107",
+                    resolution_hint=(
+                        "Remove any explicit COMMIT or ROLLBACK from the migration body. "
+                        "Confiture manages the outer transaction; embedded transaction "
+                        "control leaves the database in an unrecoverable state if a "
+                        "subsequent statement fails. If you need autocommit semantics, "
+                        "set transactional = False on the migration."
+                    ),
+                )
             success = True
 
             # Trigger AFTER_EXECUTE hook
@@ -493,7 +541,8 @@ class Migrator:
                 self._record_migration(migration, execution_time_ms, migration_file)
             self._release_savepoint(savepoint_name)
 
-            self.connection.commit()
+            if commit:
+                self.connection.commit()
             logger.info(f"Successfully applied migration {migration.version} ({migration.name})")
 
         except Exception as e:
@@ -509,7 +558,7 @@ class Migrator:
                 error=str(e),
             )
 
-            self._rollback_to_savepoint(savepoint_name)
+            self._rollback_to_savepoint(savepoint_name, commit=commit)
             if isinstance(e, (MigrationError, HookError)):
                 raise
             hint = "Check the migration SQL for errors and ensure the database is in the expected state"
@@ -641,15 +690,26 @@ class Migrator:
         with self.connection.cursor() as cursor:
             cursor.execute(pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(name)))
 
-    def _rollback_to_savepoint(self, name: str) -> None:
-        """Rollback to a savepoint (undo nested transaction)."""
+    def _rollback_to_savepoint(self, name: str, *, commit: bool = True) -> None:
+        """Rollback to a savepoint (undo nested transaction).
+
+        When ``commit`` is False, the post-rollback ``connection.commit()`` is
+        suppressed so the rollback stays nested inside the caller's outer
+        transaction. The fallback full ``connection.rollback()`` is also
+        suppressed; on a failed ROLLBACK TO SAVEPOINT the caller's outer
+        savepoint handler is responsible for the recovery.
+        """
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name)))
-            self.connection.commit()
+            if commit:
+                self.connection.commit()
         except Exception:
-            # Savepoint rollback failed, do full rollback
-            self.connection.rollback()
+            if commit:
+                # Savepoint rollback failed, do full rollback
+                self.connection.rollback()
+            else:
+                raise
 
     def _record_migration(
         self,

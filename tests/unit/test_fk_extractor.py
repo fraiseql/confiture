@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from confiture.core.fk_extractor import (
     ForeignKeyInfo,
     extract_and_strip_fks,
@@ -709,6 +711,56 @@ CREATE TABLE orders (
 """
         stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 0
+
+    def test_inline_comment_between_table_constraints_preserves_constraints(self):
+        """#128: a `--` comment between two table-level CONSTRAINTs must not
+        cause either constraint to be dropped, and must not corrupt the
+        emitted CREATE TABLE body."""
+        sql = """\
+CREATE TABLE foo.tb_thing (
+    id           UUID DEFAULT gen_random_uuid() NOT NULL UNIQUE,
+    pk_thing     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fk_parent    BIGINT NOT NULL,
+    fk_extension BIGINT,
+    fk_currency  BIGINT,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT tb_thing_fk_parent_fkey
+        FOREIGN KEY (fk_parent) REFERENCES other.tb_parent(pk_parent),
+    -- fk_extension → ext.tb_extension: deferred (ext schema loads after foo)
+    CONSTRAINT tb_thing_fk_currency_fkey
+        FOREIGN KEY (fk_currency) REFERENCES catalog.tb_currency(pk_currency)
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+
+        names = {fk.constraint_name for fk in fks}
+        assert names == {"tb_thing_fk_parent_fkey", "tb_thing_fk_currency_fkey"}
+
+        assert "-- fk_extension → ext.tb_extension: deferred" in stripped
+
+        assert re.search(r",\s*\)\s*;", stripped) is None
+
+        assert "now(),    --" not in stripped
+        assert "now(), --" not in stripped
+
+    def test_inline_comment_between_inline_references_preserves_constraints(self):
+        """#128 regression guard for the line-by-line inline-REFERENCES path
+        (Step 2 of `_extract_fks_from_body`). Expected to PASS against current
+        code — kept to pin the invariant in case Step 2 is ever rewritten to
+        operate on the body wholesale."""
+        sql = """\
+CREATE TABLE foo.tb_thing (
+    fk_a BIGINT REFERENCES other.tb_a(pk_a),
+    -- fk_b: deferred until ext schema loads
+    fk_b BIGINT REFERENCES ext.tb_b(pk_b),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+        stripped, fks = extract_and_strip_fks(sql)
+        target_tables = {fk.target_table for fk in fks}
+        assert "other.tb_a" in target_tables
+        assert "ext.tb_b" in target_tables
+        assert "-- fk_b: deferred" in stripped
 
 
 # ── generate_alter_statements ───────────────────────────────────────────

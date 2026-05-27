@@ -257,6 +257,22 @@ def _create_global_registry() -> ErrorCodeRegistry:
             "Rename files to use unique version prefixes. "
             "Run 'confiture migrate validate' to see all duplicates.",
         ),
+        ErrorCodeDefinition(
+            code="MIGR_107",
+            message_template=(
+                "Migration {version} ({name}) issued an explicit COMMIT or "
+                "ROLLBACK in its body, breaking confiture's transaction envelope"
+            ),
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint=(
+                "Remove any explicit COMMIT or ROLLBACK from the migration body. "
+                "Confiture manages the outer transaction; embedded transaction "
+                "control leaves the database in an unrecoverable state if a "
+                "subsequent statement fails. If you need autocommit semantics, "
+                "set transactional = False on the migration."
+            ),
+        ),
     ]
 
     for code in migr_codes:

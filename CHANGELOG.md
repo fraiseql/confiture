@@ -5,6 +5,174 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-05-27
+
+Bundle release: ownership coverage ([#124]), agent-experience
+punch-list for the idempotency stack ([#123]), four in-flight bug
+fixes ([#128], [#131], [#132], [#133]), and a docs pair ([#125],
+[#127]). Two intermediate version labels (0.15.0, 0.16.0) were
+prepared locally but never published; their content rolls forward
+here.
+
+### Added
+
+- **`ownership:` block in environment YAML.** Single declaration: one
+  canonical `expected_owner` per environment, with per-schema `apply_to`
+  + `relkinds` filters, an `ignore` glob list, and a `lint_enabled` flag
+  (defaults to `True`, opt-in by default). Closes
+  [#124](https://github.com/fraiseql/confiture/issues/124).
+- **`confiture drift --check-ownership`** — runtime check against
+  `pg_class.relowner`. Composes with `--check-acls` and `--schema` in a
+  single report. JSON output includes a `wrong_owner` drift type.
+- **`migrate validate --check-ownership-coverage`** — static lint rule
+  `own_001` that flags `CREATE { TABLE | VIEW | MATERIALIZED VIEW |
+  SEQUENCE }` without a matching `ALTER … OWNER TO <expected_owner>`
+  later in the same migration file. AST-only (requires the `[ast]`
+  extra); a single skip notice is emitted when pglast is missing.
+- **`-- confiture:owner-skip`** directive opts the next CREATE out of
+  the rule (for genuinely extension-owned objects).
+- **`-- confiture:run-as <role>`** front-matter directive skips the
+  whole file when the declared role matches `expected_owner`. The
+  directive is declarative only — the runtime drift detector is the
+  production-time check.
+- **`migrate fix --ownership`** — auto-inserts the missing
+  `ALTER … OWNER TO` line immediately after each offending CREATE.
+  Composable with `--idempotent`. Includes a checksum-drift guard that
+  refuses to rewrite already-applied migrations unless `--force` is set.
+- **`migrate validate --list-patterns`** — machine-readable catalog of
+  every idempotency detection pattern. Read-only (no DB, no config, no
+  migrations directory required). JSON output frozen at `version: "1"`,
+  documented under `docs/reference/json-schemas/`. Each entry now
+  carries `template_fillable: bool` alongside `has_skip_regex`,
+  `skip_hint`, and `has_auto_fix`. Closes
+  [#123](https://github.com/fraiseql/confiture/issues/123).
+- **JSON schemas under `docs/reference/json-schemas/`** — nine schemas
+  covering every machine-readable CLI output, plus a shared
+  `_common.schema.json` for the `HintsArray` and `BackendMeta` refs.
+  Every documented success-path emitter pre-allocates `"hints": []`.
+- **`--idempotent` backend banner** — `payload["meta"]["backend"]`
+  ("ast" or "regex") in JSON output; a one-line annotated banner in
+  text mode so the active backend is never silent.
+- **Captures-driven suggestion templates.** Idempotency violations now
+  carry copy-pasteable SQL fix templates with captured identifiers
+  inlined (schema/table/constraint/column). Both the regex and the AST
+  backend feed a normalized `Captures` instance through the shared
+  template module, so the rendered suggestion is identical regardless
+  of which backend matched.
+- **Quiet-success hints.** `migrate validate --idempotent` on an empty
+  directory, `migrate status` against a database with no tracking
+  table, and `migrate preflight --against` against an empty
+  `tb_confiture` now emit advisory hints — stderr in text mode,
+  `payload["hints"][…]` in JSON mode. Hints never change exit codes.
+- **New error code `MIGR_107`** for migration-body envelope breaches
+  (see [#133] below); exits with the standard migration-error exit
+  code (3).
+
+### Fixed
+
+- **`migrate up --dry-run-execute` now actually rolls back.** The
+  per-migration `connection.commit()` inside `_apply_transactional`
+  silently discarded the outer `SAVEPOINT dry_run_execute`, so the
+  first successful migration persisted and subsequent migrations ran
+  outside any transaction — the user saw `savepoint "dry_run_execute"
+  does not exist` while their schema changes had already committed.
+  `Migrator.apply()` and `_apply_transactional` now accept a
+  keyword-only `commit: bool = True` (default preserves existing
+  behavior); `_up_dry_run_execute` passes `commit=False` so the outer
+  SAVEPOINT survives the entire run. The failure-path
+  `_rollback_to_savepoint` helper takes the same flag for the same
+  reason. Secondary correctness win: the advisory transaction lock
+  (`pg_advisory_xact_lock`) also no longer gets silently released
+  mid-run, so concurrent `confiture migrate up` invocations remain
+  blocked for the full dry-run window. Closes
+  [#131](https://github.com/fraiseql/confiture/issues/131).
+- **`DO $$ ... $$;` blocks no longer have their inner `BEGIN`/`COMMIT`
+  stripped.** The historic `strip_transaction_wrappers` scanned line
+  by line with a regex and deleted any line that looked like a `BEGIN`
+  or `COMMIT` wrapper — including PL/pgSQL `BEGIN`/`COMMIT` keywords
+  inside dollar-quoted blocks, which broke a standard PostgreSQL
+  idiom. The stripper now drives off a dollar-quote-aware scanner that
+  distinguishes top-level SQL from text inside `'...'`, `--` line
+  comments, `/* ... */` block comments, and `$tag$ ... $tag$` blocks.
+  Lines whose content lives inside a quoted block are preserved
+  verbatim. Closes
+  [#132](https://github.com/fraiseql/confiture/issues/132).
+- **Inline `COMMIT;` or `ROLLBACK;` in a migration body now surfaces a
+  clear error.** Previously a migration whose `.up.sql` contained an
+  inline `SELECT 1; COMMIT;` (not on its own line, so the stripper
+  couldn't catch it) silently tore down confiture's outer transaction
+  envelope; psycopg dutifully ran the COMMIT, subsequent statements
+  ran outside any transaction, and confiture's automatic rollback was
+  powerless. After each successful `migration.up()` confiture now
+  checks `connection.info.transaction_status`; anything other than
+  `INTRANS` (or `INERROR`, which is handled by the normal exception
+  path) raises a `MigrationError` with the new `MIGR_107` error code
+  and a hint explaining how to remove the offending transaction-
+  control statement or switch the migration to `transactional =
+  False`. Closes
+  [#133](https://github.com/fraiseql/confiture/issues/133).
+- **`confiture build` no longer corrupts `CREATE TABLE` bodies when a
+  `--` comment sits between table-level `CONSTRAINT … FOREIGN KEY`
+  clauses.** The FK extractor was running its regex twice — once on a
+  comment-stripped view, once on the original — and the start/end
+  whitespace expansion ate the comment's terminating newline, gluing
+  the comment onto the previous column line and leaving a trailing
+  comma before `)`. Now positions are projected back via an index map,
+  and newline consumption is skipped on either side of a comment-only
+  line, so the comment stays on its own line and
+  `_fix_trailing_commas` walks back through comment/blank lines to
+  find the last data column. FKs are still extracted correctly into
+  the Pass-2 ALTER block. Closes
+  [#128](https://github.com/evoludigit/confiture/issues/128).
+- **`AclDriftDetector.check()` no longer crashes** with `missing
+  FROM-clause entry` on every invocation. The inline
+  `"schema"."table"::regclass` was parsed as a column reference; the
+  qualified name is now passed as a TEXT parameter through the
+  `::regclass` cast (pre-existing bug surfaced when the suite was
+  re-run from scratch).
+- **`DryRunExecutor.run()` accepts positional `(migration_name,
+  statements)`** to match the documented new-API call sites; the
+  legacy keyword form remains supported.
+- **`ViewManager.recreate_saved_views()` integration tests** updated
+  to the `RecreateResult` return type (the previous int-return API was
+  replaced before 0.14.0; tests had drifted).
+
+### Internal
+
+- New module-private `_iter_top_level_lines` scanner in
+  `confiture.core.sql_utils` — a small state machine that
+  distinguishes top-level SQL from text inside strings, comments, and
+  dollar-quoted blocks. Drives the new stripper behavior in [#132] and
+  is available if a future static lint for [#133]-style envelope
+  breaches lands.
+
+### Reference
+
+- New: `docs/reference/json-schemas.md` and the directory of nine
+  schemas it links.
+- Updated: `migrate-validate-list-patterns.schema.json` documents the
+  new `template_fillable` field.
+
+### Documentation
+
+- **Ownership coverage guide:** `docs/guides/ownership-coverage.md`,
+  sibling to `docs/guides/acl-coverage.md` with cross-references.
+- **Migration-only positioning.** README now answers "Can I use
+  confiture without a `db/schema/` directory?" above the fold. The
+  comparison grid's "Source of truth" row lists *DDL files or
+  migration chain*, an adoption-checklist row covers migration-chain
+  projects, and `docs/guides/02-incremental-migrations.md` opens with
+  a callout pointing migration-only readers at the rest of the guide.
+  Closes [#125](https://github.com/evoludigit/confiture/issues/125).
+- **Dry-run ↔ preflight cross-link.** `docs/guides/dry-run.md` gains a
+  "Need a structural diff?" section explaining that `--dry-run` /
+  `--dry-run-execute` answer *would this run?* while
+  `migrate preflight --against` answers *what would change?*, plus a
+  decision table for picking between them. `migrate up --help`
+  mentions preflight in a STRUCTURAL DIFF block. Closing
+  [#127](https://github.com/evoludigit/confiture/issues/127) as docs
+  option B; the structural-diff flag remains a future feature ask.
+
 ## [0.14.0] - 2026-05-25
 
 `migrate validate --idempotent` now uses PostgreSQL's own parser (via

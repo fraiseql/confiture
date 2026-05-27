@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-preflight.schema.json",
+  "title": "confiture migrate preflight --format json (no --against)",
+  "description": "Static preflight analysis output. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, and checksum mismatches. No database connection required.",
+  "allOf": [
+    { "$ref": "_preflight_defs.schema.json#/$defs/StaticPreflight" },
+    {
+      "type": "object",
+      "required": ["hints"],
+      "properties": {
+        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" },
+        "dependent_analysis": {
+          "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"
+        }
+      }
+    }
+  ]
+}

@@ -16,7 +16,11 @@ import psycopg
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
 
 if TYPE_CHECKING:
-    from confiture.config.environment import AclExpectation, AclGrant
+    from confiture.config.environment import (
+        AclExpectation,
+        AclGrant,
+        OwnershipExpectation,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,7 @@ class DriftType(Enum):
     EXTRA_CONSTRAINT = "extra_constraint"
     MISSING_GRANT = "missing_grant"
     EXTRA_GRANT = "extra_grant"
+    WRONG_OWNER = "wrong_owner"
 
 
 class DriftSeverity(Enum):
@@ -723,32 +728,32 @@ class AclDriftDetector:
         would produce false positives for any role that inherits a
         privilege.
 
-        Identifiers are quoted via :class:`psycopg.sql.Identifier` so
+        Identifiers are quoted via :class:`psycopg.sql.Identifier` and
+        passed as a *text literal* that ``::regclass`` resolves, so
         mixed-case tables created with ``CREATE TABLE "MyTable" …`` are
-        resolved without case-folding.  Without the quoting, the
-        ``::regclass`` cast would fold ``public.MyTable`` to
-        ``public.mytable`` and throw ``UndefinedTable`` for a perfectly
-        valid identifier.
+        looked up without case-folding.  Inlining the qualified name as
+        bare SQL (``"schema"."table"::regclass``) would be parsed as a
+        column reference (``column "table" of table "schema"``) and
+        fail with ``missing FROM-clause entry`` — the text-cast form
+        avoids that pitfall entirely.
         """
-        from psycopg import sql as _sql  # local import to keep the top tidy
-
-        qualified_text = f'"{schema}"."{table}"'
+        # SQL-side qualifier needs the double-quoted form so mixed-case
+        # relnames survive regclass lookup; the human-friendly object_name
+        # used in DriftItem stays unquoted for display consistency with
+        # OwnershipDriftDetector and the existing structural diff items.
+        qualified_sql = f'"{schema}"."{table}"'
+        display_name = f"{schema}.{table}"
         # ``has_table_privilege(role, table_oid, priv)`` takes a regclass.
-        # Passing the literal SQL via ``psycopg.sql.Identifier`` ensures
-        # any mixed-case relname survives without quoting tricks.
-        regclass_sql = _sql.SQL("{schema}.{table}::regclass").format(
-            schema=_sql.Identifier(schema),
-            table=_sql.Identifier(table),
-        )
-        priv_query = _sql.SQL("SELECT has_table_privilege(%s, {regclass}, %s)").format(
-            regclass=regclass_sql
-        )
+        # Pass the qualified name as a TEXT parameter to ``::regclass``
+        # so PostgreSQL resolves it through the regclass input function
+        # rather than parsing it as a column reference.
+        priv_query = "SELECT has_table_privilege(%s, %s::regclass, %s)"
 
         missing: list[str] = []
         for priv in grant.privileges:
             with self.connection.cursor() as cur:
                 try:
-                    cur.execute(priv_query, (grant.role, priv))
+                    cur.execute(priv_query, (grant.role, qualified_sql, priv))
                     row = cur.fetchone()
                 except (
                     psycopg.errors.UndefinedObject,
@@ -773,12 +778,12 @@ class AclDriftDetector:
                     return DriftItem(
                         drift_type=DriftType.MISSING_GRANT,
                         severity=DriftSeverity.WARNING,
-                        object_name=f"{qualified_text}({grant.role})",
+                        object_name=f"{display_name}({grant.role})",
                         expected=", ".join(grant.privileges),
                         actual=None,
                         message=(
                             f"Cannot verify grants for role '{grant.role}' "
-                            f"on '{qualified_text}': {cause}{hint}"
+                            f"on '{display_name}': {cause}{hint}"
                         ),
                     )
                 if row is not None and row[0] is False:
@@ -788,12 +793,11 @@ class AclDriftDetector:
         return DriftItem(
             drift_type=DriftType.MISSING_GRANT,
             severity=DriftSeverity.CRITICAL,
-            object_name=f"{qualified_text}({grant.role})",
+            object_name=f"{display_name}({grant.role})",
             expected=", ".join(grant.privileges),
             actual=None,
             message=(
-                f"Role '{grant.role}' is missing grant(s) "
-                f"{', '.join(missing)} on '{qualified_text}'"
+                f"Role '{grant.role}' is missing grant(s) {', '.join(missing)} on '{display_name}'"
             ),
         )
 
@@ -843,3 +847,129 @@ class AclDriftDetector:
                 f"Role '{grant.role}' has unexpected grant(s) {', '.join(extras)} on '{qualified}'"
             ),
         )
+
+
+class OwnershipDriftDetector:
+    """Detect ownership drift between ``pg_class.relowner`` and the ``ownership:`` config.
+
+    Issue #124 — the ownership axis of the same drift class that
+    :class:`AclDriftDetector` covers on the ACL axis.
+
+    Discovery query is a single SELECT against ``pg_class`` filtered by
+    schema and ``relkind``.  Partition children (``relispartition =
+    true``) are NOT excluded — Postgres allows each partition to have a
+    distinct owner, and a drifted child is exactly the kind of mistake
+    this detector exists to catch.  The ``ignore:`` glob list is
+    evaluated Python-side after the query so the SQL stays simple and
+    the cross-schema globs (``*.legacy_audit_log``) work uniformly.
+
+    System tables (``tb_confiture`` etc.) are excluded via the same
+    :pyattr:`SchemaDriftDetector.SYSTEM_TABLES` set.
+
+    Example::
+
+        from confiture.config.environment import Environment
+        from confiture.core.drift import OwnershipDriftDetector
+
+        env = Environment.load("production")
+        with psycopg.connect(env.database_url) as conn:
+            report = OwnershipDriftDetector(conn).check(env.ownership)
+            if report.has_critical_drift:
+                raise SystemExit(1)
+    """
+
+    SYSTEM_TABLES = SchemaDriftDetector.SYSTEM_TABLES
+
+    def __init__(self, connection: psycopg.Connection) -> None:
+        self.connection = connection
+
+    def check(self, expectation: "OwnershipExpectation") -> DriftReport:
+        """Compare every reachable relation against the expected owner.
+
+        Returns a :class:`DriftReport` with one :class:`DriftItem` per
+        relation whose actual owner differs from ``expected_owner``.
+        ``report.has_drift is False`` means every in-scope relation has
+        the canonical owner.
+        """
+        report = DriftReport(
+            database_name=self._get_database_name(),
+            expected_schema_source="ownership",
+        )
+        for apply_entry in expectation.apply_to:
+            relations = self._discover_relations(
+                apply_entry.schema_, apply_entry.relkinds, expectation.ignore
+            )
+            for schema, relname, _relkind, actual_owner in relations:
+                report.tables_checked += 1
+                if actual_owner != expectation.expected_owner:
+                    qualified = f"{schema}.{relname}"
+                    report.drift_items.append(
+                        DriftItem(
+                            drift_type=DriftType.WRONG_OWNER,
+                            severity=DriftSeverity.CRITICAL,
+                            object_name=qualified,
+                            expected=expectation.expected_owner,
+                            actual=actual_owner,
+                            message=(
+                                f"Relation '{qualified}' is owned by "
+                                f"'{actual_owner}' but expected owner is "
+                                f"'{expectation.expected_owner}'"
+                            ),
+                        )
+                    )
+        return report
+
+    def _get_database_name(self) -> str:
+        with self.connection.cursor() as cur:
+            cur.execute("SELECT current_database()")
+            row = cur.fetchone()
+            return row[0] if row else "unknown"
+
+    def _discover_relations(
+        self,
+        schema: str,
+        relkinds: list[str],
+        ignore_patterns: list[str],
+    ) -> list[tuple[str, str, str, str]]:
+        """Return ``(schema, relname, relkind, owner)`` tuples in scope.
+
+        Filters out system tables and any qualified name matching an
+        ``ignore`` glob.  Ignore patterns may be either ``schema.name``
+        or a glob form like ``*.audit_log`` evaluated against the
+        ``schema.relname`` qualified form.
+        """
+        with self.connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT n.nspname,
+                       c.relname,
+                       c.relkind,
+                       pg_get_userbyid(c.relowner) AS owner
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = %s
+                  AND c.relkind = ANY(%s)
+                ORDER BY n.nspname, c.relname
+                """,
+                (schema, list(relkinds)),
+            )
+            rows: list[tuple[str, str, str, str]] = [
+                (row[0], row[1], row[2], row[3]) for row in cur.fetchall()
+            ]
+
+        rows = [r for r in rows if r[1] not in self.SYSTEM_TABLES]
+
+        if ignore_patterns:
+            rows = [r for r in rows if not _matches_any_glob(f"{r[0]}.{r[1]}", ignore_patterns)]
+
+        return rows
+
+
+def _matches_any_glob(qualified_name: str, patterns: list[str]) -> bool:
+    """Return ``True`` iff *qualified_name* matches any *patterns* glob.
+
+    Patterns may be either literal ``schema.name`` or a glob form like
+    ``*.audit_log`` or ``tenant.*_legacy``.  Uses :mod:`fnmatch`'s
+    case-sensitive ``fnmatchcase`` to mirror :class:`AclDriftDetector`.
+    """
+    return any(fnmatch.fnmatchcase(qualified_name, p) for p in patterns)

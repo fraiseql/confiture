@@ -29,7 +29,8 @@ class TestDryRunSavepointIntegration:
         assert result.success is True
         assert result.confidence_pct == 85
         assert len(result.statements) == 4
-        assert result.rows_affected == 2  # Only the UPDATE affects rows
+        # Aggregate sums every statement's rowcount: 3 inserts + 2 updates.
+        assert result.rows_affected == 5
 
         # Verify individual statements
         assert result.statements[0].rows_affected == 0  # CREATE TABLE
