@@ -1,23 +1,23 @@
 # .pre-commit-config.yaml
-# Using j178/prek for fast Rust-based pre-commit hooks
-# Prek provides high-performance alternatives to traditional Python tools
+#
+# Ruff: Astral's official `ruff-pre-commit` repo. The `rev:` tag tracks
+#   the ruff version installed in the project venv (`uv run ruff
+#   --version`); bump both together when upgrading.
+# Ty: not yet shipped as an official pre-commit repo, so it runs as a
+#   local hook via `uv run`.
 repos:
-   - repo: local
+   - repo: https://github.com/astral-sh/ruff-pre-commit
+     rev: v0.14.5
      hooks:
-       - id: sync-version
-         name: Sync version (pyproject.toml → __init__.py)
-         language: python
-         entry: python scripts/sync_docstring_version.py
-         pass_filenames: false
-         files: (^pyproject\.toml$|^python/confiture/__init__\.py$)
-
-   - repo: https://github.com/j178/prek
-     rev: v0.5.6
-     hooks:
-       # Ruff-based linting and formatting (Astral tools)
-       - id: ruff-check
+       - id: ruff
          args: [--fix]
        - id: ruff-format
-       # Ty type checking (Astral's ultra-fast type checker)
+
+   - repo: local
+     hooks:
        - id: ty
+         name: Ty type check (Astral)
+         language: system
+         entry: uv run ty check python/
+         pass_filenames: false
          files: ^python/
