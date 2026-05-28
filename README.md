@@ -163,6 +163,12 @@ jobs:
 
 Exit codes: `0` success, `2` config error, `3` SQL failure, `6` lock contention, `7` structural drift. See [the dry-run guide](docs/guides/dry-run.md) for what each one means.
 
+> Migrations that open their own SAVEPOINTs, use `psycopg`'s
+> `conn.transaction()`, or wrap `DO $$ … EXCEPTION WHEN … $$` blocks
+> are supported under all three modes. The rules a migration body must
+> follow for the SAVEPOINT-based rollback to stay clean are documented
+> in [the transaction & SAVEPOINT contract](docs/reference/transaction-contract.md).
+
 ---
 
 ## Python project snippet
