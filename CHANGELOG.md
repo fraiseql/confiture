@@ -5,6 +5,119 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-05-28
+
+Bundled release covering three open issues. One feature branch, one
+PR, one CI run — features land together rather than as separate
+minor versions.
+
+### Added
+
+#### `confiture bootstrap` — environment ownership setup ([#137](https://github.com/fraiseql/confiture/issues/137))
+
+One-shot, idempotent command for environment ownership setup. Solves
+the catch-22 where migrations running as `migrator` cannot
+`ALTER … OWNER TO migrator` on pre-existing wrong-owned objects.
+
+Three modes:
+
+- `--check` (default): read-only drift report; exit 1 on drift.
+- `--dry-run`: print the exact SQL `--apply` would run.
+- `--apply`: execute the plan inside a single transaction.
+
+The plan covers up to three steps: `CREATE ROLE` (if absent),
+`REASSIGN OWNED BY postgres TO <migrator>` (database-wide, gated by
+`--all-schemas` when out-of-scope schemas have postgres-owned
+objects), and `ALTER DEFAULT PRIVILEGES` per
+`ownership.default_privileges` entry.
+
+Connection is read from `ownership.bootstrap_connection_url` (new
+required field for `bootstrap`, env-var expanded). Operator guide:
+[`docs/guides/bootstrap.md`](docs/guides/bootstrap.md).
+
+#### `requires_superuser` + `migrate apply-as` ([#137](https://github.com/fraiseql/confiture/issues/137))
+
+Declarative attribute on `Migration` that opts a migration out of
+routine `migrate up`. Mirrors the existing `transactional: bool =
+True` pattern.
+
+`MigratorSession.up()` halts at the first migration with
+`requires_superuser=True`, surfaces a `SkippedMigration` record on
+`MigrateUpResult.skipped_superuser`, and exits 1 with a recovery hint
+pointing to `confiture migrate apply-as <role> <version>`. The new
+subcommand connects with `apply_as.<role>.url`, applies that one
+migration, and records `applied_by=<role>` in the tracking table.
+
+`tb_confiture` gains an `applied_by TEXT` column. Existing installs
+auto-migrate via `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Pre-0.18.0
+rows keep `applied_by IS NULL` as a **documented invariant**
+("applied before 0.18.0; role unknown") — downstream queries must
+`COALESCE` or filter explicitly.
+
+Author + operator guide:
+[`docs/guides/superuser-migrations.md`](docs/guides/superuser-migrations.md).
+
+#### `func_001` — function uniqueness lint ([#136](https://github.com/fraiseql/confiture/issues/136))
+
+New schema-lint rule that walks the configured DDL directories and
+flags any fully-qualified `CREATE FUNCTION` / `CREATE PROCEDURE`
+signature defined in more than one `.sql` file. `confiture build`
+silently concatenates duplicate definitions and PostgreSQL keeps
+whichever copy loads last; this rule catches the duplicate first.
+
+Kind-aware key `(kind, schema, name, parameter_types)` — functions
+and procedures don't collide, overloads aren't flagged, OUT
+parameters are excluded from the signature (per PostgreSQL overload
+resolution rules).
+
+Opt-in via a new `function_coverage:` env block. Wired into the
+existing CLI as `migrate validate --check-function-uniqueness
+--ddl-dir <path>`. Inline opt-out:
+`-- confiture:func-allow-duplicate` directive above a CREATE.
+
+Guide: [`docs/guides/function-uniqueness.md`](docs/guides/function-uniqueness.md).
+JSON schema: `docs/reference/json-schemas/migrate-validate-check-function-uniqueness.schema.json`.
+
+#### `own_002` — bare ALTER OWNER lint ([#137](https://github.com/fraiseql/confiture/issues/137))
+
+Sibling rule to `own_001`. Catches `ALTER … OWNER TO <expected_owner>`
+on objects the migration did NOT create — the exact failure shape
+that `confiture bootstrap` and `requires_superuser` exist to prevent.
+
+Three severity tiers:
+
+| Shape | Severity |
+|-------|----------|
+| Bare ALTER OWNER, no guard | ERROR |
+| `IF EXISTS` guard, no companion `requires_superuser=True` | WARNING |
+| `IF EXISTS` guard + companion `requires_superuser=True` | silent |
+
+Wired alongside `own_001` under `migrate validate
+--check-ownership-coverage`. Companion detection: looks for a sibling
+`.py` file with the same stem and greps for
+`requires_superuser\s*=\s*True`.
+
+#### SAVEPOINT compatibility contract ([#126](https://github.com/fraiseql/confiture/issues/126))
+
+New reference doc
+[`docs/reference/transaction-contract.md`](docs/reference/transaction-contract.md)
+covers the five-point contract migration authors need to know:
+
+1. Confiture wraps every migration in a transaction.
+2. `--dry-run-execute` / `preflight --against` add an outer SAVEPOINT.
+3. Migration bodies MAY open their own SAVEPOINTs (psycopg
+   `conn.transaction()` or explicit `SAVEPOINT … RELEASE`).
+4. `DO $$ … EXCEPTION WHEN … $$` blocks compose.
+5. Bare `COMMIT` / `ROLLBACK` in a migration body breaks the envelope.
+   0.17.0's `MIGR_107` guard (introduced separately under #133) now
+   detects this and raises a clear error rather than letting the
+   envelope corrupt silently. Use `transactional = False` instead.
+
+Two integration tests in `tests/integration/test_savepoint_contract.py`
+are the executable form of the contract — they exercise both
+`--dry-run-execute` and `preflight --against` against a migration
+body that opens nested SAVEPOINTs.
+
 ## [0.17.0] - 2026-05-27
 
 Bundle release: ownership coverage ([#124]), agent-experience
