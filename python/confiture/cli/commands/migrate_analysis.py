@@ -356,6 +356,27 @@ def migrate_validate(
             "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast)."
         ),
     ),
+    check_function_uniqueness: bool = typer.Option(
+        False,
+        "--check-function-uniqueness",
+        help=(
+            "Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` "
+            "in the configured DDL directories has a unique fully-qualified "
+            "signature. Two files defining the same `schema.name(args)` "
+            "are silently shadowed by `confiture build` — this rule "
+            "(`func_001`) catches the duplicate first. No-op when the "
+            "config has no `function_coverage:` block, or when "
+            "`function_coverage.enabled` is false. Requires the [ast] extra (pglast)."
+        ),
+    ),
+    ddl_dir: list[Path] = typer.Option(
+        None,
+        "--ddl-dir",
+        help=(
+            "DDL directory to scan for `--check-function-uniqueness` "
+            "(repeatable). Defaults to `db/schema` if not provided."
+        ),
+    ),
     check_signature_schemas: str = typer.Option(
         "public",
         "--schemas",
@@ -753,6 +774,60 @@ def migrate_validate(
                 console.print("[green]✅ All migrations have ownership coverage[/green]")
 
             if ownership_violations:
+                raise typer.Exit(1)
+            return
+
+        # Run function-uniqueness check on DDL files (static, no DB).
+        if check_function_uniqueness:
+            from confiture.cli.function_coverage_loader import load_function_coverage
+            from confiture.core.linting.libraries.functions import (
+                Func001FunctionUniqueness,
+            )
+
+            if not config.exists():
+                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                raise typer.Exit(2)
+
+            config_data = load_config(config)
+            coverage = load_function_coverage(config_data, config, require=False)
+
+            scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
+
+            func_violations = []
+            if coverage is not None and coverage.enabled:
+                func_violations = Func001FunctionUniqueness(coverage=coverage).check(scan_paths)
+
+            if format_output == "json":
+                _output_json(
+                    {
+                        "check": "function_uniqueness",
+                        "violations": [
+                            {
+                                "rule_id": v.rule_id,
+                                "severity": v.severity.value,
+                                "object_name": v.object_name,
+                                "object_type": v.object_type,
+                                "message": v.message,
+                                "file_path": v.file_path,
+                                "line_number": v.line_number,
+                            }
+                            for v in func_violations
+                        ],
+                    },
+                    output_file,
+                    console,
+                )
+            elif func_violations:
+                console.print(
+                    f"[red]❌ Function uniqueness check failed: "
+                    f"{len(func_violations)} violation(s)[/red]"
+                )
+                for v in func_violations:
+                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+            else:
+                console.print("[green]✅ All callables have unique signatures[/green]")
+
+            if func_violations:
                 raise typer.Exit(1)
             return
 

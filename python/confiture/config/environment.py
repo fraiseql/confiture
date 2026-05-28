@@ -486,6 +486,36 @@ class OwnershipApplyTo(BaseModel):
         return v
 
 
+class FunctionCoverage(BaseModel):
+    """The ``function_coverage:`` block in environment YAML (issue #136).
+
+    Enables the ``func_001`` lint rule that walks the configured DDL
+    directories and flags any fully-qualified function/procedure
+    signature defined in more than one ``.sql`` file.
+
+    Opt-in by default (``enabled=False``) to avoid surprising existing
+    projects with pre-existing duplicates.  Documented upgrade path:
+    enable, run, fix or opt out per call site with
+    ``-- confiture:func-allow-duplicate``, then leave on.
+
+    Attributes:
+        enabled: Master switch.  When False the rule is a no-op even if
+            scope-matching files contain duplicates.
+        apply_to: Schema-name patterns (``fnmatch``-style) that scope
+            the check.  ``["*"]`` covers every schema; ``["public",
+            "stat_etl"]`` covers only those two.
+        ignore: Object-path globs (``schema.name``) that opt specific
+            callables out of detection regardless of how many files
+            define them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    apply_to: list[str] = Field(default_factory=lambda: ["*"])
+    ignore: list[str] = Field(default_factory=list)
+
+
 class OwnershipExpectation(BaseModel):
     """The ``ownership:`` block in environment YAML (issue #124).
 
@@ -560,6 +590,10 @@ class Environment(BaseModel):
     # owner per env), unlike ``acls:`` which is a list.  ``None`` means
     # the project hasn't opted into ownership coverage at all.
     ownership: OwnershipExpectation | None = None
+    # Issue #136 — function-uniqueness lint (``func_001``).  ``None``
+    # leaves the rule disabled; set ``function_coverage.enabled: true``
+    # in the env YAML to opt in.
+    function_coverage: FunctionCoverage | None = None
 
     @property
     def database(self) -> DatabaseConfig:
@@ -773,6 +807,12 @@ class Environment(BaseModel):
         # ``expected_owner`` field commonly parameterizes across envs.
         if "ownership" in data and data["ownership"] is not None:
             data["ownership"] = expand_env_vars(data["ownership"], context="ownership")
+
+        # Same treatment for the ``function_coverage:`` subtree (issue #136).
+        if "function_coverage" in data and data["function_coverage"] is not None:
+            data["function_coverage"] = expand_env_vars(
+                data["function_coverage"], context="function_coverage"
+            )
 
         # Create Environment instance
         try:

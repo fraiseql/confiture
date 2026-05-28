@@ -230,5 +230,6 @@ confiture drift \
 ## Related
 
 - [ACL Coverage](acl-coverage.md) — the sister feature on the grants axis.
+- [Function Uniqueness](function-uniqueness.md) — the sister feature on the duplicate-DDL axis (`func_001`).
 - [Drift Detection](git-aware-validation.md) — full drift command reference.
 - Issue history: #66 (grant-sweep accompaniment), #120 (ACL coverage), #124 (ownership — this guide).

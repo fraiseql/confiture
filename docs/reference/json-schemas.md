@@ -126,6 +126,29 @@ Static check that every `CREATE TABLE` in `db/migrations/` has a matching `GRANT
 }
 ```
 
+### `confiture migrate validate --check-function-uniqueness --format json`
+
+[migrate-validate-check-function-uniqueness.schema.json](./json-schemas/migrate-validate-check-function-uniqueness.schema.json)
+
+Static check that every `CREATE FUNCTION` / `CREATE PROCEDURE` across the configured DDL directories has a unique fully-qualified signature. Opt-in via a `function_coverage:` block in the env config. Requires the `[ast]` extra (pglast). No DB required.
+
+```json
+{
+  "check": "function_uniqueness",
+  "violations": [
+    {
+      "rule_id": "func_001",
+      "severity": "error",
+      "object_name": "stat_etl.sync_tv_dimensions",
+      "object_type": "function",
+      "message": "Function 'stat_etl.sync_tv_dimensions()' is defined in 2 files: 03970_sync_tv_dimensions.sql, 039700_sync_tv_dimensions.sql. ...",
+      "file_path": "db/schema/0397_maintenance/03970_sync_tv_dimensions.sql",
+      "line_number": 14
+    }
+  ]
+}
+```
+
 ### `confiture migrate status --format json`
 
 [migrate-status.schema.json](./json-schemas/migrate-status.schema.json)
