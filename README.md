@@ -163,6 +163,12 @@ jobs:
 
 Exit codes: `0` success, `2` config error, `3` SQL failure, `6` lock contention, `7` structural drift. See [the dry-run guide](docs/guides/dry-run.md) for what each one means.
 
+> Migrations that open their own SAVEPOINTs, use `psycopg`'s
+> `conn.transaction()`, or wrap `DO $$ … EXCEPTION WHEN … $$` blocks
+> are supported under all three modes. The rules a migration body must
+> follow for the SAVEPOINT-based rollback to stay clean are documented
+> in [the transaction & SAVEPOINT contract](docs/reference/transaction-contract.md).
+
 ---
 
 ## Python project snippet
@@ -251,12 +257,16 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
 - [Dry-Run + Preflight](docs/guides/dry-run.md)
+- [Bootstrap](docs/guides/bootstrap.md) — `confiture bootstrap` for one-shot env ownership setup.
+- [Superuser Migrations](docs/guides/superuser-migrations.md) — `requires_superuser = True` + `migrate apply-as` recovery workflow.
+- [Function Uniqueness](docs/guides/function-uniqueness.md) — `func_001` catches duplicate `CREATE FUNCTION` across DDL files.
 - [Named Schemas](docs/guides/named-schemas.md)
 - [Hooks](docs/guides/hooks.md)
 - [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)
 
 **Reference**
 - [Tracking table (`tb_confiture`)](docs/reference/tracking-table.md)
+- [Transaction & SAVEPOINT contract](docs/reference/transaction-contract.md) — what migration bodies may and may not do under the wrapping transaction.
 - [CLI](docs/reference/cli.md)
 - [Configuration YAML](docs/reference/configuration.md)
 - [Complete feature list](docs/features/overview.md)

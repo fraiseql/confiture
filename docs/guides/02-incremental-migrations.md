@@ -401,4 +401,10 @@ Always update both `db/schema/` files and migrations together.
 - [Schema-to-Schema](./04-schema-to-schema.md) - For zero-downtime
 - [ACL Coverage](./acl-coverage.md) - Catch tables that ship without `GRANT`s
 - [Dry-Run Guide](./dry-run.md) - Test migrations safely
+- [Transaction & SAVEPOINT Contract](../reference/transaction-contract.md) -
+  Rules for `conn.transaction()`, explicit SAVEPOINTs, `DO $$ EXCEPTION`
+  blocks, and `transactional = False`
+- [Superuser Migrations](./superuser-migrations.md) - Declarative
+  `requires_superuser = True` + the `confiture migrate apply-as` recovery
+  workflow
 - [CLI Reference](../reference/cli.md) - All migrate commands

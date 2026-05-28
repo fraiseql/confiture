@@ -352,8 +352,32 @@ def migrate_validate(
         help=(
             "Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
             "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
-            "in the same file.  No-op when the config has no `ownership:` block, or when "
+            "in the same file (`own_001`).  Also flags bare `ALTER … OWNER TO` on objects "
+            "the migration didn't create (`own_002` — three severity tiers: silent when "
+            "guarded + companion `requires_superuser=True`, WARNING when only guarded, "
+            "ERROR when bare).  No-op when the config has no `ownership:` block, or when "
             "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast)."
+        ),
+    ),
+    check_function_uniqueness: bool = typer.Option(
+        False,
+        "--check-function-uniqueness",
+        help=(
+            "Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` "
+            "in the configured DDL directories has a unique fully-qualified "
+            "signature. Two files defining the same `schema.name(args)` "
+            "are silently shadowed by `confiture build` — this rule "
+            "(`func_001`) catches the duplicate first. No-op when the "
+            "config has no `function_coverage:` block, or when "
+            "`function_coverage.enabled` is false. Requires the [ast] extra (pglast)."
+        ),
+    ),
+    ddl_dir: list[Path] = typer.Option(
+        None,
+        "--ddl-dir",
+        help=(
+            "DDL directory to scan for `--check-function-uniqueness` "
+            "(repeatable). Defaults to `db/schema` if not provided."
         ),
     ),
     check_signature_schemas: str = typer.Option(
@@ -706,6 +730,7 @@ def migrate_validate(
             from confiture.cli.ownership_loader import load_ownership_expectation
             from confiture.core.linting.libraries.ownership import (
                 Own001OwnershipCoverage,
+                Own002BareAlterOwner,
             )
 
             if not config.exists():
@@ -721,6 +746,16 @@ def migrate_validate(
                 ownership_violations = Own001OwnershipCoverage(expectation=ownership_exp).check(
                     migrations_dir
                 )
+                # Issue #137 — own_002 sibling rule: bare `ALTER … OWNER TO`
+                # on objects the migration didn't create.
+                ownership_violations.extend(
+                    Own002BareAlterOwner(expectation=ownership_exp).check(migrations_dir)
+                )
+
+            # Errors fail the gate (exit 1); warnings print but don't.
+            from confiture.core.linting.schema_linter import RuleSeverity
+
+            has_errors = any(v.severity == RuleSeverity.ERROR for v in ownership_violations)
 
             if format_output == "json":
                 _output_json(
@@ -748,11 +783,69 @@ def migrate_validate(
                 )
                 for v in ownership_violations:
                     # Escape the rule_id brackets so Rich doesn't read them as markup.
-                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+                    color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
+                    mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
+                    console.print(
+                        f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] {v.object_name}: {v.message}"
+                    )
             else:
                 console.print("[green]✅ All migrations have ownership coverage[/green]")
 
-            if ownership_violations:
+            if has_errors:
+                raise typer.Exit(1)
+            return
+
+        # Run function-uniqueness check on DDL files (static, no DB).
+        if check_function_uniqueness:
+            from confiture.cli.function_coverage_loader import load_function_coverage
+            from confiture.core.linting.libraries.functions import (
+                Func001FunctionUniqueness,
+            )
+
+            if not config.exists():
+                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
+                raise typer.Exit(2)
+
+            config_data = load_config(config)
+            coverage = load_function_coverage(config_data, config, require=False)
+
+            scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
+
+            func_violations = []
+            if coverage is not None and coverage.enabled:
+                func_violations = Func001FunctionUniqueness(coverage=coverage).check(scan_paths)
+
+            if format_output == "json":
+                _output_json(
+                    {
+                        "check": "function_uniqueness",
+                        "violations": [
+                            {
+                                "rule_id": v.rule_id,
+                                "severity": v.severity.value,
+                                "object_name": v.object_name,
+                                "object_type": v.object_type,
+                                "message": v.message,
+                                "file_path": v.file_path,
+                                "line_number": v.line_number,
+                            }
+                            for v in func_violations
+                        ],
+                    },
+                    output_file,
+                    console,
+                )
+            elif func_violations:
+                console.print(
+                    f"[red]❌ Function uniqueness check failed: "
+                    f"{len(func_violations)} violation(s)[/red]"
+                )
+                for v in func_violations:
+                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+            else:
+                console.print("[green]✅ All callables have unique signatures[/green]")
+
+            if func_violations:
                 raise typer.Exit(1)
             return
 

@@ -486,6 +486,51 @@ class OwnershipApplyTo(BaseModel):
         return v
 
 
+class FunctionCoverage(BaseModel):
+    """The ``function_coverage:`` block in environment YAML (issue #136).
+
+    Enables the ``func_001`` lint rule that walks the configured DDL
+    directories and flags any fully-qualified function/procedure
+    signature defined in more than one ``.sql`` file.
+
+    Opt-in by default (``enabled=False``) to avoid surprising existing
+    projects with pre-existing duplicates.  Documented upgrade path:
+    enable, run, fix or opt out per call site with
+    ``-- confiture:func-allow-duplicate``, then leave on.
+
+    Attributes:
+        enabled: Master switch.  When False the rule is a no-op even if
+            scope-matching files contain duplicates.
+        apply_to: Schema-name patterns (``fnmatch``-style) that scope
+            the check.  ``["*"]`` covers every schema; ``["public",
+            "stat_etl"]`` covers only those two.
+        ignore: Object-path globs (``schema.name``) that opt specific
+            callables out of detection regardless of how many files
+            define them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    apply_to: list[str] = Field(default_factory=lambda: ["*"])
+    ignore: list[str] = Field(default_factory=list)
+
+
+_PRIVILEGE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER",
+        "EXECUTE",
+        "USAGE",
+    }
+)
+
+
 class OwnershipExpectation(BaseModel):
     """The ``ownership:`` block in environment YAML (issue #124).
 
@@ -496,6 +541,26 @@ class OwnershipExpectation(BaseModel):
     Mirrors the structure of :class:`AclTableExpectation` (#120) but on
     the ownership axis.  Opt-in by default: ``lint_enabled`` defaults
     to ``True`` per the issue's Definition of done.
+
+    Attributes:
+        expected_owner: Canonical role that should own every in-scope
+            relation in the environment.
+        apply_to: Per-schema scope entries (which relkinds to check).
+        ignore: Object-path globs that opt specific relations out of
+            both static lint and runtime drift detection.
+        lint_enabled: Master switch for the static ``own_001`` rule.
+        bootstrap_connection_url: Optional superuser URL used by
+            ``confiture bootstrap`` (issue #137).  Required for
+            ``--apply`` because ``CREATE ROLE`` and ``REASSIGN OWNED``
+            both need superuser.  Falls back to the env's main URL
+            only when the user passes the explicit override; we never
+            guess.  Supports ``${VAR}`` expansion at load time.
+        default_privileges: Mapping of ``schema -> role ->
+            [PRIVILEGE, ...]`` used to plan ``ALTER DEFAULT PRIVILEGES``
+            statements in ``confiture bootstrap`` (issue #137 part 1).
+            ``None`` means the bootstrap step is skipped with a one-line
+            notice.  Privilege strings are validated against the
+            standard PostgreSQL allow-list.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -504,6 +569,8 @@ class OwnershipExpectation(BaseModel):
     apply_to: list[OwnershipApplyTo]
     ignore: list[str] = Field(default_factory=list)
     lint_enabled: bool = True
+    bootstrap_connection_url: str | None = None
+    default_privileges: dict[str, dict[str, list[str]]] | None = None
 
     @field_validator("expected_owner")
     @classmethod
@@ -514,6 +581,24 @@ class OwnershipExpectation(BaseModel):
                 f"Use an unquoted ``[a-z_][a-z0-9_]*`` form, or a double-quoted "
                 f'``"Name"`` form for mixed-case roles.'
             )
+        return v
+
+    @field_validator("default_privileges")
+    @classmethod
+    def _validate_default_privileges(
+        cls, v: dict[str, dict[str, list[str]]] | None
+    ) -> dict[str, dict[str, list[str]]] | None:
+        if v is None:
+            return None
+        for schema, role_map in v.items():
+            for role, privs in role_map.items():
+                unknown = {p.upper() for p in privs} - _PRIVILEGE_KEYWORDS
+                if unknown:
+                    raise ValueError(
+                        f"Invalid privilege keyword(s) for {schema}.{role}: "
+                        f"{sorted(unknown)}. Allowed: "
+                        f"{sorted(_PRIVILEGE_KEYWORDS)}."
+                    )
         return v
 
 
@@ -560,6 +645,10 @@ class Environment(BaseModel):
     # owner per env), unlike ``acls:`` which is a list.  ``None`` means
     # the project hasn't opted into ownership coverage at all.
     ownership: OwnershipExpectation | None = None
+    # Issue #136 — function-uniqueness lint (``func_001``).  ``None``
+    # leaves the rule disabled; set ``function_coverage.enabled: true``
+    # in the env YAML to opt in.
+    function_coverage: FunctionCoverage | None = None
 
     @property
     def database(self) -> DatabaseConfig:
@@ -773,6 +862,12 @@ class Environment(BaseModel):
         # ``expected_owner`` field commonly parameterizes across envs.
         if "ownership" in data and data["ownership"] is not None:
             data["ownership"] = expand_env_vars(data["ownership"], context="ownership")
+
+        # Same treatment for the ``function_coverage:`` subtree (issue #136).
+        if "function_coverage" in data and data["function_coverage"] is not None:
+            data["function_coverage"] = expand_env_vars(
+                data["function_coverage"], context="function_coverage"
+            )
 
         # Create Environment instance
         try:

@@ -312,7 +312,11 @@ class MigratorSession:
         # Import through confiture.core.migrator so tests can patch
         # confiture.core.migrator.load_migration_class and confiture.core.migrator.MigrationLock.
         from confiture.exceptions import ConfigurationError
-        from confiture.models.results import MigrateUpResult, MigrationApplied
+        from confiture.models.results import (
+            MigrateUpResult,
+            MigrationApplied,
+            SkippedMigration,
+        )
 
         if self._migrator is None:
             raise ConfigurationError(
@@ -404,17 +408,45 @@ class MigratorSession:
         lock = _m.MigrationLock(self._conn, lock_config)
 
         migrations_applied: list[MigrationApplied] = []
+        skipped_superuser: list[SkippedMigration] = []
+        pending_after_halt: list[str] = []
         total_execution_time_ms = 0
         failed_exception: Exception | None = None
+        halted = False
 
         try:
             with lock.acquire():
-                for migration_file in pending_files:
+                for idx, migration_file in enumerate(pending_files):
                     migration_class = _m.load_migration_class(migration_file)
                     migration = migration_class(connection=self._conn)
 
                     # Stop at target version
                     if target and migration.version > target:
+                        break
+
+                    # Issue #137 — halt-at-first-skip for requires_superuser.
+                    # No dependency cascade exists in the model, so the safe
+                    # behavior is to stop the chain and surface a recovery
+                    # hint via the formatter.  Later migrations are reported
+                    # as pending rather than silently applied.
+                    # ``is True`` rather than truthiness so MagicMock-based
+                    # test doubles don't accidentally trip the halt path.
+                    if getattr(migration, "requires_superuser", False) is True:
+                        skipped_superuser.append(
+                            SkippedMigration(
+                                version=migration.version,
+                                name=migration.name,
+                                reason=(
+                                    "requires_superuser=True; resolve with "
+                                    f"`confiture migrate apply-as <role> {migration.version}`"
+                                ),
+                            )
+                        )
+                        pending_after_halt = [
+                            self._migrator._version_from_filename(f.name)
+                            for f in pending_files[idx + 1 :]
+                        ]
+                        halted = True
                         break
 
                     try:
@@ -445,16 +477,20 @@ class MigratorSession:
                 dry_run=False,
                 errors=[str(failed_exception)],
                 skipped=skipped_versions,
+                skipped_superuser=skipped_superuser,
+                pending=pending_after_halt,
             )
 
         return MigrateUpResult(
-            success=True,
+            success=not halted,
             migrations_applied=migrations_applied,
             total_execution_time_ms=total_execution_time_ms,
             checksums_verified=verify_checksums,
             dry_run=False,
             warnings=["Force mode enabled"] if force else [],
             skipped=skipped_versions,
+            skipped_superuser=skipped_superuser,
+            pending=pending_after_halt,
         )
 
     def _up_dry_run_execute(

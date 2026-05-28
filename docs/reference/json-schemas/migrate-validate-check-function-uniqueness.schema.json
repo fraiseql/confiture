@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-check-function-uniqueness.schema.json",
+  "title": "confiture migrate validate --check-function-uniqueness --format json",
+  "description": "Static function-uniqueness report: every `CREATE FUNCTION` / `CREATE PROCEDURE` across the configured DDL directories must have a unique fully-qualified signature (`schema.name(arg_types)`).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["check", "violations"],
+  "properties": {
+    "check": {
+      "type": "string",
+      "const": "function_uniqueness"
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "severity", "object_name", "object_type", "message", "file_path"],
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "const": "func_001"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning", "info"]
+          },
+          "object_name": {
+            "type": "string",
+            "description": "Qualified callable name (schema.name) — no argument types."
+          },
+          "object_type": {
+            "type": "string",
+            "enum": ["function", "procedure"]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable description including the list of files that define this signature and the recommended remediation."
+          },
+          "file_path": {
+            "type": ["string", "null"],
+            "description": "Path of the first file that defines this signature, in lexicographic order."
+          },
+          "line_number": {
+            "type": ["integer", "null"],
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}

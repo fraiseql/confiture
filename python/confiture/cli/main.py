@@ -13,6 +13,8 @@ from confiture.cli.commands.admin import (
     validate_profile,
     verify,
 )
+from confiture.cli.commands.apply_as import migrate_apply_as
+from confiture.cli.commands.bootstrap import bootstrap
 from confiture.cli.commands.debug import debug_app
 from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
@@ -61,6 +63,7 @@ COMMON_COMMANDS = [
     "coordinate",
     "install-helpers",
     "restore",
+    "bootstrap",
     "migrate-up",
     "migrate-down",
     "migrate-status",
@@ -143,6 +146,9 @@ app.command()(validate_profile)
 app.command()(verify)
 app.command()(restore)
 
+# Register bootstrap command (#137 — one-shot environment ownership setup)
+app.command()(bootstrap)
+
 # Register migrate core commands
 migrate_app.command("status")(migrate_status)
 migrate_app.command("up")(migrate_up)
@@ -163,6 +169,7 @@ migrate_app.command("fix-signatures")(migrate_fix_signatures)
 migrate_app.command("introspect")(migrate_introspect)
 migrate_app.command("verify")(migrate_verify)
 migrate_app.command("preflight")(migrate_preflight)
+migrate_app.command("apply-as")(migrate_apply_as)
 
 
 if __name__ == "__main__":

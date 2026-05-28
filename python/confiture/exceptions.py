@@ -743,6 +743,43 @@ class UnsafeOperationError(ConfiturError):
         )
 
 
+class BootstrapError(ConfiturError):
+    """Raised by ``confiture bootstrap`` (issue #137).
+
+    Distinct subclass so callers can catch all bootstrap failures
+    independently of generic configuration errors.  Defaults to
+    exit code 2 via the underlying CONFIG-class error code.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code,
+            severity=severity,
+            context=context,
+            resolution_hint=resolution_hint,
+        )
+
+
+class BootstrapScopeError(BootstrapError):
+    """``REASSIGN OWNED`` would affect schemas outside ``ownership.apply_to``.
+
+    Confiture refuses to run ``REASSIGN OWNED BY postgres TO migrator``
+    across schemas the operator hasn't explicitly opted into, because
+    the statement is database-wide and could rename ownership in
+    extensions or unrelated schemas.  Pass ``--all-schemas`` to
+    override.
+    """
+
+
 # Re-export precondition exceptions for convenience
 # These are defined in confiture.core.preconditions but users may want to
 # import them from confiture.exceptions
@@ -776,4 +813,6 @@ __all__ = [
     "PreconditionValidationError",
     "PreStateSimulationError",
     "UnsafeOperationError",
+    "BootstrapError",
+    "BootstrapScopeError",
 ]

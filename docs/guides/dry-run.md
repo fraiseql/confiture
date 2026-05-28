@@ -296,4 +296,7 @@ Estimates are conservative approximations. Use `--dry-run-execute` for real metr
 ## See Also
 
 - [CLI Reference](../reference/cli.md)
+- [Transaction & SAVEPOINT Contract](../reference/transaction-contract.md) — the
+  rules a migration body must follow for `--dry-run-execute` and
+  `preflight --against` to roll back cleanly
 - [Incremental Migrations](./02-incremental-migrations.md)
