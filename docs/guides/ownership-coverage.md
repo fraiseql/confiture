@@ -231,5 +231,6 @@ confiture drift \
 
 - [ACL Coverage](acl-coverage.md) — the sister feature on the grants axis.
 - [Function Uniqueness](function-uniqueness.md) — the sister feature on the duplicate-DDL axis (`func_001`).
+- [Bootstrap](bootstrap.md) — operator-explicit setup that prevents the wrong-owner drift in the first place (`confiture bootstrap`).
 - [Drift Detection](git-aware-validation.md) — full drift command reference.
-- Issue history: #66 (grant-sweep accompaniment), #120 (ACL coverage), #124 (ownership — this guide).
+- Issue history: #66 (grant-sweep accompaniment), #120 (ACL coverage), #124 (ownership — this guide), #137 (bootstrap & superuser migrations).

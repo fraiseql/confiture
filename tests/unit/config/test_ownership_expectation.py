@@ -194,3 +194,66 @@ def test_environment_ownership_missing_env_var_fails_loud(
     )
     with pytest.raises(ConfigurationError, match="OWNER"):
         Environment.load("test", project)
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_connection_url + default_privileges (issue #137 / Phase C)
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_connection_url_optional() -> None:
+    """Bootstrap URL is optional; defaults to None when unset."""
+    e = OwnershipExpectation(
+        expected_owner="migrator",
+        apply_to=[OwnershipApplyTo(schema="tenant")],
+    )
+    assert e.bootstrap_connection_url is None
+
+
+def test_bootstrap_connection_url_accepts_string() -> None:
+    e = OwnershipExpectation(
+        expected_owner="migrator",
+        apply_to=[OwnershipApplyTo(schema="tenant")],
+        bootstrap_connection_url="postgresql://super@localhost/prod",
+    )
+    assert e.bootstrap_connection_url == "postgresql://super@localhost/prod"
+
+
+def test_default_privileges_parses_nested_mapping() -> None:
+    """`schema -> role -> [PRIV, ...]` parses with privilege-keyword validation."""
+    e = OwnershipExpectation(
+        expected_owner="migrator",
+        apply_to=[OwnershipApplyTo(schema="tenant")],
+        default_privileges={
+            "tenant": {
+                "app": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+                "readonly": ["SELECT"],
+            }
+        },
+    )
+    assert e.default_privileges is not None
+    assert e.default_privileges["tenant"]["app"] == [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+    ]
+    assert e.default_privileges["tenant"]["readonly"] == ["SELECT"]
+
+
+def test_default_privileges_rejects_unknown_keyword() -> None:
+    with pytest.raises(ValidationError, match="DROP"):
+        OwnershipExpectation(
+            expected_owner="migrator",
+            apply_to=[OwnershipApplyTo(schema="tenant")],
+            default_privileges={"tenant": {"app": ["SELECT", "DROP"]}},
+        )
+
+
+def test_default_privileges_none_when_unconfigured() -> None:
+    """Absent block → ``default_privileges is None`` (bootstrap step skipped)."""
+    e = OwnershipExpectation(
+        expected_owner="migrator",
+        apply_to=[OwnershipApplyTo(schema="tenant")],
+    )
+    assert e.default_privileges is None

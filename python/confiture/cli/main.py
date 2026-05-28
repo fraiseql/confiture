@@ -13,6 +13,7 @@ from confiture.cli.commands.admin import (
     validate_profile,
     verify,
 )
+from confiture.cli.commands.bootstrap import bootstrap
 from confiture.cli.commands.debug import debug_app
 from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
@@ -61,6 +62,7 @@ COMMON_COMMANDS = [
     "coordinate",
     "install-helpers",
     "restore",
+    "bootstrap",
     "migrate-up",
     "migrate-down",
     "migrate-status",
@@ -142,6 +144,9 @@ app.command("install-helpers")(install_helpers)
 app.command()(validate_profile)
 app.command()(verify)
 app.command()(restore)
+
+# Register bootstrap command (#137 — one-shot environment ownership setup)
+app.command()(bootstrap)
 
 # Register migrate core commands
 migrate_app.command("status")(migrate_status)
