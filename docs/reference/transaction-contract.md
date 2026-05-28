@@ -138,10 +138,16 @@ all three execution modes.
 
 A migration body that issues a bare `COMMIT` or `ROLLBACK` ends
 confiture's wrapping transaction and invalidates every active
-savepoint.  Under `--dry-run-execute` or `preflight --against` the
-subsequent `ROLLBACK TO SAVEPOINT` will fail with
-`savepoint "dry_run_execute" does not exist` (or the preflight
-equivalent).
+savepoint.  As of 0.17.0 (issue #133), confiture **detects this** by
+inspecting `connection.info.transaction_status` after `up()` returns;
+if the status isn't `INTRANS` or `INERROR`, the migration is rejected
+with `MIGR_107`:
+
+```
+MIGR_107: Migration 20260528120000 (smoke_test) issued an explicit
+COMMIT or ROLLBACK in its body, breaking confiture's transaction
+envelope (connection status: IDLE).
+```
 
 The supported escape hatch is to declare the migration
 non-transactional:
