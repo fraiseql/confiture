@@ -309,7 +309,8 @@ class Migrator:
                         name VARCHAR(255) NOT NULL,
                         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         execution_time_ms INTEGER,
-                        checksum VARCHAR(64)
+                        checksum VARCHAR(64),
+                        applied_by TEXT
                     )
                     """).format(self._table_ident)
                 )
@@ -339,6 +340,16 @@ class Migrator:
                         self._table_ident,
                     )
                 )
+            else:
+                # Issue #137 — `applied_by` column was added in 0.17.0.
+                # Existing installs auto-migrate via IF NOT EXISTS; pre-0.17.0
+                # rows keep `applied_by IS NULL` ("applied before 0.17.0;
+                # role unknown") as a documented invariant.
+                self._execute_sql(
+                    pgsql.SQL(
+                        "ALTER TABLE {} ADD COLUMN IF NOT EXISTS applied_by TEXT"
+                    ).format(self._table_ident)
+                )
 
             self.connection.commit()
         except Exception as e:
@@ -362,6 +373,7 @@ class Migrator:
         skip_preconditions: bool = False,
         *,
         commit: bool = True,
+        applied_by: str | None = None,
     ) -> None:
         """Apply a migration and record it in the tracking table.
 
@@ -389,6 +401,10 @@ class Migrator:
                 ``--dry-run-execute`` where the caller owns an outer
                 SAVEPOINT that must outlive the per-migration apply. Has
                 no effect on non-transactional migrations.
+            applied_by: PostgreSQL role to record in ``tb_confiture.applied_by``
+                (issue #137). When None, defaults to the connection's
+                ``current_user``. ``migrate apply-as`` sets this explicitly
+                to the role argument.
 
         Raises:
             MigrationError: If migration fails or hooks fail
@@ -412,9 +428,17 @@ class Migrator:
             )
 
         if migration.transactional:
-            self._apply_transactional(migration, already_applied, migration_file, commit=commit)
+            self._apply_transactional(
+                migration,
+                already_applied,
+                migration_file,
+                commit=commit,
+                applied_by=applied_by,
+            )
         else:
-            self._apply_non_transactional(migration, already_applied, migration_file)
+            self._apply_non_transactional(
+                migration, already_applied, migration_file, applied_by=applied_by
+            )
 
     def _validate_preconditions(
         self,
@@ -459,6 +483,7 @@ class Migrator:
         migration_file: Path | None = None,
         *,
         commit: bool = True,
+        applied_by: str | None = None,
     ) -> None:
         """Apply migration within a transaction using savepoints.
 
@@ -471,6 +496,9 @@ class Migrator:
                 outer transaction; the caller is responsible for either
                 committing or rolling back. Used by ``--dry-run-execute``,
                 whose outer SAVEPOINT would otherwise be discarded by COMMIT.
+            applied_by: PostgreSQL role to record in ``tb_confiture.applied_by``
+                (issue #137). When None, defaults to the connection's
+                ``current_user``.
         """
         savepoint_name = f"migration_{migration.version}"
         execution_time_ms = 0
@@ -538,7 +566,9 @@ class Migrator:
             # Only record the migration if it's not already applied
             # In force mode, we re-apply but don't re-record
             if not already_applied:
-                self._record_migration(migration, execution_time_ms, migration_file)
+                self._record_migration(
+                    migration, execution_time_ms, migration_file, applied_by=applied_by
+                )
             self._release_savepoint(savepoint_name)
 
             if commit:
@@ -583,6 +613,8 @@ class Migrator:
         migration: Migration,
         already_applied: bool,
         migration_file: Path | None = None,
+        *,
+        applied_by: str | None = None,
     ) -> None:
         """Apply migration in autocommit mode (no transaction).
 
@@ -633,7 +665,9 @@ class Migrator:
 
             # Record migration (in autocommit, this commits immediately)
             if not already_applied:
-                self._record_migration(migration, execution_time_ms, migration_file)
+                self._record_migration(
+                    migration, execution_time_ms, migration_file, applied_by=applied_by
+                )
 
             logger.info(
                 f"Successfully applied non-transactional migration "
@@ -716,6 +750,8 @@ class Migrator:
         migration: Migration,
         execution_time_ms: int,
         migration_file: Path | None = None,
+        *,
+        applied_by: str | None = None,
     ) -> None:
         """Record migration in tracking table with checksum.
 
@@ -723,6 +759,11 @@ class Migrator:
             migration: Migration that was applied
             execution_time_ms: Time taken to apply migration
             migration_file: Path to migration file for checksum computation
+            applied_by: PostgreSQL role that applied this migration
+                (issue #137).  Defaults to the connection's
+                ``current_user`` when the caller doesn't pass an explicit
+                value.  Pre-0.17.0 rows keep ``applied_by IS NULL`` as a
+                documented invariant — see docs/guides/superuser-migrations.md.
         """
         from datetime import datetime
 
@@ -735,14 +776,27 @@ class Migrator:
             checksum = compute_checksum(migration_file)
             logger.debug(f"Computed checksum for {migration.version}: {checksum[:16]}...")
 
+        if applied_by is None:
+            # Capture the role that opened the connection.  Quoting
+            # is unnecessary — current_user is read-only on the server.
+            row = self.connection.execute("SELECT current_user").fetchone()
+            applied_by = row[0] if row else None
+
         with self.connection.cursor() as cursor:
             cursor.execute(
                 pgsql.SQL("""
                 INSERT INTO {}
-                    (id, slug, version, name, execution_time_ms, checksum)
-                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
+                    (id, slug, version, name, execution_time_ms, checksum, applied_by)
+                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
                 """).format(self._table_ident),
-                (slug, migration.version, migration.name, execution_time_ms, checksum),
+                (
+                    slug,
+                    migration.version,
+                    migration.name,
+                    execution_time_ms,
+                    checksum,
+                    applied_by,
+                ),
             )
 
     def mark_applied(

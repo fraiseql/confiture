@@ -1019,6 +1019,29 @@ def migrate_up(
                             )
                             break
 
+                        # Issue #137 — halt at first requires_superuser=True.
+                        # Print the recovery hint pointing to `apply-as` and
+                        # exit 1.  Subsequent migrations are NOT applied.
+                        if getattr(migration, "requires_superuser", False) is True:
+                            console.print(
+                                f"\n[yellow]⏸  Skipping migration {migration.version}"
+                                f"_{migration.name}:[/yellow]"
+                            )
+                            console.print(
+                                "[dim]  requires_superuser=True.  Apply this "
+                                "migration separately as a superuser:[/dim]"
+                            )
+                            console.print(
+                                f"[dim]    confiture migrate apply-as <role> "
+                                f"{migration.version}[/dim]"
+                            )
+                            console.print(
+                                "[dim]  Then re-run `confiture migrate up` to "
+                                "resume the chain.[/dim]"
+                            )
+                            conn.close()
+                            raise typer.Exit(1)
+
                         # Apply migration
                         console.print(
                             f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]",

@@ -211,6 +211,28 @@ class MigrationApplied:
         }
 
 
+@dataclass(frozen=True)
+class SkippedMigration:
+    """One migration skipped during `migrate up` (issue #137).
+
+    Currently emitted when a migration declares `requires_superuser = True`.
+    The session halts at the first such record, populates `pending` with
+    every later migration, and exits 1 with a recovery hint pointing to
+    `confiture migrate apply-as`.
+    """
+
+    version: str
+    name: str
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "name": self.name,
+            "reason": self.reason,
+        }
+
+
 @dataclass
 class MigrateUpResult:
     """Result of migrate up operation.
@@ -250,6 +272,11 @@ class MigrateUpResult:
     warnings: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Issue #137 — migrations halted on `requires_superuser=True` are
+    # recorded here.  When non-empty, the session halts at the first
+    # entry and reports remaining migrations in `pending`.
+    skipped_superuser: list[SkippedMigration] = field(default_factory=list)
+    pending: list[str] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -278,6 +305,8 @@ class MigrateUpResult:
             "success": self.success,
             "applied": [m.to_dict() for m in self.migrations_applied],
             "skipped": self.skipped,
+            "skipped_superuser": [s.to_dict() for s in self.skipped_superuser],
+            "pending": self.pending,
             "errors": self.errors,
             "total_duration_ms": self.total_execution_time_ms,
             "checksums_verified": self.checksums_verified,

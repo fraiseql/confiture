@@ -404,4 +404,7 @@ Always update both `db/schema/` files and migrations together.
 - [Transaction & SAVEPOINT Contract](../reference/transaction-contract.md) -
   Rules for `conn.transaction()`, explicit SAVEPOINTs, `DO $$ EXCEPTION`
   blocks, and `transactional = False`
+- [Superuser Migrations](./superuser-migrations.md) - Declarative
+  `requires_superuser = True` + the `confiture migrate apply-as` recovery
+  workflow
 - [CLI Reference](../reference/cli.md) - All migrate commands

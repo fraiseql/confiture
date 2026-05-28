@@ -141,6 +141,10 @@ class Migration(ABC):
     # Configuration attributes
     transactional: bool = True  # Default: run in transaction with savepoints
     strict_mode: bool = False  # Default: lenient error handling
+    # Issue #137 — declarative "this migration must run as superuser".
+    # `MigratorSession.up()` halts at the first migration with this set;
+    # the operator resolves with `confiture migrate apply-as <role>`.
+    requires_superuser: bool = False
 
     # Precondition attributes (optional, default to empty lists)
     # Validated before migration execution - fail fast if not satisfied
