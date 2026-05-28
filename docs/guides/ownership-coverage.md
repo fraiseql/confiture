@@ -87,6 +87,22 @@ Install the extra to enable the rule:
 pip install "fraiseql-confiture[ast]"
 ```
 
+### Sibling rule — `own_002` bare `ALTER OWNER`
+
+`own_001` catches *new* `CREATE` without a paired `ALTER OWNER`.  Its sibling `own_002` catches the opposite shape: an `ALTER … OWNER TO <expected_owner>` on an object the migration did **not** itself create.  This is the catch-22 from [issue #137](https://github.com/fraiseql/confiture/issues/137) — a migration tries to "repair" pre-existing wrong ownership, but it runs as the non-owning migrator role and fails at apply time.
+
+Three severity tiers per occurrence:
+
+| Shape | Severity | Recommended fix |
+|-------|----------|-----------------|
+| Bare `ALTER OWNER`, no guard | **ERROR** | Run [`confiture bootstrap`](bootstrap.md) once, or wrap in `IF EXISTS` and mark `requires_superuser = True`. |
+| `IF EXISTS` guard, no `requires_superuser = True` | **WARNING** | Add `requires_superuser = True` to the companion `.py` so the migration runs via [`apply-as`](superuser-migrations.md). |
+| `IF EXISTS` guard AND `requires_superuser = True` | silent | Intended pattern — no action needed. |
+
+Companion detection: the rule looks for a sibling `.py` file with the same stem (`20260528170300_fix.up.sql` → `20260528170300_fix.py`) and greps for `requires_superuser\s*=\s*True`.  Pure-SQL migrations with no companion default to "not superuser."
+
+`own_002` is registered alongside `own_001` under `--check-ownership-coverage`; the two run in lockstep.
+
 ### Opt-out: the `-- confiture:owner-skip` directive
 
 For genuinely extension-owned objects, mark the `CREATE` with a directive comment on its own line:

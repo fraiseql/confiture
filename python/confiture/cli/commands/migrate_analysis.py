@@ -352,7 +352,10 @@ def migrate_validate(
         help=(
             "Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
             "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
-            "in the same file.  No-op when the config has no `ownership:` block, or when "
+            "in the same file (`own_001`).  Also flags bare `ALTER … OWNER TO` on objects "
+            "the migration didn't create (`own_002` — three severity tiers: silent when "
+            "guarded + companion `requires_superuser=True`, WARNING when only guarded, "
+            "ERROR when bare).  No-op when the config has no `ownership:` block, or when "
             "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast)."
         ),
     ),
@@ -727,6 +730,7 @@ def migrate_validate(
             from confiture.cli.ownership_loader import load_ownership_expectation
             from confiture.core.linting.libraries.ownership import (
                 Own001OwnershipCoverage,
+                Own002BareAlterOwner,
             )
 
             if not config.exists():
@@ -742,6 +746,18 @@ def migrate_validate(
                 ownership_violations = Own001OwnershipCoverage(expectation=ownership_exp).check(
                     migrations_dir
                 )
+                # Issue #137 — own_002 sibling rule: bare `ALTER … OWNER TO`
+                # on objects the migration didn't create.
+                ownership_violations.extend(
+                    Own002BareAlterOwner(expectation=ownership_exp).check(migrations_dir)
+                )
+
+            # Errors fail the gate (exit 1); warnings print but don't.
+            from confiture.core.linting.schema_linter import RuleSeverity
+
+            has_errors = any(
+                v.severity == RuleSeverity.ERROR for v in ownership_violations
+            )
 
             if format_output == "json":
                 _output_json(
@@ -769,11 +785,16 @@ def migrate_validate(
                 )
                 for v in ownership_violations:
                     # Escape the rule_id brackets so Rich doesn't read them as markup.
-                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+                    color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
+                    mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
+                    console.print(
+                        f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] "
+                        f"{v.object_name}: {v.message}"
+                    )
             else:
                 console.print("[green]✅ All migrations have ownership coverage[/green]")
 
-            if ownership_violations:
+            if has_errors:
                 raise typer.Exit(1)
             return
 
