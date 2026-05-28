@@ -74,9 +74,7 @@ def _write_config(tmp_path: Path, db_url: str) -> Path:
 
 
 @pytest.mark.integration
-def test_apply_as_records_role_in_tracking_table(
-    apply_as_db: str, tmp_path: Path
-) -> None:
+def test_apply_as_records_role_in_tracking_table(apply_as_db: str, tmp_path: Path) -> None:
     migrations_dir = tmp_path / "db" / "migrations"
     _write_migration(migrations_dir, "20260528150000", requires_superuser=True)
     cfg = _write_config(tmp_path, apply_as_db)
@@ -129,9 +127,7 @@ def test_apply_as_refuses_unknown_version(apply_as_db: str, tmp_path: Path) -> N
 
 
 @pytest.mark.integration
-def test_apply_as_refuses_already_applied(
-    apply_as_db: str, tmp_path: Path
-) -> None:
+def test_apply_as_refuses_already_applied(apply_as_db: str, tmp_path: Path) -> None:
     migrations_dir = tmp_path / "db" / "migrations"
     _write_migration(migrations_dir, "20260528150100", requires_superuser=True)
     cfg = _write_config(tmp_path, apply_as_db)

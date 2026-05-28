@@ -62,9 +62,7 @@ def bootstrap_db() -> str:
 
 
 def _role_exists(conn: psycopg.Connection, role: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)
-    ).fetchone()
+    row = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
     return row is not None
 
 
@@ -130,9 +128,7 @@ def test_apply_emits_default_privileges_statements(bootstrap_db: str) -> None:
     with psycopg.connect(bootstrap_db, autocommit=False) as conn:
         planner = BootstrapPlanner(ownership=ownership)
         plan = planner.plan(conn, all_schemas=True)
-        adp_steps = [
-            s for s in plan.steps if s.label.startswith("default_privileges_")
-        ]
+        adp_steps = [s for s in plan.steps if s.label.startswith("default_privileges_")]
         assert len(adp_steps) == 1
         executor = BootstrapExecutor()
         result = executor.apply(plan, conn)

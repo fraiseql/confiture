@@ -394,8 +394,7 @@ class Own002BareAlterOwner:
             return []
         if not is_pglast_available():
             emit_skip_notice(
-                'own_002 requires the [ast] extra: '
-                'pip install "fraiseql-confiture[ast]"'
+                'own_002 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
             )
             return []
 
@@ -588,9 +587,7 @@ def _companion_declares_requires_superuser(sql_path: Path) -> bool:
     return bool(re.search(r"requires_superuser\s*=\s*True", text))
 
 
-def _build_own_002_message(
-    *, qualified: str, expected_owner: str, was_guarded: bool
-) -> str:
+def _build_own_002_message(*, qualified: str, expected_owner: str, was_guarded: bool) -> str:
     if was_guarded:
         return (
             f"`ALTER TABLE {qualified} OWNER TO {expected_owner}` targets a "

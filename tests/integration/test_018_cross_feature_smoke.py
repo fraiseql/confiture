@@ -160,9 +160,7 @@ def test_bootstrap_apply_then_migrate_with_superuser_halt_and_apply_as(
     assert boot.exit_code == 0, boot.output
 
     with psycopg.connect(db_url) as verify:
-        row = verify.execute(
-            "SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)
-        ).fetchone()
+        row = verify.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
         assert row is not None, "bootstrap should have created the migrator role"
 
     # #137 — migrate up halts at the requires_superuser=True migration.
@@ -199,9 +197,7 @@ def test_bootstrap_apply_then_migrate_with_superuser_halt_and_apply_as(
     with psycopg.connect(db_url) as verify:
         applied = {
             r[0]
-            for r in verify.execute(
-                "SELECT version FROM tb_confiture ORDER BY version"
-            ).fetchall()
+            for r in verify.execute("SELECT version FROM tb_confiture ORDER BY version").fetchall()
         }
         assert applied == {"20260528180001", "20260528180002"}
 

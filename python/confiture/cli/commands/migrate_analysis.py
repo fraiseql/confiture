@@ -755,9 +755,7 @@ def migrate_validate(
             # Errors fail the gate (exit 1); warnings print but don't.
             from confiture.core.linting.schema_linter import RuleSeverity
 
-            has_errors = any(
-                v.severity == RuleSeverity.ERROR for v in ownership_violations
-            )
+            has_errors = any(v.severity == RuleSeverity.ERROR for v in ownership_violations)
 
             if format_output == "json":
                 _output_json(
@@ -788,8 +786,7 @@ def migrate_validate(
                     color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
                     mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
                     console.print(
-                        f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] "
-                        f"{v.object_name}: {v.message}"
+                        f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] {v.object_name}: {v.message}"
                     )
             else:
                 console.print("[green]✅ All migrations have ownership coverage[/green]")

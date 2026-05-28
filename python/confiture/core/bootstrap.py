@@ -101,9 +101,7 @@ class BootstrapPlan:
                 }
                 for s in self.steps
             ],
-            "observed_postgres_owned_schemas": list(
-                self.observed_postgres_owned_schemas
-            ),
+            "observed_postgres_owned_schemas": list(self.observed_postgres_owned_schemas),
             "apply_to_schemas": list(self.apply_to_schemas),
             "is_empty": self.is_empty,
         }
@@ -209,10 +207,7 @@ class BootstrapPlanner:
         return BootstrapStep(
             label="create_role",
             sql=f"CREATE ROLE {role} WITH LOGIN NOCREATEROLE",
-            description=(
-                f"Create role {self.ownership.expected_owner!r} "
-                f"(absent from pg_roles)."
-            ),
+            description=(f"Create role {self.ownership.expected_owner!r} (absent from pg_roles)."),
         )
 
     def _step_reassign_owned(self) -> BootstrapStep:
@@ -248,8 +243,7 @@ class BootstrapPlanner:
                             f"GRANT {upper_privs} ON TABLES TO {grantee_ident}"
                         ),
                         description=(
-                            f"Grant {upper_privs} on future tables in "
-                            f"{schema!r} to {grantee!r}."
+                            f"Grant {upper_privs} on future tables in {schema!r} to {grantee!r}."
                         ),
                     )
                 )
@@ -261,9 +255,7 @@ class BootstrapPlanner:
 
     @staticmethod
     def _role_exists(conn: psycopg.Connection, role: str) -> bool:
-        row = conn.execute(
-            "SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
         return row is not None
 
     @staticmethod
@@ -317,8 +309,7 @@ class BootstrapExecutor:
         except Exception as exc:  # noqa: BLE001 — re-wrap into BootstrapError
             conn.rollback()
             raise BootstrapError(
-                f"Bootstrap failed during step "
-                f"{applied[-1] if applied else '<role check>'}: {exc}",
+                f"Bootstrap failed during step {applied[-1] if applied else '<role check>'}: {exc}",
                 resolution_hint=(
                     "Inspect the database state, fix the underlying issue, "
                     "and re-run `confiture bootstrap --check` to see what "

@@ -346,9 +346,9 @@ class Migrator:
                 # rows keep `applied_by IS NULL` ("applied before 0.17.0;
                 # role unknown") as a documented invariant.
                 self._execute_sql(
-                    pgsql.SQL(
-                        "ALTER TABLE {} ADD COLUMN IF NOT EXISTS applied_by TEXT"
-                    ).format(self._table_ident)
+                    pgsql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS applied_by TEXT").format(
+                        self._table_ident
+                    )
                 )
 
             self.connection.commit()

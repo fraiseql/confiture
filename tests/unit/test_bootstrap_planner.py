@@ -172,9 +172,7 @@ def test_plan_omits_default_privileges_when_unconfigured() -> None:
     planner = BootstrapPlanner(ownership=_make_ownership(default_privileges=None))
     conn = _make_conn(role_exists=True, postgres_owned_schemas=[])
     plan = planner.plan(conn)
-    assert not any(
-        s.label.startswith("default_privileges_") for s in plan.steps
-    )
+    assert not any(s.label.startswith("default_privileges_") for s in plan.steps)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +188,5 @@ def test_plan_to_dict_round_trips_steps() -> None:
     )
     plan = BootstrapPlan(steps=(step,))
     data = plan.to_dict()
-    assert data["steps"] == [
-        {"label": "dummy", "sql": "SELECT 1", "description": "noop"}
-    ]
+    assert data["steps"] == [{"label": "dummy", "sql": "SELECT 1", "description": "noop"}]
     assert data["is_empty"] is False

@@ -124,9 +124,7 @@ def bootstrap(
 
     # Resolve mode: --apply and --dry-run override --check.
     if apply_mode and dry_run:
-        error_console.print(
-            "[red]❌ Cannot combine --apply with --dry-run[/red]"
-        )
+        error_console.print("[red]❌ Cannot combine --apply with --dry-run[/red]")
         raise typer.Exit(2)
     mode = "apply" if apply_mode else "dry-run" if dry_run else "check"
 
@@ -149,9 +147,7 @@ def bootstrap(
     )
     if not isinstance(bootstrap_url, str):
         # Defensive — env-var expansion preserves scalar type.
-        error_console.print(
-            "[red]❌ bootstrap_connection_url did not resolve to a string[/red]"
-        )
+        error_console.print("[red]❌ bootstrap_connection_url did not resolve to a string[/red]")
         raise typer.Exit(2)
 
     # Build and (optionally) execute the plan.
@@ -160,9 +156,7 @@ def bootstrap(
     try:
         conn = psycopg.connect(bootstrap_url, autocommit=False)
     except psycopg.OperationalError as exc:
-        error_console.print(
-            f"[red]❌ Could not connect with bootstrap_connection_url: {exc}[/red]"
-        )
+        error_console.print(f"[red]❌ Could not connect with bootstrap_connection_url: {exc}[/red]")
         raise typer.Exit(2) from exc
 
     try:
@@ -237,18 +231,13 @@ def _render_check(plan, output_format: str) -> None:
         )
         return
     if plan.is_empty:
-        console.print(
-            "[green]✅ Bootstrap is up to date — no drift detected.[/green]"
-        )
+        console.print("[green]✅ Bootstrap is up to date — no drift detected.[/green]")
         return
-    console.print(
-        f"[yellow]⚠ Bootstrap drift detected ({len(plan.steps)} step(s)):[/yellow]"
-    )
+    console.print(f"[yellow]⚠ Bootstrap drift detected ({len(plan.steps)} step(s)):[/yellow]")
     for step in plan.steps:
         console.print(f"  • [bold]{step.label}[/bold]: {step.description}")
     console.print(
-        "[dim]Run `confiture bootstrap --dry-run` to see the SQL, "
-        "then `--apply` to execute.[/dim]"
+        "[dim]Run `confiture bootstrap --dry-run` to see the SQL, then `--apply` to execute.[/dim]"
     )
 
 
@@ -259,9 +248,7 @@ def _render_dry_run(plan, output_format: str) -> None:
     if plan.is_empty:
         console.print("[green]✅ Nothing to do — the plan is empty.[/green]")
         return
-    console.print(
-        f"[cyan]🔍 Dry-run plan ({len(plan.steps)} step(s)):[/cyan]"
-    )
+    console.print(f"[cyan]🔍 Dry-run plan ({len(plan.steps)} step(s)):[/cyan]")
     for step in plan.steps:
         console.print(f"\n[bold]{step.label}[/bold]: {step.description}")
         console.print(f"  [dim]{step.sql};[/dim]")
@@ -274,9 +261,7 @@ def _render_apply(result, output_format: str) -> None:
     if not result.applied_steps:
         console.print("[green]✅ Bootstrap is already up to date.[/green]")
         return
-    console.print(
-        f"[green]✅ Bootstrap applied — {len(result.applied_steps)} step(s):[/green]"
-    )
+    console.print(f"[green]✅ Bootstrap applied — {len(result.applied_steps)} step(s):[/green]")
     for label in result.applied_steps:
         console.print(f"  • {label}")
 

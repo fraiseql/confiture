@@ -128,9 +128,7 @@ def test_halt_apply_as_resume_workflow(workflow_db: str, tmp_path: Path) -> None
     with psycopg.connect(workflow_db) as conn:
         applied = {
             row[0]
-            for row in conn.execute(
-                "SELECT version FROM tb_confiture ORDER BY version"
-            ).fetchall()
+            for row in conn.execute("SELECT version FROM tb_confiture ORDER BY version").fetchall()
         }
         assert applied == {"20260528160001"}
 
@@ -174,9 +172,7 @@ def test_halt_apply_as_resume_workflow(workflow_db: str, tmp_path: Path) -> None
     with psycopg.connect(workflow_db) as conn:
         applied = {
             row[0]
-            for row in conn.execute(
-                "SELECT version FROM tb_confiture ORDER BY version"
-            ).fetchall()
+            for row in conn.execute("SELECT version FROM tb_confiture ORDER BY version").fetchall()
         }
         assert applied == {
             "20260528160001",

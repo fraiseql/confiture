@@ -97,18 +97,14 @@ def test_apply_then_check_exits_0(bootstrap_db: str, tmp_path: Path) -> None:
     assert apply_result.exit_code == 0, apply_result.output
     assert "applied" in apply_result.output.lower()
 
-    check_result = runner.invoke(
-        app, ["bootstrap", "--check", "--config", str(cfg)]
-    )
+    check_result = runner.invoke(app, ["bootstrap", "--check", "--config", str(cfg)])
     assert check_result.exit_code == 0, check_result.output
 
 
 @pytest.mark.integration
 def test_dry_run_prints_sql(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = _write_env_config(tmp_path, bootstrap_db)
-    result = CliRunner().invoke(
-        app, ["bootstrap", "--dry-run", "--config", str(cfg)]
-    )
+    result = CliRunner().invoke(app, ["bootstrap", "--dry-run", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert "CREATE ROLE" in result.output
 
@@ -127,9 +123,7 @@ def test_check_emits_json(bootstrap_db: str, tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_config_without_bootstrap_url_exits_2(
-    bootstrap_db: str, tmp_path: Path
-) -> None:
+def test_config_without_bootstrap_url_exits_2(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = tmp_path / "confiture.yaml"
     cfg.write_text(
         textwrap.dedent(

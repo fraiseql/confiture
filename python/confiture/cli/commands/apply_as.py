@@ -108,16 +108,12 @@ def migrate_apply_as(
 
     raw_url = expand_env_vars(role_block["url"], context=f"apply_as.{role}.url")
     if not isinstance(raw_url, str):
-        error_console.print(
-            f"[red]❌ `apply_as.{role}.url` did not resolve to a string[/red]"
-        )
+        error_console.print(f"[red]❌ `apply_as.{role}.url` did not resolve to a string[/red]")
         raise typer.Exit(2)
 
     # Find the migration file for this version.
     if not migrations_dir.exists():
-        error_console.print(
-            f"[red]❌ Migrations directory not found: {migrations_dir}[/red]"
-        )
+        error_console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
         raise typer.Exit(2)
     migration_file = _find_migration_file(migrations_dir, version)
     if migration_file is None:
@@ -133,15 +129,11 @@ def migrate_apply_as(
     try:
         conn = psycopg.connect(raw_url, autocommit=False)
     except psycopg.OperationalError as exc:
-        error_console.print(
-            f"[red]❌ Could not connect with apply_as.{role}.url: {exc}[/red]"
-        )
+        error_console.print(f"[red]❌ Could not connect with apply_as.{role}.url: {exc}[/red]")
         raise typer.Exit(2) from exc
 
     try:
-        tracking_table = (
-            config_data.get("migration", {}).get("tracking_table") or "tb_confiture"
-        )
+        tracking_table = config_data.get("migration", {}).get("tracking_table") or "tb_confiture"
         migrator = Migrator(connection=conn, migration_table=tracking_table)
         migrator.initialize()
 
@@ -159,9 +151,7 @@ def migrate_apply_as(
                     )
                 )
             else:
-                error_console.print(
-                    f"[yellow]⚠ Migration {version} is already applied.[/yellow]"
-                )
+                error_console.print(f"[yellow]⚠ Migration {version} is already applied.[/yellow]")
             raise typer.Exit(2)
 
         migration_class = load_migration_class(migration_file)

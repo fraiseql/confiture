@@ -70,8 +70,7 @@ def test_does_not_flag_when_create_in_same_migration(tmp_path: Path) -> None:
     _write_migration(
         tmp_path,
         "20260528170100_create_and_alter.up.sql",
-        "CREATE TABLE tenant.tb_foo (id int);\n"
-        "ALTER TABLE tenant.tb_foo OWNER TO migrator;\n",
+        "CREATE TABLE tenant.tb_foo (id int);\nALTER TABLE tenant.tb_foo OWNER TO migrator;\n",
     )
     rule = Own002BareAlterOwner(expectation=_make_expectation())
     assert rule.check(tmp_path) == []
