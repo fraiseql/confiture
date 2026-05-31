@@ -2347,6 +2347,11 @@ def migrate_preflight(
             "Requires the [ast] extra (pglast)."
         ),
     ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Treat warnings as errors for exit purposes (warnings → exit 7).",
+    ),
 ) -> None:
     """Check if pending migrations are safe to deploy.
 
@@ -2396,10 +2401,14 @@ def migrate_preflight(
       confiture migrate preflight --against postgresql://localhost/myapp_preflight --format json
         ↳ Output static + execution results as JSON
 
-    EXIT CODES:
-      0 — all migrations safe to deploy (skipped non-transactional migrations are neutral)
-      1 — one or more issues detected or execution failures
-      2 — config or connection error
+    EXIT CODES (default, no --against — the structured report, issue #148):
+      0 — no error-severity issues (warnings alone are non-fatal unless --strict)
+      7 — one or more error-severity issues (or, under --strict, any warning)
+      A preflight that *crashes* (config/DB error) exits per the #146 convention
+      (e.g. 5 config invalid, 3 connection failed) with the #145 error envelope.
+
+    With --against (execution replay):
+      0 — all replays passed; 1 — a replay failed; config/connection errors per #146.
 
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:
@@ -2408,7 +2417,7 @@ def migrate_preflight(
     """
     from rich.table import Table
 
-    from confiture.core.preflight import run_preflight
+    from confiture.core.preflight import preflight_exit_code, run_preflight
 
     if check_dependents not in {"off", "fail", "warn"}:
         error_console.print(
@@ -2430,14 +2439,18 @@ def migrate_preflight(
                 "skip_reason": "no_preflight_db",
             }
 
+        # #148: structured report — {ok, summary, issues[]}; exit 7 on errors
+        # (or warnings under --strict), exit 0 otherwise.
+        summary = result.summary
+        exit_code = preflight_exit_code(summary, strict=strict)
+
         if format_type == "json":
-            payload = result.to_dict()
+            payload = result.to_report_dict(strict=strict)
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
-            payload["hints"] = []
             _output_json(payload, None, console)
-            if not result.safe_to_deploy:
-                raise typer.Exit(1)
+            if exit_code:
+                raise typer.Exit(exit_code)
             return
 
         table = Table(title="Pre-flight Check")
@@ -2455,45 +2468,30 @@ def migrate_preflight(
             table.add_row(m.version, m.name, rev, txn)
 
         console.print(table)
-        console.print(f"\nSummary: {len(result.migrations)} migrations checked")
+        console.print(
+            f"\nSummary: {summary['migrations_checked']} migration(s) checked, "
+            f"{summary['errors']} error(s), {summary['warnings']} warning(s)"
+        )
 
-        if result.irreversible:
+        issues = result.issues
+        if not issues:
+            console.print("  [green]✓ No issues[/green]")
+        for issue in issues:
+            color = "red" if issue.severity == "error" else "yellow"
             console.print(
-                f"  [red]✗[/red] {len(result.irreversible)} irreversible (missing .down.sql)"
+                f"  [{color}]{issue.severity.upper()}[/{color}] {issue.code}: {issue.message}"
             )
-        else:
-            console.print("  [green]✓[/green] All reversible")
-
-        if result.non_transactional:
-            total_stmts = sum(len(m.non_transactional_statements) for m in result.non_transactional)
-            console.print(f"  [red]✗[/red] {total_stmts} non-transactional statements")
-        else:
-            console.print("  [green]✓[/green] All transactional")
-
-        if result.has_duplicates:
-            console.print(f"  [red]✗[/red] {len(result.duplicate_versions)} duplicate version(s)")
-        else:
-            console.print("  [green]✓[/green] No duplicate versions")
-
-        if result.checksum_verified:
-            if result.has_checksum_mismatches:
-                console.print(
-                    f"  [red]✗[/red] {len(result.checksum_mismatches)} checksum mismatch(es)"
-                )
-            else:
-                console.print("  [green]✓[/green] Checksums verified")
-
-        if result.safe_to_deploy:
-            console.print("  [green]→ Safe to deploy[/green]")
-        else:
-            console.print("  [red]→ Not safe to deploy with rollback guarantee[/red]")
-            raise typer.Exit(1)
+            if issue.actionable:
+                console.print(f"    [dim]💡 {issue.actionable}[/dim]")
 
         if check_dependents != "off":
             console.print(
                 "[yellow]⚠️  Dependent check skipped: no preflight DB configured. "
                 "Pass --against <url> to enable.[/yellow]"
             )
+
+        if exit_code:
+            raise typer.Exit(exit_code)
         return
 
     # --against path: static analysis + exhaustive execution against preflight DB.

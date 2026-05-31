@@ -40,6 +40,17 @@ Internally, `load_config()` / `create_connection()` now raise `ConfigurationErro
 (with `CONFIG_002`/`CONFIG_004`/`CONFIG_006`) instead of `MigrationError`, so the
 correct exit code flows from the registry through `ConfiturError.exit_code`.
 
+### ⚠️ BREAKING — `migrate preflight` JSON reshaped ([#148](https://github.com/fraiseql/confiture/issues/148))
+
+`migrate preflight --format json` (no `--against`) now returns the structured
+report `{ok, summary, issues[]}` instead of the flat `PreflightResult` JSON. Each
+`issues[]` element is the unified issue object with a `PFLIGHT_*` code
+(`PFLIGHT_MISSING_DOWN`, `PFLIGHT_NON_TRANSACTIONAL`, `PFLIGHT_DUPLICATE_VERSION`,
+`PFLIGHT_CHECKSUM_MISMATCH`). Error-severity issues exit **7** (was 1);
+**non-transactional statements are now warnings** (exit 0 by default) unless
+`--strict` promotes warnings to failures. Table output gains the issue code +
+severity. The `--against` execution path is unchanged.
+
 ### Fixed
 
 - `migrate down` now acquires the migration advisory lock for the duration of

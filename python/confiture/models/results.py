@@ -723,6 +723,7 @@ class MigrationPreflightInfo:
     has_down: bool
     non_transactional_statements: list[str] = field(default_factory=list)
     checksum: str | None = None
+    filename: str | None = None  # source filename, for issue attribution (#148)
 
     @property
     def reversible(self) -> bool:
@@ -808,6 +809,172 @@ class PreflightResult:
             "migrations": [m.to_dict() for m in self.migrations],
             "duplicate_versions": self.duplicate_versions,
             "checksum_mismatches": self.checksum_mismatches,
+        }
+
+    @property
+    def issues(self) -> list[PreflightIssue]:
+        """Per-check, per-migration issues in the unified shape (#148).
+
+        Fans the existing reversibility / transactionality / duplicate-version /
+        checksum checks into ``PreflightIssue``s. One issue per (check, migration).
+        """
+        out: list[PreflightIssue] = []
+        for m in self.irreversible:
+            out.append(
+                PreflightIssue.of(
+                    "PFLIGHT_MISSING_DOWN",
+                    f"Migration {m.version} ({m.name}) is not reversible: "
+                    f"no matching .down.sql.",
+                    migration=m.version,
+                    file=m.filename,
+                )
+            )
+        for m in self.non_transactional:
+            out.append(
+                PreflightIssue.of(
+                    "PFLIGHT_NON_TRANSACTIONAL",
+                    f"Migration {m.version} ({m.name}) has non-transactional "
+                    f"statement(s): {', '.join(m.non_transactional_statements)}.",
+                    migration=m.version,
+                    file=m.filename,
+                    details={"statements": list(m.non_transactional_statements)},
+                )
+            )
+        for version, files in self.duplicate_versions.items():
+            out.append(
+                PreflightIssue.of(
+                    "PFLIGHT_DUPLICATE_VERSION",
+                    f"Duplicate migration version {version}: {', '.join(files)}.",
+                    migration=version,
+                    details={"files": list(files)},
+                )
+            )
+        for version in self.checksum_mismatches:
+            out.append(
+                PreflightIssue.of(
+                    "PFLIGHT_CHECKSUM_MISMATCH",
+                    f"Checksum mismatch for applied migration {version} "
+                    f"(file changed after it was applied).",
+                    migration=version,
+                )
+            )
+        return out
+
+    @property
+    def summary(self) -> dict[str, int]:
+        """Issue counts by severity + the number of migrations analyzed (#148)."""
+        issues = self.issues
+        return {
+            "errors": sum(1 for i in issues if i.severity == "error"),
+            "warnings": sum(1 for i in issues if i.severity == "warning"),
+            "info": sum(1 for i in issues if i.severity == "info"),
+            "migrations_checked": len(self.migrations),
+        }
+
+    def to_report_dict(self, *, strict: bool = False) -> dict[str, Any]:
+        """The structured preflight report: ``{ok, summary, issues[]}`` (#148).
+
+        ``ok`` is False if there are error-severity issues, or — under
+        ``strict`` — any warnings.
+        """
+        summary = self.summary
+        ok = summary["errors"] == 0 and not (strict and summary["warnings"] > 0)
+        return {
+            "ok": ok,
+            "summary": summary,
+            "issues": [i.to_dict() for i in self.issues],
+        }
+
+
+# Default severity + actionable text per PFLIGHT_* code (issue #148). Single
+# source the codebook doc reads. These are preflight-report issue codes (carried
+# in the report's issues[]), distinct from the ConfiturError registry codes — the
+# command's exit code is computed from the summary (preflight_exit_code), not
+# per issue code.
+PFLIGHT_CODES: dict[str, tuple[str, str]] = {
+    "PFLIGHT_MISSING_DOWN": (
+        "error",
+        "Add a matching .down.sql sibling, or mark the migration explicitly "
+        "non-reversible.",
+    ),
+    "PFLIGHT_NON_TRANSACTIONAL": (
+        "warning",
+        "Run with --allow-non-transactional to apply it in autocommit, or split "
+        "the statement out of the transactional migration.",
+    ),
+    "PFLIGHT_DUPLICATE_VERSION": (
+        "error",
+        "Rename files to use unique version prefixes.",
+    ),
+    "PFLIGHT_CHECKSUM_MISMATCH": (
+        "error",
+        "Restore the original migration file, or re-apply with --force if the "
+        "change is intentional.",
+    ),
+    "PFLIGHT_REPLAY_FAILED": (
+        "error",
+        "Fix the failing migration SQL; see details for the database error.",
+    ),
+    "PFLIGHT_LIVE_DEPENDENTS": (
+        "warning",
+        "Review the live dependents before replacing the target object.",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class PreflightIssue:
+    """A single preflight finding — the unified inner issue object (#148).
+
+    Same shape as #145's ``error`` and #144's ``issues[]`` (see
+    shared-issue-schema.md): severity/code/message always present; the rest
+    present-but-nullable.
+    """
+
+    severity: str
+    code: str
+    message: str
+    migration: str | None = None
+    file: str | None = None
+    line: int | None = None
+    actionable: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def of(
+        cls,
+        code: str,
+        message: str,
+        *,
+        migration: str | None = None,
+        file: str | None = None,
+        line: int | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> PreflightIssue:
+        """Build an issue, pulling default severity + actionable from PFLIGHT_CODES."""
+        severity, actionable = PFLIGHT_CODES.get(code, ("error", None))
+        return cls(
+            severity=severity,
+            code=code,
+            message=message,
+            migration=migration,
+            file=file,
+            line=line,
+            actionable=actionable,
+            details=details or {},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to the unified inner issue object."""
+        return {
+            "severity": self.severity,
+            "code": self.code,
+            "message": self.message,
+            "migration": self.migration,
+            "file": self.file,
+            "line": self.line,
+            "actionable": self.actionable,
+            "details": self.details,
         }
 
 

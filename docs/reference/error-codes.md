@@ -143,6 +143,24 @@ stale-lock hint to `actionable`. When no identity is available (older holder, or
 the metadata table is absent), `details.holder` is `null` and the message says
 so — diagnostics never block a migration.
 
+## `PFLIGHT_*` — preflight report issue codes (#148)
+
+`migrate preflight --format json` (no `--against`) returns a *report*
+(`{ok, summary, issues[]}`), not the error envelope above. Each `issues[]`
+element is the same unified issue object, carrying a `PFLIGHT_*` code. These are
+report codes (not `ConfiturError` registry codes); the command's exit comes from
+the summary — any error → 7, warnings → 0 unless `--strict`.
+
+| Code | Default severity | Meaning |
+|------|------------------|---------|
+| `PFLIGHT_MISSING_DOWN` | error | Migration has no matching `.down.sql` (not reversible) |
+| `PFLIGHT_NON_TRANSACTIONAL` | warning | Migration contains a statement that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) |
+| `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
+| `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
+| `PFLIGHT_REPLAY_FAILED` | error | (reserved) a migration failed to replay against the `--against` DB |
+| `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
+| `PFLIGHT_REPLICA_*` | — | reserved for the replica-aware lint (#139) |
+
 ## Stability contract
 
 Symbolic error codes are **public API**:

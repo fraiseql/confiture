@@ -599,7 +599,7 @@ class TestMigratePreflightCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(mdir)])
         assert result.exit_code == 0
-        assert "Safe to deploy" in result.output
+        assert "No issues" in result.output  # #148: structured report, clean run
 
     def test_table_output_unsafe(self, tmp_path: Path):
         from typer.testing import CliRunner
@@ -613,8 +613,8 @@ class TestMigratePreflightCLI:
 
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(mdir)])
-        assert result.exit_code == 1
-        assert "irreversible" in result.output
+        assert result.exit_code == 7  # #148: error → exit 7
+        assert "PFLIGHT_MISSING_DOWN" in result.output
 
     def test_json_output(self, tmp_path: Path):
         from typer.testing import CliRunner
@@ -632,9 +632,9 @@ class TestMigratePreflightCLI:
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert data["safe_to_deploy"] is True
-        assert "migrations" in data
-        assert "checksum_verified" in data
+        assert data["ok"] is True  # #148: structured report shape
+        assert "summary" in data
+        assert "issues" in data
 
     def test_json_output_unsafe(self, tmp_path: Path):
         from typer.testing import CliRunner
@@ -650,9 +650,9 @@ class TestMigratePreflightCLI:
         result = runner.invoke(
             app, ["migrate", "preflight", "--migrations-dir", str(mdir), "--format", "json"]
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 7  # #148: error → exit 7
         data = json.loads(result.output)
-        assert data["safe_to_deploy"] is False
+        assert data["ok"] is False
 
     def test_duplicates_in_output(self, tmp_path: Path):
         from typer.testing import CliRunner
@@ -668,8 +668,8 @@ class TestMigratePreflightCLI:
 
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(mdir)])
-        assert result.exit_code == 1
-        assert "duplicate" in result.output
+        assert result.exit_code == 7  # #148: duplicate version is an error → exit 7
+        assert "PFLIGHT_DUPLICATE_VERSION" in result.output
 
     def test_non_transactional_in_output(self, tmp_path: Path):
         from typer.testing import CliRunner
@@ -683,8 +683,9 @@ class TestMigratePreflightCLI:
 
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(mdir)])
-        assert result.exit_code == 1
-        assert "non-transactional" in result.output
+        # #148: non-transactional is now a WARNING — exit 0 by default (use --strict to fail).
+        assert result.exit_code == 0
+        assert "PFLIGHT_NON_TRANSACTIONAL" in result.output
 
 
 # ── Phase 3: Lazy exports ────────────────────────────────────────────────

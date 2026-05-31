@@ -314,8 +314,8 @@ def test_json_output_structure(runner, tmp_path):
     assert data["against"]["skipped"] == 0
 
 
-def test_json_output_without_against_is_flat(runner, tmp_path):
-    """Backward compat: no --against → flat PreflightResult.to_dict()."""
+def test_json_output_without_against_is_structured_report(runner, tmp_path):
+    """#148: no --against → the structured report {ok, summary, issues[]}."""
     (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
     (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
 
@@ -332,8 +332,10 @@ def test_json_output_without_against_is_flat(runner, tmp_path):
     )
 
     data = json.loads(result.output)
-    assert "static" not in data  # flat, not enveloped
-    assert "migrations" in data  # existing PreflightResult shape
+    assert "static" not in data  # not the --against envelope
+    assert set(data.keys()) >= {"ok", "summary", "issues"}  # structured report
+    assert data["ok"] is True
+    assert data["summary"]["migrations_checked"] == 1
 
 
 # ---------------------------------------------------------------------------

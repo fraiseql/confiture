@@ -1243,13 +1243,22 @@ confiture migrate preflight [OPTIONS]
 |--------|------|---------|-------------|
 | `--migrations-dir` | Path | `db/migrations` | Migrations directory |
 | `--format`, `-f` | String | `table` | Output format: `table` or `json` |
+| `--strict` | flag | off | Treat warnings as errors for exit purposes |
 
-#### Exit Codes
+`--format json` (no `--against`) returns the **structured report**
+`{ok, summary, issues[]}` (issue #148); each `issues[]` element is the shared
+[issue object](error-codes.md#pflight_--preflight-report-issue-codes-148) with a
+`PFLIGHT_*` code.
+
+#### Exit Codes (no `--against`)
 
 | Code | Meaning |
 |------|---------|
-| `0` | All migrations safe to deploy |
-| `1` | One or more issues detected |
+| `0` | No error-severity issues (warnings alone are non-fatal unless `--strict`) |
+| `7` | One or more error-severity issues (or, under `--strict`, any warning) |
+
+A preflight that *crashes* (config / DB error) exits per the
+[exit-code convention](exit-codes.md) (e.g. 5, 3) with the error envelope.
 
 #### Examples
 
@@ -1257,8 +1266,11 @@ confiture migrate preflight [OPTIONS]
 # Basic check
 confiture migrate preflight
 
-# JSON output for CI/CD
+# JSON output for CI/CD — {ok, summary, issues[]}
 confiture migrate preflight --format json
+
+# Fail on warnings too
+confiture migrate preflight --strict
 
 # Custom migrations directory
 confiture migrate preflight --migrations-dir custom/migrations

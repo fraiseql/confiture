@@ -210,7 +210,7 @@ Rewrites non-idempotent SQL files in place (or previews with `--dry-run`). Pytho
 
 [migrate-preflight.schema.json](./json-schemas/migrate-preflight.schema.json)
 
-Static preflight analysis — per-migration reversibility, transactionality, duplicate version prefixes, checksum mismatches. No DB required.
+Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issues[]` element is the shared [issue object](./json-schemas/issue-object.schema.json) (`PFLIGHT_*` codes). Covers reversibility, transactionality, duplicate version prefixes, and checksum mismatches. No DB required. Errors → exit 7; warnings are non-fatal unless `--strict`. A preflight that *crashes* (config/DB error) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
 
 ### `confiture migrate preflight --against <url> --format json`
 
