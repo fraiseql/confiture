@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
     from confiture.config.environment import Environment
     from confiture.models.results import (
+        CurrentRevision,
         MigrateDownResult,
         MigrateRebuildResult,
         MigrateReinitResult,
@@ -246,6 +247,51 @@ class MigratorSession:
             tracking_table_exists=table_exists,
             tracking_table=tracking_table,
             summary={"applied": applied_count, "pending": pending_count, "total": len(infos)},
+        )
+
+    def current_revision(self) -> "CurrentRevision | None":
+        """Return the latest applied migration revision (issue #141).
+
+        Returns:
+            A ``CurrentRevision`` for the most-recently-applied migration, or
+            ``None`` when the tracking table exists but is empty (no migrations
+            applied yet — a freshly-initialized database).
+
+        Raises:
+            ConfigurationError: If called outside the ``with`` context manager.
+            PreconditionError: ``PRECON_1001`` when the tracking table is absent
+                (confiture not initialized on this database) — exits 2 per #146.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     cur = m.current_revision()
+            ...     print(cur.version if cur else "(none applied)")
+        """
+        from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
+        from confiture.models.results import CurrentRevision
+
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+
+        # MANDATORY probe: get_current_revision_row() raises psycopg's
+        # UndefinedTable on an absent table — it does NOT return None. Translate
+        # "absent" → PRECON_1001 (exit 2); reserve None for "exists but empty".
+        if not self._migrator.tracking_table_exists():
+            raise DatabaseNotInitializedError(
+                "Database not initialized (tracking table absent)"
+            )
+
+        row = self._migrator.get_current_revision_row()
+        if row is None:
+            return None
+        return CurrentRevision(
+            version=row["version"],
+            name=row["name"],
+            applied_at=row["applied_at"],
+            checksum=row.get("checksum"),
         )
 
     def up(

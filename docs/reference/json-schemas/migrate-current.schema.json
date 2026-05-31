@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-current.schema.json",
+  "title": "confiture migrate current --format json",
+  "description": "The latest applied migration revision (issue #141). All fields are null when the tracking table exists but is empty (exit 0). An absent tracking table is an error path that emits the error envelope (error-envelope.schema.json, exit 2), not this shape.",
+  "type": "object",
+  "required": ["revision", "name", "applied_at", "checksum"],
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "type": ["string", "null"],
+      "description": "Version identifier of the latest applied migration; null when none applied."
+    },
+    "name": {
+      "type": ["string", "null"],
+      "description": "Human-readable name of the latest applied migration; null when none applied."
+    },
+    "applied_at": {
+      "type": ["string", "null"],
+      "description": "ISO-8601 timestamp the migration was applied; null when none applied or unknown."
+    },
+    "checksum": {
+      "type": ["string", "null"],
+      "description": "Checksum recorded for the migration; null when none applied or recorded (e.g. baseline rows)."
+    }
+  }
+}

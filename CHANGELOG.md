@@ -42,6 +42,13 @@ correct exit code flows from the registry through `ConfiturError.exit_code`.
 
 ### Added
 
+- `confiture migrate current` — print the latest applied migration revision
+  ([#141](https://github.com/fraiseql/confiture/issues/141)). Text mode prints
+  the bare revision (empty line if none); `--format json` returns
+  `{revision, name, applied_at, checksum}` with `revision: null` for an empty
+  tracking table (exit 0). An absent tracking table exits 2 (`PRECON_1001`).
+  Accepts `--database-url` (#140). Also exposed as
+  `MigratorSession.current_revision()`.
 - Structured error envelope in `--format json` mode
   ([#145](https://github.com/fraiseql/confiture/issues/145)). On an error path,
   migrate-family commands now emit `{"ok": false, "error": {code, message,

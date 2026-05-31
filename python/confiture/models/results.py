@@ -103,6 +103,31 @@ class StatusResult:
         }
 
 
+@dataclass(frozen=True)
+class CurrentRevision:
+    """The latest applied migration revision (issue #141).
+
+    Returned by ``MigratorSession.current_revision()`` and rendered by
+    ``confiture migrate current``. ``None`` from that method means the tracking
+    table exists but is empty (no migrations applied yet) — distinct from an
+    absent table, which raises ``PreconditionError`` (PRECON_1001).
+    """
+
+    version: str
+    name: str
+    applied_at: str | None
+    checksum: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to the `migrate current --format json` payload."""
+        return {
+            "revision": self.version,
+            "name": self.name,
+            "applied_at": self.applied_at,
+            "checksum": self.checksum,
+        }
+
+
 @dataclass
 class BuildResult:
     """Result of schema build operation.

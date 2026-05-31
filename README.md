@@ -56,8 +56,10 @@ The walkthrough — including failure modes, the integration test that backs the
 
 ## No `db/schema/` directory? That works too.
 
-`confiture migrate up`, `down`, `status`, `baseline`, and `preflight` are
-the migration runner — they don't require a `db/schema/` directory. The
+`confiture migrate up`, `down`, `status`, `current`, `baseline`, and
+`preflight` are the migration runner — they don't require a `db/schema/`
+directory (`migrate current` prints the latest applied revision as a narrow
+"what's deployed?" contract). The
 "Build from DDL" pitch above the fold sells one of confiture's four
 strategies; the other three (incremental migrations, production sync,
 schema-to-schema FDW migration) work against a project whose only source

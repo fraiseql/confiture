@@ -30,6 +30,7 @@ from confiture.cli.commands.migrate_analysis import (
     migrate_verify,
 )
 from confiture.cli.commands.migrate_core import (
+    migrate_current,
     migrate_down,
     migrate_estimate,
     migrate_generate,
@@ -179,6 +180,7 @@ app.command()(bootstrap)
 
 # Register migrate core commands
 migrate_app.command("status")(migrate_status)
+migrate_app.command("current")(migrate_current)
 migrate_app.command("up")(migrate_up)
 migrate_app.command("down")(migrate_down)
 migrate_app.command("generate")(migrate_generate)

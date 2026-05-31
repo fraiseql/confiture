@@ -50,6 +50,10 @@ change without a top-level version bump.
 
 [error-envelope.schema.json](./json-schemas/error-envelope.schema.json) — `{ "ok": false, "error": { … } }`, where `error` is the shared [issue-object.schema.json](./json-schemas/issue-object.schema.json). Emitted on stdout when a migrate-family command fails in JSON mode; the process exits with the matching [exit code](exit-codes.md). The full code list is the [error-code codebook](error-codes.md).
 
+### `confiture migrate current --format json`
+
+[migrate-current.schema.json](./json-schemas/migrate-current.schema.json) — `{revision, name, applied_at, checksum}` for the latest applied migration (all `null` when the tracking table is empty). An absent tracking table is an error path emitting the [error envelope](./json-schemas/error-envelope.schema.json) at exit 2.
+
 ### `confiture migrate validate --list-patterns --format json`
 
 [migrate-validate-list-patterns.schema.json](./json-schemas/migrate-validate-list-patterns.schema.json)

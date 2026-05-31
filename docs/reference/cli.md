@@ -290,6 +290,7 @@ Migration management commands (Medium 2: Incremental Migrations).
 All migration commands are subcommands of `confiture migrate`:
 
 - `confiture migrate status` - View migration status
+- `confiture migrate current` - Print the latest applied revision
 - `confiture migrate generate` - Create new migration template
 - `confiture migrate diff` - Compare schemas and detect changes
 - `confiture migrate up` - Apply pending migrations
@@ -417,6 +418,43 @@ case $? in
   3) echo "Fatal error" ; exit 1 ;;
 esac
 ```
+
+---
+
+### `confiture migrate current`
+
+Print the **latest applied** migration revision — a narrow, stable contract for
+tooling ("what is deployed right now?") without parsing the full `migrate
+status` payload.
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file |
+| `--database-url` | `-d` | str | (none) | Tracking-DB DSN (see [Connection source and precedence](#connection-source-and-precedence)) |
+| `--format` | `-f` | str | `text` | `text` (bare revision) or `json` |
+| `--output` | `-o` | Path | (stdout) | Write output to a file |
+
+Output:
+
+- **text** — the bare revision string, or an empty line if none applied.
+- **json** — `{revision, name, applied_at, checksum}`; `revision` is `null` when
+  the tracking table exists but is empty.
+
+Exit codes:
+
+| Exit | Meaning |
+|---|---|
+| 0 | Current revision printed (or `null` when the tracking table is empty) |
+| 2 | Tracking table absent — confiture not initialized on this database (`PRECON_1001`) |
+| 3 | Database connection failed |
+
+```bash
+confiture migrate current -c db/environments/prod.yaml
+confiture migrate current --database-url "$DATABASE_URL" --format json
+```
+
+`migrate current` is the narrow form; [`migrate status`](#confiture-migrate-status)
+is the full applied/pending picture.
 
 ---
 
