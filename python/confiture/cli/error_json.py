@@ -29,15 +29,52 @@ if TYPE_CHECKING:
 INTERNAL_ERROR_CODE = "INTERNAL_ERROR"
 
 
+# Stale-lock advisory threshold (seconds). Held longer than this, the message
+# suggests the holder may be stuck.
+_STALE_LOCK_SECONDS = 300
+
+
+def lock_error_to_confiture(exc: Exception) -> ConfiturError:
+    """Translate a LockAcquisitionError into a LOCK_1300 ConfiturError (#147).
+
+    Folds the holder identity into ``context["holder"]`` (so it lands under the
+    envelope's ``details.holder``) and adds a stale-lock hint when the lock has
+    been held a long time.
+    """
+    holder = getattr(exc, "holder", None)
+    context: dict[str, Any] = {}
+    if holder is not None:
+        context["holder"] = holder.to_dict()
+
+    hint = "Wait for the current migration to finish, then retry."
+    held = getattr(holder, "held_for_seconds", None) if holder is not None else None
+    if held is not None and held > _STALE_LOCK_SECONDS:
+        hint += (
+            f" Held for >{_STALE_LOCK_SECONDS // 60} min — this may be a stale lock; "
+            "investigate the holder process before forcing."
+        )
+    return ConfiturError(
+        str(exc) or "Migration lock is held by another process.",
+        error_code="LOCK_1300",
+        context=context,
+        resolution_hint=hint,
+    )
+
+
 def coerce_to_confiture_error(exc: Exception) -> ConfiturError:
     """Wrap a non-ConfiturError so JSON consumers never see a raw traceback.
 
-    A genuine ``ConfiturError`` is returned unchanged. Anything else becomes a
-    generic ``ConfiturError`` (no registry code → exit 1) carrying the original
-    message, so ``emit_error_json`` still produces a valid envelope.
+    A genuine ``ConfiturError`` is returned unchanged. A ``LockAcquisitionError``
+    becomes a ``LOCK_1300`` error with holder identity (#147). Anything else
+    becomes a generic ``ConfiturError`` (no registry code → exit 1) carrying the
+    original message, so ``emit_error_json`` still produces a valid envelope.
     """
     if isinstance(exc, ConfiturError):
         return exc
+    from confiture.core.locking import LockAcquisitionError
+
+    if isinstance(exc, LockAcquisitionError):
+        return lock_error_to_confiture(exc)
     message = str(exc) or exc.__class__.__name__
     return ConfiturError(message)
 

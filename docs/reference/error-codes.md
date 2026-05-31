@@ -119,6 +119,30 @@ resolution hint surfaced in the envelope.
 > print(render_error_codebook())"`; the codebook test
 > (`tests/unit/test_error_codebook.py`) fails if it drifts.
 
+## `LOCK_1300` — lock-holder identity (`details.holder`)
+
+When `migrate up`/`down`/`down-to` cannot acquire the migration lock, the
+`LOCK_1300` envelope carries the current holder under `details.holder` (issue
+#147):
+
+```json
+{ "ok": false, "error": { "code": "LOCK_1300",
+  "message": "Could not acquire migration lock within 30.0s. Held by pid 12345 on deploy-1 running \"confiture migrate up\"; acquired 47s ago.",
+  "details": { "holder": {
+    "pid": 12345, "hostname": "deploy-1", "user": "deploy",
+    "command": "confiture migrate up",
+    "acquired_at": "2026-05-31T14:30:00+00:00", "held_for_seconds": 47 } },
+  "actionable": "Wait for the current migration to finish, then retry." } }
+```
+
+Identity is recorded best-effort in a `confiture_lock_holder` metadata table
+written *under* the advisory lock. The advisory lock remains the source of truth
+for "is it held" — if the holder crashes, the advisory lock auto-releases and
+the lingering row is reported as stale. `held_for_seconds > 300` adds a
+stale-lock hint to `actionable`. When no identity is available (older holder, or
+the metadata table is absent), `details.holder` is `null` and the message says
+so — diagnostics never block a migration.
+
 ## Stability contract
 
 Symbolic error codes are **public API**:

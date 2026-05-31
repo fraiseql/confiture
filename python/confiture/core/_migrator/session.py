@@ -714,6 +714,7 @@ class MigratorSession:
         dry_run: bool = False,
         lock_timeout: int = 30000,
         no_lock: bool = False,
+        command: str | None = None,
     ) -> MigrateDownResult:
         """Roll back applied migrations in reverse order.
 
@@ -776,7 +777,9 @@ class MigratorSession:
         if dry_run:
             rolled_back, total_ms = self._rollback_sequence(versions_to_rollback, dry_run=True)
         else:
-            lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+            lock_config = _m.LockConfig(
+                enabled=not no_lock, timeout_ms=lock_timeout, command=command
+            )
             lock = _m.MigrationLock(self._conn, lock_config)
             with lock.acquire():
                 rolled_back, total_ms = self._rollback_sequence(
@@ -796,6 +799,7 @@ class MigratorSession:
         dry_run: bool = False,
         lock_timeout: int = 30000,
         no_lock: bool = False,
+        command: str | None = None,
     ) -> DownToResult:
         """Roll back every migration newer than ``target`` (issue #142).
 
@@ -888,7 +892,9 @@ class MigratorSession:
         if dry_run:
             return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)
 
-        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+        lock_config = _m.LockConfig(
+            enabled=not no_lock, timeout_ms=lock_timeout, command=command
+        )
         lock = _m.MigrationLock(self._conn, lock_config)
         with lock.acquire():
             self._rollback_sequence(to_execute, dry_run=False)

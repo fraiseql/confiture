@@ -1121,10 +1121,11 @@ def migrate_up(
                 conn.close()
                 raise typer.Exit(1) from e
 
-        # Configure locking
+        # Configure locking (command recorded in the lock-holder metadata, #147)
         lock_config = LockConfig(
             enabled=not no_lock,
             timeout_ms=lock_timeout,
+            command="confiture migrate up",
         )
 
         # Create lock manager
@@ -1227,10 +1228,11 @@ def migrate_up(
         except LockAcquisitionError as e:
             conn.close()
             if is_json(format_output):
-                from confiture.exceptions import ConfiturError
+                from confiture.cli.error_json import lock_error_to_confiture
 
+                # LOCK_1300 envelope enriched with holder identity (#147).
                 fail(
-                    ConfiturError(str(e), error_code="LOCK_1300"),
+                    lock_error_to_confiture(e),
                     json_mode=True,
                     output_file=output_file,
                 )
@@ -1341,6 +1343,16 @@ def migrate_down(
         "--dry-run",
         help="Analyze rollback without executing (default: off)",
     ),
+    lock_timeout: int = typer.Option(
+        30000,
+        "--lock-timeout",
+        help="Lock timeout in milliseconds (default: 30000ms)",
+    ),
+    no_lock: bool = typer.Option(
+        False,
+        "--no-lock",
+        help="Disable migration locking (default: off, DANGEROUS in multi-pod)",
+    ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -1399,6 +1411,7 @@ def migrate_down(
         load_config,
         load_migration_class,
     )
+    from confiture.core.locking import LockAcquisitionError, LockConfig, MigrationLock
     from confiture.core.migrator import Migrator
 
     try:
@@ -1529,34 +1542,57 @@ def migrate_down(
 
         console.print(f"[cyan]📦 Rolling back {len(versions_to_rollback)} migration(s)[/cyan]\n")
 
-        # Rollback migrations in reverse order
-        rolled_back_count = 0
-        for version in reversed(versions_to_rollback):
-            # Find migration file
-            migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
-            migration_file = None
-            for mf in migration_files:
-                if migrator._version_from_filename(mf.name) == version:
-                    migration_file = mf
-                    break
+        # Acquire the migration lock for the rollback (#142): atomic w.r.t. a
+        # concurrent migrate up/down.
+        lock = MigrationLock(
+            conn,
+            LockConfig(
+                enabled=not no_lock,
+                timeout_ms=lock_timeout,
+                command="confiture migrate down",
+            ),
+        )
+        try:
+            with lock.acquire():
+                # Rollback migrations in reverse order
+                rolled_back_count = 0
+                for version in reversed(versions_to_rollback):
+                    # Find migration file
+                    migration_files = migrator.find_migration_files(
+                        migrations_dir=migrations_dir
+                    )
+                    migration_file = None
+                    for mf in migration_files:
+                        if migrator._version_from_filename(mf.name) == version:
+                            migration_file = mf
+                            break
 
-            if not migration_file:
-                console.print(f"[red]❌ Migration file for version {version} not found[/red]")
-                continue
+                    if not migration_file:
+                        console.print(
+                            f"[red]❌ Migration file for version {version} not found[/red]"
+                        )
+                        continue
 
-            # Load migration module
-            migration_class = load_migration_class(migration_file)
+                    # Load migration module + instance
+                    migration_class = load_migration_class(migration_file)
+                    migration = migration_class(connection=conn)
 
-            # Create migration instance
-            migration = migration_class(connection=conn)
+                    # Rollback migration
+                    console.print(
+                        f"[cyan]⚡ Rolling back {migration.version}_{migration.name}...[/cyan]",
+                        end=" ",
+                    )
+                    migrator.rollback(migration)
+                    console.print("[green]✅[/green]")
+                    rolled_back_count += 1
+        except LockAcquisitionError as e:
+            conn.close()
+            if is_json(format_output):
+                from confiture.cli.error_json import lock_error_to_confiture
 
-            # Rollback migration
-            console.print(
-                f"[cyan]⚡ Rolling back {migration.version}_{migration.name}...[/cyan]", end=" "
-            )
-            migrator.rollback(migration)
-            console.print("[green]✅[/green]")
-            rolled_back_count += 1
+                fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
+            print_error_to_console(e, error_console)
+            raise typer.Exit(6) from e
 
         console.print(
             f"\n[green]✅ Successfully rolled back {rolled_back_count} migration(s)![/green]"
@@ -1652,7 +1688,7 @@ def migrate_down_to(
         else:
             session = Migrator.from_config(str(config), migrations_dir=migrations_dir)
         with session as s:
-            result = s.down_to(revision, dry_run=dry_run)
+            result = s.down_to(revision, dry_run=dry_run, command="confiture migrate down-to")
     except typer.Exit:
         raise
     except Exception as e:

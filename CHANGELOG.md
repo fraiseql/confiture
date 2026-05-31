@@ -49,6 +49,15 @@ correct exit code flows from the registry through `ConfiturError.exit_code`.
 
 ### Added
 
+- Lock-holder identity in lock-contention errors
+  ([#147](https://github.com/fraiseql/confiture/issues/147)). When the migration
+  lock can't be acquired, `migrate up`/`down`/`down-to` now name the holder —
+  pid, hostname, user, command, and `held_for_seconds` — in stderr and under the
+  `LOCK_1300` envelope's `details.holder`. Identity is recorded best-effort in a
+  new `confiture_lock_holder` metadata table written under the advisory lock; the
+  advisory lock stays the crash-safe source of truth (a crashed holder's lingering
+  row is reported as stale, and a new acquirer still succeeds). Writing identity
+  never blocks a migration. A hold longer than 5 minutes adds a stale-lock hint.
 - `confiture migrate down-to <revision>` — roll back to a specific revision
   ([#142](https://github.com/fraiseql/confiture/issues/142)). The absolute
   counterpart to `migrate down --steps N`. A pure planner computes the rollback

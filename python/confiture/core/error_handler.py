@@ -172,6 +172,15 @@ def handle_cli_error(error: Exception) -> int:
                 return 1
         return 1
 
+    # Lock contention maps to LOCK_1300 (exit 6 per #146) even though
+    # LockAcquisitionError is not a ConfiturError (issue #147).
+    from confiture.core.locking import LockAcquisitionError
+
+    if isinstance(error, LockAcquisitionError):
+        from confiture.core.error_codes import ERROR_CODE_REGISTRY
+
+        return ERROR_CODE_REGISTRY.get("LOCK_1300").exit_code
+
     # For other exceptions, return generic error code
     return 1
 
