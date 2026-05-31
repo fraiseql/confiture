@@ -294,7 +294,8 @@ All migration commands are subcommands of `confiture migrate`:
 - `confiture migrate generate` - Create new migration template
 - `confiture migrate diff` - Compare schemas and detect changes
 - `confiture migrate up` - Apply pending migrations
-- `confiture migrate down` - Rollback applied migrations
+- `confiture migrate down` - Rollback applied migrations (relative, `--steps N`)
+- `confiture migrate down-to` - Rollback to a specific revision (absolute)
 - `confiture migrate preflight` - Pre-deploy safety check
 
 ### Connection source and precedence
@@ -951,6 +952,46 @@ confiture migrate down --steps 3
 - **Development iteration**: Test migration changes
 - **Production hotfix**: Emergency rollback of problematic changes
 - **Environment reset**: Return to known-good state
+
+---
+
+### `confiture migrate down-to`
+
+Roll back to a **specific revision** (absolute), the counterpart to `migrate
+down --steps N` (relative). Name the revision to return to — typically captured
+earlier with [`migrate current`](#confiture-migrate-current) — and Confiture
+computes the rollback set, validates that every required `.down.sql` exists
+**before** touching the database, and rolls back newest→oldest under the
+migration lock. If any required `.down.sql` is missing it refuses atomically:
+**nothing is rolled back**.
+
+```bash
+confiture migrate down-to 20260101000001 -c db/environments/staging.yaml
+confiture migrate down-to 20260101000001 --dry-run --format json
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `revision` | | str (arg) | — | Target revision to keep applied |
+| `--migrations-dir` | | Path | `db/migrations` | Migrations directory |
+| `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file |
+| `--database-url` | `-d` | str | (none) | Tracking-DB DSN (see [precedence](#connection-source-and-precedence)) |
+| `--dry-run` | | flag | off | Print the plan, apply nothing, exit 0 |
+| `--format` | `-f` | str | `text` | `text` or `json` (`{from, to, rolled_back, skipped, errors}`) |
+| `--output` | `-o` | Path | (stdout) | Write output to a file |
+
+Edge cases and exit codes:
+
+| Case | Exit | Behavior |
+|---|---|---|
+| `<revision>` == current | 0 | No-op ("already at `<revision>`") |
+| `<revision>` newer than current | 3 | Refuse — "use `migrate up --target`" (`MIGR_100`) |
+| `<revision>` unknown | 3 | Refuse — "unknown revision" (`MIGR_100`) |
+| any required `.down.sql` missing | 8 | Refuse atomically, nothing applied (`ROLLBACK_600`) |
+
+> `migrate down-to` (and `migrate down`) acquire the migration advisory lock for
+> the duration of the rollback, so the applied-set read and the rollback are
+> atomic with respect to a concurrent `migrate up`.
 
 ---
 

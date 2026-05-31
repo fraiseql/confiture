@@ -32,6 +32,7 @@ from confiture.cli.commands.migrate_analysis import (
 from confiture.cli.commands.migrate_core import (
     migrate_current,
     migrate_down,
+    migrate_down_to,
     migrate_estimate,
     migrate_generate,
     migrate_status,
@@ -183,6 +184,7 @@ migrate_app.command("status")(migrate_status)
 migrate_app.command("current")(migrate_current)
 migrate_app.command("up")(migrate_up)
 migrate_app.command("down")(migrate_down)
+migrate_app.command("down-to")(migrate_down_to)
 migrate_app.command("generate")(migrate_generate)
 migrate_app.command("estimate")(migrate_estimate)
 

@@ -65,7 +65,10 @@ class TestMigratorSessionDown:
         session._migrator.rollback = MagicMock()
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
-        with patch("confiture.core.migrator.load_migration_class", return_value=mock_class):
+        with (
+            patch("confiture.core.migrator.load_migration_class", return_value=mock_class),
+            patch("confiture.core.migrator.MigrationLock"),  # #142: down() now locks
+        ):
             result = session.down()
 
         assert result.success is True
@@ -104,7 +107,10 @@ class TestMigratorSessionDown:
         session._migrator.rollback = MagicMock()
         session._migrator._version_from_filename = MagicMock(side_effect=lambda n: n.split("_")[0])
 
-        with patch("confiture.core.migrator.load_migration_class", side_effect=_load_class):
+        with (
+            patch("confiture.core.migrator.load_migration_class", side_effect=_load_class),
+            patch("confiture.core.migrator.MigrationLock"),  # #142: down() now locks
+        ):
             result = session.down(steps=2)
 
         assert len(result.migrations_rolled_back) == 2

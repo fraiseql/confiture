@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-down-to.schema.json",
+  "title": "confiture migrate down-to <revision> --format json",
+  "description": "Plan+result of an absolute rollback (issue #142). rolled_back is newest → oldest. An invalid plan (unknown/forward target, or a missing .down.sql) is an error path that emits the error envelope (error-envelope.schema.json) and applies nothing — not this shape.",
+  "type": "object",
+  "required": ["from", "to", "rolled_back", "skipped", "errors"],
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "type": ["string", "null"],
+      "description": "The revision that was current before the rollback; null if nothing was applied."
+    },
+    "to": {
+      "type": "string",
+      "description": "The target revision rolled back to (kept applied)."
+    },
+    "rolled_back": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Versions rolled back, newest → oldest. In --dry-run these are the versions that would be rolled back."
+    },
+    "skipped": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Versions in the computed set that were unexpectedly not applied (empty with a consistent tracking table)."
+    },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Runtime rollback failures during execution (empty in the happy path; distinct from the up-front missing-.down.sql refusal, which aborts before any execution)."
+    }
+  }
+}

@@ -406,6 +406,35 @@ class MigrateDownResult:
 
 
 @dataclass
+class DownToResult:
+    """Result of `migrate down-to <revision>` (issue #142).
+
+    Serializes to the issue's plan+result shape ``{from, to, rolled_back,
+    skipped, errors}``. ``rolled_back`` is newest → oldest. ``skipped`` holds
+    versions in the computed set that were unexpectedly not applied; ``errors``
+    holds runtime SQL failures during execution (distinct from the up-front
+    missing-`.down.sql` refusal, which aborts before any execution).
+    """
+
+    from_: str | None
+    to: str
+    rolled_back: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    noop: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to the issue's `{from, to, rolled_back, skipped, errors}` shape."""
+        return {
+            "from": self.from_,
+            "to": self.to,
+            "rolled_back": self.rolled_back,
+            "skipped": self.skipped,
+            "errors": self.errors,
+        }
+
+
+@dataclass
 class MigrateRebuildResult:
     """Result of migrate rebuild operation.
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from confiture.config.environment import Environment
     from confiture.models.results import (
         CurrentRevision,
+        DownToResult,
         MigrateDownResult,
         MigrateRebuildResult,
         MigrateReinitResult,
@@ -249,7 +250,7 @@ class MigratorSession:
             summary={"applied": applied_count, "pending": pending_count, "total": len(infos)},
         )
 
-    def current_revision(self) -> "CurrentRevision | None":
+    def current_revision(self) -> CurrentRevision | None:
         """Return the latest applied migration revision (issue #141).
 
         Returns:
@@ -632,80 +633,37 @@ class MigratorSession:
             warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"],
         )
 
-    def down(
-        self,
-        *,
-        steps: int = 1,
-        dry_run: bool = False,
-    ) -> MigrateDownResult:
-        """Roll back applied migrations in reverse order.
+    def _rollback_sequence(
+        self, versions: list[str], *, dry_run: bool = False
+    ) -> tuple[list, int]:
+        """Roll back an ordered (newest → oldest) list of versions.
 
-        Rolls back the most recently applied migrations. Each migration's
-        ``down()`` method or ``.down.sql`` file is executed.
-
-        Args:
-            steps: Number of migrations to roll back (default: 1).
-                   Migrations are rolled back in reverse chronological order.
-            dry_run: If True, analyze without executing SQL.
+        The shared rollback loop behind both ``down(steps=N)`` and
+        ``down_to(target)`` — keeps the two paths from diverging. Reuses the
+        engine's ``rollback()`` (transactional vs. non-transactional handling
+        lives there). Does NOT acquire the lock itself; callers wrap it.
 
         Returns:
-            MigrateDownResult with:
-            - success: True if all rollbacks succeeded
-            - migrations_rolled_back: List of MigrationApplied (serialized as "rolled_back")
-            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
-            - error: Error message if success=False
-
-        Raises:
-            ConfigurationError: If used outside ``with`` context manager.
-            MigrationError: If a migration file cannot be loaded.
-            RollbackError: If rollback SQL execution fails.
-
-        Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
-            ...     result = m.down(steps=2)
-            ...     if result.success:
-            ...         print(f"Rolled back {len(result.migrations_rolled_back)} migrations")
+            (rolled_back, total_execution_time_ms) where rolled_back is a list
+            of MigrationApplied in the order rolled back.
         """
         import time as _time
 
-        import confiture.core.migrator as _m
-
         # Import through confiture.core.migrator so tests can patch
         # confiture.core.migrator.load_migration_class.
-        from confiture.exceptions import ConfigurationError
-        from confiture.models.results import MigrateDownResult, MigrationApplied
+        import confiture.core.migrator as _m
+        from confiture.models.results import MigrationApplied
 
-        if self._migrator is None:
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
-
-        self._migrator.initialize()
-        applied_versions = self._migrator.get_applied_versions()
-
-        if not applied_versions:
-            return MigrateDownResult(
-                success=True,
-                migrations_rolled_back=[],
-                total_execution_time_ms=0,
-            )
-
-        versions_to_rollback = applied_versions[-steps:]
         migration_files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
+        by_version = {
+            self._migrator._version_from_filename(f.name): f for f in migration_files
+        }
 
         rolled_back: list[MigrationApplied] = []
         total_execution_time_ms = 0
 
-        for version in reversed(versions_to_rollback):
-            migration_file = next(
-                (
-                    f
-                    for f in migration_files
-                    if self._migrator._version_from_filename(f.name) == version
-                ),
-                None,
-            )
+        for version in versions:
+            migration_file = by_version.get(version)
             if migration_file is None:
                 continue
 
@@ -728,11 +686,214 @@ class MigratorSession:
                 )
             )
 
+        return rolled_back, total_execution_time_ms
+
+    def _reversible_versions(self) -> set[str]:
+        """Set of discoverable versions that have a usable rollback.
+
+        A ``.up.sql`` migration is reversible iff its sibling ``.down.sql``
+        exists on disk; Python migrations are treated as reversible (they define
+        ``down()``). This feeds the planner's ``down_available`` so an
+        irreversible target is refused *before* any execution.
+        """
+        reversible: set[str] = set()
+        for f in self._migrator.find_migration_files(migrations_dir=self._migrations_dir):
+            version = self._migrator._version_from_filename(f.name)
+            if f.name.endswith(".up.sql"):
+                down_file = f.parent / f.name.replace(".up.sql", ".down.sql")
+                if down_file.exists():
+                    reversible.add(version)
+            else:
+                reversible.add(version)
+        return reversible
+
+    def down(
+        self,
+        *,
+        steps: int = 1,
+        dry_run: bool = False,
+        lock_timeout: int = 30000,
+        no_lock: bool = False,
+    ) -> MigrateDownResult:
+        """Roll back applied migrations in reverse order.
+
+        Rolls back the most recently applied migrations. Each migration's
+        ``down()`` method or ``.down.sql`` file is executed.
+
+        Acquires the migration advisory lock for the duration of the rollback
+        (issue #142) so it is atomic w.r.t. a concurrent ``up()``/``down()`` —
+        previously ``down()`` ran unlocked, a latent race. Pass ``no_lock=True``
+        to skip (dangerous in multi-pod environments).
+
+        Args:
+            steps: Number of migrations to roll back (default: 1).
+                   Migrations are rolled back in reverse chronological order.
+            dry_run: If True, analyze without executing SQL (no lock taken).
+            lock_timeout: Lock acquisition timeout in milliseconds (default: 30000).
+            no_lock: If True, skip distributed locking.
+
+        Returns:
+            MigrateDownResult with:
+            - success: True if all rollbacks succeeded
+            - migrations_rolled_back: List of MigrationApplied (serialized as "rolled_back")
+            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+            - error: Error message if success=False
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+            MigrationError: If a migration file cannot be loaded.
+            RollbackError: If rollback SQL execution fails.
+            LockAcquisitionError: If the migration lock cannot be acquired.
+
+        Example:
+            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            ...     result = m.down(steps=2)
+            ...     if result.success:
+            ...         print(f"Rolled back {len(result.migrations_rolled_back)} migrations")
+        """
+        import confiture.core.migrator as _m
+        from confiture.exceptions import ConfigurationError
+        from confiture.models.results import MigrateDownResult
+
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+
+        self._migrator.initialize()
+        applied_versions = self._migrator.get_applied_versions()
+
+        if not applied_versions:
+            return MigrateDownResult(
+                success=True,
+                migrations_rolled_back=[],
+                total_execution_time_ms=0,
+            )
+
+        versions_to_rollback = list(reversed(applied_versions[-steps:]))  # newest → oldest
+
+        if dry_run:
+            rolled_back, total_ms = self._rollback_sequence(versions_to_rollback, dry_run=True)
+        else:
+            lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+            lock = _m.MigrationLock(self._conn, lock_config)
+            with lock.acquire():
+                rolled_back, total_ms = self._rollback_sequence(
+                    versions_to_rollback, dry_run=False
+                )
+
         return MigrateDownResult(
             success=True,
             migrations_rolled_back=rolled_back,
-            total_execution_time_ms=total_execution_time_ms,
+            total_execution_time_ms=total_ms,
         )
+
+    def down_to(
+        self,
+        target: str,
+        *,
+        dry_run: bool = False,
+        lock_timeout: int = 30000,
+        no_lock: bool = False,
+    ) -> DownToResult:
+        """Roll back every migration newer than ``target`` (issue #142).
+
+        Computes the rollback set via the pure planner, validates that *all*
+        required ``.down.sql`` files exist up front (refusing atomically if any
+        is missing — no partial application), then rolls back newest → oldest
+        under the migration lock so the read-and-rollback is atomic w.r.t. other
+        writers.
+
+        Args:
+            target: The revision to roll back to (kept applied).
+            dry_run: If True, compute + validate the plan but execute nothing.
+            lock_timeout: Lock acquisition timeout in milliseconds.
+            no_lock: If True, skip distributed locking.
+
+        Returns:
+            DownToResult with from/to/rolled_back/skipped/errors.
+
+        Raises:
+            ConfigurationError: If used outside ``with`` context manager.
+            RollbackError: ``ROLLBACK_600`` if a required ``.down.sql`` is missing.
+            MigrationError: ``MIGR_100`` for an unknown target, or a
+                forward-move ("use migrate up --target") for a target newer than
+                current.
+            LockAcquisitionError: If the migration lock cannot be acquired.
+        """
+        import confiture.core.migrator as _m
+        from confiture.core._migrator.rollback_planner import (
+            REASON_IRREVERSIBLE,
+            REASON_TARGET_NEWER,
+            plan_down_to,
+        )
+        from confiture.exceptions import ConfigurationError, MigrationError, RollbackError
+        from confiture.models.results import DownToResult
+
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+
+        self._migrator.initialize()
+        applied = self._migrator.get_applied_versions()  # ASC
+        known = {
+            self._migrator._version_from_filename(f.name)
+            for f in self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
+        }
+        down_available = self._reversible_versions()
+
+        plan = plan_down_to(applied, known, target, down_available)
+
+        if not plan.valid:
+            if plan.reason == REASON_IRREVERSIBLE:
+                missing = ", ".join(plan.missing_down)
+                raise RollbackError(
+                    f"Cannot roll back to {target}: missing .down.sql for {missing}. "
+                    f"Aborting without applying anything.",
+                    error_code="ROLLBACK_600",
+                    resolution_hint=(
+                        f"Add the missing .down.sql file(s) for {missing}, or choose a "
+                        f"target that does not require rolling back past them."
+                    ),
+                )
+            if plan.reason == REASON_TARGET_NEWER:
+                raise MigrationError(
+                    f"Revision {target} is newer than the current revision — "
+                    f"down-to only moves backward.",
+                    error_code="MIGR_100",
+                    resolution_hint="Use 'confiture migrate up --target' for forward moves.",
+                )
+            # unknown_revision
+            raise MigrationError(
+                f"Unknown revision: {target}.",
+                error_code="MIGR_100",
+                resolution_hint="Run 'confiture migrate status' or 'migrate current' "
+                "to see known revisions.",
+            )
+
+        from_ = applied[-1] if applied else None
+
+        if plan.noop:
+            return DownToResult(from_=from_, to=target, rolled_back=[], noop=True)
+
+        # Defensive: any computed version not actually applied (consistent
+        # tracking table → empty).
+        applied_set = set(applied)
+        skipped = [v for v in plan.to_rollback if v not in applied_set]
+        to_execute = [v for v in plan.to_rollback if v in applied_set]
+
+        if dry_run:
+            return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)
+
+        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+        lock = _m.MigrationLock(self._conn, lock_config)
+        with lock.acquire():
+            self._rollback_sequence(to_execute, dry_run=False)
+
+        return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)
 
     def reinit(
         self,

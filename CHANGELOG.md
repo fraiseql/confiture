@@ -40,8 +40,24 @@ Internally, `load_config()` / `create_connection()` now raise `ConfigurationErro
 (with `CONFIG_002`/`CONFIG_004`/`CONFIG_006`) instead of `MigrationError`, so the
 correct exit code flows from the registry through `ConfiturError.exit_code`.
 
+### Fixed
+
+- `migrate down` now acquires the migration advisory lock for the duration of
+  the rollback ([#142](https://github.com/fraiseql/confiture/issues/142)).
+  Previously only `migrate up` locked, so a `down` racing a concurrent deploy
+  had no mutual exclusion. Pass `--no-lock` / `no_lock=True` to opt out.
+
 ### Added
 
+- `confiture migrate down-to <revision>` — roll back to a specific revision
+  ([#142](https://github.com/fraiseql/confiture/issues/142)). The absolute
+  counterpart to `migrate down --steps N`. A pure planner computes the rollback
+  set and validates that every required `.down.sql` exists **before** touching
+  the database; if any is missing it refuses atomically (`ROLLBACK_600`, exit 8,
+  nothing applied). Edge cases: no-op when already at the target (exit 0),
+  unknown/forward target (`MIGR_100`, exit 3). `--dry-run` prints the plan;
+  `--format json` returns `{from, to, rolled_back, skipped, errors}`. Accepts
+  `--database-url` (#140). Also exposed as `MigratorSession.down_to()`.
 - `confiture migrate current` — print the latest applied migration revision
   ([#141](https://github.com/fraiseql/confiture/issues/141)). Text mode prints
   the bare revision (empty line if none); `--format json` returns

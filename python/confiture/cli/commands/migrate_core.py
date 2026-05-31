@@ -1572,6 +1572,109 @@ def migrate_down(
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+def migrate_down_to(
+    revision: str = typer.Argument(
+        ...,
+        help="Target revision to roll back to (stays applied). Use 'migrate current' to find it.",
+    ),
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory (default: db/migrations)",
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file (default: db/environments/local.yaml)",
+    ),
+    database_url: str = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print the rollback plan and exit 0 without applying anything.",
+    ),
+    format_output: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file (default: stdout)",
+    ),
+) -> None:
+    """Roll back every migration newer than <revision> (absolute rollback).
+
+    The absolute counterpart to ``migrate down --steps N``: instead of a
+    relative count, name the revision to return to. Confiture computes the
+    rollback set, validates that every required ``.down.sql`` exists *before*
+    touching the database, and rolls back newest→oldest under the migration
+    lock. If any required ``.down.sql`` is missing, it refuses atomically —
+    nothing is rolled back.
+
+    EDGE CASES:
+      <revision> == current      → no-op, exit 0 ("already at <revision>")
+      <revision> newer than current → exit 3 ("use 'migrate up --target'")
+      <revision> unknown         → exit 3 ("unknown revision")
+      any required .down.sql missing → exit 8, nothing applied (ROLLBACK_600)
+
+    OUTPUT (--format json): {from, to, rolled_back, skipped, errors}
+
+    EXAMPLES:
+      confiture migrate down-to 20260101_a -c db/environments/staging.yaml
+      confiture migrate down-to 20260101_a --dry-run --format json
+    """
+    from confiture.core.migrator import Migrator, MigratorSession
+
+    if format_output not in ("text", "json"):
+        error_console.print(
+            f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
+        )
+        raise typer.Exit(2)
+
+    try:
+        override = resolve_database_url(database_url, config)
+        if override is not None:
+            session = MigratorSession(
+                config=None,
+                migrations_dir=migrations_dir,
+                database_url_override=override,
+            )
+        else:
+            session = Migrator.from_config(str(config), migrations_dir=migrations_dir)
+        with session as s:
+            result = s.down_to(revision, dry_run=dry_run)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        if is_json(format_output):
+            fail(e, json_mode=True, output_file=output_file)
+        print_error_to_console(e, error_console)
+        raise typer.Exit(handle_cli_error(e)) from e
+
+    if is_json(format_output):
+        _output_json(result.to_dict(), output_file, console)
+    elif result.noop:
+        console.print(f"Already at {revision}; nothing to roll back.")
+    else:
+        verb = "Would roll back" if dry_run else "Rolled back"
+        console.print(
+            f"{verb} {len(result.rolled_back)} migration(s) "
+            f"from {result.from_} to {revision}:"
+        )
+        for v in result.rolled_back:
+            console.print(f"  • {v}")
+
+
 def migrate_generate(
     name: str = typer.Argument(..., help="Migration name (snake_case)"),
     migrations_dir: Path = typer.Option(

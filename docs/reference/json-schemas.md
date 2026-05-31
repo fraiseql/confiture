@@ -54,6 +54,10 @@ change without a top-level version bump.
 
 [migrate-current.schema.json](./json-schemas/migrate-current.schema.json) — `{revision, name, applied_at, checksum}` for the latest applied migration (all `null` when the tracking table is empty). An absent tracking table is an error path emitting the [error envelope](./json-schemas/error-envelope.schema.json) at exit 2.
 
+### `confiture migrate down-to <revision> --format json`
+
+[migrate-down-to.schema.json](./json-schemas/migrate-down-to.schema.json) — `{from, to, rolled_back, skipped, errors}` for an absolute rollback. An invalid plan (unknown/forward target, or a missing `.down.sql`) emits the [error envelope](./json-schemas/error-envelope.schema.json) and applies nothing.
+
 ### `confiture migrate validate --list-patterns --format json`
 
 [migrate-validate-list-patterns.schema.json](./json-schemas/migrate-validate-list-patterns.schema.json)
