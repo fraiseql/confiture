@@ -1,10 +1,18 @@
-"""Admin commands: install_helpers, validate_profile, verify, restore."""
+"""Admin commands: install_helpers, validate_profile, verify-checksums, restore,
+validate-config."""
 
 from pathlib import Path
 
 import typer
 
-from confiture.cli.helpers import console, error_console
+from confiture.cli.helpers import (
+    DATABASE_URL_OPTION_HELP,
+    _output_json,
+    console,
+    error_console,
+    is_json,
+    resolve_database_url,
+)
 from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error
 
@@ -282,6 +290,112 @@ def verify_deprecated(
         "integrity (or 'confiture migrate verify' for runtime correctness).[/yellow]"
     )
     verify_checksums(migrations_dir=migrations_dir, config=config, fix=fix)
+
+
+def validate_config(
+    config: Path = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Configuration file to validate (default: db/environments/local.yaml)",
+    ),
+    database_url: str = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
+    ),
+    migrations_path: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-path",
+        help="Migrations directory to validate (default: db/migrations)",
+    ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Treat warnings as errors for exit purposes.",
+    ),
+) -> None:
+    """Validate configuration and the migrations tree — without connecting (#144).
+
+    Checks YAML/schema validity, include-dir existence, DSN *format*, and the
+    migrations tree (well-formed filenames, no duplicate versions). It never
+    opens a database connection — for DB-level checks use `migrate preflight
+    --against`.
+
+    Accepts the same connection sources as the migrate family
+    (`--config` / `--database-url` / `CONFITURE_DATABASE_URL` / `DATABASE_URL`).
+
+    EXIT CODES:
+      0 — config valid (warnings alone are non-fatal unless --strict)
+      5 — config invalid (or, under --strict, warnings present)
+
+    JSON output: {valid, config_source, migrations_path, migration_count, issues[]}.
+    """
+    from confiture.core.config_validator import ConfigValidator
+
+    if output_format not in ("text", "json"):
+        error_console.print(
+            f"[red]❌ Error: Invalid format '{output_format}'. Use 'text' or 'json'[/red]"
+        )
+        raise typer.Exit(2)
+
+    # Source selection: an explicit --config validates that YAML; a
+    # --database-url flag is validated for *format* as an issue (not raised);
+    # otherwise an env-var DSN, else the default config path. We avoid routing
+    # the flag through resolve_database_url() here so a malformed DSN surfaces
+    # as a CONFIG_003 issue rather than raising before validation.
+    if config is not None:
+        validator = ConfigValidator.from_config(config, migrations_path=migrations_path)
+    elif database_url:
+        validator = ConfigValidator.from_flags(
+            database_url=database_url, migrations_path=migrations_path
+        )
+    elif (env_url := resolve_database_url(None, None)) is not None:
+        validator = ConfigValidator.from_env(
+            database_url=env_url, migrations_path=migrations_path
+        )
+    else:
+        validator = ConfigValidator.from_config(
+            Path("db/environments/local.yaml"), migrations_path=migrations_path
+        )
+
+    report = validator.validate()
+    has_error = any(i.severity in ("error", "critical") for i in report.issues)
+    has_warning = any(i.severity == "warning" for i in report.issues)
+    exit_code = 5 if has_error or (strict and has_warning) else 0
+
+    if is_json(output_format):
+        _output_json(report.to_dict(), None, console)
+        if exit_code:
+            raise typer.Exit(exit_code)
+        return
+
+    if report.valid and not report.issues:
+        console.print(
+            f"[green]✅ Configuration valid[/green] "
+            f"({report.config_source}, {report.migration_count} migration(s))"
+        )
+        if exit_code:
+            raise typer.Exit(exit_code)
+        return
+
+    error_console.print(f"[red]❌ Configuration issues ({report.config_source}):[/red]")
+    for issue in report.issues:
+        color = "red" if issue.severity in ("error", "critical") else "yellow"
+        error_console.print(
+            f"  [{color}]{issue.severity.upper()}[/{color}] {issue.code}: {issue.message}"
+        )
+        if issue.actionable:
+            error_console.print(f"    [dim]💡 {issue.actionable}[/dim]")
+    if exit_code:
+        raise typer.Exit(exit_code)
 
 
 def restore(

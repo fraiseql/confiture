@@ -10,6 +10,7 @@ from confiture.cli.branch import branch_app
 from confiture.cli.commands.admin import (
     install_helpers,
     restore,
+    validate_config,
     validate_profile,
     verify_checksums,
     verify_deprecated,
@@ -177,6 +178,8 @@ app.command()(validate_profile)
 # #143: verify-checksums is canonical; `verify` is a deprecated alias for one cycle.
 app.command("verify-checksums")(verify_checksums)
 app.command("verify")(verify_deprecated)
+# #144: offline config + migrations-tree validation (never connects).
+app.command("validate-config")(validate_config)
 app.command()(restore)
 
 # Register bootstrap command (#137 — one-shot environment ownership setup)

@@ -71,6 +71,15 @@ severity. The `--against` execution path is unchanged.
 
 ### Added
 
+- `confiture validate-config` — offline config + migrations-tree validation
+  ([#144](https://github.com/fraiseql/confiture/issues/144)). Checks YAML/schema
+  validity, include-dir existence, DSN *format*, and the migrations tree
+  (well-formed filenames, no duplicate versions) **without ever connecting to a
+  database**. Accepts `--config` / `--database-url` / env (same sources as the
+  migrate family) and `--migrations-path`. Valid → exit 0; invalid → exit 5
+  (config invalid) with structured stderr; `--format json` returns
+  `{valid, config_source, migrations_path, migration_count, issues[]}` (each
+  issue the shared issue object). `--strict` promotes warnings to failures.
 - Lock-holder identity in lock-contention errors
   ([#147](https://github.com/fraiseql/confiture/issues/147)). When the migration
   lock can't be acquired, `migrate up`/`down`/`down-to` now name the holder —
