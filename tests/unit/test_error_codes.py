@@ -230,7 +230,7 @@ class TestGlobalErrorCodeRegistry:
         # CONFIG_001 should be defined
         definition = ERROR_CODE_REGISTRY.get("CONFIG_001")
         assert definition.code == "CONFIG_001"
-        assert definition.exit_code == 2  # Configuration error exit code
+        assert definition.exit_code == 5  # #146: CONFIG family → config invalid (5)
 
     def test_global_registry_has_migr_codes(self) -> None:
         """Test that MIGR category codes are registered."""

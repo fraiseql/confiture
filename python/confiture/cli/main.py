@@ -71,10 +71,20 @@ COMMON_COMMANDS = [
     "drift",
 ]
 
+# Exit-code summary shown in the top-level --help epilog. The full contract
+# lives in docs/reference/exit-codes.md (issue #146).
+_EXIT_CODE_EPILOG = (
+    "Exit codes (see docs/reference/exit-codes.md): "
+    "0 success · 1 generic failure · 2 tracking table absent · "
+    "3 DB connection failed · 4 schema/build · 5 config invalid · "
+    "6 lock contention · 7 git/grant · 8 irreversible rollback."
+)
+
 # Create Typer app
 app = typer.Typer(
     name="confiture",
     help="PostgreSQL migrations, sweetly done 🍓",
+    epilog=_EXIT_CODE_EPILOG,
     add_completion=False,
 )
 
@@ -113,6 +123,16 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def exit_codes_callback(value: bool) -> None:
+    """Print the canonical exit-code reference and exit."""
+    if value:
+        from confiture.core.error_codes import render_exit_codes_doc
+
+        console.print("confiture exit-code convention (#146):\n")
+        console.print(render_exit_codes_doc())
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     version: bool = typer.Option(
@@ -121,6 +141,14 @@ def main(
         callback=version_callback,
         is_eager=True,
         help="Show version and exit",
+    ),
+    exit_codes: bool = typer.Option(
+        False,
+        "--exit-codes",
+        callback=exit_codes_callback,
+        is_eager=True,
+        hidden=True,
+        help="Print the canonical exit-code convention and exit",
     ),
 ) -> None:
     """Confiture - PostgreSQL migrations, sweetly done 🍓."""

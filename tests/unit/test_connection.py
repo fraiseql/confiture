@@ -12,7 +12,7 @@ from confiture.core.connection import (
     load_config,
     load_migration_module,
 )
-from confiture.exceptions import MigrationError
+from confiture.exceptions import ConfigurationError, MigrationError
 
 
 class TestLoadConfig:
@@ -40,7 +40,7 @@ class TestLoadConfig:
         """Test loading non-existent config file."""
         nonexistent_file = tmp_path / "nonexistent.yaml"
 
-        with pytest.raises(MigrationError, match="Configuration file not found"):
+        with pytest.raises(ConfigurationError, match="Configuration file not found"):
             load_config(nonexistent_file)
 
     def test_load_config_invalid_yaml(self, tmp_path):
@@ -48,7 +48,7 @@ class TestLoadConfig:
         config_file = tmp_path / "invalid.yaml"
         config_file.write_text("{ invalid: yaml: content: : : }")
 
-        with pytest.raises(MigrationError, match="Invalid YAML configuration"):
+        with pytest.raises(ConfigurationError, match="Invalid YAML configuration"):
             load_config(config_file)
 
     def test_load_config_empty_file(self, tmp_path):
@@ -130,7 +130,7 @@ class TestCreateConnection:
 
         config = {"database": {"host": "invalid-host"}}
 
-        with pytest.raises(MigrationError, match="Failed to connect to database"):
+        with pytest.raises(ConfigurationError, match="Failed to connect to database"):
             create_connection(config)
 
 

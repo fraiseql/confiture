@@ -384,7 +384,9 @@ class TestMigrateUpGenericErrors:
                 ],
             )
 
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
+        # #146: CONFIG_001 maps to exit 5 (config invalid); the point of this
+        # test is that the exit code flows from the registry, not a literal.
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}"
 
     def test_unknown_exception_exits_1(self, tmp_path):
         """Non-ConfiturError → exit 1."""
@@ -466,7 +468,9 @@ class TestMigrateDownGenericErrors:
                 ],
             )
 
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
+        # #146: CONFIG_001 maps to exit 5 (config invalid); the point of this
+        # test is that the exit code flows from the registry, not a literal.
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}"
 
 
 # ---------------------------------------------------------------------------

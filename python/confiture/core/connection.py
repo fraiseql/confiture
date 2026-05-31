@@ -11,7 +11,7 @@ from typing import Any
 import psycopg
 import yaml
 
-from confiture.exceptions import MigrationError
+from confiture.exceptions import ConfigurationError, MigrationError
 
 
 def load_config(config_file: Path) -> dict[str, Any]:
@@ -24,11 +24,12 @@ def load_config(config_file: Path) -> dict[str, Any]:
         Configuration dictionary
 
     Raises:
-        MigrationError: If config file is invalid
+        ConfigurationError: If the config file is missing or invalid (exit 5).
     """
     if not config_file.exists():
-        raise MigrationError(
+        raise ConfigurationError(
             f"Configuration file not found: {config_file}",
+            error_code="CONFIG_004",
             resolution_hint=f"Create a YAML config file at {config_file} or check the path is correct",
         )
 
@@ -37,8 +38,9 @@ def load_config(config_file: Path) -> dict[str, Any]:
             config: dict[str, Any] = yaml.safe_load(f)
         return config
     except yaml.YAMLError as e:
-        raise MigrationError(
+        raise ConfigurationError(
             f"Invalid YAML configuration: {e}",
+            error_code="CONFIG_002",
             resolution_hint="Check the YAML syntax in your config file for indentation or formatting errors",
         ) from e
 
@@ -54,7 +56,7 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
         PostgreSQL connection
 
     Raises:
-        MigrationError: If connection fails
+        ConfigurationError: If the connection fails (CONFIG_006 → exit 3).
     """
     from confiture.config.environment import DatabaseConfig
 
@@ -91,8 +93,9 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
                 )
         return conn
     except psycopg.Error as e:
-        raise MigrationError(
+        raise ConfigurationError(
             f"Failed to connect to database: {e}",
+            error_code="CONFIG_006",
             resolution_hint="Check that the database server is running and the connection credentials are correct",
         ) from e
 
@@ -145,8 +148,9 @@ def open_connection(
         elif isinstance(config, dict):
             database_url = config.get("database_url", "")
         else:
-            raise MigrationError(
+            raise ConfigurationError(
                 "Cannot determine database_url for SSH tunnel",
+                error_code="CONFIG_001",
                 resolution_hint="Ensure your config has a 'database_url' field",
             )
 
@@ -154,8 +158,9 @@ def open_connection(
             try:
                 conn = psycopg.connect(patched_url)
             except psycopg.Error as e:
-                raise MigrationError(
+                raise ConfigurationError(
                     f"Failed to connect through SSH tunnel: {e}",
+                    error_code="CONFIG_006",
                     resolution_hint="Check that the SSH tunnel opened correctly and the database URL is valid",
                 ) from e
             try:

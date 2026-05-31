@@ -103,8 +103,8 @@ class TestHandleCliError:
 
         exit_code = handle_cli_error(error)
 
-        # CONFIG_001 should map to exit code 2
-        assert exit_code == 2
+        # CONFIG_001 maps to exit code 5 (#146: CONFIG family → config-invalid)
+        assert exit_code == 5
 
     def test_handle_confiture_error_without_code(self) -> None:
         """Test handling ConfiturError without error code."""
@@ -140,7 +140,7 @@ class TestHandleCliError:
     def test_exit_code_mapping(self) -> None:
         """Test that different error codes map to correct exit codes."""
         test_cases = [
-            ("CONFIG_001", 2),  # Configuration error
+            ("CONFIG_001", 5),  # Configuration error (#146: config invalid → 5)
             ("MIGR_100", 3),  # Migration error
             ("SCHEMA_200", 4),  # Schema error
         ]

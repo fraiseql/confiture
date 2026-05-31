@@ -37,7 +37,7 @@ def test_config_010_registered():
 
     definition = ERROR_CODE_REGISTRY.get("CONFIG_010")
     assert definition.code == "CONFIG_010"
-    assert definition.exit_code == 2
+    assert definition.exit_code == 5  # #146: CONFIG family → 5 (config invalid)
 
 
 # ── C-2: ConfigurationError guard raises with CONFIG_001 ──────────────────────
@@ -65,7 +65,7 @@ def test_migrator_session_guard_has_config_error_code():
         session.status()
 
     assert exc_info.value.error_code == "CONFIG_001"
-    assert exc_info.value.exit_code == 2
+    assert exc_info.value.exit_code == 5  # #146: CONFIG family → 5 (config invalid)
 
 
 def test_migrator_session_up_guard_has_config_error_code():
@@ -150,7 +150,7 @@ def test_from_config_missing_file_uses_config_004():
         Migrator.from_config("/nonexistent/path/config.yaml")
 
     assert exc_info.value.error_code == "CONFIG_004"
-    assert exc_info.value.exit_code == 2
+    assert exc_info.value.exit_code == 5  # #146: CONFIG family → 5 (config invalid)
 
 
 # ── C-5: error_code is always present as non-None string ─────────────────────

@@ -161,7 +161,7 @@ jobs:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
 ```
 
-Exit codes: `0` success, `2` config error, `3` SQL failure, `6` lock contention, `7` structural drift. See [the dry-run guide](docs/guides/dry-run.md) for what each one means.
+Exit codes are a documented stability contract — see [the exit-code reference](docs/reference/exit-codes.md). The most operationally important: `2` tracking table absent, `3` DB connection failed, `5` config invalid, `6` lock contention. For `migrate preflight`'s drift-gate codes specifically, see [the dry-run guide](docs/guides/dry-run.md).
 
 > Migrations that open their own SAVEPOINTs, use `psycopg`'s
 > `conn.transaction()`, or wrap `DO $$ … EXCEPTION WHEN … $$` blocks
@@ -267,6 +267,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 **Reference**
 - [Tracking table (`tb_confiture`)](docs/reference/tracking-table.md)
 - [Transaction & SAVEPOINT contract](docs/reference/transaction-contract.md) — what migration bodies may and may not do under the wrapping transaction.
+- [Exit-code convention](docs/reference/exit-codes.md) — the stable, wrapper-facing exit codes.
 - [CLI](docs/reference/cli.md)
 - [Configuration YAML](docs/reference/configuration.md)
 - [Complete feature list](docs/features/overview.md)

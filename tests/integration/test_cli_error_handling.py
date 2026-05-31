@@ -10,7 +10,7 @@ class TestCliExitCodes:
     """Test that CLI commands exit with correct codes."""
 
     def test_build_with_nonexistent_env(self) -> None:
-        """Test that build with nonexistent environment exits with code 2."""
+        """Test that build with a nonexistent environment exits as config-invalid."""
         result = subprocess.run(
             ["confiture", "build", "--env", "nonexistent"],
             capture_output=True,
@@ -19,8 +19,8 @@ class TestCliExitCodes:
 
         # Should exit with error code (not 0)
         assert result.returncode != 0
-        # Configuration error should exit with code 2
-        assert result.returncode in [1, 2]  # 2 is preferred for config errors
+        # #146: configuration errors exit 5 (config invalid)
+        assert result.returncode in [1, 5]
 
     def test_help_command_exits_success(self) -> None:
         """Test that help command exits with success code."""

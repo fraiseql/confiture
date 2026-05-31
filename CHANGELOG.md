@@ -5,6 +5,49 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - Unreleased
+
+Bundled release stabilizing Confiture's machine-readable contracts (CLI exit
+codes, structured error JSON, new `migrate` subcommands) for tooling that wraps
+Confiture. Covers GitHub issues #139–#148.
+
+### ⚠️ BREAKING — exit codes renumbered ([#146](https://github.com/fraiseql/confiture/issues/146))
+
+The process exit codes for three error families have changed so the structured
+exception registry now emits a wrapper-facing convention (no-table = 2,
+connection failed = 3, config invalid = 5). **Wrappers that branch on these exit
+codes must update.** Exit codes are now a documented **stability contract** —
+see [`docs/reference/exit-codes.md`](docs/reference/exit-codes.md).
+
+| Symbolic code | Meaning | Old exit (≤0.18.0) | New exit |
+|---------------|---------|:------------------:|:--------:|
+| `PRECON_1001` | Database not initialized (tracking table absent) | 5 | **2** |
+| `CONFIG_001` | Missing required config field | 2 | **5** |
+| `CONFIG_002` | Invalid YAML syntax | 2 | **5** |
+| `CONFIG_003` | Invalid database URL format | 2 | **5** |
+| `CONFIG_004` | Environment config not found | 2 | **5** |
+| `CONFIG_005` | Invalid include/exclude pattern | 2 | **5** |
+| `CONFIG_006` | Database connection failed | 2 | **3** |
+| `CONFIG_010` | Database URL not set in environment | 2 | **5** |
+
+Migration guidance for wrapper authors:
+
+- If you branched on **exit 2 = config error**, it is now **5**.
+- **Exit 2** now means **tracking table absent** (fresh DB, no current revision).
+- **Exit 3** now distinguishes a **connection failure** from a config error.
+
+Internally, `load_config()` / `create_connection()` now raise `ConfigurationError`
+(with `CONFIG_002`/`CONFIG_004`/`CONFIG_006`) instead of `MigrationError`, so the
+correct exit code flows from the registry through `ConfiturError.exit_code`.
+
+### Added
+
+- `docs/reference/exit-codes.md` — the canonical exit-code convention, generated
+  from the hand-authored `CANONICAL_EXIT_CODES` contract and asserted against the
+  registry by `tests/unit/test_exit_code_convention.py`. ([#146](https://github.com/fraiseql/confiture/issues/146))
+- `confiture --exit-codes` — hidden utility printing the convention; the
+  top-level `--help` epilog names the operationally important codes. ([#146](https://github.com/fraiseql/confiture/issues/146))
+
 ## [0.18.0] - 2026-05-28
 
 Bundled release covering three open issues. One feature branch, one
