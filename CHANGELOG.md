@@ -42,6 +42,13 @@ correct exit code flows from the registry through `ConfiturError.exit_code`.
 
 ### Added
 
+- `--database-url` / `-d` on `migrate up`/`down`/`status`/`verify`/`preflight`
+  ([#140](https://github.com/fraiseql/confiture/issues/140)). Resolution
+  precedence: flag > `CONFITURE_DATABASE_URL` > `DATABASE_URL` > `--config`. When
+  a DSN is supplied via flag or env var, no YAML is required (tracking table
+  defaults to `tb_confiture`). For `migrate preflight` the flag is the *tracking*
+  DB (pending detection), distinct from `--against`. SSH-tunnel configs still
+  require `--config`. A malformed DSN fails with `CONFIG_003` (exit 5).
 - `docs/reference/exit-codes.md` — the canonical exit-code convention, generated
   from the hand-authored `CANONICAL_EXIT_CODES` contract and asserted against the
   registry by `tests/unit/test_exit_code_convention.py`. ([#146](https://github.com/fraiseql/confiture/issues/146))

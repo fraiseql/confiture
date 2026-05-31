@@ -156,10 +156,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv pip install --system "fraiseql-confiture[ast]"
-      - run: confiture migrate up -c db/environments/production.yaml
+      # No YAML needed in CI — the migrate family reads DATABASE_URL directly
+      # (or pass --database-url "$DSN"). See the connection-source docs below.
+      - run: confiture migrate up
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
 ```
+
+`migrate up`/`down`/`status`/`verify`/`preflight` accept `--database-url <dsn>` (or read `CONFITURE_DATABASE_URL` / `DATABASE_URL`) so runtime-resolved DSNs need no temp YAML — precedence and details in [the CLI reference](docs/reference/cli.md#connection-source-and-precedence).
 
 Exit codes are a documented stability contract — see [the exit-code reference](docs/reference/exit-codes.md). The most operationally important: `2` tracking table absent, `3` DB connection failed, `5` config invalid, `6` lock contention. For `migrate preflight`'s drift-gate codes specifically, see [the dry-run guide](docs/guides/dry-run.md).
 

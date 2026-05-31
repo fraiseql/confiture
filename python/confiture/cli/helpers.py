@@ -2,6 +2,7 @@
 
 import difflib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -213,6 +214,57 @@ def _resolve_config(config: Path, env: str | None) -> Path:
             )
         return Path("db") / "environments" / f"{env}.yaml"
     return config
+
+
+# Canonical env var for the connection DSN, plus the ubiquitous bare fallback
+# (OD-5). Checked in order; the first non-empty value wins.
+_DATABASE_URL_ENV_VARS = ("CONFITURE_DATABASE_URL", "DATABASE_URL")
+
+# Shared --help text for the --database-url flag across the migrate family (#140).
+DATABASE_URL_OPTION_HELP = (
+    "PostgreSQL DSN for the tracking database. Takes precedence over --config / "
+    "--env and the CONFITURE_DATABASE_URL / DATABASE_URL env vars. When given, no "
+    "YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs "
+    "still require --config."
+)
+
+
+def resolve_database_url(flag: str | None, config_path: Path | None) -> str | None:
+    """Resolve the tracking-database DSN with documented precedence.
+
+    Precedence: ``--database-url`` flag > ``CONFITURE_DATABASE_URL`` >
+    ``DATABASE_URL`` > ``None``. A ``None`` result means no override was
+    supplied — the caller falls back to ``config_path`` so the session reads
+    ``config.database_url`` as before.
+
+    Args:
+        flag: Value of the ``--database-url`` option (``None`` if not given).
+        config_path: The resolved ``--config`` path (unused for resolution; kept
+            for an explicit, self-documenting call site and future use).
+
+    Returns:
+        The DSN string to use as ``database_url_override``, or ``None`` to defer
+        to the config file.
+
+    Raises:
+        ConfigurationError: ``CONFIG_003`` if an explicit flag DSN is malformed.
+    """
+    if flag:
+        if not flag.startswith(("postgresql://", "postgres://")):
+            from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+
+            raise ConfigurationError(
+                f"Invalid --database-url: must start with postgresql:// or "
+                f"postgres://, got: {flag}",
+                error_code="CONFIG_003",
+                resolution_hint="Use format: postgresql://user:password@host:port/database",
+            )
+        return flag
+    for var in _DATABASE_URL_ENV_VARS:
+        val = os.environ.get(var)
+        if val:
+            return val
+    return None
 
 
 def _get_tracking_table(config_data: Any) -> str:

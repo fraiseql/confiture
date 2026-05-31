@@ -296,6 +296,31 @@ All migration commands are subcommands of `confiture migrate`:
 - `confiture migrate down` - Rollback applied migrations
 - `confiture migrate preflight` - Pre-deploy safety check
 
+### Connection source and precedence
+
+`migrate up`, `down`, `status`, `verify`, and `preflight` accept a direct
+PostgreSQL DSN via `--database-url` / `-d`, so tooling that resolves a DSN at
+runtime no longer has to synthesize a temporary YAML file. The connection is
+resolved with this **precedence**:
+
+1. `--database-url <dsn>` flag
+2. `CONFITURE_DATABASE_URL` environment variable (canonical)
+3. `DATABASE_URL` environment variable (ubiquitous fallback)
+4. `--config <yaml>` / `--env <name>` file (`database_url` field)
+
+When a DSN is supplied via flag or env var, **no YAML is required** — the
+migrations directory falls back to `db/migrations` and the tracking table to
+`tb_confiture`. A malformed DSN (not starting with `postgresql://` /
+`postgres://`) fails with `CONFIG_003` (exit 5).
+
+> **SSH tunnels**: a `--config` YAML may define an `ssh_tunnel` block that
+> rewrites the DSN. `--database-url` bypasses that — the flag is for
+> directly-reachable databases. Tunnelled connections still require `--config`.
+>
+> **`migrate preflight`**: `--database-url` is the *tracking* DB used for
+> pending-migration detection; it is distinct from `--against`, which is the
+> throwaway database migrations are replayed into.
+
 ---
 
 ### `confiture migrate status`

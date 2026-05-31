@@ -9,6 +9,7 @@ import typer
 
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
+    DATABASE_URL_OPTION_HELP,
     _emit_hint,
     _fix_idempotency,
     _fix_ownership,
@@ -1502,6 +1503,12 @@ def migrate_verify(
         "-c",
         help="Configuration file path",
     ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
+    ),
     version: str | None = typer.Option(
         None,
         "--version",
@@ -1541,18 +1548,24 @@ def migrate_verify(
       confiture migrate up      - Apply pending migrations
     """
     from confiture.cli.formatters.migrate_formatter import format_verify_results
-    from confiture.cli.helpers import _get_tracking_table
+    from confiture.cli.helpers import _get_tracking_table, resolve_database_url
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
     from confiture.models.results import VerifyAllResult
 
     try:
-        if not config or not config.exists():
-            error_console.print("[red]Config file required for migrate verify[/red]")
+        # Connection source (#140): --database-url / env override wins over --config.
+        _db_url_override = resolve_database_url(database_url, config)
+        if _db_url_override is not None:
+            config_data: Any = {"database_url": _db_url_override}
+        elif config and config.exists():
+            config_data = load_config(str(config))
+        else:
+            error_console.print(
+                "[red]Config file or --database-url required for migrate verify[/red]"
+            )
             raise typer.Exit(1)
-
-        config_data = load_config(str(config))
         tracking_table = _get_tracking_table(config_data)
 
         conn = create_connection(config_data)
@@ -2074,19 +2087,24 @@ def _resolve_preflight_pending(
     config_path: Path | None,
     env_name: str | None,
     since: str | None,
+    database_url_override: str | None = None,
 ) -> list[Path]:
     """Return migration files to test in a preflight --against run.
 
     Priority order:
-    1. --config / --env: connect to configured DB, return pending files.
-    2. --since: all local files with version >= since (no DB required).
-    3. Neither: all local migration files.
+    1. --database-url / env override: connect to that DB, return pending files.
+    2. --config / --env: connect to configured DB, return pending files.
+    3. --since: all local files with version >= since (no DB required).
+    4. Neither: all local migration files.
     """
-    if config_path is not None or env_name is not None:
+    if database_url_override is not None or config_path is not None or env_name is not None:
         from confiture.cli.helpers import _get_tracking_table, _resolve_config  # noqa: PLC0415
 
-        resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
-        config_data = load_config(resolved)
+        if database_url_override is not None:
+            config_data: Any = {"database_url": database_url_override}
+        else:
+            resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
+            config_data = load_config(resolved)
         conn = create_connection(config_data)
         try:
             migrator = Migrator(
@@ -2280,6 +2298,17 @@ def migrate_preflight(
             "Connects to the configured database to read the tracking table."
         ),
     ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=(
+            "PostgreSQL DSN of the tracking database for pending-migration "
+            "detection (distinct from --against, which is the throwaway target). "
+            "Takes precedence over --config / --env and the CONFITURE_DATABASE_URL "
+            "/ DATABASE_URL env vars."
+        ),
+    ),
     env: str | None = typer.Option(
         None,
         "--env",
@@ -2465,11 +2494,14 @@ def migrate_preflight(
 
     # --against path: static analysis + exhaustive execution against preflight DB.
     try:
+        from confiture.cli.helpers import resolve_database_url  # noqa: PLC0415
+
         pending_files = _resolve_preflight_pending(
             migrations_dir=migrations_dir,
             config_path=config,
             env_name=env,
             since=since,
+            database_url_override=resolve_database_url(database_url, config),
         )
     except Exception as e:
         error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")

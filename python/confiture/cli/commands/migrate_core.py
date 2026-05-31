@@ -7,6 +7,7 @@ from typing import Any
 import typer
 
 from confiture.cli.helpers import (
+    DATABASE_URL_OPTION_HELP,
     _emit_hint,
     _find_orphaned_sql_files,
     _get_tracking_table,
@@ -15,6 +16,7 @@ from confiture.cli.helpers import (
     _print_orphaned_files_warning,
     console,
     error_console,
+    resolve_database_url,
 )
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.migration_generator import MigrationGenerator
@@ -32,6 +34,12 @@ def migrate_status(
         "-c",
         help="Config file for database connection. Must appear after 'status': "
         "confiture migrate status -c config.yaml",
+    ),
+    database_url: str = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
     ),
     output_format: str = typer.Option(
         "table",
@@ -151,18 +159,28 @@ def migrate_status(
                     _print_orphaned_files_warning(orphaned_sql_files, console)
             return
 
-        # Get applied migrations from database if config provided
+        # Get applied migrations from database if a connection source is given.
+        # Precedence (#140): --database-url / env override > --config file.
         applied_versions: set[str] = set()
         applied_at_by_version: dict[str, Any] = {}
         db_error: str | None = None
         tracking_table_absent: bool = False
         status_tracking_table: str | None = None
-        if config and config.exists():
+        _db_url_override = resolve_database_url(database_url, config)
+        _status_config_data: Any = None
+        if _db_url_override is not None:
+            _status_config_data = {"database_url": _db_url_override}
+        elif config and config.exists():
+            from confiture.core.connection import load_config
+
+            _status_config_data = load_config(config)
+        _db_source = _status_config_data is not None
+        if _db_source:
             try:
-                from confiture.core.connection import create_connection, load_config
+                from confiture.core.connection import create_connection
                 from confiture.core.migrator import Migrator
 
-                config_data = load_config(config)
+                config_data = _status_config_data
                 status_tracking_table = _get_tracking_table(config_data)
                 conn = create_connection(config_data)
                 migrator = Migrator(connection=conn, migration_table=status_tracking_table)
@@ -197,7 +215,7 @@ def migrate_status(
             name = parts[1] if len(parts) > 1 else base_name
 
             # Determine status
-            if config and config.exists() and not db_error:
+            if _db_source and not db_error:
                 # tracking_table_absent: table was missing → all migrations are pending
                 # (confiture has not been set up on this database yet)
                 if tracking_table_absent or version not in applied_versions:
@@ -388,11 +406,10 @@ def migrate_status(
                     )
 
         # Set exit flags after output is written (avoids raising inside try)
-        if config and config.exists() and db_error:
+        if _db_source and db_error:
             fatal_error_exit = True
         elif (
-            config
-            and config.exists()
+            _db_source
             and not db_error
             and not tracking_table_absent
             and len(pending_list) > 0
@@ -434,6 +451,12 @@ def migrate_up(
         "--config",
         "-c",
         help="Configuration file (default: db/environments/local.yaml)",
+    ),
+    database_url: str = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
     ),
     target: str = typer.Option(
         None,
@@ -662,13 +685,19 @@ def migrate_up(
             )
             raise typer.Exit(3)
 
-        # Load configuration
-        config_data = load_config(config)
+        # Load configuration — a --database-url / env override (#140) wins over
+        # the --config file and skips YAML loading entirely.
+        _db_url_override = resolve_database_url(database_url, config)
+        if _db_url_override is not None:
+            config_data = {"database_url": _db_url_override}
+        else:
+            config_data = load_config(config)
 
         # Try to load environment config for migration settings
         effective_strict_mode = strict
         if (
-            not strict
+            _db_url_override is None
+            and not strict
             and config.parent.name == "environments"
             and config.parent.parent.name == "db"
         ):
@@ -1163,6 +1192,12 @@ def migrate_down(
         "-c",
         help="Configuration file (default: db/environments/local.yaml)",
     ),
+    database_url: str = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
+    ),
     steps: int = typer.Option(
         1,
         "--steps",
@@ -1242,8 +1277,13 @@ def migrate_down(
             )
             raise typer.Exit(2)
 
-        # Load configuration
-        config_data = load_config(config)
+        # Load configuration — a --database-url / env override (#140) wins over
+        # the --config file and skips YAML loading entirely.
+        _db_url_override = resolve_database_url(database_url, config)
+        if _db_url_override is not None:
+            config_data = {"database_url": _db_url_override}
+        else:
+            config_data = load_config(config)
 
         # Create database connection
         conn = create_connection(config_data)
