@@ -11,7 +11,8 @@ from confiture.cli.commands.admin import (
     install_helpers,
     restore,
     validate_profile,
-    verify,
+    verify_checksums,
+    verify_deprecated,
 )
 from confiture.cli.commands.apply_as import migrate_apply_as
 from confiture.cli.commands.bootstrap import bootstrap
@@ -173,7 +174,9 @@ app.command()(drift)
 # Register admin commands
 app.command("install-helpers")(install_helpers)
 app.command()(validate_profile)
-app.command()(verify)
+# #143: verify-checksums is canonical; `verify` is a deprecated alias for one cycle.
+app.command("verify-checksums")(verify_checksums)
+app.command("verify")(verify_deprecated)
 app.command()(restore)
 
 # Register bootstrap command (#137 — one-shot environment ownership setup)

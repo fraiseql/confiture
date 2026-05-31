@@ -1529,11 +1529,15 @@ def migrate_verify(
         help="Save output to file (default: stdout)",
     ),
 ) -> None:
-    """Verify applied migrations using .verify.sql sidecar files.
+    """Verify applied migrations using .verify.sql sidecar files (runtime correctness).
 
     Each .verify.sql file contains a SELECT query that returns a truthy value
     when the migration was applied correctly. Queries run inside SAVEPOINT
     (read-only, no side effects).
+
+    This checks *runtime correctness* — did the migrations produce the expected
+    schema/data state? For *file-checksum integrity* (have applied migration
+    files been modified since?) use `confiture verify-checksums` instead.
 
     EXAMPLES:
       confiture migrate verify -c db/environments/local.yaml

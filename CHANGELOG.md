@@ -51,6 +51,17 @@ report `{ok, summary, issues[]}` instead of the flat `PreflightResult` JSON. Eac
 `--strict` promotes warnings to failures. Table output gains the issue code +
 severity. The `--against` execution path is unchanged.
 
+### Deprecated
+
+- `confiture verify` is renamed to `confiture verify-checksums`
+  ([#143](https://github.com/fraiseql/confiture/issues/143)) to disambiguate it
+  from `confiture migrate verify` (runtime correctness via `.verify.sql`).
+  `verify-checksums` is the canonical name for file-checksum integrity;
+  `confiture verify` keeps working as a deprecated alias for one release cycle
+  (it prints a deprecation warning to **stderr**, so piped stdout stays clean,
+  and behaves identically otherwise) and is removed in the next major. Each
+  command's `--help` now names its sibling.
+
 ### Fixed
 
 - `migrate down` now acquires the migration advisory lock for the duration of

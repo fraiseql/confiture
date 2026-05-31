@@ -180,7 +180,7 @@ confiture/
 │   │   │   ├── migrate_core.py  # migrate status/up/down/generate
 │   │   │   ├── migrate_state.py # migrate baseline/reinit/rebuild
 │   │   │   ├── migrate_analysis.py  # migrate diff/validate/fix/introspect/verify
-│   │   │   └── admin.py         # install-helpers, validate_profile, verify, restore
+│   │   │   └── admin.py         # install-helpers, validate_profile, verify-checksums (+ deprecated `verify` alias), restore
 │   │   ├── formatters/
 │   │   │   ├── build_formatter.py
 │   │   │   ├── migrate_formatter.py

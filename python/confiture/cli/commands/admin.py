@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.helpers import console
+from confiture.cli.helpers import console, error_console
 from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error
 
@@ -149,7 +149,7 @@ def validate_profile(
         raise typer.Exit(1) from e
 
 
-def verify(
+def verify_checksums(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -171,7 +171,11 @@ def verify(
 
     Compares SHA-256 checksums of migration files against the checksums
     stored when migrations were applied. Detects if files have been
-    modified after application.
+    modified after application (file-tampering / schema-drift detection).
+
+    For *runtime correctness* (did the migrations produce the expected
+    schema/data state, via .verify.sql sidecars?) use `confiture migrate verify`
+    instead — this command checks file integrity, not runtime state.
 
     This helps prevent:
     - Silent schema drift between environments
@@ -180,13 +184,13 @@ def verify(
 
     Examples:
         # Verify all migrations
-        confiture verify
+        confiture verify-checksums
 
         # Verify with specific config
-        confiture verify --config db/environments/production.yaml
+        confiture verify-checksums --config db/environments/production.yaml
 
         # Fix checksums (update stored to match current files)
-        confiture verify --fix
+        confiture verify-checksums --fix
     """
     from confiture.core.checksum import (
         ChecksumConfig,
@@ -245,6 +249,39 @@ def verify(
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def verify_deprecated(
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory",
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Configuration file",
+    ),
+    fix: bool = typer.Option(
+        False,
+        "--fix",
+        help="Update stored checksums to match current files (dangerous)",
+    ),
+) -> None:
+    """[DEPRECATED] Alias for `confiture verify-checksums`.
+
+    `confiture verify` was ambiguous with `confiture migrate verify` (runtime
+    correctness). Use `confiture verify-checksums` for file-integrity checks.
+    This alias still works for one release cycle and is removed in the next major.
+    """
+    # Warning to stderr so piped/JSON stdout consumers stay clean (#143).
+    error_console.print(
+        "[yellow]⚠️  'confiture verify' is deprecated and will be removed in a "
+        "future major release. Use 'confiture verify-checksums' for checksum "
+        "integrity (or 'confiture migrate verify' for runtime correctness).[/yellow]"
+    )
+    verify_checksums(migrations_dir=migrations_dir, config=config, fix=fix)
 
 
 def restore(
