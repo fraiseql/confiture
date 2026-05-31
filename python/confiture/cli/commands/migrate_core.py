@@ -6,6 +6,7 @@ from typing import Any
 
 import typer
 
+from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     _emit_hint,
@@ -16,6 +17,7 @@ from confiture.cli.helpers import (
     _print_orphaned_files_warning,
     console,
     error_console,
+    is_json,
     resolve_database_url,
 )
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
@@ -418,8 +420,10 @@ def migrate_status(
 
     except Exception as e:
         if output_format == "json":
-            result = {"error": str(e)}
-            _output_json(result, output_file, console)
+            # #145: a genuinely unexpected status failure emits the structured
+            # error envelope (the informative no-table/pending payloads above are
+            # emitted on their own paths and are not errors).
+            fail(e, json_mode=True, output_file=output_file)
         elif output_format == "csv":
             from confiture.cli.formatters.common import handle_output
 
@@ -667,6 +671,21 @@ def migrate_up(
 
         _up_duplicates = find_duplicate_migration_versions(migrations_dir)
         if _up_duplicates:
+            if is_json(format_output):
+                from confiture.exceptions import MigrationConflictError
+
+                _dupe_files = sorted(
+                    f.name for files in _up_duplicates.values() for f in files
+                )
+                fail(
+                    MigrationConflictError(
+                        "Duplicate migration versions detected: "
+                        + ", ".join(sorted(_up_duplicates)),
+                        conflicting_files=_dupe_files,
+                    ),
+                    json_mode=True,
+                    output_file=output_file,
+                )
             error_console.print(
                 "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
             )
@@ -1103,6 +1122,15 @@ def migrate_up(
                             break
 
         except LockAcquisitionError as e:
+            conn.close()
+            if is_json(format_output):
+                from confiture.exceptions import ConfiturError
+
+                fail(
+                    ConfiturError(str(e), error_code="LOCK_1300"),
+                    json_mode=True,
+                    output_file=output_file,
+                )
             print_error_to_console(e, error_console)
             if e.timeout:
                 error_console.print(
@@ -1112,7 +1140,6 @@ def migrate_up(
                 error_console.print(
                     "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
                 )
-            conn.close()
             raise typer.Exit(6) from e
 
         # Handle results
@@ -1176,6 +1203,8 @@ def migrate_up(
         # Already handled above
         raise
     except Exception as e:
+        if is_json(format_output):
+            fail(e, json_mode=True, output_file=output_file)
         print_error_to_console(e, error_console)
         raise typer.Exit(handle_cli_error(e)) from e
 
@@ -1434,6 +1463,8 @@ def migrate_down(
     except typer.Exit:
         raise
     except Exception as e:
+        if is_json(format_output):
+            fail(e, json_mode=True, output_file=output_file)
         print_error_to_console(e, error_console)
         raise typer.Exit(handle_cli_error(e)) from e
 

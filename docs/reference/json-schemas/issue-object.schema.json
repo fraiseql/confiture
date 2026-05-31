@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/issue-object.schema.json",
+  "title": "Confiture unified issue/error object",
+  "description": "The shared inner object embedded by every structured error/issue surface (error envelope #145, validate-config #144, preflight report #148). severity/code/message are always present; the rest are present-but-nullable. Stable contract: changes require a version bump.",
+  "type": "object",
+  "required": ["severity", "code", "message", "actionable", "details", "migration", "file", "line"],
+  "additionalProperties": false,
+  "properties": {
+    "severity": {
+      "type": "string",
+      "enum": ["error", "warning", "info"],
+      "description": "Lowercased ErrorSeverity. CRITICAL folds to \"error\" in the public contract."
+    },
+    "code": {
+      "type": "string",
+      "description": "Stable symbolic code (e.g. CONFIG_006, MIGR_106). INTERNAL_ERROR for an unexpected non-ConfiturError."
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable message."
+    },
+    "actionable": {
+      "type": ["string", "null"],
+      "description": "Suggested fix (maps from ConfiturError.resolution_hint); null when none."
+    },
+    "details": {
+      "type": "object",
+      "description": "Code-specific structured data; {} when none."
+    },
+    "migration": {
+      "type": ["string", "null"],
+      "description": "Migration version identifier when the issue is migration-specific; else null."
+    },
+    "file": {
+      "type": ["string", "null"],
+      "description": "Filesystem path when known; else null."
+    },
+    "line": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "1-based line within `file` when known; else null."
+    }
+  }
+}

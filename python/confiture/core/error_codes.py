@@ -968,3 +968,28 @@ def render_exit_codes_doc() -> str:
         lines.append(f"  - {', '.join(symbols)}")
 
     return "\n".join(lines)
+
+
+def render_error_codebook() -> str:
+    """Render the full symbolic error-code codebook as Markdown (issue #145).
+
+    Generated from ``ERROR_CODE_REGISTRY`` so the published codebook can never
+    drift from the codes the CLI actually emits in ``--format json``. One table
+    row per code: symbolic code, exit code, severity, message template, and the
+    resolution hint surfaced as the envelope's ``actionable`` field.
+    """
+
+    def _sort_key(d: ErrorCodeDefinition) -> tuple[str, int]:
+        family, _, number = d.code.partition("_")
+        return (family, int(number) if number.isdigit() else 0)
+
+    lines: list[str] = []
+    lines.append("| Code | Exit | Severity | Message | Actionable |")
+    lines.append("|------|:----:|----------|---------|------------|")
+    for d in sorted(ERROR_CODE_REGISTRY.all_codes(), key=_sort_key):
+        message = d.message_template.replace("|", "\\|").replace("\n", " ")
+        hint = (d.resolution_hint or "—").replace("|", "\\|").replace("\n", " ")
+        lines.append(
+            f"| `{d.code}` | {d.exit_code} | {d.severity.value} | {message} | {hint} |"
+        )
+    return "\n".join(lines)

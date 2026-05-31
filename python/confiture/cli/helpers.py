@@ -4,7 +4,6 @@ import difflib
 import json
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +22,11 @@ from confiture.models.lint import LintReport, LintSeverity, Violation
 
 _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 
-# Create Rich consoles for stdout and stderr
+# Create Rich consoles for stdout and stderr. Use stderr=True (not
+# file=sys.stderr) so the stream is resolved dynamically at write time — this
+# keeps it correct under pytest's capsys, which swaps sys.stderr per test.
 console = Console()
-error_console = Console(file=sys.stderr)
+error_console = Console(stderr=True)
 
 _MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
 
@@ -265,6 +266,16 @@ def resolve_database_url(flag: str | None, config_path: Path | None) -> str | No
         if val:
             return val
     return None
+
+
+def is_json(fmt: str | None) -> bool:
+    """Whether a command's --format value selects JSON output (#145).
+
+    Commands use varied format param names (``format_output`` / ``output_format``
+    / ``format_type``) with different allowed sets; this collapses them to the
+    single boolean the error boundary needs.
+    """
+    return bool(fmt) and fmt.lower() == "json"
 
 
 def _get_tracking_table(config_data: Any) -> str:

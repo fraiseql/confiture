@@ -7,6 +7,7 @@ from typing import Any
 
 import typer
 
+from confiture.cli.error_json import fail
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
@@ -18,6 +19,7 @@ from confiture.cli.helpers import (
     _validate_idempotency,
     console,
     error_console,
+    is_json,
 )
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
@@ -1598,6 +1600,8 @@ def migrate_verify(
     except typer.Exit:
         raise
     except Exception as e:
+        if is_json(format_output):
+            fail(e, json_mode=True, output_file=output_file)
         error_console.print(f"[red]Verify failed: {e}[/red]")
         raise typer.Exit(1) from e
 
@@ -2504,6 +2508,8 @@ def migrate_preflight(
             database_url_override=resolve_database_url(database_url, config),
         )
     except Exception as e:
+        if is_json(format_type):
+            fail(e, json_mode=True, output_file=None)
         error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")
         raise typer.Exit(2) from e
 

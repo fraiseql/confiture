@@ -278,6 +278,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 
 **For agents and tooling**
 - Every machine-readable CLI output has a published JSON schema under [`docs/reference/json-schemas/`](docs/reference/json-schemas/) — see [`docs/reference/json-schemas.md`](docs/reference/json-schemas.md).
+- On an **error path** in `--format json` mode, the migrate family emits a structured error envelope on stdout — `{"ok": false, "error": {code, message, severity, actionable, details, migration, file, line}}` — and exits with the [exit code](docs/reference/exit-codes.md) for that error. The full code list and the envelope schema are in the [error-code codebook](docs/reference/error-codes.md).
 - `confiture migrate validate --list-patterns --format json` exposes the full idempotency-detection catalog (read-only, no DB / config / migrations directory needed).
 - Quiet-success ambiguities surface advisory hints in `payload["hints"]` (or on stderr in text mode) — exit codes are unaffected.
 

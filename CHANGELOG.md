@@ -42,6 +42,16 @@ correct exit code flows from the registry through `ConfiturError.exit_code`.
 
 ### Added
 
+- Structured error envelope in `--format json` mode
+  ([#145](https://github.com/fraiseql/confiture/issues/145)). On an error path,
+  migrate-family commands now emit `{"ok": false, "error": {code, message,
+  severity, actionable, details, migration, file, line}}` on stdout (human/text
+  output unchanged) and exit with the #146 code. The `error` value is the unified
+  inner issue object shared with `validate-config` (#144) and the preflight report
+  (#148). New: `confiture.cli.error_json` (`emit_error_json` / `fail`),
+  `docs/reference/error-codes.md` codebook (generated from the registry), and the
+  `error-envelope` / `issue-object` JSON schemas. `migrate status`'s informative
+  no-table / pending payloads are preserved (success-with-signal, not errors).
 - `--database-url` / `-d` on `migrate up`/`down`/`status`/`verify`/`preflight`
   ([#140](https://github.com/fraiseql/confiture/issues/140)). Resolution
   precedence: flag > `CONFITURE_DATABASE_URL` > `DATABASE_URL` > `--config`. When

@@ -46,6 +46,10 @@ change without a top-level version bump.
 
 ## Schemas by command
 
+### Error envelope (any migrate command, `--format json` error path)
+
+[error-envelope.schema.json](./json-schemas/error-envelope.schema.json) — `{ "ok": false, "error": { … } }`, where `error` is the shared [issue-object.schema.json](./json-schemas/issue-object.schema.json). Emitted on stdout when a migrate-family command fails in JSON mode; the process exits with the matching [exit code](exit-codes.md). The full code list is the [error-code codebook](error-codes.md).
+
 ### `confiture migrate validate --list-patterns --format json`
 
 [migrate-validate-list-patterns.schema.json](./json-schemas/migrate-validate-list-patterns.schema.json)
