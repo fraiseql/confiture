@@ -225,6 +225,13 @@ _CONFITURE_DSN_ENV = "CONFITURE_DATABASE_URL"
 _AMBIENT_DSN_ENV = "DATABASE_URL"
 _DATABASE_URL_ENV_VARS = (_CONFITURE_DSN_ENV, _AMBIENT_DSN_ENV)
 
+# Shared --help text for the --no-config flag across the migrate family (#152).
+NO_CONFIG_OPTION_HELP = (
+    "Suppress config-file discovery entirely; the environment "
+    "(CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. "
+    "Use this for runtime-resolved DSNs that must not be exposed in argv."
+)
+
 # Shared --help text for the --database-url flag across the migrate family (#140).
 DATABASE_URL_OPTION_HELP = (
     "PostgreSQL DSN for the tracking database. Always wins over --config / --env "
@@ -359,6 +366,45 @@ def resolve_database_url(
 
     # (8) No source.
     return None
+
+
+def config_is_explicit(ctx: Any, param: str = "config") -> bool:
+    """Whether ``--config``/``--env`` was set explicitly, not defaulted (#152).
+
+    The migrate family defaults ``--config`` to a *present* file
+    (``db/environments/local.yaml``), so the resolved ``Path`` cannot tell a
+    default from an operator-supplied one. Click's parameter source can — this
+    is the linchpin that makes the precedence contract expressible.
+
+    Returns ``False`` defensively when the source is unavailable (no context).
+    """
+    from click.core import ParameterSource  # noqa: PLC0415
+
+    try:
+        source = ctx.get_parameter_source(param)
+    except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
+        return False
+    return source is not None and source not in (
+        ParameterSource.DEFAULT,
+        ParameterSource.DEFAULT_MAP,
+    )
+
+
+def has_intentional_dsn_source(ctx: Any, flag: str | None, no_config: bool) -> bool:
+    """Whether an *intentional* DSN source is present (#152, for ``status``).
+
+    True for a ``--database-url`` flag, ``--no-config``, an explicit
+    ``--config``/``--env``, or the canonical ``CONFITURE_DATABASE_URL``. A
+    merely-ambient ``DATABASE_URL`` does NOT count — ``migrate status`` stays in
+    its no-connect "status-unknown" state (exit 0) rather than auto-connecting
+    to whatever ``DATABASE_URL`` happens to be in the environment.
+    """
+    return (
+        bool(flag)
+        or no_config
+        or config_is_explicit(ctx)
+        or bool(os.environ.get(_CONFITURE_DSN_ENV))
+    )
 
 
 def is_json(fmt: str | None) -> bool:

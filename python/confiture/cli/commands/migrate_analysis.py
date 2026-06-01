@@ -11,6 +11,7 @@ from confiture.cli.error_json import fail
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
+    NO_CONFIG_OPTION_HELP,
     _emit_hint,
     _fix_idempotency,
     _fix_ownership,
@@ -1494,6 +1495,7 @@ def migrate_introspect(
 
 
 def migrate_verify(
+    ctx: typer.Context,
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -1510,6 +1512,11 @@ def migrate_verify(
         "--database-url",
         "-d",
         help=DATABASE_URL_OPTION_HELP,
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     version: str | None = typer.Option(
         None,
@@ -1554,22 +1561,35 @@ def migrate_verify(
       confiture migrate up      - Apply pending migrations
     """
     from confiture.cli.formatters.migrate_formatter import format_verify_results
-    from confiture.cli.helpers import _get_tracking_table, resolve_database_url
+    from confiture.cli.helpers import (
+        _get_tracking_table,
+        config_is_explicit,
+        has_intentional_dsn_source,
+        resolve_database_url,
+    )
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
     from confiture.models.results import VerifyAllResult
 
     try:
-        # Connection source (#140): an explicit --database-url flag or --config.
-        # An ambient DATABASE_URL env var must NOT satisfy the "config required"
-        # check — only an explicit source does. (#140 / CI regression fix)
-        _db_url_override = resolve_database_url(database_url, None) if database_url else None
-        if _db_url_override is not None:
-            config_data: Any = {"database_url": _db_url_override}
-        elif config and config.exists():
-            config_data = load_config(str(config))
-        else:
+        # Connection source (#152): a --database-url flag, --no-config, an
+        # explicit --config, or the canonical CONFITURE_DATABASE_URL. An ambient
+        # DATABASE_URL alone does NOT satisfy "config required"; two explicit
+        # sources fail loud (CONFIG_007).
+        config_data: Any = None
+        if has_intentional_dsn_source(ctx, database_url, no_config):
+            _db_url_override = resolve_database_url(
+                database_url,
+                config,
+                config_explicit=config_is_explicit(ctx),
+                no_config=no_config,
+            )
+            if _db_url_override is not None:
+                config_data = {"database_url": _db_url_override}
+            elif config and config.exists():
+                config_data = load_config(str(config))
+        if config_data is None:
             error_console.print(
                 "[red]Config file or --database-url required for migrate verify[/red]"
             )
@@ -2304,6 +2324,7 @@ def _display_dependent_analysis(report: Any, cons: Any) -> None:
 
 
 def migrate_preflight(
+    ctx: typer.Context,
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -2348,6 +2369,11 @@ def migrate_preflight(
         None,
         "--env",
         help="Environment shortcut — db/environments/{name}.yaml (e.g. --env production).",
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     since: str | None = typer.Option(
         None,
@@ -2542,19 +2568,31 @@ def migrate_preflight(
 
     # --against path: static analysis + exhaustive execution against preflight DB.
     try:
-        from confiture.cli.helpers import resolve_database_url  # noqa: PLC0415
+        from confiture.cli.helpers import (  # noqa: PLC0415
+            config_is_explicit,
+            has_intentional_dsn_source,
+            resolve_database_url,
+        )
 
+        # Pending-detection DSN under the #152 contract: a --database-url flag,
+        # --no-config, an explicit --config/--env, or the canonical
+        # CONFITURE_DATABASE_URL drive a tracking-DB connect; a merely-ambient
+        # DATABASE_URL must NOT silently flip "--against alone → all local files"
+        # into a tracking-DB connect. Two explicit sources fail loud (CONFIG_007).
         pending_files = _resolve_preflight_pending(
             migrations_dir=migrations_dir,
             config_path=config,
             env_name=env,
             since=since,
-            # Flag-only: an explicit --database-url drives pending-detection, but
-            # an ambient CONFITURE_DATABASE_URL / DATABASE_URL must NOT silently
-            # flip "--against alone → all local files" into a tracking-DB connect
-            # (issue #140 precedence; matches `migrate status`/`verify`).
             database_url_override=(
-                resolve_database_url(database_url, None) if database_url else None
+                resolve_database_url(
+                    database_url,
+                    config,
+                    config_explicit=config_is_explicit(ctx),
+                    no_config=no_config,
+                )
+                if has_intentional_dsn_source(ctx, database_url, no_config)
+                else None
             ),
         )
     except Exception as e:
