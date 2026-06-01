@@ -44,6 +44,16 @@ CONFIG family) — see [`docs/reference/exit-codes.md`](docs/reference/exit-code
   no config-shadowing and no neutralization hack.
 - **`CONFIG_007`** — conflicting explicit DSN sources.
 
+### Fixed
+
+- **Checksum verification ignored a custom `tracking_table`.**
+  `MigrationChecksumVerifier` queried a hardcoded `tb_confiture` in its SELECT
+  and UPDATE, so with a custom `migration.tracking_table` (and checksum
+  verification on by default) `migrate up` read the wrong table — silently when
+  `tb_confiture` happened to exist, or as a hard crash (`relation
+  "tb_confiture" does not exist`) on a database without it. It now uses the
+  configured, schema-qualified tracking table.
+
 ### Migration guide
 
 - Preferred handoff: `CONFITURE_DATABASE_URL=… confiture migrate up --no-config`
