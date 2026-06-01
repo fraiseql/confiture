@@ -68,6 +68,9 @@ severity. The `--against` execution path is unchanged.
   the rollback ([#142](https://github.com/fraiseql/confiture/issues/142)).
   Previously only `migrate up` locked, so a `down` racing a concurrent deploy
   had no mutual exclusion. Pass `--no-lock` / `no_lock=True` to opt out.
+  Consequence: a `migrate down` now blocks (or fails with exit 6 once
+  `--lock-timeout` expires) when another migration holds the lock, where it
+  previously proceeded unguarded.
 
 ### Added
 
