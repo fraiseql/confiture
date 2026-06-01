@@ -507,9 +507,7 @@ class TestMigrationChecksumVerifier:
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
-        verifier = MigrationChecksumVerifier(
-            mock_conn, migration_table="myschema.tb_custom"
-        )
+        verifier = MigrationChecksumVerifier(mock_conn, migration_table="myschema.tb_custom")
         verifier._get_stored_checksums()
 
         sql_str = str(mock_cursor.execute.call_args[0][0])

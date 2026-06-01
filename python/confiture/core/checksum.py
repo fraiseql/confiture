@@ -263,9 +263,9 @@ class MigrationChecksumVerifier:
         """
         with self.connection.cursor() as cur:
             cur.execute(
-                pgsql.SQL(
-                    "SELECT version, name, checksum FROM {} ORDER BY version"
-                ).format(self._table_ident)
+                pgsql.SQL("SELECT version, name, checksum FROM {} ORDER BY version").format(
+                    self._table_ident
+                )
             )
             return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
 

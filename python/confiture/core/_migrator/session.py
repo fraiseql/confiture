@@ -1039,9 +1039,7 @@ class MigratorSession:
                 self._conn,
                 config,
                 migration_table=(
-                    self._migrator.migration_table
-                    if self._migrator is not None
-                    else "tb_confiture"
+                    self._migrator.migration_table if self._migrator is not None else "tb_confiture"
                 ),
             )
             mismatches = verifier.verify_all(self._migrations_dir)
