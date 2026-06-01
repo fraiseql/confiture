@@ -26,11 +26,16 @@ def test_batch_progress_importable():
     assert BatchProgress is not None
 
 
-def test_migrate_up_accepts_batched_flag():
+def test_migrate_up_accepts_batched_flag(monkeypatch):
     """--batched and --batch-size flags are accepted by migrate up."""
     from typer.testing import CliRunner
 
     from confiture.cli.main import app
+
+    # Clear ambient DSN env vars so a missing --config genuinely errors (this
+    # test is about flag *parsing*, not the #140 env-var fallback precedence).
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
 
     runner = CliRunner()
 

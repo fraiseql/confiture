@@ -589,6 +589,17 @@ def lint(
         "--fail-on-warning",
         help="Exit with code 1 if warnings found (default: off, stricter)",
     ),
+    replica_safe: bool = typer.Option(
+        False,
+        "--replica-safe",
+        help="Also run the replica-aware forward-compatibility lint over the "
+        "migrations tree (#139).",
+    ),
+    migrations_dir: Path = typer.Option(
+        Path("db/migrations"),
+        "--migrations-dir",
+        help="Migrations directory for --replica-safe (default: db/migrations)",
+    ),
 ) -> None:
     """Validate schema against best practices.
 
@@ -675,6 +686,45 @@ def lint(
         should_fail = (report.has_errors and fail_on_error) or (
             report.has_warnings and fail_on_warning
         )
+
+        # #139: replica-aware forward-compatibility lint over the migrations tree
+        # (a migration-tree check, distinct from the schema lint above).
+        if replica_safe:
+            from confiture.core.linting.libraries.replica import Replica001ForwardCompat
+            from confiture.core.linting.schema_linter import RuleSeverity
+
+            has_replicas = False
+            bypass = False
+            try:
+                from confiture.config.environment import Environment
+
+                _env = Environment.load(env, project_dir=project_dir)
+                has_replicas = bool(_env.infrastructure.replicas)
+                bypass = _env.migration.allow_unsafe_under_replication
+            except Exception:  # noqa: BLE001 — replica policy degrades to defaults
+                pass
+
+            replica_violations = Replica001ForwardCompat(
+                has_replicas=has_replicas, bypass=bypass
+            ).check(migrations_dir)
+            if replica_violations:
+                console.print("\n[cyan]🔁 Replica forward-compatibility:[/cyan]")
+                for v in replica_violations:
+                    color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
+                    console.print(
+                        f"  [{color}]{v.severity.value.upper()}[/{color}] {v.rule_id} "
+                        f"({v.object_name}): {v.message}"
+                    )
+                rep_errors = any(v.severity == RuleSeverity.ERROR for v in replica_violations)
+                rep_warnings = any(v.severity == RuleSeverity.WARNING for v in replica_violations)
+                should_fail = (
+                    should_fail
+                    or (rep_errors and fail_on_error)
+                    or (rep_warnings and fail_on_warning)
+                )
+            else:
+                console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
+
         if should_fail:
             raise typer.Exit(1)
 

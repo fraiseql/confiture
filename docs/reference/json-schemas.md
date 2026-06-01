@@ -46,6 +46,22 @@ change without a top-level version bump.
 
 ## Schemas by command
 
+### Error envelope (any migrate command, `--format json` error path)
+
+[error-envelope.schema.json](./json-schemas/error-envelope.schema.json) — `{ "ok": false, "error": { … } }`, where `error` is the shared [issue-object.schema.json](./json-schemas/issue-object.schema.json). Emitted on stdout when a migrate-family command fails in JSON mode; the process exits with the matching [exit code](exit-codes.md). The full code list is the [error-code codebook](error-codes.md).
+
+### `confiture validate-config --format json`
+
+[validate-config.schema.json](./json-schemas/validate-config.schema.json) — `{valid, config_source, migrations_path, migration_count, issues[]}` for offline config + migrations-tree validation (#144). **Never connects to a database.** Each `issues[]` element is the shared [issue object](./json-schemas/issue-object.schema.json). Invalid config exits 5.
+
+### `confiture migrate current --format json`
+
+[migrate-current.schema.json](./json-schemas/migrate-current.schema.json) — `{revision, name, applied_at, checksum}` for the latest applied migration (all `null` when the tracking table is empty). An absent tracking table is an error path emitting the [error envelope](./json-schemas/error-envelope.schema.json) at exit 2.
+
+### `confiture migrate down-to <revision> --format json`
+
+[migrate-down-to.schema.json](./json-schemas/migrate-down-to.schema.json) — `{from, to, rolled_back, skipped, errors}` for an absolute rollback. An invalid plan (unknown/forward target, or a missing `.down.sql`) emits the [error envelope](./json-schemas/error-envelope.schema.json) and applies nothing.
+
 ### `confiture migrate validate --list-patterns --format json`
 
 [migrate-validate-list-patterns.schema.json](./json-schemas/migrate-validate-list-patterns.schema.json)
@@ -198,7 +214,7 @@ Rewrites non-idempotent SQL files in place (or previews with `--dry-run`). Pytho
 
 [migrate-preflight.schema.json](./json-schemas/migrate-preflight.schema.json)
 
-Static preflight analysis — per-migration reversibility, transactionality, duplicate version prefixes, checksum mismatches. No DB required.
+Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issues[]` element is the shared [issue object](./json-schemas/issue-object.schema.json) (`PFLIGHT_*` codes). Covers reversibility, transactionality, duplicate version prefixes, and checksum mismatches. No DB required. Errors → exit 7; warnings are non-fatal unless `--strict`. A preflight that *crashes* (config/DB error) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
 
 ### `confiture migrate preflight --against <url> --format json`
 

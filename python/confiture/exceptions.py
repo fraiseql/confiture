@@ -581,6 +581,44 @@ class MigrationOverwriteError(MigrationError):
         self.filepath = filepath
 
 
+class DatabaseNotInitializedError(ConfiturError):
+    """The tracking table is absent — confiture is not initialized on this DB.
+
+    The fresh-database signal: a command that needs the tracking table (e.g.
+    ``migrate current``) found it missing. Defaults to ``PRECON_1001``, which
+    exits 2 per the #146 convention (a distinct, low-numbered "not initialized
+    yet" signal, separate from connection failures and config errors).
+
+    Note: distinct from ``confiture.core.preconditions.PreconditionError``,
+    which is the migration-runtime precondition failure (a different concern).
+
+    Example:
+        >>> raise DatabaseNotInitializedError("Tracking table absent")
+    """
+
+    def __init__(
+        self,
+        message: str = "Database not initialized",
+        *,
+        error_code: str | None = None,
+        severity: ErrorSeverity | None = None,
+        context: dict[str, Any] | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code=error_code or "PRECON_1001",
+            severity=severity,
+            context=context,
+            resolution_hint=(
+                resolution_hint
+                or "Run 'confiture migrate up' to initialize the tracking table, "
+                "or 'confiture migrate baseline --through <version>' if the schema "
+                "is already applied."
+            ),
+        )
+
+
 class ExternalGeneratorError(ConfiturError):
     """External migration generator command failed
 
@@ -806,6 +844,7 @@ __all__ = [
     "GitError",
     "NotAGitRepositoryError",
     "ExternalGeneratorError",
+    "DatabaseNotInitializedError",
     "RebuildError",
     "RestoreError",
     "SeedError",

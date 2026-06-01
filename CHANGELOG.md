@@ -5,6 +5,144 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - Unreleased
+
+Bundled release stabilizing Confiture's machine-readable contracts (CLI exit
+codes, structured error JSON, new `migrate` subcommands) for tooling that wraps
+Confiture. Covers GitHub issues #139–#148.
+
+### ⚠️ BREAKING — exit codes renumbered ([#146](https://github.com/fraiseql/confiture/issues/146))
+
+The process exit codes for three error families have changed so the structured
+exception registry now emits a wrapper-facing convention (no-table = 2,
+connection failed = 3, config invalid = 5). **Wrappers that branch on these exit
+codes must update.** Exit codes are now a documented **stability contract** —
+see [`docs/reference/exit-codes.md`](docs/reference/exit-codes.md).
+
+| Symbolic code | Meaning | Old exit (≤0.18.0) | New exit |
+|---------------|---------|:------------------:|:--------:|
+| `PRECON_1001` | Database not initialized (tracking table absent) | 5 | **2** |
+| `CONFIG_001` | Missing required config field | 2 | **5** |
+| `CONFIG_002` | Invalid YAML syntax | 2 | **5** |
+| `CONFIG_003` | Invalid database URL format | 2 | **5** |
+| `CONFIG_004` | Environment config not found | 2 | **5** |
+| `CONFIG_005` | Invalid include/exclude pattern | 2 | **5** |
+| `CONFIG_006` | Database connection failed | 2 | **3** |
+| `CONFIG_010` | Database URL not set in environment | 2 | **5** |
+
+Migration guidance for wrapper authors:
+
+- If you branched on **exit 2 = config error**, it is now **5**.
+- **Exit 2** now means **tracking table absent** (fresh DB, no current revision).
+- **Exit 3** now distinguishes a **connection failure** from a config error.
+
+Internally, `load_config()` / `create_connection()` now raise `ConfigurationError`
+(with `CONFIG_002`/`CONFIG_004`/`CONFIG_006`) instead of `MigrationError`, so the
+correct exit code flows from the registry through `ConfiturError.exit_code`.
+
+### ⚠️ BREAKING — `migrate preflight` JSON reshaped ([#148](https://github.com/fraiseql/confiture/issues/148))
+
+`migrate preflight --format json` (no `--against`) now returns the structured
+report `{ok, summary, issues[]}` instead of the flat `PreflightResult` JSON. Each
+`issues[]` element is the unified issue object with a `PFLIGHT_*` code
+(`PFLIGHT_MISSING_DOWN`, `PFLIGHT_NON_TRANSACTIONAL`, `PFLIGHT_DUPLICATE_VERSION`,
+`PFLIGHT_CHECKSUM_MISMATCH`). Error-severity issues exit **7** (was 1);
+**non-transactional statements are now warnings** (exit 0 by default) unless
+`--strict` promotes warnings to failures. Table output gains the issue code +
+severity. The `--against` execution path is unchanged.
+
+### Deprecated
+
+- `confiture verify` is renamed to `confiture verify-checksums`
+  ([#143](https://github.com/fraiseql/confiture/issues/143)) to disambiguate it
+  from `confiture migrate verify` (runtime correctness via `.verify.sql`).
+  `verify-checksums` is the canonical name for file-checksum integrity;
+  `confiture verify` keeps working as a deprecated alias for one release cycle
+  (it prints a deprecation warning to **stderr**, so piped stdout stays clean,
+  and behaves identically otherwise) and is removed in the next major. Each
+  command's `--help` now names its sibling.
+
+### Fixed
+
+- `migrate down` now acquires the migration advisory lock for the duration of
+  the rollback ([#142](https://github.com/fraiseql/confiture/issues/142)).
+  Previously only `migrate up` locked, so a `down` racing a concurrent deploy
+  had no mutual exclusion. Pass `--no-lock` / `no_lock=True` to opt out.
+  Consequence: a `migrate down` now blocks (or fails with exit 6 once
+  `--lock-timeout` expires) when another migration holds the lock, where it
+  previously proceeded unguarded.
+
+### Added
+
+- Replica-aware forward-compatibility lint
+  ([#139](https://github.com/fraiseql/confiture/issues/139)). Classifies each
+  migration DDL operation and flags those unsafe under streaming replication —
+  `DROP COLUMN`, `RENAME COLUMN`, type changes, `ADD COLUMN NOT NULL/DEFAULT`,
+  immediate `ADD CONSTRAINT`, non-concurrent `CREATE INDEX` — with the exact
+  multi-step remediation. Surfaced via `confiture lint --replica-safe`
+  (rule `replica_001`) and `migrate preflight` (`PFLIGHT_REPLICA_*` issues in the
+  structured report). **Soft default** (owner decision): warns when no replicas
+  are declared, errors when `infrastructure.replicas` is non-empty;
+  `migration.allow_unsafe_under_replication: true` downgrades errors to warnings.
+  Reuses the pglast/regex two-tier parser (no new SQL parser). Guide:
+  [`docs/guides/replica-safe-migrations.md`](docs/guides/replica-safe-migrations.md).
+- `confiture validate-config` — offline config + migrations-tree validation
+  ([#144](https://github.com/fraiseql/confiture/issues/144)). Checks YAML/schema
+  validity, include-dir existence, DSN *format*, and the migrations tree
+  (well-formed filenames, no duplicate versions) **without ever connecting to a
+  database**. Accepts `--config` / `--database-url` / env (same sources as the
+  migrate family) and `--migrations-path`. Valid → exit 0; invalid → exit 5
+  (config invalid) with structured stderr; `--format json` returns
+  `{valid, config_source, migrations_path, migration_count, issues[]}` (each
+  issue the shared issue object). `--strict` promotes warnings to failures.
+- Lock-holder identity in lock-contention errors
+  ([#147](https://github.com/fraiseql/confiture/issues/147)). When the migration
+  lock can't be acquired, `migrate up`/`down`/`down-to` now name the holder —
+  pid, hostname, user, command, and `held_for_seconds` — in stderr and under the
+  `LOCK_1300` envelope's `details.holder`. Identity is recorded best-effort in a
+  new `confiture_lock_holder` metadata table written under the advisory lock; the
+  advisory lock stays the crash-safe source of truth (a crashed holder's lingering
+  row is reported as stale, and a new acquirer still succeeds). Writing identity
+  never blocks a migration. A hold longer than 5 minutes adds a stale-lock hint.
+- `confiture migrate down-to <revision>` — roll back to a specific revision
+  ([#142](https://github.com/fraiseql/confiture/issues/142)). The absolute
+  counterpart to `migrate down --steps N`. A pure planner computes the rollback
+  set and validates that every required `.down.sql` exists **before** touching
+  the database; if any is missing it refuses atomically (`ROLLBACK_600`, exit 8,
+  nothing applied). Edge cases: no-op when already at the target (exit 0),
+  unknown/forward target (`MIGR_100`, exit 3). `--dry-run` prints the plan;
+  `--format json` returns `{from, to, rolled_back, skipped, errors}`. Accepts
+  `--database-url` (#140). Also exposed as `MigratorSession.down_to()`.
+- `confiture migrate current` — print the latest applied migration revision
+  ([#141](https://github.com/fraiseql/confiture/issues/141)). Text mode prints
+  the bare revision (empty line if none); `--format json` returns
+  `{revision, name, applied_at, checksum}` with `revision: null` for an empty
+  tracking table (exit 0). An absent tracking table exits 2 (`PRECON_1001`).
+  Accepts `--database-url` (#140). Also exposed as
+  `MigratorSession.current_revision()`.
+- Structured error envelope in `--format json` mode
+  ([#145](https://github.com/fraiseql/confiture/issues/145)). On an error path,
+  migrate-family commands now emit `{"ok": false, "error": {code, message,
+  severity, actionable, details, migration, file, line}}` on stdout (human/text
+  output unchanged) and exit with the #146 code. The `error` value is the unified
+  inner issue object shared with `validate-config` (#144) and the preflight report
+  (#148). New: `confiture.cli.error_json` (`emit_error_json` / `fail`),
+  `docs/reference/error-codes.md` codebook (generated from the registry), and the
+  `error-envelope` / `issue-object` JSON schemas. `migrate status`'s informative
+  no-table / pending payloads are preserved (success-with-signal, not errors).
+- `--database-url` / `-d` on `migrate up`/`down`/`status`/`verify`/`preflight`
+  ([#140](https://github.com/fraiseql/confiture/issues/140)). Resolution
+  precedence: flag > `CONFITURE_DATABASE_URL` > `DATABASE_URL` > `--config`. When
+  a DSN is supplied via flag or env var, no YAML is required (tracking table
+  defaults to `tb_confiture`). For `migrate preflight` the flag is the *tracking*
+  DB (pending detection), distinct from `--against`. SSH-tunnel configs still
+  require `--config`. A malformed DSN fails with `CONFIG_003` (exit 5).
+- `docs/reference/exit-codes.md` — the canonical exit-code convention, generated
+  from the hand-authored `CANONICAL_EXIT_CODES` contract and asserted against the
+  registry by `tests/unit/test_exit_code_convention.py`. ([#146](https://github.com/fraiseql/confiture/issues/146))
+- `confiture --exit-codes` — hidden utility printing the convention; the
+  top-level `--help` epilog names the operationally important codes. ([#146](https://github.com/fraiseql/confiture/issues/146))
+
 ## [0.18.0] - 2026-05-28
 
 Bundled release covering three open issues. One feature branch, one

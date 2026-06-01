@@ -7,8 +7,10 @@ from typing import Any
 
 import typer
 
+from confiture.cli.error_json import fail
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import (
+    DATABASE_URL_OPTION_HELP,
     _emit_hint,
     _fix_idempotency,
     _fix_ownership,
@@ -17,6 +19,7 @@ from confiture.cli.helpers import (
     _validate_idempotency,
     console,
     error_console,
+    is_json,
 )
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
@@ -1502,6 +1505,12 @@ def migrate_verify(
         "-c",
         help="Configuration file path",
     ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=DATABASE_URL_OPTION_HELP,
+    ),
     version: str | None = typer.Option(
         None,
         "--version",
@@ -1520,11 +1529,15 @@ def migrate_verify(
         help="Save output to file (default: stdout)",
     ),
 ) -> None:
-    """Verify applied migrations using .verify.sql sidecar files.
+    """Verify applied migrations using .verify.sql sidecar files (runtime correctness).
 
     Each .verify.sql file contains a SELECT query that returns a truthy value
     when the migration was applied correctly. Queries run inside SAVEPOINT
     (read-only, no side effects).
+
+    This checks *runtime correctness* — did the migrations produce the expected
+    schema/data state? For *file-checksum integrity* (have applied migration
+    files been modified since?) use `confiture verify-checksums` instead.
 
     EXAMPLES:
       confiture migrate verify -c db/environments/local.yaml
@@ -1541,18 +1554,26 @@ def migrate_verify(
       confiture migrate up      - Apply pending migrations
     """
     from confiture.cli.formatters.migrate_formatter import format_verify_results
-    from confiture.cli.helpers import _get_tracking_table
+    from confiture.cli.helpers import _get_tracking_table, resolve_database_url
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
     from confiture.models.results import VerifyAllResult
 
     try:
-        if not config or not config.exists():
-            error_console.print("[red]Config file required for migrate verify[/red]")
+        # Connection source (#140): an explicit --database-url flag or --config.
+        # An ambient DATABASE_URL env var must NOT satisfy the "config required"
+        # check — only an explicit source does. (#140 / CI regression fix)
+        _db_url_override = resolve_database_url(database_url, None) if database_url else None
+        if _db_url_override is not None:
+            config_data: Any = {"database_url": _db_url_override}
+        elif config and config.exists():
+            config_data = load_config(str(config))
+        else:
+            error_console.print(
+                "[red]Config file or --database-url required for migrate verify[/red]"
+            )
             raise typer.Exit(1)
-
-        config_data = load_config(str(config))
         tracking_table = _get_tracking_table(config_data)
 
         conn = create_connection(config_data)
@@ -1585,6 +1606,8 @@ def migrate_verify(
     except typer.Exit:
         raise
     except Exception as e:
+        if is_json(format_output):
+            fail(e, json_mode=True, output_file=output_file)
         error_console.print(f"[red]Verify failed: {e}[/red]")
         raise typer.Exit(1) from e
 
@@ -2068,25 +2091,55 @@ def _target_tracking_table_is_empty(session: MigratorSession) -> bool:
         return True
 
 
+def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tuple[bool, bool]:
+    """Best-effort (has_replicas, bypass) for the replica lint, never connects.
+
+    Reads ``infrastructure.replicas`` and ``migration.allow_unsafe_under_replication``
+    from --env or --config when available; otherwise defaults to (False, False)
+    — no replicas declared, so the replica lint warns rather than errors (#139).
+    """
+    try:
+        from confiture.config.environment import Environment
+
+        if env_name:
+            e = Environment.load(env_name)
+        elif config is not None and config.exists():
+            from confiture.core.connection import load_config
+
+            e = Environment.model_validate(load_config(config))
+        else:
+            return False, False
+        return bool(e.infrastructure.replicas), bool(e.migration.allow_unsafe_under_replication)
+    except Exception:  # noqa: BLE001 — policy degrades to warn-by-default
+        return False, False
+
+
 def _resolve_preflight_pending(
     migrations_dir: Path,
     *,
     config_path: Path | None,
     env_name: str | None,
     since: str | None,
+    database_url_override: str | None = None,
 ) -> list[Path]:
     """Return migration files to test in a preflight --against run.
 
     Priority order:
-    1. --config / --env: connect to configured DB, return pending files.
-    2. --since: all local files with version >= since (no DB required).
-    3. Neither: all local migration files.
+    1. --database-url override (explicit flag only): connect to that DB, return
+       pending files. Ambient env vars do not reach here — the caller passes a
+       value only for an explicit flag (issue #140 precedence).
+    2. --config / --env: connect to configured DB, return pending files.
+    3. --since: all local files with version >= since (no DB required).
+    4. Neither: all local migration files.
     """
-    if config_path is not None or env_name is not None:
+    if database_url_override is not None or config_path is not None or env_name is not None:
         from confiture.cli.helpers import _get_tracking_table, _resolve_config  # noqa: PLC0415
 
-        resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
-        config_data = load_config(resolved)
+        if database_url_override is not None:
+            config_data: Any = {"database_url": database_url_override}
+        else:
+            resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
+            config_data = load_config(resolved)
         conn = create_connection(config_data)
         try:
             migrator = Migrator(
@@ -2280,6 +2333,17 @@ def migrate_preflight(
             "Connects to the configured database to read the tracking table."
         ),
     ),
+    database_url: str | None = typer.Option(
+        None,
+        "--database-url",
+        "-d",
+        help=(
+            "PostgreSQL DSN of the tracking database for pending-migration "
+            "detection (distinct from --against, which is the throwaway target). "
+            "Takes precedence over --config / --env and the CONFITURE_DATABASE_URL "
+            "/ DATABASE_URL env vars."
+        ),
+    ),
     env: str | None = typer.Option(
         None,
         "--env",
@@ -2313,6 +2377,11 @@ def migrate_preflight(
             "'warn' (render dependents as informational, exit code unchanged). "
             "Requires the [ast] extra (pglast)."
         ),
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Treat warnings as errors for exit purposes (warnings → exit 7).",
     ),
 ) -> None:
     """Check if pending migrations are safe to deploy.
@@ -2363,10 +2432,14 @@ def migrate_preflight(
       confiture migrate preflight --against postgresql://localhost/myapp_preflight --format json
         ↳ Output static + execution results as JSON
 
-    EXIT CODES:
-      0 — all migrations safe to deploy (skipped non-transactional migrations are neutral)
-      1 — one or more issues detected or execution failures
-      2 — config or connection error
+    EXIT CODES (default, no --against — the structured report, issue #148):
+      0 — no error-severity issues (warnings alone are non-fatal unless --strict)
+      7 — one or more error-severity issues (or, under --strict, any warning)
+      A preflight that *crashes* (config/DB error) exits per the #146 convention
+      (e.g. 5 config invalid, 3 connection failed) with the #145 error envelope.
+
+    With --against (execution replay):
+      0 — all replays passed; 1 — a replay failed; config/connection errors per #146.
 
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:
@@ -2375,7 +2448,8 @@ def migrate_preflight(
     """
     from rich.table import Table
 
-    from confiture.core.preflight import run_preflight
+    from confiture.core.linting.libraries.replica import replica_preflight_issues
+    from confiture.core.preflight import preflight_exit_code, run_preflight
 
     if check_dependents not in {"off", "fail", "warn"}:
         error_console.print(
@@ -2397,14 +2471,32 @@ def migrate_preflight(
                 "skip_reason": "no_preflight_db",
             }
 
+        # #148 structured report + #139 replica-safety: merge the base preflight
+        # issues with the replica-forward-compat findings (PFLIGHT_REPLICA_*).
+        _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
+        replica_issues = replica_preflight_issues(
+            migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
+        )
+        all_issues = result.issues + replica_issues
+        summary = {
+            "errors": sum(1 for i in all_issues if i.severity in ("error", "critical")),
+            "warnings": sum(1 for i in all_issues if i.severity == "warning"),
+            "info": sum(1 for i in all_issues if i.severity == "info"),
+            "migrations_checked": len(result.migrations),
+        }
+        exit_code = preflight_exit_code(summary, strict=strict)
+
         if format_type == "json":
-            payload = result.to_dict()
+            payload = {
+                "ok": exit_code == 0,
+                "summary": summary,
+                "issues": [i.to_dict() for i in all_issues],
+            }
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
-            payload["hints"] = []
             _output_json(payload, None, console)
-            if not result.safe_to_deploy:
-                raise typer.Exit(1)
+            if exit_code:
+                raise typer.Exit(exit_code)
             return
 
         table = Table(title="Pre-flight Check")
@@ -2422,56 +2514,52 @@ def migrate_preflight(
             table.add_row(m.version, m.name, rev, txn)
 
         console.print(table)
-        console.print(f"\nSummary: {len(result.migrations)} migrations checked")
+        console.print(
+            f"\nSummary: {summary['migrations_checked']} migration(s) checked, "
+            f"{summary['errors']} error(s), {summary['warnings']} warning(s)"
+        )
 
-        if result.irreversible:
+        issues = all_issues
+        if not issues:
+            console.print("  [green]✓ No issues[/green]")
+        for issue in issues:
+            color = "red" if issue.severity == "error" else "yellow"
             console.print(
-                f"  [red]✗[/red] {len(result.irreversible)} irreversible (missing .down.sql)"
+                f"  [{color}]{issue.severity.upper()}[/{color}] {issue.code}: {issue.message}"
             )
-        else:
-            console.print("  [green]✓[/green] All reversible")
-
-        if result.non_transactional:
-            total_stmts = sum(len(m.non_transactional_statements) for m in result.non_transactional)
-            console.print(f"  [red]✗[/red] {total_stmts} non-transactional statements")
-        else:
-            console.print("  [green]✓[/green] All transactional")
-
-        if result.has_duplicates:
-            console.print(f"  [red]✗[/red] {len(result.duplicate_versions)} duplicate version(s)")
-        else:
-            console.print("  [green]✓[/green] No duplicate versions")
-
-        if result.checksum_verified:
-            if result.has_checksum_mismatches:
-                console.print(
-                    f"  [red]✗[/red] {len(result.checksum_mismatches)} checksum mismatch(es)"
-                )
-            else:
-                console.print("  [green]✓[/green] Checksums verified")
-
-        if result.safe_to_deploy:
-            console.print("  [green]→ Safe to deploy[/green]")
-        else:
-            console.print("  [red]→ Not safe to deploy with rollback guarantee[/red]")
-            raise typer.Exit(1)
+            if issue.actionable:
+                console.print(f"    [dim]💡 {issue.actionable}[/dim]")
 
         if check_dependents != "off":
             console.print(
                 "[yellow]⚠️  Dependent check skipped: no preflight DB configured. "
                 "Pass --against <url> to enable.[/yellow]"
             )
+
+        if exit_code:
+            raise typer.Exit(exit_code)
         return
 
     # --against path: static analysis + exhaustive execution against preflight DB.
     try:
+        from confiture.cli.helpers import resolve_database_url  # noqa: PLC0415
+
         pending_files = _resolve_preflight_pending(
             migrations_dir=migrations_dir,
             config_path=config,
             env_name=env,
             since=since,
+            # Flag-only: an explicit --database-url drives pending-detection, but
+            # an ambient CONFITURE_DATABASE_URL / DATABASE_URL must NOT silently
+            # flip "--against alone → all local files" into a tracking-DB connect
+            # (issue #140 precedence; matches `migrate status`/`verify`).
+            database_url_override=(
+                resolve_database_url(database_url, None) if database_url else None
+            ),
         )
     except Exception as e:
+        if is_json(format_type):
+            fail(e, json_mode=True, output_file=None)
         error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")
         raise typer.Exit(2) from e
 

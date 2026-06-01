@@ -10,8 +10,10 @@ from confiture.cli.branch import branch_app
 from confiture.cli.commands.admin import (
     install_helpers,
     restore,
+    validate_config,
     validate_profile,
-    verify,
+    verify_checksums,
+    verify_deprecated,
 )
 from confiture.cli.commands.apply_as import migrate_apply_as
 from confiture.cli.commands.bootstrap import bootstrap
@@ -30,7 +32,9 @@ from confiture.cli.commands.migrate_analysis import (
     migrate_verify,
 )
 from confiture.cli.commands.migrate_core import (
+    migrate_current,
     migrate_down,
+    migrate_down_to,
     migrate_estimate,
     migrate_generate,
     migrate_status,
@@ -71,10 +75,20 @@ COMMON_COMMANDS = [
     "drift",
 ]
 
+# Exit-code summary shown in the top-level --help epilog. The full contract
+# lives in docs/reference/exit-codes.md (issue #146).
+_EXIT_CODE_EPILOG = (
+    "Exit codes (see docs/reference/exit-codes.md): "
+    "0 success · 1 generic failure · 2 tracking table absent · "
+    "3 DB connection failed · 4 schema/build · 5 config invalid · "
+    "6 lock contention · 7 git/grant · 8 irreversible rollback."
+)
+
 # Create Typer app
 app = typer.Typer(
     name="confiture",
     help="PostgreSQL migrations, sweetly done 🍓",
+    epilog=_EXIT_CODE_EPILOG,
     add_completion=False,
 )
 
@@ -113,6 +127,16 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def exit_codes_callback(value: bool) -> None:
+    """Print the canonical exit-code reference and exit."""
+    if value:
+        from confiture.core.error_codes import render_exit_codes_doc
+
+        console.print("confiture exit-code convention (#146):\n")
+        console.print(render_exit_codes_doc())
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     version: bool = typer.Option(
@@ -121,6 +145,14 @@ def main(
         callback=version_callback,
         is_eager=True,
         help="Show version and exit",
+    ),
+    exit_codes: bool = typer.Option(
+        False,
+        "--exit-codes",
+        callback=exit_codes_callback,
+        is_eager=True,
+        hidden=True,
+        help="Print the canonical exit-code convention and exit",
     ),
 ) -> None:
     """Confiture - PostgreSQL migrations, sweetly done 🍓."""
@@ -143,7 +175,11 @@ app.command()(drift)
 # Register admin commands
 app.command("install-helpers")(install_helpers)
 app.command()(validate_profile)
-app.command()(verify)
+# #143: verify-checksums is canonical; `verify` is a deprecated alias for one cycle.
+app.command("verify-checksums")(verify_checksums)
+app.command("verify")(verify_deprecated)
+# #144: offline config + migrations-tree validation (never connects).
+app.command("validate-config")(validate_config)
 app.command()(restore)
 
 # Register bootstrap command (#137 — one-shot environment ownership setup)
@@ -151,8 +187,10 @@ app.command()(bootstrap)
 
 # Register migrate core commands
 migrate_app.command("status")(migrate_status)
+migrate_app.command("current")(migrate_current)
 migrate_app.command("up")(migrate_up)
 migrate_app.command("down")(migrate_down)
+migrate_app.command("down-to")(migrate_down_to)
 migrate_app.command("generate")(migrate_generate)
 migrate_app.command("estimate")(migrate_estimate)
 

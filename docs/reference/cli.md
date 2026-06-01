@@ -290,11 +290,38 @@ Migration management commands (Medium 2: Incremental Migrations).
 All migration commands are subcommands of `confiture migrate`:
 
 - `confiture migrate status` - View migration status
+- `confiture migrate current` - Print the latest applied revision
 - `confiture migrate generate` - Create new migration template
 - `confiture migrate diff` - Compare schemas and detect changes
 - `confiture migrate up` - Apply pending migrations
-- `confiture migrate down` - Rollback applied migrations
+- `confiture migrate down` - Rollback applied migrations (relative, `--steps N`)
+- `confiture migrate down-to` - Rollback to a specific revision (absolute)
 - `confiture migrate preflight` - Pre-deploy safety check
+
+### Connection source and precedence
+
+`migrate up`, `down`, `status`, `verify`, and `preflight` accept a direct
+PostgreSQL DSN via `--database-url` / `-d`, so tooling that resolves a DSN at
+runtime no longer has to synthesize a temporary YAML file. The connection is
+resolved with this **precedence**:
+
+1. `--database-url <dsn>` flag
+2. `CONFITURE_DATABASE_URL` environment variable (canonical)
+3. `DATABASE_URL` environment variable (ubiquitous fallback)
+4. `--config <yaml>` / `--env <name>` file (`database_url` field)
+
+When a DSN is supplied via flag or env var, **no YAML is required** — the
+migrations directory falls back to `db/migrations` and the tracking table to
+`tb_confiture`. A malformed DSN (not starting with `postgresql://` /
+`postgres://`) fails with `CONFIG_003` (exit 5).
+
+> **SSH tunnels**: a `--config` YAML may define an `ssh_tunnel` block that
+> rewrites the DSN. `--database-url` bypasses that — the flag is for
+> directly-reachable databases. Tunnelled connections still require `--config`.
+>
+> **`migrate preflight`**: `--database-url` is the *tracking* DB used for
+> pending-migration detection; it is distinct from `--against`, which is the
+> throwaway database migrations are replayed into.
 
 ---
 
@@ -392,6 +419,43 @@ case $? in
   3) echo "Fatal error" ; exit 1 ;;
 esac
 ```
+
+---
+
+### `confiture migrate current`
+
+Print the **latest applied** migration revision — a narrow, stable contract for
+tooling ("what is deployed right now?") without parsing the full `migrate
+status` payload.
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file |
+| `--database-url` | `-d` | str | (none) | Tracking-DB DSN (see [Connection source and precedence](#connection-source-and-precedence)) |
+| `--format` | `-f` | str | `text` | `text` (bare revision) or `json` |
+| `--output` | `-o` | Path | (stdout) | Write output to a file |
+
+Output:
+
+- **text** — the bare revision string, or an empty line if none applied.
+- **json** — `{revision, name, applied_at, checksum}`; `revision` is `null` when
+  the tracking table exists but is empty.
+
+Exit codes:
+
+| Exit | Meaning |
+|---|---|
+| 0 | Current revision printed (or `null` when the tracking table is empty) |
+| 2 | Tracking table absent — confiture not initialized on this database (`PRECON_1001`) |
+| 3 | Database connection failed |
+
+```bash
+confiture migrate current -c db/environments/prod.yaml
+confiture migrate current --database-url "$DATABASE_URL" --format json
+```
+
+`migrate current` is the narrow form; [`migrate status`](#confiture-migrate-status)
+is the full applied/pending picture.
 
 ---
 
@@ -891,6 +955,46 @@ confiture migrate down --steps 3
 
 ---
 
+### `confiture migrate down-to`
+
+Roll back to a **specific revision** (absolute), the counterpart to `migrate
+down --steps N` (relative). Name the revision to return to — typically captured
+earlier with [`migrate current`](#confiture-migrate-current) — and Confiture
+computes the rollback set, validates that every required `.down.sql` exists
+**before** touching the database, and rolls back newest→oldest under the
+migration lock. If any required `.down.sql` is missing it refuses atomically:
+**nothing is rolled back**.
+
+```bash
+confiture migrate down-to 20260101000001 -c db/environments/staging.yaml
+confiture migrate down-to 20260101000001 --dry-run --format json
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `revision` | | str (arg) | — | Target revision to keep applied |
+| `--migrations-dir` | | Path | `db/migrations` | Migrations directory |
+| `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file |
+| `--database-url` | `-d` | str | (none) | Tracking-DB DSN (see [precedence](#connection-source-and-precedence)) |
+| `--dry-run` | | flag | off | Print the plan, apply nothing, exit 0 |
+| `--format` | `-f` | str | `text` | `text` or `json` (`{from, to, rolled_back, skipped, errors}`) |
+| `--output` | `-o` | Path | (stdout) | Write output to a file |
+
+Edge cases and exit codes:
+
+| Case | Exit | Behavior |
+|---|---|---|
+| `<revision>` == current | 0 | No-op ("already at `<revision>`") |
+| `<revision>` newer than current | 3 | Refuse — "use `migrate up --target`" (`MIGR_100`) |
+| `<revision>` unknown | 3 | Refuse — "unknown revision" (`MIGR_100`) |
+| any required `.down.sql` missing | 8 | Refuse atomically, nothing applied (`ROLLBACK_600`) |
+
+> `migrate down-to` (and `migrate down`) acquire the migration advisory lock for
+> the duration of the rollback, so the applied-set read and the rollback are
+> atomic with respect to a concurrent `migrate up`.
+
+---
+
 ### `confiture migrate rebuild`
 
 Rebuild database from DDL schema and bootstrap tracking table.
@@ -1139,13 +1243,22 @@ confiture migrate preflight [OPTIONS]
 |--------|------|---------|-------------|
 | `--migrations-dir` | Path | `db/migrations` | Migrations directory |
 | `--format`, `-f` | String | `table` | Output format: `table` or `json` |
+| `--strict` | flag | off | Treat warnings as errors for exit purposes |
 
-#### Exit Codes
+`--format json` (no `--against`) returns the **structured report**
+`{ok, summary, issues[]}` (issue #148); each `issues[]` element is the shared
+[issue object](error-codes.md#pflight_--preflight-report-issue-codes-148) with a
+`PFLIGHT_*` code.
+
+#### Exit Codes (no `--against`)
 
 | Code | Meaning |
 |------|---------|
-| `0` | All migrations safe to deploy |
-| `1` | One or more issues detected |
+| `0` | No error-severity issues (warnings alone are non-fatal unless `--strict`) |
+| `7` | One or more error-severity issues (or, under `--strict`, any warning) |
+
+A preflight that *crashes* (config / DB error) exits per the
+[exit-code convention](exit-codes.md) (e.g. 5, 3) with the error envelope.
 
 #### Examples
 
@@ -1153,8 +1266,11 @@ confiture migrate preflight [OPTIONS]
 # Basic check
 confiture migrate preflight
 
-# JSON output for CI/CD
+# JSON output for CI/CD — {ok, summary, issues[]}
 confiture migrate preflight --format json
+
+# Fail on warnings too
+confiture migrate preflight --strict
 
 # Custom migrations directory
 confiture migrate preflight --migrations-dir custom/migrations

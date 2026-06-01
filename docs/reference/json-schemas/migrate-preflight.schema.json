@@ -2,18 +2,31 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-preflight.schema.json",
   "title": "confiture migrate preflight --format json (no --against)",
-  "description": "Static preflight analysis output. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, and checksum mismatches. No database connection required.",
-  "allOf": [
-    { "$ref": "_preflight_defs.schema.json#/$defs/StaticPreflight" },
-    {
+  "description": "Structured preflight report (issue #148): {ok, summary, issues[]}. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, and checksum mismatches as a uniform issues[] of the shared issue object. No database connection required. A preflight that *crashed* (config/DB error) emits the #145 error envelope instead — branch on `issues` vs `error`.",
+  "type": "object",
+  "required": ["ok", "summary", "issues"],
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "False if any error-severity issue (or, under --strict, any warning)."
+    },
+    "summary": {
       "type": "object",
-      "required": ["hints"],
+      "required": ["errors", "warnings", "info", "migrations_checked"],
+      "additionalProperties": false,
       "properties": {
-        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" },
-        "dependent_analysis": {
-          "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"
-        }
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 },
+        "migrations_checked": { "type": "integer", "minimum": 0 }
       }
+    },
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "issue-object.schema.json#" }
+    },
+    "dependent_analysis": {
+      "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"
     }
-  ]
+  }
 }

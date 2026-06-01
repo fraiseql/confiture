@@ -4,6 +4,10 @@ Complete guide to understanding and fixing Confiture errors.
 
 When something goes wrong, Confiture provides detailed error messages with step-by-step solutions. This guide explains each error type and how to fix it.
 
+> Looking for the **integer process exit codes** each error maps to? See the
+> [exit-code convention](reference/exit-codes.md) — a documented stability
+> contract for tooling that wraps Confiture.
+
 ---
 
 ## Error Message Format

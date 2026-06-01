@@ -1355,6 +1355,39 @@ class Migrator:
                 for row in cursor.fetchall()
             ]
 
+    def get_current_revision_row(self) -> dict[str, Any] | None:
+        """Return the most-recently-applied migration row, or None if empty.
+
+        Selects version, name, applied_at, checksum for the row with the latest
+        ``applied_at`` (``ORDER BY applied_at DESC LIMIT 1`` — avoids loading the
+        full history just to take the tail).
+
+        Returns:
+            Dict with 'version', 'name', 'applied_at' (ISO string or None), and
+            'checksum' (str or None), or None when the tracking table is empty.
+
+        Note:
+            Raises psycopg's UndefinedTable when the tracking table is absent;
+            callers must probe ``tracking_table_exists()`` first to distinguish
+            an absent table (not initialized) from an empty one (no migrations).
+        """
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                pgsql.SQL(
+                    "SELECT version, name, applied_at, checksum FROM {} "
+                    "ORDER BY applied_at DESC LIMIT 1"
+                ).format(self._table_ident)
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "version": row[0],
+            "name": row[1],
+            "applied_at": row[2].isoformat() if row[2] else None,
+            "checksum": row[3],
+        }
+
     def find_migration_files(self, migrations_dir: Path | None = None) -> list[Path]:
         """Find all migration files in the migrations directory.
 

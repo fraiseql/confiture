@@ -56,8 +56,12 @@ The walkthrough — including failure modes, the integration test that backs the
 
 ## No `db/schema/` directory? That works too.
 
-`confiture migrate up`, `down`, `status`, `baseline`, and `preflight` are
-the migration runner — they don't require a `db/schema/` directory. The
+`confiture migrate up`, `down`, `down-to`, `status`, `current`, `baseline`,
+and `preflight` are the migration runner — they don't require a `db/schema/`
+directory (`migrate current` prints the latest applied revision as a narrow
+"what's deployed?" contract; `migrate down --steps N` rolls back relatively
+while `migrate down-to <revision>` rolls back to a specific revision, refusing
+atomically if any required `.down.sql` is missing). The
 "Build from DDL" pitch above the fold sells one of confiture's four
 strategies; the other three (incremental migrations, production sync,
 schema-to-schema FDW migration) work against a project whose only source
@@ -156,12 +160,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv pip install --system "fraiseql-confiture[ast]"
-      - run: confiture migrate up -c db/environments/production.yaml
+      # No YAML needed in CI — the migrate family reads DATABASE_URL directly
+      # (or pass --database-url "$DSN"). See the connection-source docs below.
+      - run: confiture migrate up
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
 ```
 
-Exit codes: `0` success, `2` config error, `3` SQL failure, `6` lock contention, `7` structural drift. See [the dry-run guide](docs/guides/dry-run.md) for what each one means.
+`migrate up`/`down`/`status`/`verify`/`preflight` accept `--database-url <dsn>` (or read `CONFITURE_DATABASE_URL` / `DATABASE_URL`) so runtime-resolved DSNs need no temp YAML — precedence and details in [the CLI reference](docs/reference/cli.md#connection-source-and-precedence).
+
+Exit codes are a documented stability contract — see [the exit-code reference](docs/reference/exit-codes.md). The most operationally important: `2` tracking table absent, `3` DB connection failed, `5` config invalid, `6` lock contention. For `migrate preflight`'s drift-gate codes specifically, see [the dry-run guide](docs/guides/dry-run.md).
 
 > Migrations that open their own SAVEPOINTs, use `psycopg`'s
 > `conn.transaction()`, or wrap `DO $$ … EXCEPTION WHEN … $$` blocks
@@ -257,6 +265,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
 - [Dry-Run + Preflight](docs/guides/dry-run.md)
+- [Replica-safe migrations](docs/guides/replica-safe-migrations.md) — `replica_001` / `PFLIGHT_REPLICA_*` forward-compatibility lint under streaming replication.
 - [Bootstrap](docs/guides/bootstrap.md) — `confiture bootstrap` for one-shot env ownership setup.
 - [Superuser Migrations](docs/guides/superuser-migrations.md) — `requires_superuser = True` + `migrate apply-as` recovery workflow.
 - [Function Uniqueness](docs/guides/function-uniqueness.md) — `func_001` catches duplicate `CREATE FUNCTION` across DDL files.
@@ -267,12 +276,14 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 **Reference**
 - [Tracking table (`tb_confiture`)](docs/reference/tracking-table.md)
 - [Transaction & SAVEPOINT contract](docs/reference/transaction-contract.md) — what migration bodies may and may not do under the wrapping transaction.
+- [Exit-code convention](docs/reference/exit-codes.md) — the stable, wrapper-facing exit codes.
 - [CLI](docs/reference/cli.md)
 - [Configuration YAML](docs/reference/configuration.md)
 - [Complete feature list](docs/features/overview.md)
 
 **For agents and tooling**
 - Every machine-readable CLI output has a published JSON schema under [`docs/reference/json-schemas/`](docs/reference/json-schemas/) — see [`docs/reference/json-schemas.md`](docs/reference/json-schemas.md).
+- On an **error path** in `--format json` mode, the migrate family emits a structured error envelope on stdout — `{"ok": false, "error": {code, message, severity, actionable, details, migration, file, line}}` — and exits with the [exit code](docs/reference/exit-codes.md) for that error. The full code list and the envelope schema are in the [error-code codebook](docs/reference/error-codes.md).
 - `confiture migrate validate --list-patterns --format json` exposes the full idempotency-detection catalog (read-only, no DB / config / migrations directory needed).
 - Quiet-success ambiguities surface advisory hints in `payload["hints"]` (or on stderr in text mode) — exit codes are unaffected.
 

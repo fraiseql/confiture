@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/validate-config.schema.json",
+  "title": "confiture validate-config --format json",
+  "description": "Offline config + migrations-tree validation report (issue #144). Never connects to a database. Each issues[] element is the shared issue object.",
+  "type": "object",
+  "required": ["valid", "config_source", "migrations_path", "migration_count", "issues"],
+  "additionalProperties": false,
+  "properties": {
+    "valid": {
+      "type": "boolean",
+      "description": "True if there are no error-severity issues."
+    },
+    "config_source": {
+      "type": "string",
+      "enum": ["yaml-file", "flags", "env"],
+      "description": "Where the validated config came from."
+    },
+    "migrations_path": {
+      "type": "string",
+      "description": "The migrations directory that was validated."
+    },
+    "migration_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of migration files discovered in migrations_path."
+    },
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "issue-object.schema.json#" }
+    }
+  }
+}

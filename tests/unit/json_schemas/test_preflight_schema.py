@@ -31,9 +31,13 @@ def _load(schemas_dir: Path, name: str) -> dict:
 
 
 def _build_registry(schemas_dir: Path) -> Registry:
-    """Registry including the preflight $defs file as well as common."""
+    """Registry including the preflight $defs + shared issue object (#148)."""
     registry: Registry = Registry()
-    for filename in ("_common.schema.json", "_preflight_defs.schema.json"):
+    for filename in (
+        "_common.schema.json",
+        "_preflight_defs.schema.json",
+        "issue-object.schema.json",
+    ):
         content = _load(schemas_dir, filename)
         resource = Resource.from_contents(content, default_specification=DRAFT202012)
         registry = registry.with_resource(uri=filename, resource=resource)
@@ -69,8 +73,10 @@ def test_preflight_no_against_validates(tmp_path, schemas_dir):
 
     registry = _build_registry(schemas_dir)
     Draft202012Validator(_load(schemas_dir, PREFLIGHT_SCHEMA), registry=registry).validate(payload)
-    assert payload["hints"] == []
-    assert "safe_to_deploy" in payload
+    # #148: structured report shape, not the old flat PreflightResult.to_dict().
+    assert payload["ok"] is True
+    assert payload["summary"]["migrations_checked"] == 1
+    assert payload["issues"] == []
 
 
 def test_preflight_against_validates(tmp_path, schemas_dir):

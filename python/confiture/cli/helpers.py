@@ -2,8 +2,8 @@
 
 import difflib
 import json
+import os
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -22,9 +22,11 @@ from confiture.models.lint import LintReport, LintSeverity, Violation
 
 _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 
-# Create Rich consoles for stdout and stderr
+# Create Rich consoles for stdout and stderr. Use stderr=True (not
+# file=sys.stderr) so the stream is resolved dynamically at write time — this
+# keeps it correct under pytest's capsys, which swaps sys.stderr per test.
 console = Console()
-error_console = Console(file=sys.stderr)
+error_console = Console(stderr=True)
 
 _MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
 
@@ -213,6 +215,75 @@ def _resolve_config(config: Path, env: str | None) -> Path:
             )
         return Path("db") / "environments" / f"{env}.yaml"
     return config
+
+
+# Canonical env var for the connection DSN, plus the ubiquitous bare fallback
+# (OD-5). Checked in order; the first non-empty value wins.
+_DATABASE_URL_ENV_VARS = ("CONFITURE_DATABASE_URL", "DATABASE_URL")
+
+# Shared --help text for the --database-url flag across the migrate family (#140).
+DATABASE_URL_OPTION_HELP = (
+    "PostgreSQL DSN for the tracking database. Takes precedence over --config / "
+    "--env and the CONFITURE_DATABASE_URL / DATABASE_URL env vars. When given, no "
+    "YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs "
+    "still require --config."
+)
+
+
+def resolve_database_url(flag: str | None, config_path: Path | None) -> str | None:
+    """Resolve the tracking-database DSN with documented precedence.
+
+    Precedence: ``--database-url`` flag > an **existing** ``--config`` file >
+    ``CONFITURE_DATABASE_URL`` > ``DATABASE_URL`` > ``None``.
+
+    The explicit flag always wins. An existing ``--config`` is authoritative over
+    the ambient env vars: ``DATABASE_URL`` is ubiquitous in CI / deploy
+    environments, and silently letting it override a project's ``--config``
+    would discard the config's ``tracking_table`` (and other settings) — so a
+    present config short-circuits to ``None`` (the caller loads the config). The
+    env vars are a last-resort fallback only when no config file is available.
+
+    Args:
+        flag: Value of the ``--database-url`` option (``None`` if not given).
+        config_path: The resolved ``--config`` path. When it points to an
+            existing file, the config wins over the env vars (returns ``None``).
+
+    Returns:
+        The DSN string to use as ``database_url_override``, or ``None`` to defer
+        to the config file.
+
+    Raises:
+        ConfigurationError: ``CONFIG_003`` if an explicit flag DSN is malformed.
+    """
+    if flag:
+        if not flag.startswith(("postgresql://", "postgres://")):
+            from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+
+            raise ConfigurationError(
+                f"Invalid --database-url: must start with postgresql:// or "
+                f"postgres://, got: {flag}",
+                error_code="CONFIG_003",
+                resolution_hint="Use format: postgresql://user:password@host:port/database",
+            )
+        return flag
+    # An explicit, existing config file beats the ambient env vars.
+    if config_path is not None and config_path.exists():
+        return None
+    for var in _DATABASE_URL_ENV_VARS:
+        val = os.environ.get(var)
+        if val:
+            return val
+    return None
+
+
+def is_json(fmt: str | None) -> bool:
+    """Whether a command's --format value selects JSON output (#145).
+
+    Commands use varied format param names (``format_output`` / ``output_format``
+    / ``format_type``) with different allowed sets; this collapses them to the
+    single boolean the error boundary needs.
+    """
+    return bool(fmt) and fmt.lower() == "json"
 
 
 def _get_tracking_table(config_data: Any) -> str:

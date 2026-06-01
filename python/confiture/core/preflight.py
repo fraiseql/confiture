@@ -17,6 +17,20 @@ from confiture.core._migrator.discovery import (
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
 
 
+def preflight_exit_code(summary: dict[str, int], *, strict: bool) -> int:
+    """Exit code for a completed preflight report (issue #148).
+
+    Any error-severity issue → 7 (preflight failure, per #146). Under ``strict``,
+    warnings also fail (→ 7). Otherwise 0. A clean run and a warnings-only
+    non-strict run both exit 0.
+    """
+    if summary.get("errors", 0) > 0:
+        return 7
+    if strict and summary.get("warnings", 0) > 0:
+        return 7
+    return 0
+
+
 def run_preflight(
     migrations_dir: Path,
     *,
@@ -72,6 +86,7 @@ def run_preflight(
                 name=name,
                 has_down=down_file.exists(),
                 non_transactional_statements=non_txn,
+                filename=up_file.name,
             )
         )
 
@@ -88,6 +103,7 @@ def run_preflight(
                 version=version,
                 name=name,
                 has_down=True,
+                filename=py_file.name,
             )
         )
 
