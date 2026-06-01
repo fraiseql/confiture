@@ -23,6 +23,14 @@ runner = CliRunner()
 _TABLE = "tb_lockid_it"
 
 
+def _connect(url):
+    """Connect, or skip when no DB is reachable (mirrors test_db_connection)."""
+    try:
+        return psycopg.connect(url)
+    except psycopg.OperationalError as e:
+        pytest.skip(f"PostgreSQL not available: {e}")
+
+
 @pytest.fixture
 def cfg(tmp_path: Path, test_db_url: str) -> Path:
     p = tmp_path / "env.yaml"
@@ -51,7 +59,7 @@ def migrations_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def holder_connection(test_db_url: str):
     """A connection that holds the real migration lock + writes its identity."""
-    conn = psycopg.connect(test_db_url)
+    conn = _connect(test_db_url)
     # Use the real (db-derived) lock id so the CLI's lock collides with ours.
     lock = MigrationLock(conn, LockConfig(command="confiture migrate up"))
     acquired = lock.acquire()

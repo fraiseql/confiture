@@ -7,6 +7,7 @@ connection attempt (which fails fast against an unreachable DSN → exit 3).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,7 +26,11 @@ _UNREACHABLE = "postgresql://localhost:1/nope"
 def test_database_url_in_help(cmd: str) -> None:
     """Every migrate subcommand documents --database-url (#140 / Phase 2)."""
     out = runner.invoke(app, ["migrate", cmd, "--help"]).output
-    assert "--database-url" in out
+    # Rich wraps long option names at narrow terminal widths (e.g. CI's 80
+    # cols), so "--database-url" may render split across lines. Collapse all
+    # whitespace before matching so the assertion is width-independent.
+    collapsed = re.sub(r"\s+", "", out)
+    assert "--database-url" in collapsed
 
 
 def test_status_database_url_only_no_config_connects(tmp_path: Path) -> None:
@@ -99,12 +104,18 @@ def test_up_malformed_database_url_exits_5(tmp_path: Path) -> None:
     assert result.exit_code == 5, result.output
 
 
-def test_env_var_honored_when_no_flag(tmp_path: Path, monkeypatch) -> None:
-    """CONFITURE_DATABASE_URL is honored when no --database-url flag is given."""
+def test_env_var_honored_as_fallback_when_config_absent(tmp_path: Path, monkeypatch) -> None:
+    """CONFITURE_DATABASE_URL is honored as a fallback when the config is absent.
+
+    Precedence: flag > existing --config > env var. Here the --config path does
+    not exist, so the env var supplies the DSN (vs. an ambient env var silently
+    overriding an *existing* config — see test_env_var_does_not_override_config).
+    """
     monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
+    missing_cfg = tmp_path / "nope.yaml"  # explicit, non-existent → env fallback applies
 
     with patch(
         "confiture.core.connection.psycopg.connect",
@@ -112,8 +123,40 @@ def test_env_var_honored_when_no_flag(tmp_path: Path, monkeypatch) -> None:
     ):
         result = runner.invoke(
             app,
-            ["migrate", "up", "--migrations-dir", str(migrations_dir)],
+            ["migrate", "up", "-c", str(missing_cfg), "--migrations-dir", str(migrations_dir)],
         )
-    # Reached the connection attempt via the env override (exit 3), not a
-    # config-file lookup (which would be exit 5 for the missing default YAML).
+    # Reached the connection attempt via the env fallback (exit 3).
     assert result.exit_code == 3, result.output
+
+
+def test_env_var_does_not_override_existing_config(tmp_path: Path, monkeypatch) -> None:
+    """An ambient env var must NOT override an existing --config (#140 / CI fix)."""
+    import yaml
+
+    monkeypatch.setenv("DATABASE_URL", _UNREACHABLE)
+    cfg = tmp_path / "env.yaml"
+    cfg.write_text(
+        yaml.safe_dump(
+            {
+                "name": "test",
+                "database_url": "postgresql://localhost:2/cfgdb",
+                "migration": {"tracking_table": "myschema.tb_x"},
+            }
+        )
+    )
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+
+    captured: dict = {}
+
+    def _fake_connect(arg, *a, **k):
+        captured["dsn"] = arg
+        raise psycopg.OperationalError("refused")
+
+    with patch("confiture.core.connection.psycopg.connect", side_effect=_fake_connect):
+        runner.invoke(
+            app,
+            ["migrate", "up", "-c", str(cfg), "--migrations-dir", str(migrations_dir)],
+        )
+    # The config's DSN was used, not the ambient DATABASE_URL env var.
+    assert captured.get("dsn") == "postgresql://localhost:2/cfgdb"

@@ -168,7 +168,11 @@ def migrate_status(
         db_error: str | None = None
         tracking_table_absent: bool = False
         status_tracking_table: str | None = None
-        _db_url_override = resolve_database_url(database_url, config)
+        # status only connects when a source is *explicitly* given: a
+        # --database-url flag or an existing --config. An ambient DATABASE_URL
+        # env var must NOT force a connection here — "no config" stays the
+        # informative status-unknown state (exit 0). (#140 / CI regression fix)
+        _db_url_override = resolve_database_url(database_url, None) if database_url else None
         _status_config_data: Any = None
         if _db_url_override is not None:
             _status_config_data = {"database_url": _db_url_override}

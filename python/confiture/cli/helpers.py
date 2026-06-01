@@ -233,15 +233,20 @@ DATABASE_URL_OPTION_HELP = (
 def resolve_database_url(flag: str | None, config_path: Path | None) -> str | None:
     """Resolve the tracking-database DSN with documented precedence.
 
-    Precedence: ``--database-url`` flag > ``CONFITURE_DATABASE_URL`` >
-    ``DATABASE_URL`` > ``None``. A ``None`` result means no override was
-    supplied — the caller falls back to ``config_path`` so the session reads
-    ``config.database_url`` as before.
+    Precedence: ``--database-url`` flag > an **existing** ``--config`` file >
+    ``CONFITURE_DATABASE_URL`` > ``DATABASE_URL`` > ``None``.
+
+    The explicit flag always wins. An existing ``--config`` is authoritative over
+    the ambient env vars: ``DATABASE_URL`` is ubiquitous in CI / deploy
+    environments, and silently letting it override a project's ``--config``
+    would discard the config's ``tracking_table`` (and other settings) — so a
+    present config short-circuits to ``None`` (the caller loads the config). The
+    env vars are a last-resort fallback only when no config file is available.
 
     Args:
         flag: Value of the ``--database-url`` option (``None`` if not given).
-        config_path: The resolved ``--config`` path (unused for resolution; kept
-            for an explicit, self-documenting call site and future use).
+        config_path: The resolved ``--config`` path. When it points to an
+            existing file, the config wins over the env vars (returns ``None``).
 
     Returns:
         The DSN string to use as ``database_url_override``, or ``None`` to defer
@@ -261,6 +266,9 @@ def resolve_database_url(flag: str | None, config_path: Path | None) -> str | No
                 resolution_hint="Use format: postgresql://user:password@host:port/database",
             )
         return flag
+    # An explicit, existing config file beats the ambient env vars.
+    if config_path is not None and config_path.exists():
+        return None
     for var in _DATABASE_URL_ENV_VARS:
         val = os.environ.get(var)
         if val:

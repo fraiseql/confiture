@@ -30,9 +30,17 @@ def _validator() -> Draft202012Validator:
     )
 
 
+def _connect(url):
+    """Connect, or skip when no DB is reachable (mirrors test_db_connection)."""
+    try:
+        return psycopg.connect(url)
+    except psycopg.OperationalError as e:
+        pytest.skip(f"PostgreSQL not available: {e}")
+
+
 @pytest.fixture
 def conn(test_db_url: str):
-    c = psycopg.connect(test_db_url)
+    c = _connect(test_db_url)
 
     def _clean() -> None:
         with c.cursor() as cur:

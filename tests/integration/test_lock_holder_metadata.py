@@ -21,6 +21,14 @@ from confiture.core.locking import (
 _LOCK_ID = 920147001
 
 
+def _connect(url: str) -> psycopg.Connection:
+    """Connect, or skip the test when no DB is reachable (mirrors test_db_connection)."""
+    try:
+        return psycopg.connect(url)
+    except psycopg.OperationalError as e:
+        pytest.skip(f"PostgreSQL not available: {e}")
+
+
 def _clean(conn: psycopg.Connection) -> None:
     with conn.cursor() as cur:
         cur.execute(f"DELETE FROM {LOCK_HOLDER_TABLE} WHERE lock_id = %s", (_LOCK_ID,))
@@ -29,8 +37,8 @@ def _clean(conn: psycopg.Connection) -> None:
 
 @pytest.fixture
 def conns(test_db_url: str):
-    a = psycopg.connect(test_db_url)
-    b = psycopg.connect(test_db_url)
+    a = _connect(test_db_url)
+    b = _connect(test_db_url)
     try:
         # ensure the table exists for cleanup, ignore if not yet created
         with a.cursor() as cur:
@@ -87,7 +95,7 @@ def test_contention_attaches_holder(conns) -> None:
 
 def test_read_holder_none_without_table(test_db_url) -> None:
     """Graceful degradation: no metadata table → holder is None, no raise."""
-    conn = psycopg.connect(test_db_url)
+    conn = _connect(test_db_url)
     try:
         with conn.cursor() as cur:
             cur.execute(f"DROP TABLE IF EXISTS {LOCK_HOLDER_TABLE} CASCADE")
@@ -105,7 +113,7 @@ def test_crash_safety_stale_row_recognized(test_db_url, conns) -> None:
 
     # Holder acquires + writes (committed) metadata, then "crashes" — closes the
     # connection WITHOUT releasing. The advisory lock auto-drops; the row stays.
-    crasher = psycopg.connect(test_db_url)
+    crasher = _connect(test_db_url)
     crasher_lock = MigrationLock(crasher, LockConfig(lock_id=_LOCK_ID, command="x"))
     crasher_lock._acquire_lock()
     crasher.close()
