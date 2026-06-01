@@ -1564,9 +1564,7 @@ def migrate_verify(
         # Connection source (#140): an explicit --database-url flag or --config.
         # An ambient DATABASE_URL env var must NOT satisfy the "config required"
         # check — only an explicit source does. (#140 / CI regression fix)
-        _db_url_override = (
-            resolve_database_url(database_url, None) if database_url else None
-        )
+        _db_url_override = resolve_database_url(database_url, None) if database_url else None
         if _db_url_override is not None:
             config_data: Any = {"database_url": _db_url_override}
         elif config and config.exists():
