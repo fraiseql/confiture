@@ -83,8 +83,17 @@ def test_down_to_payload_validates(conn, project) -> None:
     cfg, md = project
     r = runner.invoke(
         app,
-        ["migrate", "down-to", "20260101000001", "-c", str(cfg),
-         "--migrations-dir", str(md), "--format", "json"],
+        [
+            "migrate",
+            "down-to",
+            "20260101000001",
+            "-c",
+            str(cfg),
+            "--migrations-dir",
+            str(md),
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 0, r.output
     _validator().validate(json.loads(r.stdout))

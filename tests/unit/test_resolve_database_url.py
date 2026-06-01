@@ -16,10 +16,7 @@ from confiture.exceptions import ConfigurationError
 
 def test_flag_wins_over_env_and_config(monkeypatch) -> None:
     monkeypatch.setenv("CONFITURE_DATABASE_URL", "postgresql://env/db")
-    assert (
-        resolve_database_url("postgresql://flag/db", Path("env.yaml"))
-        == "postgresql://flag/db"
-    )
+    assert resolve_database_url("postgresql://flag/db", Path("env.yaml")) == "postgresql://flag/db"
 
 
 def test_env_used_when_no_flag(monkeypatch) -> None:

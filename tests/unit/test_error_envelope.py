@@ -43,7 +43,16 @@ def test_migration_version_promoted_to_migration_field() -> None:
 def test_inner_object_always_has_all_keys() -> None:
     env = emit_error_json(ConfiturError("plain", error_code="CONFIG_001"))
     inner = env["error"]
-    for key in ("severity", "code", "message", "actionable", "details", "migration", "file", "line"):
+    for key in (
+        "severity",
+        "code",
+        "message",
+        "actionable",
+        "details",
+        "migration",
+        "file",
+        "line",
+    ):
         assert key in inner, f"missing required key {key}"
 
 
@@ -65,9 +74,7 @@ def test_critical_severity_folds_to_error() -> None:
 
 
 def test_details_are_json_serializable_paths_become_str() -> None:
-    err = MigrationConflictError(
-        "dup", conflicting_files=[Path("a.sql"), Path("b.sql")]
-    )
+    err = MigrationConflictError("dup", conflicting_files=[Path("a.sql"), Path("b.sql")])
     details = emit_error_json(err)["error"]["details"]
     assert details["conflicting_files"] == ["a.sql", "b.sql"]
 

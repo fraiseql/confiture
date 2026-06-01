@@ -49,8 +49,16 @@ def test_real_connection_failure_envelope_validates(tmp_path: Path) -> None:
     ):
         result = CliRunner().invoke(
             app,
-            ["migrate", "up", "--database-url", _UNREACHABLE,
-             "--migrations-dir", str(migrations_dir), "--format", "json"],
+            [
+                "migrate",
+                "up",
+                "--database-url",
+                _UNREACHABLE,
+                "--migrations-dir",
+                str(migrations_dir),
+                "--format",
+                "json",
+            ],
         )
     assert result.exit_code == 3, result.output
     payload = json.loads(result.stdout)
@@ -66,8 +74,16 @@ def test_real_duplicate_version_envelope_validates(tmp_path: Path) -> None:
         (d / f"{name}.down.sql").write_text("SELECT 1;")
     result = CliRunner().invoke(
         app,
-        ["migrate", "up", "--database-url", _UNREACHABLE,
-         "--migrations-dir", str(d), "--format", "json"],
+        [
+            "migrate",
+            "up",
+            "--database-url",
+            _UNREACHABLE,
+            "--migrations-dir",
+            str(d),
+            "--format",
+            "json",
+        ],
     )
     assert result.exit_code == 3, result.output
     _envelope_validator().validate(json.loads(result.stdout))

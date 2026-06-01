@@ -16,7 +16,10 @@ from confiture.core.replica.classifier import (
 )
 
 _COLUMN_CASES = [
-    ("ALTER TABLE t ADD COLUMN c int;", AddColumn(table="t", column="c", nullable=True, has_default=False)),
+    (
+        "ALTER TABLE t ADD COLUMN c int;",
+        AddColumn(table="t", column="c", nullable=True, has_default=False),
+    ),
     (
         "ALTER TABLE t ADD COLUMN c int NOT NULL DEFAULT 0;",
         AddColumn(table="t", column="c", nullable=False, has_default=True),

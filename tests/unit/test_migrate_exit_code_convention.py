@@ -61,9 +61,7 @@ def test_create_connection_failure_raises_config_006() -> None:
 def _write_valid_config(tmp_path: Path) -> Path:
     cfg = tmp_path / "local.yaml"
     cfg.write_text(
-        yaml.safe_dump(
-            {"name": "test", "database_url": "postgresql://localhost:1/nope"}
-        )
+        yaml.safe_dump({"name": "test", "database_url": "postgresql://localhost:1/nope"})
     )
     return cfg
 

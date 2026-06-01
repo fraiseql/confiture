@@ -358,9 +358,7 @@ def validate_config(
             database_url=database_url, migrations_path=migrations_path
         )
     elif (env_url := resolve_database_url(None, None)) is not None:
-        validator = ConfigValidator.from_env(
-            database_url=env_url, migrations_path=migrations_path
-        )
+        validator = ConfigValidator.from_env(database_url=env_url, migrations_path=migrations_path)
     else:
         validator = ConfigValidator.from_config(
             Path("db/environments/local.yaml"), migrations_path=migrations_path

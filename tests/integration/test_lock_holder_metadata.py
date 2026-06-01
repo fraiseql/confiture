@@ -50,9 +50,7 @@ def conns(test_db_url: str):
 
 def test_identity_written_on_acquire(conns) -> None:
     conn_a, conn_b = conns
-    lock_a = MigrationLock(
-        conn_a, LockConfig(lock_id=_LOCK_ID, command="confiture migrate up")
-    )
+    lock_a = MigrationLock(conn_a, LockConfig(lock_id=_LOCK_ID, command="confiture migrate up"))
     with lock_a.acquire():
         reader = MigrationLock(conn_b, LockConfig(lock_id=_LOCK_ID))
         holder = reader.read_lock_holder()
@@ -76,13 +74,9 @@ def test_identity_cleared_on_release(conns) -> None:
 
 def test_contention_attaches_holder(conns) -> None:
     conn_a, conn_b = conns
-    lock_a = MigrationLock(
-        conn_a, LockConfig(lock_id=_LOCK_ID, command="confiture migrate up")
-    )
+    lock_a = MigrationLock(conn_a, LockConfig(lock_id=_LOCK_ID, command="confiture migrate up"))
     with lock_a.acquire():
-        lock_b = MigrationLock(
-            conn_b, LockConfig(lock_id=_LOCK_ID, mode=LockMode.NON_BLOCKING)
-        )
+        lock_b = MigrationLock(conn_b, LockConfig(lock_id=_LOCK_ID, mode=LockMode.NON_BLOCKING))
         with pytest.raises(LockAcquisitionError) as e:
             lock_b._acquire_lock()
     assert e.value.holder is not None
@@ -122,8 +116,6 @@ def test_crash_safety_stale_row_recognized(test_db_url, conns) -> None:
     assert holder.live is False  # advisory lock gone → recognized as stale
 
     # Crash-safety: a new acquirer succeeds because the advisory lock released.
-    new_lock = MigrationLock(
-        reader_conn, LockConfig(lock_id=_LOCK_ID, mode=LockMode.NON_BLOCKING)
-    )
+    new_lock = MigrationLock(reader_conn, LockConfig(lock_id=_LOCK_ID, mode=LockMode.NON_BLOCKING))
     with new_lock.acquire():
         pass  # no LockAcquisitionError → advisory-lock crash-safety preserved

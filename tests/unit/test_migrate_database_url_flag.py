@@ -45,8 +45,14 @@ def test_status_database_url_only_no_config_connects(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["migrate", "status", "--database-url", _UNREACHABLE,
-             "--migrations-dir", str(migrations_dir)],
+            [
+                "migrate",
+                "status",
+                "--database-url",
+                _UNREACHABLE,
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
         )
     assert result.exit_code == 3, result.output
 
@@ -62,8 +68,14 @@ def test_up_database_url_only_unreachable_exits_3(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["migrate", "up", "--database-url", _UNREACHABLE,
-             "--migrations-dir", str(migrations_dir)],
+            [
+                "migrate",
+                "up",
+                "--database-url",
+                _UNREACHABLE,
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
         )
     assert result.exit_code == 3, result.output
 
@@ -75,8 +87,14 @@ def test_up_malformed_database_url_exits_5(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["migrate", "up", "--database-url", "mysql://nope/db",
-         "--migrations-dir", str(migrations_dir)],
+        [
+            "migrate",
+            "up",
+            "--database-url",
+            "mysql://nope/db",
+            "--migrations-dir",
+            str(migrations_dir),
+        ],
     )
     assert result.exit_code == 5, result.output
 

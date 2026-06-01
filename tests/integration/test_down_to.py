@@ -162,8 +162,17 @@ def test_down_to_json_plan_and_result(conn, project) -> None:
     _apply_all(cfg, md)
     r = runner.invoke(
         app,
-        ["migrate", "down-to", "20260102000002", "-c", str(cfg),
-         "--migrations-dir", str(md), "--format", "json"],
+        [
+            "migrate",
+            "down-to",
+            "20260102000002",
+            "-c",
+            str(cfg),
+            "--migrations-dir",
+            str(md),
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 0, r.output
     p = json.loads(r.stdout)
@@ -206,8 +215,18 @@ def test_down_to_dry_run_does_not_apply(conn, project) -> None:
     _apply_all(cfg, md)
     r = runner.invoke(
         app,
-        ["migrate", "down-to", "20260102000002", "-c", str(cfg),
-         "--migrations-dir", str(md), "--dry-run", "--format", "json"],
+        [
+            "migrate",
+            "down-to",
+            "20260102000002",
+            "-c",
+            str(cfg),
+            "--migrations-dir",
+            str(md),
+            "--dry-run",
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 0, r.output
     p = json.loads(r.stdout)

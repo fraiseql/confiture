@@ -310,30 +310,40 @@ def _split_statements(sql: str) -> list[str]:
 
 
 _RE_ADD_COLUMN = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?" + _IDENT.format(name="table")
-    + r"\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?" + _IDENT.format(name="col")
+    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
+    + _IDENT.format(name="table")
+    + r"\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"
+    + _IDENT.format(name="col")
     + r"\s+(?P<rest>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 _RE_DROP_COLUMN = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?" + _IDENT.format(name="table")
-    + r"\s+DROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?" + _IDENT.format(name="col"),
+    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
+    + _IDENT.format(name="table")
+    + r"\s+DROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?"
+    + _IDENT.format(name="col"),
     re.IGNORECASE,
 )
 _RE_RENAME_COLUMN = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?" + _IDENT.format(name="table")
-    + r"\s+RENAME\s+COLUMN\s+" + _IDENT.format(name="old")
-    + r"\s+TO\s+" + _IDENT.format(name="new"),
+    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
+    + _IDENT.format(name="table")
+    + r"\s+RENAME\s+COLUMN\s+"
+    + _IDENT.format(name="old")
+    + r"\s+TO\s+"
+    + _IDENT.format(name="new"),
     re.IGNORECASE,
 )
 _RE_ALTER_TYPE = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?" + _IDENT.format(name="table")
-    + r"\s+ALTER\s+COLUMN\s+" + _IDENT.format(name="col")
+    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
+    + _IDENT.format(name="table")
+    + r"\s+ALTER\s+COLUMN\s+"
+    + _IDENT.format(name="col")
     + r"\s+(?:SET\s+DATA\s+)?TYPE\s+",
     re.IGNORECASE,
 )
 _RE_ADD_CONSTRAINT = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?" + _IDENT.format(name="table")
+    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
+    + _IDENT.format(name="table")
     + r"\s+ADD\s+CONSTRAINT\s+",
     re.IGNORECASE,
 )

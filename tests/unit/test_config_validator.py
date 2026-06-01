@@ -10,7 +10,13 @@ import yaml
 from confiture.core.config_validator import ConfigValidator
 
 
-def _project(tmp_path: Path, *, include="db/schema", database_url="postgresql://localhost/app", n_migrations=3) -> Path:
+def _project(
+    tmp_path: Path,
+    *,
+    include="db/schema",
+    database_url="postgresql://localhost/app",
+    n_migrations=3,
+) -> Path:
     (tmp_path / "db" / "schema").mkdir(parents=True)
     migs = tmp_path / "db" / "migrations"
     migs.mkdir(parents=True)
@@ -20,9 +26,7 @@ def _project(tmp_path: Path, *, include="db/schema", database_url="postgresql://
         (migs / f"{v}_m{i}.down.sql").write_text("SELECT 1;")
     cfg = tmp_path / "env.yaml"
     cfg.write_text(
-        yaml.safe_dump(
-            {"name": "test", "database_url": database_url, "include_dirs": [include]}
-        )
+        yaml.safe_dump({"name": "test", "database_url": database_url, "include_dirs": [include]})
     )
     return cfg
 
@@ -32,7 +36,9 @@ def _project(tmp_path: Path, *, include="db/schema", database_url="postgresql://
 
 def test_valid_config_reports_valid(tmp_path: Path) -> None:
     cfg = _project(tmp_path)
-    report = ConfigValidator.from_config(cfg, migrations_path=tmp_path / "db" / "migrations").validate()
+    report = ConfigValidator.from_config(
+        cfg, migrations_path=tmp_path / "db" / "migrations"
+    ).validate()
     assert report.valid
     assert report.issues == []
     assert report.migration_count == 3
@@ -41,7 +47,9 @@ def test_valid_config_reports_valid(tmp_path: Path) -> None:
 
 def test_missing_required_field(tmp_path: Path) -> None:
     cfg = tmp_path / "env.yaml"
-    cfg.write_text(yaml.safe_dump({"name": "test", "include_dirs": ["db/schema"]}))  # no database_url
+    cfg.write_text(
+        yaml.safe_dump({"name": "test", "include_dirs": ["db/schema"]})
+    )  # no database_url
     (tmp_path / "db" / "schema").mkdir(parents=True)
     report = ConfigValidator.from_config(cfg, migrations_path=tmp_path / "missing").validate()
     assert not report.valid
@@ -52,7 +60,11 @@ def test_nonexistent_include_dir(tmp_path: Path) -> None:
     cfg = tmp_path / "env.yaml"
     cfg.write_text(
         yaml.safe_dump(
-            {"name": "test", "database_url": "postgresql://localhost/app", "include_dirs": ["db/nope"]}
+            {
+                "name": "test",
+                "database_url": "postgresql://localhost/app",
+                "include_dirs": ["db/nope"],
+            }
         )
     )
     report = ConfigValidator.from_config(cfg, migrations_path=tmp_path).validate()
@@ -61,7 +73,9 @@ def test_nonexistent_include_dir(tmp_path: Path) -> None:
 
 
 def test_missing_config_file(tmp_path: Path) -> None:
-    report = ConfigValidator.from_config(tmp_path / "nope.yaml", migrations_path=tmp_path).validate()
+    report = ConfigValidator.from_config(
+        tmp_path / "nope.yaml", migrations_path=tmp_path
+    ).validate()
     assert not report.valid
     assert any(i.code == "CONFIG_004" for i in report.issues)
 
@@ -118,7 +132,15 @@ def test_flags_valid_dsn(tmp_path: Path) -> None:
 
 def test_report_to_dict_shape(tmp_path: Path) -> None:
     cfg = _project(tmp_path)
-    report = ConfigValidator.from_config(cfg, migrations_path=tmp_path / "db" / "migrations").validate()
+    report = ConfigValidator.from_config(
+        cfg, migrations_path=tmp_path / "db" / "migrations"
+    ).validate()
     d = report.to_dict()
-    assert set(d.keys()) == {"valid", "config_source", "migrations_path", "migration_count", "issues"}
+    assert set(d.keys()) == {
+        "valid",
+        "config_source",
+        "migrations_path",
+        "migration_count",
+        "issues",
+    }
     assert d["valid"] is True

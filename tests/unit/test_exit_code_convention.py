@@ -94,6 +94,5 @@ def test_exit_codes_doc_embeds_current_generated_section() -> None:
     assert begin in doc and end in doc, "generated-section markers missing"
     embedded = doc.split(begin, 1)[1].split(end, 1)[0].strip()
     assert embedded == render_exit_codes_doc().strip(), (
-        "exit-codes.md generated block is stale; regenerate with "
-        "`confiture --exit-codes`"
+        "exit-codes.md generated block is stale; regenerate with `confiture --exit-codes`"
     )

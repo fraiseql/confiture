@@ -716,11 +716,11 @@ def lint(
                         f"({v.object_name}): {v.message}"
                     )
                 rep_errors = any(v.severity == RuleSeverity.ERROR for v in replica_violations)
-                rep_warnings = any(
-                    v.severity == RuleSeverity.WARNING for v in replica_violations
-                )
-                should_fail = should_fail or (rep_errors and fail_on_error) or (
-                    rep_warnings and fail_on_warning
+                rep_warnings = any(v.severity == RuleSeverity.WARNING for v in replica_violations)
+                should_fail = (
+                    should_fail
+                    or (rep_errors and fail_on_error)
+                    or (rep_warnings and fail_on_warning)
                 )
             else:
                 console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")

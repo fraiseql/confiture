@@ -281,9 +281,7 @@ class MigratorSession:
         # UndefinedTable on an absent table — it does NOT return None. Translate
         # "absent" → PRECON_1001 (exit 2); reserve None for "exists but empty".
         if not self._migrator.tracking_table_exists():
-            raise DatabaseNotInitializedError(
-                "Database not initialized (tracking table absent)"
-            )
+            raise DatabaseNotInitializedError("Database not initialized (tracking table absent)")
 
         row = self._migrator.get_current_revision_row()
         if row is None:
@@ -633,9 +631,7 @@ class MigratorSession:
             warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"],
         )
 
-    def _rollback_sequence(
-        self, versions: list[str], *, dry_run: bool = False
-    ) -> tuple[list, int]:
+    def _rollback_sequence(self, versions: list[str], *, dry_run: bool = False) -> tuple[list, int]:
         """Roll back an ordered (newest → oldest) list of versions.
 
         The shared rollback loop behind both ``down(steps=N)`` and
@@ -655,9 +651,7 @@ class MigratorSession:
         from confiture.models.results import MigrationApplied
 
         migration_files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
-        by_version = {
-            self._migrator._version_from_filename(f.name): f for f in migration_files
-        }
+        by_version = {self._migrator._version_from_filename(f.name): f for f in migration_files}
 
         rolled_back: list[MigrationApplied] = []
         total_execution_time_ms = 0
@@ -782,9 +776,7 @@ class MigratorSession:
             )
             lock = _m.MigrationLock(self._conn, lock_config)
             with lock.acquire():
-                rolled_back, total_ms = self._rollback_sequence(
-                    versions_to_rollback, dry_run=False
-                )
+                rolled_back, total_ms = self._rollback_sequence(versions_to_rollback, dry_run=False)
 
         return MigrateDownResult(
             success=True,
@@ -892,9 +884,7 @@ class MigratorSession:
         if dry_run:
             return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)
 
-        lock_config = _m.LockConfig(
-            enabled=not no_lock, timeout_ms=lock_timeout, command=command
-        )
+        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout, command=command)
         lock = _m.MigrationLock(self._conn, lock_config)
         with lock.acquire():
             self._rollback_sequence(to_execute, dry_run=False)

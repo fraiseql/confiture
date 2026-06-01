@@ -410,12 +410,7 @@ def migrate_status(
         # Set exit flags after output is written (avoids raising inside try)
         if _db_source and db_error:
             fatal_error_exit = True
-        elif (
-            _db_source
-            and not db_error
-            and not tracking_table_absent
-            and len(pending_list) > 0
-        ):
+        elif _db_source and not db_error and not tracking_table_absent and len(pending_list) > 0:
             pending_migrations_exit = True
 
     except Exception as e:
@@ -505,9 +500,7 @@ def migrate_current(
         config_data = {"database_url": override} if override is not None else load_config(config)
         conn = create_connection(config_data)
         try:
-            migrator = Migrator(
-                connection=conn, migration_table=_get_tracking_table(config_data)
-            )
+            migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
             # Probe first: the row query raises on an absent table (≠ empty).
             if not migrator.tracking_table_exists():
                 raise DatabaseNotInitializedError(
@@ -777,9 +770,7 @@ def migrate_up(
             if is_json(format_output):
                 from confiture.exceptions import MigrationConflictError
 
-                _dupe_files = sorted(
-                    f.name for files in _up_duplicates.values() for f in files
-                )
+                _dupe_files = sorted(f.name for files in _up_duplicates.values() for f in files)
                 fail(
                     MigrationConflictError(
                         "Duplicate migration versions detected: "
@@ -1558,9 +1549,7 @@ def migrate_down(
                 rolled_back_count = 0
                 for version in reversed(versions_to_rollback):
                     # Find migration file
-                    migration_files = migrator.find_migration_files(
-                        migrations_dir=migrations_dir
-                    )
+                    migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
                     migration_file = None
                     for mf in migration_files:
                         if migrator._version_from_filename(mf.name) == version:
@@ -1704,8 +1693,7 @@ def migrate_down_to(
     else:
         verb = "Would roll back" if dry_run else "Rolled back"
         console.print(
-            f"{verb} {len(result.rolled_back)} migration(s) "
-            f"from {result.from_} to {revision}:"
+            f"{verb} {len(result.rolled_back)} migration(s) from {result.from_} to {revision}:"
         )
         for v in result.rolled_back:
             console.print(f"  • {v}")

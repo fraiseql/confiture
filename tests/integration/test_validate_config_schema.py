@@ -43,7 +43,11 @@ def test_valid_report_validates(tmp_path: Path) -> None:
     cfg = tmp_path / "env.yaml"
     cfg.write_text(
         yaml.safe_dump(
-            {"name": "t", "database_url": "postgresql://localhost/app", "include_dirs": ["db/schema"]}
+            {
+                "name": "t",
+                "database_url": "postgresql://localhost/app",
+                "include_dirs": ["db/schema"],
+            }
         )
     )
     r = runner.invoke(
@@ -58,8 +62,15 @@ def test_invalid_report_validates(tmp_path: Path) -> None:
     migs.mkdir()
     r = runner.invoke(
         app,
-        ["validate-config", "--database-url", "not-a-dsn",
-         "--migrations-path", str(migs), "--format", "json"],
+        [
+            "validate-config",
+            "--database-url",
+            "not-a-dsn",
+            "--migrations-path",
+            str(migs),
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 5, r.output
     payload = json.loads(r.stdout)

@@ -823,8 +823,7 @@ class PreflightResult:
             out.append(
                 PreflightIssue.of(
                     "PFLIGHT_MISSING_DOWN",
-                    f"Migration {m.version} ({m.name}) is not reversible: "
-                    f"no matching .down.sql.",
+                    f"Migration {m.version} ({m.name}) is not reversible: no matching .down.sql.",
                     migration=m.version,
                     file=m.filename,
                 )
@@ -894,8 +893,7 @@ class PreflightResult:
 PFLIGHT_CODES: dict[str, tuple[str, str]] = {
     "PFLIGHT_MISSING_DOWN": (
         "error",
-        "Add a matching .down.sql sibling, or mark the migration explicitly "
-        "non-reversible.",
+        "Add a matching .down.sql sibling, or mark the migration explicitly non-reversible.",
     ),
     "PFLIGHT_NON_TRANSACTIONAL": (
         "warning",

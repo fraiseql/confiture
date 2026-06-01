@@ -2089,9 +2089,7 @@ def _target_tracking_table_is_empty(session: MigratorSession) -> bool:
         return True
 
 
-def _preflight_replica_policy(
-    config: Path | None, env_name: str | None
-) -> tuple[bool, bool]:
+def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tuple[bool, bool]:
     """Best-effort (has_replicas, bypass) for the replica lint, never connects.
 
     Reads ``infrastructure.replicas`` and ``migration.allow_unsafe_under_replication``

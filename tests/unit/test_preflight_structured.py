@@ -23,7 +23,9 @@ def _mig(d: Path, version: str, name: str, *, down: bool = True, body: str = "SE
 
 def test_preflight_json_shape(tmp_path: Path) -> None:
     _mig(tmp_path, "20260531000001", "add_user_bio", down=False)
-    r = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"])
+    r = runner.invoke(
+        app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"]
+    )
     assert r.exit_code == 7, r.output
     p = json.loads(r.stdout)
     assert p["ok"] is False
@@ -36,14 +38,18 @@ def test_preflight_json_shape(tmp_path: Path) -> None:
 
 def test_preflight_clean_exit_0(tmp_path: Path) -> None:
     _mig(tmp_path, "20260531000001", "a")
-    r = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"])
+    r = runner.invoke(
+        app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"]
+    )
     assert r.exit_code == 0, r.output
     assert json.loads(r.stdout)["ok"] is True
 
 
 def test_warnings_only_exit_0_by_default(tmp_path: Path) -> None:
     _mig(tmp_path, "20260531000002", "idx", body="CREATE INDEX CONCURRENTLY i ON t (c);")
-    r = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"])
+    r = runner.invoke(
+        app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"]
+    )
     assert r.exit_code == 0, r.output
     assert json.loads(r.stdout)["summary"]["warnings"] >= 1
 
@@ -70,7 +76,9 @@ def test_duplicate_version_is_error(tmp_path: Path) -> None:
     (tmp_path / "20260531000001_a.down.sql").write_text("SELECT 1;")
     (tmp_path / "20260531000001_b.up.sql").write_text("SELECT 1;")
     (tmp_path / "20260531000001_b.down.sql").write_text("SELECT 1;")
-    r = runner.invoke(app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"])
+    r = runner.invoke(
+        app, ["migrate", "preflight", "--migrations-dir", str(tmp_path), "--format", "json"]
+    )
     assert r.exit_code == 7, r.output
     p = json.loads(r.stdout)
     assert any(i["code"] == "PFLIGHT_DUPLICATE_VERSION" for i in p["issues"])

@@ -54,7 +54,16 @@ def test_report_dict_shape(tmp_path: Path) -> None:
     assert report["ok"] is False
     assert set(report.keys()) == {"ok", "summary", "issues"}
     for i in report["issues"]:
-        assert {"severity", "code", "message", "migration", "file", "line", "actionable", "details"} == set(i)
+        assert {
+            "severity",
+            "code",
+            "message",
+            "migration",
+            "file",
+            "line",
+            "actionable",
+            "details",
+        } == set(i)
 
 
 def test_report_ok_when_clean(tmp_path: Path) -> None:

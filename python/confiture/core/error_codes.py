@@ -989,7 +989,5 @@ def render_error_codebook() -> str:
     for d in sorted(ERROR_CODE_REGISTRY.all_codes(), key=_sort_key):
         message = d.message_template.replace("|", "\\|").replace("\n", " ")
         hint = (d.resolution_hint or "—").replace("|", "\\|").replace("\n", " ")
-        lines.append(
-            f"| `{d.code}` | {d.exit_code} | {d.severity.value} | {message} | {hint} |"
-        )
+        lines.append(f"| `{d.code}` | {d.exit_code} | {d.severity.value} | {message} | {hint} |")
     return "\n".join(lines)

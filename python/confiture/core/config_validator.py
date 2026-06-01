@@ -109,10 +109,7 @@ class ConfigValidator:
         # Resolve include_dirs relative to the project root: for the standard
         # db/environments/<env>.yaml layout that is three levels up; otherwise
         # the config file's own directory.
-        if (
-            config_path.parent.name == "environments"
-            and config_path.parent.parent.name == "db"
-        ):
+        if config_path.parent.name == "environments" and config_path.parent.parent.name == "db":
             project_dir = config_path.parent.parent.parent
         else:
             project_dir = config_path.parent
@@ -183,9 +180,7 @@ class ConfigValidator:
         )
 
     @classmethod
-    def from_env(
-        cls, *, database_url: str, migrations_path: Path | None = None
-    ) -> ConfigValidator:
+    def from_env(cls, *, database_url: str, migrations_path: Path | None = None) -> ConfigValidator:
         """Build from a DSN found in the environment (config_source = "env")."""
         return cls(
             config_source="env",
@@ -296,7 +291,9 @@ class ConfigValidator:
             if not resolved.is_absolute():
                 resolved = base / resolved
             # auto_discover dirs are allowed to be absent (created lazily).
-            auto_discover = getattr(item, "auto_discover", False) if not isinstance(item, str) else False
+            auto_discover = (
+                getattr(item, "auto_discover", False) if not isinstance(item, str) else False
+            )
             if not resolved.exists() and not auto_discover:
                 issues.append(
                     ConfigIssue(

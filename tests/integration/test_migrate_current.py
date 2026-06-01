@@ -34,7 +34,9 @@ def _create_empty(conn: psycopg.Connection) -> None:
     conn.commit()
 
 
-def _insert(conn: psycopg.Connection, version: str, name: str, applied_at: datetime, checksum=None) -> None:
+def _insert(
+    conn: psycopg.Connection, version: str, name: str, applied_at: datetime, checksum=None
+) -> None:
     with conn.cursor() as cur:
         cur.execute(
             f"INSERT INTO {_TABLE} (slug, version, name, applied_at, checksum) "

@@ -36,8 +36,16 @@ def test_up_duplicate_version_json_envelope(tmp_path: Path) -> None:
     migrations_dir = _dupe_migrations(tmp_path)
     result = runner.invoke(
         app,
-        ["migrate", "up", "--database-url", _UNREACHABLE,
-         "--migrations-dir", str(migrations_dir), "--format", "json"],
+        [
+            "migrate",
+            "up",
+            "--database-url",
+            _UNREACHABLE,
+            "--migrations-dir",
+            str(migrations_dir),
+            "--format",
+            "json",
+        ],
     )
     assert result.exit_code == 3, result.output
     payload = json.loads(result.stdout)
@@ -55,8 +63,16 @@ def test_up_connection_refused_json_envelope(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["migrate", "up", "--database-url", _UNREACHABLE,
-             "--migrations-dir", str(migrations_dir), "--format", "json"],
+            [
+                "migrate",
+                "up",
+                "--database-url",
+                _UNREACHABLE,
+                "--migrations-dir",
+                str(migrations_dir),
+                "--format",
+                "json",
+            ],
         )
     assert result.exit_code == 3, result.output
     payload = json.loads(result.stdout)
@@ -70,8 +86,16 @@ def test_up_broken_yaml_json_envelope(tmp_path: Path) -> None:
     migrations_dir.mkdir()
     result = runner.invoke(
         app,
-        ["migrate", "up", "--config", str(cfg),
-         "--migrations-dir", str(migrations_dir), "--format", "json"],
+        [
+            "migrate",
+            "up",
+            "--config",
+            str(cfg),
+            "--migrations-dir",
+            str(migrations_dir),
+            "--format",
+            "json",
+        ],
     )
     assert result.exit_code == 5, result.output
     payload = json.loads(result.stdout)
@@ -87,8 +111,16 @@ def test_down_connection_refused_json_envelope(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["migrate", "down", "--database-url", _UNREACHABLE,
-             "--migrations-dir", str(migrations_dir), "--format", "json"],
+            [
+                "migrate",
+                "down",
+                "--database-url",
+                _UNREACHABLE,
+                "--migrations-dir",
+                str(migrations_dir),
+                "--format",
+                "json",
+            ],
         )
     assert result.exit_code == 3, result.output
     payload = json.loads(result.stdout)
@@ -103,8 +135,16 @@ def test_up_text_mode_does_not_emit_json_envelope(tmp_path: Path) -> None:
     migrations_dir.mkdir()
     result = runner.invoke(
         app,
-        ["migrate", "up", "--config", str(cfg),
-         "--migrations-dir", str(migrations_dir), "--format", "text"],
+        [
+            "migrate",
+            "up",
+            "--config",
+            str(cfg),
+            "--migrations-dir",
+            str(migrations_dir),
+            "--format",
+            "text",
+        ],
     )
     assert result.exit_code == 5, result.output
     assert not result.stdout.strip().startswith("{")  # not the JSON envelope
@@ -122,9 +162,26 @@ def test_up_unreachable_json_envelope_has_all_inner_keys(tmp_path: Path) -> None
     ):
         result = runner.invoke(
             app,
-            ["migrate", "up", "--config", str(cfg),
-             "--migrations-dir", str(migrations_dir), "--format", "json"],
+            [
+                "migrate",
+                "up",
+                "--config",
+                str(cfg),
+                "--migrations-dir",
+                str(migrations_dir),
+                "--format",
+                "json",
+            ],
         )
     inner = json.loads(result.stdout)["error"]
-    for key in ("severity", "code", "message", "actionable", "details", "migration", "file", "line"):
+    for key in (
+        "severity",
+        "code",
+        "message",
+        "actionable",
+        "details",
+        "migration",
+        "file",
+        "line",
+    ):
         assert key in inner

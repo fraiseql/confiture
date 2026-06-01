@@ -39,14 +39,22 @@ def test_valid_config_exit_0(tmp_path: Path) -> None:
     cfg = _project(tmp_path)
     r = runner.invoke(
         app,
-        ["validate-config", "-c", str(cfg), "--migrations-path", str(tmp_path / "db" / "migrations")],
+        [
+            "validate-config",
+            "-c",
+            str(cfg),
+            "--migrations-path",
+            str(tmp_path / "db" / "migrations"),
+        ],
     )
     assert r.exit_code == 0, r.output
 
 
 def test_invalid_config_exit_5(tmp_path: Path) -> None:
     cfg = tmp_path / "env.yaml"
-    cfg.write_text(yaml.safe_dump({"name": "test", "include_dirs": ["db/schema"]}))  # no database_url
+    cfg.write_text(
+        yaml.safe_dump({"name": "test", "include_dirs": ["db/schema"]})
+    )  # no database_url
     (tmp_path / "db" / "schema").mkdir(parents=True)
     r = runner.invoke(
         app, ["validate-config", "-c", str(cfg), "--migrations-path", str(tmp_path / "none")]
@@ -59,8 +67,15 @@ def test_json_output_shape(tmp_path: Path) -> None:
     cfg = _project(tmp_path)
     r = runner.invoke(
         app,
-        ["validate-config", "-c", str(cfg), "--migrations-path",
-         str(tmp_path / "db" / "migrations"), "--format", "json"],
+        [
+            "validate-config",
+            "-c",
+            str(cfg),
+            "--migrations-path",
+            str(tmp_path / "db" / "migrations"),
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 0, r.output
     p = json.loads(r.stdout)
@@ -68,7 +83,13 @@ def test_json_output_shape(tmp_path: Path) -> None:
     assert p["config_source"] == "yaml-file"
     assert p["migration_count"] == 3
     assert p["issues"] == []
-    assert set(p.keys()) == {"valid", "config_source", "migrations_path", "migration_count", "issues"}
+    assert set(p.keys()) == {
+        "valid",
+        "config_source",
+        "migrations_path",
+        "migration_count",
+        "issues",
+    }
 
 
 def test_flags_source_without_yaml(tmp_path: Path) -> None:
@@ -76,8 +97,15 @@ def test_flags_source_without_yaml(tmp_path: Path) -> None:
     migs.mkdir()
     r = runner.invoke(
         app,
-        ["validate-config", "--database-url", "postgresql://x/y",
-         "--migrations-path", str(migs), "--format", "json"],
+        [
+            "validate-config",
+            "--database-url",
+            "postgresql://x/y",
+            "--migrations-path",
+            str(migs),
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 0, r.output
     assert json.loads(r.stdout)["config_source"] == "flags"
@@ -88,8 +116,15 @@ def test_flags_bad_dsn_exit_5(tmp_path: Path) -> None:
     migs.mkdir()
     r = runner.invoke(
         app,
-        ["validate-config", "--database-url", "not-a-dsn",
-         "--migrations-path", str(migs), "--format", "json"],
+        [
+            "validate-config",
+            "--database-url",
+            "not-a-dsn",
+            "--migrations-path",
+            str(migs),
+            "--format",
+            "json",
+        ],
     )
     assert r.exit_code == 5, r.output
     assert any(i["code"] == "CONFIG_003" for i in json.loads(r.stdout)["issues"])
@@ -102,6 +137,12 @@ def test_never_connects(tmp_path: Path, monkeypatch) -> None:
     )
     r = runner.invoke(
         app,
-        ["validate-config", "-c", str(cfg), "--migrations-path", str(tmp_path / "db" / "migrations")],
+        [
+            "validate-config",
+            "-c",
+            str(cfg),
+            "--migrations-path",
+            str(tmp_path / "db" / "migrations"),
+        ],
     )
     assert r.exit_code == 0, r.output

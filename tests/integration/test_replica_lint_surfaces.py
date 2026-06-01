@@ -100,8 +100,16 @@ def test_lint_replica_safe_flag_errors_with_replicas(tmp_path: Path) -> None:
     proj = _standard_project(tmp_path, replicas=["read-1"])
     r = runner.invoke(
         app,
-        ["lint", "--replica-safe", "--env", "local", "--project-dir", str(proj),
-         "--migrations-dir", str(proj / "db" / "migrations")],
+        [
+            "lint",
+            "--replica-safe",
+            "--env",
+            "local",
+            "--project-dir",
+            str(proj),
+            "--migrations-dir",
+            str(proj / "db" / "migrations"),
+        ],
     )
     assert r.exit_code != 0
     assert "replica_001" in r.output

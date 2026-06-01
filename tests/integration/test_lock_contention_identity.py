@@ -70,8 +70,18 @@ def holder_connection(test_db_url: str):
 def test_contention_json_surfaces_holder(holder_connection, cfg, migrations_dir) -> None:
     result = runner.invoke(
         app,
-        ["migrate", "up", "-c", str(cfg), "--migrations-dir", str(migrations_dir),
-         "--lock-timeout", "500", "--format", "json"],
+        [
+            "migrate",
+            "up",
+            "-c",
+            str(cfg),
+            "--migrations-dir",
+            str(migrations_dir),
+            "--lock-timeout",
+            "500",
+            "--format",
+            "json",
+        ],
     )
     assert result.exit_code == 6, result.output  # LOCK_1300 → 6
     # migrate up prints human progress preamble before the error envelope in
@@ -88,8 +98,16 @@ def test_contention_json_surfaces_holder(holder_connection, cfg, migrations_dir)
 def test_contention_human_names_holder(holder_connection, cfg, migrations_dir) -> None:
     result = runner.invoke(
         app,
-        ["migrate", "up", "-c", str(cfg), "--migrations-dir", str(migrations_dir),
-         "--lock-timeout", "500"],
+        [
+            "migrate",
+            "up",
+            "-c",
+            str(cfg),
+            "--migrations-dir",
+            str(migrations_dir),
+            "--lock-timeout",
+            "500",
+        ],
     )
     assert result.exit_code == 6, result.output
     # Human output names the holder (command + pid).

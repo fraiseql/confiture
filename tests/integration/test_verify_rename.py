@@ -21,9 +21,7 @@ runner = CliRunner()
 def _cfg(tmp_path: Path, test_db_url: str) -> Path:
     p = tmp_path / "env.yaml"
     p.write_text(
-        yaml.safe_dump(
-            {"name": "test", "database_url": test_db_url, "include_dirs": ["db/schema"]}
-        )
+        yaml.safe_dump({"name": "test", "database_url": test_db_url, "include_dirs": ["db/schema"]})
     )
     return p
 
