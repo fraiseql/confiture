@@ -174,7 +174,15 @@ def test_check_acls_without_acls_block_emits_helpful_message(
     combined = completed.stdout + completed.stderr
     assert "acls" in combined.lower()
     assert "requires" in combined.lower()
-    assert str(cfg) in combined
+    # Rich wraps the (long tmp) config path mid-string at the default 80-col
+    # width when there's no TTY (e.g. "…/confi\nture.yaml"). Compare with ANSI
+    # stripped and whitespace collapsed so the assertion is width-independent
+    # (mirrors tests/unit/test_migrate_database_url_flag.py::test_database_url_in_help).
+    import re
+
+    _ansi = re.compile(r"\x1b\[[0-9;]*m")
+    collapsed = re.sub(r"\s+", "", _ansi.sub("", combined))
+    assert re.sub(r"\s+", "", str(cfg)) in collapsed, combined
 
 
 # ---------------------------------------------------------------------------
