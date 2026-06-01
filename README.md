@@ -265,6 +265,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
 - [Dry-Run + Preflight](docs/guides/dry-run.md)
+- [Replica-safe migrations](docs/guides/replica-safe-migrations.md) — `replica_001` / `PFLIGHT_REPLICA_*` forward-compatibility lint under streaming replication.
 - [Bootstrap](docs/guides/bootstrap.md) — `confiture bootstrap` for one-shot env ownership setup.
 - [Superuser Migrations](docs/guides/superuser-migrations.md) — `requires_superuser = True` + `migrate apply-as` recovery workflow.
 - [Function Uniqueness](docs/guides/function-uniqueness.md) — `func_001` catches duplicate `CREATE FUNCTION` across DDL files.

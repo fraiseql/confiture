@@ -159,7 +159,26 @@ the summary — any error → 7, warnings → 0 unless `--strict`.
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | (reserved) a migration failed to replay against the `--against` DB |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
-| `PFLIGHT_REPLICA_*` | — | reserved for the replica-aware lint (#139) |
+
+### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)
+
+The replica-aware forward-compatibility lint emits these (severity per the
+[policy](replica-safe-migrations.md#default-severity-policy): warning by
+default, error when replicas are declared, downgraded by
+`allow_unsafe_under_replication`):
+
+| Code | Operation | Multi-step fix |
+|------|-----------|----------------|
+| `PFLIGHT_REPLICA_ADD_COLUMN` | `ADD COLUMN` NOT NULL / DEFAULT | add nullable → backfill → `SET NOT NULL` later |
+| `PFLIGHT_REPLICA_DROP_COLUMN` | `DROP COLUMN` | deprecate → wait one release → drop |
+| `PFLIGHT_REPLICA_RENAME_COLUMN` | `RENAME COLUMN` | add new → dual-write → migrate readers → drop old |
+| `PFLIGHT_REPLICA_CHANGE_TYPE` | `ALTER COLUMN ... TYPE` | add new column → backfill → swap readers → drop old |
+| `PFLIGHT_REPLICA_ADD_CONSTRAINT` | `ADD CONSTRAINT` (immediate) | `NOT VALID` → backfill → `VALIDATE` |
+| `PFLIGHT_REPLICA_CREATE_INDEX` | non-concurrent `CREATE INDEX` | `CREATE INDEX CONCURRENTLY` |
+| `PFLIGHT_REPLICA_UNCLASSIFIED` | dynamic / unparseable DDL | review manually (always a warning) |
+
+See the [replica-safe migrations guide](replica-safe-migrations.md) for the full
+rationale.
 
 ## Stability contract
 

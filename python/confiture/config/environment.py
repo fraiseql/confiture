@@ -228,6 +228,23 @@ class MigrationConfig(BaseModel):
     tracking_table: str = "tb_confiture"
     rebuild_threshold: int = 5
     grant_dir: str = "db/7_grant"
+    # Issue #139 — replica-aware forward-compatibility lint. When True, unsafe
+    # operations are downgraded from errors to warnings even if replicas are
+    # declared. RISK: you accept that a single-step DDL change may surface
+    # errors on read replicas during the replication-lag window.
+    allow_unsafe_under_replication: bool = False
+
+
+class InfrastructureConfig(BaseModel):
+    """Deployment-topology declarations confiture reads (issue #139).
+
+    ``replicas`` lists declared read-replica identifiers. Its mere presence
+    (non-empty) makes the replica-safety lint error rather than warn — the
+    project is telling confiture it runs under replication. The deploy tool
+    (fraisier) owns the live topology; confiture only reads this declaration.
+    """
+
+    replicas: list[str] = Field(default_factory=list)
 
 
 class SshTunnelConfig(BaseModel):
@@ -631,6 +648,7 @@ class Environment(BaseModel):
     require_confirmation: bool = True
     build: BuildConfig = Field(default_factory=BuildConfig)
     migration: MigrationConfig = Field(default_factory=MigrationConfig)
+    infrastructure: InfrastructureConfig = Field(default_factory=InfrastructureConfig)
     pggit: PgGitConfig = Field(default_factory=PgGitConfig)
     seed: SeedConfig = Field(default_factory=SeedConfig)
     ssh_tunnel: SshTunnelConfig | None = None

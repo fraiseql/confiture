@@ -71,6 +71,18 @@ severity. The `--against` execution path is unchanged.
 
 ### Added
 
+- Replica-aware forward-compatibility lint
+  ([#139](https://github.com/fraiseql/confiture/issues/139)). Classifies each
+  migration DDL operation and flags those unsafe under streaming replication —
+  `DROP COLUMN`, `RENAME COLUMN`, type changes, `ADD COLUMN NOT NULL/DEFAULT`,
+  immediate `ADD CONSTRAINT`, non-concurrent `CREATE INDEX` — with the exact
+  multi-step remediation. Surfaced via `confiture lint --replica-safe`
+  (rule `replica_001`) and `migrate preflight` (`PFLIGHT_REPLICA_*` issues in the
+  structured report). **Soft default** (owner decision): warns when no replicas
+  are declared, errors when `infrastructure.replicas` is non-empty;
+  `migration.allow_unsafe_under_replication: true` downgrades errors to warnings.
+  Reuses the pglast/regex two-tier parser (no new SQL parser). Guide:
+  [`docs/guides/replica-safe-migrations.md`](docs/guides/replica-safe-migrations.md).
 - `confiture validate-config` — offline config + migrations-tree validation
   ([#144](https://github.com/fraiseql/confiture/issues/144)). Checks YAML/schema
   validity, include-dir existence, DSN *format*, and the migrations tree

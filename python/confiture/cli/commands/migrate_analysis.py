@@ -2089,6 +2089,31 @@ def _target_tracking_table_is_empty(session: MigratorSession) -> bool:
         return True
 
 
+def _preflight_replica_policy(
+    config: Path | None, env_name: str | None
+) -> tuple[bool, bool]:
+    """Best-effort (has_replicas, bypass) for the replica lint, never connects.
+
+    Reads ``infrastructure.replicas`` and ``migration.allow_unsafe_under_replication``
+    from --env or --config when available; otherwise defaults to (False, False)
+    — no replicas declared, so the replica lint warns rather than errors (#139).
+    """
+    try:
+        from confiture.config.environment import Environment
+
+        if env_name:
+            e = Environment.load(env_name)
+        elif config is not None and config.exists():
+            from confiture.core.connection import load_config
+
+            e = Environment.model_validate(load_config(config))
+        else:
+            return False, False
+        return bool(e.infrastructure.replicas), bool(e.migration.allow_unsafe_under_replication)
+    except Exception:  # noqa: BLE001 — policy degrades to warn-by-default
+        return False, False
+
+
 def _resolve_preflight_pending(
     migrations_dir: Path,
     *,
@@ -2421,6 +2446,7 @@ def migrate_preflight(
     """
     from rich.table import Table
 
+    from confiture.core.linting.libraries.replica import replica_preflight_issues
     from confiture.core.preflight import preflight_exit_code, run_preflight
 
     if check_dependents not in {"off", "fail", "warn"}:
@@ -2443,13 +2469,27 @@ def migrate_preflight(
                 "skip_reason": "no_preflight_db",
             }
 
-        # #148: structured report — {ok, summary, issues[]}; exit 7 on errors
-        # (or warnings under --strict), exit 0 otherwise.
-        summary = result.summary
+        # #148 structured report + #139 replica-safety: merge the base preflight
+        # issues with the replica-forward-compat findings (PFLIGHT_REPLICA_*).
+        _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
+        replica_issues = replica_preflight_issues(
+            migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
+        )
+        all_issues = result.issues + replica_issues
+        summary = {
+            "errors": sum(1 for i in all_issues if i.severity in ("error", "critical")),
+            "warnings": sum(1 for i in all_issues if i.severity == "warning"),
+            "info": sum(1 for i in all_issues if i.severity == "info"),
+            "migrations_checked": len(result.migrations),
+        }
         exit_code = preflight_exit_code(summary, strict=strict)
 
         if format_type == "json":
-            payload = result.to_report_dict(strict=strict)
+            payload = {
+                "ok": exit_code == 0,
+                "summary": summary,
+                "issues": [i.to_dict() for i in all_issues],
+            }
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
             _output_json(payload, None, console)
@@ -2477,7 +2517,7 @@ def migrate_preflight(
             f"{summary['errors']} error(s), {summary['warnings']} warning(s)"
         )
 
-        issues = result.issues
+        issues = all_issues
         if not issues:
             console.print("  [green]✓ No issues[/green]")
         for issue in issues:
