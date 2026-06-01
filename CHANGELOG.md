@@ -5,7 +5,7 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.20.0] - Unreleased
+## [0.20.0] - 2026-06-01
 
 Settles the DSN connection-source precedence into a single, secure contract
 ([#152](https://github.com/fraiseql/confiture/issues/152)). Previously the docs
