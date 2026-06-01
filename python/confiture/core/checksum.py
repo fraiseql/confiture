@@ -16,6 +16,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from psycopg import sql as pgsql
+
 if TYPE_CHECKING:
     import psycopg
 
@@ -160,15 +162,28 @@ class MigrationChecksumVerifier:
         self,
         connection: "psycopg.Connection",
         config: ChecksumConfig | None = None,
+        migration_table: str = "tb_confiture",
     ):
         """Initialize verifier.
 
         Args:
             connection: psycopg3 database connection
             config: Checksum configuration (uses defaults if None)
+            migration_table: Tracking table name; may be schema-qualified
+                (e.g. ``public.tb_confiture``). Must match the migrator's
+                tracking table — stored checksums live there. Defaulting this to
+                the literal default silently read the wrong table under a custom
+                ``tracking_table`` (#152).
         """
         self.connection = connection
         self.config = config or ChecksumConfig()
+        self.migration_table = migration_table
+        _parts = migration_table.split(".", 1)
+        self._table_ident = (
+            pgsql.Identifier(_parts[0], _parts[1])
+            if len(_parts) == 2
+            else pgsql.Identifier(migration_table)
+        )
 
     def verify_all(self, migrations_dir: Path) -> list[ChecksumMismatch]:
         """Verify all applied migrations against their stored checksums.
@@ -247,11 +262,11 @@ class MigrationChecksumVerifier:
             Dict mapping version -> (name, checksum)
         """
         with self.connection.cursor() as cur:
-            cur.execute("""
-                SELECT version, name, checksum
-                FROM tb_confiture
-                ORDER BY version
-            """)
+            cur.execute(
+                pgsql.SQL(
+                    "SELECT version, name, checksum FROM {} ORDER BY version"
+                ).format(self._table_ident)
+            )
             return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
 
     def _find_migration_file(
@@ -321,11 +336,9 @@ class MigrationChecksumVerifier:
         """
         with self.connection.cursor() as cur:
             cur.execute(
-                """
-                UPDATE tb_confiture
-                SET checksum = %s
-                WHERE version = %s
-            """,
+                pgsql.SQL("UPDATE {} SET checksum = %s WHERE version = %s").format(
+                    self._table_ident
+                ),
                 (new_checksum, version),
             )
         self.connection.commit()

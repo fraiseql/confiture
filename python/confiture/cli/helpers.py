@@ -431,14 +431,19 @@ def _get_tracking_table(config_data: Any) -> str:
     Handles Environment objects (from mocks / validated config), raw dicts
     from load_config() (old YAML format without database_url), and MagicMock
     objects used in tests.
+
+    Always returns a ``str``: a non-string candidate (e.g. a bare ``MagicMock``
+    config in tests) falls back to the default rather than leaking a non-string
+    into callers that build SQL identifiers from it (#152).
     """
+    candidate: Any = "tb_confiture"
     if hasattr(config_data, "migration") and hasattr(config_data.migration, "tracking_table"):
-        return config_data.migration.tracking_table  # type: ignore[no-any-return]
-    if isinstance(config_data, dict):
+        candidate = config_data.migration.tracking_table
+    elif isinstance(config_data, dict):
         migration_cfg = config_data.get("migration") or {}
         if isinstance(migration_cfg, dict):
-            return migration_cfg.get("tracking_table", "tb_confiture")
-    return "tb_confiture"
+            candidate = migration_cfg.get("tracking_table", "tb_confiture")
+    return candidate if isinstance(candidate, str) else "tb_confiture"
 
 
 def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:

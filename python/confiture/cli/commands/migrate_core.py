@@ -979,7 +979,11 @@ def migrate_up(
                 enabled=True,
                 on_mismatch=mismatch_behavior,
             )
-            verifier = MigrationChecksumVerifier(conn, checksum_config)
+            verifier = MigrationChecksumVerifier(
+                conn,
+                checksum_config,
+                migration_table=_get_tracking_table(config_data),
+            )
 
             try:
                 mismatches = verifier.verify_all(migrations_dir)

@@ -486,12 +486,36 @@ class TestMigrationChecksumVerifier:
         verifier = MigrationChecksumVerifier(mock_conn)
         verifier.update_checksum("001", "new_checksum")
 
-        # Check UPDATE was executed
+        # Check UPDATE was executed. The query is now a psycopg Composed (the
+        # tracking table is a quoted identifier, #152), so match on its repr.
         mock_cursor.execute.assert_called()
         call_args = mock_cursor.execute.call_args
-        assert "UPDATE" in call_args[0][0]
+        assert "UPDATE" in str(call_args[0][0])
         assert "new_checksum" in call_args[0][1]
         mock_conn.commit.assert_called()
+
+    def test_uses_configured_tracking_table(self):
+        """#152: the verifier queries the CONFIGURED tracking table, not the default.
+
+        Regression: a custom ``tracking_table`` used to be ignored — checksum
+        verification always read the literal ``tb_confiture``, which silently
+        read the wrong table (and crashed on a fresh DB where it didn't exist).
+        """
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        verifier = MigrationChecksumVerifier(
+            mock_conn, migration_table="myschema.tb_custom"
+        )
+        verifier._get_stored_checksums()
+
+        sql_str = str(mock_cursor.execute.call_args[0][0])
+        assert "tb_custom" in sql_str
+        assert "myschema" in sql_str
+        assert "tb_confiture" not in sql_str
 
     def test_update_all_checksums(self, tmp_path):
         """Test updating all checksums."""

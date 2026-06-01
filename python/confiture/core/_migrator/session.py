@@ -1035,7 +1035,15 @@ class MigratorSession:
             )
 
             config = ChecksumConfig(on_mismatch=ChecksumMismatchBehavior.WARN)
-            verifier = MigrationChecksumVerifier(self._conn, config)
+            verifier = MigrationChecksumVerifier(
+                self._conn,
+                config,
+                migration_table=(
+                    self._migrator.migration_table
+                    if self._migrator is not None
+                    else "tb_confiture"
+                ),
+            )
             mismatches = verifier.verify_all(self._migrations_dir)
             result.checksum_mismatches = [
                 f"{m.version}_{m.name}: expected {(m.expected or '')[:12]}..., got {m.actual[:12]}..."
