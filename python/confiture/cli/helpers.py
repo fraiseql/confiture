@@ -217,48 +217,82 @@ def _resolve_config(config: Path, env: str | None) -> Path:
     return config
 
 
-# Canonical env var for the connection DSN, plus the ubiquitous bare fallback
-# (OD-5). Checked in order; the first non-empty value wins.
-_DATABASE_URL_ENV_VARS = ("CONFITURE_DATABASE_URL", "DATABASE_URL")
+# The two recognized DSN env vars, treated *differently* by intent (#152):
+#   - CONFITURE_DATABASE_URL: canonical, confiture-specific, set on purpose.
+#   - DATABASE_URL: ambient, ubiquitous in CI/deploy; must never silently
+#     clobber a config.
+_CONFITURE_DSN_ENV = "CONFITURE_DATABASE_URL"
+_AMBIENT_DSN_ENV = "DATABASE_URL"
+_DATABASE_URL_ENV_VARS = (_CONFITURE_DSN_ENV, _AMBIENT_DSN_ENV)
 
 # Shared --help text for the --database-url flag across the migrate family (#140).
 DATABASE_URL_OPTION_HELP = (
-    "PostgreSQL DSN for the tracking database. Takes precedence over --config / "
-    "--env and the CONFITURE_DATABASE_URL / DATABASE_URL env vars. When given, no "
-    "YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs "
-    "still require --config."
+    "PostgreSQL DSN for the tracking database. Always wins over --config / --env "
+    "and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* "
+    "--config but conflicts with an *explicit* one (CONFIG_007); the ambient "
+    "DATABASE_URL never overrides a present config. Pass --no-config to make the "
+    "environment the sole source. When a DSN is supplied, no YAML is required "
+    "(tracking table defaults to tb_confiture). SSH-tunnel configs still require "
+    "--config."
 )
 
 
-def resolve_database_url(flag: str | None, config_path: Path | None) -> str | None:
-    """Resolve the tracking-database DSN with documented precedence.
+def resolve_database_url(
+    flag: str | None,
+    config_path: Path | None,
+    *,
+    config_explicit: bool = False,
+    no_config: bool = False,
+    require_intentional_source: bool = False,
+) -> str | None:
+    """Resolve the tracking-database DSN under the #152 precedence contract.
 
-    Precedence: ``--database-url`` flag > an **existing** ``--config`` file >
-    ``CONFITURE_DATABASE_URL`` > ``DATABASE_URL`` > ``None``.
+    Principle: **explicit-and-singular wins; ambiguity fails loud** — the secure
+    default for a tool that touches production. Order:
 
-    The explicit flag always wins. An existing ``--config`` is authoritative over
-    the ambient env vars: ``DATABASE_URL`` is ubiquitous in CI / deploy
-    environments, and silently letting it override a project's ``--config``
-    would discard the config's ``tracking_table`` (and other settings) — so a
-    present config short-circuits to ``None`` (the caller loads the config). The
-    env vars are a last-resort fallback only when no config file is available.
+    1. ``--database-url`` flag — always wins (validated).
+    2. ``--no-config`` — config discovery is suppressed, the environment is the
+       sole source: ``CONFITURE_DATABASE_URL`` preferred over the ambient
+       ``DATABASE_URL``; neither set → ``CONFIG_010`` (fail loud).
+    3. An **explicit** ``--config``/``--env`` **and** ``CONFITURE_DATABASE_URL``
+       both present → ``CONFIG_007`` (fail loud; two explicit sources are never
+       silently reconciled — no DSN normalization, no "pick one").
+    4. An explicit ``--config``/``--env`` only → defer to the config (``None``);
+       an ambient ``DATABASE_URL`` does NOT override an explicit config.
+    5. ``CONFITURE_DATABASE_URL`` set while the config is only the **default** →
+       the canonical var (it beats a default config — the bug #152 fixes).
+    6. A present config file (even the default) → defer to it (``None``); it
+       beats the ambient ``DATABASE_URL``.
+    7. Otherwise the ambient ``DATABASE_URL`` — unless
+       ``require_intentional_source`` (mutating commands), where an ambient-only
+       DSN raises ``CONFIG_010`` rather than silently migrating against it.
+    8. Nothing resolved → ``None`` (the caller has no source).
 
     Args:
-        flag: Value of the ``--database-url`` option (``None`` if not given).
-        config_path: The resolved ``--config`` path. When it points to an
-            existing file, the config wins over the env vars (returns ``None``).
+        flag: ``--database-url`` value (``None`` if not given).
+        config_path: The resolved ``--config`` path. Its default is a *present*
+            file, so existence alone cannot tell default from explicit — hence
+            ``config_explicit``.
+        config_explicit: Whether ``--config``/``--env`` was set explicitly (vs
+            defaulted). The command recovers this from
+            ``ctx.get_parameter_source("config")``.
+        no_config: Whether ``--no-config`` was passed (suppress config discovery).
+        require_intentional_source: For mutating commands (``up``/``down``):
+            refuse to run against a merely-ambient ``DATABASE_URL``.
 
     Returns:
-        The DSN string to use as ``database_url_override``, or ``None`` to defer
-        to the config file.
+        The DSN to use as ``database_url_override``, or ``None`` to defer to the
+        config file.
 
     Raises:
-        ConfigurationError: ``CONFIG_003`` if an explicit flag DSN is malformed.
+        ConfigurationError: ``CONFIG_003`` (malformed flag DSN), ``CONFIG_007``
+            (two explicit sources), or ``CONFIG_010`` (no usable source).
     """
+    from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+
+    # (1) An explicit flag always wins.
     if flag:
         if not flag.startswith(("postgresql://", "postgres://")):
-            from confiture.exceptions import ConfigurationError  # noqa: PLC0415
-
             raise ConfigurationError(
                 f"Invalid --database-url: must start with postgresql:// or "
                 f"postgres://, got: {flag}",
@@ -266,13 +300,64 @@ def resolve_database_url(flag: str | None, config_path: Path | None) -> str | No
                 resolution_hint="Use format: postgresql://user:password@host:port/database",
             )
         return flag
-    # An explicit, existing config file beats the ambient env vars.
+
+    confiture_url = os.environ.get(_CONFITURE_DSN_ENV)
+    ambient_url = os.environ.get(_AMBIENT_DSN_ENV)
+
+    # (2) --no-config: the environment is the sole source.
+    if no_config:
+        if confiture_url:
+            return confiture_url
+        if ambient_url:
+            return ambient_url
+        raise ConfigurationError(
+            "--no-config was given but no DSN is set in the environment",
+            error_code="CONFIG_010",
+            resolution_hint=(
+                "Set CONFITURE_DATABASE_URL (or DATABASE_URL), or drop --no-config "
+                "to use a config file."
+            ),
+        )
+
+    # (3) Two explicit sources → fail loud, period (present-at-all, not differing).
+    if config_explicit and confiture_url:
+        raise ConfigurationError(
+            "Both an explicit --config/--env and CONFITURE_DATABASE_URL are set",
+            error_code="CONFIG_007",
+            resolution_hint=(
+                "Pass exactly one explicit source: drop --config/--env, unset "
+                "CONFITURE_DATABASE_URL, or pass --no-config."
+            ),
+        )
+
+    # (4) Explicit config (no canonical var) → use it; ambient never overrides it.
+    if config_explicit:
+        return None
+
+    # config_path is at most the DEFAULT below here.
+    # (5) The canonical var beats a default config.
+    if confiture_url:
+        return confiture_url
+
+    # (6) A present (default) config beats the ambient DATABASE_URL.
     if config_path is not None and config_path.exists():
         return None
-    for var in _DATABASE_URL_ENV_VARS:
-        val = os.environ.get(var)
-        if val:
-            return val
+
+    # (7) Ambient DATABASE_URL — refused for mutating commands.
+    if ambient_url:
+        if require_intentional_source:
+            raise ConfigurationError(
+                "No intentional DSN source for a mutating command; refusing to run "
+                "against an ambient DATABASE_URL",
+                error_code="CONFIG_010",
+                resolution_hint=(
+                    "Pass --database-url, set CONFITURE_DATABASE_URL, or point "
+                    "--config at a config file."
+                ),
+            )
+        return ambient_url
+
+    # (8) No source.
     return None
 
 

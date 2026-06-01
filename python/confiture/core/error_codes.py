@@ -157,7 +157,7 @@ def _create_global_registry() -> ErrorCodeRegistry:
     """Create and populate the global error code registry.
 
     Returns:
-        Populated ErrorCodeRegistry with all 72 error codes
+        Populated ErrorCodeRegistry with the full error-code catalog.
     """
     registry = ErrorCodeRegistry()
 
@@ -204,6 +204,20 @@ def _create_global_registry() -> ErrorCodeRegistry:
             severity=ErrorSeverity.ERROR,
             exit_code=3,
             resolution_hint="Check database URL, host, port, and credentials",
+        ),
+        ErrorCodeDefinition(
+            code="CONFIG_007",
+            message_template=(
+                "Conflicting explicit DSN sources: an explicit --config/--env and "
+                "CONFITURE_DATABASE_URL are both set"
+            ),
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint=(
+                "Pass exactly one explicit source: drop --config/--env, unset "
+                "CONFITURE_DATABASE_URL, or pass --no-config to make the env var "
+                "authoritative."
+            ),
         ),
     ]
 
@@ -838,6 +852,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_004": 5,
     "CONFIG_005": 5,
     "CONFIG_006": 3,  # carve-out: DB connection failed (family is otherwise 5)
+    "CONFIG_007": 5,  # conflicting explicit DSN sources (#152)
     "CONFIG_010": 5,
     # MIGR family → 3, with two success-with-signal carve-outs at 0.
     "MIGR_001": 3,
