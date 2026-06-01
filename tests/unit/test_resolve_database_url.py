@@ -76,10 +76,7 @@ def test_canonical_env_beats_decoy_default_config(monkeypatch, tmp_path) -> None
     decoy = tmp_path / "local.yaml"
     decoy.write_text("database_url: postgresql://decoy/local\n")
     # config_explicit=False → the path is a mere default.
-    assert (
-        resolve_database_url(None, decoy, config_explicit=False)
-        == "postgresql://canonical/db"
-    )
+    assert resolve_database_url(None, decoy, config_explicit=False) == "postgresql://canonical/db"
 
 
 def test_two_explicit_sources_raise_config_007(monkeypatch, tmp_path) -> None:
@@ -144,9 +141,7 @@ def test_no_config_uses_canonical_env(monkeypatch, tmp_path) -> None:
 def test_no_config_uses_ambient_when_no_canonical(monkeypatch) -> None:
     monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
     monkeypatch.setenv("DATABASE_URL", "postgresql://ambient/db")
-    assert (
-        resolve_database_url(None, None, no_config=True) == "postgresql://ambient/db"
-    )
+    assert resolve_database_url(None, None, no_config=True) == "postgresql://ambient/db"
 
 
 def test_no_config_without_env_raises_config_010(monkeypatch) -> None:
@@ -173,3 +168,47 @@ def test_require_intentional_accepts_canonical(monkeypatch) -> None:
         resolve_database_url(None, None, require_intentional_source=True)
         == "postgresql://canonical/db"
     )
+
+
+# ---------------------------------------------------------------------------
+# config_is_explicit — the parameter-source linchpin. Must recognize an
+# explicit --env, not just --config (preflight carries both); #152 gate.
+# ---------------------------------------------------------------------------
+
+
+class _FakeCtx:
+    """Minimal stand-in for a click/typer Context's get_parameter_source."""
+
+    def __init__(self, sources: dict) -> None:
+        self._sources = sources
+
+    def get_parameter_source(self, name: str):  # noqa: ANN201
+        return self._sources.get(name)
+
+
+def test_config_is_explicit_detects_explicit_env() -> None:
+    from click.core import ParameterSource
+
+    from confiture.cli.helpers import config_is_explicit
+
+    ctx = _FakeCtx({"config": ParameterSource.DEFAULT, "env": ParameterSource.COMMANDLINE})
+    assert config_is_explicit(ctx) is True
+
+
+def test_config_is_explicit_false_when_all_defaulted() -> None:
+    from click.core import ParameterSource
+
+    from confiture.cli.helpers import config_is_explicit
+
+    ctx = _FakeCtx({"config": ParameterSource.DEFAULT, "env": ParameterSource.DEFAULT})
+    assert config_is_explicit(ctx) is False
+
+
+def test_config_is_explicit_ignores_unknown_params() -> None:
+    """A command that doesn't declare 'env' yields no source — safely ignored."""
+    from click.core import ParameterSource
+
+    from confiture.cli.helpers import config_is_explicit
+
+    ctx = _FakeCtx({"config": ParameterSource.COMMANDLINE})  # no "env" key
+    assert config_is_explicit(ctx) is True

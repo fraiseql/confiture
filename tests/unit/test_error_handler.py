@@ -3,13 +3,57 @@
 Tests error formatting and exit code handling for CLI output.
 """
 
-from confiture.core.error_handler import format_error_for_cli, handle_cli_error
+from confiture.core.error_handler import (
+    _detect_error_context,
+    format_error_for_cli,
+    handle_cli_error,
+)
 from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
     MigrationError,
 )
 from confiture.models.error import ErrorSeverity
+
+
+class TestDsnPrecedenceErrorContext:
+    """#152: precedence-routing config errors must not get the connection template.
+
+    Their messages mention ``CONFITURE_DATABASE_URL`` (substring "database"),
+    which would otherwise wrongly route them to DB_CONNECTION_FAILED's
+    "Cannot reach PostgreSQL… check connectivity" remediation.
+    """
+
+    def test_config_007_not_routed_to_connection_template(self) -> None:
+        err = ConfigurationError(
+            "Both an explicit --config/--env and CONFITURE_DATABASE_URL are set",
+            error_code="CONFIG_007",
+            resolution_hint="Pass exactly one explicit source.",
+        )
+        assert _detect_error_context(err) is None
+
+    def test_config_010_not_routed_to_connection_template(self) -> None:
+        err = ConfigurationError(
+            "--no-config was given but no DSN is set in the environment",
+            error_code="CONFIG_010",
+            resolution_hint="Set CONFITURE_DATABASE_URL or DATABASE_URL.",
+        )
+        assert _detect_error_context(err) is None
+
+    def test_config_007_rendering_omits_connection_advice(self) -> None:
+        err = ConfigurationError(
+            "Both an explicit --config/--env and CONFITURE_DATABASE_URL are set",
+            error_code="CONFIG_007",
+            resolution_hint="Pass exactly one explicit source.",
+        )
+        formatted = format_error_for_cli(err)
+        assert "Cannot reach PostgreSQL" not in formatted
+        assert "Pass exactly one explicit source." in formatted
+
+    def test_config_006_still_routes_to_connection_template(self) -> None:
+        """The genuine connection-failed code is intentionally NOT excluded."""
+        err = ConfigurationError("Database connection failed", error_code="CONFIG_006")
+        assert _detect_error_context(err) == "DB_CONNECTION_FAILED"
 
 
 class TestFormatErrorForCli:

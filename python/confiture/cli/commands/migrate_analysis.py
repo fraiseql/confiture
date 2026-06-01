@@ -2596,6 +2596,12 @@ def migrate_preflight(
             ),
         )
     except Exception as e:
+        # #152: a precedence conflict (CONFIG_007) or missing source (CONFIG_010)
+        # must surface with its own exit code + remediation via the shared error
+        # boundary, not be masked as a generic "failed to resolve pending"
+        # (exit 2). Genuine resolution/connection failures keep the exit-2 path.
+        if getattr(e, "error_code", None) in {"CONFIG_007", "CONFIG_010"}:
+            fail(e, json_mode=is_json(format_type), output_file=None)
         if is_json(format_type):
             fail(e, json_mode=True, output_file=None)
         error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")

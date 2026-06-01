@@ -35,6 +35,17 @@ def _detect_error_context(error: Exception) -> str | None:
 
     error_msg = str(error).lower()
 
+    # #152: DSN-precedence routing errors are NOT connectivity problems — their
+    # own resolution_hint is the right guidance ("drop one source" / "set a
+    # DSN"). Skip the connection template, which the literal "database" keyword
+    # (e.g. inside CONFITURE_DATABASE_URL) would otherwise wrongly trigger. Note
+    # CONFIG_006 is genuinely "connection failed" and is intentionally excluded.
+    if isinstance(error, ConfigurationError) and getattr(error, "error_code", None) in {
+        "CONFIG_007",
+        "CONFIG_010",
+    }:
+        return None
+
     # Database connection errors
     if isinstance(error, ConfigurationError) and any(
         keyword in error_msg for keyword in ["connection", "connect", "database", "postgresql"]

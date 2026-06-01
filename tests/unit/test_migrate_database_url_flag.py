@@ -212,6 +212,37 @@ def test_status_ambient_only_stays_unknown_exit_0(tmp_path: Path, monkeypatch) -
     assert result.exit_code == 0, result.output
 
 
+def test_preflight_explicit_env_plus_canonical_conflicts_exit_5(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """#152: `preflight --env` + CONFITURE_DATABASE_URL → CONFIG_007 (exit 5).
+
+    Proves two things at once: config_is_explicit recognizes an explicit --env
+    (preflight is the family member that has it), and the conflict surfaces with
+    its own exit code rather than being masked as the --against path's generic
+    'failed to resolve pending' (exit 2).
+    """
+    monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "preflight",
+            "--against",
+            _UNREACHABLE,
+            "--env",
+            "production",
+            "--migrations-dir",
+            str(migrations_dir),
+        ],
+    )
+    assert result.exit_code == 5, result.output
+
+
 def test_env_var_honored_when_no_config_present(tmp_path: Path, monkeypatch) -> None:
     """#152: with no explicit --config and no default config, the canonical var drives.
 

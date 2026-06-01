@@ -280,9 +280,10 @@ def resolve_database_url(
         config_path: The resolved ``--config`` path. Its default is a *present*
             file, so existence alone cannot tell default from explicit — hence
             ``config_explicit``.
-        config_explicit: Whether ``--config``/``--env`` was set explicitly (vs
-            defaulted). The command recovers this from
-            ``ctx.get_parameter_source("config")``.
+        config_explicit: Whether ``--config`` or ``--env`` was set explicitly
+            (vs defaulted). The command recovers this via ``config_is_explicit``
+            from ``ctx.get_parameter_source`` for the ``config`` and ``env``
+            parameters.
         no_config: Whether ``--no-config`` was passed (suppress config discovery).
         require_intentional_source: For mutating commands (``up``/``down``):
             refuse to run against a merely-ambient ``DATABASE_URL``.
@@ -368,26 +369,33 @@ def resolve_database_url(
     return None
 
 
-def config_is_explicit(ctx: Any, param: str = "config") -> bool:
-    """Whether ``--config``/``--env`` was set explicitly, not defaulted (#152).
+def config_is_explicit(ctx: Any, *params: str) -> bool:
+    """Whether ``--config`` or ``--env`` was set explicitly, not defaulted (#152).
 
     The migrate family defaults ``--config`` to a *present* file
     (``db/environments/local.yaml``), so the resolved ``Path`` cannot tell a
     default from an operator-supplied one. Click's parameter source can — this
     is the linchpin that makes the precedence contract expressible.
 
-    Returns ``False`` defensively when the source is unavailable (no context).
+    Checks ``config`` and ``env`` by default (a command may carry either —
+    ``preflight`` has both). A parameter the command does not declare yields no
+    source and is ignored, so passing the full set is always safe. Returns
+    ``True`` if *any* checked parameter was set on the command line / via env
+    rather than defaulted; ``False`` defensively when no source is available.
     """
     from click.core import ParameterSource  # noqa: PLC0415
 
-    try:
-        source = ctx.get_parameter_source(param)
-    except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
-        return False
-    return source is not None and source not in (
-        ParameterSource.DEFAULT,
-        ParameterSource.DEFAULT_MAP,
-    )
+    for param in params or ("config", "env"):
+        try:
+            source = ctx.get_parameter_source(param)
+        except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
+            continue
+        if source is not None and source not in (
+            ParameterSource.DEFAULT,
+            ParameterSource.DEFAULT_MAP,
+        ):
+            return True
+    return False
 
 
 def has_intentional_dsn_source(ctx: Any, flag: str | None, no_config: bool) -> bool:
