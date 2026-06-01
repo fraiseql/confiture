@@ -22,14 +22,19 @@ runner = CliRunner()
 _UNREACHABLE = "postgresql://localhost:1/nope"
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
 @pytest.mark.parametrize("cmd", ["up", "down", "status", "verify", "preflight"])
 def test_database_url_in_help(cmd: str) -> None:
     """Every migrate subcommand documents --database-url (#140 / Phase 2)."""
     out = runner.invoke(app, ["migrate", cmd, "--help"]).output
     # Rich wraps long option names at narrow terminal widths (e.g. CI's 80
-    # cols), so "--database-url" may render split across lines. Collapse all
-    # whitespace before matching so the assertion is width-independent.
-    collapsed = re.sub(r"\s+", "", out)
+    # cols) AND colorizes them when a TTY/FORCE_COLOR is detected, interleaving
+    # ANSI SGR codes mid-token (e.g. "--database\x1b[0m-url"). Strip ANSI first,
+    # then collapse whitespace, so the assertion is both width- and color-
+    # independent (CI forces color; local runs usually don't).
+    collapsed = re.sub(r"\s+", "", _ANSI.sub("", out))
     assert "--database-url" in collapsed
 
 

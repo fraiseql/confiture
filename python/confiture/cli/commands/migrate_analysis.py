@@ -2125,7 +2125,9 @@ def _resolve_preflight_pending(
     """Return migration files to test in a preflight --against run.
 
     Priority order:
-    1. --database-url / env override: connect to that DB, return pending files.
+    1. --database-url override (explicit flag only): connect to that DB, return
+       pending files. Ambient env vars do not reach here — the caller passes a
+       value only for an explicit flag (issue #140 precedence).
     2. --config / --env: connect to configured DB, return pending files.
     3. --since: all local files with version >= since (no DB required).
     4. Neither: all local migration files.
@@ -2547,7 +2549,13 @@ def migrate_preflight(
             config_path=config,
             env_name=env,
             since=since,
-            database_url_override=resolve_database_url(database_url, config),
+            # Flag-only: an explicit --database-url drives pending-detection, but
+            # an ambient CONFITURE_DATABASE_URL / DATABASE_URL must NOT silently
+            # flip "--against alone → all local files" into a tracking-DB connect
+            # (issue #140 precedence; matches `migrate status`/`verify`).
+            database_url_override=(
+                resolve_database_url(database_url, None) if database_url else None
+            ),
         )
     except Exception as e:
         if is_json(format_type):
