@@ -5,6 +5,64 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-06-01
+
+Settles the DSN connection-source precedence into a single, secure contract
+([#152](https://github.com/fraiseql/confiture/issues/152)). Previously the docs
+said env > config while the code did config > env, and a present *default*
+config (`db/environments/local.yaml`) silently shadowed an injected
+`CONFITURE_DATABASE_URL` — so a consumer that (correctly) kept the DSN out of
+`argv` could deploy against the **wrong database** with exit 0.
+
+### ⚠️ BREAKING — DSN precedence + `CONFIG_007` ([#152](https://github.com/fraiseql/confiture/issues/152))
+
+**Wrappers and CI that resolve the tracking DSN must review their setup.** The
+new contract is *explicit-and-singular wins; ambiguity fails loud*:
+
+- The canonical `CONFITURE_DATABASE_URL` now **beats a _default_ `--config`**
+  (previously a present default config silently shadowed it — the bug above).
+- An **explicit** `--config`/`--env` together with `CONFITURE_DATABASE_URL` now
+  **errors** with the new `CONFIG_007` (exit 5) instead of silently choosing one
+  — two explicit sources are never reconciled (present-at-all, no DSN
+  normalization).
+- An ambient `DATABASE_URL` never overrides a present config (unchanged), and
+  the mutating commands (`up`/`down`/`down-to`) now **refuse** to run against a
+  merely-ambient `DATABASE_URL` (`CONFIG_010`, exit 5) rather than silently
+  migrating it.
+- `migrate status` connects on any intentional source but stays in its
+  "status-unknown" state (exit 0) on an ambient-only `DATABASE_URL`.
+
+`CONFIG_007` is added to the `CANONICAL_EXIT_CODES` stability contract (exit 5,
+CONFIG family) — see [`docs/reference/exit-codes.md`](docs/reference/exit-codes.md).
+
+### Added
+
+- **`--no-config`** flag on `up`/`down`/`down-to`/`current`/`status`/`verify`/
+  `preflight`: suppress config-file discovery so the environment
+  (`CONFITURE_DATABASE_URL`, else `DATABASE_URL`) is the **sole** DSN source.
+  Lets a no-secrets-in-`argv` consumer hand the DSN over deterministically with
+  no config-shadowing and no neutralization hack.
+- **`CONFIG_007`** — conflicting explicit DSN sources.
+
+### Fixed
+
+- **Checksum verification ignored a custom `tracking_table`.**
+  `MigrationChecksumVerifier` queried a hardcoded `tb_confiture` in its SELECT
+  and UPDATE, so with a custom `migration.tracking_table` (and checksum
+  verification on by default) `migrate up` read the wrong table — silently when
+  `tb_confiture` happened to exist, or as a hard crash (`relation
+  "tb_confiture" does not exist`) on a database without it. It now uses the
+  configured, schema-qualified tracking table.
+
+### Migration guide
+
+- Preferred handoff: `CONFITURE_DATABASE_URL=… confiture migrate up --no-config`
+  — deterministic, no secret in `argv`, config discovery suppressed.
+- If you relied on an explicit `--config` *and* an exported
+  `CONFITURE_DATABASE_URL`, drop one — that combination is now `CONFIG_007`.
+- The connection-source precedence in `docs/reference/cli.md` is the
+  authoritative description.
+
 ## [0.19.0] - Unreleased
 
 Bundled release stabilizing Confiture's machine-readable contracts (CLI exit

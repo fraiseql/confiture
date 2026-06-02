@@ -7,6 +7,7 @@ import typer
 
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
+    _get_tracking_table,
     _output_json,
     console,
     error_console,
@@ -219,6 +220,7 @@ def verify_checksums(
                 enabled=True,
                 on_mismatch=ChecksumMismatchBehavior.WARN,
             ),
+            migration_table=_get_tracking_table(config_data),
         )
         mismatches = verifier.verify_all(migrations_dir)
 

@@ -48,6 +48,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_004` | 5 | error | Environment config not found: {env} | Create configuration file for this environment or use an existing one |
 | `CONFIG_005` | 5 | error | Invalid include/exclude pattern | Check glob patterns in your configuration |
 | `CONFIG_006` | 3 | error | Database connection failed | Check database URL, host, port, and credentials |
+| `CONFIG_007` | 5 | error | Conflicting explicit DSN sources: an explicit --config/--env and CONFITURE_DATABASE_URL are both set | Pass exactly one explicit source: drop --config/--env, unset CONFITURE_DATABASE_URL, or pass --no-config to make the env var authoritative. |
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |

@@ -300,21 +300,46 @@ All migration commands are subcommands of `confiture migrate`:
 
 ### Connection source and precedence
 
-`migrate up`, `down`, `status`, `verify`, and `preflight` accept a direct
-PostgreSQL DSN via `--database-url` / `-d`, so tooling that resolves a DSN at
-runtime no longer has to synthesize a temporary YAML file. The connection is
-resolved with this **precedence**:
+`migrate up`, `down`, `down-to`, `current`, `status`, `verify`, and `preflight`
+accept a direct PostgreSQL DSN via `--database-url` / `-d`, so tooling that
+resolves a DSN at runtime no longer has to synthesize a temporary YAML file.
 
-1. `--database-url <dsn>` flag
-2. `CONFITURE_DATABASE_URL` environment variable (canonical)
-3. `DATABASE_URL` environment variable (ubiquitous fallback)
-4. `--config <yaml>` / `--env <name>` file (`database_url` field)
+Since **0.20.0** (#152) the connection source follows a single, secure
+contract — **explicit-and-singular wins; ambiguity fails loud**. Two env vars
+are treated differently by intent: `CONFITURE_DATABASE_URL` is the *canonical*,
+confiture-specific var (set on purpose); `DATABASE_URL` is the *ambient*,
+ubiquitous one and must never silently clobber a config. Resolution order:
+
+1. `--database-url <dsn>` flag — always wins (validated).
+2. An **explicit** `--config`/`--env` **and** `CONFITURE_DATABASE_URL` both
+   present → **error** `CONFIG_007` (exit 5). Two explicit sources are never
+   silently reconciled — pick one, or pass `--no-config`.
+3. An explicit `--config`/`--env` (no canonical var) → the config file. An
+   ambient `DATABASE_URL` does **not** override an explicit config.
+4. `CONFITURE_DATABASE_URL` while `--config` is only the **default** → the
+   canonical var (it beats a *default* config).
+5. A present config file (even the default) → the config; it beats the ambient
+   `DATABASE_URL`. With no config present, the ambient `DATABASE_URL` is used.
+6. `--no-config` suppresses config discovery entirely → the environment
+   (`CONFITURE_DATABASE_URL`, else `DATABASE_URL`) is the **sole** DSN source;
+   with neither set, `CONFIG_010` (exit 5). Use this for runtime-resolved DSNs
+   that must not appear in `argv`.
 
 When a DSN is supplied via flag or env var, **no YAML is required** — the
 migrations directory falls back to `db/migrations` and the tracking table to
 `tb_confiture`. A malformed DSN (not starting with `postgresql://` /
 `postgres://`) fails with `CONFIG_003` (exit 5).
 
+> **Mutating commands** (`up`, `down`, `down-to`) require an *intentional*
+> source: a flag, the canonical var, an explicit/default config, or
+> `--no-config`. They refuse to run against a merely-ambient `DATABASE_URL`
+> (`CONFIG_010`) rather than silently migrating the wrong database.
+>
+> **`migrate status`** connects on any intentional source but stays in its
+> informative "status-unknown" state (exit 0) when only an ambient
+> `DATABASE_URL` is set — it never auto-connects to whatever `DATABASE_URL`
+> happens to be in the environment.
+>
 > **SSH tunnels**: a `--config` YAML may define an `ssh_tunnel` block that
 > rewrites the DSN. `--database-url` bypasses that — the flag is for
 > directly-reachable databases. Tunnelled connections still require `--config`.

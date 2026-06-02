@@ -109,18 +109,36 @@ def test_up_malformed_database_url_exits_5(tmp_path: Path) -> None:
     assert result.exit_code == 5, result.output
 
 
-def test_env_var_honored_as_fallback_when_config_absent(tmp_path: Path, monkeypatch) -> None:
-    """CONFITURE_DATABASE_URL is honored as a fallback when the config is absent.
+def test_explicit_config_plus_canonical_env_conflicts_exit_5(tmp_path: Path, monkeypatch) -> None:
+    """#152: an explicit --config AND CONFITURE_DATABASE_URL → CONFIG_007 (exit 5).
 
-    Precedence: flag > existing --config > env var. Here the --config path does
-    not exist, so the env var supplies the DSN (vs. an ambient env var silently
-    overriding an *existing* config — see test_env_var_does_not_override_config).
+    Two explicit sources fail loud (present-at-all, not 'differing') instead of
+    silently picking one — even when the --config path does not exist. This
+    replaces the pre-0.20.0 'env fallback when config absent' behavior.
     """
     monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
-    missing_cfg = tmp_path / "nope.yaml"  # explicit, non-existent → env fallback applies
+    explicit_cfg = tmp_path / "prod.yaml"
+
+    result = runner.invoke(
+        app,
+        ["migrate", "up", "-c", str(explicit_cfg), "--migrations-dir", str(migrations_dir)],
+    )
+    assert result.exit_code == 5, result.output
+
+
+def test_no_config_makes_canonical_env_the_sole_source(tmp_path: Path, monkeypatch) -> None:
+    """#152: --no-config + CONFITURE_DATABASE_URL connects via the env var alone.
+
+    No conflict (no explicit --config), config discovery suppressed; the
+    unreachable canonical DSN proves the connection was attempted (exit 3).
+    """
+    monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
 
     with patch(
         "confiture.core.connection.psycopg.connect",
@@ -128,9 +146,123 @@ def test_env_var_honored_as_fallback_when_config_absent(tmp_path: Path, monkeypa
     ):
         result = runner.invoke(
             app,
-            ["migrate", "up", "-c", str(missing_cfg), "--migrations-dir", str(migrations_dir)],
+            ["migrate", "up", "--no-config", "--migrations-dir", str(migrations_dir)],
         )
-    # Reached the connection attempt via the env fallback (exit 3).
+    assert result.exit_code == 3, result.output
+
+
+def test_up_ambient_only_database_url_refused_exit_5(tmp_path: Path, monkeypatch) -> None:
+    """#152: a mutating command refuses to run on an ambient-only DATABASE_URL.
+
+    No flag, no canonical var, no config present in the migrations dir, and the
+    default --config (db/environments/local.yaml) is absent under tmp cwd → an
+    intentional source is required, so this fails loud (CONFIG_010 → exit 5)
+    rather than silently migrating against whatever DATABASE_URL is in the env.
+    """
+    monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", _UNREACHABLE)
+    monkeypatch.chdir(tmp_path)  # no db/environments/local.yaml here
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+
+    result = runner.invoke(
+        app,
+        ["migrate", "up", "--migrations-dir", str(migrations_dir)],
+    )
+    assert result.exit_code == 5, result.output
+
+
+def test_status_canonical_env_connects(tmp_path: Path, monkeypatch) -> None:
+    """#152: `migrate status` connects on the canonical var (intentional source)."""
+    monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "001_x.up.sql").write_text("SELECT 1;")
+    (migrations_dir / "001_x.down.sql").write_text("SELECT 1;")
+
+    with patch(
+        "confiture.core.connection.psycopg.connect",
+        side_effect=psycopg.OperationalError("connection refused"),
+    ):
+        result = runner.invoke(
+            app,
+            ["migrate", "status", "--migrations-dir", str(migrations_dir)],
+        )
+    assert result.exit_code == 3, result.output
+
+
+def test_status_ambient_only_stays_unknown_exit_0(tmp_path: Path, monkeypatch) -> None:
+    """#152: `migrate status` does NOT auto-connect on an ambient-only DATABASE_URL.
+
+    It stays in the informative status-unknown state (exit 0) instead.
+    """
+    monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", _UNREACHABLE)
+    monkeypatch.chdir(tmp_path)  # no default config present
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "001_x.up.sql").write_text("SELECT 1;")
+    (migrations_dir / "001_x.down.sql").write_text("SELECT 1;")
+
+    result = runner.invoke(
+        app,
+        ["migrate", "status", "--migrations-dir", str(migrations_dir)],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_preflight_explicit_env_plus_canonical_conflicts_exit_5(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """#152: `preflight --env` + CONFITURE_DATABASE_URL → CONFIG_007 (exit 5).
+
+    Proves two things at once: config_is_explicit recognizes an explicit --env
+    (preflight is the family member that has it), and the conflict surfaces with
+    its own exit code rather than being masked as the --against path's generic
+    'failed to resolve pending' (exit 2).
+    """
+    monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "preflight",
+            "--against",
+            _UNREACHABLE,
+            "--env",
+            "production",
+            "--migrations-dir",
+            str(migrations_dir),
+        ],
+    )
+    assert result.exit_code == 5, result.output
+
+
+def test_env_var_honored_when_no_config_present(tmp_path: Path, monkeypatch) -> None:
+    """#152: with no explicit --config and no default config, the canonical var drives.
+
+    The default --config path is absent (tmp cwd), CONFITURE_DATABASE_URL is set
+    and no explicit -c → row (d): the canonical var supplies the DSN (exit 3).
+    """
+    monkeypatch.setenv("CONFITURE_DATABASE_URL", _UNREACHABLE)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)  # no db/environments/local.yaml here
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+
+    with patch(
+        "confiture.core.connection.psycopg.connect",
+        side_effect=psycopg.OperationalError("connection refused"),
+    ):
+        result = runner.invoke(
+            app,
+            ["migrate", "up", "--migrations-dir", str(migrations_dir)],
+        )
     assert result.exit_code == 3, result.output
 
 

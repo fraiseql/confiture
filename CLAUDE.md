@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.18.0
-**Last Updated**: 2026-05-28
+**Version**: 0.19.0
+**Last Updated**: 2026-06-01
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -799,35 +799,13 @@ Closes #123
 
 ## 🎯 Current Status
 
-### v0.8.20
+Confiture is **production-ready** (in production since March 2026). The four mediums
+(build-from-DDL, incremental migrations, production sync, schema-to-schema via FDW), the
+5-level prep-seed validation, schema linting, the library API (`Migrator.from_config()` +
+`MigratorSession`), and the introspection layer are all implemented.
 
-**Implemented Features**:
-- ✅ Schema builder (Medium 1) - Build from DDL
-- ✅ Migration system (Medium 2) - Incremental migrations with dry-run
-- ✅ Production sync (Medium 3) - Copy data with PII anonymization
-- ✅ Zero-downtime migrations (Medium 4) - Schema-to-schema via FDW
-- ✅ Schema diff detection — pglast primary parser, sqlparse fallback
-- ✅ Large-schema support — schemas with bulk seed data parse without token-limit crash
-- ✅ Prep-seed validation - 5-level validation orchestrator with full Level 4-5 support
-- ✅ CLI with rich terminal output
-- ✅ Migration hooks
-- ✅ Schema linting
-- ✅ Anonymization strategies
-- ✅ Timestamp-based migration versioning (YYYYMMDDHHMMSS)
-- ✅ Exception hierarchy with error codes and resolution hints
-- ✅ Library API: `Migrator.from_config()` + `MigratorSession` context manager
-- ✅ Introspection layer: `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`
-- ✅ Grant accompaniment checker (detect grant changes without migration)
-- ✅ Migration verifier (`.verify.sql` post-migration queries)
-- ✅ `migrate rebuild` command
-- ✅ Semantic exit codes for `migrate status`
-- ✅ JSON/CSV/YAML structured output for all commands
-- ✅ Pre-flight migration check (`migrate preflight` + `MigratorSession.preflight()`)
-
-**Test Metrics**:
-- **Unit tests passing**: 4,620+
-- **Python Support**: 3.11, 3.12, 3.13
-- **Documentation**: Comprehensive with guides and API references
+For the current version, the full shipped-feature list, and live test counts, see
+**[CHANGELOG.md](./CHANGELOG.md)** — the single source of truth for release status.
 
 ---
 
@@ -889,11 +867,9 @@ except psycopg.OperationalError as e:
 
 ---
 
-## 📊 Implementation Metrics
+## 📊 Implementation Capabilities
 
-- ✅ **Tests**: 4,620+ unit passing (2026-03-30)
-- ✅ **CLI Commands**: 20+ implemented across schema, migrate, admin, seed, branch, coordinate, generate subgroups
-- ✅ **Documentation**: Comprehensive guides + API references
+- ✅ **CLI**: commands across schema, migrate, admin, seed, branch, coordinate, generate subgroups
 - ✅ **Validation System**: 5-level prep-seed orchestrator with full database support
 - ✅ **CI/CD**: Multi-platform wheel building, quality gates (ruff + ty + pytest)
 - ✅ **Python Support**: 3.11, 3.12, 3.13 tested
@@ -901,6 +877,8 @@ except psycopg.OperationalError as e:
 - ✅ **Introspection layer**: `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`
 - ✅ **Structured error hierarchy**: `ConfiturError` + error codes + exit codes
 - ✅ **Structured output**: JSON/CSV/YAML for all major commands
+
+For live test counts and per-release detail, see **[CHANGELOG.md](./CHANGELOG.md)**.
 
 ---
 
@@ -934,8 +912,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: 2026-05-28
-**Version**: 0.18.0
+**Last Updated**: 2026-06-01
+**Version**: 0.19.0
 
 ---
 

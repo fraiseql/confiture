@@ -2030,7 +2030,9 @@ class Migrator:
             checksum_config = ChecksumConfig()
 
         if checksum_config.enabled and not force:
-            verifier = MigrationChecksumVerifier(self.connection, checksum_config)
+            verifier = MigrationChecksumVerifier(
+                self.connection, checksum_config, migration_table=self.migration_table
+            )
             verifier.verify_all(effective_migrations_dir)
 
         if progress and verify_task is not None:

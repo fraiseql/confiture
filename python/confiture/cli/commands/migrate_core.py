@@ -9,14 +9,17 @@ import typer
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
+    NO_CONFIG_OPTION_HELP,
     _emit_hint,
     _find_orphaned_sql_files,
     _get_tracking_table,
     _output_json,
     _print_duplicate_versions_warning,
     _print_orphaned_files_warning,
+    config_is_explicit,
     console,
     error_console,
+    has_intentional_dsn_source,
     is_json,
     resolve_database_url,
 )
@@ -25,6 +28,7 @@ from confiture.core.migration_generator import MigrationGenerator
 
 
 def migrate_status(
+    ctx: typer.Context,
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -42,6 +46,11 @@ def migrate_status(
         "--database-url",
         "-d",
         help=DATABASE_URL_OPTION_HELP,
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     output_format: str = typer.Option(
         "table",
@@ -168,18 +177,27 @@ def migrate_status(
         db_error: str | None = None
         tracking_table_absent: bool = False
         status_tracking_table: str | None = None
-        # status only connects when a source is *explicitly* given: a
-        # --database-url flag or an existing --config. An ambient DATABASE_URL
-        # env var must NOT force a connection here — "no config" stays the
-        # informative status-unknown state (exit 0). (#140 / CI regression fix)
-        _db_url_override = resolve_database_url(database_url, None) if database_url else None
+        # status connects only on an *intentional* source: a --database-url
+        # flag, --no-config, an explicit --config, or the canonical
+        # CONFITURE_DATABASE_URL. A merely-ambient DATABASE_URL must NOT force a
+        # connection — "status-unknown" (exit 0) stays the informative default
+        # rather than auto-connecting to whatever DATABASE_URL is in the env
+        # (#152; supersedes the #140 flag-only carve-out). Two explicit sources
+        # still fail loud via CONFIG_007.
         _status_config_data: Any = None
-        if _db_url_override is not None:
-            _status_config_data = {"database_url": _db_url_override}
-        elif config and config.exists():
-            from confiture.core.connection import load_config
+        if has_intentional_dsn_source(ctx, database_url, no_config):
+            _db_url_override = resolve_database_url(
+                database_url,
+                config,
+                config_explicit=config_is_explicit(ctx),
+                no_config=no_config,
+            )
+            if _db_url_override is not None:
+                _status_config_data = {"database_url": _db_url_override}
+            elif config is not None and config.exists():
+                from confiture.core.connection import load_config
 
-            _status_config_data = load_config(config)
+                _status_config_data = load_config(config)
         _db_source = _status_config_data is not None
         if _db_source:
             try:
@@ -444,6 +462,7 @@ def migrate_status(
 
 
 def migrate_current(
+    ctx: typer.Context,
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
         "--config",
@@ -455,6 +474,11 @@ def migrate_current(
         "--database-url",
         "-d",
         help=DATABASE_URL_OPTION_HELP,
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     output_format: str = typer.Option(
         "text",
@@ -500,7 +524,12 @@ def migrate_current(
         raise typer.Exit(2)
 
     try:
-        override = resolve_database_url(database_url, config)
+        override = resolve_database_url(
+            database_url,
+            config,
+            config_explicit=config_is_explicit(ctx),
+            no_config=no_config,
+        )
         config_data = {"database_url": override} if override is not None else load_config(config)
         conn = create_connection(config_data)
         try:
@@ -545,6 +574,7 @@ def migrate_current(
 
 
 def migrate_up(
+    ctx: typer.Context,
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -561,6 +591,11 @@ def migrate_up(
         "--database-url",
         "-d",
         help=DATABASE_URL_OPTION_HELP,
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     target: str = typer.Option(
         None,
@@ -802,9 +837,16 @@ def migrate_up(
             )
             raise typer.Exit(3)
 
-        # Load configuration — a --database-url / env override (#140) wins over
-        # the --config file and skips YAML loading entirely.
-        _db_url_override = resolve_database_url(database_url, config)
+        # Resolve the DSN under the #152 precedence contract. A resolved
+        # override (flag / canonical env / --no-config) skips YAML loading;
+        # `up` is mutating, so an ambient-only DATABASE_URL is refused.
+        _db_url_override = resolve_database_url(
+            database_url,
+            config,
+            config_explicit=config_is_explicit(ctx),
+            no_config=no_config,
+            require_intentional_source=True,
+        )
         if _db_url_override is not None:
             config_data = {"database_url": _db_url_override}
         else:
@@ -937,7 +979,11 @@ def migrate_up(
                 enabled=True,
                 on_mismatch=mismatch_behavior,
             )
-            verifier = MigrationChecksumVerifier(conn, checksum_config)
+            verifier = MigrationChecksumVerifier(
+                conn,
+                checksum_config,
+                migration_table=_get_tracking_table(config_data),
+            )
 
             try:
                 mismatches = verifier.verify_all(migrations_dir)
@@ -1310,6 +1356,7 @@ def migrate_up(
 
 
 def migrate_down(
+    ctx: typer.Context,
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -1326,6 +1373,11 @@ def migrate_down(
         "--database-url",
         "-d",
         help=DATABASE_URL_OPTION_HELP,
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     steps: int = typer.Option(
         1,
@@ -1417,9 +1469,15 @@ def migrate_down(
             )
             raise typer.Exit(2)
 
-        # Load configuration — a --database-url / env override (#140) wins over
-        # the --config file and skips YAML loading entirely.
-        _db_url_override = resolve_database_url(database_url, config)
+        # Resolve the DSN under the #152 precedence contract. `down` is
+        # mutating, so an ambient-only DATABASE_URL is refused.
+        _db_url_override = resolve_database_url(
+            database_url,
+            config,
+            config_explicit=config_is_explicit(ctx),
+            no_config=no_config,
+            require_intentional_source=True,
+        )
         if _db_url_override is not None:
             config_data = {"database_url": _db_url_override}
         else:
@@ -1602,6 +1660,7 @@ def migrate_down(
 
 
 def migrate_down_to(
+    ctx: typer.Context,
     revision: str = typer.Argument(
         ...,
         help="Target revision to roll back to (stays applied). Use 'migrate current' to find it.",
@@ -1622,6 +1681,11 @@ def migrate_down_to(
         "--database-url",
         "-d",
         help=DATABASE_URL_OPTION_HELP,
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help=NO_CONFIG_OPTION_HELP,
     ),
     dry_run: bool = typer.Option(
         False,
@@ -1671,7 +1735,13 @@ def migrate_down_to(
         raise typer.Exit(2)
 
     try:
-        override = resolve_database_url(database_url, config)
+        override = resolve_database_url(
+            database_url,
+            config,
+            config_explicit=config_is_explicit(ctx),
+            no_config=no_config,
+            require_intentional_source=True,
+        )
         if override is not None:
             session = MigratorSession(
                 config=None,
