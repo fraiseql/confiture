@@ -176,6 +176,19 @@ def test_require_intentional_accepts_canonical(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
+class _Src:
+    """Stand-in for a ParameterSource enum member (carries only ``.name``).
+
+    Deliberately avoids importing ``click``: config_is_explicit compares by
+    member name precisely so it never imports the (transitive-only) click
+    package, and these tests must not reintroduce that dependency (CI installs
+    do not guarantee a bare ``import click`` resolves).
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
 class _FakeCtx:
     """Minimal stand-in for a click/typer Context's get_parameter_source."""
 
@@ -187,28 +200,21 @@ class _FakeCtx:
 
 
 def test_config_is_explicit_detects_explicit_env() -> None:
-    from click.core import ParameterSource
-
     from confiture.cli.helpers import config_is_explicit
 
-    ctx = _FakeCtx({"config": ParameterSource.DEFAULT, "env": ParameterSource.COMMANDLINE})
+    ctx = _FakeCtx({"config": _Src("DEFAULT"), "env": _Src("COMMANDLINE")})
     assert config_is_explicit(ctx) is True
 
 
 def test_config_is_explicit_false_when_all_defaulted() -> None:
-    from click.core import ParameterSource
-
     from confiture.cli.helpers import config_is_explicit
 
-    ctx = _FakeCtx({"config": ParameterSource.DEFAULT, "env": ParameterSource.DEFAULT})
+    ctx = _FakeCtx({"config": _Src("DEFAULT"), "env": _Src("DEFAULT_MAP")})
     assert config_is_explicit(ctx) is False
 
 
-def test_config_is_explicit_ignores_unknown_params() -> None:
-    """A command that doesn't declare 'env' yields no source — safely ignored."""
-    from click.core import ParameterSource
-
+def test_config_is_explicit_detects_explicit_config() -> None:
     from confiture.cli.helpers import config_is_explicit
 
-    ctx = _FakeCtx({"config": ParameterSource.COMMANDLINE})  # no "env" key
+    ctx = _FakeCtx({"config": _Src("COMMANDLINE")})  # command with no "env" param
     assert config_is_explicit(ctx) is True

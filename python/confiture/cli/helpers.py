@@ -382,18 +382,19 @@ def config_is_explicit(ctx: Any, *params: str) -> bool:
     source and is ignored, so passing the full set is always safe. Returns
     ``True`` if *any* checked parameter was set on the command line / via env
     rather than defaulted; ``False`` defensively when no source is available.
-    """
-    from click.core import ParameterSource  # noqa: PLC0415
 
+    Compares the ``click.core.ParameterSource`` enum by member name rather than
+    importing it: ``click`` is only a transitive dependency (via typer), so a
+    direct ``import click`` is not guaranteed to resolve. ``ctx`` is already a
+    typer/click Context, so no import is needed.
+    """
     for param in params or ("config", "env"):
         try:
             source = ctx.get_parameter_source(param)
         except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
             continue
-        if source is not None and source not in (
-            ParameterSource.DEFAULT,
-            ParameterSource.DEFAULT_MAP,
-        ):
+        name = getattr(source, "name", None)
+        if name is not None and name not in ("DEFAULT", "DEFAULT_MAP"):
             return True
     return False
 
