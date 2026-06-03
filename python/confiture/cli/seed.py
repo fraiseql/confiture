@@ -13,14 +13,16 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import is_json
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
-from confiture.core.error_handler import print_error_to_console
 from confiture.core.seed_applier import SeedApplier
 from confiture.core.seed_validation import SeedFixer, SeedValidator
 from confiture.core.seed_validation.prep_seed import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
+from confiture.exceptions import ConfigurationError, ConfiturError, SeedError
 
 # Create Rich console for pretty output
 console = Console()
@@ -87,10 +89,14 @@ def _validate_prep_seed(
 
     # Validate database_url requirement
     if max_level >= 4 and not database_url:
-        console.print(
-            "[red]✗ Database URL required for levels 4-5. Use --database-url or --static-only[/red]"
+        fail(
+            ConfigurationError(
+                "Database URL required for levels 4-5. Use --database-url or --static-only.",
+                error_code="CONFIG_010",
+            ),
+            json_mode=is_json(format_),
+            output_file=output,
         )
-        raise typer.Exit(2)
 
     # Create orchestrator config
     config = OrchestrationConfig(
@@ -126,15 +132,14 @@ def _validate_prep_seed(
 
         # Exit with appropriate code
         if report.has_violations:
-            raise typer.Exit(1)
+            raise typer.Exit(1)  # success-signal: validation found violations
         else:
-            raise typer.Exit(0)
+            raise typer.Exit(0)  # success-signal: clean
 
     except typer.Exit:
         raise
     except Exception as e:
-        print_error_to_console(e)
-        raise typer.Exit(2) from e
+        fail(e, json_mode=is_json(format_), output_file=output)
 
 
 @seed_app.command("validate")
@@ -301,15 +306,27 @@ def validate(
             if env_seeds.exists():
                 dirs_to_validate.append((env_seeds, env))
             else:
-                console.print(f"[red]✗ Environment seeds not found: {env_seeds}[/red]")
-                raise typer.Exit(2)
+                fail(
+                    ConfigurationError(
+                        f"Environment seeds not found: {env_seeds}",
+                        error_code="CONFIG_004",
+                    ),
+                    json_mode=is_json(format_),
+                    output_file=output,
+                )
         else:
             # Validate provided directory
             if seeds_dir.exists():
                 dirs_to_validate.append((seeds_dir, "default"))
             else:
-                console.print(f"[red]✗ Seeds directory not found: {seeds_dir}[/red]")
-                raise typer.Exit(2)
+                fail(
+                    ConfigurationError(
+                        f"Seeds directory not found: {seeds_dir}",
+                        error_code="CONFIG_004",
+                    ),
+                    json_mode=is_json(format_),
+                    output_file=output,
+                )
 
         # Create validator
         validator = SeedValidator()
@@ -387,15 +404,14 @@ def validate(
 
         # Exit with appropriate code
         if all_violations:
-            raise typer.Exit(1)
+            raise typer.Exit(1)  # success-signal: validation found violations
         else:
-            raise typer.Exit(0)
+            raise typer.Exit(0)  # success-signal: clean
 
     except typer.Exit:
         raise
     except Exception as e:
-        print_error_to_console(e)
-        raise typer.Exit(2) from e
+        fail(e, json_mode=is_json(format_), output_file=output)
 
 
 @seed_app.command("apply")
@@ -503,12 +519,18 @@ def apply(
         if not sequential:
             console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
             console.print("[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
-            raise typer.Exit(0)
+            raise typer.Exit(0)  # success-signal: advisory, nothing applied
 
         # Verify seeds directory exists
         if not seeds_dir.exists():
-            console.print(f"[red]✗ Seeds directory not found: {seeds_dir}[/red]")
-            raise typer.Exit(2)
+            fail(
+                ConfigurationError(
+                    f"Seeds directory not found: {seeds_dir}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=is_json(format_type),
+                output_file=report_output,
+            )
 
         # Get database connection
         if database_url:
@@ -518,8 +540,14 @@ def apply(
             try:
                 connection = create_connection(database_url)
             except Exception as e:
-                console.print(f"[red]✗ Failed to connect to database: {e}[/red]")
-                raise typer.Exit(2) from e
+                fail(
+                    ConfigurationError(
+                        f"Failed to connect to database: {e}",
+                        error_code="CONFIG_006",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
         else:
             # Load from environment config
             try:
@@ -530,8 +558,14 @@ def apply(
 
                 connection = create_connection(env_config.database_url)
             except Exception as e:
-                console.print(f"[red]✗ Failed to load environment {env}: {e}[/red]")
-                raise typer.Exit(2) from e
+                fail(
+                    ConfigurationError(
+                        f"Failed to load environment {env}: {e}",
+                        error_code="CONFIG_006",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
 
         # Apply seeds sequentially
         try:
@@ -562,19 +596,25 @@ def apply(
 
             # Exit with error if files failed and not continuing
             if result.failed > 0 and not continue_on_error:
-                raise typer.Exit(1)
+                raise typer.Exit(1)  # success-signal: some seed files failed
 
-            raise typer.Exit(0)
+            raise typer.Exit(0)  # success-signal: all applied
 
+        except typer.Exit:
+            connection.close()
+            raise
         except Exception as e:
-            console.print(f"[red]✗ Seed application failed: {e}[/red]")
-            raise typer.Exit(2) from e
+            connection.close()
+            fail(
+                SeedError(f"Seed application failed: {e}"),
+                json_mode=is_json(format_type),
+                output_file=report_output,
+            )
 
     except typer.Exit:
         raise
     except Exception as e:
-        print_error_to_console(e)
-        raise typer.Exit(2) from e
+        fail(e, json_mode=is_json(format_type), output_file=report_output)
 
 
 @seed_app.command("convert")
@@ -664,21 +704,24 @@ def convert(
     try:
         from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
+        # These guards raise ConfiturError (not fail() directly) so the type
+        # checker narrows output_file past the --output requirement; the outer
+        # handler routes them through fail() with their own registry codes.
         if not input_file.exists():
-            console.print(f"[red]✗ Input file/directory not found: {input_file}[/red]")
-            raise typer.Exit(2)
+            raise ConfigurationError(
+                f"Input file/directory not found: {input_file}",
+                error_code="CONFIG_004",
+            )
 
         converter = InsertToCopyConverter()
 
         # Batch mode: process all files in directory
         if batch:
             if not input_file.is_dir():
-                console.print("[red]✗ For --batch mode, input must be a directory[/red]")
-                raise typer.Exit(2)
+                raise ConfigurationError("For --batch mode, input must be a directory.")
 
             if not output_file:
-                console.print("[red]✗ For --batch mode, --output is required[/red]")
-                raise typer.Exit(2)
+                raise ConfigurationError("For --batch mode, --output is required.")
 
             # Create output directory if it doesn't exist
             output_file.mkdir(parents=True, exist_ok=True)
@@ -762,11 +805,10 @@ def convert(
 
     except typer.Exit:
         raise
+    except ConfiturError as e:
+        fail(e, json_mode=False)
     except Exception as e:
-        from rich.text import Text
-
-        console.print(Text(f"Conversion failed: {e!s}", style="red"))
-        raise typer.Exit(2) from e
+        fail(SeedError(f"Conversion failed: {e!s}"), json_mode=False)
 
 
 @seed_app.command("benchmark")
@@ -839,8 +881,13 @@ def benchmark(
         from confiture.core.seed.performance_benchmark import PerformanceBenchmark
 
         if not seeds_dir.exists():
-            console.print(f"[red]✗ Seeds directory not found: {seeds_dir}[/red]")
-            raise typer.Exit(2)
+            fail(
+                ConfigurationError(
+                    f"Seeds directory not found: {seeds_dir}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=False,
+            )
 
         # Collect seed data
         seed_data: dict[str, list[dict]] = {}
@@ -862,13 +909,12 @@ def benchmark(
 
         # Display results using helper
         _format_benchmark_output(result)
-        raise typer.Exit(0)
+        raise typer.Exit(0)  # success-signal: benchmark complete
 
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]✗ Benchmark failed: {e}[/red]")
-        raise typer.Exit(2) from e
+        fail(SeedError(f"Benchmark failed: {e}"), json_mode=False)
 
 
 @seed_app.command("generate")
@@ -916,8 +962,10 @@ def seed_generate(
     try:
         result = bridge.generate(config)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            SeedError(f"Seed generation failed: {e}"),
+            json_mode=is_json(format_type),
+        )
 
     if format_type == "json":
         import json

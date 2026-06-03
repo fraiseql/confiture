@@ -167,8 +167,8 @@ class TestPrepSeedCLI:
             )
 
             # Should error about missing database URL
-            assert result.exit_code == 2
-            assert "Database URL required" in result.stdout
+            assert result.exit_code == 5
+            assert "Database URL required" in result.output
 
         finally:
             os.chdir(original_cwd)
@@ -200,8 +200,8 @@ class TestPrepSeedCLI:
             )
 
             # Should error about missing database URL
-            assert result.exit_code == 2
-            assert "Database URL required" in result.stdout
+            assert result.exit_code == 5
+            assert "Database URL required" in result.output
 
         finally:
             os.chdir(original_cwd)
@@ -383,7 +383,7 @@ class TestPrepSeedCLI:
             )
 
             # Should exit with error code
-            assert result.exit_code == 2
+            assert result.exit_code == 5
 
         finally:
             os.chdir(original_cwd)

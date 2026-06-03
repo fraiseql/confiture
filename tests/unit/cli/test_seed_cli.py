@@ -176,8 +176,8 @@ class TestSeedConvertCommand:
             ["convert", "--input", str(input_dir), "--batch"],
         )
 
-        assert result.exit_code == 2
-        assert "output" in result.stdout.lower()
+        assert result.exit_code == 5
+        assert "output" in result.output.lower()
 
     def test_seed_convert_batch_mode_requires_directory(
         self, cli_runner: CliRunner, tmp_path: Path
@@ -192,8 +192,8 @@ class TestSeedConvertCommand:
             ["convert", "--input", str(input_file), "--batch", "--output", str(output_dir)],
         )
 
-        assert result.exit_code == 2
-        assert "directory" in result.stdout.lower()
+        assert result.exit_code == 5
+        assert "directory" in result.output.lower()
 
     def test_seed_convert_batch_mode_processes_multiple_files(
         self, cli_runner: CliRunner, tmp_path: Path
