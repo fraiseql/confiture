@@ -19,6 +19,7 @@ import psycopg
 import psycopg.pq
 from psycopg import sql as pgsql
 
+from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator.discovery import find_duplicate_migration_versions
 from confiture.core.checksum import (
     ChecksumConfig,
@@ -1189,115 +1190,7 @@ class Migrator:
             MigrationError: If migration fails or was not applied
             PreconditionValidationError: If precondition validation fails
         """
-        # Check if applied
-        if not self._is_applied(migration.version):
-            raise MigrationError(
-                f"Migration {migration.version} ({migration.name}) "
-                "has not been applied, cannot rollback",
-                migration.version,
-                migration.name,
-                error_code="MIGR_100",
-                resolution_hint="Run 'confiture migrate status' to see which migrations are applied",
-            )
-
-        # Validate preconditions before rolling back
-        if not skip_preconditions:
-            self._validate_preconditions(
-                migration, direction="down", preconditions=migration.down_preconditions
-            )
-
-        if migration.transactional:
-            self._rollback_transactional(migration)
-        else:
-            self._rollback_non_transactional(migration)
-
-    def _rollback_transactional(self, migration: Migration) -> None:
-        """Rollback a migration within a transaction.
-
-        Args:
-            migration: Migration instance to rollback
-        """
-        try:
-            # Execute down() method
-            logger.debug(f"Executing rollback (down) for migration {migration.version}")
-            migration.down()
-
-            # Remove from tracking table
-            self._execute_sql(
-                pgsql.SQL("DELETE FROM {} WHERE version = %s").format(self._table_ident),
-                (migration.version,),
-            )
-
-            # Commit transaction
-            self.connection.commit()
-            logger.info(
-                f"Successfully rolled back migration {migration.version} ({migration.name})"
-            )
-
-        except Exception as e:
-            self.connection.rollback()
-            raise MigrationError(
-                f"Failed to rollback migration {migration.version} ({migration.name}): {e}",
-                migration.version,
-                migration.name,
-                resolution_hint="Check the down migration SQL and ensure the database objects being reversed still exist",
-            ) from e
-
-    def _rollback_non_transactional(self, migration: Migration) -> None:
-        """Rollback a migration in autocommit mode (no transaction).
-
-        WARNING: If this fails, manual cleanup may be required.
-
-        Args:
-            migration: Migration instance to rollback
-        """
-        logger.warning(
-            f"Rolling back migration {migration.version} in non-transactional mode. "
-            "Manual cleanup may be required on failure."
-        )
-
-        # Ensure any pending transaction is committed
-        self.connection.commit()
-
-        # Set autocommit mode
-        original_autocommit = self.connection.autocommit
-        self.connection.autocommit = True
-
-        try:
-            # Execute down() method
-            logger.debug(
-                f"Executing rollback (down) for migration {migration.version} (autocommit)"
-            )
-            migration.down()
-
-            # Remove from tracking table
-            self._execute_sql(
-                pgsql.SQL("DELETE FROM {} WHERE version = %s").format(self._table_ident),
-                (migration.version,),
-            )
-
-            logger.info(
-                f"Successfully rolled back non-transactional migration "
-                f"{migration.version} ({migration.name})"
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Non-transactional rollback of migration {migration.version} failed. "
-                "Manual cleanup may be required."
-            )
-            raise MigrationError(
-                f"Failed to rollback non-transactional migration "
-                f"{migration.version} ({migration.name}): {e}. "
-                "Manual cleanup may be required.",
-                migration.version,
-                migration.name,
-                resolution_hint="Inspect the database for partial rollback changes and manually complete the reversal",
-            ) from e
-
-        finally:
-            # Restore original autocommit setting
-            self.connection.autocommit = original_autocommit
+        rollback_impl.rollback(self, migration, skip_preconditions)
 
     def _is_applied(self, version: str) -> bool:
         """Check if migration version has been applied.
