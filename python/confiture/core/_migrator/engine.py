@@ -19,6 +19,7 @@ import psycopg
 import psycopg.pq
 from psycopg import sql as pgsql
 
+from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator.discovery import find_duplicate_migration_versions
 from confiture.core.checksum import (
@@ -912,119 +913,14 @@ class Migrator:
             MigrationError: If the source connection fails or its table
                 cannot be read.
         """
-        from confiture.core._migrator.baseline_copy import _select_rows_to_copy
-
-        local_files = self.find_migration_files(migrations_dir)
-        local_versions = {self._version_from_filename(f.name) for f in local_files}
-
-        source_table_name = source_table or self.migration_table
-        source_rows = self._read_source_tracking_table(source_dsn, source_table_name)
-
-        selection = _select_rows_to_copy(
-            source_rows,
-            local_versions=local_versions,
+        return baseline_impl.baseline_from_db(
+            self,
+            source_dsn,
+            migrations_dir,
             through=through,
+            dry_run=dry_run,
+            source_table=source_table,
         )
-
-        applied_versions = set(self.get_applied_versions())
-        copied: list[dict[str, Any]] = []
-        skipped: list[str] = []
-
-        for index, row in enumerate(selection.rows):
-            if row["version"] in applied_versions:
-                skipped.append(row["version"])
-                continue
-            if not dry_run:
-                self._insert_baseline_row(row, index=index)
-            copied.append(row)
-
-        if not dry_run:
-            self.connection.commit()
-
-        return {
-            "copied": copied,
-            "skipped": skipped,
-            "source_only": selection.source_only,
-            "warnings": selection.warnings,
-            "dry_run": dry_run,
-        }
-
-    def _read_source_tracking_table(
-        self,
-        source_dsn: str,
-        source_table: str,
-    ) -> list[dict[str, Any]]:
-        """Open *source_dsn* and SELECT all rows from *source_table*.
-
-        Returns rows as dicts keyed by column name, ordered by version
-        ascending.  Closes the source connection before returning.
-        """
-        if not _VALID_TABLE_RE.match(source_table):
-            raise MigrationError(
-                f"Invalid source table name: {source_table!r}.",
-                resolution_hint="Pass --source-table with a valid identifier.",
-            )
-        src_parts = source_table.split(".", 1)
-        if len(src_parts) == 2:
-            src_ident = pgsql.Identifier(src_parts[0], src_parts[1])
-        else:
-            src_ident = pgsql.Identifier(src_parts[0])
-
-        try:
-            with psycopg.connect(source_dsn) as src_conn, src_conn.cursor() as cursor:
-                cursor.execute(
-                    pgsql.SQL(
-                        "SELECT version, name, applied_at, execution_time_ms, "
-                        "checksum FROM {} ORDER BY version ASC"
-                    ).format(src_ident)
-                )
-                rows = cursor.fetchall()
-                columns = [desc[0] for desc in (cursor.description or [])]
-        except psycopg.Error as exc:
-            raise MigrationError(
-                f"Could not read source tracking table {source_table!r}: {exc}",
-                resolution_hint=(
-                    "Verify the DSN, that the source DB is reachable, and that "
-                    "the tracking table exists and is readable."
-                ),
-            ) from exc
-
-        return [dict(zip(columns, row, strict=False)) for row in rows]
-
-    def _insert_baseline_row(self, row: dict[str, Any], *, index: int = 0) -> None:
-        """Insert one source row into the target tracking table.
-
-        The target row gets a freshly generated ``id`` and a ``slug``
-        that records the copy operation, so the audit trail is clear.
-        ``applied_at``, ``execution_time_ms``, and ``checksum`` are
-        preserved verbatim from the source.
-
-        ``index`` is the row's position in the copy batch and is
-        embedded in the slug so that two source rows sharing the same
-        ``name`` within the same wall-clock second do not collide on
-        the ``slug`` UNIQUE constraint.
-        """
-        from datetime import datetime
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = f"{row['name']}_{timestamp}_{index:04d}_baseline_from_db"
-
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                pgsql.SQL("""
-                INSERT INTO {}
-                    (id, slug, version, name, applied_at, execution_time_ms, checksum)
-                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
-                """).format(self._table_ident),
-                (
-                    slug,
-                    row["version"],
-                    row["name"],
-                    row.get("applied_at"),
-                    row.get("execution_time_ms") or 0,
-                    row.get("checksum"),
-                ),
-            )
 
     def _clear_tracking_table(self) -> int:
         """Delete all entries from the tracking table.
@@ -1035,10 +931,7 @@ class Migrator:
         Returns:
             Number of rows deleted.
         """
-        with self.connection.cursor() as cursor:
-            cursor.execute(pgsql.SQL("DELETE FROM {}").format(self._table_ident))
-            deleted = cursor.rowcount
-        return deleted
+        return baseline_impl.clear_tracking_table(self)
 
     def reinit(
         self,
@@ -1073,93 +966,7 @@ class Migrator:
             >>> migrator.reinit()  # marks all files
             MigrateReinitResult(success=True, deleted_count=3, ...)
         """
-        from confiture.models.results import MigrateReinitResult, MigrationApplied
-
-        start_time = time.time()
-
-        # Discover migration files
-        all_migrations = self.find_migration_files(migrations_dir)
-
-        # Filter to target version if specified
-        if through is not None:
-            migrations_to_mark: list[Path] = []
-            found = False
-            for migration_file in all_migrations:
-                version = self._version_from_filename(migration_file.name)
-                migrations_to_mark.append(migration_file)
-                if version == through:
-                    found = True
-                    break
-            if not found:
-                raise MigrationError(
-                    f"Migration version '{through}' not found on disk",
-                    through,
-                    error_code="MIGR_100",
-                    resolution_hint=f"Run 'confiture migrate status' to list available versions, or check that version '{through}' exists in your migrations directory",
-                )
-        else:
-            migrations_to_mark = list(all_migrations)
-
-        try:
-            # Clear tracking table
-            deleted_count = self._clear_tracking_table()
-
-            # Re-mark each migration using direct INSERT (avoid mark_applied's
-            # commit which would interfere with dry-run rollback)
-            from datetime import datetime
-
-            from confiture.core.checksum import compute_checksum
-            from confiture.core.connection import load_migration_class
-
-            marked: list[MigrationApplied] = []
-            for migration_file in migrations_to_mark:
-                migration_class = load_migration_class(migration_file)
-                migration = migration_class(connection=self.connection)
-
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                slug = f"{migration.name}_{timestamp}_reinit"
-                checksum = compute_checksum(migration_file)
-
-                with self.connection.cursor() as cursor:
-                    cursor.execute(
-                        pgsql.SQL("""
-                        INSERT INTO {}
-                            (id, slug, version, name, execution_time_ms, checksum)
-                        VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
-                        """).format(self._table_ident),
-                        (slug, migration.version, migration.name, 0, checksum),
-                    )
-
-                name_parts = migration_file.stem.split("_", 1)
-                name = name_parts[1] if len(name_parts) > 1 else migration_file.stem
-                if name.endswith(".up"):
-                    name = name[:-3]
-                marked.append(
-                    MigrationApplied(
-                        version=migration.version,
-                        name=name,
-                        execution_time_ms=0,
-                    )
-                )
-
-            if dry_run:
-                self.connection.rollback()
-            else:
-                self.connection.commit()
-
-            elapsed_ms = int((time.time() - start_time) * 1000)
-
-            return MigrateReinitResult(
-                success=True,
-                deleted_count=deleted_count,
-                migrations_marked=marked,
-                total_execution_time_ms=elapsed_ms,
-                dry_run=dry_run,
-            )
-
-        except Exception:
-            self.connection.rollback()
-            raise
+        return baseline_impl.reinit(self, through, dry_run, migrations_dir)
 
     def rollback(
         self,
@@ -1337,115 +1144,23 @@ class Migrator:
     )
 
     def _discover_user_schemas(self) -> list[str]:
-        """Query all user-created schemas, excluding system schemas.
-
-        Returns:
-            List of schema names (e.g. ``["public", "myapp"]``).
-        """
-        with self.connection.cursor() as cursor:
-            cursor.execute("SELECT schema_name FROM information_schema.schemata")
-            rows = cursor.fetchall()
-
-        return [
-            row[0]
-            for row in rows
-            if row[0] not in self._SYSTEM_SCHEMAS
-            and not row[0].startswith("pg_temp_")
-            and not row[0].startswith("pg_toast_temp_")
-        ]
+        """Query all user-created schemas, excluding system schemas."""
+        return baseline_impl.discover_user_schemas(self)
 
     def _drop_user_schemas(self, schemas: list[str]) -> list[str]:
-        """Drop user schemas with CASCADE and recreate ``public``.
-
-        Runs in autocommit mode (DDL cannot be rolled back safely).
-
-        Args:
-            schemas: Schema names to drop.
-
-        Returns:
-            List of schemas that were actually dropped.
-        """
-        if not schemas:
-            return []
-
-        original_autocommit = self.connection.autocommit
-        # Close any open transaction before switching to autocommit (issue #93)
-        self.connection.rollback()
-        self.connection.autocommit = True
-        try:
-            with self.connection.cursor() as cursor:
-                for schema in schemas:
-                    logger.info("Dropping schema %s", schema)
-                    cursor.execute(
-                        pgsql.SQL("DROP SCHEMA {} CASCADE").format(pgsql.Identifier(schema))
-                    )
-                # Always recreate public
-                cursor.execute("CREATE SCHEMA public")
-            return list(schemas)
-        finally:
-            self.connection.autocommit = original_autocommit
+        """Drop user schemas with CASCADE and recreate ``public`` (autocommit)."""
+        return baseline_impl.drop_user_schemas(self, schemas)
 
     def _apply_ddl_string(self, ddl: str) -> tuple[int, list[str]]:
         """Execute DDL statements in autocommit mode.
 
-        Strips BEGIN/COMMIT wrappers, splits into statements, and executes
-        each one. CREATE EXTENSION failures are captured as warnings rather
-        than raised.
-
-        Args:
-            ddl: Raw DDL string (may contain multiple statements).
-
-        Returns:
-            Tuple of (statements_executed, warnings).
+        Returns a tuple of (statements_executed, warnings).
         """
-        import sqlparse
-
-        from confiture.core.sql_utils import strip_transaction_wrappers
-
-        cleaned = strip_transaction_wrappers(ddl)
-        statements = [s.strip() for s in sqlparse.split(cleaned) if s.strip()]
-
-        if not statements:
-            return 0, []
-
-        warnings: list[str] = []
-        executed = 0
-
-        original_autocommit = self.connection.autocommit
-        # Close any open transaction before switching to autocommit (issue #93)
-        self.connection.rollback()
-        self.connection.autocommit = True
-        try:
-            with self.connection.cursor() as cursor:
-                for stmt in statements:
-                    if not stmt or stmt == ";":
-                        continue
-                    try:
-                        cursor.execute(stmt)
-                        executed += 1
-                    except Exception as exc:
-                        if "CREATE EXTENSION" in stmt.upper():
-                            warnings.append(f"CREATE EXTENSION warning: {exc}")
-                        else:
-                            raise
-        finally:
-            self.connection.autocommit = original_autocommit
-
-        return executed, warnings
+        return baseline_impl.apply_ddl_string(self, ddl)
 
     def _backup_tracking_table(self) -> list[dict[str, Any]]:
-        """Dump current tracking table contents as list of dicts.
-
-        Returns:
-            List of row dicts, or empty list if table does not exist.
-        """
-        if not self.tracking_table_exists():
-            return []
-
-        with self.connection.cursor() as cursor:
-            cursor.execute(pgsql.SQL("SELECT * FROM {}").format(self._table_ident))
-            columns = [desc[0] for desc in (cursor.description or [])]
-            return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+        """Dump current tracking table contents as list of dicts (empty if absent)."""
+        return baseline_impl.backup_tracking_table(self)
 
     def rebuild(
         self,
@@ -1481,114 +1196,16 @@ class Migrator:
         Raises:
             RebuildError: If schema build or DDL application fails.
         """
-        from confiture.exceptions import RebuildError
-        from confiture.models.results import MigrateRebuildResult
-
-        start_time = time.time()
-        warnings: list[str] = []
-        schemas_dropped: list[str] = []
-        ddl_count = 0
-        seeds_applied: int | None = None
-
-        if schema_dir is None:
-            schema_dir = Path("db") / "schema"
-        if migrations_dir is None:
-            migrations_dir = Path("db") / "migrations"
-        if seeds_dir is None:
-            seeds_dir = Path("db") / "seeds"
-
-        # Step 1: Backup tracking table if requested
-        if backup_tracking:
-            self._backup_tracking_table()  # result used by CLI for JSON dump
-
-        # Step 2: Build DDL via SchemaBuilder
-        try:
-            from confiture.core.builder import SchemaBuilder
-
-            builder = SchemaBuilder(
-                env=env_config.name if env_config and hasattr(env_config, "name") else "rebuild",
-            )
-            ddl = builder.build(schema_only=True)
-        except Exception as exc:
-            raise RebuildError(
-                f"Schema build failed: {exc}",
-                resolution_hint="Check your schema DDL files for syntax errors and ensure the schema directory exists",
-            ) from exc
-
-        if dry_run:
-            # Count what would be executed
-            import sqlparse
-
-            from confiture.core.sql_utils import strip_transaction_wrappers
-
-            cleaned = strip_transaction_wrappers(ddl)
-            stmts = [s.strip() for s in sqlparse.split(cleaned) if s.strip()]
-            ddl_count = len(stmts)
-
-            # Count migrations that would be marked
-            all_migrations = self.find_migration_files(migrations_dir)
-            from confiture.models.results import MigrationApplied
-
-            marked = []
-            for mf in all_migrations:
-                version = self._version_from_filename(mf.name)
-                name_parts = mf.stem.split("_", 1)
-                name = name_parts[1] if len(name_parts) > 1 else mf.stem
-                if name.endswith(".up"):
-                    name = name[:-3]
-                marked.append(MigrationApplied(version=version, name=name, execution_time_ms=0))
-
-            # Discover schemas that would be dropped
-            if drop_schemas:
-                schemas_dropped = self._discover_user_schemas()
-
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            return MigrateRebuildResult(
-                success=True,
-                schemas_dropped=schemas_dropped,
-                ddl_statements_executed=ddl_count,
-                migrations_marked=marked,
-                total_execution_time_ms=elapsed_ms,
-                dry_run=True,
-                warnings=warnings,
-            )
-
-        # Step 3: Drop schemas if requested
-        if drop_schemas:
-            user_schemas = self._discover_user_schemas()
-            schemas_dropped = self._drop_user_schemas(user_schemas)
-
-        # Step 4: Apply DDL
-        ddl_count, ddl_warnings = self._apply_ddl_string(ddl)
-        warnings.extend(ddl_warnings)
-
-        # Step 5: Initialize tracking table + re-baseline
-        self.initialize()
-        reinit_result = self.reinit(migrations_dir=migrations_dir)
-        migrations_marked = reinit_result.migrations_marked
-
-        # Step 6: Optionally apply seeds
-        if apply_seeds:
-            from confiture.core.seed_applier import SeedApplier
-
-            applier = SeedApplier(
-                seeds_dir=seeds_dir,
-                connection=self.connection,
-            )
-            seed_result = applier.apply_sequential()
-            seeds_applied = seed_result.succeeded
-
-        elapsed_ms = int((time.time() - start_time) * 1000)
-
-        return MigrateRebuildResult(
-            success=True,
-            schemas_dropped=schemas_dropped,
-            ddl_statements_executed=ddl_count,
-            migrations_marked=migrations_marked,
-            total_execution_time_ms=elapsed_ms,
-            dry_run=False,
-            warnings=warnings,
-            seeds_applied=seeds_applied,
+        return baseline_impl.rebuild(
+            self,
+            drop_schemas=drop_schemas,
+            dry_run=dry_run,
+            apply_seeds=apply_seeds,
+            backup_tracking=backup_tracking,
+            schema_dir=schema_dir,
+            migrations_dir=migrations_dir,
+            seeds_dir=seeds_dir,
+            env_config=env_config,
         )
 
     def tracking_table_exists(self) -> bool:
@@ -1656,32 +1273,7 @@ class Migrator:
             >>> migrator.baseline_through("007", Path("db/migrations"))
             ["001", "002", "003", "004", "005", "006", "007"]
         """
-        all_migrations = self.find_migration_files(migrations_dir)
-
-        migrations_to_mark: list[Path] = []
-        found = False
-        for migration_file in all_migrations:
-            version = self._version_from_filename(migration_file.name)
-            migrations_to_mark.append(migration_file)
-            if version == through:
-                found = True
-                break
-
-        if not found:
-            raise MigrationError(
-                f"Migration version '{through}' not found on disk",
-                through,
-                resolution_hint=f"Run 'confiture migrate status' to list available versions, or check that version '{through}' exists in your migrations directory",
-            )
-
-        already_applied = set(self.get_applied_versions())
-        newly_marked: list[str] = []
-        for migration_file in migrations_to_mark:
-            version = self._version_from_filename(migration_file.name)
-            if version not in already_applied:
-                self.mark_applied(migration_file, reason="auto-baseline")
-                newly_marked.append(version)
-        return newly_marked
+        return baseline_impl.baseline_through(self, through, migrations_dir)
 
     def find_duplicate_versions(self, migrations_dir: Path | None = None) -> dict[str, list[Path]]:
         """Find migration files that share the same version prefix.
