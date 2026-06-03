@@ -22,6 +22,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import is_json
+from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.integrations.pggit.coordination import (
     ConflictSeverity,
     IntentRegistry,
@@ -59,20 +62,26 @@ def _get_connection(database_url: str | None = None) -> psycopg.Connection:
     Returns:
         psycopg Connection
     """
-    if database_url:
-        return psycopg.connect(database_url)
-
-    # Try environment variable
-    import os
-
-    url = os.getenv("DATABASE_URL") or os.getenv("CONFITURE_DB_URL")
+    url = database_url
     if not url:
-        console.print(
-            "[red]Error:[/red] No database URL provided. Use --db-url or set DATABASE_URL environment variable"
-        )
-        raise typer.Exit(1)
+        # Try environment variable
+        import os
 
-    return psycopg.connect(url)
+        url = os.getenv("DATABASE_URL") or os.getenv("CONFITURE_DB_URL")
+    if not url:
+        raise ConfigurationError(
+            "No database URL provided. Use --database-url or set DATABASE_URL.",
+            error_code="CONFIG_010",
+            resolution_hint="Pass --database-url or export DATABASE_URL / CONFITURE_DB_URL.",
+        )
+
+    try:
+        return psycopg.connect(url)
+    except Exception as exc:
+        raise ConfigurationError(
+            f"Connection failed: {exc}",
+            error_code="CONFIG_006",
+        ) from exc
 
 
 @coordinate_app.command()
@@ -112,8 +121,10 @@ def register(
             # Load from file
             schema_file = Path(schema_changes)
             if not schema_file.exists():
-                console.print(f"[red]Error:[/red] SQL file not found: {schema_changes}")
-                raise typer.Exit(1)
+                raise ConfigurationError(
+                    f"SQL file not found: {schema_changes}",
+                    error_code="CONFIG_004",
+                )
             schema_list = [schema_file.read_text()]
         else:
             # Split by semicolon
@@ -185,8 +196,7 @@ def register(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))
 
 
 @coordinate_app.command()
@@ -214,12 +224,11 @@ def list_intents(
         if status_filter:
             try:
                 intent_status = IntentStatus[status_filter.upper()]
-            except KeyError:
-                console.print(
-                    f"[red]Error:[/red] Invalid status: {status_filter}. "
-                    "Valid options: registered, in_progress, completed, merged, abandoned, conflicted"
-                )
-                raise typer.Exit(1) from None
+            except KeyError as exc:
+                raise ConfigurationError(
+                    f"Invalid status: {status_filter}. Valid options: registered, "
+                    "in_progress, completed, merged, abandoned, conflicted",
+                ) from exc
 
         # List intents
         intents = registry.list_intents(status=intent_status, agent_id=agent_filter)
@@ -262,8 +271,7 @@ def list_intents(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))
 
 
 @coordinate_app.command()
@@ -292,8 +300,10 @@ def check(
         if schema_changes.endswith(".sql"):
             schema_file = Path(schema_changes)
             if not schema_file.exists():
-                console.print(f"[red]Error:[/red] SQL file not found: {schema_changes}")
-                raise typer.Exit(1)
+                raise ConfigurationError(
+                    f"SQL file not found: {schema_changes}",
+                    error_code="CONFIG_004",
+                )
             schema_list = [schema_file.read_text()]
         else:
             schema_list = [s.strip() for s in schema_changes.split(";") if s.strip()]
@@ -354,8 +364,7 @@ def check(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))
 
 
 @coordinate_app.command()
@@ -375,11 +384,10 @@ def status(
 
         intent = registry.get_intent(intent_id)
         if not intent:
-            if format_output == "json":
-                _output_json({"error": "Intention not found", "intent_id": intent_id})
-            else:
-                console.print(f"[red]Error:[/red] Intention not found: {intent_id}")
-            raise typer.Exit(1)
+            raise ConfiturError(
+                f"Intention not found: {intent_id}",
+                context={"intent_id": intent_id},
+            )
 
         # Get conflicts
         conflicts = registry.get_conflicts(intent.id)
@@ -427,8 +435,7 @@ def status(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))
 
 
 @coordinate_app.command()
@@ -495,8 +502,7 @@ def conflicts(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))
 
 
 @coordinate_app.command()
@@ -533,8 +539,7 @@ def resolve(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))
 
 
 @coordinate_app.command()
@@ -557,8 +562,10 @@ def abandon(
 
         intent = registry.get_intent(intent_id)
         if not intent:
-            console.print(f"[red]Error:[/red] Intention not found: {intent_id}")
-            raise typer.Exit(1)
+            raise ConfiturError(
+                f"Intention not found: {intent_id}",
+                context={"intent_id": intent_id},
+            )
 
         registry.mark_abandoned(intent_id, reason=reason)
 
@@ -580,5 +587,4 @@ def abandon(
         conn.close()
 
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
+        fail(e, json_mode=is_json(format_output))

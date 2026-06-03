@@ -56,7 +56,8 @@ _ALLOWLIST: dict[str, int] = {
     "commands/migrate_state.py": 16,  # TODO(phase-02): convert to fail()
     "branch.py": 14,  # TODO(phase-02): convert to fail()
     "generate.py": 1,  # success-signal: renumber → Exit(1) when dangling refs remain
-    "coordinate.py": 13,  # TODO(phase-02): convert to fail()
+    # coordinate.py: fully converted (Cycle 1) — _get_connection + inner guards
+    # raise ConfiturErrors; every command's outer handler routes through fail().
     "commands/schema.py": 2,  # success-signal: lint / lint-unified → Exit(1) on violations
     "commands/bootstrap.py": 4,  # success-signal: check/dry-run/apply → Exit(0); drift → Exit(1)
     # commands/apply_as.py: fully converted (Cycle 1) — config → 5, migration-state

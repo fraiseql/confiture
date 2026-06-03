@@ -330,8 +330,9 @@ class TestCoordinateListCommand:
             app, ["coordinate", "list-intents", "--status-filter", "invalid_status"]
         )
 
-        assert result.exit_code == 1
-        assert "Invalid status" in result.stdout
+        # Invalid status filter → ConfigurationError → exit 5; message on stderr.
+        assert result.exit_code == 5
+        assert "Invalid status" in result.output
 
 
 class TestCoordinateCheckCommand:
@@ -471,7 +472,7 @@ class TestCoordinateStatusCommand:
         result = runner.invoke(app, ["coordinate", "status", "--intent-id", intent_id])
 
         assert result.exit_code == 1
-        assert "not found" in result.stdout
+        assert "not found" in result.output
 
     @patch("confiture.cli.coordinate._get_connection")
     @patch("confiture.cli.coordinate.IntentRegistry")
@@ -674,7 +675,7 @@ class TestCoordinateAbandonCommand:
         )
 
         assert result.exit_code == 1
-        assert "not found" in result.stdout
+        assert "not found" in result.output
 
 
 class TestCoordinateConnectionHandling:
@@ -703,8 +704,9 @@ class TestCoordinateConnectionHandling:
                 ],
             )
 
-            assert result.exit_code == 1
-            assert "database url" in result.stdout.lower()
+            # No DSN → CONFIG_010 → exit 5; message on stderr (mixed in output).
+            assert result.exit_code == 5
+            assert "database url" in result.output.lower()
         finally:
             # Restore environment
             if old_db_url:
