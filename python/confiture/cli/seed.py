@@ -464,8 +464,13 @@ def apply(
     ),
     report_output: Path = typer.Option(
         None,
+        "--output",
+        "-o",
         "--report",
-        help="Save structured output (JSON/CSV) to file",
+        help=(
+            "Save structured output (JSON/CSV) to file. --report is a "
+            "back-compat alias for --output/-o (DOCS-M2)."
+        ),
     ),
 ) -> None:
     """Load seed data into the database.

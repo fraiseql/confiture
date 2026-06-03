@@ -268,7 +268,10 @@ def build(
     report_output: Path = typer.Option(
         None,
         "--report",
-        help="Save structured output (JSON/CSV) to file (default: stdout)",
+        help=(
+            "Save structured build report (JSON/CSV) to file (default: stdout). "
+            "Distinct from --output/-o, which is the generated *schema* file."
+        ),
     ),
 ) -> None:
     """Build complete schema from DDL files in one fast operation.

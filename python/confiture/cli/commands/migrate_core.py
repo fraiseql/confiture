@@ -56,13 +56,13 @@ def migrate_status(
         "table",
         "--format",
         "-f",
-        help="Output format: table or json (default: table)",
+        help="Output format: table, json, or csv (default: table)",
     ),
     output_file: Path = typer.Option(
         None,
         "--output",
         "-o",
-        help="Save output to file (default: stdout, useful with json)",
+        help="Save output to file (default: stdout, useful with json/csv)",
     ),
     check_rebuild: bool = typer.Option(
         False,
@@ -2231,11 +2231,7 @@ def migrate_estimate(
 
         # If no tables specified, estimate all in public schema
         if not tables:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
-                )
-                tables = [row[0] for row in cur.fetchall()]
+            tables = estimator.all_tables()
 
         if not tables:
             console.print("[yellow]No tables found.[/yellow]")

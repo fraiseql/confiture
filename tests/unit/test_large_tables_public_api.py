@@ -105,6 +105,8 @@ def test_migrate_estimate_with_mock_db(tmp_path):
     mock_estimator = MagicMock()
     mock_estimator.get_row_count_estimate.return_value = 1_000_000
     mock_estimator.should_use_batched_operation.return_value = True
+    # ARCH-L2: the table list now comes from the core method, not raw cursor SQL.
+    mock_estimator.all_tables.return_value = ["users", "orders"]
 
     with (
         patch("confiture.core.connection.load_config", return_value=MagicMock()),

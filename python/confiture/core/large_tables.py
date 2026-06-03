@@ -703,6 +703,26 @@ class TableSizeEstimator:
             result = cur.fetchone()
             return max(0, result[0]) if result else 0
 
+    def all_tables(self, schema: str = "public") -> list[str]:
+        """List the base tables in *schema*, ordered by name.
+
+        Centralizes the ``pg_tables`` enumeration the ``migrate estimate``
+        command needs when no explicit tables are passed, keeping raw catalog
+        SQL out of the CLI layer (ARCH-L2).
+
+        Args:
+            schema: Schema to enumerate (default ``public``).
+
+        Returns:
+            Sorted list of table names in *schema*.
+        """
+        with self.connection.cursor() as cur:
+            cur.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = %s ORDER BY tablename",
+                (schema,),
+            )
+            return [row[0] for row in cur.fetchall()]
+
     def get_exact_row_count(self, table: str, where_clause: str = "TRUE") -> int:
         """Get exact row count (slow but accurate).
 

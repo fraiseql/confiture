@@ -455,6 +455,29 @@ class TestTableSizeEstimator:
 
         assert count == 1000000
 
+    def test_all_tables_lists_public_base_tables(self, mock_connection):
+        """all_tables() enumerates base tables via pg_tables, parameterised by schema."""
+        conn, cursor = mock_connection
+        cursor.fetchall.return_value = [("orders",), ("users",)]
+        estimator = TableSizeEstimator(conn)
+
+        tables = estimator.all_tables()
+
+        assert tables == ["orders", "users"]
+        # Schema is bound as a parameter (not interpolated) and defaults to public.
+        sql, params = cursor.execute.call_args[0]
+        assert "pg_tables" in sql
+        assert params == ("public",)
+
+    def test_all_tables_accepts_explicit_schema(self, mock_connection):
+        conn, cursor = mock_connection
+        cursor.fetchall.return_value = []
+        estimator = TableSizeEstimator(conn)
+
+        estimator.all_tables(schema="catalog")
+
+        assert cursor.execute.call_args[0][1] == ("catalog",)
+
     def test_get_row_count_estimate_negative(self, mock_connection):
         """Test estimated row count handles negative values."""
         conn, cursor = mock_connection
