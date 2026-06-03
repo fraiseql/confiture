@@ -24,6 +24,7 @@ from typing import Any
 import typer
 import yaml
 
+from confiture.cli.error_json import fail
 from confiture.cli.helpers import _resolve_config, console
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.notifications.config import load_notifications_config
@@ -123,31 +124,36 @@ def hooks_test(
         config_path = _resolve_config(config, env)
         root_cfg = _load_notifications_from_yaml(config_path)
     except ConfigurationError as exc:
-        console.print(f"[red]❌ {exc}[/red]")
-        raise typer.Exit(2) from exc
+        fail(exc, json_mode=False)
 
     hooks = root_cfg.hooks
     if not hooks:
-        console.print(
-            "[red]❌ No notification hooks configured.[/red]\n"
-            "[yellow]Add at least one entry under `notifications.hooks` in your config.[/yellow]"
+        fail(
+            ConfigurationError(
+                "No notification hooks configured.",
+                resolution_hint=(
+                    "Add at least one entry under `notifications.hooks` in your config."
+                ),
+            ),
+            json_mode=False,
         )
-        raise typer.Exit(2)
 
     if hook_id is None:
         if len(hooks) > 1:
             ids = ", ".join(h.id for h in hooks)
-            console.print(
-                f"[red]❌ Multiple hooks configured ({ids}); pass --id to choose one.[/red]"
+            fail(
+                ConfigurationError(f"Multiple hooks configured ({ids}); pass --id to choose one."),
+                json_mode=False,
             )
-            raise typer.Exit(2)
         chosen = hooks[0]
     else:
         matches = [h for h in hooks if h.id == hook_id]
         if not matches:
             ids = ", ".join(h.id for h in hooks)
-            console.print(f"[red]❌ Hook id {hook_id!r} not found.  Configured: {ids}[/red]")
-            raise typer.Exit(2)
+            fail(
+                ConfigurationError(f"Hook id {hook_id!r} not found.  Configured: {ids}"),
+                json_mode=False,
+            )
         chosen = matches[0]
 
     hook = from_config(chosen, allow_templated_renderers=root_cfg.allow_templated_renderers)
@@ -173,6 +179,8 @@ def hooks_test(
 
     if result.success:
         console.print(f"[green]✅ Hook {chosen.id!r} executed successfully.[/green]")
-        raise typer.Exit(0)
+        raise typer.Exit(0)  # success-signal: clean pass
     console.print(f"[red]❌ Hook {chosen.id!r} failed: {result.error}[/red]")
+    # success-signal: the test ran and is reporting that the configured hook
+    # failed — the diagnostic result the user asked for, not a confiture error.
     raise typer.Exit(1)

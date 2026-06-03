@@ -6,8 +6,9 @@ from pathlib import Path
 import typer
 
 from confiture.cli.acl_loader import load_acl_expectations
+from confiture.cli.error_json import fail
 from confiture.cli.formatters.common import display_drift_report
-from confiture.cli.helpers import console, error_console
+from confiture.cli.helpers import console, is_json
 from confiture.cli.ownership_loader import load_ownership_expectation
 from confiture.config.environment import AclExpectation, OwnershipExpectation
 from confiture.core.connection import create_connection, load_config
@@ -19,7 +20,7 @@ from confiture.core.drift import (
     OwnershipDriftDetector,
     SchemaDriftDetector,
 )
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, SchemaError
 
 
 def _demote_missing_grant_warnings(report: DriftReport) -> None:
@@ -95,7 +96,9 @@ def drift(
     EXIT CODES:
       0 - No drift detected
       1 - Drift detected (critical, or warning when --fail-on-warning)
-      2 - Connection or configuration error
+      3 - Database connection failed
+      4 - Schema file not found
+      5 - Invalid configuration (missing --schema, bad --format, config errors)
 
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:
@@ -107,23 +110,35 @@ def drift(
       confiture migrate validate --check-live-drift - Validate within migrate workflow
       confiture migrate diff                        - Compare two schema files
     """
+    json_mode = is_json(format_output)
     try:
         if format_output not in ("table", "json"):
-            error_console.print(
-                f"[red]❌ Invalid format: {format_output}. Use 'table' or 'json'[/red]"
+            fail(
+                ConfigurationError(
+                    f"Invalid format: {format_output}. Use 'table' or 'json'.",
+                    resolution_hint="Pass --format table or --format json.",
+                ),
+                json_mode=json_mode,
             )
-            raise typer.Exit(1)
 
         if not config.exists():
-            error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-            raise typer.Exit(2)
+            fail(
+                ConfigurationError(
+                    f"Config file not found: {config}",
+                    error_code="CONFIG_004",
+                    resolution_hint="Check the path passed to --config.",
+                ),
+                json_mode=json_mode,
+            )
 
         if schema is None and not check_acls and not check_ownership:
-            error_console.print(
-                "[red]❌ --schema is required (or use --check-acls / --check-ownership). "
-                "Provide a schema SQL file to compare against.[/red]"
+            fail(
+                ConfigurationError(
+                    "--schema is required (or use --check-acls / --check-ownership). "
+                    "Provide a schema SQL file to compare against.",
+                ),
+                json_mode=json_mode,
             )
-            raise typer.Exit(2)
 
         config_data = load_config(config)
 
@@ -179,19 +194,25 @@ def drift(
             display_drift_report(drift_report, console)
 
         if drift_report.has_critical_drift:
-            raise typer.Exit(1)
+            raise typer.Exit(1)  # success-signal: drift detected
 
         if fail_on_warning and drift_report.has_drift:
-            raise typer.Exit(1)
+            raise typer.Exit(1)  # success-signal: drift detected (warnings)
 
     except typer.Exit:
         raise
     except ConfigurationError as e:
-        error_console.print(f"[red]❌ {e}[/red]")
-        raise typer.Exit(2) from e
+        fail(e, json_mode=json_mode)
     except FileNotFoundError as e:
-        error_console.print(f"[red]❌ {e}[/red]")
-        raise typer.Exit(2) from e
+        fail(
+            SchemaError(str(e), error_code="SCHEMA_201"),
+            json_mode=json_mode,
+        )
     except Exception as e:
-        error_console.print(f"[red]❌ Connection or configuration error: {e}[/red]")
-        raise typer.Exit(2) from e
+        fail(
+            ConfigurationError(
+                f"Connection or configuration error: {e}",
+                error_code="CONFIG_006",
+            ),
+            json_mode=json_mode,
+        )

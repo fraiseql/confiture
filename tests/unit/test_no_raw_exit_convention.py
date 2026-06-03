@@ -61,8 +61,8 @@ _ALLOWLIST: dict[str, int] = {
     "commands/bootstrap.py": 12,  # TODO(phase-02): convert to fail()
     "commands/apply_as.py": 10,  # TODO(phase-02): convert to fail()
     "commands/admin.py": 9,  # TODO(phase-02): convert to fail()
-    "commands/drift.py": 8,  # TODO(phase-02): convert to fail()
-    "commands/hooks.py": 6,  # TODO(phase-02): convert to fail()
+    "commands/drift.py": 2,  # success-signal: drift detected → Exit(1) (critical / --fail-on-warning)
+    "commands/hooks.py": 2,  # success-signal: hooks test → Exit(0) pass / Exit(1) hook failed
     "commands/debug.py": 2,  # success-signal: debug cte → Exit(1) when a CTE in the query fails
     # commands/diff.py: fully converted (Cycle 2) — success exit is an IfExp,
     # not a literal, so it no longer appears here.

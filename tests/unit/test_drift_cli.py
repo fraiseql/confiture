@@ -172,8 +172,8 @@ class TestDriftCommand:
         assert "drift_items" in data
         assert data["has_drift"] is False
 
-    def test_drift_command_missing_schema_flag_exits_2(self, tmp_path):
-        """Should exit 2 with error message when --schema is not provided."""
+    def test_drift_command_missing_schema_flag_is_config_error(self, tmp_path):
+        """Missing --schema is a config error (exit 5), not the reserved exit 2."""
         config_file = tmp_path / "confiture.yaml"
         config_file.write_text("database_url: postgresql://localhost/test\n")
 
@@ -186,10 +186,10 @@ class TestDriftCommand:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 5
 
-    def test_drift_command_missing_config_exits_2(self, tmp_path):
-        """Should exit 2 with error message when config file does not exist."""
+    def test_drift_command_missing_config_is_config_error(self, tmp_path):
+        """A missing config file is CONFIG_004 (exit 5), never the reserved exit 2."""
         schema_file = tmp_path / "schema.sql"
         schema_file.write_text("CREATE TABLE users (id SERIAL PRIMARY KEY);")
 
@@ -204,15 +204,35 @@ class TestDriftCommand:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 5
 
-    def test_drift_exits_2_when_no_flags_and_no_acls(self, tmp_path):
+    def test_drift_command_missing_config_json_envelope(self, tmp_path):
+        schema_file = tmp_path / "schema.sql"
+        schema_file.write_text("CREATE TABLE users (id SERIAL PRIMARY KEY);")
+        result = runner.invoke(
+            app,
+            [
+                "drift",
+                "--config",
+                str(tmp_path / "nonexistent.yaml"),
+                "--schema",
+                str(schema_file),
+                "--format",
+                "json",
+            ],
+        )
+        assert result.exit_code == 5
+        data = json.loads(result.stdout)
+        assert data["ok"] is False
+        assert data["error"]["code"] == "CONFIG_004"
+
+    def test_drift_is_config_error_when_no_flags_and_no_acls(self, tmp_path):
         """Without --schema and without --check-acls, the command can't proceed."""
         config_file = tmp_path / "confiture.yaml"
         config_file.write_text("database_url: postgresql://localhost/test\n")
 
         result = runner.invoke(app, ["drift", "--config", str(config_file)])
-        assert result.exit_code == 2
+        assert result.exit_code == 5
 
     def test_drift_check_acls_without_acls_block_exits_2(self, tmp_path):
         """``--check-acls`` requires an ``acls:`` block in the config."""
@@ -227,7 +247,9 @@ class TestDriftCommand:
                 str(config_file),
             ],
         )
-        # Either exit 2 (no acls block) or a clear error — never silently 0.
+        # Missing-block still routes through the *_loader.py Exit(2) path, which
+        # is deferred to Phase 03 (shares a seam with migrate_validate). Until
+        # then it stays exit 2; the contract requirement here is "never silently 0".
         assert result.exit_code == 2
 
     def test_drift_check_acls_propagates_env_var_error(self, tmp_path, monkeypatch):
@@ -252,8 +274,9 @@ class TestDriftCommand:
                 str(config_file),
             ],
         )
-        # The env-var error path must produce exit 2, not crash unrecognised.
-        assert result.exit_code == 2
+        # An unresolvable ${VAR} raises ConfigurationError from expand_env_vars,
+        # which drift now routes through fail() → exit 5 (config error), not 2.
+        assert result.exit_code == 5
 
     def test_drift_check_acls_propagates_unsupported_env_var_syntax(self, tmp_path, monkeypatch):
         """``${VAR:-default}`` is rejected loudly (phase 05)."""
@@ -276,7 +299,9 @@ class TestDriftCommand:
                 str(config_file),
             ],
         )
-        assert result.exit_code == 2
+        # ${VAR:-default} is rejected by expand_env_vars (ConfigurationError),
+        # routed through fail() → exit 5 (config error), not the reserved 2.
+        assert result.exit_code == 5
 
 
 class TestMigrateValidateCheckLiveDrift:
