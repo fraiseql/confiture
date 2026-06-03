@@ -53,20 +53,24 @@ confiture migrate schema-to-schema setup \
     --target new_production
 
 # 3. Analyze tables
-confiture migrate schema-to-schema analyze --target new_production
+confiture migrate schema-to-schema analyze \
+    --source old_production --target new_production
 
 # 4. Migrate with column mapping
 confiture migrate schema-to-schema migrate \
+    --source old_production \
     --target new_production \
     --mapping db/migration/column_mapping.yaml
 
 # 5. Verify
-confiture migrate schema-to-schema verify --target new_production
+confiture migrate schema-to-schema verify \
+    --source old_production --target new_production
 
 # 6. Cutover (update app config to new_production)
 
 # 7. Cleanup (after monitoring period)
-confiture migrate schema-to-schema cleanup --target new_production
+confiture migrate schema-to-schema cleanup \
+    --source old_production --target new_production
 ```
 
 ---
@@ -114,6 +118,7 @@ posts:
 
 ```bash
 confiture migrate schema-to-schema migrate-table \
+    --source old_production \
     --target new_production \
     --source-table old_users \
     --target-table users \
@@ -162,7 +167,7 @@ kubectl rollout restart deployment/app
 ```bash
 # Row count comparison
 confiture migrate schema-to-schema verify \
-    --target new_production \
+    --source old_production --target new_production \
     --tables users,posts
 ```
 

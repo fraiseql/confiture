@@ -49,6 +49,7 @@ from confiture.cli.commands.schema import build, init, introspect, lint, lint_un
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
 from confiture.cli.helpers import console
+from confiture.cli.schema_to_schema import schema_to_schema_app
 from confiture.cli.seed import seed_app
 
 # Valid output formats for linting
@@ -208,6 +209,9 @@ migrate_app.command("introspect")(migrate_introspect)
 migrate_app.command("verify")(migrate_verify)
 migrate_app.command("preflight")(migrate_preflight)
 migrate_app.command("apply-as")(migrate_apply_as)
+
+# Medium 4: schema-to-schema (FDW) subcommand group
+migrate_app.add_typer(schema_to_schema_app, name="schema-to-schema")
 
 
 if __name__ == "__main__":
