@@ -228,9 +228,7 @@ class TestDiffCommandParseError:
             "confiture.cli.commands.diff.SchemaDiffer.compare",
             side_effect=RuntimeError("parse failure"),
         ):
-            result = runner.invoke(
-                app, ["diff", "--from", old, "--to", new, "--format", "json"]
-            )
+            result = runner.invoke(app, ["diff", "--from", old, "--to", new, "--format", "json"])
         assert result.exit_code == 5
         data = json.loads(result.output)
         assert data["ok"] is False
