@@ -1,8 +1,12 @@
 # JSON Output Schemas
 
-Every Confiture command that supports `--format json` ships with a
-machine-validatable JSON Schema. Schemas use Draft 2020-12 and live in
-`docs/reference/json-schemas/`.
+Many Confiture commands that support `--format json` ship with a
+machine-validatable JSON Schema — currently the `migrate` family (`current`,
+`down-to`, `fix`, `preflight`, `preflight --against`, `status`, and the
+`validate` modes), `drift` (and `drift --check-acls`), and `validate-config`,
+plus the shared error envelope. Commands such as `build`, `migrate up`/`down`,
+`migrate diff`, and `seed apply` emit JSON but do not yet ship a schema. Schemas
+use Draft 2020-12 and live in `docs/reference/json-schemas/`.
 
 ## For agents and tooling
 

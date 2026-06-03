@@ -102,7 +102,7 @@ DATABASE_URL="postgresql://localhost/confiture_restore_test" \
   confiture migrate status
 
 # Verify data integrity
-psql confiture_restore_test -c "SELECT COUNT(*) FROM confiture_migrations"
+psql confiture_restore_test -c "SELECT COUNT(*) FROM tb_confiture"
 
 # Cleanup
 dropdb confiture_restore_test
@@ -156,7 +156,7 @@ WHERE query LIKE 'CREATE%' OR query LIKE 'ALTER%'
 ORDER BY calls DESC LIMIT 10;
 
 -- Check migration history
-SELECT * FROM confiture_migrations ORDER BY applied_at DESC LIMIT 5;
+SELECT * FROM tb_confiture ORDER BY applied_at DESC LIMIT 5;
 ```
 
 **Recovery Steps:**
@@ -183,7 +183,7 @@ DROP INDEX IF EXISTS idx_partial;
 DROP COLUMN IF EXISTS users.incomplete_column;
 
 -- Remove from migration history
-DELETE FROM confiture_migrations WHERE version = 'failed_migration';
+DELETE FROM tb_confiture WHERE version = 'failed_migration';
 EOF
 
 # Step 3: Fix migration and retry
@@ -319,7 +319,7 @@ EOF
 ### Scenario 4: Lost Migration History
 
 **Symptoms:**
-- `confiture_migrations` table deleted or corrupted
+- `tb_confiture` table deleted or corrupted
 - Can't determine which migrations are applied
 - Confiture shows all migrations as pending
 
@@ -328,11 +328,11 @@ EOF
 -- Check if table exists
 SELECT EXISTS (
     SELECT FROM information_schema.tables
-    WHERE table_name = 'confiture_migrations'
+    WHERE table_name = 'tb_confiture'
 );
 
 -- If exists, check contents
-SELECT * FROM confiture_migrations ORDER BY applied_at;
+SELECT * FROM tb_confiture ORDER BY applied_at;
 ```
 
 **Recovery Steps:**
@@ -340,8 +340,8 @@ SELECT * FROM confiture_migrations ORDER BY applied_at;
 **Step 1: Backup current state**
 ```sql
 -- If table exists but corrupted
-CREATE TABLE confiture_migrations_backup AS
-SELECT * FROM confiture_migrations;
+CREATE TABLE tb_confiture_backup AS
+SELECT * FROM tb_confiture;
 ```
 
 **Step 2: Reinitialize**
@@ -378,7 +378,7 @@ confiture migrate verify-checksums
 SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = 'users');
 
 -- If yes, mark as applied
-INSERT INTO confiture_migrations (version, applied_at, checksum)
+INSERT INTO tb_confiture (version, applied_at, checksum)
 VALUES ('001_create_users', NOW(), 'computed_checksum');
 
 -- Repeat for each migration...

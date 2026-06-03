@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.19.0
+**Version**: 0.21.0
 **Last Updated**: 2026-06-01
 **Current Status**: Production-Ready
 
@@ -80,7 +80,7 @@ uv run pytest tests/unit/test_builder.py -v
 ```bash
 uv run pytest --cov=confiture --cov-report=term-missing
 uv run ruff check .
-uv run mypy confiture/
+uv run ty check python/confiture/
 ```
 
 ---
@@ -549,7 +549,7 @@ uv run pytest tests/unit/test_differ.py -v
 
 # 5. Quality checks (QA)
 uv run ruff check .
-uv run mypy python/confiture/
+uv run ty check python/confiture/
 uv run pytest --cov=confiture
 
 # 6. Commit (pre-commit hooks run automatically)
@@ -616,6 +616,11 @@ uv run ruff check .
 uv run ty check python/confiture/
 ```
 
+Confiture runs a **deliberately focused ruff ruleset** (`E, W, F, I, B, C4, UP,
+ARG, SIM`), not the full prescribed superset. The heavier families (`PL, PERF,
+FURB, ERA, PTH, TCH, RUF`) are intentionally off for now; `[tool.ruff.lint]` in
+`pyproject.toml` is the source of truth and documents the rationale.
+
 ### Pre-commit Hooks
 
 ```yaml
@@ -656,10 +661,10 @@ uv run pytest tests/unit/test_builder.py::test_find_sql_files --pdb -v
 psql postgresql://localhost/confiture_test
 
 # Check applied migrations
-SELECT * FROM confiture_migrations ORDER BY applied_at DESC;
+SELECT * FROM tb_confiture ORDER BY applied_at DESC;
 
 # Check schema version
-SELECT * FROM confiture_version;
+SELECT version FROM tb_confiture ORDER BY applied_at DESC LIMIT 1;
 ```
 
 ---
@@ -913,7 +918,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-06-01
-**Version**: 0.19.0
+**Version**: 0.21.0
 
 ---
 

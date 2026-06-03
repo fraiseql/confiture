@@ -26,23 +26,20 @@ Executes migrations in dry-run mode for testing.
 
 ```python
 class DryRunExecutor:
-    """Executes migrations in dry-run mode for testing.
+    """Executes migration SQL in dry-run mode for testing.
 
     Features:
-    - Transaction-based execution with automatic rollback
-    - Capture of execution metrics (time, rows affected, locks)
-    - Estimation of production execution time
-    - Detection of constraint violations
-    - Confidence level for estimates
-    - Structured logging for observability
+    - SAVEPOINT-based execution with automatic rollback (nothing persisted)
+    - Per-statement metrics (execution time, rows affected)
+    - A confidence percentage for the run
     """
 ```
 
 #### Constructor
 
 ```python
-def __init__(self) -> None:
-    """Initialize dry-run executor."""
+def __init__(self, conn: psycopg.Connection | None = None) -> None:
+    """Initialize the executor, optionally binding a connection."""
 ```
 
 #### Method: run
@@ -50,52 +47,52 @@ def __init__(self) -> None:
 ```python
 def run(
     self,
-    conn: psycopg.Connection,
-    migration,
+    *,
+    migration_name: str | None = None,
+    statements: list[str] | None = None,
 ) -> DryRunResult:
-    """Execute migration in dry-run mode.
+    """Execute SQL statements in dry-run mode.
 
-    Executes the migration within a transaction that is automatically
-    rolled back, allowing testing without permanent changes.
+    Each statement runs inside a SAVEPOINT that is rolled back, so nothing is
+    persisted. Returns per-statement results plus an overall verdict.
 
     Args:
-        conn: Database connection
-        migration: Migration instance with up() method
+        migration_name: Label for the migration under test.
+        statements: SQL statements to execute (and roll back).
 
     Returns:
-        DryRunResult with execution metrics
+        DryRunResult with per-statement metrics.
 
     Raises:
-        DryRunError: If migration execution fails
+        DryRunError: If execution fails irrecoverably.
     """
 ```
 
-**Parameters**:
+**Returns**: `DryRunResult` — per-statement metrics and an overall verdict.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `conn` | psycopg.Connection | Yes | PostgreSQL connection |
-| `migration` | Migration | Yes | Migration instance with up() method |
-
-**Returns**: `DryRunResult` - Execution metrics and results
-
-**Safety**: Guaranteed rollback - no data modified on disk
+**Safety**: every statement runs in a SAVEPOINT and is rolled back — nothing is persisted to disk.
 
 **Example**:
 ```python
-from confiture.core.dry_run import DryRunExecutor, DryRunResult
+import psycopg
+from confiture.core.dry_run import DryRunExecutor
 
-executor = DryRunExecutor()
+with psycopg.connect("postgresql://localhost/mydb") as conn:
+    executor = DryRunExecutor(conn)
+    result = executor.run(
+        migration_name="20260403120000_add_users",
+        statements=["ALTER TABLE users ADD COLUMN email VARCHAR(255)"],
+    )
 
-# Execute migration in dry-run mode
-result = executor.run(conn, migration)
-
-if result.success:
-    print(f"Migration {result.migration_name} succeeded")
-    print(f"Execution time: {result.execution_time_ms}ms")
-    print(f"Rows affected: {result.rows_affected}")
-else:
-    print(f"Migration failed with warnings: {result.warnings}")
+    if result.success:
+        print(
+            f"{result.migration_name} ok in {result.total_time_ms} ms "
+            f"(confidence {result.confidence_pct}%)"
+        )
+        for stmt in result.statements:
+            print(f"  {stmt.rows_affected} rows in {stmt.execution_time_ms} ms")
+    else:
+        print(f"failed: {result.error}")
 ```
 
 ---
@@ -114,31 +111,47 @@ class DryRunResult:
     """Result of a dry-run execution."""
 
     migration_name: str
-    migration_version: str
     success: bool
-    execution_time_ms: int = 0
-    rows_affected: int = 0
-    locked_tables: list[str] = field(default_factory=list)
-    estimated_production_time_ms: int = 0
-    confidence_percent: int = 0
-    warnings: list[str] = field(default_factory=list)
-    stats: dict[str, Any] = field(default_factory=dict)
+    total_time_ms: int = 0
+    confidence_pct: int = 0
+    statements: list[StatementResult] = field(default_factory=list)
+    error: str | None = None
 ```
 
 **Fields**:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `migration_name` | str | Name of the migration |
-| `migration_version` | str | Version of the migration |
-| `success` | bool | Whether execution succeeded |
-| `execution_time_ms` | int | Actual execution time in milliseconds |
-| `rows_affected` | int | Number of rows affected |
-| `locked_tables` | list[str] | Tables that were locked |
-| `estimated_production_time_ms` | int | Estimated production time |
-| `confidence_percent` | int | Confidence in the estimate (0-100) |
-| `warnings` | list[str] | List of warnings encountered |
-| `stats` | dict[str, Any] | Additional statistics |
+| `migration_name` | str | Name of the migration under test |
+| `success` | bool | Whether every statement succeeded |
+| `total_time_ms` | int | Total execution time across statements (ms) |
+| `confidence_pct` | int | Confidence in the estimate (SAVEPOINT replay ≈ 80–90) |
+| `statements` | list[StatementResult] | Per-statement results (see below) |
+| `error` | str \| None | Error message if the run failed |
+
+### Dataclass: StatementResult
+
+```python
+@dataclass
+class StatementResult:
+    """Result of a single statement within a dry run."""
+
+    sql: str
+    success: bool
+    execution_time_ms: int = 0
+    rows_affected: int = 0
+    error: str | None = None
+```
+
+**Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sql` | str | The statement that was executed |
+| `success` | bool | Whether the statement succeeded |
+| `execution_time_ms` | int | Statement execution time (ms) |
+| `rows_affected` | int | Rows affected by the statement |
+| `error` | str \| None | Error message if the statement failed |
 
 ---
 
@@ -151,7 +164,7 @@ Error raised when dry-run execution fails.
 ### Class: DryRunError
 
 ```python
-class DryRunError(MigrationError):
+class DryRunError(ConfiturError):
     """Error raised when dry-run execution fails."""
 
     def __init__(self, migration_name: str, error: Exception):
@@ -261,34 +274,27 @@ def display_dry_run_header(mode: str) -> None:
 
 ```python
 import psycopg
-from confiture.core.dry_run import DryRunExecutor, DryRunResult, DryRunError
+from confiture.core.dry_run import DryRunExecutor, DryRunError
 
-# Connect to database
-conn = psycopg.connect("postgresql://localhost/mydb")
+with psycopg.connect("postgresql://localhost/mydb") as conn:
+    executor = DryRunExecutor(conn)
 
-# Create executor
-executor = DryRunExecutor()
+    try:
+        result = executor.run(
+            migration_name="20260403120000_add_users",
+            statements=["ALTER TABLE users ADD COLUMN email VARCHAR(255)"],
+        )
 
-# Execute migration in dry-run mode
-try:
-    result = executor.run(conn, migration)
+        if result.success:
+            print(f"✓ {result.migration_name} passed in {result.total_time_ms} ms")
+            for stmt in result.statements:
+                print(f"  {stmt.rows_affected} rows in {stmt.execution_time_ms} ms")
+        else:
+            print(f"✗ {result.migration_name} failed: {result.error}")
 
-    if result.success:
-        print(f"✓ Migration {result.migration_name} passed")
-        print(f"  Execution time: {result.execution_time_ms}ms")
-        print(f"  Rows affected: {result.rows_affected}")
-        print(f"  Locked tables: {', '.join(result.locked_tables)}")
-
-        if result.warnings:
-            print("  Warnings:")
-            for warning in result.warnings:
-                print(f"    - {warning}")
-    else:
-        print(f"✗ Migration {result.migration_name} failed")
-
-except DryRunError as e:
-    print(f"Dry-run failed: {e}")
-    print(f"Original error: {e.original_error}")
+    except DryRunError as e:
+        print(f"Dry-run failed: {e}")
+        print(f"Original error: {e.original_error}")
 ```
 
 ### CLI Integration
@@ -321,6 +327,5 @@ else:
 
 ---
 
-**Version**: 2.0
-**Last Updated**: January 2026
-**Note**: This API reference reflects the current simplified dry-run implementation.
+**Note**: This reference reflects the SAVEPOINT-based dry-run implementation in
+`confiture.core.dry_run`.

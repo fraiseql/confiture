@@ -2464,8 +2464,10 @@ def migrate_preflight(
       A preflight that *crashes* (config/DB error) exits per the #146 convention
       (e.g. 5 config invalid, 3 connection failed) with the #145 error envelope.
 
-    With --against (execution replay):
-      0 — all replays passed; 1 — a replay failed; config/connection errors per #146.
+    With --against (execution replay, #151):
+      0 — all replays passed; 7 — one or more replays failed (a replay failure is
+      an error-severity issue, folded into the unified report); an unreachable
+      --against URL → 3 (connection failed), other config/connection errors per #146.
 
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:

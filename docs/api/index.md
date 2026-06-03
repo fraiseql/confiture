@@ -81,20 +81,14 @@ print(f"Hash: {builder.compute_hash()[:12]}")
 ### Medium 2: Apply Migration
 
 ```python
-from confiture.core.migrator import Migrator
-import psycopg
+from confiture import Migrator
 
-with psycopg.connect("postgresql://localhost/mydb") as conn:
-    migrator = Migrator(connection=conn)
+with Migrator.from_config("db/environments/local.yaml") as session:
+    # Apply all pending migrations
+    result = session.up()
 
-    # Apply single migration
-    migrator.apply("20260403120000_create_users")
-
-    # Apply all pending
-    migrator.apply_all()
-
-    # Rollback
-    migrator.rollback("20260403120000_create_users")
+    # Roll back the most recent migration
+    session.down(steps=1)
 ```
 
 ### Medium 3: Sync Production Data

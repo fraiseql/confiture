@@ -211,7 +211,7 @@ You should see:
                 List of relations
  Schema |        Name         | Type  |  Owner
 --------+---------------------+-------+----------
- public | confiture_migrations| table | postgres
+ public | tb_confiture| table | postgres
  public | users               | table | postgres
 ```
 

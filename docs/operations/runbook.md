@@ -241,7 +241,7 @@ ChecksumError: Migration 003_add_users checksum mismatch
 1. **Compare current vs applied:**
    ```bash
    # View stored checksum
-   psql -c "SELECT checksum FROM confiture_migrations WHERE version = '003_add_users'"
+   psql -c "SELECT checksum FROM tb_confiture WHERE version = '003_add_users'"
 
    # Compute current checksum
    confiture migrate checksum db/migrations/003_add_users.py
@@ -280,7 +280,7 @@ MigrationError: Migration 010_add_indexes failed: relation "users" does not exis
    SELECT tablename FROM pg_tables WHERE schemaname = 'public';
 
    -- Check migration history
-   SELECT * FROM confiture_migrations ORDER BY applied_at DESC LIMIT 5;
+   SELECT * FROM tb_confiture ORDER BY applied_at DESC LIMIT 5;
    ```
 
 3. **If partially applied (non-transactional migration):**
@@ -444,8 +444,8 @@ PoolExhaustedError: No connections available (max: 10)
 
 1. **Backup current state:**
    ```sql
-   CREATE TABLE confiture_migrations_backup AS
-   SELECT * FROM confiture_migrations;
+   CREATE TABLE tb_confiture_backup AS
+   SELECT * FROM tb_confiture;
    ```
 
 2. **Reinitialize tracking:**
@@ -496,7 +496,7 @@ PoolExhaustedError: No connections available (max: 10)
 | `confiture.yaml` | Configuration file |
 | `db/migrations/` | Migration files |
 | `db/schema/` | DDL schema files |
-| `confiture_migrations` | Database tracking table |
+| `tb_confiture` | Database tracking table |
 
 ---
 

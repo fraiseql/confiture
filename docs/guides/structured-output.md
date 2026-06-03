@@ -4,17 +4,22 @@ Export Confiture command results in **JSON** or **CSV** format for automation, i
 
 ## Overview
 
-All major Confiture commands support structured output via `--format` and `--report` options:
+Many Confiture commands support structured output via `--format`, plus a flag to
+save it to a file. The save flag differs by command: the **migrate** family uses
+`--output`/`-o`, while `build`, `migrate diff`, and `seed apply` use `--report`.
 
 ```bash
 # Output to console as JSON
 confiture build --format json
 
-# Save as JSON to file
+# Save JSON to a file (build / seed apply / migrate diff use --report)
 confiture build --format json --report build-result.json
 
-# Export as CSV for spreadsheet/analysis
-confiture migrate status --format csv --report migrations.csv
+# Save migrate output to a file (the migrate family uses --output / -o)
+confiture migrate status --format json --output status.json
+
+# Export as CSV (CSV is supported by build, migrate diff, and seed apply)
+confiture seed apply --format csv --report seeds.csv
 ```
 
 ## Quick Start
@@ -42,28 +47,31 @@ Returns structured data suitable for parsing and automation:
 ```
 
 ### CSV Output
+
+CSV is supported by `build`, `migrate diff`, and `seed apply` (not the
+`migrate up/down/status` family, which emit text/JSON only):
+
 ```bash
-confiture migrate status --format csv --report status.csv
+confiture migrate diff old.sql new.sql --format csv --report changes.csv
 ```
 Generates tabular data for spreadsheets or data analysis:
 ```csv
-version,name,status
-001,initial_schema,applied
-002,add_users,applied
-003,add_indexes,pending
+type,details
+add_column,users.email VARCHAR(255)
+drop_index,old_users_idx
 ```
 
 ## Supported Commands
 
-| Command | JSON | CSV | Notes |
-|---------|------|-----|-------|
-| `build` | ✅ | ✅ | Schema compilation metrics |
-| `migrate up` | ✅ | ✅ | Migration execution details |
-| `migrate down` | ✅ | ✅ | Rollback tracking |
-| `migrate status` | ✅ | ✅ | Migration inventory |
-| `migrate diff` | ✅ | ✅ | Schema change detection |
-| `migrate validate` | ✅ | ✅ | Validation results |
-| `seed apply` | ✅ | ✅ | Seed operation summary |
+| Command | JSON | CSV | Save flag | Notes |
+|---------|------|-----|-----------|-------|
+| `build` | ✅ | ✅ | `--report` | Schema compilation metrics |
+| `migrate up` | ✅ | — | `--output` | `--format text\|json` |
+| `migrate down` | ✅ | — | `--output` | `--format text\|json` |
+| `migrate status` | ✅ | — | `--output` | `--format table\|json` |
+| `migrate diff` | ✅ | ✅ | `--report` | Schema change detection |
+| `migrate validate` | ✅ | — | `--output` | `--format text\|json` |
+| `seed apply` | ✅ | ✅ | `--report` | Seed operation summary |
 
 ## Command Reference
 
@@ -104,74 +112,71 @@ confiture build --format csv --report metrics.csv
 
 **Purpose:** Apply pending migrations
 
-**Output Fields (JSON):**
+**Output Fields (JSON)** — the keys of `MigrateUpResult.to_dict()`:
+
+<!-- doctest:migrate-up-json -->
 ```json
 {
-  "success": boolean,
-  "migrations_applied": [
+  "success": true,
+  "applied": [
     {
-      "version": string,
-      "name": string,
-      "execution_time_ms": number,
-      "rows_affected": number
+      "version": "20260403120000",
+      "name": "create_users",
+      "execution_time_ms": 12,
+      "rows_affected": 0
     }
   ],
-  "count": number,
-  "total_execution_time_ms": number,
-  "checksums_verified": boolean,
-  "dry_run": boolean,
-  "warnings": string[],
-  "error": string | null
+  "skipped": [],
+  "skipped_superuser": [],
+  "pending": [],
+  "errors": [],
+  "total_duration_ms": 12,
+  "checksums_verified": true,
+  "dry_run": false,
+  "dry_run_execute": false,
+  "warnings": []
 }
 ```
-
-**CSV Columns:** `version, name, execution_time_ms, rows_affected`
 
 **Examples:**
 ```bash
 # Dry-run migrations and get JSON output
 confiture migrate up --dry-run --format json
 
-# Apply migrations and save results
-confiture migrate up --format json --report up.json
-
-# Export migration details as CSV
-confiture migrate up --format csv --report migrations.csv
+# Apply migrations and save the JSON result to a file
+confiture migrate up --format json --output up.json
 ```
 
 ### confiture migrate down
 
 **Purpose:** Rollback previously applied migrations
 
-**Output Fields (JSON):**
+**Output Fields (JSON)** — the keys of `MigrateDownResult.to_dict()`:
 ```json
 {
-  "success": boolean,
-  "migrations_rolled_back": [
+  "success": true,
+  "rolled_back": [
     {
-      "version": string,
-      "name": string,
-      "execution_time_ms": number,
-      "rows_affected": number
+      "version": "20260403120000",
+      "name": "create_users",
+      "execution_time_ms": 8,
+      "rows_affected": 0
     }
   ],
-  "count": number,
-  "total_execution_time_ms": number,
-  "checksums_verified": boolean,
-  "warnings": string[],
-  "error": string | null
+  "total_duration_ms": 8,
+  "checksums_verified": true,
+  "warnings": [],
+  "error": null
 }
 ```
-
-**CSV Columns:** `version, name, execution_time_ms, rows_affected`
 
 **Examples:**
 ```bash
 # Preview rollback before executing
 confiture migrate down --dry-run --format json
 
-# Execute rollback and save report
-confiture migrate down --steps 2 --format json --report rollback.json
+# Execute rollback and save the JSON report
+confiture migrate down --steps 2 --format json --output rollback.json
 ```
 
 ### confiture migrate status
@@ -197,15 +202,13 @@ confiture migrate down --steps 2 --format json --report rollback.json
 }
 ```
 
-**CSV Columns:** `version, name, status`
-
 **Examples:**
 ```bash
 # Show migration status as JSON
 confiture migrate status --format json
 
-# Save migration inventory as CSV
-confiture migrate status --format csv --report inventory.csv
+# Save migration inventory to a file
+confiture migrate status --format json --output inventory.json
 ```
 
 ### confiture migrate diff
@@ -261,15 +264,13 @@ confiture migrate diff old.sql new.sql --generate --name add_features \
 }
 ```
 
-**CSV Columns:** `check, count`
-
 **Examples:**
 ```bash
 # Validate migrations and get JSON output
 confiture migrate validate --format json
 
-# Save validation report as CSV
-confiture migrate validate --format csv --report validation.csv
+# Save validation report to a file
+confiture migrate validate --format json --output validation.json
 
 # Preview naming fixes
 confiture migrate validate --fix-naming --dry-run --format json
@@ -317,7 +318,7 @@ if [ "$BUILD_RESULT" != "true" ]; then
 fi
 
 # Migrate database
-confiture migrate up --format json --report migrations.json
+confiture migrate up --format json --output migrations.json
 MIGRATE_SUCCESS=$(cat migrations.json | jq '.success')
 if [ "$MIGRATE_SUCCESS" != "true" ]; then
   echo "❌ Migration failed"
@@ -357,15 +358,11 @@ echo "Average schema size: ${SCHEMA_SIZE} bytes"
 #!/bin/bash
 
 # Create audit trail of all migrations
-confiture migrate status --format json --report "status_$(date +%Y-%m-%d).json"
-
-# Create CSV for spreadsheet
-confiture migrate status --format csv --report "migrations_$(date +%Y-%m-%d).csv"
+confiture migrate status --format json --output "status_$(date +%Y-%m-%d).json"
 
 # Archive results
 mkdir -p migration-audits
 cp status_*.json migration-audits/
-cp migrations_*.csv migration-audits/
 ```
 
 ## Parsing Output
@@ -377,7 +374,7 @@ cp migrations_*.csv migration-audits/
 confiture build --format json | jq '.success'
 
 # Get execution time
-confiture migrate up --format json | jq '.total_execution_time_ms'
+confiture migrate up --format json | jq '.total_duration_ms'
 
 # List all applied migrations
 confiture migrate status --format json | jq '.applied[]'
@@ -388,47 +385,53 @@ confiture migrate diff old.sql new.sql --format json | jq '.change_count'
 
 ### Using grep/awk (CSV)
 
+CSV is emitted by `build`, `migrate diff`, and `seed apply`:
+
 ```bash
-# Count applied migrations
-confiture migrate status --format csv | grep "applied" | wc -l
+# Extract the metric column from a build report
+confiture build --format csv | cut -d',' -f1
 
-# Find pending migrations
-confiture migrate status --format csv | grep "pending"
-
-# Extract version column
-confiture migrate status --format csv | cut -d',' -f1
+# Count failed seed files
+confiture seed apply --format csv | grep -c "failed"
 ```
+
+For the `migrate up/down/status` family (JSON only), parse with `jq` instead —
+e.g. `confiture migrate status --format json | jq -r '.migrations[].version'`.
 
 ## Error Handling
 
-When a command fails, the output format is respected:
+When a command fails, JSON output is the unified error envelope — `ok: false`
+plus a structured `error` object:
 
-**JSON Error Response:**
 ```json
 {
-  "success": false,
-  "error": "Database connection failed",
-  ...
+  "ok": false,
+  "error": {
+    "code": "CONFIG_006",
+    "message": "Database connection failed",
+    "severity": "error",
+    "actionable": "Check database_url and that PostgreSQL is reachable"
+  }
 }
 ```
 
-**CSV Error Response:**
-```csv
-error
-"Database connection failed"
-```
+The process exit code is derived from `error.code` (see the
+[CLI reference](../reference/cli.md)).
 
-Check the `success` field (JSON) or look for error rows (CSV) to determine if an operation succeeded.
+Distinguish this from a command that *runs* but reports per-item failures in its
+result body — e.g. `migrate up` returns `"success": false` with a populated
+`errors` array (exit code 0 for the run, non-zero only on a hard failure).
+Detect failures by checking `ok` (envelope) or `success` (result body).
 
 ## Best Practices
 
 ### 1. Use Meaningful Report Names
 ```bash
 # Good: Timestamp and operation type
-confiture migrate up --format json --report "migrate_up_$(date +%Y%m%d_%H%M%S).json"
+confiture migrate up --format json --output "migrate_up_$(date +%Y%m%d_%H%M%S).json"
 
 # Less clear
-confiture migrate up --format json --report result.json
+confiture migrate up --format json --output result.json
 ```
 
 ### 2. Validate Output Before Processing
@@ -444,7 +447,7 @@ fi
 ### 3. Combine with Timestamps
 ```bash
 # Create audit trail with timestamps
-confiture migrate status --format csv --report "status_$(date -u +%Y-%m-%dT%H:%M:%SZ).csv"
+confiture migrate status --format json --output "status_$(date -u +%Y-%m-%dT%H:%M:%SZ).json"
 ```
 
 ### 4. Use Appropriate Format for Purpose

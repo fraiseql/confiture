@@ -42,6 +42,7 @@ confiture build --env production   # Loads db/environments/production.yaml
 
 ### Complete Example
 
+<!-- doctest:config-complete-example -->
 ```yaml
 # Environment name
 name: production
@@ -62,8 +63,10 @@ include_dirs:
 exclude_dirs:
   - db/schema/99_development
 
-# Migration tracking table name (optional, default: confiture_migrations)
-migration_table: confiture_migrations
+# Migration tracking configuration (optional)
+migration:
+  # Tracking table name (optional, default: tb_confiture)
+  tracking_table: tb_confiture
 
 # Auto-backup before migrations (optional, default: true)
 auto_backup: true
@@ -380,31 +383,26 @@ exclude_dirs:
 
 ---
 
-### `migration_table`
+### `migration.tracking_table`
 
 **Type**: String
-**Default**: `confiture_migrations`
-**Description**: Table name for tracking applied migrations
+**Default**: `tb_confiture`
+**Description**: Name of the table that tracks applied migrations. Nested under
+the `migration:` section. Optionally schema-qualified (e.g. `public.tb_confiture`).
 
 ```yaml
-migration_table: confiture_migrations
+migration:
+  tracking_table: tb_confiture
 ```
 
-**Schema**:
-
-```sql
-CREATE TABLE confiture_migrations (
-    version TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    applied_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-**Custom table name** (if default conflicts):
+**Custom table name** (if the default conflicts):
 
 ```yaml
-migration_table: my_custom_migrations
+migration:
+  tracking_table: my_custom_migrations
 ```
+
+See [Tracking Table](./tracking-table.md) for the full table schema and columns.
 
 ---
 
@@ -540,7 +538,8 @@ include_dirs:
 
 exclude_dirs: []
 
-migration_table: confiture_migrations
+migration:
+  tracking_table: tb_confiture
 auto_backup: false          # No backups needed locally
 require_confirmation: false # Fast iteration
 ```
@@ -570,7 +569,8 @@ include_dirs:
 exclude_dirs:
   - db/schema/99_experimental
 
-migration_table: confiture_migrations
+migration:
+  tracking_table: tb_confiture
 auto_backup: true           # Backup before migrations
 require_confirmation: false # Automated deployments OK
 ```
@@ -601,7 +601,8 @@ include_dirs:
 
 exclude_dirs: []
 
-migration_table: confiture_migrations
+migration:
+  tracking_table: tb_confiture
 auto_backup: true               # Extra safety
 require_confirmation: true      # Manual approval required
 ```
@@ -631,7 +632,8 @@ include_dirs:
 
 exclude_dirs: []
 
-migration_table: confiture_migrations
+migration:
+  tracking_table: tb_confiture
 auto_backup: false          # No backups in CI
 require_confirmation: false # Fully automated
 ```
@@ -855,7 +857,6 @@ include_dirs: array[string]     # Directories to include
 
 # Optional fields
 exclude_dirs: array[string]     # Directories to exclude (default: [])
-migration_table: string         # Migration tracking table (default: confiture_migrations)
 auto_backup: boolean            # Auto-backup before migrations (default: true)
 require_confirmation: boolean   # Require user confirmation (default: true)
 

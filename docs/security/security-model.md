@@ -234,7 +234,7 @@ REVOKE CREATE ON SCHEMA public FROM app_user;
 
 ### 6. Audit Trail
 
-All migrations are logged in the `confiture_migrations` table:
+All migrations are logged in the `tb_confiture` table:
 
 ```sql
 SELECT
@@ -243,7 +243,7 @@ SELECT
     checksum,
     applied_by,
     execution_time_ms
-FROM confiture_migrations
+FROM tb_confiture
 ORDER BY applied_at DESC;
 ```
 

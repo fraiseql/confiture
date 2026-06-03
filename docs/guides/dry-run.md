@@ -24,7 +24,7 @@ confiture migrate up --dry-run-execute
 |------|------|--------|
 | **Analyze** | `migrate up --dry-run` | Static analysis; no DB connection needed |
 | **SAVEPOINT test** | `migrate up --dry-run-execute` | Executes in a SAVEPOINT against the live DB, then rolls back |
-| **Preflight against a copy** | `migrate preflight --against <preflight-db>` | Runs every pending migration end-to-end on a parallel database, with structural diff |
+| **Preflight against a copy** | `migrate preflight --against <preflight-db>` | Replays every pending migration end-to-end on a parallel database inside SAVEPOINTs, then rolls back |
 
 For pre-deploy CI gates, `migrate preflight --against` is the strongest check. Use the others for quick local feedback.
 
@@ -69,20 +69,19 @@ confiture migrate down --dry-run --steps 3
 
 ---
 
-## Need a structural diff?
+## "Will it run?" vs "what will change?"
 
-`migrate up --dry-run` and `--dry-run-execute` answer *"would this run?"*
-They print row-count / time / disk estimates and verify the SQL executes
-inside a SAVEPOINT — but they don't show **what would change** in
-schema terms ("this would add column `users.bio TEXT NULL`, drop index
-`idx_legacy_users_email` …").
+`migrate up --dry-run`, `--dry-run-execute`, and `migrate preflight --against`
+all answer *"will these migrations run?"* — they execute the SQL (statically
+estimated, or for real inside a SAVEPOINT / replay) and report success, timing,
+and safety. None of them emits a schema-level diff of what the migrations change.
 
-For that, use `migrate preflight --against <preflight-db>` (covered in
-[Preflight against a parallel database](#preflight-against-a-parallel-database)
-below). Preflight replays every pending migration on a parallel database,
-then emits a structural diff against `db/schema/` — the human-readable
-"what's about to change" output that lets you pull the trigger on a prod
-apply with confidence.
+For a **structural** comparison — *"this would add column `users.bio`, drop
+index `idx_legacy_users_email`"* — diff two schema files with `migrate diff`:
+
+```bash
+confiture migrate diff old_schema.sql new_schema.sql
+```
 
 **Quick decision**:
 
@@ -90,8 +89,9 @@ apply with confidence.
 |---|---|
 | Verify the SQL parses + executes inside a transaction | `migrate up --dry-run-execute` |
 | See row-count / time / disk estimates | `migrate up --dry-run` |
-| See "this would add table X, drop column Y" | `migrate preflight --against <preflight-db>` |
-| Gate a CI pipeline on schema drift | `migrate preflight --against` (exit 7 on drift) |
+| Replay every pending migration end-to-end on a real DB copy | `migrate preflight --against <preflight-db>` |
+| See a structural diff ("would add table X, drop column Y") | `migrate diff <old.sql> <new.sql>` |
+| Gate CI on whether pending migrations replay cleanly | `migrate preflight --against` (exit 7 on replay failure) |
 
 ---
 
@@ -150,6 +150,9 @@ confiture migrate up --dry-run --format json --output report.json
 }
 ```
 
+The `migration_id` is `dry_run_<config-stem>` — `dry_run_local` here is derived
+from `local.yaml`.
+
 ### CI/CD Integration
 
 ```bash
@@ -169,10 +172,10 @@ fi
 
 `migrate preflight --against <url>` is the strongest dry-run mode confiture ships. It:
 
-1. Reads the live tracking table on `<url>` to determine which migrations are already applied there.
-2. Replays every pending `up.sql` (and `down.sql`, if `--include-down`) end-to-end on that database.
-3. Diffs the resulting schema against the source-of-truth DDL in `db/schema/`.
-4. Reports structural drift, transaction safety, and reversibility — exits non-zero if anything fails.
+1. Reads the live tracking table on `<url>` to determine which migrations are already applied there (or uses `--config` / `--env` / `--since` to pick the pending set).
+2. Replays every pending migration end-to-end on that database, each inside a SAVEPOINT.
+3. Rolls the replay back, leaving the preflight database in its original state — unless a non-transactional migration was run with `--allow-non-transactional`, which commits and consumes the DB.
+4. Reports per-migration replay success/failure, plus transaction safety and reversibility — exits non-zero if any pending migration fails to replay.
 
 The intended pattern: provision a throwaway database (RDS snapshot restore, `pg_dump | pg_restore` to a scratch DB, a Neon branch), point `--against` at it, and gate your deploy pipeline on the exit code.
 
@@ -185,46 +188,40 @@ $ confiture migrate preflight --against postgresql://localhost/myapp_preflight
 ▸ Reading tracking table from preflight DB … 12 migrations applied
 ▸ Discovering pending migrations from db/migrations/ … 2 pending
 
-  ► 20260520143015_add_user_bio.up.sql      transactional   reversible   no checksum drift
-  ► 20260520151200_add_orders_index.up.sql  non-transactional ⚠           reversible   no checksum drift
+  ► 20260520143015_add_user_bio.up.sql      transactional       reversible
+  ► 20260520151200_add_orders_index.up.sql  non-transactional ⚠  reversible
 
-▸ Replaying pending migrations on preflight DB …
-  ✓ 20260520143015_add_user_bio                 applied in 24 ms
-  ✓ 20260520151200_add_orders_index             applied in 1,820 ms (CREATE INDEX CONCURRENTLY)
+▸ Replaying pending migrations on preflight DB (inside SAVEPOINTs) …
+  ✓ 20260520143015_add_user_bio                 replayed in 24 ms
+  ⊘ 20260520151200_add_orders_index             skipped — non-transactional
+        (CREATE INDEX CONCURRENTLY; re-run with --allow-non-transactional to replay it)
 
-▸ Comparing resulting schema vs. db/schema/ …
-
-  Structural diff — preflight DB vs source DDL:
-    + public.users.bio TEXT NULL                  (new in preflight, matches db/schema/10_tables/users.sql)
-    + public.orders.idx_orders_customer_id        (new in preflight, matches db/schema/10_tables/orders.sql)
-
-  ✓ No drift — preflight matches db/schema/
+▸ Rolling back the SAVEPOINT — preflight DB left unchanged.
 
 ▸ Summary
     Pending:        2
-    Applied OK:     2
+    Replayed OK:    1
+    Skipped:        1 (non-transactional)
     Failed:         0
-    Drift items:    0
-    Non-tx warns:   1 (orders index — confirmed CONCURRENTLY)
 
 ✓ Preflight passed. Safe to deploy.
 exit 0
 ```
 
-When something does go wrong, the structural-diff section is where the signal lives. Typical failure modes:
+When something goes wrong, a pending migration fails to replay. The failing
+statement and its database error are the signal:
 
 ```text
-✗ Drift — preflight differs from db/schema/
+✗ Replay failed — a pending migration errored on the preflight DB
 
-  - public.users.email VARCHAR(255) NOT NULL    (preflight has this; db/schema/ does not)
+  ► 20260520143015_change_email_type.up.sql
+      PFLIGHT_REPLAY_FAILED: column "email" cannot be cast automatically
+      to type integer
+      (the SAVEPOINT was rolled back; the preflight DB is unchanged)
 
-  Hint: db/schema/10_tables/users.sql declares 'email TEXT NOT NULL', but the
-  migration 20260520143015_change_email_type.up.sql leaves the column as VARCHAR(255).
-  Either:
-    • Update db/schema/10_tables/users.sql to match the migration outcome, or
-    • Add ALTER TABLE public.users ALTER COLUMN email TYPE TEXT; to the migration.
+  Hint: fix the migration SQL and re-run preflight before deploying.
 
-exit 7  (drift detected)
+exit 7  (replay failed)
 ```
 
 The exit code is **semantic** — wire it to your CI gate (codes as of 0.21.0, #151):
@@ -253,19 +250,25 @@ confiture migrate preflight --against "$PREFLIGHT_URL" \
 ## Python API
 
 ```python
+import psycopg
 from confiture.core.dry_run import DryRunExecutor
 
-executor = DryRunExecutor()
-result = executor.run(conn, migration)
+with psycopg.connect("postgresql://localhost/mydb") as conn:
+    executor = DryRunExecutor(conn)
+    result = executor.run(
+        migration_name="20260520143015_add_user_bio",
+        statements=["ALTER TABLE users ADD COLUMN bio TEXT"],
+    )
 
-if result.success:
-    print(f"Time: {result.execution_time_ms}ms")
-    print(f"Rows: {result.rows_affected}")
-    print(f"Locked tables: {result.locked_tables}")
-else:
-    for warning in result.warnings:
-        print(f"Warning: {warning}")
+    if result.success:
+        print(f"OK in {result.total_time_ms} ms (confidence {result.confidence_pct}%)")
+        for stmt in result.statements:
+            print(f"  {stmt.rows_affected} rows in {stmt.execution_time_ms} ms")
+    else:
+        print(f"Failed: {result.error}")
 ```
+
+See the [dry-run API reference](../reference/dry-run-api.md) for the full surface.
 
 ---
 

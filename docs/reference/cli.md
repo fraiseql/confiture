@@ -1987,7 +1987,7 @@ pytest tests/
 confiture migrate up --config test.yaml
 
 # Verify database
-psql -c "SELECT version FROM confiture_version"
+psql -c "SELECT version FROM tb_confiture ORDER BY applied_at DESC LIMIT 1"
 ```
 
 ### Production Deployment

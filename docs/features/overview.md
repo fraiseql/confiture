@@ -4,8 +4,8 @@ The full feature laundry list — for the 30-second pitch and quick-start, see [
 
 ## Migration Management
 - **`migrate preflight`** — pre-deploy safety gate: checks reversibility, non-transactional statements, duplicate versions, and checksum tampering. JSON output for CI/CD.
-- **`migrate preflight --against`** — replay pending migrations end-to-end against a parallel database and structurally diff the result. See [the dry-run guide](../guides/dry-run.md#preflight-against-a-parallel-database).
-- **Semantic exit codes** — `0` success, `2` validation error, `3` SQL failure, `6` lock contention, `7` structural drift. Script with confidence.
+- **`migrate preflight --against`** — replay pending migrations end-to-end against a parallel database inside SAVEPOINTs (then roll back), reporting per-migration success/failure. See [the dry-run guide](../guides/dry-run.md#preflight-against-a-parallel-database).
+- **Semantic exit codes** — e.g. `0` success, `3` connection failure, `5` config error, `6` lock contention, `7` error-severity findings. See the [exit-code reference](../reference/cli.md). Script with confidence.
 - **`migrate baseline`** — adopt Confiture on databases that already have migrations applied. See [the legacy-bootstrap guide](../guides/legacy-bootstrap.md).
 - **`migrate rebuild`** — drop and recreate from DDL + replay migrations in one command. Fast environment reset.
 - **`migrate validate`** — naming convention checks, schema drift detection, function signature and body drift.

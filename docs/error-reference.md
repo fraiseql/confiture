@@ -121,7 +121,7 @@ confiture migrate up --database-url postgresql://localhost:5433/mydb
 - User can't create tables
 - User can't create schemas
 - User can't create migrations table
-- User can't write to confiture_migrations table
+- User can't write to tb_confiture table
 
 **How to fix**:
 1. **Connect as a privileged user**

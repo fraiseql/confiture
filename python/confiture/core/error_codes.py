@@ -161,7 +161,7 @@ def _create_global_registry() -> ErrorCodeRegistry:
     """
     registry = ErrorCodeRegistry()
 
-    # ========== CONFIG (001-099): Configuration errors → exit code 2 ==========
+    # ========== CONFIG (001-099): Configuration errors → exit code 5 ==========
     config_codes = [
         ErrorCodeDefinition(
             code="CONFIG_001",
