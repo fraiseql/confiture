@@ -123,7 +123,8 @@ def test_apply_as_refuses_unknown_version(apply_as_db: str, tmp_path: Path) -> N
             str(migrations_dir),
         ],
     )
-    assert result.exit_code == 2, result.output
+    # Unknown version → MIGR_100 → exit 3 (was the reserved 2).
+    assert result.exit_code == 3, result.output
 
 
 @pytest.mark.integration
@@ -161,7 +162,8 @@ def test_apply_as_refuses_already_applied(apply_as_db: str, tmp_path: Path) -> N
             str(migrations_dir),
         ],
     )
-    assert second.exit_code == 2, second.output
+    # Already-applied refusal → MIGR_001 → exit 3 (was the reserved 2).
+    assert second.exit_code == 3, second.output
 
 
 @pytest.mark.integration

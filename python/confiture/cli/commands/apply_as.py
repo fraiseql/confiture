@@ -21,7 +21,8 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.helpers import console, error_console
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import console, is_json
 from confiture.core.connection import load_config, load_migration_class
 from confiture.exceptions import ConfigurationError, MigrationError
 
@@ -85,42 +86,63 @@ def migrate_apply_as(
       2. Run `confiture migrate apply-as <role> <version>` for that one.
       3. Re-run `confiture migrate up` to apply the remaining chain.
     """
+    json_mode = is_json(output_format)
+
     if env and config != Path("confiture.yaml"):
-        error_console.print("[red]❌ Cannot combine --env with --config[/red]")
-        raise typer.Exit(2)
+        fail(ConfigurationError("Cannot combine --env with --config"), json_mode=json_mode)
     if env:
         config = Path(f"db/environments/{env}.yaml")
     if not config.exists():
-        error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-        raise typer.Exit(2)
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Check the path passed to --config (or --env).",
+            ),
+            json_mode=json_mode,
+        )
 
     config_data = load_config(config)
     apply_as_block = config_data.get("apply_as") or {}
     role_block = apply_as_block.get(role)
-    if not isinstance(role_block, dict) or "url" not in role_block:
-        error_console.print(
-            f"[red]❌ `apply_as.{role}.url` is required in {config} for "
-            f"`migrate apply-as {role}`.[/red]"
+    url_spec = role_block.get("url") if isinstance(role_block, dict) else None
+    if url_spec is None:
+        fail(
+            ConfigurationError(
+                f"`apply_as.{role}.url` is required in {config} for `migrate apply-as {role}`.",
+                resolution_hint=f"Add an `apply_as.{role}.url` block to {config}.",
+            ),
+            json_mode=json_mode,
         )
-        raise typer.Exit(2)
 
     from confiture.config._env_vars import expand_env_vars
 
-    raw_url = expand_env_vars(role_block["url"], context=f"apply_as.{role}.url")
+    raw_url = expand_env_vars(url_spec, context=f"apply_as.{role}.url")
     if not isinstance(raw_url, str):
-        error_console.print(f"[red]❌ `apply_as.{role}.url` did not resolve to a string[/red]")
-        raise typer.Exit(2)
+        fail(
+            ConfigurationError(f"`apply_as.{role}.url` did not resolve to a string"),
+            json_mode=json_mode,
+        )
 
     # Find the migration file for this version.
     if not migrations_dir.exists():
-        error_console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-        raise typer.Exit(2)
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=json_mode,
+        )
     migration_file = _find_migration_file(migrations_dir, version)
     if migration_file is None:
-        error_console.print(
-            f"[red]❌ Migration version {version!r} not found in {migrations_dir}.[/red]"
+        fail(
+            MigrationError(
+                f"Migration version {version!r} not found in {migrations_dir}.",
+                version=version,
+                error_code="MIGR_100",
+            ),
+            json_mode=json_mode,
         )
-        raise typer.Exit(2)
 
     import psycopg
 
@@ -129,8 +151,13 @@ def migrate_apply_as(
     try:
         conn = psycopg.connect(raw_url, autocommit=False)
     except psycopg.OperationalError as exc:
-        error_console.print(f"[red]❌ Could not connect with apply_as.{role}.url: {exc}[/red]")
-        raise typer.Exit(2) from exc
+        fail(
+            ConfigurationError(
+                f"Could not connect with apply_as.{role}.url: {exc}",
+                error_code="CONFIG_006",
+            ),
+            json_mode=json_mode,
+        )
 
     try:
         tracking_table = config_data.get("migration", {}).get("tracking_table") or "tb_confiture"
@@ -140,19 +167,16 @@ def migrate_apply_as(
         # Refuse if already applied.
         applied = set(migrator.get_applied_versions())
         if version in applied:
-            if output_format == "json":
-                print(
-                    json.dumps(
-                        {
-                            "success": False,
-                            "error": "already_applied",
-                            "version": version,
-                        }
-                    )
-                )
-            else:
-                error_console.print(f"[yellow]⚠ Migration {version} is already applied.[/yellow]")
-            raise typer.Exit(2)
+            fail(
+                MigrationError(
+                    f"Migration {version} is already applied.",
+                    version=version,
+                    error_code="MIGR_001",
+                    context={"reason": "already_applied"},
+                    resolution_hint="Nothing to do — the version is already in the tracking table.",
+                ),
+                json_mode=json_mode,
+            )
 
         migration_class = load_migration_class(migration_file)
         migration = migration_class(connection=conn)
@@ -164,11 +188,7 @@ def migrate_apply_as(
                 applied_by=role,
             )
         except MigrationError as exc:
-            if output_format == "json":
-                print(json.dumps({"success": False, "error": str(exc)}))
-            else:
-                error_console.print(f"[red]❌ apply-as failed: {exc}[/red]")
-            raise typer.Exit(3) from exc
+            fail(exc, json_mode=json_mode)
 
         if output_format == "json":
             print(
@@ -187,8 +207,7 @@ def migrate_apply_as(
                 f"({migration.name}) as {role!r}.[/green]"
             )
     except ConfigurationError as exc:
-        error_console.print(f"[red]❌ {exc}[/red]")
-        raise typer.Exit(2) from exc
+        fail(exc, json_mode=json_mode)
     finally:
         conn.close()
 
