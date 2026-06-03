@@ -5,9 +5,11 @@ from pathlib import Path
 
 import typer
 
+from confiture.cli.error_json import fail
 from confiture.cli.formatters.diff_formatter import print_diff_text
-from confiture.cli.helpers import console, error_console
+from confiture.cli.helpers import console, is_json
 from confiture.core.differ import SchemaDiffer
+from confiture.exceptions import DifferError, SchemaError
 from confiture.models.results import DiffResult
 
 
@@ -29,12 +31,24 @@ def schema_diff(
 
       confiture diff --from old.sql --to new.sql --format json
 
-    Exit codes: 0 = no changes, 1 = changes detected, 2 = error.
+    Exit codes: 0 = no changes, 1 = changes detected, 4 = input file not
+    found (SCHEMA_201), 5 = schema parse error (DIFFER_400). In ``--format
+    json`` mode, failures emit the ``{ok: false, error: {...}}`` envelope on
+    stdout; exit 2 is never used here (it is reserved for "tracking table
+    absent").
     """
+    json_mode = is_json(format_type)
+
     for path, label in [(from_file, "--from"), (to_file, "--to")]:
         if not path.exists():
-            error_console.print(f"[red]Error:[/red] {label} file not found: {path}")
-            raise typer.Exit(2)
+            fail(
+                SchemaError(
+                    f"{label} file not found: {path}",
+                    error_code="SCHEMA_201",
+                    resolution_hint=f"Check the path passed to {label}.",
+                ),
+                json_mode=json_mode,
+            )
 
     old_sql = from_file.read_text()
     new_sql = to_file.read_text()
@@ -43,8 +57,14 @@ def schema_diff(
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
     except Exception as exc:  # noqa: BLE001
-        error_console.print(f"[red]Error parsing schema:[/red] {exc}")
-        raise typer.Exit(2) from exc
+        fail(
+            DifferError(
+                f"Cannot parse schema: {exc}",
+                error_code="DIFFER_400",
+                resolution_hint="Fix the SQL syntax in the schema files being compared.",
+            ),
+            json_mode=json_mode,
+        )
 
     result = DiffResult.from_schema_diff(diff)
 

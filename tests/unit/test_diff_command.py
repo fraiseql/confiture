@@ -116,10 +116,24 @@ class TestDiffCommand:
         assert data["has_changes"] is False
 
     def test_diff_command_missing_file(self):
+        # Exit 2 is reserved for PRECON_1001 (tracking table absent). A missing
+        # input file is a schema-source error → SCHEMA_201 → exit 4, never 2.
         result = runner.invoke(
             app, ["diff", "--from", "nonexistent.sql", "--to", "also_missing.sql"]
         )
-        assert result.exit_code == 2
+        assert result.exit_code == 4
+        assert "not found" in result.output
+
+    def test_diff_command_missing_file_json_envelope(self):
+        result = runner.invoke(
+            app,
+            ["diff", "--from", "nonexistent.sql", "--to", "x.sql", "--format", "json"],
+        )
+        assert result.exit_code == 4
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert data["error"]["code"] == "SCHEMA_201"
+        assert "not found" in data["error"]["message"]
 
     def test_diff_command_text_shows_change_count(self):
         old = _write_sql(OLD_SQL)
@@ -190,9 +204,9 @@ class TestDiffResultSummaryRenames:
 
 
 class TestDiffCommandParseError:
-    """Gap I — diff command parse error path exits with code 2."""
+    """diff command parse-error path → DIFFER_400 (exit 5), never the reserved 2."""
 
-    def test_diff_command_parse_error_exits_2(self):
+    def test_diff_command_parse_error_exits_differ_400(self):
         from unittest.mock import patch  # noqa: PLC0415
 
         old = _write_sql("CREATE TABLE t (id INT);")
@@ -202,7 +216,25 @@ class TestDiffCommandParseError:
             side_effect=RuntimeError("parse failure"),
         ):
             result = runner.invoke(app, ["diff", "--from", old, "--to", new])
-        assert result.exit_code == 2
+        # Exit 2 is reserved (tracking table absent); a parse failure is DIFFER_400 → 5.
+        assert result.exit_code == 5
+
+    def test_diff_command_parse_error_json_envelope(self):
+        from unittest.mock import patch  # noqa: PLC0415
+
+        old = _write_sql("CREATE TABLE t (id INT);")
+        new = _write_sql("CREATE TABLE t (id INT);")
+        with patch(
+            "confiture.cli.commands.diff.SchemaDiffer.compare",
+            side_effect=RuntimeError("parse failure"),
+        ):
+            result = runner.invoke(
+                app, ["diff", "--from", old, "--to", new, "--format", "json"]
+            )
+        assert result.exit_code == 5
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert data["error"]["code"] == "DIFFER_400"
 
 
 class TestDiffCommandFormatFallthrough:

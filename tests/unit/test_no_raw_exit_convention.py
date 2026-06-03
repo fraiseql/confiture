@@ -64,7 +64,8 @@ _ALLOWLIST: dict[str, int] = {
     "commands/drift.py": 8,  # TODO(phase-02): convert to fail()
     "commands/hooks.py": 6,  # TODO(phase-02): convert to fail()
     "commands/debug.py": 5,  # TODO(phase-02): convert to fail()
-    "commands/diff.py": 2,  # TODO(phase-02): exit-2 fix → success-signal only
+    # commands/diff.py: fully converted (Cycle 2) — success exit is an IfExp,
+    # not a literal, so it no longer appears here.
     "ownership_loader.py": 2,  # TODO(phase-02): convert to fail()
     "helpers.py": 2,  # success-signal: idempotency gate → Exit(1) on findings
     "function_coverage_loader.py": 2,  # TODO(phase-02): convert to fail()
