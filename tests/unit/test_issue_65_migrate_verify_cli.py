@@ -22,9 +22,9 @@ class TestMigrateVerifyCLI:
         return config_file
 
     def test_requires_config(self):
-        """Exit 1 when no config provided."""
+        """Config-required is a ConfigurationError (CONFIG_001 → exit 5) since Phase 03."""
         result = self.runner.invoke(app, ["migrate", "verify"])
-        assert result.exit_code == 1
+        assert result.exit_code == 5
 
     def test_exits_0_when_all_verified(self, tmp_path):
         """Exit 0 when all migrations verified successfully."""

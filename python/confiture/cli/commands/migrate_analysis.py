@@ -927,21 +927,17 @@ def migrate_fix(
       confiture migrate up       - Apply migrations
       confiture migrate generate - Create new migration
     """
+    json_mode = is_json(format_output)
     try:
         # Validate output format
         if format_output not in ("text", "json"):
-            console.print(f"[red]❌ Invalid format: {format_output}. Use 'text' or 'json'[/red]")
-            raise typer.Exit(1)
+            raise ConfigurationError(f"Invalid format: {format_output}. Use 'text' or 'json'.")
 
         if not migrations_dir.exists():
-            if format_output == "json":
-                result: dict[str, Any] = {
-                    "error": f"Migrations directory not found: {migrations_dir.absolute()}"
-                }
-                _output_json(result, output_file, console)
-            else:
-                console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-            raise typer.Exit(1)
+            raise ConfigurationError(
+                f"Migrations directory not found: {migrations_dir.absolute()}",
+                error_code="CONFIG_004",
+            )
 
         if not idempotent and not ownership:
             console.print(
@@ -964,13 +960,10 @@ def migrate_fix(
 
     except typer.Exit:
         raise
+    except ConfiturError as e:
+        fail(e, json_mode=json_mode, output_file=output_file)
     except Exception as e:
-        if format_output == "json":
-            result = {"error": str(e)}
-            _output_json(result, output_file, console)
-        else:
-            console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=json_mode, output_file=output_file)
 
 
 def migrate_introspect(
@@ -1017,10 +1010,12 @@ def migrate_introspect(
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator
 
+    json_mode = is_json(format_output)
     try:
         if not config.exists():
-            console.print(f"[red]❌ Config file not found: {config}[/red]")
-            raise typer.Exit(1)
+            raise ConfigurationError(
+                f"Config file not found: {config}", error_code="CONFIG_004"
+            )
 
         config_data = load_config(config)
         conn = create_connection(config_data)
@@ -1127,12 +1122,10 @@ def migrate_introspect(
 
     except typer.Exit:
         raise
+    except ConfiturError as e:
+        fail(e, json_mode=json_mode)
     except Exception as e:
-        if format_output == "json":
-            print(json.dumps({"error": str(e)}, indent=2))
-        else:
-            console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=json_mode)
 
 
 def migrate_verify(
@@ -1213,6 +1206,7 @@ def migrate_verify(
     from confiture.core.migrator import Migrator
     from confiture.models.results import VerifyAllResult
 
+    json_mode = is_json(format_output)
     try:
         # Connection source (#152): a --database-url flag, --no-config, an
         # explicit --config, or the canonical CONFITURE_DATABASE_URL. An ambient
@@ -1231,10 +1225,9 @@ def migrate_verify(
             elif config and config.exists():
                 config_data = load_config(str(config))
         if config_data is None:
-            error_console.print(
-                "[red]Config file or --database-url required for migrate verify[/red]"
+            raise ConfigurationError(
+                "Config file or --database-url required for migrate verify"
             )
-            raise typer.Exit(1)
         tracking_table = _get_tracking_table(config_data)
 
         conn = create_connection(config_data)
@@ -1266,11 +1259,10 @@ def migrate_verify(
 
     except typer.Exit:
         raise
+    except ConfiturError as e:
+        fail(e, json_mode=json_mode, output_file=output_file)
     except Exception as e:
-        if is_json(format_output):
-            fail(e, json_mode=True, output_file=output_file)
-        error_console.print(f"[red]Verify failed: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=json_mode, output_file=output_file)
 
 
 # ---------------------------------------------------------------------------
