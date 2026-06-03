@@ -403,7 +403,7 @@ class {class_name}(Migration):
 
         result = subprocess.run(
             resolved,
-            shell=True,
+            shell=True,  # nosec B602 — `resolved` is a trusted operator-configured generator command (not user/network input); a shell is required to honor the configured pipeline. See SEC-M1.
             capture_output=True,
             text=True,
         )

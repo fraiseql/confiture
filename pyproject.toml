@@ -156,6 +156,14 @@ target-version = "py311"
 src = ["python"]
 
 [tool.ruff.lint]
+# Deliberate, focused ruleset (see ARCH-M3). Confiture runs a curated core
+# rather than the full prescribed superset: the families below catch real bugs
+# and style drift with near-zero false positives. The heavier / more opinionated
+# families (PL, PERF, FURB, ERA, PTH, TCH, RUF) are intentionally NOT enabled —
+# enabling the full set surfaces ~900+ findings (much of it churn) without
+# commensurate value today. Adopt them incrementally, family-by-family, if a
+# future need earns it. This config — not the global methodology — is the
+# source of truth for Confiture's lint scope.
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings

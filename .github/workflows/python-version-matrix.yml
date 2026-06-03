@@ -8,10 +8,10 @@ on:
   pull_request:
     branches: [ main ]
   # Allow manual trigger
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  workflow_dispatch:
 
 concurrency:
   group: python-matrix-${{ github.ref }}

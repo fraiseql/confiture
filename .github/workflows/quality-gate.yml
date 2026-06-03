@@ -162,7 +162,6 @@ jobs:
     - name: Run ty type check on Python code
       run: ty check python/confiture/
       timeout-minutes: 5
-      continue-on-error: true  # ty has known issues with psycopg3 strict typing
 
   rust-checks:
     name: Rust Checks
@@ -197,9 +196,17 @@ jobs:
         uv venv
         uv pip install bandit
     - name: Run bandit security scan
-      run: uv run bandit -r python/confiture/ -f json || true
+      # Blocking at High severity + High confidence. Lower-severity B608
+      # findings (SQL built from validated/quoted identifiers — see the
+      # `# noqa: S608` sites) are tracked separately; the one High finding
+      # (subprocess shell=True on trusted-operator config) carries a
+      # justified `# nosec B602`.
+      run: uv run bandit -r python/confiture/ --severity-level high --confidence-level high
+    # Trivy scans dependencies for CVEs, which surface over time independent of
+    # the PR — kept advisory (continue-on-error) so a newly-disclosed CVE can't
+    # block an unrelated change. Bandit is the blocking security leg.
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -225,9 +232,9 @@ jobs:
             echo "❌ Lint checks failed - Quality gate blocked"
             exit 1
           fi
-          # Type check allowed to fail due to psycopg3 strict typing issues
-          if [[ "${{ needs.type-check.result }}" == "failure" ]]; then
-            echo "⚠️ Type check has warnings (allowed due to psycopg3 strict typing)"
+          if [[ "${{ needs.type-check.result }}" != "success" ]]; then
+            echo "❌ Type check failed - Quality gate blocked"
+            exit 1
           fi
           if [[ "${{ needs.rust-checks.result }}" != "success" ]]; then
             echo "❌ Rust checks failed - Quality gate blocked"
