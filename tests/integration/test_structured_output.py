@@ -269,9 +269,10 @@ class TestBuildFormatValidation:
             ],
         )
 
-        # Should fail
-        assert result.exit_code != 0
-        assert "Invalid format" in result.stdout
+        # Should fail with a config error (exit 5); the "Invalid format" message
+        # is rendered to stderr via the fail() boundary (mixed into result.output).
+        assert result.exit_code == 5
+        assert "Invalid format" in result.output
 
 
 class TestBuildWithShowHash:
