@@ -227,15 +227,17 @@ When something does go wrong, the structural-diff section is where the signal li
 exit 7  (drift detected)
 ```
 
-The exit code is **semantic** — wire it to your CI gate:
+The exit code is **semantic** — wire it to your CI gate (codes as of 0.21.0, #151):
 
 | Exit | Meaning |
 |---|---|
-| 0 | Preflight passed |
-| 2 | Configuration error (bad YAML, unreachable preflight URL) |
-| 3 | SQL execution failure during replay |
-| 6 | Lock contention (another preflight is running) |
-| 7 | Structural drift between preflight DB and `db/schema/` |
+| 0 | Preflight passed — no error-severity issues |
+| 3 | Connection failure — unreachable `--against` URL or tracking DB (`CONFIG_006`) |
+| 5 | Configuration error — bad YAML, or conflicting DSN sources (`CONFIG_007` / `CONFIG_010`) |
+| 6 | Lock contention (another migration holds the advisory lock) |
+| 7 | One or more error-severity findings — a migration failed to replay (`PFLIGHT_REPLAY_FAILED`), a missing `.down.sql`, a duplicate version, or a checksum mismatch |
+
+In `--format json`, the report is the unified `{ok, summary, issues[]}` envelope (#151) — each failed replay is a `PFLIGHT_REPLAY_FAILED` entry in `issues[]`, with the database error under `details.error`.
 
 ### Capturing the report for review
 

@@ -220,32 +220,34 @@ Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issue
 
 [migrate-preflight-against.schema.json](./json-schemas/migrate-preflight-against.schema.json)
 
-Static analysis + exhaustive execution against a preflight database. Returns a two-level shape: `static` (same as no-`--against`) and `against` (execution outcomes).
+> **Changed in 0.21.0 (#151).** `--against` now emits the **same** `{ok, summary, issues[]}`
+> envelope as the no-`--against` path — one schema, one parser. The legacy
+> `{static, against, hints}` shape is gone.
+
+Static findings + replica-forward-compat lints + execution-replay results, unified into one `issues[]`. A migration that fails to replay against the `--against` database appears as a `PFLIGHT_REPLAY_FAILED` issue, with the database error in `details.error`; the run exits 7 (via `preflight_exit_code`). Run-level metadata that is not a finding — `db_consumed` — rides in `summary`. `summary.migrations_checked` is the number of migrations *replayed* (the pending set). An unreachable `--against` URL is a connection failure → the [error envelope](./json-schemas/error-envelope.schema.json) with `CONFIG_006` (exit 3).
 
 ```json
 {
-  "static": { "...": "PreflightResult.to_dict() shape" },
-  "against": {
-    "against_url": "postgresql://user@host/preflight",
-    "all_passed": true,
-    "total": 1,
-    "passed": 1,
-    "failed": 0,
-    "skipped": 0,
-    "db_consumed": false,
-    "migrations": [
-      {
-        "version": "20260527000000",
-        "name": "init",
-        "success": true,
-        "error": null,
-        "skipped": false,
-        "skipped_reason": null,
-        "execution_time_ms": 42
-      }
-    ]
+  "ok": false,
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "info": 0,
+    "migrations_checked": 1,
+    "db_consumed": false
   },
-  "hints": []
+  "issues": [
+    {
+      "severity": "error",
+      "code": "PFLIGHT_REPLAY_FAILED",
+      "message": "Migration 20260527000000 (init) failed to replay against the preflight DB.",
+      "migration": "20260527000000",
+      "file": null,
+      "line": null,
+      "actionable": "Fix the failing migration SQL; see details for the database error.",
+      "details": { "error": "relation \"x\" already exists" }
+    }
+  ]
 }
 ```
 
@@ -287,13 +289,6 @@ The intermediate representation for extracted SQL is called `snippets`,
 not `sql`. There is no `.sql` attribute on `ExtractionResult`. Each
 entry in `snippets` is an `ExtractedSQL` with its own `source_line`.
 
-### `against.migrations[].success` (NOT `passed`)
-
-Each per-migration entry in `migrate preflight --against` carries
-`success: bool` — not `passed`. The aggregate counters at the
-`against.` level use both: `against.passed` is an integer count;
-`against.all_passed` is the boolean aggregate. Don't confuse them.
-
 ### `severity` is required
 
 Every `Violation` (idempotency) and `DriftItem` (drift) MUST have a
@@ -313,8 +308,10 @@ The `_common.schema.json` file holds shared `$defs`:
 * `HintsArray` — the `hints` field (pre-allocated for Phase 05)
 
 The `_preflight_defs.schema.json` file holds preflight-specific
-sub-schemas shared between `migrate-preflight.schema.json` and
-`migrate-preflight-against.schema.json`:
+sub-schemas:
 
-* `StaticPreflight` — the `PreflightResult.to_dict()` shape
-* `DependentAnalysis` — the optional dependent-objects analysis
+* `DependentAnalysis` — the optional dependent-objects analysis, referenced by
+  both `migrate-preflight.schema.json` and `migrate-preflight-against.schema.json`
+* `StaticPreflight` — the legacy `PreflightResult.to_dict()` shape. **Unused
+  since 0.21.0 (#151)** — the `--against` `static` block it described was folded
+  into the unified `issues[]`. Retained for back-reference only.

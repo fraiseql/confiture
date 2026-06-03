@@ -30,10 +30,14 @@ def test_reference_doc_mentions_every_schema_file():
 
 
 def test_reference_doc_calls_out_field_name_traps():
-    """The four field-name surprises from issue #123 are documented."""
+    """The field-name surprises from issue #123 are documented.
+
+    The `against.migrations[].success` (NOT `passed`) trap was retired in 0.21.0
+    (#151): `migrate preflight --against` no longer has an `against` block — its
+    findings are unified into the standard `issues[]`, so that trap is moot.
+    """
     text = REFERENCE_DOC.read_text()
     # Each trap surfaces in the doc body so agents can grep for the wrong name.
     assert "source_line" in text
     assert "line_number" in text  # called out as the WRONG field name
-    assert "success" in text
-    assert "passed" in text  # called out as the WRONG field name
+    assert "snippets" in text  # the ExtractionResult.snippets (NOT sql) trap

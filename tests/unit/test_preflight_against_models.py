@@ -176,3 +176,82 @@ def test_to_dict_structure():
     assert d["skipped"] == 1
     assert d["db_consumed"] is False
     assert len(d["migrations"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# PreflightAgainstResult.replay_issues  (issue #151)
+# ---------------------------------------------------------------------------
+
+
+def test_replay_issues_empty_when_all_pass():
+    """No failures → no replay issues."""
+    result = PreflightAgainstResult(
+        migrations=[
+            PreflightAgainstMigration("001", "a", True),
+            PreflightAgainstMigration("002", "b", True),
+        ],
+        against_url="postgresql://localhost/preflight",
+    )
+    assert result.replay_issues == []
+
+
+def test_replay_issues_one_per_failure():
+    """Each failed (non-skipped) migration yields one PFLIGHT_REPLAY_FAILED issue."""
+    result = PreflightAgainstResult(
+        migrations=[
+            PreflightAgainstMigration("001", "a", True),
+            PreflightAgainstMigration("002", "b", False, error="syntax error"),
+            PreflightAgainstMigration("003", "c", False, error="missing column"),
+        ],
+        against_url="postgresql://localhost/preflight",
+    )
+    issues = result.replay_issues
+    assert len(issues) == 2
+    assert all(i.code == "PFLIGHT_REPLAY_FAILED" for i in issues)
+    assert all(i.severity == "error" for i in issues)
+    assert {i.migration for i in issues} == {"002", "003"}
+
+
+def test_replay_issues_skips_skipped():
+    """Skipped migrations are neutral — they produce no replay issue."""
+    result = PreflightAgainstResult(
+        migrations=[
+            PreflightAgainstMigration("001", "a", True),
+            PreflightAgainstMigration(
+                "002",
+                "b",
+                False,
+                skipped=True,
+                skipped_reason="non-transactional",
+            ),
+        ],
+        against_url="postgresql://localhost/preflight",
+    )
+    assert result.replay_issues == []
+
+
+def test_replay_issue_carries_error_in_details():
+    """The DB error is preserved under details['error']; actionable comes from PFLIGHT_CODES."""
+    result = PreflightAgainstResult(
+        migrations=[
+            PreflightAgainstMigration(
+                "20260501120000", "tv_dims", False, error="cannot change name of input parameter"
+            ),
+        ],
+        against_url="postgresql://localhost/preflight",
+    )
+    (issue,) = result.replay_issues
+    assert issue.migration == "20260501120000"
+    assert issue.details["error"] == "cannot change name of input parameter"
+    assert issue.actionable is not None
+    assert "20260501120000" in issue.message
+
+
+def test_replay_issue_no_error_yields_empty_details():
+    """A failure with no error string still produces an issue, with empty details."""
+    result = PreflightAgainstResult(
+        migrations=[PreflightAgainstMigration("002", "b", False, error=None)],
+        against_url="postgresql://localhost/preflight",
+    )
+    (issue,) = result.replay_issues
+    assert issue.details == {}

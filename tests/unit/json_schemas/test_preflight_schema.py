@@ -131,10 +131,67 @@ def test_preflight_against_validates(tmp_path, schemas_dir):
     registry = _build_registry(schemas_dir)
     Draft202012Validator(_load(schemas_dir, AGAINST_SCHEMA), registry=registry).validate(payload)
 
-    # Spot-check the documented field-name traps:
-    assert "success" in payload["against"]["migrations"][0]  # NOT "passed"
-    assert payload["against"]["all_passed"] is True
-    # URL is redacted — the password is stripped (the username is preserved).
-    assert "secret" not in payload["against"]["against_url"]
-    assert "user" in payload["against"]["against_url"]
-    assert payload["hints"] == []
+    # #151: --against now emits the unified {ok, summary, issues[]} envelope —
+    # the same shape as the no---against path. No `static` / `against` / `hints`.
+    assert "against" not in payload
+    assert "static" not in payload
+    assert "hints" not in payload
+    assert payload["ok"] is True
+    assert payload["issues"] == []
+    assert payload["summary"]["migrations_checked"] == 1
+    assert payload["summary"]["db_consumed"] is False
+
+
+def test_preflight_against_replay_failure_validates(tmp_path, schemas_dir):
+    """#151: a failed replay validates as a PFLIGHT_REPLAY_FAILED issue in the envelope."""
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260527000000_init.up.sql").write_text("CREATE TABLE x (id INT);\n")
+    (migs / "20260527000000_init.down.sql").write_text("DROP TABLE x;\n")
+
+    fixture = PreflightAgainstResult(
+        migrations=[
+            PreflightAgainstMigration(
+                version="20260527000000",
+                name="init",
+                success=False,
+                error='relation "x" already exists',
+            )
+        ],
+        against_url="postgresql://localhost/preflight",
+    )
+
+    mock_session = MagicMock()
+    mock_session.__enter__ = lambda s: mock_session
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.run_against.return_value = fixture
+
+    runner = CliRunner()
+    with patch(
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        return_value=mock_session,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--migrations-dir",
+                str(migs),
+                "--format",
+                "json",
+            ],
+        )
+    assert result.exit_code == 7, result.output
+    payload = json.loads(result.stdout)
+
+    registry = _build_registry(schemas_dir)
+    Draft202012Validator(_load(schemas_dir, AGAINST_SCHEMA), registry=registry).validate(payload)
+
+    assert payload["ok"] is False
+    (replay,) = [i for i in payload["issues"] if i["code"] == "PFLIGHT_REPLAY_FAILED"]
+    assert replay["severity"] == "error"
+    assert replay["migration"] == "20260527000000"
+    assert replay["details"]["error"] == 'relation "x" already exists'

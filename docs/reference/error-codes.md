@@ -146,11 +146,12 @@ so — diagnostics never block a migration.
 
 ## `PFLIGHT_*` — preflight report issue codes (#148)
 
-`migrate preflight --format json` (no `--against`) returns a *report*
-(`{ok, summary, issues[]}`), not the error envelope above. Each `issues[]`
-element is the same unified issue object, carrying a `PFLIGHT_*` code. These are
-report codes (not `ConfiturError` registry codes); the command's exit comes from
-the summary — any error → 7, warnings → 0 unless `--strict`.
+`migrate preflight --format json` returns a *report* (`{ok, summary, issues[]}`),
+not the error envelope above — in **both** the default and `--against` modes
+(unified in 0.21.0, #151). Each `issues[]` element is the same unified issue
+object, carrying a `PFLIGHT_*` code. These are report codes (not `ConfiturError`
+registry codes); the command's exit comes from the summary — any error → 7,
+warnings → 0 unless `--strict`.
 
 | Code | Default severity | Meaning |
 |------|------------------|---------|
@@ -158,7 +159,7 @@ the summary — any error → 7, warnings → 0 unless `--strict`.
 | `PFLIGHT_NON_TRANSACTIONAL` | warning | Migration contains a statement that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) |
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
-| `PFLIGHT_REPLAY_FAILED` | error | (reserved) a migration failed to replay against the `--against` DB |
+| `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
 
 ### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)

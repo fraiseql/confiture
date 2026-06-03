@@ -5,6 +5,54 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-06-03
+
+Unifies the last preflight surface still on a bespoke JSON shape: `migrate
+preflight --against` now emits the **same** structured report envelope as the
+default path ([#151](https://github.com/fraiseql/confiture/issues/151)). One
+schema, one parser across the whole preflight family.
+
+### ⚠️ BREAKING — `migrate preflight --against --format json` reshape ([#151](https://github.com/fraiseql/confiture/issues/151))
+
+**CI and wrappers that parse `--against` JSON must update.** The legacy
+two-level `{static, against, hints}` payload is replaced by the unified
+`{ok, summary, issues[]}` envelope — identical in shape to `migrate preflight
+--format json` without `--against` (#148):
+
+- A migration that **fails to replay** against the `--against` database is now
+  a `PFLIGHT_REPLAY_FAILED` **report-issue** in `issues[]` (DB error in
+  `details.error`, `migration` attribution), joining the static reversibility /
+  transactionality / duplicate-version / checksum findings and the replica
+  forward-compat lints in one list. `PFLIGHT_REPLAY_FAILED` is a report-issue
+  code, **not** a `ConfiturError` registry code — the `CANONICAL_EXIT_CODES`
+  stability contract is untouched.
+- Run-level metadata that is not a finding — `db_consumed` — moves into
+  `summary` (alongside `errors` / `warnings` / `info` / `migrations_checked`).
+  `summary.migrations_checked` is the number of migrations *replayed*.
+- **Removed**: the top-level `static`, `against`, and `hints` keys, and
+  per-*successful*-migration timing in JSON. Preflight is a safety gate, not a
+  profiler — use `migrate estimate` for timing. The "empty tracking table"
+  advisory still prints to stderr in text mode.
+
+### ⚠️ BREAKING — `--against` exit codes follow the #146/#148 convention
+
+- A failed replay now exits **7** (any error-severity issue → `preflight_exit_code`),
+  not the old bare exit **1**.
+- An **unreachable `--against` URL** (or a connection failure while resolving the
+  pending set) now exits **3** (`CONFIG_006`, "connection failed") with the #145
+  `{ok:false, error}` envelope in JSON mode, not the old exit **2**.
+- Static errors (missing `.down.sql`, duplicate version, checksum mismatch) now
+  fail the `--against` run too (exit **7**) — previously surfaced only on the
+  default path.
+
+### Documentation
+
+- Rewrote `migrate-preflight-against.schema.json` to the unified envelope;
+  refreshed `docs/reference/json-schemas.md` (dropped the obsolete
+  `against.migrations[].success` field-name trap), `docs/reference/error-codes.md`
+  (`PFLIGHT_REPLAY_FAILED` no longer "(reserved)"), and the `migrate preflight
+  --against` exit-code table in `docs/guides/dry-run.md`.
+
 ## [0.20.0] - 2026-06-01
 
 Settles the DSN connection-source precedence into a single, secure contract

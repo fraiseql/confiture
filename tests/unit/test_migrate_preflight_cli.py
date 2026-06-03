@@ -158,11 +158,12 @@ def test_against_no_filter_runs_all(runner, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# CLI: failure → exit 1
+# CLI: replay failure → exit 7 (#151, via preflight_exit_code)
 # ---------------------------------------------------------------------------
 
 
-def test_against_failure_exits_1(runner, tmp_path):
+def test_against_failure_exits_7(runner, tmp_path):
+    """A failed replay is an error-severity issue → exit 7 (#151), not the old exit 1."""
     (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
     (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
 
@@ -189,7 +190,8 @@ def test_against_failure_exits_1(runner, tmp_path):
             ],
         )
 
-    assert result.exit_code == 1
+    assert result.exit_code == 7
+    # Text mode is unchanged — the human still sees the DB error inline.
     assert "column does not exist" in result.output
 
 
@@ -280,7 +282,12 @@ def test_allow_non_transactional_flag_passed(runner, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_json_output_structure(runner, tmp_path):
+def test_against_json_is_unified_envelope(runner, tmp_path):
+    """#151: --against JSON is the unified {ok, summary, issues[]} envelope.
+
+    The legacy {static, against, hints} keys are gone; the shape now matches
+    the no---against path, with run-level metadata (db_consumed) in summary.
+    """
     (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
     (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
 
@@ -308,10 +315,90 @@ def test_json_output_structure(runner, tmp_path):
         )
 
     data = json.loads(result.output)
-    assert "static" in data
-    assert "against" in data
-    assert data["against"]["all_passed"] is True
-    assert data["against"]["skipped"] == 0
+    assert "static" not in data
+    assert "against" not in data
+    assert "hints" not in data
+    assert set(data) >= {"ok", "summary", "issues"}
+    assert data["ok"] is True
+    assert data["issues"] == []
+    assert data["summary"]["migrations_checked"] == 1
+    assert data["summary"]["db_consumed"] is False
+
+
+def test_against_json_replay_failure_is_issue(runner, tmp_path):
+    """#151: a failed replay surfaces as a PFLIGHT_REPLAY_FAILED issue, ok=False, exit 7."""
+    (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
+    (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
+
+    against_result = PreflightAgainstResult(
+        migrations=[
+            PreflightAgainstMigration(
+                "20260428000000", "a", False, error="column x does not exist"
+            ),
+        ],
+        against_url="postgresql://localhost/preflight",
+    )
+
+    with patch(
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        return_value=_mock_session(against_result),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--format",
+                "json",
+                "--migrations-dir",
+                str(tmp_path),
+            ],
+        )
+
+    assert result.exit_code == 7
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    replay = [i for i in data["issues"] if i["code"] == "PFLIGHT_REPLAY_FAILED"]
+    assert len(replay) == 1
+    assert replay[0]["migration"] == "20260428000000"
+    assert replay[0]["details"]["error"] == "column x does not exist"
+    assert data["summary"]["errors"] == 1
+
+
+def test_against_static_error_exits_7(runner, tmp_path):
+    """#151: a static error (missing .down.sql) fails the --against run too (exit 7)."""
+    (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
+    # No .down.sql sibling → PFLIGHT_MISSING_DOWN (error).
+
+    against_result = PreflightAgainstResult(
+        migrations=[PreflightAgainstMigration("20260428000000", "a", True)],
+        against_url="postgresql://localhost/preflight",
+    )
+
+    with patch(
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        return_value=_mock_session(against_result),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--format",
+                "json",
+                "--migrations-dir",
+                str(tmp_path),
+            ],
+        )
+
+    assert result.exit_code == 7
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert any(i["code"] == "PFLIGHT_MISSING_DOWN" for i in data["issues"])
 
 
 def test_json_output_without_against_is_structured_report(runner, tmp_path):
@@ -339,11 +426,12 @@ def test_json_output_without_against_is_structured_report(runner, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# CLI: unreachable URL → exit 2
+# CLI: unreachable URL → exit 3 (#151, harness/connection failure = CONFIG_006)
 # ---------------------------------------------------------------------------
 
 
-def test_against_unreachable_url_exits_2(runner, tmp_path):
+def test_against_unreachable_url_exits_3(runner, tmp_path):
+    """An unreachable --against URL is a connection failure → exit 3, not exit 2."""
     (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
     (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
 
@@ -363,7 +451,36 @@ def test_against_unreachable_url_exits_2(runner, tmp_path):
             ],
         )
 
-    assert result.exit_code == 2
+    assert result.exit_code == 3
+
+
+def test_against_unreachable_url_json_envelope_exits_3(runner, tmp_path):
+    """In JSON mode the connection failure emits the {ok:false, error} envelope, exit 3."""
+    (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
+    (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
+
+    with patch(
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        side_effect=Exception("connection refused"),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--format",
+                "json",
+                "--migrations-dir",
+                str(tmp_path),
+            ],
+        )
+
+    assert result.exit_code == 3
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert data["error"]["code"] == "CONFIG_006"
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +521,7 @@ def test_db_consumed_warning_shown_in_text(runner, tmp_path):
 
 
 def test_db_consumed_in_json_envelope(runner, tmp_path):
-    """db_consumed=True appears in the JSON against envelope."""
+    """#151: db_consumed=True rides in summary (run-level metadata), not a separate block."""
     (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
     (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
 
@@ -433,7 +550,7 @@ def test_db_consumed_in_json_envelope(runner, tmp_path):
         )
 
     data = json.loads(result.output)
-    assert data["against"]["db_consumed"] is True
+    assert data["summary"]["db_consumed"] is True
 
 
 # ---------------------------------------------------------------------------

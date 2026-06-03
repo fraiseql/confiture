@@ -1030,6 +1030,26 @@ class PreflightAgainstResult:
         """Migrations skipped because they are non-transactional."""
         return [m for m in self.migrations if m.skipped]
 
+    @property
+    def replay_issues(self) -> list[PreflightIssue]:
+        """Failed replays as unified ``PreflightIssue``s (issue #151).
+
+        One ``PFLIGHT_REPLAY_FAILED`` issue per failed (non-skipped) migration,
+        carrying the version as ``migration`` and the database error under
+        ``details["error"]``. Skipped and passing migrations produce nothing —
+        the static pass already surfaces non-transactional skips via
+        ``PFLIGHT_NON_TRANSACTIONAL``.
+        """
+        return [
+            PreflightIssue.of(
+                "PFLIGHT_REPLAY_FAILED",
+                f"Migration {m.version} ({m.name}) failed to replay against the preflight DB.",
+                migration=m.version,
+                details={"error": m.error} if m.error else {},
+            )
+            for m in self.failures
+        ]
+
     @staticmethod
     def _redact_url(url: str) -> str:
         """Return URL with password replaced by ***, username preserved."""

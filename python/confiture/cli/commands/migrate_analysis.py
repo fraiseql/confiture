@@ -2596,16 +2596,24 @@ def migrate_preflight(
             ),
         )
     except Exception as e:
+        from confiture.exceptions import ConfigurationError, ConfiturError  # noqa: PLC0415
+
         # #152: a precedence conflict (CONFIG_007) or missing source (CONFIG_010)
-        # must surface with its own exit code + remediation via the shared error
-        # boundary, not be masked as a generic "failed to resolve pending"
-        # (exit 2). Genuine resolution/connection failures keep the exit-2 path.
-        if getattr(e, "error_code", None) in {"CONFIG_007", "CONFIG_010"}:
+        # — and any other ConfiturError — surfaces with its own exit code +
+        # remediation via the shared error boundary.
+        if isinstance(e, ConfiturError):
             fail(e, json_mode=is_json(format_type), output_file=None)
-        if is_json(format_type):
-            fail(e, json_mode=True, output_file=None)
-        error_console.print(f"[red]❌ Failed to resolve pending migrations: {e}[/red]")
-        raise typer.Exit(2) from e
+        # #151: any other failure resolving the pending set is a harness /
+        # connection failure — align to the canonical connection-failure exit 3
+        # (CONFIG_006), not the old generic exit 2.
+        fail(
+            ConfigurationError(
+                f"Failed to resolve pending migrations: {e}",
+                error_code="CONFIG_006",
+            ),
+            json_mode=is_json(format_type),
+            output_file=None,
+        )
 
     target_tracking_empty = False
     try:
@@ -2627,8 +2635,18 @@ def migrate_preflight(
                 allow_non_transactional=allow_non_transactional,
             )
     except Exception as e:
-        error_console.print(f"[red]❌ Connection to --against URL failed: {e}[/red]")
-        raise typer.Exit(2) from e
+        # #151: an unreachable --against URL is a connection failure → exit 3
+        # (CONFIG_006), with the shared {ok:false, error} envelope in JSON mode.
+        from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+
+        fail(
+            ConfigurationError(
+                f"Connection to --against URL failed: {e}",
+                error_code="CONFIG_006",
+            ),
+            json_mode=is_json(format_type),
+            output_file=None,
+        )
 
     dependent_report = None
     if check_dependents != "off":
@@ -2639,21 +2657,39 @@ def migrate_preflight(
             against_url=against,
         )
 
-    preflight_hints: list[str] = []
     if target_tracking_empty and pending_files:
         _emit_hint(
             "`tb_confiture` on the target is empty. If --against points at a "
             "restored backup, was the tracking table dropped during "
             "anonymization?",
-            hints_list=preflight_hints,
+            # The unified --against envelope (#151) has no `hints` array; in
+            # text mode this still prints the breadcrumb to stderr.
+            hints_list=[],
             format_=format_type,
         )
 
+    # #151: unified {ok, summary, issues[]} envelope — same shape as the
+    # no-`--against` path. Replay failures join the static + replica findings;
+    # run-level metadata (db_consumed) rides in `summary`.
+    _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
+    replica_issues = replica_preflight_issues(
+        migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
+    )
+    all_issues = result.issues + replica_issues + against_result.replay_issues
+    summary = {
+        "errors": sum(1 for i in all_issues if i.severity in ("error", "critical")),
+        "warnings": sum(1 for i in all_issues if i.severity == "warning"),
+        "info": sum(1 for i in all_issues if i.severity == "info"),
+        "migrations_checked": len(against_result.migrations),
+        "db_consumed": against_result.db_consumed,
+    }
+    exit_code = preflight_exit_code(summary, strict=strict)
+
     if format_type == "json":
         payload: dict[str, Any] = {
-            "static": result.to_dict(),
-            "against": against_result.to_dict(),
-            "hints": preflight_hints,
+            "ok": exit_code == 0,
+            "summary": summary,
+            "issues": [i.to_dict() for i in all_issues],
         }
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
@@ -2663,7 +2699,7 @@ def migrate_preflight(
         if dependent_report is not None:
             _display_dependent_analysis(dependent_report, console)
 
-    if not against_result.all_passed:
-        raise typer.Exit(1)
+    if exit_code:
+        raise typer.Exit(exit_code)
     if dependent_report is not None and dependent_report.has_blocking():
         raise typer.Exit(1)
