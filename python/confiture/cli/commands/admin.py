@@ -5,6 +5,7 @@ from pathlib import Path
 
 import typer
 
+from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     _get_tracking_table,
@@ -16,6 +17,7 @@ from confiture.cli.helpers import (
 )
 from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 
 def install_helpers(
@@ -148,14 +150,21 @@ def validate_profile(
         console.print("[green]\n✅ Profile validation passed![/green]")
 
     except FileNotFoundError as e:
-        console.print(f"[red]❌ File not found: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfigurationError(
+                f"Profile file not found: {e}",
+                error_code="CONFIG_004",
+                resolution_hint="Check the path to the anonymization profile YAML.",
+            ),
+            json_mode=False,
+        )
     except ValueError as e:
-        console.print(f"[red]❌ Invalid profile: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfiturError(f"Invalid profile: {e}", error_code="ANON_1400"),
+            json_mode=False,
+        )
     except Exception as e:
-        console.print(f"[red]❌ Error validating profile: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 def verify_checksums(
@@ -250,6 +259,8 @@ def verify_checksums(
                 "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
             )
             conn.close()
+            # success-signal: verification ran and found mismatches (the CI gate
+            # this command exists to trip) — not a confiture-domain error.
             raise typer.Exit(1)
 
         conn.close()
@@ -257,8 +268,7 @@ def verify_checksums(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 def verify_deprecated(
@@ -343,10 +353,13 @@ def validate_config(
     from confiture.core.config_validator import ConfigValidator
 
     if output_format not in ("text", "json"):
-        error_console.print(
-            f"[red]❌ Error: Invalid format '{output_format}'. Use 'text' or 'json'[/red]"
+        fail(
+            ConfigurationError(
+                f"Invalid format '{output_format}'. Use 'text' or 'json'.",
+                resolution_hint="Pass --format text or --format json.",
+            ),
+            json_mode=False,
         )
-        raise typer.Exit(2)
 
     # Source selection: an explicit --config validates that YAML; a
     # --database-url flag is validated for *format* as an issue (not raised);
@@ -484,8 +497,13 @@ def restore(
     from confiture.exceptions import RestoreError
 
     if not backup_file.exists():
-        console.print(f"[red]Error:[/red] Backup file not found: {backup_file}")
-        raise typer.Exit(1)
+        fail(
+            RestoreError(
+                f"Backup file not found: {backup_file}",
+                resolution_hint="Check the backup path; restore needs a -Fc/-Fd dump.",
+            ),
+            json_mode=False,
+        )
 
     options = RestoreOptions(
         backup_path=backup_file,
@@ -515,8 +533,7 @@ def restore(
     try:
         result = DatabaseRestorer().restore(options, on_stderr_line=on_stderr_line)
     except RestoreError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
     if result.warnings:
         console.print(f"[yellow]⚠ {len(result.warnings)} warning(s) during restore[/yellow]")
@@ -528,4 +545,7 @@ def restore(
     else:
         for err in result.errors:
             console.print(f"[red]{err}[/red]")
-        raise typer.Exit(1)
+        fail(
+            RestoreError("Restore failed; see the errors above."),
+            json_mode=False,
+        )

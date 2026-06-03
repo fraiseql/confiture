@@ -69,7 +69,8 @@ class TestRestoreCLI:
             ),
         ):
             result = runner.invoke(app, ["restore", str(backup), "--database", "mydb"])
-        assert result.exit_code == 1
+        # Restore failure → RESTORE_001 → exit 5 (was the generic 1).
+        assert result.exit_code == 5
         assert "FK constraint violation" in result.output
 
     def test_warnings_shown_even_on_success(self, tmp_path):
@@ -142,7 +143,8 @@ class TestRestoreCLI:
             side_effect=RestoreError("plain-text format not supported"),
         ):
             result = runner.invoke(app, ["restore", str(backup), "--database", "mydb"])
-        assert result.exit_code == 1
+        # RestoreError (bad dump format) → RESTORE_001 → exit 5 (was 1).
+        assert result.exit_code == 5
         assert "plain-text" in result.output
 
     def test_table_count_shown_when_min_tables_set(self, tmp_path):
