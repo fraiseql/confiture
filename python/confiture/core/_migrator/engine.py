@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,24 +18,17 @@ import psycopg
 import psycopg.pq
 from psycopg import sql as pgsql
 
+from confiture.core._migrator import apply as apply_impl
 from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator.discovery import find_duplicate_migration_versions
 from confiture.core.checksum import (
     ChecksumConfig,
-    MigrationChecksumVerifier,
-    compute_checksum,
 )
-from confiture.core.connection import (
-    get_migration_class,
-    load_migration_module,
-)
-from confiture.core.dry_run import DryRunExecutor, DryRunResult
-from confiture.core.hooks import HookError, HookRegistry
+from confiture.core.dry_run import DryRunResult
+from confiture.core.hooks import HookRegistry
 from confiture.core.hooks.context import ExecutionContext
-from confiture.core.hooks.phases import HookPhase
-from confiture.core.locking import LockConfig, MigrationLock
-from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
+from confiture.core.locking import LockConfig
 from confiture.core.progress import ProgressManager
 from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
@@ -412,35 +404,15 @@ class Migrator:
             MigrationError: If migration fails or hooks fail
             PreconditionValidationError: If precondition validation fails
         """
-        already_applied = self._is_applied(migration.version)
-
-        if not force and already_applied:
-            raise MigrationError(
-                f"Migration {migration.version} ({migration.name}) has already been applied",
-                migration.version,
-                migration.name,
-                error_code="MIGR_101",
-                resolution_hint="Use --force to re-apply this migration, or run 'confiture migrate status' to review applied migrations",
-            )
-
-        # Validate preconditions before applying
-        if not skip_preconditions:
-            self._validate_preconditions(
-                migration, direction="up", preconditions=migration.up_preconditions
-            )
-
-        if migration.transactional:
-            self._apply_transactional(
-                migration,
-                already_applied,
-                migration_file,
-                commit=commit,
-                applied_by=applied_by,
-            )
-        else:
-            self._apply_non_transactional(
-                migration, already_applied, migration_file, applied_by=applied_by
-            )
+        apply_impl.apply(
+            self,
+            migration,
+            force=force,
+            migration_file=migration_file,
+            skip_preconditions=skip_preconditions,
+            commit=commit,
+            applied_by=applied_by,
+        )
 
     def _validate_preconditions(
         self,
@@ -450,33 +422,10 @@ class Migrator:
     ) -> None:
         """Validate migration preconditions before execution.
 
-        Args:
-            migration: Migration being validated
-            direction: "up" or "down" for error messages
-            preconditions: List of preconditions to check
-
         Raises:
-            PreconditionValidationError: If any precondition fails
+            PreconditionValidationError: If any precondition fails.
         """
-        if not preconditions:
-            return
-
-        logger.debug(
-            f"Validating {len(preconditions)} preconditions for migration "
-            f"{migration.version} ({direction})"
-        )
-
-        validator = PreconditionValidator(self.connection)
-        try:
-            validator.validate(
-                preconditions,
-                migration_version=migration.version,
-                migration_name=migration.name,
-            )
-            logger.debug(f"All preconditions passed for migration {migration.version}")
-        except PreconditionValidationError as e:
-            logger.error(f"Precondition validation failed for migration {migration.version}: {e}")
-            raise
+        apply_impl.validate_preconditions(self, migration, direction, preconditions)
 
     def _apply_transactional(
         self,
@@ -502,113 +451,14 @@ class Migrator:
                 (issue #137). When None, defaults to the connection's
                 ``current_user``.
         """
-        savepoint_name = f"migration_{migration.version}"
-        execution_time_ms = 0
-        success = False
-
-        try:
-            self._create_savepoint(savepoint_name)
-
-            # Trigger BEFORE_EXECUTE hook
-            self._trigger_hook(
-                HookPhase.BEFORE_EXECUTE,
-                migration,
-                execution_time_ms=0,
-                success=False,
-            )
-
-            # Execute migration DDL
-            logger.debug(f"Executing DDL for migration {migration.version}")
-            start_time = time.perf_counter()
-            migration.up()
-            execution_time_ms = int((time.perf_counter() - start_time) * 1000)
-
-            # #133: a migration body that issues COMMIT/ROLLBACK silently
-            # breaks confiture's outer transaction envelope. After a clean
-            # up() we expect the connection to be INTRANS; INERROR is handled
-            # by the surrounding exception path. Any other status means the
-            # body committed/rolled back and we cannot safely record the
-            # migration.
-            #
-            # Guard against test doubles: if a unit test passes a mock
-            # connection whose ``info.transaction_status`` isn't an actual
-            # ``TransactionStatus`` value, skip the check rather than
-            # false-positive on the mock.
-            tx_status = self.connection.info.transaction_status
-            if isinstance(tx_status, psycopg.pq.TransactionStatus) and tx_status not in (
-                psycopg.pq.TransactionStatus.INTRANS,
-                psycopg.pq.TransactionStatus.INERROR,
-            ):
-                raise MigrationError(
-                    f"Migration {migration.version} ({migration.name}) issued "
-                    f"an explicit COMMIT or ROLLBACK in its body, breaking "
-                    f"confiture's transaction envelope "
-                    f"(connection status: {tx_status.name}).",
-                    migration.version,
-                    migration.name,
-                    error_code="MIGR_107",
-                    resolution_hint=(
-                        "Remove any explicit COMMIT or ROLLBACK from the migration body. "
-                        "Confiture manages the outer transaction; embedded transaction "
-                        "control leaves the database in an unrecoverable state if a "
-                        "subsequent statement fails. If you need autocommit semantics, "
-                        "set transactional = False on the migration."
-                    ),
-                )
-            success = True
-
-            # Trigger AFTER_EXECUTE hook
-            self._trigger_hook(
-                HookPhase.AFTER_EXECUTE,
-                migration,
-                execution_time_ms=execution_time_ms,
-                success=True,
-            )
-
-            # Only record the migration if it's not already applied
-            # In force mode, we re-apply but don't re-record
-            if not already_applied:
-                self._record_migration(
-                    migration, execution_time_ms, migration_file, applied_by=applied_by
-                )
-            self._release_savepoint(savepoint_name)
-
-            if commit:
-                self.connection.commit()
-            logger.info(f"Successfully applied migration {migration.version} ({migration.name})")
-
-        except Exception as e:
-            # Trigger AFTER_EXECUTE hook for failure case
-            if "start_time" in locals():
-                execution_time_ms = int((time.perf_counter() - start_time) * 1000)
-
-            self._trigger_hook(
-                HookPhase.AFTER_EXECUTE,
-                migration,
-                execution_time_ms=execution_time_ms,
-                success=False,
-                error=str(e),
-            )
-
-            self._rollback_to_savepoint(savepoint_name, commit=commit)
-            if isinstance(e, (MigrationError, HookError)):
-                raise
-            hint = "Check the migration SQL for errors and ensure the database is in the expected state"
-            if isinstance(e, psycopg.Error) and _VIEW_COLUMN_RENAME_RE.search(str(e)):
-                hint = (
-                    "Dependent views block this column change. "
-                    "Call confiture.save_and_drop_dependent_views() before the ALTER "
-                    "and confiture.recreate_saved_views() after it. "
-                    "If you renamed a column, views referencing the old name cannot be "
-                    "auto-recreated — check SELECT schema_name, view_name, error_message, "
-                    "definition FROM confiture.saved_views for preserved definitions"
-                )
-            raise MigrationError(
-                f"Failed to apply migration {migration.version} ({migration.name}): {e}",
-                migration.version,
-                migration.name,
-                resolution_hint=hint,
-            ) from e
+        apply_impl.apply_transactional(
+            self,
+            migration,
+            already_applied,
+            migration_file,
+            commit=commit,
+            applied_by=applied_by,
+        )
 
     def _apply_non_transactional(
         self,
@@ -627,125 +477,29 @@ class Migrator:
             already_applied: Whether migration was already applied (force mode)
             migration_file: Path to migration file for checksum computation
         """
-        logger.warning(
-            f"Running migration {migration.version} in non-transactional mode. "
-            "Manual cleanup may be required on failure."
+        apply_impl.apply_non_transactional(
+            self,
+            migration,
+            already_applied,
+            migration_file,
+            applied_by=applied_by,
         )
-
-        # Ensure any pending transaction is committed
-        self.connection.commit()
-
-        # Set autocommit mode
-        original_autocommit = self.connection.autocommit
-        self.connection.autocommit = True
-
-        execution_time_ms = 0
-        success = False
-
-        try:
-            # Trigger BEFORE_EXECUTE hook
-            self._trigger_hook(
-                HookPhase.BEFORE_EXECUTE,
-                migration,
-                execution_time_ms=0,
-                success=False,
-            )
-
-            logger.debug(f"Executing DDL for migration {migration.version} (autocommit)")
-            start_time = time.perf_counter()
-            migration.up()
-            execution_time_ms = int((time.perf_counter() - start_time) * 1000)
-            success = True
-
-            # Trigger AFTER_EXECUTE hook
-            self._trigger_hook(
-                HookPhase.AFTER_EXECUTE,
-                migration,
-                execution_time_ms=execution_time_ms,
-                success=True,
-            )
-
-            # Record migration (in autocommit, this commits immediately)
-            if not already_applied:
-                self._record_migration(
-                    migration, execution_time_ms, migration_file, applied_by=applied_by
-                )
-
-            logger.info(
-                f"Successfully applied non-transactional migration "
-                f"{migration.version} ({migration.name})"
-            )
-
-        except Exception as e:
-            # Trigger AFTER_EXECUTE hook for failure case
-            if "start_time" in locals():
-                execution_time_ms = int((time.perf_counter() - start_time) * 1000)
-
-            self._trigger_hook(
-                HookPhase.AFTER_EXECUTE,
-                migration,
-                execution_time_ms=execution_time_ms,
-                success=False,
-                error=str(e),
-            )
-
-            logger.error(
-                f"Non-transactional migration {migration.version} failed. "
-                "Manual cleanup may be required."
-            )
-            hint = "Inspect the database for partial changes and manually revert any applied DDL statements"
-            if isinstance(e, psycopg.Error) and _VIEW_COLUMN_RENAME_RE.search(str(e)):
-                hint = (
-                    "Dependent views block this column change. "
-                    "Call confiture.save_and_drop_dependent_views() before the ALTER "
-                    "and confiture.recreate_saved_views() after it. "
-                    "If you renamed a column, views referencing the old name cannot be "
-                    "auto-recreated — check SELECT schema_name, view_name, error_message, "
-                    "definition FROM confiture.saved_views for preserved definitions"
-                )
-            raise MigrationError(
-                f"Failed to apply non-transactional migration "
-                f"{migration.version} ({migration.name}): {e}. "
-                "Manual cleanup may be required.",
-                migration.version,
-                migration.name,
-                resolution_hint=hint,
-            ) from e
-
-        finally:
-            # Restore original autocommit setting
-            self.connection.autocommit = original_autocommit
 
     def _create_savepoint(self, name: str) -> None:
         """Create a savepoint for transaction rollback."""
-        with self.connection.cursor() as cursor:
-            cursor.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(name)))
+        apply_impl.create_savepoint(self, name)
 
     def _release_savepoint(self, name: str) -> None:
         """Release a savepoint (commit nested transaction)."""
-        with self.connection.cursor() as cursor:
-            cursor.execute(pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(name)))
+        apply_impl.release_savepoint(self, name)
 
     def _rollback_to_savepoint(self, name: str, *, commit: bool = True) -> None:
         """Rollback to a savepoint (undo nested transaction).
 
-        When ``commit`` is False, the post-rollback ``connection.commit()`` is
-        suppressed so the rollback stays nested inside the caller's outer
-        transaction. The fallback full ``connection.rollback()`` is also
-        suppressed; on a failed ROLLBACK TO SAVEPOINT the caller's outer
-        savepoint handler is responsible for the recovery.
+        When ``commit`` is False the post-rollback commit/full-rollback are
+        suppressed so the rollback stays nested in the caller's transaction.
         """
-        try:
-            with self.connection.cursor() as cursor:
-                cursor.execute(pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name)))
-            if commit:
-                self.connection.commit()
-        except Exception:
-            if commit:
-                # Savepoint rollback failed, do full rollback
-                self.connection.rollback()
-            else:
-                raise
+        apply_impl.rollback_to_savepoint(self, name, commit=commit)
 
     def _record_migration(
         self,
@@ -757,49 +511,12 @@ class Migrator:
     ) -> None:
         """Record migration in tracking table with checksum.
 
-        Args:
-            migration: Migration that was applied
-            execution_time_ms: Time taken to apply migration
-            migration_file: Path to migration file for checksum computation
-            applied_by: PostgreSQL role that applied this migration
-                (issue #137).  Defaults to the connection's
-                ``current_user`` when the caller doesn't pass an explicit
-                value.  Pre-0.17.0 rows keep ``applied_by IS NULL`` as a
-                documented invariant — see docs/guides/superuser-migrations.md.
+        ``applied_by`` defaults to the connection's ``current_user`` when None;
+        pre-0.17.0 rows keep ``applied_by IS NULL`` as a documented invariant.
         """
-        from datetime import datetime
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = f"{migration.name}_{timestamp}"
-
-        # Compute checksum if file path provided
-        checksum = None
-        if migration_file is not None and migration_file.exists():
-            checksum = compute_checksum(migration_file)
-            logger.debug(f"Computed checksum for {migration.version}: {checksum[:16]}...")
-
-        if applied_by is None:
-            # Capture the role that opened the connection.  Quoting
-            # is unnecessary — current_user is read-only on the server.
-            row = self.connection.execute("SELECT current_user").fetchone()
-            applied_by = row[0] if row else None
-
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                pgsql.SQL("""
-                INSERT INTO {}
-                    (id, slug, version, name, execution_time_ms, checksum, applied_by)
-                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
-                """).format(self._table_ident),
-                (
-                    slug,
-                    migration.version,
-                    migration.name,
-                    execution_time_ms,
-                    checksum,
-                    applied_by,
-                ),
-            )
+        apply_impl.record_migration(
+            self, migration, execution_time_ms, migration_file, applied_by=applied_by
+        )
 
     def mark_applied(
         self,
@@ -828,47 +545,7 @@ class Migrator:
             >>> migrator.mark_applied(Path("db/migrations/001_create_users.py"))
             "001"
         """
-        from datetime import datetime
-
-        from confiture.core.connection import load_migration_class
-
-        # Load the migration class to get version and name
-        migration_class = load_migration_class(migration_file)
-
-        # Create a minimal instance just to read attributes
-        # We need to pass a connection but won't use it
-        migration = migration_class(connection=self.connection)
-
-        # Check if already applied
-        applied_versions = set(self.get_applied_versions())
-        if migration.version in applied_versions:
-            logger.info(f"Migration {migration.version} already applied, skipping")
-            return migration.version
-
-        # Generate slug with reason marker
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = f"{migration.name}_{timestamp}_{reason}"
-
-        # Compute checksum
-        checksum = compute_checksum(migration_file)
-
-        # Record in tracking table with execution_time_ms = 0 (not executed)
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                pgsql.SQL("""
-                INSERT INTO {}
-                    (id, slug, version, name, execution_time_ms, checksum)
-                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
-                """).format(self._table_ident),
-                (slug, migration.version, migration.name, 0, checksum),
-            )
-
-        self.connection.commit()
-        logger.info(
-            f"Marked migration {migration.version} ({migration.name}) as applied ({reason})"
-        )
-
-        return migration.version
+        return apply_impl.mark_applied(self, migration_file, reason)
 
     def baseline_from_db(
         self,
@@ -1504,31 +1181,15 @@ class Migrator:
             >>> with ProgressManager() as pm:
             ...     applied = migrator.migrate_up(progress=pm)
         """
-        effective_migrations_dir = migrations_dir or Path("db/migrations")
-
-        verify_task = None
-        if progress:
-            verify_task = progress.add_task("Verifying checksums...", total=None)
-
-        # Verify checksums before running migrations (unless force mode)
-        if checksum_config is None:
-            checksum_config = ChecksumConfig()
-
-        if checksum_config.enabled and not force:
-            verifier = MigrationChecksumVerifier(
-                self.connection, checksum_config, migration_table=self.migration_table
-            )
-            verifier.verify_all(effective_migrations_dir)
-
-        if progress and verify_task is not None:
-            progress.finish_task(verify_task)
-
-        # Create lock manager
-        lock = MigrationLock(self.connection, lock_config)
-
-        # Acquire lock and run migrations
-        with lock.acquire():
-            return self._migrate_up_internal(force, migrations_dir, target, progress=progress)
+        return apply_impl.migrate_up(
+            self,
+            force=force,
+            migrations_dir=migrations_dir,
+            target=target,
+            lock_config=lock_config,
+            checksum_config=checksum_config,
+            progress=progress,
+        )
 
     def _migrate_up_internal(
         self,
@@ -1537,102 +1198,14 @@ class Migrator:
         target: str | None = None,
         progress: ProgressManager | None = None,
     ) -> list[str]:
-        """Internal implementation of migrate_up (called within lock).
-
-        Args:
-            force: If True, skip migration state checks
-            migrations_dir: Custom migrations directory
-            target: Target migration version
-            progress: Optional ProgressManager for tracking progress
-
-        Returns:
-            List of applied migration versions
-        """
-        discover_task = None
-        if progress:
-            discover_task = progress.add_task("Discovering migrations...", total=None)
-
-        # Find migrations to apply
-        if force:
-            # In force mode, apply all migrations regardless of state
-            migrations_to_apply = self.find_migration_files(migrations_dir)
-        else:
-            # Normal mode: only apply pending migrations
-            migrations_to_apply = self.find_pending(migrations_dir)
-
-        if progress and discover_task is not None:
-            progress.update(discover_task, len(migrations_to_apply))
-
-        # Check for mixed transactional modes and warn
-        self._warn_mixed_transactional_modes(migrations_to_apply)
-
-        apply_task = None
-        if progress:
-            apply_task = progress.add_task("Applying migrations...", total=len(migrations_to_apply))
-
-        applied_versions = []
-
-        for migration_file in migrations_to_apply:
-            # Load migration module
-            module = load_migration_module(migration_file)
-            migration_class = get_migration_class(module)
-
-            # Create migration instance
-            migration = migration_class(connection=self.connection)
-
-            # Check target
-            if target and migration.version > target:
-                break
-
-            # Apply migration with file path for checksum computation
-            self.apply(migration, force=force, migration_file=migration_file)
-            applied_versions.append(migration.version)
-
-            # Update progress
-            if progress and apply_task is not None:
-                progress.update(apply_task, advance=1)
-
-        if progress and apply_task is not None:
-            progress.finish_task(apply_task)
-
-        return applied_versions
+        """Internal implementation of migrate_up (called within lock)."""
+        return apply_impl.migrate_up_internal(
+            self, force, migrations_dir, target, progress=progress
+        )
 
     def _warn_mixed_transactional_modes(self, migration_files: list[Path]) -> None:
-        """Warn if batch contains both transactional and non-transactional migrations.
-
-        Mixed batches can be problematic because non-transactional migrations
-        cannot be automatically rolled back if a later transactional migration fails.
-
-        Args:
-            migration_files: List of migration files to check
-        """
-        if len(migration_files) <= 1:
-            return
-
-        transactional_migrations: list[str] = []
-        non_transactional_migrations: list[str] = []
-
-        for migration_file in migration_files:
-            module = load_migration_module(migration_file)
-            migration_class = get_migration_class(module)
-
-            # Check transactional attribute (default is True)
-            is_transactional = getattr(migration_class, "transactional", True)
-
-            if is_transactional:
-                transactional_migrations.append(migration_file.name)
-            else:
-                non_transactional_migrations.append(migration_file.name)
-
-        if transactional_migrations and non_transactional_migrations:
-            logger.warning(
-                "Batch contains both transactional and non-transactional migrations. "
-                "If a transactional migration fails after a non-transactional one succeeds, "
-                "manual cleanup of the non-transactional changes may be required.\n"
-                f"  Non-transactional: {', '.join(non_transactional_migrations)}\n"
-                f"  Transactional: {', '.join(transactional_migrations[:3])}"
-                f"{'...' if len(transactional_migrations) > 3 else ''}"
-            )
+        """Warn if batch contains both transactional and non-transactional migrations."""
+        apply_impl.warn_mixed_transactional_modes(migration_files)
 
     def _trigger_hook(
         self,
@@ -1722,24 +1295,7 @@ class Migrator:
             >>> print(f"Execution time: {result.total_time_ms}ms")
             >>> print(f"Confidence: {result.confidence_pct}%")
         """
-        statements = migration.get_up_sql_statements()
-        if not statements:
-            # Fallback to old simulation mode for Python migrations
-            # Note: This creates a basic simulation result since the old executor
-            # is no longer available. In practice, Python migrations should implement
-            # get_up_sql_statements() or use SQL-based migrations.
-            from confiture.core.dry_run import DryRunResult
-
-            return DryRunResult(
-                migration_name=migration.name,
-                success=True,
-                total_time_ms=0,
-                confidence_pct=40,  # Low confidence for unsupported migrations
-                statements=[],
-            )
-
-        executor = DryRunExecutor(self.connection)
-        return executor.run(migration_name=migration.name, statements=statements)
+        return apply_impl.dry_run(self, migration)
 
     def check_preconditions(
         self,
@@ -1748,37 +1304,10 @@ class Migrator:
     ) -> tuple[bool, list[tuple[Any, str]]]:
         """Check migration preconditions without running the migration.
 
-        Useful for:
-        - CI/CD pipelines to verify preconditions before deployment
-        - Pre-flight validation in production
-        - Debugging precondition issues
-
-        Args:
-            migration: Migration instance to check
-            direction: "up" or "down" to specify which preconditions to check
-
-        Returns:
-            Tuple of (all_passed, failures):
-                - all_passed: True if all preconditions passed
-                - failures: List of (precondition, error_message) for failures
-
-        Example:
-            >>> migrator = Migrator(connection=conn)
-            >>> migration = MyMigration(connection=conn)
-            >>> passed, failures = migrator.check_preconditions(migration)
-            >>> if not passed:
-            ...     for precondition, error in failures:
-            ...         print(f"FAILED: {precondition}: {error}")
+        Returns ``(all_passed, failures)`` where *failures* is a list of
+        ``(precondition, error_message)`` tuples.
         """
-        preconditions = (
-            migration.up_preconditions if direction == "up" else migration.down_preconditions
-        )
-
-        if not preconditions:
-            return (True, [])
-
-        validator = PreconditionValidator(self.connection)
-        return validator.check(preconditions)
+        return apply_impl.check_preconditions(self, migration, direction)
 
     @classmethod
     def from_config(
