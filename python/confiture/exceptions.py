@@ -786,7 +786,9 @@ class BootstrapError(ConfiturError):
 
     Distinct subclass so callers can catch all bootstrap failures
     independently of generic configuration errors.  Defaults to
-    exit code 2 via the underlying CONFIG-class error code.
+    ``PRECON_1000`` (exit code 5) — a bootstrap failure is a precondition
+    the operator must satisfy (e.g. a superuser DSN, or ``--all-schemas``)
+    before the environment can be set up.
     """
 
     def __init__(
@@ -800,7 +802,7 @@ class BootstrapError(ConfiturError):
     ) -> None:
         super().__init__(
             message,
-            error_code=error_code,
+            error_code=error_code or "PRECON_1000",
             severity=severity,
             context=context,
             resolution_hint=resolution_hint,

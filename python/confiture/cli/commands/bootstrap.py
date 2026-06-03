@@ -31,12 +31,13 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.helpers import console, error_console
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import console, is_json
 from confiture.cli.ownership_loader import load_ownership_expectation
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
-from confiture.exceptions import BootstrapError, BootstrapScopeError
+from confiture.exceptions import BootstrapError, BootstrapScopeError, ConfigurationError
 
 
 def bootstrap(
@@ -113,19 +114,25 @@ def bootstrap(
       - REASSIGN OWNED takes AccessExclusiveLock; run during a maintenance
         window.
     """
+    json_mode = is_json(output_format)
+
     if env and config != Path("confiture.yaml"):
-        error_console.print("[red]❌ Cannot combine --env with --config[/red]")
-        raise typer.Exit(2)
+        fail(ConfigurationError("Cannot combine --env with --config"), json_mode=json_mode)
     if env:
         config = Path(f"db/environments/{env}.yaml")
     if not config.exists():
-        error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-        raise typer.Exit(2)
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Check the path passed to --config (or --env).",
+            ),
+            json_mode=json_mode,
+        )
 
     # Resolve mode: --apply and --dry-run override --check.
     if apply_mode and dry_run:
-        error_console.print("[red]❌ Cannot combine --apply with --dry-run[/red]")
-        raise typer.Exit(2)
+        fail(ConfigurationError("Cannot combine --apply with --dry-run"), json_mode=json_mode)
     mode = "apply" if apply_mode else "dry-run" if dry_run else "check"
 
     config_data = load_config(config)
@@ -133,12 +140,15 @@ def bootstrap(
     assert ownership is not None  # noqa: S101 — require=True guarantees non-None
 
     if ownership.bootstrap_connection_url is None:
-        error_console.print(
-            "[red]❌ `ownership.bootstrap_connection_url` is required for "
-            "`confiture bootstrap` (every step needs superuser; we don't "
-            "guess a fallback).[/red]"
+        fail(
+            ConfigurationError(
+                "`ownership.bootstrap_connection_url` is required for "
+                "`confiture bootstrap` (every step needs superuser; we don't "
+                "guess a fallback).",
+                resolution_hint="Set ownership.bootstrap_connection_url to a superuser DSN.",
+            ),
+            json_mode=json_mode,
         )
-        raise typer.Exit(2)
 
     # ${VAR} expansion already ran at config-load time on the ownership
     # subtree — including bootstrap_connection_url.
@@ -147,8 +157,10 @@ def bootstrap(
     )
     if not isinstance(bootstrap_url, str):
         # Defensive — env-var expansion preserves scalar type.
-        error_console.print("[red]❌ bootstrap_connection_url did not resolve to a string[/red]")
-        raise typer.Exit(2)
+        fail(
+            ConfigurationError("bootstrap_connection_url did not resolve to a string"),
+            json_mode=json_mode,
+        )
 
     # Build and (optionally) execute the plan.
     import psycopg
@@ -156,64 +168,40 @@ def bootstrap(
     try:
         conn = psycopg.connect(bootstrap_url, autocommit=False)
     except psycopg.OperationalError as exc:
-        error_console.print(f"[red]❌ Could not connect with bootstrap_connection_url: {exc}[/red]")
-        raise typer.Exit(2) from exc
+        fail(
+            ConfigurationError(
+                f"Could not connect with bootstrap_connection_url: {exc}",
+                error_code="CONFIG_006",
+            ),
+            json_mode=json_mode,
+        )
 
     try:
         planner = BootstrapPlanner(ownership=ownership)
         try:
             plan = planner.plan(conn, all_schemas=all_schemas)
         except BootstrapScopeError as exc:
-            if output_format == "json":
-                print(
-                    json.dumps(
-                        {
-                            "mode": mode,
-                            "success": False,
-                            "error": "scope",
-                            "message": str(exc),
-                        }
-                    )
-                )
-            else:
-                error_console.print(f"[red]❌ {exc}[/red]")
-                if exc.resolution_hint:
-                    error_console.print(f"[dim]💡 {exc.resolution_hint}[/dim]")
-            raise typer.Exit(2) from exc
+            fail(exc, json_mode=json_mode)
 
         if mode == "check":
             _render_check(plan, output_format)
             if plan.is_empty:
-                raise typer.Exit(0)
-            raise typer.Exit(1)
+                raise typer.Exit(0)  # success-signal: no drift
+            raise typer.Exit(1)  # success-signal: drift detected
 
         if mode == "dry-run":
             _render_dry_run(plan, output_format)
-            raise typer.Exit(0)
+            raise typer.Exit(0)  # success-signal: plan rendered, no side effects
 
         # mode == "apply"
         executor = BootstrapExecutor()
         try:
             result = executor.apply(plan, conn)
         except BootstrapError as exc:
-            if output_format == "json":
-                print(
-                    json.dumps(
-                        {
-                            "mode": "apply",
-                            "success": False,
-                            "error": str(exc),
-                        }
-                    )
-                )
-            else:
-                error_console.print(f"[red]❌ {exc}[/red]")
-                if exc.resolution_hint:
-                    error_console.print(f"[dim]💡 {exc.resolution_hint}[/dim]")
-            raise typer.Exit(2) from exc
+            fail(exc, json_mode=json_mode)
 
         _render_apply(result, output_format)
-        raise typer.Exit(0)
+        raise typer.Exit(0)  # success-signal: applied
     finally:
         conn.close()
 

@@ -58,7 +58,7 @@ _ALLOWLIST: dict[str, int] = {
     "generate.py": 13,  # TODO(phase-02): convert to fail()
     "coordinate.py": 13,  # TODO(phase-02): convert to fail()
     "commands/schema.py": 12,  # TODO(phase-02): convert to fail()
-    "commands/bootstrap.py": 12,  # TODO(phase-02): convert to fail()
+    "commands/bootstrap.py": 4,  # success-signal: check/dry-run/apply → Exit(0); drift → Exit(1)
     # commands/apply_as.py: fully converted (Cycle 1) — config → 5, migration-state
     # refusals → 3, connection → CONFIG_006, all via fail() with the JSON envelope.
     "commands/admin.py": 1,  # success-signal: verify-checksums → Exit(1) on mismatch (CI gate)

@@ -138,8 +138,7 @@ def test_config_without_bootstrap_url_exits_2(bootstrap_db: str, tmp_path: Path)
             """
         )
     )
-    # `error_console` writes to stderr; CliRunner mixes stderr into output
-    # by default in older Typer versions and into result.stderr otherwise.
-    # Just assert the exit code — the message is documented elsewhere.
     result = CliRunner().invoke(app, ["bootstrap", "--check", "--config", str(cfg)])
-    assert result.exit_code == 2, result.output
+    # Missing bootstrap_connection_url is a config error → exit 5, not the
+    # reserved exit 2 (tracking table absent).
+    assert result.exit_code == 5, result.output
