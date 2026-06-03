@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import typer
 
-from confiture.cli.helpers import console, error_console
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import console
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 mcp_app = typer.Typer(help="Run confiture as an MCP server.", no_args_is_help=True)
 
@@ -30,12 +32,16 @@ def mcp_server(
     if port is not None:
         try:
             from confiture.core.mcp_http import serve
-        except ImportError as exc:
-            error_console.print(
-                "[red]HTTP mode requires optional extras.[/red]\n"
-                "Install with: uv add 'fraiseql-confiture[mcp-http]'"
+        except ImportError:
+            # No registry code: a missing optional extra is an environment
+            # gap, not a confiture-domain failure — generic ConfiturError → exit 1.
+            fail(
+                ConfiturError(
+                    "HTTP mode requires optional extras.",
+                    resolution_hint="Install with: uv add 'fraiseql-confiture[mcp-http]'",
+                ),
+                json_mode=False,
             )
-            raise typer.Exit(1) from exc
 
         serve(
             database_url=database_url,
@@ -49,8 +55,14 @@ def mcp_server(
     try:
         conn = psycopg.connect(database_url)
     except Exception as e:
-        error_console.print(f"[red]Connection failed: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfigurationError(
+                f"Connection failed: {e}",
+                error_code="CONFIG_006",
+                resolution_hint="Check database URL, host, port, and credentials.",
+            ),
+            json_mode=False,
+        )
 
     server = MCPServer(
         conn,

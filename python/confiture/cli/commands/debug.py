@@ -7,7 +7,9 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.helpers import console, error_console
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import console, is_json
+from confiture.exceptions import ConfigurationError
 
 debug_app = typer.Typer(
     help="Debug SQL queries step by step.",
@@ -48,14 +50,26 @@ def debug_cte(
 
     from confiture.core.cte_debugger import CTEDebugger
 
+    json_mode = is_json(format_type)
+
     if sql is None and file is None:
-        error_console.print("[red]Provide --sql or --file[/red]")
-        raise typer.Exit(1)
+        fail(
+            ConfigurationError(
+                "Provide --sql or --file",
+                resolution_hint="Pass the query inline with --sql, or point --file at a .sql file.",
+            ),
+            json_mode=json_mode,
+        )
 
     if file is not None:
         if not file.exists():
-            error_console.print(f"[red]File not found: {file}[/red]")
-            raise typer.Exit(1)
+            fail(
+                ConfigurationError(
+                    f"File not found: {file}",
+                    resolution_hint="Check the path passed to --file.",
+                ),
+                json_mode=json_mode,
+            )
         query = file.read_text()
     else:
         query = sql  # type: ignore[assignment]
@@ -63,8 +77,14 @@ def debug_cte(
     try:
         conn = psycopg.connect(database_url)
     except Exception as e:
-        error_console.print(f"[red]Connection failed: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfigurationError(
+                f"Connection failed: {e}",
+                error_code="CONFIG_006",
+                resolution_hint="Check database URL, host, port, and credentials.",
+            ),
+            json_mode=json_mode,
+        )
 
     try:
         debugger = CTEDebugger(conn)
@@ -75,6 +95,8 @@ def debug_cte(
     if format_type == "json":
         console.print(json.dumps(session.to_dict(), indent=2, default=str))
         if not session.all_succeeded:
+            # success-signal: the debug session ran fine and is reporting that a
+            # CTE in the user's query failed — not a confiture-domain error.
             raise typer.Exit(1)
         return
 
@@ -108,4 +130,6 @@ def debug_cte(
         console.print("[green]All CTE steps succeeded.[/green]")
     else:
         console.print(f"[red]Failed at CTE: {session.failed_at}[/red]")
+        # success-signal: a CTE in the user's query failed (see above) — the
+        # debug command itself succeeded.
         raise typer.Exit(1)

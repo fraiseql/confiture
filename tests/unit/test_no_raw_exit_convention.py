@@ -63,14 +63,15 @@ _ALLOWLIST: dict[str, int] = {
     "commands/admin.py": 9,  # TODO(phase-02): convert to fail()
     "commands/drift.py": 8,  # TODO(phase-02): convert to fail()
     "commands/hooks.py": 6,  # TODO(phase-02): convert to fail()
-    "commands/debug.py": 5,  # TODO(phase-02): convert to fail()
+    "commands/debug.py": 2,  # success-signal: debug cte → Exit(1) when a CTE in the query fails
     # commands/diff.py: fully converted (Cycle 2) — success exit is an IfExp,
     # not a literal, so it no longer appears here.
-    "ownership_loader.py": 2,  # TODO(phase-02): convert to fail()
+    "ownership_loader.py": 2,  # TODO(phase-03): shares ValidationError seam with migrate_validate
+    "function_coverage_loader.py": 2,  # TODO(phase-03): shares seam with migrate_validate
     "helpers.py": 2,  # success-signal: idempotency gate → Exit(1) on findings
-    "function_coverage_loader.py": 2,  # TODO(phase-02): convert to fail()
-    "commands/mcp.py": 2,  # TODO(phase-02): convert to fail()
-    "acl_loader.py": 2,  # TODO(phase-02): convert to fail()
+    # commands/mcp.py: fully converted (Cycle 1) — connection → CONFIG_006,
+    # missing-extra → generic ConfiturError, both via fail().
+    "acl_loader.py": 2,  # TODO(phase-03): shares ValidationError seam with migrate_validate
 }
 
 _EXCLUDED = {"error_json.py"}
