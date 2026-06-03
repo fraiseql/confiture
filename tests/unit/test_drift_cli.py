@@ -306,9 +306,9 @@ class TestDriftCommand:
 class TestMigrateValidateCheckLiveDrift:
     """Tests for --check-live-drift flag on migrate validate."""
 
-    @patch("confiture.cli.commands.migrate_analysis.SchemaDriftDetector")
-    @patch("confiture.cli.commands.migrate_analysis.create_connection")
-    @patch("confiture.cli.commands.migrate_analysis.load_config")
+    @patch("confiture.core.validation.live_drift.SchemaDriftDetector")
+    @patch("confiture.core.validation.live_drift.create_connection")
+    @patch("confiture.core.validation.live_drift.load_config")
     def test_validate_check_live_drift_flag(
         self, mock_load_config, mock_create_connection, mock_detector_class, tmp_path
     ):

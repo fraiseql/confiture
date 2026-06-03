@@ -8,7 +8,7 @@ from typing import Any
 import typer
 
 from confiture.cli.error_json import fail
-from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
+from confiture.cli.formatters.common import display_signature_drift_report
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
@@ -25,7 +25,6 @@ from confiture.cli.helpers import (
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
 from confiture.core.differ import SchemaDiffer
-from confiture.core.drift import SchemaDriftDetector
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import Migrator
 from confiture.exceptions import ConfigurationError, ConfiturError
@@ -710,74 +709,24 @@ def migrate_validate(
 
         # Run import check on Python migration modules
         if check_imports:
+            from confiture.cli.formatters.validate_formatter import render_import_check
             from confiture.core.import_checker import ImportChecker
 
-            checker = ImportChecker(migrations_dir)
-            import_result = checker.check()
-
-            if format_output == "json":
-                _output_json(
-                    {"check": "imports", **import_result.to_dict()},
-                    output_file,
-                    console,
-                )
-            else:
-                if import_result.success:
-                    console.print(
-                        f"[green]✅ All {import_result.checked} Python migration(s) passed import check[/green]"
-                    )
-                    if import_result.skipped_sql:
-                        console.print(
-                            f"  [dim]({import_result.skipped_sql} SQL migration(s) skipped)[/dim]"
-                        )
-                else:
-                    console.print(
-                        f"[red]❌ Import check failed: {import_result.failed}/{import_result.checked} file(s) have issues[/red]"
-                    )
-                    for v in import_result.violations:
-                        console.print(
-                            f"  [red]✗[/red] [{v.rule}] {Path(v.file_path).name}: {v.message}"
-                        )
-
+            import_result = ImportChecker(migrations_dir).check()
+            render_import_check(import_result, json_mode=json_mode, output_file=output_file)
             if not import_result.success:
-                raise typer.Exit(1)
+                raise typer.Exit(1)  # success-signal: import failures found
             return
 
         # Run live drift check
         if check_live_drift:
-            live_drift_passed = True
-            try:
-                if not config.exists():
-                    error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-                    raise typer.Exit(2)
-                if schema_file is None:
-                    error_console.print(
-                        "[red]❌ --schema is required with --check-live-drift[/red]"
-                    )
-                    raise typer.Exit(2)
-                config_data = load_config(config)
-                conn = create_connection(config_data)
-                try:
-                    detector = SchemaDriftDetector(conn)
-                    drift_report = detector.compare_with_schema_file(str(schema_file))
-                finally:
-                    conn.close()
-                if format_output == "json":
-                    _output_json(
-                        {"check": "live_drift", **drift_report.to_dict()}, output_file, console
-                    )
-                else:
-                    display_drift_report(drift_report, console)
-                if drift_report.has_critical_drift:
-                    live_drift_passed = False
-            except typer.Exit:
-                raise
-            except Exception as e:
-                error_console.print(f"[red]❌ Live drift check failed: {e}[/red]")
-                raise typer.Exit(2) from e
+            from confiture.cli.formatters.validate_formatter import render_live_drift
+            from confiture.core.validation.live_drift import check_live_drift as run_live_drift
 
-            if not live_drift_passed:
-                raise typer.Exit(1)
+            drift_report = run_live_drift(config, schema_file)
+            render_live_drift(drift_report, json_mode=json_mode, output_file=output_file)
+            if drift_report.has_critical_drift:
+                raise typer.Exit(1)  # success-signal: critical drift found
             return
 
         # Run live function signature drift check

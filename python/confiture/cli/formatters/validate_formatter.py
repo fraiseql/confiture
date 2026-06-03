@@ -122,3 +122,34 @@ def render_function_uniqueness(
             console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
     else:
         console.print("[green]✅ All callables have unique signatures[/green]")
+
+
+def render_import_check(result: Any, *, json_mode: bool, output_file: Path | None) -> None:
+    """Render the ``--check-imports`` ImportCheckResult."""
+    from pathlib import Path as _Path
+
+    if json_mode:
+        _output_json({"check": "imports", **result.to_dict()}, output_file, console)
+    elif result.success:
+        console.print(
+            f"[green]✅ All {result.checked} Python migration(s) passed import check[/green]"
+        )
+        if result.skipped_sql:
+            console.print(f"  [dim]({result.skipped_sql} SQL migration(s) skipped)[/dim]")
+    else:
+        console.print(
+            f"[red]❌ Import check failed: {result.failed}/{result.checked} "
+            f"file(s) have issues[/red]"
+        )
+        for v in result.violations:
+            console.print(f"  [red]✗[/red] [{v.rule}] {_Path(v.file_path).name}: {v.message}")
+
+
+def render_live_drift(report: Any, *, json_mode: bool, output_file: Path | None) -> None:
+    """Render the ``--check-live-drift`` DriftReport."""
+    from confiture.cli.formatters.common import display_drift_report
+
+    if json_mode:
+        _output_json({"check": "live_drift", **report.to_dict()}, output_file, console)
+    else:
+        display_drift_report(report, console)
