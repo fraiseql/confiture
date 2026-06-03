@@ -15,6 +15,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import is_json
+from confiture.exceptions import ConfiturError
+
 # Create Rich console for pretty output
 console = Console()
 
@@ -35,7 +39,8 @@ def _get_pggit_client(config_path: Path):
         Tuple of (PgGitClient, Connection)
 
     Raises:
-        typer.Exit: If pgGit is not available
+        ConfiturError: If pgGit is not available (PRECON_1000); the calling
+            command routes it through the fail() boundary.
     """
     from confiture.core.connection import create_connection
     from confiture.integrations.pggit import (
@@ -49,20 +54,22 @@ def _get_pggit_client(config_path: Path):
 
     # Check if pgGit is available
     if not is_pggit_available(conn):
-        console.print("[red]pgGit extension is not installed on this database.[/red]")
-        console.print("\n[yellow]To install pgGit:[/yellow]")
-        console.print("  CREATE EXTENSION pggit CASCADE;")
-        console.print("\n[dim]Note: pgGit is for development databases only.[/dim]")
         conn.close()
-        raise typer.Exit(1)
+        raise ConfiturError(
+            "pgGit extension is not installed on this database.",
+            error_code="PRECON_1000",
+            resolution_hint=(
+                "Install it with `CREATE EXTENSION pggit CASCADE;` "
+                "(pgGit is for development databases only)."
+            ),
+        )
 
     try:
         client = PgGitClient(conn)
         return client, conn
     except PgGitNotAvailableError as e:
-        console.print(f"[red]{e}[/red]")
         conn.close()
-        raise typer.Exit(1) from e
+        raise ConfiturError(str(e), error_code="PRECON_1000") from e
 
 
 @branch_app.command("list")
@@ -140,8 +147,7 @@ def branch_list(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=is_json(format_output))
 
 
 @branch_app.command("create")
@@ -203,8 +209,7 @@ def branch_create(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error creating branch: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("checkout")
@@ -238,8 +243,7 @@ def branch_checkout(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error checking out branch: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("delete")
@@ -273,12 +277,13 @@ def branch_delete(
         # Check if trying to delete current branch
         current = client.get_branch()
         if current and current.name == name:
-            console.print("[red]Cannot delete the current branch.[/red]")
-            console.print(
-                "[yellow]Checkout a different branch first: confiture branch checkout main[/yellow]"
-            )
             conn.close()
-            raise typer.Exit(1)
+            raise ConfiturError(
+                "Cannot delete the current branch.",
+                resolution_hint=(
+                    "Checkout a different branch first: confiture branch checkout main"
+                ),
+            )
 
         # Confirm deletion
         if not force and not typer.confirm(f"Delete branch '{name}'?"):
@@ -295,8 +300,7 @@ def branch_delete(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error deleting branch: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("status")
@@ -349,8 +353,7 @@ def branch_status(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("commit")
@@ -393,8 +396,7 @@ def branch_commit(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error committing: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("log")
@@ -445,8 +447,7 @@ def branch_log(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("merge")
@@ -519,15 +520,17 @@ def branch_merge(
                 )
 
             conn.close()
-            raise typer.Exit(1)
+            raise ConfiturError(
+                f"Merge failed: {result.message}",
+                error_code="PGGIT_900",
+            )
 
         conn.close()
 
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error merging: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("merge-abort")
@@ -558,8 +561,7 @@ def branch_merge_abort(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error aborting merge: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 @branch_app.command("diff")
@@ -626,5 +628,4 @@ def branch_diff(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)

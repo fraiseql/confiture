@@ -54,7 +54,8 @@ _ALLOWLIST: dict[str, int] = {
     # ---- Cycle 1 conversion cohort (this phase) ----
     "seed.py": 32,  # TODO(phase-02): convert to fail()
     "commands/migrate_state.py": 16,  # TODO(phase-02): convert to fail()
-    "branch.py": 14,  # TODO(phase-02): convert to fail()
+    # branch.py: fully converted (Cycle 1) — _get_pggit_client raises
+    # ConfiturError; every command's outer handler routes through fail().
     "generate.py": 1,  # success-signal: renumber → Exit(1) when dangling refs remain
     # coordinate.py: fully converted (Cycle 1) — _get_connection + inner guards
     # raise ConfiturErrors; every command's outer handler routes through fail().
