@@ -242,15 +242,15 @@ class TestCheckBodyFlag:
     # Cycle 1: Guard — --check-body requires --check-signatures
     # ------------------------------------------------------------------
 
-    def test_check_body_without_check_signatures_exits_2(self, tmp_path):
+    def test_check_body_without_check_signatures_is_config_error(self, tmp_path):
         config = tmp_path / "confiture.yaml"
         config.write_text("database:\n  url: postgresql://localhost/test\n")
         result = runner.invoke(
             app,
             ["migrate", "validate", "--check-body", "--config", str(config)],
         )
-        # Guard triggers before any DB access; message goes to stderr (error_console)
-        assert result.exit_code == 2
+        # Phase 03: the usage guard now routes through fail() (CONFIG_001 → exit 5).
+        assert result.exit_code == 5
 
     # ------------------------------------------------------------------
     # Cycle 2 & 3: Clean run and drift detection

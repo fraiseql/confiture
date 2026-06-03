@@ -28,6 +28,7 @@ from confiture.core.differ import SchemaDiffer
 from confiture.core.drift import SchemaDriftDetector
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import Migrator
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 
 def migrate_diff(
@@ -497,13 +498,13 @@ def migrate_validate(
       confiture migrate fix      - Auto-fix non-idempotent migrations
       confiture migrate status   - View migration history
     """
+    json_mode = is_json(format_output)
     try:
         # Validate output format
         if format_output not in ("text", "json", "csv"):
-            console.print(
-                f"[red]❌ Invalid format: {format_output}. Use 'text', 'json', or 'csv'[/red]"
+            raise ConfigurationError(
+                f"Invalid format: {format_output}. Use 'text', 'json', or 'csv'."
             )
-            raise typer.Exit(1)
 
         # --list-patterns is a read-only catalog query. Short-circuit before
         # touching config / migrations directory / DB. Must run before
@@ -511,22 +512,15 @@ def migrate_validate(
         # introspect the pattern catalog.
         if list_patterns:
             if idempotent:
-                error_console.print(
-                    "[red]Error:[/red] --list-patterns is mutually exclusive with --idempotent"
+                raise ConfigurationError(
+                    "--list-patterns is mutually exclusive with --idempotent"
                 )
-                raise typer.Exit(2)
             _emit_pattern_catalog(format_output, output_file)
             return
 
-        # Resolve --env / --config to a single config path
-        try:
-            config = _resolve_config(config, env)
-        except Exception as e:
-            if format_output == "json":
-                _output_json({"error": str(e)}, output_file, console)
-            else:
-                error_console.print(f"[red]❌ {e}[/red]")
-            raise typer.Exit(2) from e
+        # Resolve --env / --config to a single config path (raises
+        # ConfigurationError, funneled through the fail() boundary below).
+        config = _resolve_config(config, env)
 
         # Handle git validation flags
         if check_drift or require_migration or require_grant_migration or staged:
@@ -666,8 +660,7 @@ def migrate_validate(
 
         # Guard: --check-body requires --check-signatures
         if check_body and not check_signatures:
-            error_console.print("[red]Error:[/red] --check-body requires --check-signatures")
-            raise typer.Exit(2)
+            raise ConfigurationError("--check-body requires --check-signatures")
 
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
@@ -1200,13 +1193,13 @@ def migrate_validate(
 
     except typer.Exit:
         raise
+    except ConfiturError as e:
+        fail(e, json_mode=json_mode, output_file=output_file)
     except Exception as e:
-        if format_output == "json":
-            result = {"error": str(e)}
-            _output_json(result, output_file, console)
-        else:
-            console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        # Unknown failures coerce to a generic ConfiturError (no registry code →
+        # exit 1), preserving the legacy catch-all exit code while emitting the
+        # #145 envelope in JSON mode.
+        fail(e, json_mode=json_mode, output_file=output_file)
 
 
 def migrate_fix(

@@ -91,7 +91,8 @@ class TestListPatternsMutualExclusion:
     def test_rejects_combination_with_idempotent(self):
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "validate", "--list-patterns", "--idempotent"])
-        assert result.exit_code == 2, _strip_ansi(result.output)
+        # Phase 03: the usage guard now routes through fail() (CONFIG_001 → exit 5).
+        assert result.exit_code == 5, _strip_ansi(result.output)
 
 
 class TestListPatternsIsReadOnly:
