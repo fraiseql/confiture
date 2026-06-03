@@ -8,7 +8,6 @@ from typing import Any
 import typer
 
 from confiture.cli.error_json import fail
-from confiture.cli.formatters.common import display_signature_drift_report
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
@@ -198,30 +197,6 @@ def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
             entry["description"],
         )
     console.print(table)
-
-
-def _display_body_drift_report(report: Any, console: Any) -> None:
-    """Print a FunctionBodyDriftReport to the console in human-readable form."""
-    if not report.has_drift:
-        console.print(
-            f"[green]✓[/green] 0 function body drift(s) detected "
-            f"({report.functions_checked} checked, "
-            f"{report.detection_time_ms:.1f}ms)"
-        )
-        return
-
-    console.print(
-        f"[yellow]⚠[/yellow]  {len(report.body_drifts)} function body "
-        f"drift(s) detected ({report.functions_checked} checked)"
-    )
-    for drift in report.body_drifts:
-        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
-        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
-        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
-        console.print(
-            "    Hint: function body differs — run "
-            "[bold]fix-signatures --apply[/bold] to re-apply from source"
-        )
 
 
 def migrate_validate(
@@ -731,153 +706,32 @@ def migrate_validate(
 
         # Run live function signature drift check
         if check_signatures:
-            try:
-                if not config.exists():
-                    error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-                    raise typer.Exit(2)
+            from confiture.cli.formatters.validate_formatter import render_signature_drift
+            from confiture.core.validation.signature_drift import check_signature_drift
 
-                config_data = load_config(config)
-                schemas = [s.strip() for s in check_signature_schemas.split(",") if s.strip()]
-
-                # Resolve source SQL: explicit --schema file or auto-build from DDL files
-                if schema_file is not None:
-                    source_sql = schema_file.read_text()
-                else:
-                    try:
-                        from confiture.core.builder import SchemaBuilder  # noqa: PLC0415
-
-                        env_name = (
-                            config_data.get("name")
-                            if isinstance(config_data, dict)
-                            else getattr(config_data, "name", None)
-                        )
-                        if not env_name:
-                            raise ValueError(
-                                "Config has no 'name' field — cannot auto-build schema. "
-                                "Pass --schema explicitly."
-                            )
-                        builder = SchemaBuilder(env=env_name)
-                        source_sql = builder.build(schema_only=True)
-                        if format_output == "text":
-                            console.print("[dim]  (schema auto-built from DDL files)[/dim]")
-                    except Exception as build_exc:
-                        error_console.print(
-                            f"[red]❌ --schema not provided and auto-build failed: {build_exc}[/red]\n"
-                            "  Either run 'confiture build' first or pass --schema explicitly."
-                        )
-                        raise typer.Exit(2) from build_exc
-
-                from confiture.core.function_signature_drift import (  # noqa: PLC0415
-                    FunctionSignatureDriftDetector,
-                )
-                from confiture.core.function_signature_parser import (  # noqa: PLC0415
-                    FunctionSignatureParser,
-                )
-                from confiture.core.live_function_catalog import (  # noqa: PLC0415
-                    LiveFunctionCatalog,
-                )
-
-                source_sigs = FunctionSignatureParser().parse(source_sql)
-
-                # Build effective config: --ssh flag overrides config-file ssh_tunnel
-                effective_config: Any = config_data
-                if ssh_via:
-                    from confiture.config.environment import SshTunnelConfig  # noqa: PLC0415
-
-                    parts = ssh_via.split("@", 1)
-                    ssh_host = parts[1] if len(parts) == 2 else parts[0]
-                    ssh_user = parts[0] if len(parts) == 2 else None
-
-                    # Wrap config_data with an ssh_tunnel override
-                    class _SshOverride:  # noqa: N801
-                        """Thin adapter that layers an ssh_tunnel onto config_data."""
-
-                        def __init__(self, base: Any, tunnel: SshTunnelConfig) -> None:
-                            self._base = base
-                            self.ssh_tunnel = tunnel
-
-                        @property
-                        def database_url(self) -> str:
-                            if hasattr(self._base, "database_url"):
-                                return self._base.database_url  # type: ignore[no-any-return]
-                            return self._base.get("database_url", "")
-
-                        def get(self, key: str, default: Any = None) -> Any:  # noqa: ANN401
-                            return getattr(self._base, key, None) or (
-                                self._base.get(key, default)
-                                if isinstance(self._base, dict)
-                                else default
-                            )
-
-                    effective_config = _SshOverride(
-                        config_data,
-                        SshTunnelConfig(host=ssh_host, user=ssh_user),
+            sig_result = check_signature_drift(
+                config_path=config,
+                schema_file=schema_file,
+                schemas=check_signature_schemas,
+                check_body=check_body,
+                ssh_via=ssh_via,
+            )
+            if not json_mode:
+                if sig_result.auto_built:
+                    console.print("[dim]  (schema auto-built from DDL files)[/dim]")
+                if sig_result.ssh_target:
+                    console.print(
+                        f"[dim]  (connecting via SSH tunnel to {sig_result.ssh_target})[/dim]"
                     )
-                    if format_output == "text":
-                        console.print(f"[dim]  (connecting via SSH tunnel to {ssh_via})[/dim]")
-
-                with open_connection(effective_config) as conn:
-                    live_catalog = LiveFunctionCatalog(conn)
-                    live_sigs = live_catalog.get_signatures(schemas=schemas)
-                    detector = FunctionSignatureDriftDetector()
-                    drift_report = detector.compare(source_sigs, live_sigs, schemas_checked=schemas)
-
-                    body_report = None
-                    if check_body:
-                        from confiture.core.function_body_drift import (  # noqa: PLC0415
-                            FunctionBodyDriftDetector,
-                        )
-
-                        source_with_bodies = FunctionSignatureParser().parse_with_bodies(source_sql)
-                        source_bodies: dict[str, str | None] = {
-                            sig.signature_key(): body for sig, body in source_with_bodies
-                        }
-                        live_bodies = live_catalog.get_bodies(
-                            schemas=schemas,
-                            sig_keys=set(source_bodies),
-                        )
-                        body_report = FunctionBodyDriftDetector().compare(
-                            source_bodies, live_bodies
-                        )
-
-                if format_output == "json":
-                    json_output: dict[str, Any] = {
-                        "check": "function_signature_drift",
-                        **drift_report.to_dict(),
-                    }
-                    if body_report is not None:
-                        json_output["body_drift"] = {
-                            "has_drift": body_report.has_drift,
-                            "body_drifts": [
-                                {
-                                    "schema": d.schema,
-                                    "name": d.name,
-                                    "signature_key": d.signature_key,
-                                    "source_hash": d.source_hash,
-                                    "db_hash": d.db_hash,
-                                }
-                                for d in body_report.body_drifts
-                            ],
-                            "functions_checked": body_report.functions_checked,
-                            "detection_time_ms": body_report.detection_time_ms,
-                        }
-                    _output_json(json_output, output_file, console)
-                else:
-                    display_signature_drift_report(drift_report, console)
-                    if body_report is not None:
-                        _display_body_drift_report(body_report, console)
-
-                has_any_drift = drift_report.has_critical_drift or (
-                    body_report is not None and body_report.has_drift
-                )
-                if has_any_drift:
-                    raise typer.Exit(1)
-                return
-            except typer.Exit:
-                raise
-            except Exception as e:
-                error_console.print(f"[red]❌ Signature drift check failed: {e}[/red]")
-                raise typer.Exit(2) from e
+            render_signature_drift(
+                sig_result.drift_report,
+                sig_result.body_report,
+                json_mode=json_mode,
+                output_file=output_file,
+            )
+            if sig_result.has_any_drift:
+                raise typer.Exit(1)  # success-signal: drift found
+            return
 
         if not migrations_dir.exists():
             if format_output == "json":

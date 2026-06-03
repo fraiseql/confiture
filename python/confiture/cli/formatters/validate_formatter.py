@@ -153,3 +153,65 @@ def render_live_drift(report: Any, *, json_mode: bool, output_file: Path | None)
         _output_json({"check": "live_drift", **report.to_dict()}, output_file, console)
     else:
         display_drift_report(report, console)
+
+
+def _display_body_drift_report(report: Any) -> None:
+    """Print a FunctionBodyDriftReport to the console in human-readable form."""
+    if not report.has_drift:
+        console.print(
+            f"[green]✓[/green] 0 function body drift(s) detected "
+            f"({report.functions_checked} checked, "
+            f"{report.detection_time_ms:.1f}ms)"
+        )
+        return
+
+    console.print(
+        f"[yellow]⚠[/yellow]  {len(report.body_drifts)} function body "
+        f"drift(s) detected ({report.functions_checked} checked)"
+    )
+    for drift in report.body_drifts:
+        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
+        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
+        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        console.print(
+            "    Hint: function body differs — run "
+            "[bold]fix-signatures --apply[/bold] to re-apply from source"
+        )
+
+
+def render_signature_drift(
+    drift_report: Any,
+    body_report: Any,
+    *,
+    json_mode: bool,
+    output_file: Path | None,
+) -> None:
+    """Render the ``--check-signatures`` (+ ``--check-body``) result."""
+    from confiture.cli.formatters.common import display_signature_drift_report
+
+    if json_mode:
+        payload: dict[str, Any] = {
+            "check": "function_signature_drift",
+            **drift_report.to_dict(),
+        }
+        if body_report is not None:
+            payload["body_drift"] = {
+                "has_drift": body_report.has_drift,
+                "body_drifts": [
+                    {
+                        "schema": d.schema,
+                        "name": d.name,
+                        "signature_key": d.signature_key,
+                        "source_hash": d.source_hash,
+                        "db_hash": d.db_hash,
+                    }
+                    for d in body_report.body_drifts
+                ],
+                "functions_checked": body_report.functions_checked,
+                "detection_time_ms": body_report.detection_time_ms,
+            }
+        _output_json(payload, output_file, console)
+    else:
+        display_signature_drift_report(drift_report, console)
+        if body_report is not None:
+            _display_body_drift_report(body_report)

@@ -88,7 +88,8 @@ class TestCheckSignaturesFlag:
             app,
             ["migrate", "validate", "--check-signatures", "--config", str(config)],
         )
-        assert result.exit_code == 2
+        # Phase 03: --schema omitted + auto-build fails → ConfigurationError → exit 5
+        assert result.exit_code == 5
 
     def test_check_signatures_requires_config_file(self, tmp_path):
         schema = tmp_path / "schema.sql"
@@ -105,7 +106,8 @@ class TestCheckSignaturesFlag:
                 str(schema),
             ],
         )
-        assert result.exit_code == 2
+        # Phase 03: missing config file → ConfigurationError (CONFIG_004) → exit 5
+        assert result.exit_code == 5
 
     def _make_open_conn_mock(self) -> MagicMock:
         """Return a context manager mock for open_connection."""
@@ -124,9 +126,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
+            patch("confiture.core.validation.signature_drift.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -158,9 +160,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
+            patch("confiture.core.validation.signature_drift.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -192,9 +194,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
+            patch("confiture.core.validation.signature_drift.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -264,11 +266,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.cli.commands.migrate_analysis.load_config",
+                "confiture.core.validation.signature_drift.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -307,11 +309,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.cli.commands.migrate_analysis.load_config",
+                "confiture.core.validation.signature_drift.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -359,11 +361,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.cli.commands.migrate_analysis.load_config",
+                "confiture.core.validation.signature_drift.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -429,11 +431,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.cli.commands.migrate_analysis.load_config",
+                "confiture.core.validation.signature_drift.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
