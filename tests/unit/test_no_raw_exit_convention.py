@@ -46,7 +46,7 @@ _CLI_ROOT = Path(__file__).resolve().parents[2] / "python" / "confiture" / "cli"
 # route the new failure through ``fail()`` instead.
 _ALLOWLIST: dict[str, int] = {
     # ---- Phase 03 territory: the migrate_validate god-command decomposition ----
-    "commands/migrate_analysis.py": 47,  # TODO(phase-03): structural decomposition in progress
+    "commands/migrate_analysis.py": 44,  # TODO(phase-03): structural decomposition in progress
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.

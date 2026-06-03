@@ -664,188 +664,48 @@ def migrate_validate(
 
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
-            from confiture.core.linting.schema_linter import SchemaLinter
-            from confiture.core.validation.config_loaders import load_acl_expectations
+            from confiture.cli.formatters.validate_formatter import render_acl_coverage
+            from confiture.core.validation.acl_coverage import check_acl_coverage
 
-            if not config.exists():
-                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-                raise typer.Exit(2)
-
-            config_data = load_config(config)
-            # No-op when the project hasn't adopted the `acls:` block yet.
-            expectations = load_acl_expectations(config_data, config, require=False)
-
-            grant_dir_raw = (
-                config_data.get("migration", {}).get("grant_dir")
-                if isinstance(config_data, dict)
-                else None
-            ) or "db/7_grant"
-            grant_dir = (config.parent / grant_dir_raw).resolve()
-
-            acl_report = SchemaLinter().lint_migrations(
-                migrations_dir=migrations_dir,
-                expectations=expectations,
-                grant_dir=grant_dir if grant_dir.exists() else None,
-            )
-
-            if format_output == "json":
-                _output_json(
-                    {
-                        "check": "acl_coverage",
-                        "violations": [
-                            {
-                                "rule_id": v.rule_id,
-                                "severity": v.severity.value,
-                                "object_name": v.object_name,
-                                "message": v.message,
-                                "file_path": v.file_path,
-                            }
-                            for v in (acl_report.errors + acl_report.warnings + acl_report.info)
-                        ],
-                        "hints": [],
-                    },
-                    output_file,
-                    console,
-                )
-            elif acl_report.has_errors:
-                console.print(
-                    f"[red]❌ ACL coverage check failed: "
-                    f"{len(acl_report.errors)} violation(s)[/red]"
-                )
-                for v in acl_report.errors:
-                    # Escape the rule_id brackets so Rich doesn't read them as markup.
-                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
-            else:
-                console.print("[green]✅ All migrations have ACL coverage[/green]")
-
+            acl_report = check_acl_coverage(migrations_dir, config)
+            render_acl_coverage(acl_report, json_mode=json_mode, output_file=output_file)
             if acl_report.has_errors:
-                raise typer.Exit(1)
+                raise typer.Exit(1)  # success-signal: violations found
             return
 
         # Run ownership coverage check on migration files (static, no DB).
         if check_ownership_coverage:
-            from confiture.core.linting.libraries.ownership import (
-                Own001OwnershipCoverage,
-                Own002BareAlterOwner,
+            from confiture.cli.formatters.validate_formatter import (
+                render_ownership_coverage,
             )
-            from confiture.core.validation.config_loaders import (
-                load_ownership_expectation,
+            from confiture.core.validation.ownership_coverage import (
+                check_ownership_coverage,
             )
 
-            if not config.exists():
-                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-                raise typer.Exit(2)
-
-            config_data = load_config(config)
-            # No-op when the project hasn't adopted the `ownership:` block yet.
-            ownership_exp = load_ownership_expectation(config_data, config, require=False)
-
-            ownership_violations = []
-            if ownership_exp is not None:
-                ownership_violations = Own001OwnershipCoverage(expectation=ownership_exp).check(
-                    migrations_dir
-                )
-                # Issue #137 — own_002 sibling rule: bare `ALTER … OWNER TO`
-                # on objects the migration didn't create.
-                ownership_violations.extend(
-                    Own002BareAlterOwner(expectation=ownership_exp).check(migrations_dir)
-                )
-
-            # Errors fail the gate (exit 1); warnings print but don't.
-            from confiture.core.linting.schema_linter import RuleSeverity
-
-            has_errors = any(v.severity == RuleSeverity.ERROR for v in ownership_violations)
-
-            if format_output == "json":
-                _output_json(
-                    {
-                        "check": "ownership_coverage",
-                        "violations": [
-                            {
-                                "rule_id": v.rule_id,
-                                "severity": v.severity.value,
-                                "object_name": v.object_name,
-                                "message": v.message,
-                                "file_path": v.file_path,
-                                "line_number": v.line_number,
-                            }
-                            for v in ownership_violations
-                        ],
-                    },
-                    output_file,
-                    console,
-                )
-            elif ownership_violations:
-                console.print(
-                    f"[red]❌ Ownership coverage check failed: "
-                    f"{len(ownership_violations)} violation(s)[/red]"
-                )
-                for v in ownership_violations:
-                    # Escape the rule_id brackets so Rich doesn't read them as markup.
-                    color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
-                    mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
-                    console.print(
-                        f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] {v.object_name}: {v.message}"
-                    )
-            else:
-                console.print("[green]✅ All migrations have ownership coverage[/green]")
-
-            if has_errors:
-                raise typer.Exit(1)
+            ownership_report = check_ownership_coverage(migrations_dir, config)
+            render_ownership_coverage(
+                ownership_report, json_mode=json_mode, output_file=output_file
+            )
+            if ownership_report.has_errors:
+                raise typer.Exit(1)  # success-signal: ERROR-severity violations found
             return
 
         # Run function-uniqueness check on DDL files (static, no DB).
         if check_function_uniqueness:
-            from confiture.core.linting.libraries.functions import (
-                Func001FunctionUniqueness,
+            from confiture.cli.formatters.validate_formatter import (
+                render_function_uniqueness,
             )
-            from confiture.core.validation.config_loaders import load_function_coverage
-
-            if not config.exists():
-                error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-                raise typer.Exit(2)
-
-            config_data = load_config(config)
-            coverage = load_function_coverage(config_data, config, require=False)
+            from confiture.core.validation.function_uniqueness import (
+                check_function_uniqueness,
+            )
 
             scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
-
-            func_violations = []
-            if coverage is not None and coverage.enabled:
-                func_violations = Func001FunctionUniqueness(coverage=coverage).check(scan_paths)
-
-            if format_output == "json":
-                _output_json(
-                    {
-                        "check": "function_uniqueness",
-                        "violations": [
-                            {
-                                "rule_id": v.rule_id,
-                                "severity": v.severity.value,
-                                "object_name": v.object_name,
-                                "object_type": v.object_type,
-                                "message": v.message,
-                                "file_path": v.file_path,
-                                "line_number": v.line_number,
-                            }
-                            for v in func_violations
-                        ],
-                    },
-                    output_file,
-                    console,
-                )
-            elif func_violations:
-                console.print(
-                    f"[red]❌ Function uniqueness check failed: "
-                    f"{len(func_violations)} violation(s)[/red]"
-                )
-                for v in func_violations:
-                    console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
-            else:
-                console.print("[green]✅ All callables have unique signatures[/green]")
-
-            if func_violations:
-                raise typer.Exit(1)
+            func_report = check_function_uniqueness(scan_paths, config)
+            render_function_uniqueness(
+                func_report, json_mode=json_mode, output_file=output_file
+            )
+            if func_report.has_violations:
+                raise typer.Exit(1)  # success-signal: duplicate signatures found
             return
 
         # Run import check on Python migration modules
