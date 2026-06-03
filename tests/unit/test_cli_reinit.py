@@ -45,8 +45,8 @@ class {class_name}(Migration):
 class TestMigrateReinitValidation:
     """Test CLI validation for migrate reinit."""
 
-    def test_reinit_missing_config_exits_1(self, tmp_path):
-        """Should exit 1 when config file doesn't exist."""
+    def test_reinit_missing_config_is_config_error(self, tmp_path):
+        """A missing config file is CONFIG_004 → exit 5."""
         result = runner.invoke(
             app,
             [
@@ -57,11 +57,11 @@ class TestMigrateReinitValidation:
                 "--yes",
             ],
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 5
         assert "Config file not found" in result.output
 
-    def test_reinit_missing_migrations_dir_exits_1(self, tmp_path):
-        """Should exit 1 when migrations directory doesn't exist."""
+    def test_reinit_missing_migrations_dir_is_config_error(self, tmp_path):
+        """A missing migrations directory is CONFIG_004 → exit 5."""
         config_file = _make_config_file(tmp_path)
         result = runner.invoke(
             app,
@@ -75,7 +75,7 @@ class TestMigrateReinitValidation:
                 "--yes",
             ],
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 5
         assert "Migrations directory not found" in result.output
 
     def test_reinit_duplicate_versions_exits_3(self, tmp_path):

@@ -450,7 +450,8 @@ class TestMigrateReinitCLI:
                 "--yes",
             ],
         )
-        assert result.exit_code == 1
+        # Unknown target version → MIGR_100 → exit 3 (was the generic 1).
+        assert result.exit_code == 3
         assert "999" in result.output
 
     def test_cli_reinit_confirmation_declined(self, tmp_path, test_db_connection):

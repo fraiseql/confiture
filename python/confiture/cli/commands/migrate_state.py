@@ -4,7 +4,9 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.helpers import console, error_console
+from confiture.cli.error_json import fail
+from confiture.cli.helpers import console, is_json
+from confiture.exceptions import ConfigurationError, MigrationError
 
 
 def _baseline_from_db_flow(
@@ -164,22 +166,31 @@ def migrate_baseline(
 
     try:
         if through is None and from_db is None:
-            console.print(
-                "[red]❌ Missing required option.  Pass either --through <version> "
-                "or --from-db <DSN>.[/red]"
+            fail(
+                ConfigurationError(
+                    "Missing required option. Pass either --through <version> or --from-db <DSN>.",
+                ),
+                json_mode=False,
             )
-            raise typer.Exit(1)
 
         if not config.exists():
-            console.print(f"[red]❌ Config file not found: {config}[/red]")
-            console.print(
-                "[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]"
+            fail(
+                ConfigurationError(
+                    f"Config file not found: {config}",
+                    error_code="CONFIG_004",
+                    resolution_hint="Specify config with --config path/to/config.yaml.",
+                ),
+                json_mode=False,
             )
-            raise typer.Exit(1)
 
         if not migrations_dir.exists():
-            console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-            raise typer.Exit(1)
+            fail(
+                ConfigurationError(
+                    f"Migrations directory not found: {migrations_dir}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=False,
+            )
 
         if from_db is not None:
             _baseline_from_db_flow(
@@ -209,7 +220,13 @@ def migrate_baseline(
             console.print(
                 "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
             )
-            raise typer.Exit(3)
+            fail(
+                MigrationError(
+                    "Duplicate migration versions detected — refusing to proceed.",
+                    error_code="MIGR_106",
+                ),
+                json_mode=False,
+            )
 
         # Load config and create connection
         config_data = load_config(config)
@@ -236,7 +253,6 @@ def migrate_baseline(
                 break
         else:
             # Target version not found
-            console.print(f"[red]❌ Migration version '{through}' not found[/red]")
             console.print("[yellow]Available versions:[/yellow]")
             for mf in all_migrations[:10]:
                 v = migrator._version_from_filename(mf.name)
@@ -244,7 +260,14 @@ def migrate_baseline(
             if len(all_migrations) > 10:
                 console.print(f"  ... and {len(all_migrations) - 10} more")
             conn.close()
-            raise typer.Exit(1)
+            fail(
+                MigrationError(
+                    f"Migration version '{through}' not found",
+                    version=through,
+                    error_code="MIGR_100",
+                ),
+                json_mode=False,
+            )
 
         # Get already applied versions
         applied_versions = set(migrator.get_applied_versions())
@@ -297,8 +320,7 @@ def migrate_baseline(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 def migrate_reinit(
@@ -360,17 +382,26 @@ def migrate_reinit(
 
     # Pre-flight validations (no DB needed)
     if not config.exists():
-        console.print(f"[red]❌ Config file not found: {config}[/red]")
-        console.print("[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]")
-        raise typer.Exit(1)
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Specify config with --config path/to/config.yaml.",
+            ),
+            json_mode=False,
+        )
 
     if not migrations_dir.exists():
-        console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-        raise typer.Exit(1)
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=False,
+        )
 
     duplicates = find_duplicate_migration_versions(migrations_dir)
     if duplicates:
-        console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
         console.print("[red]Multiple migration files share the same version number:[/red]\n")
         for version, files in sorted(duplicates.items()):
             console.print(f"  Version {version}:")
@@ -378,7 +409,13 @@ def migrate_reinit(
                 console.print(f"    • {f.name}")
         console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
         console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
-        raise typer.Exit(3)
+        fail(
+            MigrationError(
+                "Duplicate migration versions detected — refusing to proceed.",
+                error_code="MIGR_106",
+            ),
+            json_mode=False,
+        )
 
     try:
         with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
@@ -400,14 +437,20 @@ def migrate_reinit(
                     if version == through:
                         break
                 else:
-                    console.print(f"[red]❌ Migration version '{through}' not found[/red]")
                     console.print("[yellow]Available versions:[/yellow]")
                     for mf in all_migrations[:10]:
                         v = migrator._version_from_filename(mf.name)
                         console.print(f"  • {v}")
                     if len(all_migrations) > 10:
                         console.print(f"  ... and {len(all_migrations) - 10} more")
-                    raise typer.Exit(1)
+                    fail(
+                        MigrationError(
+                            f"Migration version '{through}' not found",
+                            version=through,
+                            error_code="MIGR_100",
+                        ),
+                        json_mode=False,
+                    )
             else:
                 migrations_to_mark = list(all_migrations)
 
@@ -459,8 +502,7 @@ def migrate_reinit(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=False)
 
 
 def migrate_rebuild(
@@ -550,35 +592,53 @@ def migrate_rebuild(
     from confiture.cli.formatters.migrate_formatter import format_rebuild_result
     from confiture.core.migrator import Migrator, find_duplicate_migration_versions
 
-    fatal_error_exit = False
+    json_mode = is_json(format_output)
 
     # Pre-flight: validate config
     if not config.exists():
-        console.print(f"[red]❌ Config file not found: {config}[/red]")
-        console.print("[yellow]💡 Tip: Specify config with --config path/to/config.yaml[/yellow]")
-        raise typer.Exit(1)
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Specify config with --config path/to/config.yaml.",
+            ),
+            json_mode=json_mode,
+        )
 
     # Pre-flight: validate migrations dir
     if not migrations_dir.exists():
-        console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-        raise typer.Exit(1)
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=json_mode,
+        )
 
     # Pre-flight: validate format
     if format_output not in ("text", "json"):
-        error_console.print(
-            f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
+        fail(
+            ConfigurationError(
+                f"Invalid format '{format_output}'. Use 'text' or 'json'.",
+                resolution_hint="Pass --format text or --format json.",
+            ),
+            json_mode=False,
         )
-        raise typer.Exit(1)
 
     # Pre-flight: check for duplicate versions
     duplicates = find_duplicate_migration_versions(migrations_dir)
     if duplicates:
-        console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
         for version, files in sorted(duplicates.items()):
             console.print(f"  Version {version}:")
             for f in files:
                 console.print(f"    • {f.name}")
-        raise typer.Exit(3)
+        fail(
+            MigrationError(
+                "Duplicate migration versions detected — refusing to proceed.",
+                error_code="MIGR_106",
+            ),
+            json_mode=json_mode,
+        )
 
     try:
         with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
@@ -635,9 +695,9 @@ def migrate_rebuild(
     except typer.Exit:
         raise
     except Exception as e:
-        if format_output == "text":
-            error_console.print(f"[red]❌ Fatal error: {e}[/red]")
-        fatal_error_exit = True
-
-    if fatal_error_exit:
-        raise typer.Exit(3)
+        # Rebuild fatal errors (connection, build, DDL) stay in the migrate
+        # family at exit 3; in --format json the unified envelope is emitted.
+        fail(
+            MigrationError(f"Rebuild failed: {e}", error_code="MIGR_001"),
+            json_mode=json_mode,
+        )

@@ -45,7 +45,7 @@ class TestRebuildPreFlight:
         result = runner.invoke(
             app, ["migrate", "rebuild", "--config", "/nonexistent/config.yaml", "--yes"]
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 5
         assert "not found" in result.output.lower() or "Config" in result.output
 
     def test_missing_migrations_dir_exits_1(self, tmp_path: Path):
@@ -63,7 +63,7 @@ class TestRebuildPreFlight:
                 "--yes",
             ],
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 5
 
 
 def _make_env(tmp_path: Path) -> tuple[Path, Path]:

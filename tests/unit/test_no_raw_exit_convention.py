@@ -53,7 +53,9 @@ _ALLOWLIST: dict[str, int] = {
     "commands/migrate_core.py": 33,  # TODO(phase-02/03): mixed success-signal + debt
     # ---- Cycle 1 conversion cohort (this phase) ----
     "seed.py": 32,  # TODO(phase-02): convert to fail()
-    "commands/migrate_state.py": 16,  # TODO(phase-02): convert to fail()
+    # commands/migrate_state.py: fully converted (Cycle 1) — baseline/reinit/
+    # rebuild config guards → 5, version-not-found → MIGR_100 (3), duplicates →
+    # MIGR_106 (3), rebuild fatal → MIGR_001 (3); all via fail().
     # branch.py: fully converted (Cycle 1) — _get_pggit_client raises
     # ConfiturError; every command's outer handler routes through fail().
     "generate.py": 1,  # success-signal: renumber → Exit(1) when dangling refs remain
