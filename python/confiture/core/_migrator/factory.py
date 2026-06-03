@@ -1,0 +1,67 @@
+"""``Migrator.from_config`` factory (peeled from engine.py, Phase 03 ARCH-M2).
+
+A free function that builds a managed :class:`MigratorSession` from an
+``Environment`` / config path. ``MigratorSession`` is imported lazily inside the
+function so this module carries no import-time dependency on ``session`` (which
+imports the engine) — keeping the package free of an import cycle.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from confiture.config.environment import Environment
+    from confiture.core._migrator.session import MigratorSession
+
+
+def from_config(
+    config: Environment | Path | str,
+    *,
+    migrations_dir: Path | str = Path("db/migrations"),
+) -> MigratorSession:
+    """Create a managed ``MigratorSession`` from an ``Environment`` config.
+
+    Accepts an ``Environment`` object, a ``Path`` to a YAML config file, or a
+    string path. The returned ``MigratorSession`` must be used as a context
+    manager so the database connection is properly closed.
+
+    Raises:
+        ConfigurationError: If the config file cannot be found or is invalid.
+    """
+    from confiture.config.environment import Environment
+    from confiture.core._migrator.session import MigratorSession
+
+    if isinstance(config, Environment):
+        env = config
+    else:
+        import yaml
+
+        config_path = Path(config)
+        if not config_path.exists():
+            from confiture.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                f"Configuration file not found: {config_path}",
+                error_code="CONFIG_004",
+                context={"file_path": str(config_path)},
+                resolution_hint=f"Create a config file at {config_path} or use an existing one",
+            )
+        with open(config_path) as f:
+            raw: dict[str, Any] = yaml.safe_load(f)
+        try:
+            env = Environment.model_validate(raw)
+        except Exception as e:
+            if "ValidationError" in type(e).__name__:
+                from confiture.exceptions import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Invalid configuration in {config_path}: {e}",
+                    error_code="CONFIG_002",
+                    context={"file_path": str(config_path)},
+                    resolution_hint=f"Fix validation errors in {config_path}",
+                ) from e
+            raise
+
+    return MigratorSession(env, Path(migrations_dir))

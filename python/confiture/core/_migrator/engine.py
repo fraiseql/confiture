@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
+    from confiture.core._migrator.session import MigratorSession
     from confiture.models.results import (
         MigrateRebuildResult,
         MigrateReinitResult,
@@ -20,6 +21,7 @@ from psycopg import sql as pgsql
 from confiture.core._migrator import apply as apply_impl
 from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import discovery as discovery_impl
+from confiture.core._migrator import factory
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator import state as state_impl
 from confiture.core._migrator._constants import (
@@ -905,43 +907,4 @@ class Migrator:
             ...     if status.has_pending:
             ...         result = m.up()
         """
-        from confiture.config.environment import Environment
-
-        if isinstance(config, Environment):
-            env = config
-        else:
-            import yaml
-
-            config_path = Path(config)
-            if not config_path.exists():
-                from confiture.exceptions import ConfigurationError
-
-                raise ConfigurationError(
-                    f"Configuration file not found: {config_path}",
-                    error_code="CONFIG_004",
-                    context={"file_path": str(config_path)},
-                    resolution_hint=f"Create a config file at {config_path} or use an existing one",
-                )
-            with open(config_path) as f:
-                raw: dict[str, Any] = yaml.safe_load(f)
-            try:
-                env = Environment.model_validate(raw)
-            except Exception as e:
-                if "ValidationError" in type(e).__name__:
-                    from confiture.exceptions import ConfigurationError
-
-                    raise ConfigurationError(
-                        f"Invalid configuration in {config_path}: {e}",
-                        error_code="CONFIG_002",
-                        context={"file_path": str(config_path)},
-                        resolution_hint=f"Fix validation errors in {config_path}",
-                    ) from e
-                raise
-
-        return MigratorSession(env, Path(migrations_dir))
-
-
-# Avoid circular import: MigratorSession is defined in session.py but
-# Migrator.from_config returns it. We import it here so the type annotation
-# and runtime return value work correctly.
-from confiture.core._migrator.session import MigratorSession  # noqa: E402
+        return factory.from_config(config, migrations_dir=migrations_dir)
