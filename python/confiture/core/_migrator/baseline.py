@@ -8,7 +8,6 @@ methods so its public surface and patch targets are unchanged. Pure refactor.
 from __future__ import annotations
 
 import logging
-import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core._migrator._constants import _VALID_TABLE_RE
 from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
@@ -24,10 +24,6 @@ if TYPE_CHECKING:
     from confiture.models.results import MigrateRebuildResult, MigrateReinitResult
 
 logger = logging.getLogger(__name__)
-
-# Mirrors the engine's table-name guard (kept local to avoid a runtime import
-# cycle between engine.py and this module).
-_VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
 
 
 def baseline_from_db(

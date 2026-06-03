@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +20,10 @@ from psycopg import sql as pgsql
 from confiture.core._migrator import apply as apply_impl
 from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import rollback as rollback_impl
+from confiture.core._migrator._constants import (
+    _POSTGRES_RESERVED_WORDS,
+    _VALID_TABLE_RE,
+)
 from confiture.core._migrator.discovery import find_duplicate_migration_versions
 from confiture.core.checksum import (
     ChecksumConfig,
@@ -34,115 +37,6 @@ from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
-
-_VIEW_COLUMN_RENAME_RE = re.compile(r"cannot change name of view column", re.IGNORECASE)
-
-# Allows 'table_name' or 'schema.table_name' (letters, digits, underscores only)
-_VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
-
-# PostgreSQL reserved words that must never be used as bare table names.
-# pgsql.Identifier quotes them correctly in SQL, but they would confuse anyone
-# writing ad-hoc queries against the tracking table.
-_POSTGRES_RESERVED_WORDS = frozenset(
-    {
-        "all",
-        "analyse",
-        "analyze",
-        "and",
-        "any",
-        "array",
-        "as",
-        "asc",
-        "asymmetric",
-        "both",
-        "case",
-        "cast",
-        "check",
-        "collate",
-        "column",
-        "constraint",
-        "create",
-        "cross",
-        "current_catalog",
-        "current_date",
-        "current_role",
-        "current_schema",
-        "current_time",
-        "current_timestamp",
-        "current_user",
-        "default",
-        "deferrable",
-        "desc",
-        "distinct",
-        "do",
-        "else",
-        "end",
-        "except",
-        "false",
-        "fetch",
-        "for",
-        "foreign",
-        "from",
-        "full",
-        "grant",
-        "group",
-        "having",
-        "ilike",
-        "in",
-        "initially",
-        "inner",
-        "intersect",
-        "into",
-        "is",
-        "isnull",
-        "join",
-        "lateral",
-        "leading",
-        "left",
-        "like",
-        "limit",
-        "localtime",
-        "localtimestamp",
-        "natural",
-        "not",
-        "notnull",
-        "null",
-        "offset",
-        "on",
-        "only",
-        "or",
-        "order",
-        "outer",
-        "overlaps",
-        "placing",
-        "primary",
-        "references",
-        "returning",
-        "right",
-        "row",
-        "select",
-        "session_user",
-        "similar",
-        "some",
-        "symmetric",
-        "table",
-        "tablesample",
-        "then",
-        "to",
-        "trailing",
-        "true",
-        "union",
-        "unique",
-        "user",
-        "using",
-        "variadic",
-        "verbose",
-        "when",
-        "where",
-        "window",
-        "with",
-    }
-)
 
 
 class Migrator:

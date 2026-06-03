@@ -10,7 +10,6 @@ seams that mock those methods on the instance keep working. Pure refactor.
 from __future__ import annotations
 
 import logging
-import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,6 +18,7 @@ import psycopg
 import psycopg.pq
 from psycopg import sql as pgsql
 
+from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 from confiture.core.checksum import (
     ChecksumConfig,
     MigrationChecksumVerifier,
@@ -38,9 +38,6 @@ if TYPE_CHECKING:
     from confiture.core._migrator.engine import Migrator
 
 logger = logging.getLogger(__name__)
-
-# Mirrors the engine's hint trigger (kept local to avoid a runtime import cycle).
-_VIEW_COLUMN_RENAME_RE = re.compile(r"cannot change name of view column", re.IGNORECASE)
 
 
 def apply(

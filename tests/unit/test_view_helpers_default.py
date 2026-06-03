@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from confiture.config.environment import MigrationConfig
-from confiture.core._migrator.engine import _VIEW_COLUMN_RENAME_RE
+from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 
 
 class TestViewHelpersDefault:
