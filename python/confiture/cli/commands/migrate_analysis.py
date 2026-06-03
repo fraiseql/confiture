@@ -671,8 +671,8 @@ def migrate_validate(
 
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
-            from confiture.cli.acl_loader import load_acl_expectations
             from confiture.core.linting.schema_linter import SchemaLinter
+            from confiture.core.validation.config_loaders import load_acl_expectations
 
             if not config.exists():
                 error_console.print(f"[red]❌ Config file not found: {config}[/red]")
@@ -731,10 +731,12 @@ def migrate_validate(
 
         # Run ownership coverage check on migration files (static, no DB).
         if check_ownership_coverage:
-            from confiture.cli.ownership_loader import load_ownership_expectation
             from confiture.core.linting.libraries.ownership import (
                 Own001OwnershipCoverage,
                 Own002BareAlterOwner,
+            )
+            from confiture.core.validation.config_loaders import (
+                load_ownership_expectation,
             )
 
             if not config.exists():
@@ -801,10 +803,10 @@ def migrate_validate(
 
         # Run function-uniqueness check on DDL files (static, no DB).
         if check_function_uniqueness:
-            from confiture.cli.function_coverage_loader import load_function_coverage
             from confiture.core.linting.libraries.functions import (
                 Func001FunctionUniqueness,
             )
+            from confiture.core.validation.config_loaders import load_function_coverage
 
             if not config.exists():
                 error_console.print(f"[red]❌ Config file not found: {config}[/red]")

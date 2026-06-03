@@ -1,8 +1,10 @@
-"""Unit tests for ``confiture.cli.ownership_loader`` (issue #124).
+"""Unit tests for ``confiture.core.validation.config_loaders`` (issue #124).
 
 Mirrors :mod:`tests.unit.cli.test_acl_loader` in spirit. The loader is
 consumed by both ``drift --check-ownership`` and
-``migrate validate --check-ownership-coverage``.
+``migrate validate --check-ownership-coverage``. As of Phase 03 it raises
+``ConfigurationError`` (CONFIG_001 → exit 5) instead of ``typer.Exit(2)``, so
+its callers funnel the failure through their ``fail()`` boundary.
 """
 
 from __future__ import annotations
@@ -11,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import typer
 
-from confiture.cli.ownership_loader import load_ownership_expectation
+from confiture.core.validation.config_loaders import load_ownership_expectation
+from confiture.exceptions import ConfigurationError
 
 
 def test_load_minimal_config() -> None:
@@ -29,11 +31,11 @@ def test_load_minimal_config() -> None:
     assert result.apply_to[0].schema_ == "tenant"
 
 
-def test_load_missing_ownership_block_with_require_true_exits_2() -> None:
+def test_load_missing_ownership_block_with_require_true_is_config_error() -> None:
     config_data: dict[str, Any] = {}
-    with pytest.raises(typer.Exit) as exc_info:
+    with pytest.raises(ConfigurationError) as exc_info:
         load_ownership_expectation(config_data, Path("confiture.yaml"), require=True)
-    assert exc_info.value.exit_code == 2
+    assert exc_info.value.exit_code == 5
 
 
 def test_load_missing_ownership_block_with_require_false_returns_none() -> None:
@@ -55,16 +57,16 @@ def test_env_var_expansion(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.expected_owner == "realowner"
 
 
-def test_invalid_yaml_block_raises_typer_exit() -> None:
+def test_invalid_yaml_block_raises_config_error() -> None:
     config_data: dict[str, Any] = {
         "ownership": {
             "expected_owner": "bad role with spaces",
             "apply_to": [{"schema": "tenant"}],
         }
     }
-    with pytest.raises(typer.Exit) as exc_info:
+    with pytest.raises(ConfigurationError) as exc_info:
         load_ownership_expectation(config_data, Path("confiture.yaml"), require=True)
-    assert exc_info.value.exit_code == 2
+    assert exc_info.value.exit_code == 5
 
 
 def test_load_block_with_lint_enabled_false() -> None:

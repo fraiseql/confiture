@@ -147,12 +147,13 @@ def test_check_acls_works_without_schema_flag(
 # ---------------------------------------------------------------------------
 
 
-def test_check_acls_without_acls_block_exits_2(
+def test_check_acls_without_acls_block_is_config_error(
     tmp_path: Path, acl_db: psycopg.Connection, pg_url: str
 ) -> None:
     cfg = _write_config(tmp_path, pg_url)  # no acls: block
     result = CliRunner().invoke(app, ["drift", "--check-acls", "--config", str(cfg)])
-    assert result.exit_code == 2, result.output
+    # Phase 03: missing required block → ConfigurationError (CONFIG_001 → exit 5)
+    assert result.exit_code == 5, result.output
 
 
 def test_check_acls_without_acls_block_emits_helpful_message(
@@ -170,7 +171,7 @@ def test_check_acls_without_acls_block_emits_helpful_message(
         capture_output=True,
         text=True,
     )
-    assert completed.returncode == 2
+    assert completed.returncode == 5
     combined = completed.stdout + completed.stderr
     assert "acls" in combined.lower()
     assert "requires" in combined.lower()

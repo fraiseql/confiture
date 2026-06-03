@@ -33,10 +33,10 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console, is_json
-from confiture.cli.ownership_loader import load_ownership_expectation
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
+from confiture.core.validation.config_loaders import load_ownership_expectation
 from confiture.exceptions import BootstrapError, BootstrapScopeError, ConfigurationError
 
 

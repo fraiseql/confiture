@@ -234,7 +234,7 @@ class TestDriftCommand:
         result = runner.invoke(app, ["drift", "--config", str(config_file)])
         assert result.exit_code == 5
 
-    def test_drift_check_acls_without_acls_block_exits_2(self, tmp_path):
+    def test_drift_check_acls_without_acls_block_is_config_error(self, tmp_path):
         """``--check-acls`` requires an ``acls:`` block in the config."""
         config_file = tmp_path / "confiture.yaml"
         config_file.write_text("database_url: postgresql://localhost/test\n")
@@ -247,10 +247,9 @@ class TestDriftCommand:
                 str(config_file),
             ],
         )
-        # Missing-block still routes through the *_loader.py Exit(2) path, which
-        # is deferred to Phase 03 (shares a seam with migrate_validate). Until
-        # then it stays exit 2; the contract requirement here is "never silently 0".
-        assert result.exit_code == 2
+        # Phase 03: the config-block loaders moved to core/validation and now
+        # raise ConfigurationError; drift routes it through fail() → exit 5.
+        assert result.exit_code == 5
 
     def test_drift_check_acls_propagates_env_var_error(self, tmp_path, monkeypatch):
         """An unresolvable ``${VAR}`` in ``acls:`` surfaces as exit 2."""

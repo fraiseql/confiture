@@ -71,12 +71,14 @@ _ALLOWLIST: dict[str, int] = {
     "commands/debug.py": 2,  # success-signal: debug cte → Exit(1) when a CTE in the query fails
     # commands/diff.py: fully converted (Cycle 2) — success exit is an IfExp,
     # not a literal, so it no longer appears here.
-    "ownership_loader.py": 2,  # TODO(phase-03): shares ValidationError seam with migrate_validate
-    "function_coverage_loader.py": 2,  # TODO(phase-03): shares seam with migrate_validate
+    # acl_loader.py / ownership_loader.py / function_coverage_loader.py: the
+    # three config-block loaders moved to core/validation/config_loaders.py
+    # (Phase 03) and now raise ConfigurationError instead of typer.Exit(2) — the
+    # ValidationError seam they shared with migrate_validate is reseamed through
+    # the callers' fail() boundaries (drift/bootstrap/migrate validate).
     "helpers.py": 2,  # success-signal: idempotency gate → Exit(1) on findings
     # commands/mcp.py: fully converted (Cycle 1) — connection → CONFIG_006,
     # missing-extra → generic ConfiturError, both via fail().
-    "acl_loader.py": 2,  # TODO(phase-03): shares ValidationError seam with migrate_validate
 }
 
 _EXCLUDED = {"error_json.py"}

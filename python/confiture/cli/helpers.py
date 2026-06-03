@@ -914,9 +914,9 @@ def _fix_ownership(
     - ``ownership.lint_enabled`` is False
     - pglast (the [ast] extra) is not installed
     """
-    from confiture.cli.ownership_loader import load_ownership_expectation
     from confiture.core.connection import load_config
     from confiture.core.ownership_fixer import OwnershipFixer
+    from confiture.core.validation.config_loaders import load_ownership_expectation
 
     if not config_path.exists():
         error_console.print(f"[red]❌ Config file not found: {config_path}[/red]")

@@ -5,11 +5,9 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.acl_loader import load_acl_expectations
 from confiture.cli.error_json import fail
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, is_json
-from confiture.cli.ownership_loader import load_ownership_expectation
 from confiture.config.environment import AclExpectation, OwnershipExpectation
 from confiture.core.connection import create_connection, load_config
 from confiture.core.drift import (
@@ -19,6 +17,10 @@ from confiture.core.drift import (
     DriftType,
     OwnershipDriftDetector,
     SchemaDriftDetector,
+)
+from confiture.core.validation.config_loaders import (
+    load_acl_expectations,
+    load_ownership_expectation,
 )
 from confiture.exceptions import ConfigurationError, SchemaError
 

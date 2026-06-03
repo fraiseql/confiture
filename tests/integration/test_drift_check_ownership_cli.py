@@ -123,12 +123,13 @@ def test_check_ownership_exits_0_on_full_coverage(
     assert result.exit_code == 0, result.output
 
 
-def test_check_ownership_without_block_exits_2(
+def test_check_ownership_without_block_is_config_error(
     tmp_path: Path, own_db: psycopg.Connection, pg_url: str
 ) -> None:
     cfg = _write_config(tmp_path, pg_url)
     result = CliRunner().invoke(app, ["drift", "--check-ownership", "--config", str(cfg)])
-    assert result.exit_code == 2, result.output
+    # Phase 03: missing required block → ConfigurationError (CONFIG_001 → exit 5)
+    assert result.exit_code == 5, result.output
 
 
 # ---------------------------------------------------------------------------
