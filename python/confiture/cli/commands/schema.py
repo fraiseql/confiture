@@ -4,11 +4,13 @@ from pathlib import Path
 
 import typer
 
+from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     _convert_linter_report,
     _output_json,
     _output_yaml,
     console,
+    is_json,
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.core.builder import SchemaBuilder
@@ -18,6 +20,7 @@ from confiture.core.introspector import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import LintConfig as LinterConfig
 from confiture.core.seed_applier import SeedApplier
+from confiture.exceptions import ConfigurationError, SchemaError, SeedError
 
 # Valid output formats for linting (re-exported so main.py can keep LINT_FORMATS there)
 LINT_FORMATS = ("table", "json", "csv")
@@ -328,9 +331,14 @@ def build(
             # Validate separator style
             valid_styles = ["block_comment", "line_comment", "mysql", "custom"]
             if separator_style not in valid_styles:
-                console.print(f"[red]❌ Invalid separator style: {separator_style}[/red]")
-                console.print(f"   Valid options: {', '.join(valid_styles)}")
-                raise typer.Exit(1)
+                fail(
+                    ConfigurationError(
+                        f"Invalid separator style: {separator_style}",
+                        resolution_hint=f"Valid options: {', '.join(valid_styles)}",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
             builder.env_config.build.separators.style = separator_style
 
         # Apply custom template if provided
@@ -343,8 +351,14 @@ def build(
             and not separator_template
             and not builder.env_config.build.separators.custom_template
         ):
-            console.print("[red]❌ Custom separator style requires --separator-template[/red]")
-            raise typer.Exit(1)
+            fail(
+                ConfigurationError(
+                    "Custom separator style requires --separator-template",
+                    resolution_hint="Pass --separator-template with a {file_path} placeholder.",
+                ),
+                json_mode=is_json(format_type),
+                output_file=report_output,
+            )
 
         # Show overrides if any were applied
         overrides_applied = any(
@@ -433,9 +447,15 @@ def build(
             # Get database URL (from CLI or config)
             db_url = database_url or builder.env_config.database_url
             if not db_url:
-                console.print("[red]❌ Database URL required for --sequential mode[/red]")
-                console.print("   Provide via --database-url or in environment config")
-                raise typer.Exit(1)
+                fail(
+                    ConfigurationError(
+                        "Database URL required for --sequential mode",
+                        error_code="CONFIG_010",
+                        resolution_hint="Provide via --database-url or in the environment config.",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
 
             # Import psycopg here to connect to database
             try:
@@ -443,8 +463,14 @@ def build(
 
                 connection = psycopg.connect(db_url)
             except Exception as e:
-                console.print(f"[red]❌ Failed to connect to database: {e}[/red]")
-                raise typer.Exit(1) from e
+                fail(
+                    ConfigurationError(
+                        f"Failed to connect to database: {e}",
+                        error_code="CONFIG_006",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
 
             try:
                 # Get seeds directory (parent of first seed file)
@@ -466,7 +492,17 @@ def build(
                     if result.failed > 0:
                         console.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
                         if not continue_on_error:
-                            raise typer.Exit(1)
+                            # fail() raises typer.Exit → the enclosing
+                            # `except typer.Exit` closes the connection.
+                            fail(
+                                SeedError(
+                                    f"{result.failed} seed file(s) failed during sequential apply.",
+                                    resolution_hint="Re-run with --continue-on-error to skip "
+                                    "failures, or fix the failing seed files.",
+                                ),
+                                json_mode=is_json(format_type),
+                                output_file=report_output,
+                            )
                 else:
                     console.print("[yellow]⚠️  No seed files found[/yellow]")
 
@@ -476,8 +512,11 @@ def build(
                 raise
             except Exception as e:
                 connection.close()
-                console.print(f"[red]❌ Seed application failed: {e}[/red]")
-                raise typer.Exit(1) from e
+                fail(
+                    SeedError(f"Seed application failed: {e}"),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
 
         # Show hash if requested
         schema_hash = None
@@ -486,8 +525,14 @@ def build(
 
         # Validate format_type
         if format_type not in ("text", "json", "csv"):
-            console.print(f"[red]❌ Invalid format: {format_type}. Use text, json, or csv[/red]")
-            raise typer.Exit(1)
+            fail(
+                ConfigurationError(
+                    f"Invalid format: {format_type}. Use text, json, or csv.",
+                    resolution_hint="Pass --format text, json, or csv.",
+                ),
+                json_mode=False,  # an invalid format can't be honored as JSON
+                output_file=report_output,
+            )
 
         # Create and format build result
         from confiture.cli.formatters.build_formatter import format_build_result
@@ -512,47 +557,26 @@ def build(
             console.print(f"  • Apply schema: psql -f {output}")
             console.print("  • Or use: confiture migrate up")
 
+    except typer.Exit:
+        # An inner fail() already emitted its envelope and is exiting — let it
+        # through untouched (do not re-handle via the generic except below).
+        raise
     except FileNotFoundError as e:
-        # Try to format error result if format was specified
-        try:
-            from confiture.cli.formatters.build_formatter import format_build_result
-            from confiture.models.results import BuildResult
-
-            error_result = BuildResult(
-                success=False,
-                files_processed=0,
-                schema_size_bytes=0,
-                output_path="",
-                error=str(e),
-            )
-            if format_type != "text":
-                format_build_result(error_result, format_type, report_output, console)
-        except Exception:
-            pass
-
-        print_error_to_console(e)
-        console.print("\n💡 Tip: Run 'confiture init' to create project structure")
-        raise typer.Exit(handle_cli_error(e)) from e
+        # In text mode keep the human-friendly "run init" tip on stderr; the
+        # envelope (json mode) carries the actionable hint instead.
+        if not is_json(format_type):
+            console.print("\n💡 Tip: Run 'confiture init' to create project structure")
+        fail(
+            SchemaError(
+                f"Schema source not found: {e}",
+                error_code="SCHEMA_201",
+                resolution_hint="Run 'confiture init' to create the project structure.",
+            ),
+            json_mode=is_json(format_type),
+            output_file=report_output,
+        )
     except Exception as e:
-        # Try to format error result if format was specified
-        try:
-            from confiture.cli.formatters.build_formatter import format_build_result
-            from confiture.models.results import BuildResult
-
-            error_result = BuildResult(
-                success=False,
-                files_processed=0,
-                schema_size_bytes=0,
-                output_path="",
-                error=str(e),
-            )
-            if format_type != "text":
-                format_build_result(error_result, format_type, report_output, console)
-        except Exception:
-            pass
-
-        print_error_to_console(e)
-        raise typer.Exit(handle_cli_error(e)) from e
+        fail(e, json_mode=is_json(format_type), output_file=report_output)
 
 
 def lint(
@@ -644,9 +668,14 @@ def lint(
     try:
         # Validate format option
         if format_type not in LINT_FORMATS:
-            console.print(f"[red]❌ Invalid format: {format_type}[/red]")
-            console.print(f"Valid formats: {', '.join(LINT_FORMATS)}")
-            raise typer.Exit(1)
+            fail(
+                ConfigurationError(
+                    f"Invalid format: {format_type}",
+                    resolution_hint=f"Valid formats: {', '.join(LINT_FORMATS)}",
+                ),
+                json_mode=False,  # an invalid format can't be honored as JSON
+                output_file=output,
+            )
 
         # Create linter configuration (use LinterConfig for the linter)
         config = LinterConfig(
@@ -726,8 +755,10 @@ def lint(
                 console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
 
         if should_fail:
-            raise typer.Exit(1)
+            raise typer.Exit(1)  # success-signal: lint found violations
 
+    except typer.Exit:
+        raise
     except FileNotFoundError as e:
         print_error_to_console(e)
         console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
@@ -870,7 +901,7 @@ def lint_unified(
                     console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
 
     if fail_on_error and unified_result.has_errors:
-        raise typer.Exit(1)
+        raise typer.Exit(1)  # success-signal: lint found errors
 
 
 def introspect(
@@ -935,15 +966,32 @@ def introspect(
     # Status/error messages go to stderr so stdout stays pipe-friendly.
     _console = _Console(stderr=True)
 
+    # introspect emits json or yaml; the unified error envelope is JSON, so we
+    # route failures through fail() in JSON mode only when the requested format
+    # is json (yaml failures fall back to the human path).
+    json_mode = is_json(format_type)
+
     if format_type not in ("json", "yaml"):
-        _console.print(f"[red]❌ Invalid format: {format_type!r}. Use 'json' or 'yaml'[/red]")
-        raise typer.Exit(1)
+        fail(
+            ConfigurationError(
+                f"Invalid format: {format_type!r}. Use 'json' or 'yaml'.",
+                resolution_hint="Pass --format json or --format yaml.",
+            ),
+            json_mode=False,  # an invalid format can't be honored as JSON
+            output_file=output,
+        )
 
     try:
         conn = create_connection(db)
     except Exception as e:
-        _console.print(f"[red]❌ Connection failed: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfigurationError(
+                f"Connection failed: {e}",
+                error_code="CONFIG_006",
+            ),
+            json_mode=json_mode,
+            output_file=output,
+        )
 
     with conn:
         introspector = SchemaIntrospector(conn)

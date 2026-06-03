@@ -302,9 +302,10 @@ include_dirs:
             ],
         )
 
-        # Should fail with error message
-        assert "Invalid separator style: invalid_style" in result.stdout
-        assert result.exit_code == 1
+        # Invalid separator style is a config error → exit 5; the message is
+        # rendered to stderr via the fail() boundary (mixed into result.output).
+        assert "Invalid separator style: invalid_style" in result.output
+        assert result.exit_code == 5
 
     def test_separator_style_custom_requires_template(self, tmp_path):
         """--separator-style custom without --separator-template should error."""
@@ -338,9 +339,9 @@ build:
             ],
         )
 
-        # Should fail
-        assert "Custom separator style requires --separator-template" in result.stdout
-        assert result.exit_code == 1
+        # Missing required template is a config error → exit 5; message on stderr.
+        assert "Custom separator style requires --separator-template" in result.output
+        assert result.exit_code == 5
 
     def test_separator_style_custom_with_template(self, tmp_path):
         """--separator-style custom with --separator-template should work."""

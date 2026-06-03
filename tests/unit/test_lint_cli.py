@@ -189,5 +189,6 @@ class TestLintCommand:
         """Should fail with invalid format option."""
         result = runner.invoke(app, ["lint", "--format", "invalid"])
 
-        assert result.exit_code == 1
-        assert "Invalid format" in result.stdout or "Invalid format" in result.stderr
+        # Invalid --format is a config error → exit 5.
+        assert result.exit_code == 5
+        assert "Invalid format" in result.output

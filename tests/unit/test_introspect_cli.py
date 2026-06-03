@@ -78,21 +78,21 @@ class TestIntrospectCommand:
     @patch("confiture.cli.commands.schema.SchemaIntrospector")
     @patch("confiture.cli.commands.schema.create_connection")
     def test_invalid_format_exits_with_error(self, mock_create_conn, mock_introspector_class):
-        """Unsupported --format value exits 1 with an error message."""
+        """Unsupported --format value is a config error → exit 5."""
         result = runner.invoke(
             app, ["introspect", "--db", "postgresql://localhost/test", "--format", "csv"]
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 5
 
     @patch("confiture.cli.commands.schema.SchemaIntrospector")
     @patch("confiture.cli.commands.schema.create_connection")
     def test_connection_failure_exits_with_error(self, mock_create_conn, mock_introspector_class):
-        """Connection failure exits 1 with an error message."""
+        """Connection failure → CONFIG_006 → exit 3."""
         mock_create_conn.side_effect = Exception("could not connect")
 
         result = runner.invoke(app, ["introspect", "--db", "postgresql://bad/db"])
 
-        assert result.exit_code == 1
+        assert result.exit_code == 3
 
     @patch("confiture.cli.commands.schema.SchemaIntrospector")
     @patch("confiture.cli.commands.schema.create_connection")
