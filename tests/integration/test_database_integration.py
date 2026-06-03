@@ -8,7 +8,6 @@ import psycopg
 import pytest
 
 from confiture.core.drift import DriftReport, SchemaDriftDetector
-from confiture.core.health import check_database_health
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
 from confiture.models.migration import Migration
 
@@ -45,18 +44,6 @@ class TestDriftDetectorIntegration:
 
         assert isinstance(report, DriftReport)
         assert report.database_name == "confiture_test"
-
-
-class TestHealthIntegration:
-    """Integration tests for health checks with real database."""
-
-    def test_real_database_health(self, db_connection):
-        """Test health check with real database."""
-        result = check_database_health(db_connection)
-
-        assert result["database_connected"] is True
-        assert result["database_name"] == "confiture_test"
-        assert result["error"] is None
 
 
 class TestSchemaAnalyzerIntegration:

@@ -9,7 +9,6 @@ from io import StringIO
 from confiture.core.context import AgentContext, get_context
 from confiture.core.logging import StructuredLogger
 from confiture.core.metrics import ErrorMetrics
-from confiture.core.metrics_aggregator import MetricsAggregator
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -122,37 +121,6 @@ class TestPhase1Phase2Integration:
         assert data["error_code"] == "CONFIG_001"
         assert "Missing database URL" in data["message"]
         assert data.get("resolution_hint") == "Add database_url to config"
-
-    def test_metrics_aggregator_with_phase1_codes(self) -> None:
-        """Test MetricsAggregator works with Phase 1 error codes."""
-        metrics = ErrorMetrics()
-
-        # Record errors with different codes
-        for i in range(3):
-            error = ConfigurationError(
-                f"Config error {i}",
-                error_code="CONFIG_001",
-            )
-            metrics.record(error)
-
-        for i in range(2):
-            error = MigrationError(
-                f"Migration error {i}",
-                version="001",
-                error_code="MIGR_100",
-            )
-            metrics.record(error)
-
-        # Use aggregator
-        agg = MetricsAggregator(metrics)
-
-        # Query by code
-        result = agg.query(code="CONFIG_001")
-        assert result["results"]["count"] == 3
-
-        # Get top errors
-        top = agg.top_by_code(n=2)
-        assert top[0][0] in ["CONFIG_001", "MIGR_100"]
 
     def test_context_propagates_through_logging(self) -> None:
         """Test that AgentContext info propagates to logs."""
