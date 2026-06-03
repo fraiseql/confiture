@@ -124,6 +124,28 @@ __all__ = [
     # Scaffold / generate tree
     "EmittedFunction",
     "ConfitureEmitter",
+    # Blue-green orchestration (library API)
+    "BlueGreenOrchestrator",
+    "BlueGreenConfig",
+    "TrafficController",
+    "MigrationPhase",
+    "MigrationState",
+    "HealthCheckResult",
+    # PostgreSQL version detection / feature gating (library API)
+    "detect_version",
+    "parse_version_string",
+    "check_version_compatibility",
+    "get_recommended_settings",
+    "PGVersionInfo",
+    "PGFeature",
+    "VersionAwareSQL",
+    # Rollback generation (library API)
+    "generate_rollback",
+    "generate_rollback_script",
+    "suggest_backup_for_destructive_operations",
+    "RollbackSuggestion",
+    "RollbackTester",
+    "RollbackTestResult",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -231,6 +253,31 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Scaffold / generate tree
     "EmittedFunction": ("confiture.core.scaffold.emitter", "EmittedFunction"),
     "ConfitureEmitter": ("confiture.core.scaffold.emitter", "ConfitureEmitter"),
+    # Blue-green orchestration (library API)
+    "BlueGreenOrchestrator": ("confiture.core.blue_green", "BlueGreenOrchestrator"),
+    "BlueGreenConfig": ("confiture.core.blue_green", "BlueGreenConfig"),
+    "TrafficController": ("confiture.core.blue_green", "TrafficController"),
+    "MigrationPhase": ("confiture.core.blue_green", "MigrationPhase"),
+    "MigrationState": ("confiture.core.blue_green", "MigrationState"),
+    "HealthCheckResult": ("confiture.core.blue_green", "HealthCheckResult"),
+    # PostgreSQL version detection / feature gating (library API)
+    "detect_version": ("confiture.core.pg_version", "detect_version"),
+    "parse_version_string": ("confiture.core.pg_version", "parse_version_string"),
+    "check_version_compatibility": ("confiture.core.pg_version", "check_version_compatibility"),
+    "get_recommended_settings": ("confiture.core.pg_version", "get_recommended_settings"),
+    "PGVersionInfo": ("confiture.core.pg_version", "PGVersionInfo"),
+    "PGFeature": ("confiture.core.pg_version", "PGFeature"),
+    "VersionAwareSQL": ("confiture.core.pg_version", "VersionAwareSQL"),
+    # Rollback generation (library API)
+    "generate_rollback": ("confiture.core.rollback_generator", "generate_rollback"),
+    "generate_rollback_script": ("confiture.core.rollback_generator", "generate_rollback_script"),
+    "suggest_backup_for_destructive_operations": (
+        "confiture.core.rollback_generator",
+        "suggest_backup_for_destructive_operations",
+    ),
+    "RollbackSuggestion": ("confiture.core.rollback_generator", "RollbackSuggestion"),
+    "RollbackTester": ("confiture.core.rollback_generator", "RollbackTester"),
+    "RollbackTestResult": ("confiture.core.rollback_generator", "RollbackTestResult"),
 }
 
 

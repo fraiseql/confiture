@@ -157,6 +157,9 @@ migrator.cleanup_fdw()
 | [Anonymization](anonymization.md) | `confiture.anonymization` | Custom data masking strategies |
 | [Linting](linting.md) | `confiture.linting` | Schema validation rules |
 | [Wizard](wizard.md) | `confiture.wizard` | Interactive migration assistant |
+| [Blue-Green](blue-green.md) | `confiture.core.blue_green` | Callback-driven zero-downtime schema swap |
+| [PG Version](pg-version.md) | `confiture.core.pg_version` | Server version detection + feature gating |
+| [Rollback Generation](rollback-generator.md) | `confiture.core.rollback_generator` | Auto-generate `down` SQL for reversible DDL |
 
 ### Hooks Example
 
