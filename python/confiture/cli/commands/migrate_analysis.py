@@ -26,7 +26,7 @@ from confiture.core.connection import create_connection, load_config, open_conne
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import Migrator
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import ConfigurationError, ConfiturError, GitError
 
 
 def migrate_diff(
@@ -508,16 +508,17 @@ def migrate_validate(
             # Override base_ref with since if provided
             effective_base_ref = since or base_ref
 
-            # Validate we're in a git repo
-            try:
-                validate_git_flags_in_repo()
-            except Exception as e:
-                if format_output == "json":
-                    result = {"error": str(e)}
-                    _output_json(result, output_file, console)
-                else:
-                    console.print(f"[red]❌ {e}[/red]")
-                raise typer.Exit(2) from e
+            # Validate we're in a git repo. NotAGitRepositoryError (GIT_002 →
+            # exit 7) propagates to the fail() boundary below.
+            validate_git_flags_in_repo()
+
+            # ARCH-L1: --staged is only meaningful for the grant-accompaniment
+            # check (staged_only=staged, below). Drift and migration
+            # accompaniment compare committed refs (base_ref → HEAD); diffing the
+            # staged index for them is not implemented, so target_ref is the
+            # constant "HEAD" rather than a dead `"HEAD" if not staged else "HEAD"`
+            # ternary. See tests/.../test_validate_staged_routing.
+            target_ref = "HEAD"
 
             # Run git drift check
             drift_passed = True
@@ -526,27 +527,21 @@ def migrate_validate(
                     drift_result = validate_git_drift(
                         env="local",
                         base_ref=effective_base_ref,
-                        target_ref="HEAD" if not staged else "HEAD",
+                        target_ref=target_ref,
                         console=console,
                         format_output=format_output,
                     )
-                    if not drift_result.get("passed"):
-                        drift_passed = False
-                        if format_output == "json":
-                            result = {
-                                "status": "failed",
-                                "check": "drift",
-                                **drift_result,
-                            }
-                            _output_json(result, output_file, console)
-                            raise typer.Exit(1)
                 except Exception as e:
-                    if format_output == "json":
-                        result = {"error": f"Drift check failed: {e}"}
-                        _output_json(result, output_file, console)
-                    else:
-                        console.print(f"[red]❌ Drift check failed: {e}[/red]")
-                    raise typer.Exit(1) from e
+                    raise GitError(f"Drift check failed: {e}") from e
+                if not drift_result.get("passed"):
+                    drift_passed = False
+                    if json_mode:
+                        _output_json(
+                            {"status": "failed", "check": "drift", **drift_result},
+                            output_file,
+                            console,
+                        )
+                        raise typer.Exit(1)  # success-signal: drift found
 
             # Run migration accompaniment check
             accompaniment_passed = True
@@ -555,27 +550,21 @@ def migrate_validate(
                     acc_result = validate_migration_accompaniment(
                         env="local",
                         base_ref=effective_base_ref,
-                        target_ref="HEAD" if not staged else "HEAD",
+                        target_ref=target_ref,
                         console=console,
                         format_output=format_output,
                     )
-                    if not acc_result.get("is_valid"):
-                        accompaniment_passed = False
-                        if format_output == "json":
-                            result = {
-                                "status": "failed",
-                                "check": "accompaniment",
-                                **acc_result,
-                            }
-                            _output_json(result, output_file, console)
-                            raise typer.Exit(1)
                 except Exception as e:
-                    if format_output == "json":
-                        result = {"error": f"Accompaniment check failed: {e}"}
-                        _output_json(result, output_file, console)
-                    else:
-                        console.print(f"[red]❌ Accompaniment check failed: {e}[/red]")
-                    raise typer.Exit(1) from e
+                    raise GitError(f"Accompaniment check failed: {e}") from e
+                if not acc_result.get("is_valid"):
+                    accompaniment_passed = False
+                    if json_mode:
+                        _output_json(
+                            {"status": "failed", "check": "accompaniment", **acc_result},
+                            output_file,
+                            console,
+                        )
+                        raise typer.Exit(1)  # success-signal: accompaniment missing
 
             # Run grant accompaniment check
             grant_passed = True
@@ -589,25 +578,21 @@ def migrate_validate(
                         format_output=format_output,
                         migrations_dir=str(migrations_dir),
                     )
-                    if not grant_result.get("is_valid"):
-                        grant_passed = False
-                        if format_output == "json":
-                            result = {
+                except Exception as e:
+                    raise GitError(f"Grant accompaniment check failed: {e}") from e
+                if not grant_result.get("is_valid"):
+                    grant_passed = False
+                    if json_mode:
+                        _output_json(
+                            {
                                 "status": "failed",
                                 "check": "grant_accompaniment",
                                 **grant_result,
-                            }
-                            _output_json(result, output_file, console)
-                            raise typer.Exit(1)
-                except typer.Exit:
-                    raise
-                except Exception as e:
-                    if format_output == "json":
-                        result = {"error": f"Grant accompaniment check failed: {e}"}
-                        _output_json(result, output_file, console)
-                    else:
-                        console.print(f"[red]❌ Grant accompaniment check failed: {e}[/red]")
-                    raise typer.Exit(1) from e
+                            },
+                            output_file,
+                            console,
+                        )
+                        raise typer.Exit(1)  # success-signal: grant migration missing
 
             # Check if all checks passed (for text output)
             if drift_passed and accompaniment_passed and grant_passed:
@@ -734,12 +719,10 @@ def migrate_validate(
             return
 
         if not migrations_dir.exists():
-            if format_output == "json":
-                result = {"error": f"Migrations directory not found: {migrations_dir.absolute()}"}
-                _output_json(result, output_file, console)
-            else:
-                console.print(f"[red]❌ Migrations directory not found: {migrations_dir}[/red]")
-            raise typer.Exit(1)
+            raise ConfigurationError(
+                f"Migrations directory not found: {migrations_dir.absolute()}",
+                error_code="CONFIG_004",
+            )
 
         # Handle idempotency validation
         if idempotent:

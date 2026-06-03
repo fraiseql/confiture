@@ -44,9 +44,11 @@ class TestCliGitValidation:
                     catch_exceptions=False,
                 )
 
-                # Should fail with meaningful error
-                assert result.exit_code != 0
-                assert "git" in result.stdout.lower() or "not a repository" in result.stdout.lower()
+                # Phase 03: not-a-repo routes through fail() → NotAGitRepositoryError
+                # (GIT_002 → exit 7); the message goes to stderr (folded into
+                # CliRunner's combined .output).
+                assert result.exit_code == 7
+                assert "git" in result.output.lower() or "not a repository" in result.output.lower()
             finally:
                 os.chdir(old_cwd)
 
@@ -73,9 +75,11 @@ class TestCliGitValidation:
                     catch_exceptions=False,
                 )
 
-                # Should fail with meaningful error
-                assert result.exit_code != 0
-                assert "git" in result.stdout.lower() or "not a repository" in result.stdout.lower()
+                # Phase 03: not-a-repo routes through fail() → NotAGitRepositoryError
+                # (GIT_002 → exit 7); the message goes to stderr (folded into
+                # CliRunner's combined .output).
+                assert result.exit_code == 7
+                assert "git" in result.output.lower() or "not a repository" in result.output.lower()
             finally:
                 os.chdir(old_cwd)
 
