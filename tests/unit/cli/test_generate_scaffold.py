@@ -180,7 +180,7 @@ class TestScaffoldHappyPath:
 
 
 class TestScaffoldErrorPaths:
-    def test_invalid_from_format_exits_1(self, tmp_path: Path) -> None:
+    def test_invalid_from_format_is_config_error(self, tmp_path: Path) -> None:
         schema, _ = _make_schema(tmp_path)
 
         result = runner.invoke(
@@ -195,9 +195,10 @@ class TestScaffoldErrorPaths:
             ],
         )
 
-        assert result.exit_code == 1
+        # Bad --from spec → ConfigurationError → exit 5 (was 1).
+        assert result.exit_code == 5
 
-    def test_unimportable_module_exits_1(self, tmp_path: Path) -> None:
+    def test_unimportable_module_is_config_error(self, tmp_path: Path) -> None:
         schema, _ = _make_schema(tmp_path)
 
         with patch(_MOCK_PATH, side_effect=ValueError("Cannot import")):
@@ -213,4 +214,4 @@ class TestScaffoldErrorPaths:
                 ],
             )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 5

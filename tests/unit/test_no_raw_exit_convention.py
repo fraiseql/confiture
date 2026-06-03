@@ -55,7 +55,7 @@ _ALLOWLIST: dict[str, int] = {
     "seed.py": 32,  # TODO(phase-02): convert to fail()
     "commands/migrate_state.py": 16,  # TODO(phase-02): convert to fail()
     "branch.py": 14,  # TODO(phase-02): convert to fail()
-    "generate.py": 13,  # TODO(phase-02): convert to fail()
+    "generate.py": 1,  # success-signal: renumber → Exit(1) when dangling refs remain
     "coordinate.py": 13,  # TODO(phase-02): convert to fail()
     "commands/schema.py": 2,  # success-signal: lint / lint-unified → Exit(1) on violations
     "commands/bootstrap.py": 4,  # success-signal: check/dry-run/apply → Exit(0); drift → Exit(1)

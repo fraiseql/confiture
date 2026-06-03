@@ -30,10 +30,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from confiture.cli.error_json import fail
 from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.tree_allocator import TreeAllocator
 from confiture.core.tree_renumber import TreeRenumber
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 
 def _detect_repo_root(schema_dir: Path) -> Path | None:
@@ -119,8 +121,7 @@ def alloc_filename(
         allocator = TreeAllocator(schema_dir)
         next_path = allocator.alloc(target_dir, verb=verb)
     except ValueError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from exc
+        fail(ConfigurationError(str(exc)), json_mode=output_json)
 
     if output_json:
         print(json.dumps({"path": str(next_path)}))
@@ -205,8 +206,7 @@ def scaffold_functions(
     try:
         factory = _load_emitter_callable(from_spec)
     except ValueError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from exc
+        fail(ConfigurationError(str(exc)), json_mode=output_json)
 
     functions: list[EmittedFunction] = factory()
 
@@ -269,7 +269,7 @@ def renumber_path(
 
     Allocates sort-stable filenames at the target, scans the schema tree
     for calls to the moved function(s), and rewrites them when the function
-    stem changes.  Exits with code 2 when dangling references remain after
+    stem changes.  Exits with code 1 when dangling references remain after
     the rewrite pass (e.g. inside string literals).  Refuses to proceed
     when the old filename is referenced outside the ``db/`` tree (e.g. by
     application code that loads SQL files by literal path) — use
@@ -288,14 +288,12 @@ def renumber_path(
     try:
         plans = renumber.build_plans(old_path, new_path)
     except ValueError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from exc
+        fail(ConfigurationError(str(exc)), json_mode=output_json)
 
     try:
         result = renumber.execute(plans, dry_run=dry_run, force=force)
     except ValueError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1) from exc
+        fail(ConfigurationError(str(exc)), json_mode=output_json)
 
     if output_json:
         print(
@@ -342,7 +340,11 @@ def renumber_path(
                 console.print(f"  {p}")
 
     if result.dangling_refs:
-        raise typer.Exit(2)
+        # success-signal: the renumber completed and already emitted its full
+        # result (incl. dangling_refs); exit 1 flags "completed with unresolved
+        # refs" the way diff/lint do. Routing through fail() here would emit a
+        # second JSON object after the result.
+        raise typer.Exit(1)
 
 
 def _get_generator(config_path: Path):
@@ -369,20 +371,28 @@ def _get_generator(config_path: Path):
 
     # Check if pgGit is available
     if not is_pggit_available(conn):
-        console.print("[red]pgGit extension is not installed on this database.[/red]")
-        console.print("\n[yellow]To install pgGit:[/yellow]")
-        console.print("  CREATE EXTENSION pggit CASCADE;")
-        console.print("\n[dim]Note: pgGit is for development databases only.[/dim]")
         conn.close()
-        raise typer.Exit(1)
+        fail(
+            ConfiturError(
+                "pgGit extension is not installed on this database.",
+                error_code="PRECON_1000",
+                resolution_hint=(
+                    "Install it with `CREATE EXTENSION pggit CASCADE;` "
+                    "(pgGit is for development databases only)."
+                ),
+            ),
+            json_mode=False,
+        )
 
     try:
         generator = MigrationGenerator(conn)
         return generator, conn
     except PgGitNotAvailableError as e:
-        console.print(f"[red]{e}[/red]")
         conn.close()
-        raise typer.Exit(1) from e
+        fail(
+            ConfiturError(str(e), error_code="PRECON_1000"),
+            json_mode=False,
+        )
 
 
 @generate_app.command("from-branch")
@@ -452,8 +462,7 @@ def generate_from_branch(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error generating migrations: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(ConfiturError(f"Error generating migrations: {e}"), json_mode=False)
 
 
 @generate_app.command("preview")
@@ -527,8 +536,7 @@ def preview_generation(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error previewing: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(ConfiturError(f"Error previewing: {e}"), json_mode=False)
 
 
 @generate_app.command("diff")
@@ -567,9 +575,15 @@ def show_diff(
         conn = create_connection(config)
 
         if not is_pggit_available(conn):
-            console.print("[red]pgGit not available.[/red]")
             conn.close()
-            raise typer.Exit(1)
+            fail(
+                ConfiturError(
+                    "pgGit not available.",
+                    error_code="PRECON_1000",
+                    resolution_hint="Install it with `CREATE EXTENSION pggit CASCADE;`.",
+                ),
+                json_mode=False,
+            )
 
         client = PgGitClient(conn)
         diff = client.diff(base, branch)
@@ -601,8 +615,7 @@ def show_diff(
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(ConfiturError(f"Error: {e}"), json_mode=False)
 
 
 @generate_app.command("pgtap")
@@ -636,8 +649,10 @@ def generate_pgtap(
             )
             pgtap_file = gen.generate()
     except Exception as e:
-        console.print(f"[red]Error connecting to database: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfigurationError(f"Error connecting to database: {e}", error_code="CONFIG_006"),
+            json_mode=False,
+        )
 
     sql = pgtap_file.render()
 
@@ -676,8 +691,10 @@ def generate_stubs(
             gen = StubGenerator(conn, schema=schema, name_pattern=include)
             stub_file = gen.generate()
     except Exception as e:
-        console.print(f"[red]Error connecting to database: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(
+            ConfigurationError(f"Error connecting to database: {e}", error_code="CONFIG_006"),
+            json_mode=False,
+        )
 
     code = stub_file.render(output_format=output_format)
 

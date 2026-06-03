@@ -192,7 +192,7 @@ class TestAllocHappyPath:
 class TestAllocErrorPaths:
     """Tests for `generate alloc` validation failures."""
 
-    def test_nonexistent_target_exits_1(self, tmp_path: Path) -> None:
+    def test_nonexistent_target_is_config_error(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         schema.mkdir()
         target = schema / "does_not_exist"
@@ -202,9 +202,10 @@ class TestAllocErrorPaths:
             ["generate", "alloc", str(target), "--schema-dir", str(schema)],
         )
 
-        assert result.exit_code == 1
+        # Invalid allocation input → ConfigurationError → exit 5 (was 1).
+        assert result.exit_code == 5
 
-    def test_target_outside_schema_root_exits_1(self, tmp_path: Path) -> None:
+    def test_target_outside_schema_root_is_config_error(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         schema.mkdir()
         outside = tmp_path / "other"
@@ -215,7 +216,7 @@ class TestAllocErrorPaths:
             ["generate", "alloc", str(outside), "--schema-dir", str(schema)],
         )
 
-        assert result.exit_code == 1
+        assert result.exit_code == 5
 
     def test_error_message_on_nonexistent_dir(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
@@ -227,8 +228,9 @@ class TestAllocErrorPaths:
             ["generate", "alloc", str(target), "--schema-dir", str(schema)],
         )
 
-        assert result.exit_code == 1
-        assert "does not exist" in result.stdout
+        assert result.exit_code == 5
+        # Message is rendered to stderr via fail() (mixed into result.output).
+        assert "does not exist" in result.output
 
     def test_error_message_on_outside_schema(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
@@ -241,5 +243,5 @@ class TestAllocErrorPaths:
             ["generate", "alloc", str(outside), "--schema-dir", str(schema)],
         )
 
-        assert result.exit_code == 1
-        assert "not within schema root" in result.stdout
+        assert result.exit_code == 5
+        assert "not within schema root" in result.output

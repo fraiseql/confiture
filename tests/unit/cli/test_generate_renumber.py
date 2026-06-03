@@ -202,7 +202,7 @@ class TestRenumberHappyPath:
 
 
 class TestRenumberErrorPaths:
-    def test_nonexistent_source_exits_1(self, tmp_path: Path) -> None:
+    def test_nonexistent_source_is_config_error(self, tmp_path: Path) -> None:
         schema, funcs = _schema(tmp_path)
         old = funcs / "00001_missing.sql"
         new = funcs / "00002_missing.sql"
@@ -219,9 +219,10 @@ class TestRenumberErrorPaths:
             ],
         )
 
-        assert result.exit_code == 1, result.output
+        # Invalid renumber input → ConfigurationError → exit 5 (was 1).
+        assert result.exit_code == 5, result.output
 
-    def test_dangling_refs_exit_2(self, tmp_path: Path) -> None:
+    def test_dangling_refs_exit_1(self, tmp_path: Path) -> None:
         schema, funcs = _schema(tmp_path)
         old = funcs / "00001_create_item.sql"
         old.write_text("SELECT 1;")
@@ -242,4 +243,6 @@ class TestRenumberErrorPaths:
             ],
         )
 
-        assert result.exit_code == 2, result.output
+        # Dangling refs after rewrite → exit 1 (a "completed with findings"
+        # signal, like diff/lint), moved off the reserved exit 2.
+        assert result.exit_code == 1, result.output
