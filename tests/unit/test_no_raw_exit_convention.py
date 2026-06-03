@@ -45,8 +45,17 @@ _CLI_ROOT = Path(__file__).resolve().parents[2] / "python" / "confiture" / "cli"
 # ``fail()`` → lower the number here. Never raise a number to "make it pass" —
 # route the new failure through ``fail()`` instead.
 _ALLOWLIST: dict[str, int] = {
-    # ---- Phase 03 territory: the migrate_validate god-command decomposition ----
-    "commands/migrate_analysis.py": 26,  # TODO(phase-03): structural decomposition in progress
+    # ---- Phase 03: migrate_validate god-command fully decomposed ----
+    # migrate_validate now holds only success-signal Exit(1) gates (found
+    # drift / orphans / violations); its config/usage/connection failures route
+    # through fail(). The migrate fix/introspect/verify siblings were converted
+    # too. The residual count is: ~12 success-signals (validate gates +
+    # verify failed_count + introspect snapshots-domain) plus the still-legacy
+    # failure paths in three siblings — migrate diff (renders errors through its
+    # MigrateDiffResult domain formatter), migrate fix-signatures, and migrate
+    # preflight (already mostly fail()-routed via computed Exit(exit_code)).
+    # TODO(follow-up): finish diff / fix-signatures / preflight contract sweep.
+    "commands/migrate_analysis.py": 26,
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.
