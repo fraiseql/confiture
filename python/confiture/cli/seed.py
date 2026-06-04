@@ -212,18 +212,13 @@ def validate(
         "--full-execution",
         help="Run all levels 1-5, requires database (default: off)",
     ),
-    uuid_validation: bool = typer.Option(
-        False,
-        "--uuid-validation",
-        help="Enable seed enumerated UUID pattern validation (default: off)",
-    ),
 ) -> None:
     """Validate seed files for data consistency and quality.
 
     PROCESS:
       Checks for common issues (double semicolons, DDL statements, missing ON
-      CONFLICT). Optionally validates UUID patterns and prep-seed transformations
-      (5 validation levels). Supports auto-fix for common issues.
+      CONFLICT). Optionally validates prep-seed transformations (5 validation
+      levels). Supports auto-fix for common issues.
 
     EXAMPLES:
       confiture seed validate
@@ -262,8 +257,8 @@ def validate(
       AUTO-FIX: --fix, --dry-run
         Automatically fix detected issues (with dry-run preview)
 
-      ADVANCED: --env, --all-envs, --database-url, --uuid-validation
-        Multi-environment validation and advanced pattern checking
+      ADVANCED: --env, --all-envs, --database-url
+        Multi-environment validation
     """
     try:
         # Handle prep-seed validation if requested
@@ -280,13 +275,6 @@ def validate(
                 fix=fix,
                 dry_run=dry_run,
             )
-
-        # Handle UUID validation if requested
-        if uuid_validation:
-            console.print("[blue]ℹ UUID Validation Support[/blue]")
-            console.print("  UUID validation is available via Level 1 of prep-seed validation.")
-            console.print("  Use: confiture seed validate --prep-seed --static-only")
-            raise typer.Exit(0)
 
         # Determine which directories to validate
         dirs_to_validate: list[tuple[Path, str]] = []
