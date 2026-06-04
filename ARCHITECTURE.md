@@ -157,9 +157,7 @@ A package providing PostgreSQL introspection beyond tables and columns, used as 
 | `seed/`, `seed_executor.py`, `seed_applier.py`, `seed_validation/` | 5-level seed validation system with SAVEPOINT isolation |
 | `locking.py` | PostgreSQL advisory locking for safe concurrent operations |
 | `hooks/` | Migration lifecycle hooks (pre/post migration) |
-| `observability/`, `metrics.py`, `metrics_aggregator.py` | Metrics and observability |
 | `blue_green.py` | Blue-green deployment support |
-| `risk/` | Migration risk assessment |
 | `security/` | Security validation utilities |
 | `error_codes.py` | `ErrorCodeDefinition`, `ErrorCodeRegistry` — structured error codes with exit codes |
 | `error_handler.py`, `error_context.py` | Error handling utilities |

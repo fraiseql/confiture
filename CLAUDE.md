@@ -218,7 +218,6 @@ confiture/
 │   │   ├── anonymization/       # PII anonymization strategies
 │   │   ├── hooks/               # Migration lifecycle hooks
 │   │   ├── idempotency/         # Idempotency analysis and fixing
-│   │   ├── risk/                # Migration risk assessment
 │   │   └── security/            # Security validation
 │   │
 │   ├── config/
