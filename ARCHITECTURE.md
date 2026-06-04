@@ -324,6 +324,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 | Package | Extra | Purpose |
 |---------|-------|---------|
 | `pglast` | `ast` | PostgreSQL SQL AST parsing (via libpg_query) |
+| `fraiseql-uuid` | `seed-uuid` | Canonical structured pattern-UUID convention for seed-validation (see Decision 8) |
 
 ### Dev / Testing Dependencies
 
@@ -388,6 +389,42 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 **Choice**: `core/introspection/` provides `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`, and `sql_ast` as a reusable package.
 
 **Rationale**: Multiple CLI commands (`migrate introspect`, code generation features) need PostgreSQL function and type metadata. A shared layer avoids duplicating `pg_catalog` queries and provides a stable API for future code generation features (GraphQL resolver stubs, type-safe wrappers, etc.).
+
+---
+
+### Decision 8: Confiture's place in the FraiseQL stack — Python 1.x, a planned Rust 2.x port, and an ops-path-only role
+
+Confiture is the **migration engine** of the FraiseQL stack. Three facts about its
+position are easy to conflate, so they are pinned here:
+
+**1. The 1.x line is Python; a Rust 2.x port is a planned, *scoped* milestone.**
+The current Confiture is the stable **1.x** Python line. The eventual Rust port
+becomes **2.x**: a planned, scoped milestone for **Q3–Q4 2027** (a focused 2–3
+month project, *not* v1.0-blocking), per
+[`fraise-stack/ROADMAP.md`](https://github.com/fraiseql/fraise-stack) (2026-05-31
+decision log). The port's intended shape is a **standalone Confiture Rust crate
+that `fraisier-core` embeds as a library** — the fraisier adapter is already
+designed for that eventual library embed — *not* folding migration logic into
+`fraisier-core`. Confiture keeps its identity and ownership across the port.
+
+**2. The optional `confiture-core` PyO3 crate is a perf accelerator, NOT the port.**
+The repo ships a small optional Rust extension (`confiture-core`, a `cdylib` PyO3
+module exposing `build_schema` + `hash_files` for a file-IO speedup). It is a
+**performance accelerator for the Python package** and has nothing to do with the
+2.x port — different purpose, different scope. Contributors must not treat it as
+the start of the Rust port or begin divergent Rust migration-engine work in it.
+
+**3. Confiture is an ops-path concern, reached via fraisier — not the data path.**
+Confiture runs at deploy/migration time. It is invoked by **fraisier** (the deploy
+engine) through the native in-process
+[`fraisier-adapter-confiture`](./docs/reference/fraisier-adapter-contract.md), and
+is also an optional `fraiseql-data` extra. There is deliberately **no**
+`fraiseql`-core dependency on confiture: the GraphQL engine's request path never
+touches it. This ops-path-only coupling is the intended end state.
+
+> The stack-wide map in `fraiseql-ecosystem/README.md` (2026-01-01) predates the
+> Rust reshape and omits fraisier + SpecQL; `fraise-stack/ROADMAP.md` (2026-05-31)
+> is the current source of truth and supersedes it.
 
 ---
 

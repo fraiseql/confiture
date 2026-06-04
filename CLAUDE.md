@@ -162,6 +162,16 @@ tokio-postgres = "0.7"    # PostgreSQL driver
 sha2 = "0.10"             # Hashing
 ```
 
+> ⚠️ **`confiture-core` (this PyO3 crate) is a performance accelerator for the
+> Python package, NOT the start of a Rust rewrite.** Confiture's **1.x line is
+> Python**; a full **Rust 2.x port** is a separate, planned, scoped milestone for
+> **Q3–Q4 2027** (per `fraise-stack/ROADMAP.md`), shaped as a standalone crate
+> that `fraisier-core` embeds — not a fold-in. Do not begin divergent Rust
+> migration-engine work in this crate or conflate it with the port. Confiture is
+> also an **ops-path-only** concern (invoked by fraisier at deploy time via the
+> [fraisier adapter contract](./docs/reference/fraisier-adapter-contract.md));
+> there is no `fraiseql`-core dependency on it. See ARCHITECTURE.md Decision 8.
+
 ---
 
 ## 📁 Project Structure
