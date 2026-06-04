@@ -93,3 +93,19 @@ def test_every_lazy_import_is_advertised() -> None:
     """Every ``_LAZY_IMPORTS`` key appears in ``__all__`` (no hidden exports)."""
     missing = [name for name in _LAZY_IMPORTS if name not in confiture.__all__]
     assert not missing, f"_LAZY_IMPORTS keys missing from __all__: {missing}"
+
+
+def test_every_lazy_import_resolves() -> None:
+    """Every ``_LAZY_IMPORTS`` symbol actually imports from its target module.
+
+    Direct reachability check: each lazy entry's ``(module, attr)`` pair must
+    load — a stale module path or renamed symbol fails here, not at a user's
+    first ``from confiture import X``.
+    """
+    broken: list[str] = []
+    for name in _LAZY_IMPORTS:
+        try:
+            assert getattr(confiture, name) is not None
+        except (AttributeError, ImportError):
+            broken.append(name)
+    assert not broken, f"_LAZY_IMPORTS symbols that fail to resolve: {broken}"
