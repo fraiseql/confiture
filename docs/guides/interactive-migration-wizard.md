@@ -443,17 +443,31 @@ confiture migrate up --non-interactive
 **Solution**: Check collaborative settings:
 
 ```python
-# In confiture_hooks.py
+import os
 
-@register_hook('pre_execute')
-def check_permissions(context: HookContext) -> None:
-    """Ensure user has permission."""
-    import os
-    user = os.getenv('USER')
-    required_role = context.migration.metadata.get('required_role')
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-    if required_role and not has_role(user, required_role):
-        raise PermissionError(f"User {user} cannot apply {required_role} migrations")
+
+class CheckPermissions(Hook[ExecutionContext]):
+    """Fail the migration unless the operator holds the required role."""
+
+    def __init__(self, required_role: str | None = None) -> None:
+        super().__init__(hook_id="check.permissions", name="Check Permissions", priority=1)
+        self._required_role = required_role
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        user = os.getenv("USER")
+        if self._required_role and not has_role(user, self._required_role):
+            return HookResult(
+                success=False,
+                error=f"User {user} cannot apply {self._required_role} migrations",
+            )
+        return HookResult(success=True)
+
+
+# Register on the migrator before running:
+#   m.register_hook(HookPhase.BEFORE_EXECUTE, CheckPermissions(required_role="dba"))
 ```
 
 ---

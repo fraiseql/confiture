@@ -44,17 +44,37 @@ audit:
 
 ### Audit Hook Example
 
+For tamper-evident audit rows, register the built-in
+[`AuditHook`](../api/hooks.md#built-in-hooks). For a custom audit log, write a
+hook over the real API:
+
 ```python
-@register_hook('post_execute')
-def hipaa_audit_log(context: HookContext) -> None:
-    audit_event = {
-        'event_type': 'migration_success',
-        'migration': context.migration_name,
-        'user_id': os.environ.get('USER'),
-        'timestamp': datetime.utcnow().isoformat(),
-        'tables_modified': [t.name for t in context.tables] if context.tables else [],
-    }
-    audit_logger.info(json.dumps(audit_event))
+import json
+import logging
+
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
+
+audit_logger = logging.getLogger("hipaa.audit")
+
+
+class HipaaAuditLog(Hook[ExecutionContext]):
+    def __init__(self) -> None:
+        super().__init__(hook_id="hipaa.audit", name="HIPAA Audit Log", priority=8)
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        audit_event = {
+            "event_type": "migration_success"
+            if data.metadata.get("success")
+            else "migration_failure",
+            "migration": data.metadata.get("migration_name"),
+            "executed_by": data.metadata.get("executed_by"),
+            "timestamp": context.timestamp.isoformat(),
+            "duration_ms": data.elapsed_time_ms,
+        }
+        audit_logger.info(json.dumps(audit_event))
+        return HookResult(success=True)
 ```
 
 ### Compliance Checklist
@@ -92,20 +112,36 @@ Auditor    |    -     |    -    |    -    |   X   |
 
 ### Reconciliation Hook
 
+Returning `HookResult(success=False, ...)` aborts the migration run — the way to
+enforce a post-condition like GL reconciliation:
+
 ```python
-@register_hook('post_execute')
-def sox_reconcile_gl(context: HookContext) -> None:
-    source_balance = float(os.environ.get('SOURCE_GL_BALANCE', 0))
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-    with psycopg.connect(context.database_url) as conn:
-        cursor = conn.execute("""
-            SELECT SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE -amount END)
-            FROM general_ledger WHERE fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)
-        """)
-        target_balance = cursor.fetchone()[0] or 0
 
-    if abs(source_balance - target_balance) > 0.01:
-        raise ValueError(f"GL mismatch: ${source_balance} vs ${target_balance}")
+class SoxReconcileGL(Hook[ExecutionContext]):
+    def __init__(self, database_url: str, source_balance: float) -> None:
+        super().__init__(hook_id="sox.reconcile", name="SOX GL Reconciliation", priority=9)
+        self._database_url = database_url
+        self._source_balance = source_balance
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        import psycopg
+
+        with psycopg.connect(self._database_url) as conn:
+            cursor = conn.execute("""
+                SELECT SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE -amount END)
+                FROM general_ledger WHERE fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)
+            """)
+            target_balance = cursor.fetchone()[0] or 0
+
+        if abs(self._source_balance - target_balance) > 0.01:
+            return HookResult(
+                success=False,
+                error=f"GL mismatch: ${self._source_balance} vs ${target_balance}",
+            )
+        return HookResult(success=True)
 ```
 
 ### Compliance Checklist
@@ -212,8 +248,8 @@ Multi-tenant systems must maintain **tenant isolation** during migrations.
 
 ```python
 class TenantMigration:
-    def migrate_tenant(self, tenant_id: str, context: HookContext):
-        with psycopg.connect(context.database_url) as conn:
+    def migrate_tenant(self, tenant_id: str, database_url: str) -> bool:
+        with psycopg.connect(database_url) as conn:
             with conn.transaction():
                 # Verify tenant exists
                 cursor = conn.execute(
@@ -233,14 +269,14 @@ class TenantMigration:
 ### Per-Tenant Rollback
 
 ```python
-def rollback_tenant(tenant_id: str, context: HookContext):
+def rollback_tenant(tenant_id: str, database_url: str, migration: str) -> None:
     """Rollback single tenant without affecting others."""
-    with psycopg.connect(context.database_url) as conn:
+    with psycopg.connect(database_url) as conn:
         cursor = conn.execute("""
             SELECT rollback_sql FROM migration_audit
             WHERE tenant_id = %s AND migration = %s
             ORDER BY executed_at DESC
-        """, (tenant_id, context.migration_name))
+        """, (tenant_id, migration))
 
         for row in cursor.fetchall():
             conn.execute(row[0])

@@ -363,68 +363,79 @@ schema-conflict-check:
 
 ---
 
-## Slack Integration
+## Hook-based integrations
 
-### Webhook Notifications
+The notification and monitoring integrations below are all **migration hooks**:
+a class subclassing `Hook[ExecutionContext]` that you register on a `Migrator`
+(see the [Hook API Reference](../api/hooks.md)). Each reads run data from the
+context and posts it somewhere. The shared shape:
+
+```python
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
+
+
+class MyIntegration(Hook[ExecutionContext]):
+    def __init__(self) -> None:
+        super().__init__(hook_id="my.integration", name="My Integration", priority=7)
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        name = data.metadata.get("migration_name")
+        ok = data.metadata.get("success")
+        error = data.metadata.get("error")
+        # ... post to the external system ...
+        return HookResult(success=True)  # best-effort: don't fail the migration
+```
+
+Register it once on `HookPhase.AFTER_EXECUTE` — it fires on both success and
+failure, so branch on `data.metadata["success"]` rather than relying on a
+separate error phase.
+
+## Slack Integration
 
 ```python
 import requests
-from confiture.hooks import register_hook, HookContext
 
-SLACK_WEBHOOK = os.environ.get('SLACK_WEBHOOK_URL')
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-@register_hook('post_execute')
-def notify_slack(context: HookContext) -> None:
-    if context.environment != "production":
-        return
 
-    message = {
-        "blocks": [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": "Migration Completed"}
-            },
-            {
-                "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": f"*Migration:*\n{context.migration.name}"},
-                    {"type": "mrkdwn", "text": f"*Duration:*\n{context.duration_ms}ms"},
-                    {"type": "mrkdwn", "text": f"*Environment:*\n{context.environment}"},
-                    {"type": "mrkdwn", "text": f"*Status:*\n:white_check_mark: Success"}
-                ]
-            }
-        ]
-    }
+class SlackNotify(Hook[ExecutionContext]):
+    def __init__(self, webhook_url: str, environment: str = "production") -> None:
+        super().__init__(hook_id="slack.notify", name="Slack Notify", priority=7)
+        self._webhook = webhook_url
+        self._environment = environment
 
-    requests.post(SLACK_WEBHOOK, json=message, timeout=10)
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        ok = data.metadata.get("success")
+        name = data.metadata.get("migration_name")
+        if ok:
+            header = "Migration Completed"
+            body = {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*Migration:*\n{name}"},
+                {"type": "mrkdwn", "text": f"*Duration:*\n{data.elapsed_time_ms}ms"},
+                {"type": "mrkdwn", "text": "*Status:*\n:white_check_mark: Success"},
+            ]}
+        else:
+            header = ":x: Migration Failed"
+            body = {"type": "section", "text": {
+                "type": "mrkdwn",
+                "text": f"```{str(data.metadata.get('error'))[:500]}```",
+            }}
+        message = {"blocks": [
+            {"type": "header", "text": {"type": "plain_text", "text": header}},
+            body,
+        ]}
+        try:
+            requests.post(self._webhook, json=message, timeout=10)
+        except requests.RequestException:
+            pass  # never let a notification failure abort the migration
+        return HookResult(success=True)
 ```
 
-### Error Notifications
-
-```python
-@register_hook('on_error')
-def notify_slack_error(context: HookContext, error: Exception) -> None:
-    message = {
-        "blocks": [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": ":x: Migration Failed"}
-            },
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": f"```{str(error)[:500]}```"}
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {"type": "mrkdwn", "text": f"Migration: {context.migration.name}"}
-                ]
-            }
-        ]
-    }
-
-    requests.post(SLACK_WEBHOOK, json=message, timeout=10)
-```
+Register: `m.register_hook(HookPhase.AFTER_EXECUTE, SlackNotify(webhook_url))`.
 
 ### Approval Workflow
 
@@ -462,7 +473,9 @@ def request_approval(migration_name: str, channel: str) -> str:
 
 ```python
 from prometheus_client import Counter, Histogram, Gauge, start_http_server
-from confiture.hooks import register_hook, HookContext
+
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
 # Metrics
 MIGRATIONS_TOTAL = Counter(
@@ -487,23 +500,20 @@ PENDING_MIGRATIONS = Gauge(
 # Start metrics server
 start_http_server(9090)
 
-@register_hook('post_execute')
-def record_metrics(context: HookContext) -> None:
-    MIGRATIONS_TOTAL.labels(
-        environment=context.environment,
-        status='success'
-    ).inc()
 
-    MIGRATION_DURATION.labels(
-        migration_name=context.migration.name
-    ).observe(context.duration_ms / 1000)
+class PrometheusMetrics(Hook[ExecutionContext]):
+    def __init__(self, environment: str = "production") -> None:
+        super().__init__(hook_id="prometheus.metrics", name="Prometheus", priority=8)
+        self._environment = environment
 
-@register_hook('on_error')
-def record_failure(context: HookContext, error: Exception) -> None:
-    MIGRATIONS_TOTAL.labels(
-        environment=context.environment,
-        status='failure'
-    ).inc()
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        status = "success" if data.metadata.get("success") else "failure"
+        MIGRATIONS_TOTAL.labels(environment=self._environment, status=status).inc()
+        MIGRATION_DURATION.labels(
+            migration_name=data.metadata.get("migration_name")
+        ).observe(data.elapsed_time_ms / 1000)
+        return HookResult(success=True)
 ```
 
 ### Grafana Dashboard
@@ -544,17 +554,21 @@ def record_failure(context: HookContext, error: Exception) -> None:
 ```python
 from datadog import statsd
 
-@register_hook('post_execute')
-def datadog_metrics(context: HookContext) -> None:
-    statsd.increment(
-        'confiture.migrations.completed',
-        tags=[f'env:{context.environment}', f'migration:{context.migration.name}']
-    )
-    statsd.histogram(
-        'confiture.migrations.duration',
-        context.duration_ms,
-        tags=[f'env:{context.environment}']
-    )
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
+
+
+class DatadogMetrics(Hook[ExecutionContext]):
+    def __init__(self, environment: str = "production") -> None:
+        super().__init__(hook_id="datadog.metrics", name="Datadog", priority=8)
+        self._environment = environment
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        tags = [f"env:{self._environment}", f"migration:{data.metadata.get('migration_name')}"]
+        statsd.increment("confiture.migrations.completed", tags=tags)
+        statsd.histogram("confiture.migrations.duration", data.elapsed_time_ms, tags=tags)
+        return HookResult(success=True)
 ```
 
 ### AWS CloudWatch
@@ -562,82 +576,89 @@ def datadog_metrics(context: HookContext) -> None:
 ```python
 import boto3
 
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
+
 cloudwatch = boto3.client('cloudwatch')
 
-@register_hook('post_execute')
-def cloudwatch_metrics(context: HookContext) -> None:
-    cloudwatch.put_metric_data(
-        Namespace='Confiture',
-        MetricData=[
-            {
-                'MetricName': 'MigrationDuration',
-                'Value': context.duration_ms,
-                'Unit': 'Milliseconds',
-                'Dimensions': [
-                    {'Name': 'Environment', 'Value': context.environment},
-                    {'Name': 'Migration', 'Value': context.migration.name}
-                ]
-            }
-        ]
-    )
+
+class CloudWatchMetrics(Hook[ExecutionContext]):
+    def __init__(self, environment: str = "production") -> None:
+        super().__init__(hook_id="cloudwatch.metrics", name="CloudWatch", priority=8)
+        self._environment = environment
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        cloudwatch.put_metric_data(
+            Namespace="Confiture",
+            MetricData=[{
+                "MetricName": "MigrationDuration",
+                "Value": data.elapsed_time_ms,
+                "Unit": "Milliseconds",
+                "Dimensions": [
+                    {"Name": "Environment", "Value": self._environment},
+                    {"Name": "Migration", "Value": data.metadata.get("migration_name")},
+                ],
+            }],
+        )
+        return HookResult(success=True)
 ```
 
 ---
 
 ## PagerDuty Alerting
 
-### Events API v2
+### Events API v2 (trigger on failure, resolve on success)
+
+A single `AFTER_EXECUTE` hook triggers an incident when a migration fails and
+auto-resolves it on success — keyed on a stable `dedup_key`:
 
 ```python
 import requests
-from confiture.hooks import register_hook, HookContext
 
-PAGERDUTY_KEY = os.environ.get('PAGERDUTY_ROUTING_KEY')
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-@register_hook('on_error')
-def pagerduty_alert(context: HookContext, error: Exception) -> None:
-    if context.environment != "production":
-        return
+PAGERDUTY_URL = "https://events.pagerduty.com/v2/enqueue"
 
-    payload = {
-        "routing_key": PAGERDUTY_KEY,
-        "event_action": "trigger",
-        "dedup_key": f"confiture-{context.migration.name}",
-        "payload": {
-            "summary": f"Migration failed: {context.migration.name}",
-            "severity": "critical",
-            "source": "confiture",
-            "custom_details": {
-                "migration": context.migration.name,
-                "error": str(error)[:1000],
-                "environment": context.environment
+
+class PagerDutyAlert(Hook[ExecutionContext]):
+    def __init__(self, routing_key: str, environment: str = "production") -> None:
+        super().__init__(hook_id="pagerduty.alert", name="PagerDuty", priority=8)
+        self._routing_key = routing_key
+        self._environment = environment
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        name = data.metadata.get("migration_name")
+        dedup_key = f"confiture-{name}"
+        if data.metadata.get("success"):
+            payload = {
+                "routing_key": self._routing_key,
+                "event_action": "resolve",
+                "dedup_key": dedup_key,
             }
-        }
-    }
-
-    requests.post(
-        "https://events.pagerduty.com/v2/enqueue",
-        json=payload,
-        timeout=10
-    )
-```
-
-### Auto-Resolve on Success
-
-```python
-@register_hook('post_execute')
-def pagerduty_resolve(context: HookContext) -> None:
-    payload = {
-        "routing_key": PAGERDUTY_KEY,
-        "event_action": "resolve",
-        "dedup_key": f"confiture-{context.migration.name}"
-    }
-
-    requests.post(
-        "https://events.pagerduty.com/v2/enqueue",
-        json=payload,
-        timeout=10
-    )
+        else:
+            payload = {
+                "routing_key": self._routing_key,
+                "event_action": "trigger",
+                "dedup_key": dedup_key,
+                "payload": {
+                    "summary": f"Migration failed: {name}",
+                    "severity": "critical",
+                    "source": "confiture",
+                    "custom_details": {
+                        "migration": name,
+                        "error": str(data.metadata.get("error"))[:1000],
+                        "environment": self._environment,
+                    },
+                },
+            }
+        try:
+            requests.post(PAGERDUTY_URL, json=payload, timeout=10)
+        except requests.RequestException:
+            pass
+        return HookResult(success=True)
 ```
 
 ---
@@ -648,26 +669,35 @@ def pagerduty_resolve(context: HookContext) -> None:
 
 ```python
 import requests
-from confiture.hooks import register_hook, HookContext
 
-@register_hook('post_execute')
-def send_webhook(context: HookContext) -> None:
-    webhook_url = os.environ.get('WEBHOOK_URL')
-    if not webhook_url:
-        return
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-    payload = {
-        "event": "migration.completed",
-        "timestamp": datetime.utcnow().isoformat(),
-        "data": {
-            "migration": context.migration.name,
-            "version": context.migration.version,
-            "environment": context.environment,
-            "duration_ms": context.duration_ms
+
+class WebhookNotify(Hook[ExecutionContext]):
+    def __init__(self, webhook_url: str, environment: str = "production") -> None:
+        super().__init__(hook_id="webhook.notify", name="Webhook", priority=7)
+        self._url = webhook_url
+        self._environment = environment
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        payload = {
+            "event": "migration.completed" if data.metadata.get("success")
+            else "migration.failed",
+            "timestamp": context.timestamp.isoformat(),
+            "data": {
+                "migration": data.metadata.get("migration_name"),
+                "version": data.metadata.get("migration_version"),
+                "environment": self._environment,
+                "duration_ms": data.elapsed_time_ms,
+            },
         }
-    }
-
-    requests.post(webhook_url, json=payload, timeout=30)
+        try:
+            requests.post(self._url, json=payload, timeout=30)
+        except requests.RequestException:
+            pass
+        return HookResult(success=True)
 ```
 
 ### Signed Webhooks
@@ -695,19 +725,8 @@ def send_signed_webhook(url: str, payload: dict, secret: str) -> None:
     )
 ```
 
-### Webhook Configuration
-
-```yaml
-# confiture.yaml
-webhooks:
-  - url: https://api.example.com/migrations
-    events: [post_execute, on_error]
-    secret: ${WEBHOOK_SECRET}
-    timeout: 30
-    retry:
-      max_attempts: 3
-      backoff: exponential
-```
+> There is no YAML webhook configuration — webhooks (and every integration on
+> this page) are registered as hooks in Python via `Migrator.register_hook`.
 
 ---
 
@@ -731,31 +750,38 @@ requests.post(url, json=data)              # Bad - can hang forever
 
 ### 3. Handle Failures Gracefully
 
+Best-effort hooks should swallow their own errors and still return
+`HookResult(success=True)` — a flaky webhook must not abort the migration:
+
 ```python
-@register_hook('post_execute')
-def safe_notification(context: HookContext) -> None:
+async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
     try:
-        send_notification(context)
-    except Exception as e:
-        # Log but don't fail the migration
-        logger.warning(f"Notification failed: {e}")
+        await send_notification(context)
+    except Exception as exc:  # log, but don't fail the migration
+        logging.getLogger(__name__).warning("notification failed: %s", exc)
+    return HookResult(success=True)
 ```
+
+(Conversely, a real post-condition check should return
+`HookResult(success=False, error=...)` to stop the run.)
 
 ### 4. Filter by Environment
 
+`ExecutionContext` carries no environment field — pass it to the hook's
+constructor and branch on `self._environment`:
+
 ```python
-@register_hook('post_execute')
-def production_only(context: HookContext) -> None:
-    if context.environment != "production":
-        return  # Skip for dev/staging
-    # ... send notification
+def __init__(self, environment: str = "production") -> None:
+    super().__init__(hook_id="notify", name="Notify", priority=7)
+    self._environment = environment
+    # ... in execute(): if self._environment != "production": return HookResult(success=True)
 ```
 
 ### 5. Deduplicate Alerts
 
 ```python
-# Use consistent dedup keys to prevent alert storms
-"dedup_key": f"confiture-{context.migration.name}"
+# Use a stable dedup key (the migration name from context metadata)
+dedup_key = f"confiture-{context.get_data().metadata.get('migration_name')}"
 ```
 
 ---

@@ -2,13 +2,19 @@
 
 [← Back to API Reference](index.md)
 
-**Stability**: Stable ✅
+**Stability**: Library API (callback-driven) 🧩
 
 ---
 
 ## Overview
 
-The Hook API enables you to extend Confiture migrations with custom logic at key lifecycle points. Hooks allow you to validate data, log events, integrate with external systems, or implement custom business logic before and after migrations.
+The Hook API lets you run custom logic at points in a migration's lifecycle —
+back up before a migration, audit after one, notify on completion, or fail a
+migration when a post-condition doesn't hold.
+
+A hook is a small **class** you register on a `Migrator`. It is a **library
+API**: there is no CLI surface and no config-file registration — you register
+hooks in Python on the migrator instance you drive.
 
 **Tagline**: *Extend migrations with custom logic at critical points*
 
@@ -63,636 +69,247 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 
 ---
 
-## What is a Hook?
+## What is a hook?
 
-A Hook is a Python function registered to execute at a specific point in the migration lifecycle. Hooks have access to the migration context (tables, columns, status) and can:
-- Validate data before or after migrations
-- Log events to external systems
-- Trigger notifications (Slack, email, webhooks)
-- Implement custom compliance checks
-- Coordinate with external systems
+A hook is a class that subclasses `Hook[T]` and implements one **async** method,
+`execute`, returning a `HookResult`:
 
-**Key Concept**: Hooks are synchronous, blocking operations. Keep them fast (<1 second) for best performance.
+<!-- doctest:hook-shape -->
+```python
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
+
+
+class MyHook(Hook[ExecutionContext]):
+    def __init__(self) -> None:
+        super().__init__(hook_id="my.hook", name="My Hook", priority=5)
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()  # the phase payload (ExecutionContext here)
+        ...
+        return HookResult(success=True)
+```
+
+- `Hook[T]` is generic over the **phase payload type** `T`. For the execute
+  phases that payload is `ExecutionContext`.
+- `__init__` sets a stable `hook_id`, a human `name`, and a `priority`
+  (`1`–`10`, **lower runs first**; default `5`). An optional `depends_on` lists
+  hook ids that must have run first.
+- `execute` is `async` and returns a `HookResult` — see
+  [Returning a result](#returning-a-result-and-failing-a-migration).
 
 ---
 
-## Why Use Hooks?
+## Lifecycle phases
 
-### Common Use Cases
+Phases are members of the `HookPhase` enum (`from confiture.core.hooks import
+HookPhase`), **not** strings:
 
-1. **Data Validation**
-   - Check data integrity before/after migrations
-   - Validate business rules are enforced
-   - Detect anomalies early
+| Phase | When |
+|-------|------|
+| `HookPhase.BEFORE_EXECUTE` | Immediately before a migration's SQL runs |
+| `HookPhase.AFTER_EXECUTE`  | Immediately after a migration runs (success *or* failure — check `metadata["success"]`) |
 
-2. **Monitoring & Logging**
-   - Log migration events to central system
-   - Track performance metrics
-   - Send alerts on failures
-
-3. **Notifications**
-   - Notify teams via Slack
-   - Send emails to stakeholders
-   - Update status dashboards
-
-4. **Compliance & Auditing**
-   - Record all migrations for audit trails
-   - Verify compliance requirements
-   - Track who changed what
-
-5. **Integration**
-   - Coordinate with CI/CD pipelines
-   - Trigger related processes
-   - Sync with external databases
+> **What actually fires today:** `migrate up` / `migrate down` trigger only
+> **`BEFORE_EXECUTE`** and **`AFTER_EXECUTE`** (once per migration, on both the
+> up and down paths). The `HookPhase` enum defines further lifecycle members
+> (`BEFORE_PLAN_MIGRATION`, `BEFORE_VALIDATE`, `BEFORE_ROLLBACK`, `*_REBUILD`,
+> …) for the broader hook framework, but the migrator does not emit them yet.
+> Register on the two execute phases for behavior you can rely on now.
 
 ---
 
-## When to Use Hooks
+## The context object
 
-**✅ Good Use Cases**:
-- Notifications (send messages when migrations complete)
-- Quick validations (check row counts match)
-- Logging (record events for audit)
-- External integrations (webhook calls)
-- Compliance checks (HIPAA audit logs)
+`execute` receives a `HookContext[T]`. The useful members:
 
-**❌ Don't Use Hooks For**:
-- Complex data transformations (use migrations instead)
-- Long-running operations (> 5 seconds)
-- Parallel processing (hooks are synchronous)
-- Resource-intensive operations (use separate jobs)
+| Member | Meaning |
+|--------|---------|
+| `context.get_data()` (or `context.data`) | The phase payload `T` (an `ExecutionContext` for the execute phases) |
+| `context.phase` | The `HookPhase` that fired |
+| `context.execution_id` | A `UUID` correlation id for this trigger (for tracing) |
+| `context.timestamp` | UTC `datetime` the context was created |
 
-**Pro Tip**: For complex logic, call external services from hooks rather than doing heavy computation in the hook itself.
+For `BEFORE_EXECUTE` / `AFTER_EXECUTE` the payload is an `ExecutionContext`:
 
----
+| Field | Meaning |
+|-------|---------|
+| `elapsed_time_ms` | Execution time so far (0 in `BEFORE_EXECUTE`) |
+| `rows_affected` | Rows affected (when known) |
+| `steps_completed` / `total_steps` | Progress counters |
+| `metadata` | A `dict` the migrator fills with the keys below |
 
-## Hook Lifecycle & Trigger Points
-
-### Available Hook Points
-
-```
-Migration Execution Timeline:
-│
-├─ pre_validate ──────────► Runs before schema validation
-├─ post_validate ─────────► Runs after schema validation
-├─ pre_execute ──────────► Runs before migration execution
-├─ post_execute ─────────► Runs after migration execution
-└─ on_error ─────────────► Runs if migration fails
-```
-
-### Hook Trigger Reference
-
-| Hook Point | When Triggered | Use Case |
-|-----------|----------------|----------|
-| `pre_validate` | Before schema validation | Pre-flight checks |
-| `post_validate` | After validation passes | Log validation success |
-| `pre_execute` | Before migration starts | Notify teams starting |
-| `post_execute` | After migration succeeds | Send completion alert |
-| `on_error` | When migration fails | Error notification |
+The migrator populates `metadata` with: `migration_name`, `migration_version`,
+`direction` (`"up"`), `success` (`bool`), `error` (`str | None`), and
+`executed_by`.
 
 ---
 
-## Function Signature
+## Registering hooks
 
-### Basic Hook Definition
+Register hook **instances** on a `Migrator` via `register_hook(phase, hook)`:
 
+<!-- doctest:registering -->
 ```python
-from confiture.hooks import register_hook, HookContext
+from confiture import HookPhase, Migrator
 
-@register_hook('post_execute')
-def my_migration_hook(context: HookContext) -> None:
-    """
-    Custom hook executed after migration completes.
-
-    Args:
-        context: HookContext with migration information
-
-    Returns:
-        None (blocking call)
-
-    Raises:
-        HookError: If hook execution fails (stops migration)
-    """
-    pass
+with Migrator.from_config("db/environments/prod.yaml") as m:
+    m.register_hook(HookPhase.AFTER_EXECUTE, MyHook())
+    # Register more than one for the same phase; they run in priority order
+    # (lower number first), then registration order to break ties.
+    m.register_hook(HookPhase.AFTER_EXECUTE, AnotherHook())
+    m.up()
 ```
 
-### Parameters
-
-**hook_point** (str): One of:
-- `'pre_validate'` - Before schema validation
-- `'post_validate'` - After successful validation
-- `'pre_execute'` - Before migration execution
-- `'post_execute'` - After successful migration
-- `'on_error'` - On migration failure
+`MigratorSession` (the object yielded by `Migrator.from_config(...)`) exposes the
+same `register_hook` — register before calling `up()` / `down()`.
 
 ---
 
-## HookContext Object
+## Returning a result, and failing a migration
 
-The `HookContext` object provides information about the migration.
-
-### Context Attributes
+`execute` returns a `HookResult`:
 
 ```python
-@dataclass
-class HookContext:
-    # Migration Information
-    migration_name: str          # e.g., "20260403120000_create_users_table"
-    migration_version: str       # e.g., "20260403120000"
-    environment: str             # e.g., "production"
-
-    # Database Information
-    database_url: str            # PostgreSQL connection string
-    schema_name: str             # Target schema (default "public")
-    tables: list[TableInfo]      # Tables involved in migration
-
-    # Execution Details
-    start_time: datetime          # When migration started
-    end_time: datetime | None     # When it ended (None if running)
-    duration: timedelta | None    # Total duration
-    status: str                   # 'running', 'success', 'error'
-
-    # Results
-    rows_affected: int | None     # Rows changed (if applicable)
-    error: Exception | None       # Exception if failed (on_error only)
-
-    # Custom Data
-    metadata: dict[str, Any]      # Custom metadata from migration
+HookResult(success=True, rows_affected=0, stats=None, error=None)
 ```
 
-### TableInfo Details
+- `success=True` — the hook is done; `stats` may carry arbitrary diagnostics.
+- `success=False` (or raising `HookError`) — the hook **failed**. Confiture
+  raises a `HookError`, which **aborts the migration run**. Use this to enforce
+  post-conditions.
 
+<!-- doctest:failing -->
 ```python
-@dataclass
-class TableInfo:
-    name: str                     # Table name
-    action: str                   # 'create', 'alter', 'drop'
-    columns: list[ColumnInfo]     # Column details
-    rows_before: int | None       # Row count before
-    rows_after: int | None        # Row count after
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
+
+
+class PostconditionHook(Hook[ExecutionContext]):
+    def __init__(self) -> None:
+        super().__init__(hook_id="check.rowcount", name="Row-count check", priority=9)
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        if not data.metadata.get("success", False):
+            # The migration itself failed — don't add noise.
+            return HookResult(success=True)
+        if data.rows_affected == 0:
+            return HookResult(success=False, error="Expected rows to change")
+        return HookResult(success=True, stats={"rows": data.rows_affected})
 ```
 
-### ColumnInfo Details
-
-```python
-@dataclass
-class ColumnInfo:
-    name: str                     # Column name
-    data_type: str               # PostgreSQL type
-    nullable: bool               # NOT NULL constraint
-    default: str | None          # Default value
-```
+`HookError` carries `hook_id`, `hook_name`, `phase`, and the originating `cause`
+for diagnostics (`from confiture.core.hooks import HookError`).
 
 ---
 
-## Registering Hooks
+## Important caveat: the event loop
 
-### Simple Registration
-
-```python
-from confiture.hooks import register_hook, HookContext
-
-@register_hook('post_execute')
-def log_migration_success(context: HookContext) -> None:
-    """Log successful migration to monitoring system."""
-    print(f"Migration {context.migration_name} completed successfully!")
-    print(f"Duration: {context.duration}")
-    print(f"Rows affected: {context.rows_affected}")
-```
-
-### Multiple Hooks for Same Point
-
-You can register multiple hooks for the same trigger point:
-
-```python
-@register_hook('post_execute')
-def notify_slack(context: HookContext) -> None:
-    """Send Slack notification."""
-    # Implementation
-    pass
-
-@register_hook('post_execute')
-def log_metrics(context: HookContext) -> None:
-    """Log metrics to monitoring system."""
-    # Implementation
-    pass
-
-# Both hooks will execute in registration order
-```
-
-### Conditional Hook Execution
-
-```python
-@register_hook('post_execute')
-def notify_on_production(context: HookContext) -> None:
-    """Only notify for production migrations."""
-    if context.environment == 'production':
-        # Send notification
-        pass
-```
+Hook `execute` methods are `async`. The migrator runs them on an internal
+asyncio loop it creates per trigger. **If you drive `up()` / `down()` from inside
+an already-running event loop, hook triggering is skipped** (to avoid nested-loop
+conflicts) and a debug line is logged. Run migrations from synchronous code when
+you rely on hooks.
 
 ---
 
-## Hook Examples
+## Examples
 
-### Example 1: Log to File
+### Example 1 — audit to a file (`AFTER_EXECUTE`)
 
+<!-- doctest:example-file-audit -->
 ```python
 import logging
-from confiture.hooks import register_hook, HookContext
+from pathlib import Path
 
-logger = logging.getLogger('confiture.migrations')
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-@register_hook('post_execute')
-def log_migration(context: HookContext) -> None:
-    """Log migration completion."""
-    logger.info(
-        f"Migration {context.migration_name} completed",
-        extra={
-            'environment': context.environment,
-            'duration': context.duration.total_seconds(),
-            'rows_affected': context.rows_affected,
-        }
-    )
-```
 
-**Output**:
-```
-2026-01-15 14:23:45 INFO: Migration 20260403120000_create_users_table completed
-  environment=production
-  duration=2.34
-  rows_affected=1000
-```
+class FileAuditHook(Hook[ExecutionContext]):
+    def __init__(self, log_path: Path) -> None:
+        super().__init__(hook_id="audit.file", name="File Audit", priority=8)
+        self._log_path = log_path
 
----
-
-### Example 2: Slack Notification
-
-```python
-import requests
-from confiture.hooks import register_hook, HookContext
-
-SLACK_WEBHOOK = "https://hooks.slack.com/services/YOUR/WEBHOOK"
-
-@register_hook('post_execute')
-def notify_slack(context: HookContext) -> None:
-    """Send Slack notification after migration."""
-    message = {
-        "text": f"✅ Migration {context.migration_name} completed",
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Migration Completed*\n"
-                            f"*Name*: {context.migration_name}\n"
-                            f"*Environment*: {context.environment}\n"
-                            f"*Duration*: {context.duration}\n"
-                            f"*Rows*: {context.rows_affected}"
-                }
-            }
-        ]
-    }
-
-    response = requests.post(SLACK_WEBHOOK, json=message)
-    response.raise_for_status()
-```
-
-**Slack Output**:
-```
-✅ Migration Completed
-Name: 20260403120000_create_users_table
-Environment: production
-Duration: 0:00:02.34
-Rows: 1000
-```
-
----
-
-### Example 3: Data Validation
-
-```python
-import psycopg
-from confiture.hooks import register_hook, HookContext, HookError
-
-@register_hook('post_execute')
-def validate_data(context: HookContext) -> None:
-    """Validate data integrity after migration."""
-    try:
-        with psycopg.connect(context.database_url) as conn:
-            for table_info in context.tables:
-                # Check for NULL values in NOT NULL columns
-                for col in table_info.columns:
-                    if not col.nullable:
-                        cursor = conn.execute(
-                            f"SELECT COUNT(*) FROM {table_info.name} "
-                            f"WHERE {col.name} IS NULL"
-                        )
-                        null_count = cursor.scalar()
-
-                        if null_count > 0:
-                            raise HookError(
-                                f"Found {null_count} NULL values in "
-                                f"{table_info.name}.{col.name}"
-                            )
-
-    except Exception as e:
-        raise HookError(f"Validation failed: {str(e)}") from e
-```
-
----
-
-### Example 4: Conditional Error Notification
-
-```python
-import requests
-from confiture.hooks import register_hook, HookContext
-
-@register_hook('on_error')
-def notify_error(context: HookContext) -> None:
-    """Send error notification for production failures."""
-    if context.environment == 'production':
-        # Send alert to on-call engineer
-        message = {
-            "text": f"🚨 Migration Failed: {context.migration_name}",
-            "error": str(context.error),
-            "environment": context.environment,
-        }
-
-        requests.post(
-            "https://alerts.example.com/incident",
-            json=message
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        line = (
+            f"{context.timestamp.isoformat()} "
+            f"{data.metadata.get('migration_name')} "
+            f"success={data.metadata.get('success')} "
+            f"{data.elapsed_time_ms}ms\n"
         )
+        try:
+            with self._log_path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+        except OSError as exc:
+            logging.getLogger(__name__).warning("audit write failed: %s", exc)
+            return HookResult(success=False, error=str(exc))
+        return HookResult(success=True)
 ```
 
----
+### Example 2 — notify on completion (`AFTER_EXECUTE`)
 
-### Example 5: Metric Collection
+Posting to a webhook needs an HTTP client (e.g. `httpx` / `requests`) — an
+external dependency, not part of Confiture.
 
+<!-- doctest:example-notify -->
 ```python
-from confiture.hooks import register_hook, HookContext
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-# Mock metrics collector (would be Prometheus, Datadog, etc.)
-class MetricsCollector:
-    @staticmethod
-    def record(metric_name: str, value: float, tags: dict) -> None:
-        print(f"{metric_name}={value} {tags}")
 
-@register_hook('post_execute')
-def collect_metrics(context: HookContext) -> None:
-    """Collect migration performance metrics."""
-    collector = MetricsCollector()
+class NotifyHook(Hook[ExecutionContext]):
+    def __init__(self, webhook_url: str) -> None:
+        super().__init__(hook_id="notify.webhook", name="Notify", priority=7)
+        self._url = webhook_url
 
-    # Record duration
-    duration_seconds = context.duration.total_seconds()
-    collector.record(
-        'migration.duration_seconds',
-        duration_seconds,
-        {'migration': context.migration_name, 'env': context.environment}
-    )
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        import httpx  # external dependency
 
-    # Record rows affected
-    if context.rows_affected:
-        collector.record(
-            'migration.rows_affected',
-            context.rows_affected,
-            {'migration': context.migration_name}
+        data = context.get_data()
+        text = (
+            f"Migration {data.metadata.get('migration_name')} "
+            f"{'succeeded' if data.metadata.get('success') else 'FAILED'}"
         )
-
-    # Record success
-    collector.record(
-        'migration.success',
-        1.0,
-        {'migration': context.migration_name}
-    )
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                await client.post(self._url, json={"text": text})
+        except Exception as exc:  # don't let a notification failure abort the run
+            return HookResult(success=True, error=f"notify skipped: {exc}")
+        return HookResult(success=True)
 ```
 
----
+> Notice the difference from Example&nbsp;1: a *notification* failure returns
+> `success=True` (best-effort), while a *post-condition* failure (the
+> [failing example](#returning-a-result-and-failing-a-migration)) returns
+> `success=False` to stop the run. Choose per hook whether a failure should
+> block the migration.
 
-## Exception Handling
+### Example 3 — built-in audit & backup
 
-### HookError
-
-If your hook raises a `HookError`, it stops the migration:
-
-```python
-from confiture.hooks import register_hook, HookContext, HookError
-
-@register_hook('post_execute')
-def strict_validation(context: HookContext) -> None:
-    """Fail migration if validation fails."""
-    if context.rows_affected is None:
-        raise HookError("Rows affected could not be determined")
-```
-
-**Result**: Migration marked as failed, error reported to user
-
-### Non-blocking Errors
-
-To handle errors without stopping migration:
-
-```python
-@register_hook('post_execute')
-def resilient_notification(context: HookContext) -> None:
-    """Fail gracefully if notification fails."""
-    try:
-        send_slack_notification(context)
-    except Exception as e:
-        print(f"Warning: Notification failed: {e}")
-        # Migration continues despite error
-```
+For tamper-evident audit logging and pre-migration `pg_dump` backups, use the
+shipped [built-in hooks](#built-in-hooks) rather than rolling your own.
 
 ---
 
-## Best Practices
+## Best practices
 
-### ✅ Do's
-
-1. **Keep hooks fast**
-   ```python
-   # Good: Direct operation
-   @register_hook('post_execute')
-   def quick_notification(context: HookContext) -> None:
-       send_webhook(context.migration_name)  # < 1 second
-   ```
-
-2. **Use context information**
-   ```python
-   # Good: Use provided context
-   if context.environment == 'production':
-       send_important_notification(context)
-   ```
-
-3. **Handle errors gracefully**
-   ```python
-   # Good: Log and continue
-   try:
-       send_notification(context)
-   except Exception as e:
-       logger.error(f"Notification failed: {e}")
-   ```
-
-4. **Document your hooks**
-   ```python
-   @register_hook('post_execute')
-   def my_hook(context: HookContext) -> None:
-       """
-       Sends Slack notification after successful migration.
-
-       Expects SLACK_WEBHOOK environment variable.
-       """
-       pass
-   ```
-
-### ❌ Don'ts
-
-1. **Don't do heavy processing**
-   ```python
-   # Bad: Slow operation blocks migration
-   @register_hook('post_execute')
-   def slow_operation(context: HookContext) -> None:
-       result = expensive_computation()  # Minutes to complete
-   ```
-
-2. **Don't modify database directly**
-   ```python
-   # Bad: Hook modifies data
-   @register_hook('post_execute')
-   def bad_modification(context: HookContext) -> None:
-       conn = psycopg.connect(context.database_url)
-       conn.execute("UPDATE users SET status = 'migrated'")  # Don't do this!
-   ```
-
-3. **Don't ignore errors silently**
-   ```python
-   # Bad: Error disappears
-   try:
-       send_notification(context)
-   except:
-       pass  # Problem now hidden
-   ```
+- **Keep hooks fast.** They run inside the migration flow; slow hooks slow every
+  migration.
+- **Decide failure semantics per hook.** Return `success=False` only when the
+  failure should abort the migration; return `success=True` for best-effort side
+  effects (notifications, metrics).
+- **Make hooks idempotent.** `AFTER_EXECUTE` fires on both success and failure —
+  branch on `metadata["success"]`.
+- **Don't assume an open transaction.** A hook gets context metadata, not the
+  migration's connection; open your own connection if you need the database (as
+  the built-in `AuditHook` does).
 
 ---
 
-## Testing Hooks
+## See also
 
-### Unit Test Example
-
-```python
-import pytest
-from confiture.hooks import HookContext
-from my_hooks import validate_data, HookError
-
-def test_validation_passes_with_valid_data():
-    """Test validation hook with valid data."""
-    context = HookContext(
-        migration_name='20260403120000_create_users',
-        environment='test',
-        database_url='postgresql://localhost/test_db',
-        status='success',
-        rows_affected=100,
-        duration=timedelta(seconds=2),
-        start_time=datetime.now(),
-        end_time=datetime.now(),
-    )
-
-    # Should not raise
-    validate_data(context)
-
-def test_validation_fails_with_null_values():
-    """Test validation hook detects NULL values."""
-    context = HookContext(...)  # Setup context
-
-    with pytest.raises(HookError):
-        validate_data(context)
-```
-
----
-
-## Hook Performance
-
-### Performance Characteristics
-
-| Operation | Typical Time | Max Recommended |
-|-----------|-------------|-----------------|
-| Simple notification | 10-50ms | 100ms |
-| Database query | 50-200ms | 500ms |
-| API call | 100-500ms | 1000ms |
-| Complex validation | 500-2000ms | 5000ms |
-
-**Recommendation**: Keep total hook time < 1 second for responsive migrations
-
----
-
-## Troubleshooting
-
-### Problem: Hook Not Called
-
-**Cause**: Hook not registered or wrong trigger point
-
-**Solution**:
-```python
-# Check hook is registered
-from confiture.hooks import list_hooks
-print(list_hooks('post_execute'))  # Should include your hook
-
-# Verify trigger point name
-@register_hook('post_execute')  # Not 'postExecute' or 'post-execute'
-def my_hook(context: HookContext) -> None:
-    pass
-```
-
-### Problem: Hook Modifies Migration
-
-**Cause**: Returning value from hook (shouldn't happen)
-
-**Solution**: Hooks always return `None`
-```python
-@register_hook('post_execute')
-def my_hook(context: HookContext) -> None:  # Type hint enforces None return
-    # No return statement needed
-    pass
-```
-
-### Problem: Hook Slows Down Migrations
-
-**Cause**: Hook does heavy processing
-
-**Solution**: Move heavy work outside hook
-```python
-# Bad
-@register_hook('post_execute')
-def slow_hook(context: HookContext) -> None:
-    for i in range(1000000):
-        expensive_operation()
-
-# Good: Trigger background job
-@register_hook('post_execute')
-def trigger_job(context: HookContext) -> None:
-    queue_job('heavy_processing', context.migration_name)
-```
-
----
-
-## API Stability
-
-**Status**: ✅ **Stable**
-
-The Hook API is stable and won't change in breaking ways:
-- ✅ New trigger points may be added
-- ✅ HookContext may gain new optional fields
-- ✅ HookError remains the exception mechanism
-- ⚠️ No promises about hook execution order across files
-
----
-
-## See Also
-
-- [Migration Hooks Guide](../guides/hooks.md) - User guide with patterns
-- [Integrations Guide](../guides/integrations.md) - CI/CD, Slack, monitoring
-- [Troubleshooting](../troubleshooting.md) - Common issues
-
----
-
-**Last Updated**: January 17, 2026
-
+- [Migrator API](migrator.md) — `Migrator.from_config`, `MigratorSession`
+- [Built-in hooks](#built-in-hooks) — `AuditHook`, `BackupHook`

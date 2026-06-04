@@ -164,13 +164,25 @@ migrator.cleanup_fdw()
 ### Hooks Example
 
 ```python
-from confiture.hooks import register_hook, HookContext
+from confiture.core.hooks import Hook, HookContext, HookResult
+from confiture.core.hooks.context import ExecutionContext
 
-@register_hook('post_execute')
-def notify_team(context: HookContext) -> None:
-    print(f"Migration {context.migration_name} completed")
-    print(f"Duration: {context.duration}")
+
+class NotifyTeam(Hook[ExecutionContext]):
+    def __init__(self) -> None:
+        super().__init__(hook_id="notify.team", name="Notify Team", priority=7)
+
+    async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
+        data = context.get_data()
+        print(f"Migration {data.metadata.get('migration_name')} completed "
+              f"in {data.elapsed_time_ms}ms")
+        return HookResult(success=True)
+
+
+# Register on a Migrator: m.register_hook(HookPhase.AFTER_EXECUTE, NotifyTeam())
 ```
+
+See the [Hook API Reference](hooks.md) for the full surface.
 
 ### Anonymization Example
 

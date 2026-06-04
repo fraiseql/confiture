@@ -11,6 +11,20 @@ Accumulates the in-progress **0.22.0** bundle (cut at finalize). See the quality
 remediation phases for the full breaking-change set; the entries below are the
 feature/wiring work.
 
+### Documentation — hook docs rewritten to the real API
+
+The hook documentation taught a **fictional** API — a non-existent
+`confiture.hooks` module, a `@register_hook('post_execute')` decorator over plain
+functions, and a `HookContext` with `.migration`/`TableInfo`/`ColumnInfo`
+attributes. None of it matched the shipped API (subclass `Hook[ExecutionContext]`,
+implement `async def execute(...) -> HookResult`, register via
+`Migrator.register_hook(HookPhase.X, hook)`). Rewrote `docs/api/hooks.md` and
+`docs/guides/hooks.md` around the real surface, and fixed the incidental hook
+snippets in `docs/api/index.md`, `docs/guides/{compliance,integrations,
+interactive-migration-wizard}.md`. A doc-guard (`test_doc_hooks_api.py`) now
+pins the imports to real symbols and locks the fictional decorator API out of
+every doc that carries a hook snippet.
+
 ### Added — `confiture migrate schema-to-schema` CLI (Medium 4, FDW)
 
 The zero-downtime FDW migration strategy (Medium 4) had a documented workflow
