@@ -61,7 +61,7 @@ _ALLOWLIST: dict[str, int] = {
     # already partially routed through fail(). Paid down opportunistically.
     "commands/migrate_core.py": 33,  # TODO(phase-02/03): mixed success-signal + debt
     # ---- Cycle 1 conversion cohort (this phase) ----
-    "seed.py": 15,  # success-signal: clean Exit(0) + "found issues/failed" Exit(1) gates
+    "seed.py": 14,  # success-signal: clean Exit(0) + "found issues/failed" Exit(1) gates
     # commands/migrate_state.py: fully converted (Cycle 1) — baseline/reinit/
     # rebuild config guards → 5, version-not-found → MIGR_100 (3), duplicates →
     # MIGR_106 (3), rebuild fatal → MIGR_001 (3); all via fail().
