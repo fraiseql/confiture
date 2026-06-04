@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-verify.schema.json",
+  "title": "confiture migrate verify --format json",
+  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads failed_count (ok ⇔ failed_count == 0) and each results[].{version,name,status,error}. A migration with no .verify.sql is reported with status \"no_file\" and counted in skipped_count, not failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": ["verified_count", "failed_count", "skipped_count", "total_applied", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "verified_count": {
+      "type": "integer",
+      "description": "Number of applied migrations whose .verify.sql passed."
+    },
+    "failed_count": {
+      "type": "integer",
+      "description": "Number of applied migrations whose .verify.sql failed. The adapter treats the run as ok when this is 0."
+    },
+    "skipped_count": {
+      "type": "integer",
+      "description": "Number of applied migrations with no .verify.sql sidecar (status \"no_file\")."
+    },
+    "total_applied": {
+      "type": "integer",
+      "description": "Total applied migrations considered."
+    },
+    "results": {
+      "type": "array",
+      "description": "Per-migration verification outcome.",
+      "items": {
+        "type": "object",
+        "required": ["version", "name", "status", "actual_value", "verify_file", "error"],
+        "additionalProperties": false,
+        "properties": {
+          "version": { "type": "string", "description": "Migration version identifier." },
+          "name": { "type": "string", "description": "Migration name (may equal the version when no name was recorded)." },
+          "status": {
+            "type": "string",
+            "description": "Outcome: \"verified\", \"failed\", or \"no_file\" (no sidecar). The adapter treats anything other than \"failed\" as ok."
+          },
+          "actual_value": {
+            "type": ["string", "number", "boolean", "null"],
+            "description": "First column of the first row the .verify.sql query returned; null when no file or no row."
+          },
+          "verify_file": {
+            "type": ["string", "null"],
+            "description": "Path to the .verify.sql sidecar; null when none."
+          },
+          "error": {
+            "type": ["string", "null"],
+            "description": "Failure detail when status is \"failed\"; null otherwise."
+          }
+        }
+      }
+    }
+  }
+}

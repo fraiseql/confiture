@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-up.schema.json",
+  "title": "confiture migrate up --format json",
+  "description": "Result of applying pending migrations (MigrateUpResult.to_dict). The fraisier migration adapter reads applied[].version to report the new head. A failure that aborts before/within execution emits the error envelope (error-envelope.schema.json) instead of this shape; a partial failure sets success=false and lists human-readable strings in errors.",
+  "type": "object",
+  "required": [
+    "success",
+    "applied",
+    "skipped",
+    "skipped_superuser",
+    "pending",
+    "errors",
+    "total_duration_ms",
+    "checksums_verified",
+    "dry_run",
+    "dry_run_execute",
+    "warnings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "type": "boolean",
+      "description": "True when every pending migration applied successfully."
+    },
+    "applied": {
+      "type": "array",
+      "description": "Migrations applied by this operation, oldest → newest.",
+      "items": {
+        "type": "object",
+        "required": ["version", "name", "duration_ms", "rows_affected"],
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Version identifier of the applied migration (the adapter's head revision)."
+          },
+          "name": { "type": "string", "description": "Human-readable migration name." },
+          "duration_ms": { "type": "integer", "description": "Apply time in milliseconds." },
+          "rows_affected": { "type": "integer", "description": "Rows affected by the migration." }
+        }
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Versions already applied before this operation (no-op for them)."
+    },
+    "skipped_superuser": {
+      "type": "array",
+      "description": "Migrations halted because they declared requires_superuser=True (issue #137).",
+      "items": {
+        "type": "object",
+        "required": ["version", "name", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "version": { "type": "string" },
+          "name": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "pending": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Versions left unapplied (e.g. everything after a superuser halt)."
+    },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Human-readable failure messages when success=false; empty in the happy path."
+    },
+    "total_duration_ms": {
+      "type": "integer",
+      "description": "Total apply time in milliseconds across all migrations."
+    },
+    "checksums_verified": {
+      "type": "boolean",
+      "description": "True when all previously-applied migration checksums verified before applying."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "True when this was a no-SQL dry-run analysis."
+    },
+    "dry_run_execute": {
+      "type": "boolean",
+      "description": "True when SQL was executed inside a SAVEPOINT then rolled back (nothing persisted)."
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Non-fatal warning messages; empty if none."
+    }
+  }
+}

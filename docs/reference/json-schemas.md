@@ -62,6 +62,14 @@ change without a top-level version bump.
 
 [migrate-current.schema.json](./json-schemas/migrate-current.schema.json) — `{revision, name, applied_at, checksum}` for the latest applied migration (all `null` when the tracking table is empty). An absent tracking table is an error path emitting the [error envelope](./json-schemas/error-envelope.schema.json) at exit 2.
 
+### `confiture migrate up --format json`
+
+[migrate-up.schema.json](./json-schemas/migrate-up.schema.json) — `{success, applied[], skipped, skipped_superuser[], pending, errors, total_duration_ms, checksums_verified, dry_run, dry_run_execute, warnings}` after applying pending migrations. The fraisier migration adapter reads `applied[].version` as the new head. A failure that aborts execution emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+
+### `confiture migrate verify --format json`
+
+[migrate-verify.schema.json](./json-schemas/migrate-verify.schema.json) — `{verified_count, failed_count, skipped_count, total_applied, results[]}` for `.verify.sql` runtime-correctness checks. The fraisier adapter treats the run as ok ⇔ `failed_count == 0`, and reads each `results[].{version, name, status, error}`. Migrations with no sidecar are `status: "no_file"` (counted in `skipped_count`).
+
 ### `confiture migrate down-to <revision> --format json`
 
 [migrate-down-to.schema.json](./json-schemas/migrate-down-to.schema.json) — `{from, to, rolled_back, skipped, errors}` for an absolute rollback. An invalid plan (unknown/forward target, or a missing `.down.sql`) emits the [error envelope](./json-schemas/error-envelope.schema.json) and applies nothing.
