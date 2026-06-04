@@ -14,6 +14,55 @@ The Hook API enables you to extend Confiture migrations with custom logic at key
 
 ---
 
+## Built-in hooks
+
+Confiture ships two ready-to-use lifecycle hooks. Both are **opt-in** — they do
+nothing until you register them on a `Migrator` instance, so the default
+migration path is unchanged.
+
+- **`BackupHook`** — runs `pg_dump` (optionally gzip-compressed, with a retention
+  cap) *before* each migration. Registers on `HookPhase.BEFORE_EXECUTE`.
+- **`AuditHook`** — appends an HMAC-SHA256-signed audit row *after* each
+  migration for tamper-evident history. Registers on `HookPhase.AFTER_EXECUTE`.
+
+Register them via the real instance API — `Migrator.register_hook(phase, hook)`:
+
+<!-- doctest:builtin-hooks-imports -->
+```python
+from pathlib import Path
+
+from confiture import (
+    AuditConfig,
+    AuditHook,
+    BackupConfig,
+    BackupHook,
+    HookPhase,
+    Migrator,
+)
+
+with Migrator.from_config("db/environments/prod.yaml") as m:
+    dsn = "postgresql://localhost/prod"
+
+    # Back up before every migration (runs first, priority 1)
+    m.register_hook(
+        HookPhase.BEFORE_EXECUTE,
+        BackupHook(BackupConfig(backup_dir=Path("backups"), database_url=dsn)),
+    )
+
+    # Record a signed audit trail after every migration (runs late, priority 8)
+    m.register_hook(
+        HookPhase.AFTER_EXECUTE,
+        AuditHook(AuditConfig(database_url=dsn, signing_key="…", environment="prod")),
+    )
+
+    m.up()
+```
+
+> `BackupConfig` accepts `compress` (default `True`) and `max_backups` (default
+> `10`). `AuditConfig` accepts an `environment` label (default `"unknown"`).
+
+---
+
 ## What is a Hook?
 
 A Hook is a Python function registered to execute at a specific point in the migration lifecycle. Hooks have access to the migration context (tables, columns, status) and can:

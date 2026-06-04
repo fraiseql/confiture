@@ -146,6 +146,12 @@ __all__ = [
     "RollbackSuggestion",
     "RollbackTester",
     "RollbackTestResult",
+    # Built-in migration lifecycle hooks (opt-in via Migrator.register_hook)
+    "AuditHook",
+    "AuditConfig",
+    "BackupHook",
+    "BackupConfig",
+    "HookPhase",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -278,6 +284,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "RollbackSuggestion": ("confiture.core.rollback_generator", "RollbackSuggestion"),
     "RollbackTester": ("confiture.core.rollback_generator", "RollbackTester"),
     "RollbackTestResult": ("confiture.core.rollback_generator", "RollbackTestResult"),
+    # Built-in migration lifecycle hooks (opt-in via Migrator.register_hook)
+    "AuditHook": ("confiture.core.hooks.builtin.audit_hook", "AuditHook"),
+    "AuditConfig": ("confiture.core.hooks.builtin.audit_hook", "AuditConfig"),
+    "BackupHook": ("confiture.core.hooks.builtin.backup_hook", "BackupHook"),
+    "BackupConfig": ("confiture.core.hooks.builtin.backup_hook", "BackupConfig"),
+    "HookPhase": ("confiture.core.hooks.phases", "HookPhase"),
 }
 
 

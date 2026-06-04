@@ -40,7 +40,15 @@ _ROLLBACK_GEN = (
     "RollbackTester",
     "RollbackTestResult",
 )
-_NEWLY_EXPOSED = _BLUE_GREEN + _PG_VERSION + _ROLLBACK_GEN
+# Built-in migration lifecycle hooks (opt-in via Migrator.register_hook).
+_BUILTIN_HOOKS = (
+    "AuditHook",
+    "AuditConfig",
+    "BackupHook",
+    "BackupConfig",
+    "HookPhase",
+)
+_NEWLY_EXPOSED = _BLUE_GREEN + _PG_VERSION + _ROLLBACK_GEN + _BUILTIN_HOOKS
 
 
 def test_newly_exposed_symbols_resolve() -> None:
@@ -67,6 +75,15 @@ def test_rollback_generator_is_callable() -> None:
     from confiture import generate_rollback
 
     assert callable(generate_rollback)
+
+
+def test_builtin_hooks_are_real() -> None:
+    from confiture import AuditHook, BackupHook, HookPhase
+
+    assert AuditHook.__name__ == "AuditHook"
+    assert BackupHook.__name__ == "BackupHook"
+    # The phase enum a user needs to register them.
+    assert HookPhase.BEFORE_EXECUTE.value == "before_execute"
 
 
 # ---------------------------------------------------------------------------

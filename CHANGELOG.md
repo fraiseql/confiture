@@ -34,6 +34,17 @@ confiture migrate schema-to-schema {setup,analyze,migrate,migrate-table,verify,c
   list to the live app) and `docs/guides/04-schema-to-schema.md`; covered by a
   happy-path e2e workflow test.
 
+### Added — built-in lifecycle hooks exposed as library API
+
+`BackupHook` (pre-migration `pg_dump`) and `AuditHook` (post-migration
+HMAC-signed audit row) shipped in the codebase and CHANGELOG but were never
+importable — the hook registry was wired, the two built-ins just weren't. They
+are now public API (`from confiture import BackupHook, BackupConfig, AuditHook,
+AuditConfig, HookPhase`) and **opt-in**: register them on a `Migrator` via
+`m.register_hook(HookPhase.BEFORE_EXECUTE, BackupHook(...))`. Nothing runs by
+default (no surprise `pg_dump`). `docs/api/hooks.md` gained a "Built-in hooks"
+section using the real registration API (guarded by a doctest).
+
 ### Added — multi-tenant isolation lint rule (`tenant_001`)
 
 The `TenantIsolationRule` existed but no config flag ever invoked it from
