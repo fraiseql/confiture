@@ -1,6 +1,6 @@
 """Apply / migrate-up / dry-run concern for ``Migrator``.
 
-Peeled out of ``engine.py`` (Phase 03, ARCH-M2). Free functions taking the
+Peeled out of ``engine.py``. Free functions taking the
 ``Migrator`` instance as their first argument; the class keeps thin delegating
 methods, so its public surface and patch targets are unchanged. Cross-method
 calls go through ``migrator.<method>()`` (the delegators) so existing test

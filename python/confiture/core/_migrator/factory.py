@@ -1,4 +1,4 @@
-"""``Migrator.from_config`` factory (peeled from engine.py, Phase 03 ARCH-M2).
+"""``Migrator.from_config`` factory (peeled from engine.py).
 
 A free function that builds a managed :class:`MigratorSession` from an
 ``Environment`` / config path. ``MigratorSession`` is imported lazily inside the

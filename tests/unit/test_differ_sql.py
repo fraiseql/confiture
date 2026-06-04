@@ -93,7 +93,8 @@ def test_alter_column_type_warns_on_lossy_cast():
     sql = gen.generate_up(change)
     assert "ALTER COLUMN age TYPE integer" in sql
     assert "USING" in sql
-    assert "FIXME" in sql
+    # The generated SQL carries a manual-review marker for the cast.
+    assert "review:" in sql
 
 
 def test_add_index_concurrently():

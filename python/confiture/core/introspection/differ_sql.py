@@ -100,7 +100,7 @@ class DifferSQLGenerator:
     def _up_alter_column_type(self, change: SchemaChange) -> str:
         return (
             f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.new_value}"
-            f" USING {change.column}::{change.new_value}; -- FIXME: verify USING clause\n"
+            f" USING {change.column}::{change.new_value}; -- review: verify the USING cast against existing data\n"
         )
 
     def _up_add_index(self, change: SchemaChange) -> str:

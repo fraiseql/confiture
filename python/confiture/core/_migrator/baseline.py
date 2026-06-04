@@ -1,6 +1,6 @@
 """Baseline / reinit / rebuild concern for ``Migrator``.
 
-Peeled out of ``engine.py`` (Phase 03, ARCH-M2). Free functions taking the
+Peeled out of ``engine.py``. Free functions taking the
 ``Migrator`` instance as their first argument; the class keeps thin delegating
 methods so its public surface and patch targets are unchanged. Pure refactor.
 """

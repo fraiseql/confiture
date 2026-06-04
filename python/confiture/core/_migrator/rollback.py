@@ -1,6 +1,6 @@
 """Rollback concern for :class:`~confiture.core._migrator.engine.Migrator`.
 
-Peeled out of ``engine.py`` (Phase 03, ARCH-M2). These are free functions that
+Peeled out of ``engine.py``. These are free functions that
 take the ``Migrator`` instance as their first argument; the class keeps thin
 delegating methods so its public surface and patch targets are unchanged.
 """

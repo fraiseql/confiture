@@ -1,6 +1,6 @@
 """Shared constants for the ``_migrator`` package.
 
-Pure data extracted from ``engine.py`` (Phase 03, ARCH-M2) so the concern
+Pure data extracted from ``engine.py`` so the concern
 modules (engine / apply / baseline) can share one copy without a runtime
 import cycle.
 """

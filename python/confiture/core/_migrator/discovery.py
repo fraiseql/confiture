@@ -63,7 +63,7 @@ def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Pa
 
 
 # ---------------------------------------------------------------------------
-# Migrator-bound discovery operations (peeled from engine.py, Phase 03 ARCH-M2).
+# Migrator-bound discovery operations (peeled from engine.py).
 # Free functions taking the Migrator instance; the class keeps thin delegators.
 # ---------------------------------------------------------------------------
 

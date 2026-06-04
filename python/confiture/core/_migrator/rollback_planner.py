@@ -3,7 +3,7 @@
 Given the applied sequence, the set of known migration versions, a target
 revision, and the set of versions that have a usable ``.down.sql``, compute the
 ordered rollback set (newest → oldest) and fully validate reversibility — all
-*without touching the database*. Execution (Phase 2) consumes a validated plan.
+*without touching the database*. Execution consumes a validated plan.
 
 This module imports nothing DB-related on purpose; correctness lives here and is
 trivially unit-testable.
