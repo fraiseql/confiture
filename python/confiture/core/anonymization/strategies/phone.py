@@ -58,6 +58,11 @@ class PhoneMaskingStrategy(AnonymizationStrategy):
     # Basic phone number regex (allows various formats)
     PHONE_REGEX = re.compile(r"[\d\s\-\+\(\)]{10,}")
 
+    # Lets StrategyRegistry.get("phone") build PhoneMaskConfig (with format)
+    # rather than the base StrategyConfig.
+    config_type = PhoneMaskConfig
+    strategy_name = "phone"
+
     def __init__(self, config: PhoneMaskConfig | None = None):
         """Initialize phone masking strategy.
 

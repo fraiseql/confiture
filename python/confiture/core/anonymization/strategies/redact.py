@@ -53,6 +53,11 @@ class SimpleRedactStrategy(AnonymizationStrategy):
         '[HIDDEN]'
     """
 
+    # Lets StrategyRegistry.get("redact") build RedactConfig (with replacement)
+    # rather than the base StrategyConfig.
+    config_type = RedactConfig
+    strategy_name = "redact"
+
     def __init__(self, config: RedactConfig | None = None):
         """Initialize redaction strategy.
 

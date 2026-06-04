@@ -77,6 +77,11 @@ class DeterministicHashStrategy(AnonymizationStrategy):
         'hash_...'
     """
 
+    # Lets StrategyRegistry.get("hash") build the right config (not the base
+    # StrategyConfig, which lacks algorithm / length / validate_algorithm).
+    config_type = DeterministicHashConfig
+    strategy_name = "hash"
+
     def __init__(self, config: DeterministicHashConfig | None = None):
         """Initialize strategy with configuration.
 

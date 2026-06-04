@@ -68,6 +68,11 @@ class EmailMaskingStrategy(AnonymizationStrategy):
     # Simple email regex for validation
     EMAIL_REGEX = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
 
+    # Lets StrategyRegistry.get("email") build EmailMaskConfig (with format /
+    # hash_length) rather than the base StrategyConfig.
+    config_type = EmailMaskConfig
+    strategy_name = "email"
+
     def __init__(self, config: EmailMaskConfig | None = None):
         """Initialize email masking strategy.
 
