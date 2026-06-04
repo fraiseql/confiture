@@ -105,7 +105,9 @@ class TestValidateIdempotentZeroFiles:
         assert result.exit_code == 0
         text = err_buf.getvalue()
         assert "Hint:" in text
-        assert "exists but contains no files" in text
+        # Rich wraps the hint at the (non-TTY) console width, which can split the
+        # phrase across a newline; normalize whitespace so the check is width-independent.
+        assert "exists but contains no files" in " ".join(text.split())
 
 
 class TestValidateUnaffectedCommandsStillEmitEmptyHints:

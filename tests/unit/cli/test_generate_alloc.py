@@ -244,4 +244,6 @@ class TestAllocErrorPaths:
         )
 
         assert result.exit_code == 5
-        assert "not within schema root" in result.output
+        # Rich wraps the path-bearing error at the (non-TTY) console width, which
+        # can split the phrase; normalize whitespace so the check is width-independent.
+        assert "not within schema root" in " ".join(result.output.split())
