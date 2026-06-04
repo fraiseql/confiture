@@ -152,6 +152,12 @@ __all__ = [
     "BackupHook",
     "BackupConfig",
     "HookPhase",
+    # PII anonymization framework (library API; powers `confiture sync --anonymize`)
+    "AnonymizationStrategy",
+    "StrategyConfig",
+    "StrategyRegistry",
+    "register_strategy",
+    "AnonymizationProfile",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -290,6 +296,13 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "BackupHook": ("confiture.core.hooks.builtin.backup_hook", "BackupHook"),
     "BackupConfig": ("confiture.core.hooks.builtin.backup_hook", "BackupConfig"),
     "HookPhase": ("confiture.core.hooks.phases", "HookPhase"),
+    # PII anonymization framework (library API). Imported from the package
+    # facade so the built-in strategies are registered on first access.
+    "AnonymizationStrategy": ("confiture.core.anonymization", "AnonymizationStrategy"),
+    "StrategyConfig": ("confiture.core.anonymization", "StrategyConfig"),
+    "StrategyRegistry": ("confiture.core.anonymization", "StrategyRegistry"),
+    "register_strategy": ("confiture.core.anonymization", "register_strategy"),
+    "AnonymizationProfile": ("confiture.core.anonymization", "AnonymizationProfile"),
 }
 
 

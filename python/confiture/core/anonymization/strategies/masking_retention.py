@@ -97,6 +97,10 @@ class MaskingRetentionStrategy(AnonymizationStrategy):
         'j***.*o*e@ex****e.com'
     """
 
+    # Lets StrategyRegistry.get("masking_retention") build the right config.
+    config_type = MaskingRetentionConfig
+    strategy_name = "masking_retention"
+
     def __init__(self, config: MaskingRetentionConfig | None = None):
         """Initialize masking with retention strategy.
 

@@ -48,7 +48,15 @@ _BUILTIN_HOOKS = (
     "BackupConfig",
     "HookPhase",
 )
-_NEWLY_EXPOSED = _BLUE_GREEN + _PG_VERSION + _ROLLBACK_GEN + _BUILTIN_HOOKS
+# PII anonymization framework (powers `confiture sync --anonymize`; Medium 3).
+_ANONYMIZATION = (
+    "AnonymizationStrategy",
+    "StrategyConfig",
+    "StrategyRegistry",
+    "register_strategy",
+    "AnonymizationProfile",
+)
+_NEWLY_EXPOSED = _BLUE_GREEN + _PG_VERSION + _ROLLBACK_GEN + _BUILTIN_HOOKS + _ANONYMIZATION
 
 
 def test_newly_exposed_symbols_resolve() -> None:
@@ -84,6 +92,24 @@ def test_builtin_hooks_are_real() -> None:
     assert BackupHook.__name__ == "BackupHook"
     # The phase enum a user needs to register them.
     assert HookPhase.BEFORE_EXECUTE.value == "before_execute"
+
+
+def test_anonymization_framework_is_real() -> None:
+    from confiture import (
+        AnonymizationProfile,
+        AnonymizationStrategy,
+        StrategyRegistry,
+        register_strategy,
+    )
+
+    # The base class users subclass + the registry are real, and accessing the
+    # library API has pre-registered the built-in strategies (incl. the four
+    # profile-whitelisted types).
+    assert AnonymizationStrategy.__name__ == "AnonymizationStrategy"
+    assert callable(register_strategy)
+    assert AnonymizationProfile.__name__ == "AnonymizationProfile"
+    for whitelisted in ("email", "phone", "hash", "redact"):
+        assert StrategyRegistry.is_registered(whitelisted), whitelisted
 
 
 # ---------------------------------------------------------------------------

@@ -139,6 +139,10 @@ class SaltedHashingStrategy(AnonymizationStrategy):
         True
     """
 
+    # Lets StrategyRegistry.get("salted_hashing") build the right config.
+    config_type = SaltedHashingConfig
+    strategy_name = "salted_hashing"
+
     def __init__(self, config: SaltedHashingConfig | None = None):
         """Initialize salted hashing strategy.
 

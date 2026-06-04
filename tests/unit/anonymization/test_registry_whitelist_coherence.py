@@ -34,6 +34,23 @@ def test_every_profile_whitelisted_type_is_registered() -> None:
     assert not missing, f"profile-whitelisted strategies not registered: {missing}"
 
 
+def test_every_registered_strategy_constructs_via_get() -> None:
+    """``StrategyRegistry.get(name)`` builds every built-in (config_type wired).
+
+    A registered strategy whose ``config_type`` is unset would have the registry
+    build the base ``StrategyConfig`` and break construction (or first use) — this
+    pins that every built-in is genuinely resolvable via the registry path.
+    """
+    _reload_builtin_strategies()
+    broken: list[str] = []
+    for name in StrategyRegistry.list_available():
+        try:
+            StrategyRegistry.get(name)
+        except Exception as exc:  # noqa: BLE001 — collect all, report together
+            broken.append(f"{name}: {type(exc).__name__}: {exc}")
+    assert not broken, f"registered strategies that fail to construct: {broken}"
+
+
 def test_whitelisted_strategies_instantiate_and_anonymize() -> None:
     """Every whitelisted strategy can be obtained and masks a value."""
     _reload_builtin_strategies()

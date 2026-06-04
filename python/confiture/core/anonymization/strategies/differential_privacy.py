@@ -169,6 +169,10 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         >>> # Budget remaining: 9.6
     """
 
+    # Lets StrategyRegistry.get("differential_privacy") build the right config.
+    config_type = DifferentialPrivacyConfig
+    strategy_name = "differential_privacy"
+
     budget_remaining: float = 0.0
     """Remaining privacy budget (decreases as values processed)."""
 
