@@ -71,6 +71,18 @@ fraiseql = [
     # FraiseQL integration (requires Python 3.13+)
 ]
 
+# fraiseql-uuid is the CANONICAL home for the structured pattern-UUID convention
+# (the {table}{type}-{func}-4{scen}-8{...}-{inst} v4-compliant encoding). Confiture's
+# seed-validation only does generic RFC-4122 *format* checks and deliberately keeps
+# NO parallel copy of that convention — the old uuid_patterns/uuid_validator island
+# was deleted (ECO-rec2). This OPT-IN extra pulls in the canonical definition for
+# projects that want structured-pattern validation, and lets the convention-seam
+# guard test (tests/unit/test_uuid_convention_seam.py) assert alignment when present.
+# Not installed by CI (no workflow uses --all-extras); core install never requires it.
+seed-uuid = [
+    "fraiseql-uuid>=0.1.3",
+]
+
 ast = [
     "pglast>=6.0",
 ]

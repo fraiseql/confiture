@@ -41,7 +41,11 @@ class Level1SeedValidator:
         re.IGNORECASE,
     )
 
-    # Valid UUID format (any version, for acceptance)
+    # Valid UUID *format* (any version, for acceptance). This is a generic
+    # RFC-4122 check only — confiture does NOT own the FraiseQL structured
+    # pattern-UUID convention ({table}{type}-{func}-4{scen}-8{...}-{inst}); that
+    # lives canonically in `fraiseql-uuid` (ECO-rec2). The convention seam is
+    # guarded by tests/unit/test_uuid_convention_seam.py.
     VALID_UUID_PATTERN = re.compile(
         r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
         re.IGNORECASE,

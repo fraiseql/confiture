@@ -40,6 +40,39 @@ The 5-level validation system catches these issues early.
 
 ---
 
+## Convention ownership & the FraiseQL seed workflow
+
+Confiture's seed-validation sits beside two other FraiseQL packages. The
+responsibilities are deliberately split so conventions live in **one** place:
+
+| Concern | Owner | What it does |
+|---------|-------|--------------|
+| Schema build | **confiture** | `confiture build` materialises the schema from `db/schema/` |
+| Seed-data *generation* | **fraiseql-data** (fraiseql-seed) | fabricates realistic rows, resolving FK graphs |
+| Structured pattern-UUIDs | **fraiseql-uuid** (fraiseql-seed) | the canonical `{table}{type}-{func}-4{scen}-8{…}-{inst}` v4-compliant encoding |
+| Seed-transform *validation* | **confiture** | the 5 levels on this page |
+
+End-to-end the workflow is **`confiture build` → `fraiseql-data` seed →
+`confiture` seed-validate**.
+
+**Confiture does not own the structured pattern-UUID convention.** Level 1's UUID
+check (below) is a *generic RFC-4122 format* check only — it accepts any valid
+UUID. The structured pattern-UUID encoding is canonically defined by
+[`fraiseql-uuid`](https://pypi.org/project/fraiseql-uuid/) (`fraiseql_uuid.Pattern`);
+confiture deliberately keeps **no** parallel copy of it (the earlier
+`uuid_patterns`/`uuid_validator` island was removed). Projects that want
+structured-pattern validation install the canonical source via the opt-in extra:
+
+```bash
+pip install "fraiseql-confiture[seed-uuid]"   # pulls in fraiseql-uuid
+```
+
+The seam is guarded by `tests/unit/test_uuid_convention_seam.py`, which fails if
+confiture's check stops being generic or if a parallel structured-pattern copy
+reappears in confiture's source.
+
+---
+
 ## Five Validation Levels
 
 ### Level 1: Seed File Validation ⚡ (~1s)
