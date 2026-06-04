@@ -51,6 +51,7 @@ from confiture.cli.generate import generate_app
 from confiture.cli.helpers import console
 from confiture.cli.schema_to_schema import schema_to_schema_app
 from confiture.cli.seed import seed_app
+from confiture.cli.sync import sync
 
 # Valid output formats for linting
 LINT_FORMATS = ("table", "json", "csv")
@@ -185,6 +186,9 @@ app.command()(restore)
 
 # Register bootstrap command (#137 — one-shot environment ownership setup)
 app.command()(bootstrap)
+
+# Medium 3: production data sync (with opt-in PII anonymization)
+app.command("sync")(sync)
 
 # Register migrate core commands
 migrate_app.command("status")(migrate_status)
