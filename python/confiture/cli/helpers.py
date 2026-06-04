@@ -1038,7 +1038,7 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
             if not name:
                 schema, name = "public", table
             cur.execute(
-                f'SELECT version FROM "{schema}"."{name}"'  # noqa: S608 — names quoted, no user input
+                f'SELECT version FROM "{schema}"."{name}"'  # nosec B608 - schema/table identifiers double-quoted, derived from tracking_table config not user input
             )
             return {row[0] for row in cur.fetchall()}
     except Exception:

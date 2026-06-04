@@ -83,7 +83,7 @@ class AuditHook(Hook[ExecutionContext]):
                         (migration, direction, environment, executed_by,
                          duration_ms, success, error, signature)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
+                    """,  # nosec B608 - AUDIT_TABLE is a module constant; all values are parameter-bound
                     (
                         record["migration"],
                         record["direction"],

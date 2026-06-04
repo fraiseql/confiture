@@ -154,7 +154,7 @@ class BatchedMigration:
             self.connection.commit()
 
             # Get total rows needing update
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} IS NULL")
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} IS NULL")  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -185,7 +185,7 @@ class BatchedMigration:
                                 WHERE {column} IS NULL
                                 LIMIT {self.config.batch_size}
                             )
-                        """
+                        """  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
                         )
                         rows_affected = cur.rowcount
                         self.connection.commit()
@@ -255,7 +255,7 @@ class BatchedMigration:
 
         with self.connection.cursor() as cur:
             # Get total rows
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -283,7 +283,7 @@ class BatchedMigration:
                         WHERE {where_clause}
                         LIMIT {self.config.batch_size}
                     )
-                """
+                """  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
                 )
 
                 rows_affected = cur.rowcount
@@ -329,7 +329,7 @@ class BatchedMigration:
         start_time = time.perf_counter()
 
         with self.connection.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -356,7 +356,7 @@ class BatchedMigration:
                         WHERE {where_clause}
                         LIMIT {self.config.batch_size}
                     )
-                """
+                """  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
                 )
 
                 rows_deleted = cur.rowcount
@@ -413,7 +413,7 @@ class BatchedMigration:
 
         with self.connection.cursor() as cur:
             # Get total rows
-            cur.execute(f"SELECT COUNT(*) FROM {source_table} WHERE {where_clause}")
+            cur.execute(f"SELECT COUNT(*) FROM {source_table} WHERE {where_clause}")  # nosec B608 - source table identifier supplied by the migration author via the library API, not user input
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -438,7 +438,7 @@ class BatchedMigration:
             columns_str = ", ".join(columns)
 
             # Track last ID for pagination
-            cur.execute(f"SELECT MIN(ctid) FROM {source_table} WHERE {where_clause}")
+            cur.execute(f"SELECT MIN(ctid) FROM {source_table} WHERE {where_clause}")  # nosec B608 - source table identifier supplied by the migration author via the library API, not user input
             result = cur.fetchone()
             if result[0] is None:
                 return BatchProgress(total_rows=0)
@@ -458,7 +458,7 @@ class BatchedMigration:
                 SELECT ctid as row_ctid, ROW_NUMBER() OVER () as rn
                 FROM {source_table}
                 WHERE {where_clause}
-            """
+            """  # nosec B608 - source table identifier supplied by the migration author via the library API, not user input
             )
             self.connection.commit()
 
@@ -476,7 +476,7 @@ class BatchedMigration:
                             SELECT row_ctid FROM _batch_tracker
                             WHERE rn > %s AND rn <= %s
                         )
-                    """,
+                    """,  # nosec B608 - table/column identifiers supplied by the migration author via the library API, row range is parameter-bound
                         (offset, offset + self.config.batch_size),
                     )
 
@@ -734,7 +734,7 @@ class TableSizeEstimator:
             Exact row count
         """
         with self.connection.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
             return cur.fetchone()[0]
 
     def get_table_size(self, table: str) -> dict[str, int]:

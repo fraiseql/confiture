@@ -11,6 +11,24 @@ Accumulates the in-progress **0.22.0** bundle (cut at finalize). See the quality
 remediation phases for the full breaking-change set; the entries below are the
 feature/wiring work.
 
+### Security — annotate the Medium bandit B608 false positives
+
+`bandit` at `--severity-level medium --confidence-level medium` reported 20
+`B608` ("possible SQL injection via string-built query") findings. Each was
+reviewed and confirmed a **false positive** — no untrusted user data is ever
+interpolated. The interpolated values are one of: module-level constants
+(`AUDIT_TABLE`, `LOCK_HOLDER_TABLE`, `_REL_KINDS`/`_SYSTEM_SCHEMAS`),
+double-quoted schema/table identifiers from config or a caller-supplied dataclass
+(`cli/helpers.py`, `core/preconditions.py`), or table/column identifiers supplied
+by the migration author through the batched-migration library API
+(`core/large_tables.py`); all row data is parameter-bound (`%s`). Each site now
+carries an inline `# nosec B608 - <specific reason>` (replacing the dead, never-enforced
+`# noqa: S608` markers where present), so a Medium-level scan reads clean.
+
+- No behavior change; this is suppression-with-justification hygiene only.
+- The bandit CI gate stays **High severity / High confidence** (already 0); this
+  does not lower it.
+
 ### Added — `confiture sync` CLI (Medium 3, Production Data Sync)
 
 The production-data-sync strategy (Medium 3) shipped a fully-tested

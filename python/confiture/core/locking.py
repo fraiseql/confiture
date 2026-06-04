@@ -440,7 +440,7 @@ class MigrationLock:
                         usename = EXCLUDED.usename,
                         command = EXCLUDED.command,
                         acquired_at = now()
-                    """,
+                    """,  # nosec B608 - LOCK_HOLDER_TABLE is a module constant; all values are parameter-bound
                     (lock_id, identity.pid, identity.hostname, identity.command),
                 )
             # Commit so contenders on other connections can see the row. Safe:
@@ -458,7 +458,7 @@ class MigrationLock:
         try:
             with self.connection.cursor() as cur:
                 cur.execute(
-                    f"DELETE FROM {LOCK_HOLDER_TABLE} WHERE lock_id = %s",
+                    f"DELETE FROM {LOCK_HOLDER_TABLE} WHERE lock_id = %s",  # nosec B608 - LOCK_HOLDER_TABLE is a module constant; lock_id is parameter-bound
                     (lock_id,),
                 )
             self.connection.commit()
@@ -506,7 +506,7 @@ class MigrationLock:
                     ) AS live
                 FROM {LOCK_HOLDER_TABLE} h
                 WHERE h.lock_id = %s
-                """,
+                """,  # nosec B608 - LOCK_HOLDER_TABLE is a module constant; all values are parameter-bound
                 (self.DEFAULT_LOCK_NAMESPACE, lock_id, lock_id),
             )
             row = cur.fetchone()

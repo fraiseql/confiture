@@ -625,7 +625,7 @@ class RowCountEquals(Precondition):
         with connection.cursor() as cursor:
             # Use fully qualified table name to prevent SQL injection
             cursor.execute(
-                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # noqa: S608
+                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # nosec B608 - schema/table identifiers double-quoted, supplied by the caller via the Precondition dataclass not user input
             )
             result = cursor.fetchone()
             actual_count = result[0] if result else 0
@@ -655,7 +655,7 @@ class RowCountGreaterThan(Precondition):
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
         with connection.cursor() as cursor:
             cursor.execute(
-                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # noqa: S608
+                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # nosec B608 - schema/table identifiers double-quoted, supplied by the caller via the Precondition dataclass not user input
             )
             result = cursor.fetchone()
             actual_count = result[0] if result else 0
@@ -684,7 +684,7 @@ class TableIsEmpty(Precondition):
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
         with connection.cursor() as cursor:
             cursor.execute(
-                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # noqa: S608
+                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # nosec B608 - schema/table identifiers double-quoted, supplied by the caller via the Precondition dataclass not user input
             )
             result = cursor.fetchone()
             count = result[0] if result else 0

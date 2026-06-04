@@ -270,7 +270,7 @@ class BootstrapPlanner:
             WHERE r.rolname = 'postgres'
               AND c.relkind IN {_REL_KINDS}
               AND n.nspname NOT IN ({", ".join("'" + s + "'" for s in _SYSTEM_SCHEMAS)})
-            """
+            """  # nosec B608 - _REL_KINDS and _SYSTEM_SCHEMAS are module-level constants, no user input
         ).fetchall()
         return {row[0] for row in rows}
 
