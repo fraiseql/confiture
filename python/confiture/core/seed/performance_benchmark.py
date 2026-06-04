@@ -88,7 +88,7 @@ class PerformanceBenchmark:
         >>> print(f"COPY is {result.speedup_factor:.1f}x faster")
     """
 
-    # Time estimates per 1000 rows (from SeedBatchBuilder heuristics)
+    # Time estimates per 1000 rows (empirical VALUES-vs-COPY heuristics)
     VALUES_TIME_PER_1K_ROWS = 100  # ms
     COPY_TIME_PER_1K_ROWS = 10  # ms
 

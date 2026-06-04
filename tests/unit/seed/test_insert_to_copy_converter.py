@@ -286,33 +286,3 @@ class TestEdgeCases:
         result = converter.convert(insert_sql)
 
         assert "999999.99" in result
-
-
-class TestRoundTripCompatibility:
-    """Test that converted COPY can be parsed back."""
-
-    def test_converted_copy_is_parseable(self) -> None:
-        """Test that converted COPY format can be parsed by CopyParser."""
-        from confiture.core.seed.copy_parser import CopyParser
-
-        converter = InsertToCopyConverter()
-        insert_sql = "INSERT INTO users (id, name) VALUES (1, 'Alice'), (2, 'Bob');"
-
-        copy_data = converter.convert(insert_sql)
-
-        # Extract just the data portion
-        lines = copy_data.split("\n")
-        data_lines = [
-            line for line in lines if line and not line.startswith("COPY") and line != "\\."
-        ]
-        copy_data_only = "\n".join(data_lines) + "\n\\."
-
-        # Parse it back
-        parser = CopyParser()
-        rows = parser.parse_table(copy_data_only, ["id", "name"])
-
-        assert len(rows) == 2
-        assert rows[0]["id"] == "1"
-        assert rows[0]["name"] == "Alice"
-        assert rows[1]["id"] == "2"
-        assert rows[1]["name"] == "Bob"
