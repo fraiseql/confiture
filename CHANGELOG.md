@@ -11,6 +11,37 @@ Accumulates the in-progress **0.22.0** bundle (cut at finalize). See the quality
 remediation phases for the full breaking-change set; the entries below are the
 feature/wiring work.
 
+### Fixed — `migrate preflight` accepts `--output` (fraisier adapter contract)
+
+`migrate preflight` was the only command in the `migrate` family without
+`--output`/`-o`. The `fraisier-adapter-confiture` migration adapter passes
+`--output <file>` to **every** subcommand it drives, so its `preflight`
+capability was silently broken: Confiture rejected the flag with a usage error
+(exit 2, no JSON). `migrate preflight` now accepts `--output`, writing the clean
+JSON report (and any error envelope) to the file — matching the rest of the
+family.
+
+### Added — fraisier adapter contract is guarded + documented
+
+The single most load-bearing ecosystem integration — the in-process
+`fraisier-adapter-confiture` calling `migrate current/up/down-to/verify/preflight`
+with `--no-config` + `CONFITURE_DATABASE_URL` — is now a pinned, tested contract:
+
+- New [`docs/reference/fraisier-adapter-contract.md`](docs/reference/fraisier-adapter-contract.md)
+  declares the formal surface (subcommands, flags, JSON shapes, exit codes) and
+  the **minimum adapter version: Confiture ≥ 0.20.0**.
+- New `tests/contract/test_fraisier_adapter_surface.py` mirrors the adapter's
+  invocation and report parsing; a regression in any of the five subcommands
+  fails Confiture's own CI (the adapter is a downstream consumer CI can't see).
+- The two adapter-consumed shapes that lacked a published schema —
+  [`migrate-up`](docs/reference/json-schemas/migrate-up.schema.json) and
+  [`migrate-verify`](docs/reference/json-schemas/migrate-verify.schema.json) —
+  are now published, so all five subcommands are schema-backed.
+
+**Compatibility policy:** the exit-code convention and these JSON shapes are a
+stability contract; a change that breaks the adapter is a breaking change
+requiring a major bump and a CHANGELOG old→new note.
+
 ### Security — annotate the Medium bandit B608 false positives
 
 `bandit` at `--severity-level medium --confidence-level medium` reported 20
