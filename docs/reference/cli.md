@@ -283,6 +283,60 @@ confiture build --env legacy --no-validate-comments --no-fail-on-unclosed --no-f
 
 ---
 
+## `confiture sync`
+
+Copy data from a production database to a local/staging target (Medium 3), with
+optional PII anonymization. See the [Production Sync
+guide](../guides/03-production-sync.md).
+
+### Usage
+
+```bash
+confiture sync --from <env|dsn> --to <env|dsn> [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--from` | Source database: an environment name (`db/environments/{name}.yaml`) or a DSN. **Required.** |
+| `--to` | Target database: an environment name or a DSN. **Required.** |
+| `--anonymize` | Apply PII anonymization rules during the copy. |
+| `--anonymization-config` | Rules YAML (default: `db/sync/anonymization.yaml`). |
+| `--tables` | Comma-separated tables to include (default: all). |
+| `--exclude` | Comma-separated tables to exclude. |
+| `--batch-size` | Rows per batch for anonymized inserts (default: 5000). |
+| `--checkpoint` | Checkpoint file for resumable syncs. |
+| `--resume` | Resume from `--checkpoint`, skipping completed tables. |
+| `--format`, `-f` | Output format: `text` (default) or `json`. |
+
+### Safety
+
+Without `--anonymize` the copy is **verbatim** — real PII lands unmasked in the
+target. The command prints a prominent warning (text → stderr; JSON → the
+`warnings` array) so the risk is never silent. The anonymization rules file maps
+each table to a list of `{column, strategy, seed}` rules, where `strategy` is one
+of `email`, `phone`, `name`, `redact`, `hash`.
+
+### Examples
+
+```bash
+# Basic sync (verbatim — warns about plaintext PII)
+confiture sync --from production --to local
+
+# With anonymization (db/sync/anonymization.yaml)
+confiture sync --from production --to local --anonymize
+
+# Specific tables, JSON output
+confiture sync --from production --to staging --tables users,posts --format json
+
+# Resumable long sync
+confiture sync --from production --to staging --checkpoint sync.json
+confiture sync --from production --to staging --resume --checkpoint sync.json
+```
+
+---
+
 ## `confiture migrate`
 
 Migration management commands (Medium 2: Incremental Migrations).

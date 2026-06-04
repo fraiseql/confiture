@@ -387,14 +387,22 @@ config = {
 
 ### Custom Strategies
 
-```python
-from confiture.anonymization import register_strategy
+Custom masking uses the class-based [anonymization framework](anonymization.md):
+subclass `AnonymizationStrategy` and register it.
 
-@register_strategy('custom_email')
-def my_email_anonymizer(value, field_name, row_context):
-    if not value:
-        return None
-    return f"test_{row_context['id']}@test.local"
+```python
+from typing import Any
+
+from confiture import AnonymizationStrategy, register_strategy
+
+
+@register_strategy("custom_email")
+class CustomEmailStrategy(AnonymizationStrategy):
+    def anonymize(self, value: Any) -> Any:
+        return None if not value else f"user_{abs(hash(value)) % 10**8:08d}@test.local"
+
+    def validate(self, value: Any) -> bool:
+        return value is None or isinstance(value, str)
 ```
 
 ---

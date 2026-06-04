@@ -154,7 +154,7 @@ migrator.cleanup_fdw()
 | API | Module | Description |
 |-----|--------|-------------|
 | [Hooks](hooks.md) | `confiture.hooks` | Lifecycle callbacks for migrations |
-| [Anonymization](anonymization.md) | `confiture.anonymization` | Custom data masking strategies |
+| [Anonymization](anonymization.md) | `confiture` | Custom data masking strategies |
 | [Linting](linting.md) | `confiture.linting` | Schema validation rules |
 | [Wizard](wizard.md) | `confiture.wizard` | Interactive migration assistant |
 | [Blue-Green](blue-green.md) | `confiture.core.blue_green` | Callback-driven zero-downtime schema swap |
@@ -187,17 +187,24 @@ See the [Hook API Reference](hooks.md) for the full surface.
 ### Anonymization Example
 
 ```python
-from confiture.anonymization import register_strategy
-import hashlib
+from typing import Any
 
-@register_strategy('email')
-def anonymize_email(value: str | None, field_name: str, row_context: dict | None) -> str | None:
-    if not value or '@' not in value:
-        return None
-    local, domain = value.rsplit('@', 1)
-    hashed = hashlib.sha256(local.encode()).hexdigest()[:8]
-    return f"user_{hashed}@{domain}"
+from confiture import AnonymizationStrategy, register_strategy
+
+
+@register_strategy("custom_email")
+class CustomEmailStrategy(AnonymizationStrategy):
+    def anonymize(self, value: Any) -> Any:
+        if not value or "@" not in str(value):
+            return None
+        local, domain = str(value).rsplit("@", 1)
+        return f"user_{abs(hash(local)) % 10**8:08d}@{domain}"
+
+    def validate(self, value: Any) -> bool:
+        return value is None or isinstance(value, str)
 ```
+
+See the [Anonymization API Reference](anonymization.md) for the full surface.
 
 ---
 

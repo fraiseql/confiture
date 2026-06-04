@@ -4,6 +4,13 @@
 
 Mask sensitive data when syncing production data to development/staging.
 
+> **⚠️ This guide is being revised.** Some examples below predate the shipped
+> API (e.g. function-style `@register_strategy`, a `StrategyFactory`, and
+> `confiture.scenarios.*`). For the authoritative, tested surface, see the
+> **[Anonymization API Reference](../api/anonymization.md)** (custom strategies)
+> and the **[Production Sync guide](03-production-sync.md)** (`confiture sync
+> --anonymize`).
+
 ---
 
 ## Quick Start

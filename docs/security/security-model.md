@@ -149,23 +149,17 @@ authors are responsible for following this pattern in their migration files.
 #### Environment Variables
 
 ```bash
-# Recommended: Use environment variables
-export DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
-export CONFITURE_KMS_KEY_ID="arn:aws:kms:..."
+# Recommended: pass the DSN via the environment, never on the command line.
+export CONFITURE_DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
 ```
 
-#### KMS Integration
-
-```python
-from confiture.core.anonymization.security.kms_manager import KMSManager
-
-# Encrypt sensitive data
-kms = KMSManager(provider="aws", key_id=os.environ["KMS_KEY_ID"])
-encrypted = kms.encrypt(sensitive_data)
-
-# Decrypt when needed
-decrypted = kms.decrypt(encrypted)
-```
+Confiture resolves its tracking DSN from `CONFITURE_DATABASE_URL` (canonical) or
+the ambient `DATABASE_URL` — see the [connection precedence
+contract](../reference/cli.md). It has **no built-in KMS or encryption layer**:
+store credentials in your platform's secret manager (environment variables, a
+mounted secret, Vault, AWS/GCP secret manager) and inject them at runtime. The
+[anonymization framework](../api/anonymization.md) masks *data* (seed-based,
+one-way) during a sync; it is not a credential store.
 
 #### Never Commit Secrets
 

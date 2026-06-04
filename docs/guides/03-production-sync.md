@@ -128,9 +128,10 @@ database:
 ```
 
 ```bash
-# Use SSH tunnel for production access
+# Use an SSH tunnel for production access, then point --from at the
+# forwarded local port via a DSN (--from / --to accept an env name or a DSN):
 ssh -L 5433:prod-db.internal:5432 bastion.example.com
-confiture sync --from production --to local --source-port 5433
+confiture sync --from "postgresql://user:pass@localhost:5433/proddb" --to local
 ```
 
 ---
