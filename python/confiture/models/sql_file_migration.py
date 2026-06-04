@@ -242,7 +242,7 @@ class FileSQLMigration(Migration):
             },
         )
 
-        return new_class  # type: ignore[return-value]
+        return new_class  # ty: ignore[invalid-return-type]
 
 
 def find_sql_migration_files(migrations_dir: Path) -> list[tuple[Path, Path]]:

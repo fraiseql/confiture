@@ -170,7 +170,9 @@ def sync(
     resume: bool = typer.Option(
         False, "--resume", help="Resume from --checkpoint, skipping completed tables."
     ),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json."),
+    format_output: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json."
+    ),
 ) -> None:
     """Copy data from a production database to a local/staging target (Medium 3).
 

@@ -68,9 +68,7 @@ def _rollback_transactional(migrator: Migrator, migration: Migration) -> None:
         )
 
         migrator.connection.commit()
-        logger.info(
-            f"Successfully rolled back migration {migration.version} ({migration.name})"
-        )
+        logger.info(f"Successfully rolled back migration {migration.version} ({migration.name})")
 
     except Exception as e:
         migrator.connection.rollback()
@@ -98,9 +96,7 @@ def _rollback_non_transactional(migrator: Migrator, migration: Migration) -> Non
     migrator.connection.autocommit = True
 
     try:
-        logger.debug(
-            f"Executing rollback (down) for migration {migration.version} (autocommit)"
-        )
+        logger.debug(f"Executing rollback (down) for migration {migration.version} (autocommit)")
         migration.down()
 
         migrator._execute_sql(

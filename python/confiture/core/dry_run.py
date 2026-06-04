@@ -212,6 +212,7 @@ class DryRunExecutor:
 
     def _execute_one(self, sql: str) -> StatementResult:
         """Execute a single statement, capturing metrics."""
+        assert self._conn is not None
         start = time.perf_counter()
         try:
             cur = self._conn.execute(sql)

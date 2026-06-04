@@ -12,12 +12,9 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from confiture.config.environment import Environment
-
-if TYPE_CHECKING:
-    from confiture.models.lint import LintConfig
 
 logger = logging.getLogger(__name__)
 

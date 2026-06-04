@@ -62,6 +62,7 @@ class IPAddressStrategy(AnonymizationStrategy):
     """
 
     config_type = IPAddressConfig
+    config: IPAddressConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "ip_address"
 
     def anonymize(self, value: str | None) -> str | None:

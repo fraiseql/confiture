@@ -285,9 +285,7 @@ def drop_user_schemas(migrator: Migrator, schemas: list[str]) -> list[str]:
         with migrator.connection.cursor() as cursor:
             for schema in schemas:
                 logger.info("Dropping schema %s", schema)
-                cursor.execute(
-                    pgsql.SQL("DROP SCHEMA {} CASCADE").format(pgsql.Identifier(schema))
-                )
+                cursor.execute(pgsql.SQL("DROP SCHEMA {} CASCADE").format(pgsql.Identifier(schema)))
             # Always recreate public
             cursor.execute("CREATE SCHEMA public")
         return list(schemas)

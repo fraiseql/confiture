@@ -132,7 +132,11 @@ jobs:
     - name: Install dependencies
       run: |
         uv venv
-        uv pip install ruff
+        # Pinned: ruff's lint/format rules evolve between releases (e.g. UP042,
+        # formatter style), so an unpinned install can turn CI red on an
+        # unrelated PR. Keep in lockstep with [dependency-groups] ruff and
+        # .pre-commit-config.yaml's rev, deliberately.
+        uv pip install 'ruff==0.15.15'
     - name: Run ruff check
       run: uv run ruff check .
     - name: Run ruff format check
@@ -156,11 +160,22 @@ jobs:
         key: uv-cache-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
         restore-keys: |
           uv-cache-${{ runner.os }}-
-    - name: Install ty (Astral type checker)
+    - name: Install dependencies and ty
       run: |
-        uv tool install ty
+        # ty resolves third-party imports from an installed environment; without
+        # the deps present its `unresolved-import` rule (a pre-1.0 default) fires
+        # on every `import psycopg`/`pydantic`/... . Sync the dependency tree
+        # WITHOUT building the project (--no-install-project), so no Rust toolchain
+        # is needed here — ty skips the `_core` import via TYPE_CHECKING.
+        uv venv
+        uv sync --no-install-project --all-extras
+        # Pinned: ty is pre-1.0 and adds default rules frequently, so an unpinned
+        # install can turn CI red on an unrelated PR. Keep in lockstep with the ty
+        # pre-commit hook / dev extra, deliberately.
+        uv pip install 'ty==0.0.43'
     - name: Run ty type check on Python code
-      run: ty check python/confiture/
+      # --no-sync: don't let `uv run` rebuild the project (which needs Rust).
+      run: uv run --no-sync ty check python/confiture/
       timeout-minutes: 5
 
   rust-checks:

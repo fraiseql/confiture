@@ -486,9 +486,7 @@ def migrate_validate(
         # introspect the pattern catalog.
         if list_patterns:
             if idempotent:
-                raise ConfigurationError(
-                    "--list-patterns is mutually exclusive with --idempotent"
-                )
+                raise ConfigurationError("--list-patterns is mutually exclusive with --idempotent")
             _emit_pattern_catalog(format_output, output_file)
             return
 
@@ -660,9 +658,7 @@ def migrate_validate(
 
             scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
             func_report = check_function_uniqueness(scan_paths, config)
-            render_function_uniqueness(
-                func_report, json_mode=json_mode, output_file=output_file
-            )
+            render_function_uniqueness(func_report, json_mode=json_mode, output_file=output_file)
             if func_report.has_violations:
                 raise typer.Exit(1)  # success-signal: duplicate signatures found
             return
@@ -745,7 +741,7 @@ def migrate_validate(
 
         if duplicate_versions:
             if format_output == "json":
-                result = {
+                result: dict[str, Any] = {
                     "status": "issues_found",
                     "duplicate_versions": {
                         v: [f.name for f in files] for v, files in duplicate_versions.items()
@@ -1013,9 +1009,7 @@ def migrate_introspect(
     json_mode = is_json(format_output)
     try:
         if not config.exists():
-            raise ConfigurationError(
-                f"Config file not found: {config}", error_code="CONFIG_004"
-            )
+            raise ConfigurationError(f"Config file not found: {config}", error_code="CONFIG_004")
 
         config_data = load_config(config)
         conn = create_connection(config_data)
@@ -1225,9 +1219,7 @@ def migrate_verify(
             elif config and config.exists():
                 config_data = load_config(str(config))
         if config_data is None:
-            raise ConfigurationError(
-                "Config file or --database-url required for migrate verify"
-            )
+            raise ConfigurationError("Config file or --database-url required for migrate verify")
         tracking_table = _get_tracking_table(config_data)
 
         conn = create_connection(config_data)

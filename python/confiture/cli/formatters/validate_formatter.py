@@ -48,8 +48,7 @@ def render_acl_coverage(report: Any, *, json_mode: bool, output_file: Path | Non
             {
                 "check": "acl_coverage",
                 "violations": [
-                    _violation_dict(v)
-                    for v in (report.errors + report.warnings + report.info)
+                    _violation_dict(v) for v in (report.errors + report.warnings + report.info)
                 ],
                 "hints": [],
             },
@@ -57,9 +56,7 @@ def render_acl_coverage(report: Any, *, json_mode: bool, output_file: Path | Non
             console,
         )
     elif report.has_errors:
-        console.print(
-            f"[red]❌ ACL coverage check failed: {len(report.errors)} violation(s)[/red]"
-        )
+        console.print(f"[red]❌ ACL coverage check failed: {len(report.errors)} violation(s)[/red]")
         for v in report.errors:
             # Escape the rule_id brackets so Rich doesn't read them as markup.
             console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
@@ -75,17 +72,14 @@ def render_ownership_coverage(report: Any, *, json_mode: bool, output_file: Path
         _output_json(
             {
                 "check": "ownership_coverage",
-                "violations": [
-                    _violation_dict(v, include_line=True) for v in report.violations
-                ],
+                "violations": [_violation_dict(v, include_line=True) for v in report.violations],
             },
             output_file,
             console,
         )
     elif report.violations:
         console.print(
-            f"[red]❌ Ownership coverage check failed: "
-            f"{len(report.violations)} violation(s)[/red]"
+            f"[red]❌ Ownership coverage check failed: {len(report.violations)} violation(s)[/red]"
         )
         for v in report.violations:
             color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
@@ -97,9 +91,7 @@ def render_ownership_coverage(report: Any, *, json_mode: bool, output_file: Path
         console.print("[green]✅ All migrations have ownership coverage[/green]")
 
 
-def render_function_uniqueness(
-    report: Any, *, json_mode: bool, output_file: Path | None
-) -> None:
+def render_function_uniqueness(report: Any, *, json_mode: bool, output_file: Path | None) -> None:
     """Render the ``--check-function-uniqueness`` result."""
     if json_mode:
         _output_json(
@@ -115,8 +107,7 @@ def render_function_uniqueness(
         )
     elif report.violations:
         console.print(
-            f"[red]❌ Function uniqueness check failed: "
-            f"{len(report.violations)} violation(s)[/red]"
+            f"[red]❌ Function uniqueness check failed: {len(report.violations)} violation(s)[/red]"
         )
         for v in report.violations:
             console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")

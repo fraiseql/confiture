@@ -75,6 +75,7 @@ class TextRedactionStrategy(AnonymizationStrategy):
     """
 
     config_type = TextRedactionConfig
+    config: TextRedactionConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "text_redaction"
 
     def __init__(self, config: TextRedactionConfig | None = None):

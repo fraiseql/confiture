@@ -813,7 +813,7 @@ class SchemaDiffer:
         """Generic name-based add/drop comparison for indexes/constraints."""
         from collections.abc import Callable
 
-        detail_fn_typed: Callable = detail_fn  # type: ignore[assignment]
+        detail_fn_typed: Callable = detail_fn  # ty: ignore[invalid-assignment]
         changes: list[SchemaChange] = []
         old_names = set(old_map.keys())
         new_names = set(new_map.keys())

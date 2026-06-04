@@ -832,9 +832,7 @@ class Migrator:
         error: str | None = None,
     ) -> None:
         """Trigger hooks for a migration lifecycle event."""
-        state_impl.trigger_hook(
-            self, phase, migration, execution_time_ms, success, error
-        )
+        state_impl.trigger_hook(self, phase, migration, execution_time_ms, success, error)
 
     def dry_run(self, migration: Migration) -> DryRunResult:
         """Test a migration without making permanent changes.

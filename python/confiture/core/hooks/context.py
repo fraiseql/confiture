@@ -153,5 +153,5 @@ class HookContext(Generic[T]):
     def add_metadata(self, key: str, value: Any) -> None:
         """Add metadata for observability."""
         if hasattr(self.data, "metadata") and isinstance(self.data.metadata, dict):
-            metadata: dict[str, Any] = self.data.metadata  # type: ignore[union-attr]
+            metadata: dict[str, Any] = self.data.metadata  # ty: ignore[invalid-assignment]
             metadata[key] = value

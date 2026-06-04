@@ -42,16 +42,12 @@ def captured_git_calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, A
         calls["grant"] = kwargs
         return {"is_valid": True}
 
-    monkeypatch.setattr(
-        "confiture.cli.git_validation.validate_git_flags_in_repo", fake_flags
-    )
+    monkeypatch.setattr("confiture.cli.git_validation.validate_git_flags_in_repo", fake_flags)
     monkeypatch.setattr("confiture.cli.git_validation.validate_git_drift", fake_drift)
     monkeypatch.setattr(
         "confiture.cli.git_validation.validate_migration_accompaniment", fake_accompaniment
     )
-    monkeypatch.setattr(
-        "confiture.cli.git_validation.validate_grant_accompaniment", fake_grant
-    )
+    monkeypatch.setattr("confiture.cli.git_validation.validate_grant_accompaniment", fake_grant)
     return calls
 
 

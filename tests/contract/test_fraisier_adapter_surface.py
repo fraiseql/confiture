@@ -64,9 +64,7 @@ def _registry() -> Registry:
 
 
 def _schema(name: str) -> Draft202012Validator:
-    return Draft202012Validator(
-        json.loads((_SCHEMAS_DIR / name).read_text()), registry=_registry()
-    )
+    return Draft202012Validator(json.loads((_SCHEMAS_DIR / name).read_text()), registry=_registry())
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +173,16 @@ def _adapter_invoke(
     migrations_dir: Path,
 ):
     """Invoke a migrate subcommand exactly as the adapter's plan() builds it."""
-    args = ["migrate", subcommand, *extra, "--no-config", "--format", "json", "--output", str(report)]
+    args = [
+        "migrate",
+        subcommand,
+        *extra,
+        "--no-config",
+        "--format",
+        "json",
+        "--output",
+        str(report),
+    ]
     # The adapter gates --migrations-dir on subcommand_takes_migrations_dir.
     if subcommand != "current":
         args += ["--migrations-dir", str(migrations_dir)]
@@ -258,7 +265,9 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
     assert _VERSIONS[1][0] in down_payload["rolled_back"]
 
 
-def test_adapter_dsn_handoff_is_env_only_under_no_config(adapter_db, migrations_dir, tmp_path) -> None:
+def test_adapter_dsn_handoff_is_env_only_under_no_config(
+    adapter_db, migrations_dir, tmp_path
+) -> None:
     """Under --no-config the env DSN is the sole source — proving the adapter handoff.
 
     A successful `migrate up` driven purely by CONFITURE_DATABASE_URL (no --config,
@@ -266,9 +275,7 @@ def test_adapter_dsn_handoff_is_env_only_under_no_config(adapter_db, migrations_
     secrets-via-env contract.
     """
     report = tmp_path / "r.json"
-    result = _adapter_invoke(
-        "up", dsn=adapter_db, report=report, migrations_dir=migrations_dir
-    )
+    result = _adapter_invoke("up", dsn=adapter_db, report=report, migrations_dir=migrations_dir)
     assert result.exit_code == 0, result.output
     payload = _read_report(result, report)
     assert payload["success"] is True

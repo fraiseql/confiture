@@ -177,7 +177,7 @@ def _load_python_migration(migration_file: Path) -> type[Migration]:
     try:
         module = load_migration_module(migration_file)
         migration_class = get_migration_class(module)
-        return migration_class  # type: ignore[return-value]
+        return migration_class  # ty: ignore[invalid-return-type]
     except MigrationError:
         raise
     except Exception as e:

@@ -36,9 +36,7 @@ def _patch_backend(monkeypatch, handle_message_return):
 
     import confiture.core.mcp_server as mcp_server_mod
 
-    monkeypatch.setattr(
-        mcp_server_mod, "MCPServer", MagicMock(return_value=mock_server)
-    )
+    monkeypatch.setattr(mcp_server_mod, "MCPServer", MagicMock(return_value=mock_server))
     return mock_server
 
 

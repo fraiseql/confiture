@@ -258,7 +258,7 @@ class _SectionTracker:
     def _get_memory_usage_mb(self) -> float | None:
         """Get current memory usage (best effort)."""
         try:
-            import psutil  # type: ignore[import-untyped]
+            import psutil  # ty: ignore[unresolved-import]
 
             process = psutil.Process()
             return process.memory_info().rss / 1024 / 1024

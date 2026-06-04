@@ -33,9 +33,7 @@ def test_each_subcommand_help_is_reachable() -> None:
 
 def test_setup_threads_to_core() -> None:
     mock_migrator = MagicMock()
-    with patch(
-        "confiture.cli.schema_to_schema._migrator", return_value=mock_migrator
-    ) as factory:
+    with patch("confiture.cli.schema_to_schema._migrator", return_value=mock_migrator) as factory:
         result = runner.invoke(
             app,
             ["migrate", "schema-to-schema", "setup", "--source", "old", "--target", "new"],

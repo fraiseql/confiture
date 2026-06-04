@@ -148,6 +148,7 @@ class CreditCardStrategy(AnonymizationStrategy):
     """
 
     config_type = CreditCardConfig
+    config: CreditCardConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "credit_card"
 
     def anonymize(self, value: str | None) -> str | None:

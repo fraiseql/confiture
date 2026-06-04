@@ -101,9 +101,7 @@ def _load_mapping_file(path: Path) -> dict[str, dict[str, Any]]:
     import yaml
 
     if not path.exists():
-        raise ConfigurationError(
-            f"Mapping file not found: {path}", error_code="CONFIG_004"
-        )
+        raise ConfigurationError(f"Mapping file not found: {path}", error_code="CONFIG_004")
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise ConfigurationError(f"Mapping file {path} must be a mapping of table entries.")
@@ -243,9 +241,7 @@ def s2s_migrate_table(
         )
         if json_mode:
             print(
-                json.dumps(
-                    {"command": "migrate-table", "target_table": target_table, "rows": rows}
-                )
+                json.dumps({"command": "migrate-table", "target_table": target_table, "rows": rows})
             )
         else:
             console.print(f"[green]✅ {target_table}: {rows} rows migrated[/green]")

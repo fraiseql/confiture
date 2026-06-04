@@ -87,7 +87,15 @@ def test_sync_workflow_json_envelopes_are_well_formed(tmp_path) -> None:
         with patch("confiture.cli.sync._build_syncer", return_value=m2):
             r = runner.invoke(
                 app,
-                ["sync", *CONN, "--anonymize", "--anonymization-config", str(anon), "--format", "json"],
+                [
+                    "sync",
+                    *CONN,
+                    "--anonymize",
+                    "--anonymization-config",
+                    str(anon),
+                    "--format",
+                    "json",
+                ],
             )
         assert r.exit_code == 0, r.output
         payload = json.loads(r.output)
@@ -102,9 +110,7 @@ def test_sync_workflow_table_selection(tmp_path) -> None:
         patch("confiture.cli.sync._resolve_database", return_value=DatabaseConfig()),
         patch("confiture.cli.sync._build_syncer", return_value=m),
     ):
-        r = runner.invoke(
-            app, ["sync", *CONN, "--tables", "users,posts", "--exclude", "audit_log"]
-        )
+        r = runner.invoke(app, ["sync", *CONN, "--tables", "users,posts", "--exclude", "audit_log"])
     assert r.exit_code == 0, r.output
     selection = m.sync.call_args.args[0].tables
     assert selection.include == ["users", "posts"]
@@ -165,10 +171,13 @@ def test_sync_cli_anonymizes_real_data_deterministically(
     )
     argv = [
         "sync",
-        "--from", source_db_url,
-        "--to", target_db_url,
+        "--from",
+        source_db_url,
+        "--to",
+        target_db_url,
         "--anonymize",
-        "--anonymization-config", str(anon),
+        "--anonymization-config",
+        str(anon),
     ]
 
     r = runner.invoke(app, argv)

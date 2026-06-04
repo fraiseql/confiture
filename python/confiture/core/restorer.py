@@ -385,7 +385,8 @@ class DatabaseRestorer:
                 text=True,
             ) as proc:
                 try:
-                    for line in proc.stderr:  # type: ignore[union-attr]
+                    assert proc.stderr is not None
+                    for line in proc.stderr:
                         line = line.rstrip()
                         if on_stderr_line:
                             on_stderr_line(line)

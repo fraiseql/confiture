@@ -71,9 +71,7 @@ def _ssh_override(config_data: Any, ssh_via: str) -> Any:
     return _SshOverride(config_data, SshTunnelConfig(host=ssh_host, user=ssh_user))
 
 
-def _resolve_source_sql(
-    config_data: Any, schema_file: Path | None
-) -> tuple[str, bool]:
+def _resolve_source_sql(config_data: Any, schema_file: Path | None) -> tuple[str, bool]:
     """Return ``(source_sql, auto_built)`` from an explicit file or a fresh build.
 
     Raises:
@@ -92,8 +90,7 @@ def _resolve_source_sql(
         )
         if not env_name:
             raise ValueError(
-                "Config has no 'name' field — cannot auto-build schema. "
-                "Pass --schema explicitly."
+                "Config has no 'name' field — cannot auto-build schema. Pass --schema explicitly."
             )
         return SchemaBuilder(env=env_name).build(schema_only=True), True
     except Exception as build_exc:
@@ -128,9 +125,7 @@ def check_signature_drift(
     from confiture.core.live_function_catalog import LiveFunctionCatalog
 
     if not config_path.exists():
-        raise ConfigurationError(
-            f"Config file not found: {config_path}", error_code="CONFIG_004"
-        )
+        raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
     config_data = load_config(config_path)
     schema_list = [s.strip() for s in schemas.split(",") if s.strip()]
@@ -157,9 +152,7 @@ def check_signature_drift(
             source_bodies: dict[str, str | None] = {
                 sig.signature_key(): body for sig, body in source_with_bodies
             }
-            live_bodies = live_catalog.get_bodies(
-                schemas=schema_list, sig_keys=set(source_bodies)
-            )
+            live_bodies = live_catalog.get_bodies(schemas=schema_list, sig_keys=set(source_bodies))
             body_report = FunctionBodyDriftDetector().compare(source_bodies, live_bodies)
 
     return SignatureDriftResult(

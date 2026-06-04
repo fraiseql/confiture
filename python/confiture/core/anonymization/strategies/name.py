@@ -172,6 +172,7 @@ class NameMaskingStrategy(AnonymizationStrategy):
     """
 
     config_type = NameMaskConfig
+    config: NameMaskConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "name"
 
     def anonymize(self, value: str | None) -> str | None:

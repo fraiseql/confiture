@@ -76,9 +76,16 @@ def test_sync_anonymize_loads_rules_from_yaml(tmp_path) -> None:
         r = runner.invoke(
             app,
             [
-                "sync", "--from", "p", "--to", "l",
-                "--anonymize", "--anonymization-config", str(cfg),
-                "--format", "json",
+                "sync",
+                "--from",
+                "p",
+                "--to",
+                "l",
+                "--anonymize",
+                "--anonymization-config",
+                str(cfg),
+                "--format",
+                "json",
             ],
         )
     assert r.exit_code == 0, r.output
@@ -100,9 +107,16 @@ def test_sync_anonymize_missing_config_fails_config_004(tmp_path) -> None:
         r = runner.invoke(
             app,
             [
-                "sync", "--from", "p", "--to", "l",
-                "--anonymize", "--anonymization-config", str(missing),
-                "--format", "json",
+                "sync",
+                "--from",
+                "p",
+                "--to",
+                "l",
+                "--anonymize",
+                "--anonymization-config",
+                str(missing),
+                "--format",
+                "json",
             ],
         )
     assert r.exit_code == 5, r.output
@@ -151,8 +165,10 @@ def test_sync_dsn_resolution_builds_configs() -> None:
             app,
             [
                 "sync",
-                "--from", "postgresql://u:pw@dbhost:5432/prod",
-                "--to", "postgresql://u:pw@localhost:5432/dev",
+                "--from",
+                "postgresql://u:pw@dbhost:5432/prod",
+                "--to",
+                "postgresql://u:pw@localhost:5432/dev",
             ],
         )
     assert r.exit_code == 0, r.output

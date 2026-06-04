@@ -12,6 +12,7 @@ import uuid
 from urllib.parse import urlparse, urlunparse
 
 import psycopg
+import psycopg.sql
 
 from confiture.exceptions import SchemaError
 

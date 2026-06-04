@@ -123,7 +123,7 @@ class MigrationSandbox:
         self._simulated_migration: Migration | None = None
 
         self.migrations_dir = migrations_dir or Path("db/migrations")
-        self.connection: psycopg.Connection = None  # type: ignore[assignment]
+        self.connection: psycopg.Connection = None  # ty: ignore[invalid-assignment]
         self._validator: DataValidator | None = None
         self._snapshotter: SchemaSnapshotter | None = None
 

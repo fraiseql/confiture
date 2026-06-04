@@ -257,9 +257,9 @@ class MutationRegistry:
                 description="Use wrong value in UPDATE",
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
-                apply_fn=lambda sql: sql.replace("'active'", "'inactive'")
-                if "'active'" in sql
-                else sql,
+                apply_fn=lambda sql: (
+                    sql.replace("'active'", "'inactive'") if "'active'" in sql else sql
+                ),
             ),
             Mutation(
                 id="data_003",
@@ -283,9 +283,9 @@ class MutationRegistry:
                 description="Change WHERE condition",
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
-                apply_fn=lambda sql: sql.replace("WHERE id > 0", "WHERE id < 0")
-                if "WHERE id > 0" in sql
-                else sql,
+                apply_fn=lambda sql: (
+                    sql.replace("WHERE id > 0", "WHERE id < 0") if "WHERE id > 0" in sql else sql
+                ),
             ),
             Mutation(
                 id="data_006",
@@ -301,9 +301,11 @@ class MutationRegistry:
                 description="Update only some rows when should update all",
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
-                apply_fn=lambda sql: sql.replace("UPDATE table", "UPDATE table WHERE id IN (1,2,3)")
-                if "UPDATE table" in sql
-                else sql,
+                apply_fn=lambda sql: (
+                    sql.replace("UPDATE table", "UPDATE table WHERE id IN (1,2,3)")
+                    if "UPDATE table" in sql
+                    else sql
+                ),
             ),
             Mutation(
                 id="data_008",
@@ -399,9 +401,9 @@ class MutationRegistry:
                 description="Scan entire table instead of using index",
                 category=MutationCategory.PERFORMANCE,
                 severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql.replace("WHERE id =", "WHERE TRUE")
-                if "WHERE id =" in sql
-                else sql,
+                apply_fn=lambda sql: (
+                    sql.replace("WHERE id =", "WHERE TRUE") if "WHERE id =" in sql else sql
+                ),
             ),
         ]
 

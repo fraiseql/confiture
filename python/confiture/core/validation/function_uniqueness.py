@@ -44,9 +44,7 @@ def check_function_uniqueness(
     from confiture.core.validation.config_loaders import load_function_coverage
 
     if not config_path.exists():
-        raise ConfigurationError(
-            f"Config file not found: {config_path}", error_code="CONFIG_004"
-        )
+        raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
     config_data = load_config(config_path)
     coverage = load_function_coverage(config_data, config_path, require=False)

@@ -54,9 +54,7 @@ def load_acl_expectations(
     raw = config_data.get("acls")
     if not raw:
         if require:
-            raise ConfigurationError(
-                f"--check-acls requires an `acls:` block in {config_path}"
-            )
+            raise ConfigurationError(f"--check-acls requires an `acls:` block in {config_path}")
         return []
 
     expanded = expand_env_vars(raw, context="acls")
@@ -101,9 +99,7 @@ def load_ownership_expectation(
     try:
         return OwnershipExpectation.model_validate(expanded)
     except ValidationError as exc:
-        raise ConfigurationError(
-            f"Invalid ownership: block in {config_path}: {exc}"
-        ) from exc
+        raise ConfigurationError(f"Invalid ownership: block in {config_path}: {exc}") from exc
 
 
 def load_function_coverage(

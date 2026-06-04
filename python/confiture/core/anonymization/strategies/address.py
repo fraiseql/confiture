@@ -162,6 +162,7 @@ class AddressStrategy(AnonymizationStrategy):
     """
 
     config_type = AddressConfig
+    config: AddressConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "address"
 
     def anonymize(self, value: str | None) -> str | dict | None:

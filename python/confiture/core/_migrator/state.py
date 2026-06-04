@@ -152,9 +152,9 @@ def get_applied_migrations_with_timestamps(migrator: Migrator) -> list[dict[str,
     """Return applied migrations with version, name, and applied_at timestamp."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL(
-                "SELECT version, name, applied_at FROM {} ORDER BY applied_at ASC"
-            ).format(migrator._table_ident)
+            pgsql.SQL("SELECT version, name, applied_at FROM {} ORDER BY applied_at ASC").format(
+                migrator._table_ident
+            )
         )
         return [
             {

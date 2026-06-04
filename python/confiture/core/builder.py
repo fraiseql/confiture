@@ -23,7 +23,7 @@ HAS_RUST = False
 
 if not TYPE_CHECKING:
     try:
-        from confiture import _core  # type: ignore
+        from confiture import _core
 
         HAS_RUST = True
     except ImportError:
@@ -69,7 +69,7 @@ class SchemaBuilder:
             )
 
         # Parse include_dirs (support string, dict, and DirectoryConfig formats)
-        self.include_configs = []
+        self.include_configs: list[dict[str, Any]] = []
         for include in self.env_config.include_dirs:
             if isinstance(include, str):
                 self.include_configs.append(
@@ -151,10 +151,10 @@ class SchemaBuilder:
                 )
 
         # Sort by order
-        self.include_configs.sort(key=lambda x: int(x["order"]))  # type: ignore
+        self.include_configs.sort(key=lambda x: int(x["order"]))
 
         # Extract paths for backward compatibility
-        self.include_dirs: list[Path] = [cfg["path"] for cfg in self.include_configs]  # type: ignore
+        self.include_dirs: list[Path] = [cfg["path"] for cfg in self.include_configs]
 
         # Base directory for relative path calculation
         # Find the common parent of all include directories
@@ -283,7 +283,7 @@ class SchemaBuilder:
         all_sql_files = []
 
         for config in self.include_configs:
-            include_dir: Path = config["path"]  # type: ignore
+            include_dir: Path = config["path"]
             recursive = config["recursive"]
             include_patterns = config["include"]
             exclude_patterns = config["exclude"]
@@ -300,7 +300,7 @@ class SchemaBuilder:
                     )
 
             # Find files matching include patterns
-            for pattern in include_patterns:  # type: ignore
+            for pattern in include_patterns:
                 if recursive:
                     sql_files = list(include_dir.rglob(pattern))
                 else:
@@ -310,8 +310,7 @@ class SchemaBuilder:
                 for file in sql_files:
                     rel_path = file.relative_to(include_dir)
                     is_excluded = any(
-                        rel_path.match(exclude_pattern)
-                        for exclude_pattern in exclude_patterns  # type: ignore
+                        rel_path.match(exclude_pattern) for exclude_pattern in exclude_patterns
                     )
 
                     if not is_excluded:

@@ -29,9 +29,7 @@ class OwnershipCoverageReport:
         return any(v.severity == RuleSeverity.ERROR for v in self.violations)
 
 
-def check_ownership_coverage(
-    migrations_dir: Path, config_path: Path
-) -> OwnershipCoverageReport:
+def check_ownership_coverage(migrations_dir: Path, config_path: Path) -> OwnershipCoverageReport:
     """Run own_001 + own_002 against *migrations_dir*.
 
     Returns:
@@ -50,9 +48,7 @@ def check_ownership_coverage(
     from confiture.core.validation.config_loaders import load_ownership_expectation
 
     if not config_path.exists():
-        raise ConfigurationError(
-            f"Config file not found: {config_path}", error_code="CONFIG_004"
-        )
+        raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
     config_data = load_config(config_path)
     # No-op when the project hasn't adopted the `ownership:` block yet.

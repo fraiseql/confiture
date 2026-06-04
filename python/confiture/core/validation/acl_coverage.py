@@ -28,18 +28,14 @@ def check_acl_coverage(migrations_dir: Path, config_path: Path):  # noqa: ANN201
     from confiture.core.validation.config_loaders import load_acl_expectations
 
     if not config_path.exists():
-        raise ConfigurationError(
-            f"Config file not found: {config_path}", error_code="CONFIG_004"
-        )
+        raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
     config_data = load_config(config_path)
     # No-op when the project hasn't adopted the `acls:` block yet.
     expectations = load_acl_expectations(config_data, config_path, require=False)
 
     grant_dir_raw = (
-        config_data.get("migration", {}).get("grant_dir")
-        if isinstance(config_data, dict)
-        else None
+        config_data.get("migration", {}).get("grant_dir") if isinstance(config_data, dict) else None
     ) or "db/7_grant"
     grant_dir = (config_path.parent / grant_dir_raw).resolve()
 

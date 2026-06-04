@@ -154,28 +154,25 @@ class HookRegistry(Generic[T]):
         tasks = [execute_with_semaphore(hook) for hook in hooks]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Process results
-        failed = [
-            r for r in results if isinstance(r, Exception) or r.status == HookExecutionStatus.FAILED
-        ]
-        if failed and config.error_strategy == HookErrorStrategy.FAIL_FAST:
-            raise HookExecutionError(f"{len(failed)} hooks failed in parallel execution")
+        # Partition gather() results into hook events vs. raised exceptions.
+        # gather(return_exceptions=True) yields HookExecutionEvent | Exception.
+        events = [r for r in results if isinstance(r, HookExecutionEvent)]
+        exceptions = [r for r in results if isinstance(r, Exception)]
+
+        # A hook "failed" if it raised or reported a FAILED status.
+        failed_total = len(exceptions) + sum(
+            1 for e in events if e.status == HookExecutionStatus.FAILED
+        )
+        if failed_total and config.error_strategy == HookErrorStrategy.FAIL_FAST:
+            raise HookExecutionError(f"{failed_total} hooks failed in parallel execution")
 
         return HookExecutionResult(
             phase=_extract_phase_value(config.phase),
             hooks_executed=len(results),
-            results=[r for r in results if not isinstance(r, Exception)],
-            total_duration_ms=sum(r.duration_ms for r in results if not isinstance(r, Exception)),
-            failed_count=sum(
-                1
-                for r in results
-                if not isinstance(r, Exception) and r.status == HookExecutionStatus.FAILED
-            ),
-            timeout_count=sum(
-                1
-                for r in results
-                if not isinstance(r, Exception) and r.status == HookExecutionStatus.TIMEOUT
-            ),
+            results=events,
+            total_duration_ms=sum(e.duration_ms for e in events),
+            failed_count=sum(1 for e in events if e.status == HookExecutionStatus.FAILED),
+            timeout_count=sum(1 for e in events if e.status == HookExecutionStatus.TIMEOUT),
         )
 
     async def _execute_dag(

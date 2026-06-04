@@ -60,6 +60,7 @@ class DateMaskingStrategy(AnonymizationStrategy):
     """
 
     config_type = DateMaskConfig
+    config: DateMaskConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "date"
 
     # Common date formats to try

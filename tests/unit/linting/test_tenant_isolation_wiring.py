@@ -45,9 +45,7 @@ def test_tenant_isolation_fires_when_enabled() -> None:
     config = LintConfig(check_tenant_isolation=True)
     report = SchemaLinter(config=config).lint(schema=_TENANT_SCHEMA)
     tenant = [
-        v
-        for v in (*report.errors, *report.warnings, *report.info)
-        if v.rule_id == "tenant_001"
+        v for v in (*report.errors, *report.warnings, *report.info) if v.rule_id == "tenant_001"
     ]
     assert tenant, "expected a tenant_001 violation when check_tenant_isolation=True"
     assert "fk_org" in tenant[0].message

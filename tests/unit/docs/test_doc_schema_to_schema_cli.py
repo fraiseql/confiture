@@ -33,9 +33,5 @@ def test_doc_has_a_schema_to_schema_section() -> None:
 def test_doc_lists_every_registered_subcommand() -> None:
     """Every subcommand the CLI registers is named in the reference doc."""
     text = read_doc(CLI_DOC)
-    missing = [
-        sub
-        for sub in _REGISTERED
-        if f"schema-to-schema {sub}" not in text
-    ]
+    missing = [sub for sub in _REGISTERED if f"schema-to-schema {sub}" not in text]
     assert not missing, f"cli.md schema-to-schema section is missing: {missing}"

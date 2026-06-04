@@ -32,7 +32,7 @@ class CustomConfig(StrategyConfig):
         >>> config = CustomConfig(seed=12345, func=upper_mask, name="uppercase")
     """
 
-    func: Callable[[Any], Any] | None = None
+    func: Callable[..., Any] | None = None
     name: str = "custom"
     accepts_seed: bool = False
 
@@ -59,6 +59,7 @@ class CustomStrategy(AnonymizationStrategy):
     """
 
     config_type = CustomConfig
+    config: CustomConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "custom"
 
     def anonymize(self, value: Any) -> Any:
@@ -122,6 +123,7 @@ class CustomLambdaStrategy(AnonymizationStrategy):
     """
 
     config_type = CustomConfig
+    config: CustomConfig  # narrow inherited StrategyConfig to this strategy's config
     strategy_name = "custom_lambda"
 
     def anonymize(self, value: Any) -> Any:

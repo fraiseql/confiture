@@ -76,11 +76,17 @@ def test_full_cutover_workflow(tmp_path) -> None:
         r = runner.invoke(
             app,
             [
-                *S2S, "migrate-table", *CONN,
-                "--source-table", "old_events",
-                "--target-table", "events",
-                "--mapping", "ts:created_at",
-                "--strategy", "copy",
+                *S2S,
+                "migrate-table",
+                *CONN,
+                "--source-table",
+                "old_events",
+                "--target-table",
+                "events",
+                "--mapping",
+                "ts:created_at",
+                "--strategy",
+                "copy",
             ],
         )
         assert r.exit_code == 0, r.output

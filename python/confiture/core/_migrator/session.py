@@ -178,6 +178,7 @@ class MigratorSession:
                 resolution_hint="Use: with Migrator.from_config(...) as m: ...",
             )
 
+        assert self._config is not None
         tracking_table = self._config.migration.tracking_table
 
         # Discover migration files (Python and SQL)
@@ -563,6 +564,10 @@ class MigratorSession:
         import confiture.core.migrator as _m
         from confiture.models.results import MigrateUpResult, MigrationApplied
 
+        # Invariant: this helper only runs inside an active session (callers guard).
+        assert self._conn is not None
+        assert self._migrator is not None
+
         lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
         lock = _m.MigrationLock(self._conn, lock_config)
 
@@ -650,6 +655,8 @@ class MigratorSession:
         import confiture.core.migrator as _m
         from confiture.models.results import MigrationApplied
 
+        assert self._migrator is not None
+
         migration_files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
         by_version = {self._migrator._version_from_filename(f.name): f for f in migration_files}
 
@@ -690,6 +697,8 @@ class MigratorSession:
         ``down()``). This feeds the planner's ``down_available`` so an
         irreversible target is refused *before* any execution.
         """
+        assert self._migrator is not None
+
         reversible: set[str] = set()
         for f in self._migrator.find_migration_files(migrations_dir=self._migrations_dir):
             version = self._migrator._version_from_filename(f.name)

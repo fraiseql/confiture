@@ -27,9 +27,7 @@ def check_live_drift(config_path: Path, schema_file: Path | None):  # noqa: ANN2
             given, or the database connection fails (``CONFIG_006``).
     """
     if not config_path.exists():
-        raise ConfigurationError(
-            f"Config file not found: {config_path}", error_code="CONFIG_004"
-        )
+        raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
     if schema_file is None:
         raise ConfigurationError("--schema is required with --check-live-drift")
 

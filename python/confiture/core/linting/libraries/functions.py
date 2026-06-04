@@ -37,7 +37,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from confiture.config.environment import FunctionCoverage
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
@@ -278,9 +278,9 @@ class Func001FunctionUniqueness:
         return definitions
 
     @staticmethod
-    def _split_funcname(funcname: object) -> tuple[str, str]:
+    def _split_funcname(funcname: Any) -> tuple[str, str]:
         """Return ``(schema, name)`` from pglast's funcname node list."""
-        parts = [n.sval for n in funcname]  # type: ignore[attr-defined]
+        parts = [n.sval for n in funcname]
         if len(parts) == 1:
             return _DEFAULT_SCHEMA, parts[0]
         # Per PostgreSQL: db.schema.name allowed only in CREATE; treat
@@ -289,12 +289,12 @@ class Func001FunctionUniqueness:
         return parts[-2], parts[-1]
 
     @staticmethod
-    def _extract_param_types(parameters: object) -> tuple[str, ...]:
+    def _extract_param_types(parameters: Any) -> tuple[str, ...]:
         """Return signature-significant parameter types, normalized."""
         if not parameters:
             return ()
         types: list[str] = []
-        for p in parameters:  # type: ignore[union-attr]
+        for p in parameters:
             mode = p.mode
             mode_name = mode.name if mode else ""
             if mode_name in _NON_SIGNATURE_MODES:
@@ -304,9 +304,9 @@ class Func001FunctionUniqueness:
         return tuple(types)
 
     @staticmethod
-    def _render_typename(type_node: object) -> str:
+    def _render_typename(type_node: Any) -> str:
         """Render a pglast ``TypeName`` node into a normalized string."""
-        names = [n.sval for n in type_node.names]  # type: ignore[attr-defined]
+        names = [n.sval for n in type_node.names]
         if len(names) == 2 and names[0] == "pg_catalog":
             base = _PG_CATALOG_ALIASES.get(names[1], names[1])
         else:

@@ -4,6 +4,7 @@ Handles text, JSON, and CSV formatting for migration results.
 """
 
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -328,7 +329,7 @@ def _format_rebuild_text(result: MigrateRebuildResult, console: Console) -> None
 
 
 def show_migration_error_details(
-    failed_migration: object,
+    failed_migration: Any,
     exception: BaseException,
     applied_count: int,
     console: Console,
@@ -344,11 +345,9 @@ def show_migration_error_details(
     from confiture.exceptions import MigrationError
 
     console.print("\n[red]Failed Migration Details:[/red]")
-    console.print(f"  Version: {failed_migration.version}")  # type: ignore[union-attr]
-    console.print(f"  Name: {failed_migration.name}")  # type: ignore[union-attr]
-    console.print(
-        f"  File: db/migrations/{failed_migration.version}_{failed_migration.name}.py"  # type: ignore[union-attr]
-    )
+    console.print(f"  Version: {failed_migration.version}")
+    console.print(f"  Name: {failed_migration.name}")
+    console.print(f"  File: db/migrations/{failed_migration.version}_{failed_migration.name}.py")
 
     error_message = str(exception)
 
@@ -423,7 +422,7 @@ def show_migration_error_details(
 
     console.print("\n[yellow]🛠️  General Troubleshooting:[/yellow]")
     console.print(
-        f"  • View migration file: cat db/migrations/{failed_migration.version}_{failed_migration.name}.py"  # type: ignore[union-attr]
+        f"  • View migration file: cat db/migrations/{failed_migration.version}_{failed_migration.name}.py"
     )
     console.print("  • Check database logs for more details")
     console.print("  • Test SQL manually in psql")

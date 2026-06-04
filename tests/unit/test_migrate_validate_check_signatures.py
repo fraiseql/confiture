@@ -126,7 +126,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
-            patch("confiture.core.validation.signature_drift.load_config", return_value=MagicMock()),
+            patch(
+                "confiture.core.validation.signature_drift.load_config", return_value=MagicMock()
+            ),
             patch(
                 "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
@@ -160,7 +162,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
-            patch("confiture.core.validation.signature_drift.load_config", return_value=MagicMock()),
+            patch(
+                "confiture.core.validation.signature_drift.load_config", return_value=MagicMock()
+            ),
             patch(
                 "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),
@@ -194,7 +198,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
-            patch("confiture.core.validation.signature_drift.load_config", return_value=MagicMock()),
+            patch(
+                "confiture.core.validation.signature_drift.load_config", return_value=MagicMock()
+            ),
             patch(
                 "confiture.core.validation.signature_drift.open_connection",
                 self._make_open_conn_mock(),

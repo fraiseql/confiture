@@ -190,6 +190,8 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
+    "UP042",  # StrEnum migration changes str() semantics; code/tests rely on the
+    # (str, Enum) form (e.g. str(LintSeverity.ERROR) == "LintSeverity.ERROR").
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -230,5 +232,5 @@ possibly-missing-attribute = "ignore"
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
-    "ruff==0.14.5",
+    "ruff==0.15.15",
 ]
