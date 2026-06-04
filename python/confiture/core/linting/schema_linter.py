@@ -101,6 +101,7 @@ class LintConfig:
         check_indexes: bool = True,
         check_constraints: bool = True,
         check_security: bool = True,
+        check_tenant_isolation: bool = False,
     ):
         """Initialize linting configuration.
 
@@ -114,6 +115,8 @@ class LintConfig:
             check_indexes: Check indexes on foreign keys
             check_constraints: Check constraint definitions
             check_security: Check for security issues (passwords, tokens)
+            check_tenant_isolation: Detect INSERTs missing tenant FK columns
+                (multi-tenant rule, ``tenant_001``). Opt-in (default off).
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -124,6 +127,7 @@ class LintConfig:
         self.check_indexes = check_indexes
         self.check_constraints = check_constraints
         self.check_security = check_security
+        self.check_tenant_isolation = check_tenant_isolation
 
 
 class SchemaLinter:
@@ -215,6 +219,12 @@ class SchemaLinter:
 
         if self.config.check_security:
             self._check_security(report)
+
+        # Tenant isolation (tenant_001) — opt-in multi-tenant rule. Detects
+        # INSERTs in functions that omit the FK column a tenant-scoped view
+        # requires. Off by default so existing lint output is unchanged.
+        if self.config.check_tenant_isolation:
+            self._check_tenant_isolation(report)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
         # the environment YAML.  The mere presence of an ``acls:`` block
@@ -517,6 +527,28 @@ class SchemaLinter:
                 report.add_violation(violation)
 
         return report
+
+    def _check_tenant_isolation(self, report: LintReport) -> None:
+        """Detect function INSERTs missing tenant FK columns (``tenant_001``).
+
+        Delegates to :class:`TenantIsolationRule`, which parses the built
+        schema for tenant-scoped views and the function INSERTs that should
+        carry their FK columns. The schema blob holds both, so it is passed
+        as both the view and function source.
+
+        Args:
+            report: Report to add violations to
+        """
+        if not self._schema_sql:
+            return
+
+        from confiture.core.linting.tenant.tenant_isolation_rule import TenantIsolationRule
+
+        TenantIsolationRule().run(
+            view_sqls=[self._schema_sql],
+            function_sqls=[self._schema_sql],
+            report=report,
+        )
 
     def lint_migrations(
         self,

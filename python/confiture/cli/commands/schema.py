@@ -627,21 +627,31 @@ def lint(
         "--migrations-dir",
         help="Migrations directory for --replica-safe (default: db/migrations)",
     ),
+    check_tenant_isolation: bool = typer.Option(
+        False,
+        "--check-tenant-isolation",
+        help="Enable the multi-tenant isolation rule (tenant_001): flag function "
+        "INSERTs missing the FK column a tenant-scoped view requires (default: off).",
+    ),
 ) -> None:
     """Validate schema against best practices.
 
     PROCESS:
-      Checks schema against 6 default rules (naming conventions, primary keys,
-      documentation, multi-tenant columns, FK indexes, security) plus an
-      opt-in ACL coverage rule (acl_001). Results in table or JSON format.
+      Checks schema against 5 default rules (naming conventions, primary keys,
+      documentation, FK indexes, security) plus two opt-in rules: ACL coverage
+      (acl_001) and multi-tenant isolation (tenant_001). Results in table or
+      JSON format.
 
     RULES:
-      naming, primary keys, documentation, multi-tenant columns, FK indexes,
-      security — always on (toggle via LintConfig fields).
+      naming, primary keys, documentation, FK indexes, security — always on
+      (toggle via LintConfig fields).
 
       ACL coverage (acl_001) — opt-in. Set ``acls.lint_enabled: true`` in
       the environment YAML to enable.  Merely defining ``acls:`` no longer
       auto-fires the rule (changed in 0.12.0).  See ``docs/guides/acl-coverage.md``.
+
+      Multi-tenant isolation (tenant_001) — opt-in via ``--check-tenant-isolation``.
+      Detects function INSERTs that omit the FK column a tenant-scoped view needs.
 
     EXAMPLES:
       confiture lint
@@ -685,6 +695,7 @@ def lint(
             enabled=True,
             fail_on_error=fail_on_error,
             fail_on_warning=fail_on_warning,
+            check_tenant_isolation=check_tenant_isolation,
         )
 
         # Create linter and run linting

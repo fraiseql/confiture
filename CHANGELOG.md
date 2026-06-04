@@ -34,6 +34,35 @@ confiture migrate schema-to-schema {setup,analyze,migrate,migrate-table,verify,c
   list to the live app) and `docs/guides/04-schema-to-schema.md`; covered by a
   happy-path e2e workflow test.
 
+### Added — multi-tenant isolation lint rule (`tenant_001`)
+
+The `TenantIsolationRule` existed but no config flag ever invoked it from
+`confiture lint`. It is now wired as an **opt-in** rule (default off, so
+existing lint output is unchanged):
+
+- `confiture lint --check-tenant-isolation`, or
+  `LintConfig(check_tenant_isolation=True)` in the library.
+- Flags function `INSERT`s that omit the FK column a tenant-scoped view
+  requires (WARNING severity). `docs/linting.md` §4 rewritten to match the
+  real rule (the old text promised an unimplemented column-presence check).
+
+### Removed — orphaned (test-only) modules
+
+A reachability sweep removed modules that were imported only by their own
+tests and superseded by shipped code (no live entrypoint):
+
+- `core/{context,logging,metrics}.py` (parallel observability layer, replaced
+  by the `exceptions.py`/`error_codes.py` stack).
+- `core/risk/` (replaced by `migrate estimate`).
+- `core/seed/{copy_executor,copy_parser,seed_batch_builder}.py` (the wired
+  load path is `SeedApplier`).
+- The seed `consistency_validator` island and the standalone
+  `uuid_validator`/`uuid_patterns`/`seed_pattern_validator` + `prep_seed/fixer`
+  (both subsumed by the wired `PrepSeedOrchestrator`). The dead `seed validate
+  --uuid-validation` stub flag and the `consistency-validation` /
+  `uuid-validation` guides were retired with them.
+- The empty `confiture/testing/utils/` package.
+
 ## [0.21.0] - 2026-06-03
 
 Unifies the last preflight surface still on a bespoke JSON shape: `migrate

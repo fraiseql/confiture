@@ -280,58 +280,48 @@ rules:
 - Clarifies business logic in schema
 - Enables better code reviews
 
-### 4. MultiTenantRule
+### 4. Tenant Isolation Rule (`tenant_001`)
 
-**Purpose**: Enforce multi-tenant table structure
+**Purpose**: Catch function `INSERT`s that would write tenant-unscoped rows
 
-**Validates**:
-- Multi-tenant tables have a tenant_id column
-- Tenant identifiers are properly indexed
-- Prevents accidental data leaks across tenants
+**Validates**: For each tenant-scoped view (one that derives a tenant column —
+`tenant_id`, `organization_id`, `org_id` — from a table's FK), every function
+`INSERT` into that table includes the required FK column. A missing FK column
+means rows can be created that the tenant-filtered view can never see (or that
+leak across tenants).
 
-**Severity**: ERROR (critical for security)
+**Severity**: WARNING
 
-**Example Violations**:
+**Opt-in**: Off by default. Enable per run with `confiture lint
+--check-tenant-isolation`, or in the library with
+`LintConfig(check_tenant_isolation=True)`.
+
+**Example Violation**:
 
 ```sql
--- BAD: No tenant isolation
-CREATE TABLE user_settings (
-    id UUID PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    theme VARCHAR(50),
-    notifications_enabled BOOLEAN
-);
+-- A view scopes tb_item by organization via fk_org:
+CREATE VIEW v_item AS
+SELECT i.id, i.name, o.id AS tenant_id
+FROM tb_item i
+JOIN tv_organization o ON i.fk_org = o.pk_organization;
 
--- GOOD: With tenant_id
-CREATE TABLE user_settings (
-    id UUID PRIMARY KEY,
-    tenant_id INTEGER NOT NULL,  -- Added
-    user_id INTEGER NOT NULL,
-    theme VARCHAR(50),
-    notifications_enabled BOOLEAN,
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-);
-CREATE INDEX idx_user_settings_tenant_id ON user_settings(tenant_id);
+-- BAD: the INSERT omits fk_org → tenant_001 violation
+CREATE FUNCTION fn_create_item() RETURNS VOID AS $$
+BEGIN
+    INSERT INTO tb_item (id, name) VALUES (1, 'test');
+END;
+$$ LANGUAGE plpgsql;
+
+-- GOOD: the INSERT carries the tenant FK
+CREATE FUNCTION fn_create_item() RETURNS VOID AS $$
+BEGIN
+    INSERT INTO tb_item (id, name, fk_org) VALUES (1, 'test', 123);
+END;
+$$ LANGUAGE plpgsql;
 ```
 
-**Configuration**:
-
-```yaml
-rules:
-  multi_tenant:
-    enabled: true
-    identifier: tenant_id  # Customize if needed
-```
-
-**Detecting Multi-Tenant Tables**: The rule uses heuristics to detect multi-tenant tables:
-- Presence of tenant_id column
-- Multiple clients/organizations sharing the database
-- SaaS application architecture
-
-**Why This Matters**: Multi-tenancy is critical for security:
-- Prevents data leaks between customers
-- Enables efficient resource sharing
-- Supports scaling and isolation
+**Why This Matters**: Tenant isolation is critical for security — it prevents
+data leaks between customers and keeps tenant-filtered views complete.
 
 ### 5. MissingIndexRule
 
