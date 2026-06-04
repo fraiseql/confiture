@@ -1707,6 +1707,110 @@ For comprehensive guide including decision trees, integration examples, and best
 
 ---
 
+### `confiture migrate schema-to-schema`
+
+Medium 4: **zero-downtime** schema migration via PostgreSQL's Foreign Data
+Wrapper (FDW). Runs the old and new schemas side-by-side, copies data in the
+background while the old schema stays live, then cuts over. Use it for column
+renames, type changes, and table splits/merges on large tables; for simple
+add/drop use `migrate up` (Medium 2) instead.
+
+Every subcommand takes a `--source` (old database) and `--target` (new
+database). Each resolves an **environment name** (`db/environments/{name}.yaml`),
+a **config path**, or a raw **DSN** — the core needs a live connection to both.
+
+```bash
+confiture migrate schema-to-schema [SUBCOMMAND] --source <db> --target <db> [OPTIONS]
+```
+
+| Subcommand | Purpose |
+|------------|---------|
+| `setup` | Create the FDW server + import the foreign schema (target → source) |
+| `analyze` | Recommend a per-table strategy (FDW vs COPY) from table sizes |
+| `migrate` | Migrate every table declared in a column-mapping YAML |
+| `migrate-table` | Migrate one table with an inline `src_col:dst_col,…` mapping |
+| `verify` | Compare source/target row counts (exit `1` on mismatch) |
+| `cleanup` | Drop the FDW server + foreign schema from the target after cutover |
+
+All subcommands accept `--format`/`-f` (`text` or `json`) and route failures
+through the unified `{ok: false, error: {…}}` envelope (an unresolvable
+`--source`/`--target` is `CONFIG_004`/`CONFIG_006`, exit `5`/`3`).
+
+#### `setup`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--source` | String | *required* | Source (old) database: env name, config path, or DSN |
+| `--target` | String | *required* | Target (new) database |
+| `--skip-import` | flag | off | Create the FDW server without importing the foreign schema |
+
+#### `analyze`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--schema` | String | `public` | Schema to analyze |
+
+Auto-selects FDW (<10M rows) or COPY (≥10M rows) per table.
+
+#### `migrate`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--mapping` | Path | *required* | Per-table column-mapping YAML (see the guide) |
+| `--strategy` | String | `fdw` | `fdw` or `copy` |
+
+#### `migrate-table`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--source-table` | String | *required* | Source table name |
+| `--target-table` | String | *required* | Target table name |
+| `--mapping` | String | *required* | Inline column mapping `src_col:dst_col,…` |
+| `--strategy` | String | `fdw` | `fdw` or `copy` |
+
+#### `verify`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--tables` | String | *required* | Comma-separated tables to verify |
+| `--source-schema` | String | `old_schema` | Source schema name |
+| `--target-schema` | String | `public` | Target schema name |
+
+Exits `1` (a found-issue signal) when any table's row counts differ.
+
+#### Examples
+
+```bash
+# 1. Set up the FDW from the new (target) database back to the old (source)
+confiture migrate schema-to-schema setup --source old_prod --target new_prod
+
+# 2. See the recommended strategy per table
+confiture migrate schema-to-schema analyze --source old_prod --target new_prod
+
+# 3. Migrate every table named in the mapping file
+confiture migrate schema-to-schema migrate \
+    --source old_prod --target new_prod \
+    --mapping db/migration/column_mapping.yaml
+
+# 4. Migrate a single table with an inline mapping
+confiture migrate schema-to-schema migrate-table \
+    --source old_prod --target new_prod \
+    --source-table old_users --target-table users \
+    --mapping "full_name:display_name,email:email"
+
+# 5. Verify row-count parity before cutover (exit 1 on mismatch)
+confiture migrate schema-to-schema verify \
+    --source old_prod --target new_prod --tables users,posts
+
+# 6. Remove the FDW after the monitoring period
+confiture migrate schema-to-schema cleanup --source old_prod --target new_prod
+```
+
+See the **[Schema-to-Schema Migration Guide](../guides/04-schema-to-schema.md)**
+for the full cutover playbook and the column-mapping YAML format.
+
+---
+
 ## `confiture drift`
 
 Compare the live database schema against expected DDL and/or the configured `acls:` block.

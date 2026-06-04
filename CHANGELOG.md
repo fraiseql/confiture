@@ -5,6 +5,35 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Accumulates the in-progress **0.22.0** bundle (cut at finalize). See the quality
+remediation phases for the full breaking-change set; the entries below are the
+feature/wiring work.
+
+### Added — `confiture migrate schema-to-schema` CLI (Medium 4, FDW)
+
+The zero-downtime FDW migration strategy (Medium 4) had a documented workflow
+but **no CLI** — the `SchemaToSchemaMigrator` engine was reachable only from its
+own tests. It is now a first-class subcommand group:
+
+```bash
+confiture migrate schema-to-schema {setup,analyze,migrate,migrate-table,verify,cleanup}
+```
+
+- Each subcommand takes `--source` and `--target`, each resolving an environment
+  name (`db/environments/{name}.yaml`), a config path, or a raw DSN.
+- `setup` builds the FDW server (`--skip-import` to defer the foreign-schema
+  import); `analyze` recommends FDW-vs-COPY per table; `migrate` drives a
+  column-mapping YAML; `migrate-table` takes an inline `src:dst,…` mapping;
+  `verify` checks row-count parity (exit `1` on mismatch); `cleanup` tears the
+  FDW down after cutover.
+- Failures route through the unified `{ok: false, error: {…}}` envelope; an
+  unresolvable `--source`/`--target` is `CONFIG_004`/`CONFIG_006`.
+- Documented in `docs/reference/cli.md` (with a doc-guard pinning the command
+  list to the live app) and `docs/guides/04-schema-to-schema.md`; covered by a
+  happy-path e2e workflow test.
+
 ## [0.21.0] - 2026-06-03
 
 Unifies the last preflight surface still on a bespoke JSON shape: `migrate
