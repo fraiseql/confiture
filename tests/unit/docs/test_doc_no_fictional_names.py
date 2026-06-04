@@ -6,7 +6,11 @@ exist and must never reappear in user-facing docs:
 * ``confiture_migrations`` / ``confiture_version`` — the tracking table is
   ``tb_confiture`` (see docs/reference/tracking-table.md);
 * ``apply_all(`` — fictional Migrator method;
-* ``uv run mypy`` — the project type-checks with ``ty``.
+* ``uv run mypy`` — the project type-checks with ``ty``;
+* ``confiture.core.security`` — the dormant validation/secure-logging module was
+  deleted in 0.22.0 (it was never imported by any live path); the docs once
+  presented it as an *active* control, which was false assurance. The unrelated
+  ``confiture.core.anonymization.security`` (KMS) path is not matched.
 
 Word boundaries keep legitimate identifiers (``tb_confiture_version_key``,
 ``idx_tb_confiture_version``) from tripping the table-name patterns.
@@ -30,6 +34,9 @@ FORBIDDEN = {
     ),
     "apply_all( (fictional Migrator method)": re.compile(r"apply_all\("),
     "uv run mypy (the project uses ty)": re.compile(r"uv run mypy"),
+    "confiture.core.security (dormant module deleted in 0.22.0)": re.compile(
+        r"confiture\.core\.security"
+    ),
 }
 
 

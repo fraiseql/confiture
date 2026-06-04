@@ -51,9 +51,9 @@ every layer of the system.
 **Impact**: Data theft, data corruption, privilege escalation
 
 **Mitigations**:
-- Input validation for all identifiers
-- Parameterized queries (required by framework)
-- SQL pattern detection
+- Parameterized queries throughout Confiture's own SQL
+- Identifier quoting for every dynamically-built identifier (internal `quote_ident`)
+- Migration authors responsible for parameterizing data values in their own SQL
 - Code review requirements
 
 #### T2: Credential Exposure
@@ -63,8 +63,8 @@ every layer of the system.
 **Impact**: Unauthorized database access
 
 **Mitigations**:
-- Automatic log redaction
-- Environment variable configuration
+- Credentials supplied via environment variables or a secret store, never inline
+- Confiture does not print connection credentials in its own output
 - KMS integration for sensitive data
 - Pre-commit secret scanning
 
@@ -99,37 +99,32 @@ every layer of the system.
 **Impact**: Reading/writing unauthorized files
 
 **Mitigations**:
-- Path validation with traversal prevention
-- Base directory enforcement
-- Resolved path checking
+- Generated and target paths confined to the schema directory (`tree_allocator`)
+- Resolved-path containment checks (`Path.resolve()` + `relative_to`)
+- No path component accepted outside the project's configured directories
 
 ---
 
 ## Security Controls
 
-### 1. Input Validation
+### 1. Input Handling
 
-All external inputs are validated before use:
+Confiture handles untrusted input at the boundary where it is used, rather than
+through a single catch-all validator:
 
-```python
-from confiture.core.security.validation import (
-    validate_identifier,
-    validate_path,
-    validate_sql,
-)
+- **Identifiers** (schema, table, role names) interpolated into DDL pass through
+  an internal `quote_ident` helper (`confiture.core.idempotency._naming`,
+  `confiture.core.bootstrap`), which double-quotes and escapes them — the correct
+  PostgreSQL defense, and one that also handles reserved words and mixed case.
+- **File paths** are resolved and confined to the project's configured
+  directories; the schema-tree allocator (`confiture.core.tree_allocator`)
+  rejects any target or output path that escapes the schema directory via
+  `Path.resolve()` + `relative_to`.
+- **Configuration** is parsed and validated by Pydantic models
+  (`confiture.config.environment`), which reject unknown or malformed fields
+  before any value reaches the database layer.
 
-# Table names validated against pattern and reserved words
-validate_identifier("users")  # OK
-validate_identifier("'; DROP TABLE users; --")  # Raises ValidationError
-
-# Paths validated for traversal attacks
-validate_path("migrations/001.py", base_dir=Path("migrations"))  # OK
-validate_path("../../../etc/passwd", base_dir=Path("migrations"))  # Raises
-
-# SQL validated for dangerous patterns
-validate_sql("SELECT * FROM users")  # OK
-validate_sql("SELECT 1; DROP TABLE users")  # Raises
-```
+Data values are never concatenated into SQL — see Parameterized Queries below.
 
 ### 2. Parameterized Queries
 
@@ -193,23 +188,36 @@ repos:
       - id: gitleaks
 ```
 
-### 4. Secure Logging
+### 4. Credential Handling in Logs
 
-Sensitive data is automatically redacted from logs:
+Confiture follows the standard-library convention that a library does not
+configure the root logger — it emits through module loggers
+(`logging.getLogger(__name__)`) and leaves handler/formatter setup to the host
+application. Confiture's own messages do not print connection passwords.
+
+Because the host application owns logging configuration, redaction of secrets in
+*your* log pipeline is configured there. A minimal filter that scrubs DSN
+credentials from any record routed through Confiture's loggers:
 
 ```python
-from confiture.core.security.logging import configure_secure_logging
+import logging
+import re
 
-# Configure secure logging
-configure_secure_logging()
 
-# Passwords automatically redacted
-logger.info("Connecting to postgresql://user:secret@host/db")
-# Output: Connecting to postgresql://***@host/db
+class RedactDSN(logging.Filter):
+    _DSN = re.compile(r"(postgres(?:ql)?://[^:@\s]+:)[^@\s]+@")
 
-logger.info("Using token=abc123xyz")
-# Output: Using token=***
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._DSN.sub(r"\1***@", record.msg)
+        return True
+
+
+logging.getLogger("confiture").addFilter(RedactDSN())
 ```
+
+Best of all, keep credentials in environment variables or a secret store so they
+never reach a log message in the first place.
 
 ### 5. Least Privilege Database Access
 
@@ -322,7 +330,7 @@ USER confiture
 | Control | Confiture Feature |
 |---------|-------------------|
 | CC6.1 Logical Access | Database role separation, advisory locks |
-| CC6.6 Audit Logging | Migration history, secure logging |
+| CC6.6 Audit Logging | Migration history (`tb_confiture`), audit hook |
 | CC6.7 Change Management | Version-controlled migrations, checksums |
 | CC7.1 Configuration Management | confiture.yaml, environment controls |
 | CC7.2 Infrastructure Security | Kubernetes security context |
@@ -332,7 +340,7 @@ USER confiture
 | Article | Confiture Feature |
 |---------|-------------------|
 | Article 25 (Privacy by Design) | Anonymization strategies |
-| Article 32 (Security) | KMS encryption, secure logging |
+| Article 32 (Security) | KMS encryption, audit trail |
 | Article 33 (Breach Notification) | Audit trail for investigation |
 
 ### HIPAA
@@ -349,7 +357,7 @@ USER confiture
 | Requirement | Confiture Feature |
 |-------------|-------------------|
 | 2.2 Configuration Standards | Secure defaults |
-| 6.5 Secure Development | Input validation, parameterized queries |
+| 6.5 Secure Development | Parameterized queries, identifier quoting |
 | 8.2 Authentication | Database role credentials |
 | 10.2 Audit Trail | Migration logging |
 
@@ -365,7 +373,7 @@ USER confiture
 - [ ] Secrets not in version control
 - [ ] Pre-commit hooks check for secrets
 - [ ] Audit logging enabled in PostgreSQL
-- [ ] Secure logging configured in Confiture
+- [ ] Credentials supplied via env vars / secret store (never inline in config or commands)
 
 ### Before Production Migration
 

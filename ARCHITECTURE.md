@@ -158,7 +158,6 @@ A package providing PostgreSQL introspection beyond tables and columns, used as 
 | `locking.py` | PostgreSQL advisory locking for safe concurrent operations |
 | `hooks/` | Migration lifecycle hooks (pre/post migration) |
 | `blue_green.py` | Blue-green deployment support |
-| `security/` | Security validation utilities |
 | `error_codes.py` | `ErrorCodeDefinition`, `ErrorCodeRegistry` — structured error codes with exit codes |
 | `error_handler.py`, `error_context.py` | Error handling utilities |
 

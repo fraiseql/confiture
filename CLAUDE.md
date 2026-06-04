@@ -217,8 +217,7 @@ confiture/
 │   │   ├── seed_validation/     # PrepSeedOrchestrator and validators
 │   │   ├── anonymization/       # PII anonymization strategies
 │   │   ├── hooks/               # Migration lifecycle hooks
-│   │   ├── idempotency/         # Idempotency analysis and fixing
-│   │   └── security/            # Security validation
+│   │   └── idempotency/         # Idempotency analysis and fixing
 │   │
 │   ├── config/
 │   │   └── environment.py       # Environment + all nested Pydantic config models

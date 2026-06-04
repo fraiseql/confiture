@@ -88,6 +88,30 @@ tests and superseded by shipped code (no live entrypoint):
   `uuid-validation` guides were retired with them.
 - The empty `confiture/testing/utils/` package.
 
+### Removed — dormant `core/security` module
+
+The `confiture.core.security` package (`validation.py` + `logging.py`) shipped a
+set of input validators (`validate_identifier`/`validate_path`/`validate_sql`/
+`validate_config`) and secure-logging helpers (`SecureFormatter`,
+`configure_secure_logging`, `sanitize_log_message`, `SensitiveValue`), but **no
+live code path ever imported it** — only its own tests. The
+`docs/security/security-model.md` document presented it as an *active* control
+("all external inputs are validated", "sensitive data is automatically redacted
+from logs"), which was false assurance.
+
+The functionality was redundant with, or inferior to, the controls actually in
+force: identifiers are *quoted* (`quote_ident`, the correct PostgreSQL defense —
+it handles reserved words instead of rejecting them); paths are confined to the
+schema directory by `tree_allocator`; configuration is validated by Pydantic;
+and `validate_sql`'s "dangerous pattern" list would have false-positived on every
+real migration (which legitimately contains comments and multiple statements).
+
+The module and its dedicated tests were removed, and `security-model.md` was
+rewritten to document the real controls. A doc-guard
+(`test_doc_no_fictional_names.py`) now locks the `confiture.core.security` import
+path out of all docs. **BREAKING** for anyone who imported
+`confiture.core.security.*` directly (it was never part of the public API).
+
 ## [0.21.0] - 2026-06-03
 
 Unifies the last preflight surface still on a bespoke JSON shape: `migrate
