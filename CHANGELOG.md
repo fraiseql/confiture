@@ -11,6 +11,62 @@ Accumulates the in-progress **0.22.0** bundle (cut at finalize). See the quality
 remediation phases for the full breaking-change set; the entries below are the
 feature/wiring work.
 
+### Added — `confiture sync` CLI (Medium 3, Production Data Sync)
+
+The production-data-sync strategy (Medium 3) shipped a fully-tested
+`ProductionSyncer` engine but **no CLI** — it was reachable only from its own
+tests. It is now a first-class top-level command matching
+`docs/guides/03-production-sync.md`:
+
+```bash
+confiture sync --from <env|dsn> --to <env|dsn> [--anonymize] [--tables …] [--exclude …]
+```
+
+- `--from`/`--to` resolve an environment name (`db/environments/{name}.yaml`) or
+  a raw DSN; `--tables`/`--exclude` select tables; `--checkpoint`/`--resume` make
+  long syncs resumable.
+- Anonymization is **opt-in** via `--anonymize`, driven by
+  `db/sync/anonymization.yaml` (`table → [{column, strategy, seed}]`) using the
+  syncer's built-in `email`/`phone`/`name`/`redact`/`hash` strategies.
+- **Safety posture (warn):** without `--anonymize` the copy is verbatim and a
+  prominent plaintext-PII warning is emitted (text → stderr, JSON → the
+  `warnings` array). Anonymization stays opt-in to match the published "Basic
+  sync".
+- Failures route through the unified `{ok: false, error}` envelope: unresolvable
+  env → `CONFIG_001`, bad DSN → `CONFIG_003`, missing anonymization config →
+  `CONFIG_004`, connection failure → `CONFIG_006`.
+- Documented in `docs/reference/cli.md` (with a doc-guard pinning every flag to
+  the live command); covered by a happy-path e2e workflow test.
+
+### Added — anonymization framework exposed as library API
+
+The PII anonymization framework (`StrategyRegistry`, 16 strategy classes,
+`AnonymizationProfile`, sandboxed plugins) shipped fully tested but was reachable
+only from its own tests, and `docs/api/anonymization.md` taught a **fictional**
+API (a non-existent `confiture.anonymization` module, a `@register_strategy('email')`
+decorator over plain functions, an `AnonymizationContext`). It is now a public
+extension point:
+
+- `from confiture import AnonymizationStrategy, StrategyConfig, StrategyRegistry,
+  register_strategy, AnonymizationProfile` (via a new `core.anonymization`
+  package facade whose import registers the built-in strategies).
+- `docs/api/anonymization.md` was rewritten to the real class-based API
+  (subclass `AnonymizationStrategy`, register the class), guarded by a doctest
+  that pins imports-resolve + the profile-YAML example validates + the fiction
+  stays out. Incidental fiction in `docs/api/index.md`, `docs/api/syncer.md`, and
+  `docs/security/security-model.md` (a fictional `KMSManager`) was reconciled.
+
+### Fixed — anonymization registry was unusable for profile-named strategies
+
+`profile.py`'s `StrategyType` whitelist (`hash`/`email`/`phone`/`redact`) and the
+set of strategies `strategies/__init__` actually registered (`name`/`date`/…)
+were **disjoint**, so `StrategyRegistry.get("email")` raised "Unknown strategy"
+for any profile-driven lookup. Two further latent bugs hid behind it (the
+whitelisted strategy classes never declared `config_type`, so the registry built
+the wrong config object). Registered the four whitelisted strategies (plus the
+three advanced ones — `salted_hashing`/`masking_retention`/`differential_privacy`)
+and declared `config_type` on each, so every built-in resolves via the registry.
+
 ### Documentation — hook docs rewritten to the real API
 
 The hook documentation taught a **fictional** API — a non-existent
