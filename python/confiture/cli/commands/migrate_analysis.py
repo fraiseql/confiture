@@ -1969,6 +1969,12 @@ def migrate_preflight(
         "-f",
         help="Output format: table or json (default: table)",
     ),
+    output_file: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file (default: stdout)",
+    ),
     against: str | None = typer.Option(
         None,
         "--against",
@@ -2155,7 +2161,7 @@ def migrate_preflight(
             }
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
-            _output_json(payload, None, console)
+            _output_json(payload, output_file, console)
             if exit_code:
                 raise typer.Exit(exit_code)
             return
@@ -2237,7 +2243,7 @@ def migrate_preflight(
         # — and any other ConfiturError — surfaces with its own exit code +
         # remediation via the shared error boundary.
         if isinstance(e, ConfiturError):
-            fail(e, json_mode=is_json(format_type), output_file=None)
+            fail(e, json_mode=is_json(format_type), output_file=output_file)
         # #151: any other failure resolving the pending set is a harness /
         # connection failure — align to the canonical connection-failure exit 3
         # (CONFIG_006), not the old generic exit 2.
@@ -2247,7 +2253,7 @@ def migrate_preflight(
                 error_code="CONFIG_006",
             ),
             json_mode=is_json(format_type),
-            output_file=None,
+            output_file=output_file,
         )
 
     target_tracking_empty = False
@@ -2280,7 +2286,7 @@ def migrate_preflight(
                 error_code="CONFIG_006",
             ),
             json_mode=is_json(format_type),
-            output_file=None,
+            output_file=output_file,
         )
 
     dependent_report = None
@@ -2328,7 +2334,7 @@ def migrate_preflight(
         }
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
-        _output_json(payload, None, console)
+        _output_json(payload, output_file, console)
     else:
         _display_against_result(against_result, format_type, console)
         if dependent_report is not None:

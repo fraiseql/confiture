@@ -574,3 +574,40 @@ def test_py_migrations_included_in_all(tmp_path):
     assert "20260401000000_a.up.sql" in names
     assert "20260401000001_b.py" in names
     assert "__init__.py" not in names
+
+
+# ---------------------------------------------------------------------------
+# --output: the fraisier adapter passes --output to *every* migrate subcommand
+# (unconditional in its plan()), so preflight must accept it and write clean
+# JSON to the file — not reject it with a Typer usage error. Regression guard
+# for the ECO-rec1 contract drift fixed in Phase 08.
+# ---------------------------------------------------------------------------
+
+
+def test_output_writes_clean_json_report(runner, tmp_path):
+    """`preflight --format json --output FILE` writes the report to FILE."""
+    md = tmp_path / "migrations"
+    md.mkdir()
+    (md / "20260101000001_a.up.sql").write_text("CREATE TABLE t (id int);")
+    (md / "20260101000001_a.down.sql").write_text("DROP TABLE t;")
+    out = tmp_path / "report.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "preflight",
+            "--migrations-dir",
+            str(md),
+            "--format",
+            "json",
+            "--output",
+            str(out),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    # The file holds clean, parseable JSON (no progress chatter mixed in).
+    payload = json.loads(out.read_text())
+    assert set(payload) >= {"ok", "summary", "issues"}
+    assert payload["ok"] is True

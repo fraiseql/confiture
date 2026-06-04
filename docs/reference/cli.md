@@ -1322,6 +1322,7 @@ confiture migrate preflight [OPTIONS]
 |--------|------|---------|-------------|
 | `--migrations-dir` | Path | `db/migrations` | Migrations directory |
 | `--format`, `-f` | String | `table` | Output format: `table` or `json` |
+| `--output`, `-o` | Path | stdout | Save the JSON report to a file (clean JSON, no progress chatter) |
 | `--strict` | flag | off | Treat warnings as errors for exit purposes |
 
 `--format json` (no `--against`) returns the **structured report**
