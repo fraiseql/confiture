@@ -7,9 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Accumulates the in-progress **0.22.0** bundle (cut at finalize). See the quality
-remediation phases for the full breaking-change set; the entries below are the
-feature/wiring work.
+## [0.22.0] - 2026-06-04
+
+A quality-remediation bundle: the error/exit-code contract is now universal and
+enforced, four shipped-but-orphaned mediums/modules were wired or removed, the
+docs no longer describe anything unreachable, and the strongest ecosystem
+integration (the fraisier migration adapter) is a pinned, tested contract. Most
+of the work is non-breaking (docs, tests, wiring); the breaking surface is the
+exit-code/JSON-envelope contract and a set of never-public import paths, all
+listed below.
+
+### ⚠️ BREAKING changes
+
+The exit-code convention is a stability contract ([exit-codes.md](docs/reference/exit-codes.md));
+this is the sanctioned pre-1.0 break that brings every command onto it. Wrappers
+that branch on confiture's exit codes or parse its JSON must review:
+
+- **Unified failure envelope.** Every CLI command now emits
+  `{"ok": false, "error": {code, message, …}}` on stdout in `--format json` on
+  the failure path (previously many commands printed an ad-hoc `{"error": "…"}`
+  or bare text), and exits with the registry-derived code. Covers the `build`,
+  `seed`, `diff`, `migrate *`, `drift`, `bootstrap`, `admin`, `generate`,
+  `coordinate`, `branch`, `hooks`, `mcp`, `apply-as` families.
+- **Exit-code remaps** (old → new): config-invalid / usage / precondition errors
+  `2` → **5**; database connection failure → **3** (`CONFIG_006`); migration-state
+  errors (unknown version, duplicates) → **3**; schema/DDL/diff file errors
+  `2`/`1` → **4**/**5**; git / grant-accompaniment errors → **7**; pgGit
+  merge-conflict → **7**. **Exit `2` is now reserved exclusively** for
+  "tracking table absent" (`PRECON_1001`), so it no longer collides with config
+  errors. `diff` no longer exits `2` for file-not-found/parse errors.
+- **`migrate validate`/`fix`/`introspect`/`verify`** invalid-`--format`, usage
+  guards, and config-missing paths: `1`/`2` → **5**; `--check-live-drift`
+  connection failure `2` → **3**; not-a-git-repo (`--check-drift`) → **7**.
+- **Removed never-public import paths** (all were unreachable / dead): the
+  `confiture.core.security.*` package; `confiture.core.{health, metrics_aggregator,
+  signals, pool, context, logging, metrics, risk}`; `confiture.config.logging_config`;
+  `confiture.cli.formatters.dry_run_formatter`; the orphaned `core/seed` COPY-loader
+  trio; the superseded UUID- and consistency-validation seed islands. Nothing
+  referenced these from a documented surface.
 
 ### Fixed — `migrate preflight` accepts `--output` (fraisier adapter contract)
 
