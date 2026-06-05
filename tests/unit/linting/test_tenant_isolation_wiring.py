@@ -8,6 +8,8 @@ surfaces tenant_001 violations through the normal LintReport.
 
 from __future__ import annotations
 
+import re
+
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -55,4 +57,5 @@ def test_lint_cli_exposes_the_flag() -> None:
     """`confiture lint --help` advertises --check-tenant-isolation (CLI-reachable)."""
     result = CliRunner().invoke(app, ["lint", "--help"])
     assert result.exit_code == 0
-    assert "--check-tenant-isolation" in result.output
+    # Strip ANSI: CI (FORCE_COLOR) renders colored help that splits the flag token.
+    assert "--check-tenant-isolation" in re.sub(r"\x1b\[[0-9;]*m", "", result.output)

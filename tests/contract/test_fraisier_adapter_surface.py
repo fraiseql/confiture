@@ -22,6 +22,7 @@ are DB-gated and skip when no PostgreSQL is reachable.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import psycopg
@@ -35,6 +36,8 @@ from confiture.cli.main import app
 from confiture.core.error_codes import CANONICAL_EXIT_CODES, EXIT_CODE_MEANINGS
 
 runner = CliRunner()
+# Strip ANSI: CI (FORCE_COLOR) renders colored help that splits flag tokens.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 # The five subcommands the adapter's CAPABILITIES advertise + drive.
 ADAPTER_SUBCOMMANDS = ["current", "up", "down-to", "verify", "preflight"]
@@ -77,7 +80,7 @@ def test_subcommand_exists_and_advertises_adapter_flags(subcommand: str) -> None
     """Each adapter subcommand exists and accepts --no-config, --format, --output."""
     result = runner.invoke(app, ["migrate", subcommand, "--help"])
     assert result.exit_code == 0, result.output
-    help_text = result.output
+    help_text = _ANSI.sub("", result.output)
     for flag in ("--no-config", "--format", "--output"):
         assert flag in help_text, f"`migrate {subcommand}` is missing {flag}"
 
@@ -89,11 +92,11 @@ def test_migrations_dir_gating_matches_adapter() -> None:
     the tracking table, so it has no migration-file inputs and is invoked without
     the flag).
     """
-    current_help = runner.invoke(app, ["migrate", "current", "--help"]).output
+    current_help = _ANSI.sub("", runner.invoke(app, ["migrate", "current", "--help"]).output)
     assert "--migrations-dir" not in current_help
 
     for subcommand in ("up", "down-to", "verify", "preflight"):
-        other_help = runner.invoke(app, ["migrate", subcommand, "--help"]).output
+        other_help = _ANSI.sub("", runner.invoke(app, ["migrate", subcommand, "--help"]).output)
         assert "--migrations-dir" in other_help, f"`migrate {subcommand}` lost --migrations-dir"
 
 
@@ -114,7 +117,7 @@ def test_version_output_shape_matches_adapter_parser() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0, result.output
     # The adapter takes the last whitespace-separated token as the version.
-    tokens = result.output.split()
+    tokens = _ANSI.sub("", result.output).split()
     assert tokens[0] == "confiture"
     assert tokens[-1][0].isdigit(), f"version token not numeric: {tokens[-1]!r}"
 

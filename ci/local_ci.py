@@ -48,6 +48,10 @@ SOURCE_EXCLUDE = [
     ".venv",
     "venv",
     "target",
+    # Exclude the local lockfile so the container resolves deps FRESH, exactly
+    # like GitHub (which has no committed lock) — otherwise the type-check leg's
+    # `uv sync` would pin to our local (possibly older) deps and miss real drift.
+    "uv.lock",
     "**/__pycache__",
     "**/*.pyc",
     ".dagger",

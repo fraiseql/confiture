@@ -10,6 +10,7 @@ exercised for real.
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -182,4 +183,5 @@ def test_sync_help_is_reachable() -> None:
     """`confiture sync --help` exits 0 (registered + imports cleanly)."""
     r = runner.invoke(app, ["sync", "--help"])
     assert r.exit_code == 0, r.output
-    assert "--anonymize" in r.output
+    # Strip ANSI: CI (FORCE_COLOR) renders colored help that splits the flag token.
+    assert "--anonymize" in re.sub(r"\x1b\[[0-9;]*m", "", r.output)

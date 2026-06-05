@@ -108,7 +108,7 @@ def confiture_sandbox(
         ) as sandbox:
             yield sandbox
     except Exception as e:
-        pytest.skip(f"Database not available: {e}")  # ty: ignore[too-many-positional-arguments]
+        pytest.skip(f"Database not available: {e}")
 
 
 @pytest.fixture

@@ -229,6 +229,25 @@ invalid-argument-type = "ignore"
 # but the type system only sees the base class type in generic code.
 possibly-missing-attribute = "ignore"
 
+# psycopg 3.3+ types execute() to accept only LiteralString/SQL/Composed (an
+# anti-SQL-injection guardrail). Confiture builds dynamic SQL from double-quoted,
+# validated identifiers (each call site carries `# nosec B608`), so the runtime
+# string never matches the overload. (Was `invalid-argument-type` under older ty.)
+no-matching-overload = "ignore"
+
+[[tool.ty.overrides]]
+# pglast AST nodes are dynamically typed (Unknown | None); attribute access on
+# them isn't statically resolvable. Scope the suppression to the AST-visitor
+# modules so first-party attribute errors stay caught everywhere else.
+include = [
+    "python/confiture/core/migration_grant_extractor.py",
+    "python/confiture/core/linting/libraries/ownership.py",
+    "python/confiture/core/linting/libraries/functions.py",
+    "python/confiture/core/replica/classifier.py",
+]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
