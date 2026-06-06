@@ -8,13 +8,45 @@ Filesystem-only checks that require no database connection:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
+
+if TYPE_CHECKING:
+    from confiture.models.results import PreflightIssue
+
+# Preflight issue codes that, beyond the replica namespace, make a migration set
+# unsafe for a two-version blue-green window (#154): an unsafe down path.
+_DOWN_PATH_BLOCKING_CODES = frozenset({"PFLIGHT_MISSING_DOWN", "PFLIGHT_NON_TRANSACTIONAL"})
+
+
+def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
+    """Typed blue-green window-safety verdict over a preflight issue set (#154).
+
+    ``True`` iff confiture certifies every checked migration is forward-compatible
+    for a two-version shared-DB window *and* has a safe down path. It folds in,
+    per the fraisier window-safety contract:
+
+    - any ``PFLIGHT_REPLICA_*`` finding — a replica-unsafe op, **or** a non-SQL
+      ``.py`` migration the classifier could not read (``PFLIGHT_REPLICA_UNCLASSIFIED``);
+    - reversibility (``PFLIGHT_MISSING_DOWN``) and transactionality
+      (``PFLIGHT_NON_TRANSACTIONAL``) — the down path.
+
+    This is the *whole* safety contract for the consumer: ``True`` means "inspected
+    everything and it is all forward-compatible + reversible", ``False`` means
+    "unsafe or uninspectable". The field's absence is treated fail-safe (blocked)
+    by the consumer, so older confiture keeps working.
+    """
+    from confiture.core.linting.libraries.replica import replica_lint_codes
+
+    blocking = replica_lint_codes() | _DOWN_PATH_BLOCKING_CODES
+    return not any(issue.code in blocking for issue in issues)
 
 
 def preflight_exit_code(summary: dict[str, int], *, strict: bool) -> int:

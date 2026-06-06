@@ -57,9 +57,9 @@ The adapter-consumed fields per command:
 - **up** — `applied[].version` (the new head).
 - **down-to** — `from`, `to`, `rolled_back[]`.
 - **verify** — `failed_count` (ok ⇔ `0`) and each `results[].{version, name, status, error}`.
-- **preflight** — `ok`, `summary` (incl. `summary.window_safe`, the typed
-  blue-green window-safety verdict — see [below](#replica-forward-compatibility-namespace-window-safety-seam)),
-  each `issues[].{severity, code, message, migration}`.
+- **preflight** — `ok`, the top-level `window_safe` verdict (the typed blue-green
+  window-safety contract — see [below](#replica-forward-compatibility-namespace-window-safety-seam)),
+  `summary`, each `issues[].{severity, code, message, migration}`.
 
 ## Replica forward-compatibility namespace (window-safety seam)
 
@@ -106,17 +106,37 @@ warning for every `.py` migration — "no replica issue" therefore always means
 migrations automatically; a downstream gate does not need a separate "refuse any
 `.py` in the set" rule.
 
-### Typed verdict: `summary.window_safe`
+### Typed verdict: top-level `window_safe`
 
-Rather than prefix-match the codes, a consumer may read the single boolean
-`summary.window_safe` (#154). It is `false` exactly when any `PFLIGHT_REPLICA_*`
-finding is present (an unsafe operation **or** an unreadable `.py` migration), so
-it is the typed form of the presence rule above and is total: `false` means
-"blocked or uninspected", `true` means "inspected and forward-compatible for the
-shared-DB window". It is present in both the default and `--against` payloads and
-pinned in the published schemas; its presence is the capability signal (additive
-field, gated by the ≥ 0.20.0 minimum version). The `ok` flag still **cannot**
-substitute for it (warn-by-default keeps `ok == true` on an unsafe migration).
+The preferred surface is the single **top-level** boolean `window_safe` (#154),
+which a consumer reads instead of prefix-matching codes:
+
+```json
+{ "ok": true, "window_safe": true, "summary": { ... }, "issues": [ ... ] }
+```
+
+`window_safe == true` iff confiture certifies **every checked migration** is
+forward-compatible for a two-version shared-DB window **and** has a safe down
+path. It is the *whole* safety contract — it folds in:
+
+- any `PFLIGHT_REPLICA_*` finding — a replica-unsafe op **or** a non-SQL `.py`
+  migration the classifier could not read;
+- reversibility (`PFLIGHT_MISSING_DOWN`) and transactionality
+  (`PFLIGHT_NON_TRANSACTIONAL`) — the down path.
+
+So `true` means "inspected everything and it is all forward-compatible +
+reversible"; `false` means "unsafe or uninspectable". The fraisier gate consumes
+it as `PreflightReport.window_safe: Option<bool>`: `Some(true)` → allowed
+(authoritative), `Some(false)` → blocked, **absent → `None` → blocked**
+(fail-safe, so an older confiture that cannot certify is refused, not waved
+through). It is present at top level in both the default and `--against` payloads
+and pinned in the published schemas + the contract test. The `ok` flag **cannot**
+substitute for it: the replica and non-transactional cases are warn-by-default,
+so `ok == true` can coincide with `window_safe == false`.
+
+> **Note — `CREATE INDEX CONCURRENTLY`:** a concurrent index is replica-safe but
+> *non-transactional*, so it reads `window_safe == false` (the down path is not
+> transactionally reversible). This is intentional under the contract above.
 
 ## Exit codes
 

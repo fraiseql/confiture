@@ -19,12 +19,18 @@ code, existing field, or existing code value changed.
 ### Added
 
 - **`migrate preflight` now carries a typed blue-green window-safety verdict**
-  (issue #154). The structured report's `summary` gains a `window_safe` boolean —
-  `false` exactly when any `PFLIGHT_REPLICA_*` finding is present — so a consumer
-  (e.g. the fraisier blue-green window-safety gate) can read one typed field
-  instead of prefix-matching codes. Present in both the default and `--against`
-  payloads and pinned in the published JSON schemas. (`ok` still cannot certify
-  window safety: the replica lint is warn-by-default.)
+  (issue #154). The structured report gains a **top-level** `window_safe` boolean
+  so a consumer (e.g. the fraisier blue-green window-safety gate) reads one typed
+  field instead of prefix-matching codes. `window_safe == true` iff confiture
+  certifies every checked migration is forward-compatible for a two-version
+  shared-DB window **and** has a safe down path — it folds in any
+  `PFLIGHT_REPLICA_*` finding (a replica-unsafe op **or** an unreadable `.py`
+  migration), `PFLIGHT_MISSING_DOWN` (reversibility), and
+  `PFLIGHT_NON_TRANSACTIONAL` (transactionality). Present in both the default and
+  `--against` payloads and pinned in the published JSON schemas. (`ok` cannot
+  substitute: the replica/transactional cases are warn-by-default, so `ok` can be
+  true while `window_safe` is false. Note: `CREATE INDEX CONCURRENTLY` is
+  replica-safe but non-transactional, so it reads `window_safe == false`.)
 - **The `PFLIGHT_REPLICA_*` code namespace is now a pinned cross-repo contract**
   (issue #154). `replica_lint_codes()` is the single source for the set, and
   `tests/contract/test_fraisier_adapter_surface.py` pins it against a literal so a

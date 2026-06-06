@@ -2,27 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-preflight.schema.json",
   "title": "confiture migrate preflight --format json (no --against)",
-  "description": "Structured preflight report (issue #148): {ok, summary, issues[]}. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, and checksum mismatches as a uniform issues[] of the shared issue object. No database connection required. A preflight that *crashed* (config/DB error) emits the #145 error envelope instead — branch on `issues` vs `error`.",
+  "description": "Structured preflight report (issue #148/#154): {ok, window_safe, summary, issues[]}. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, checksum mismatches, and replica forward-compatibility as a uniform issues[] of the shared issue object. No database connection required. A preflight that *crashed* (config/DB error) emits the #145 error envelope instead — branch on `issues` vs `error`.",
   "type": "object",
-  "required": ["ok", "summary", "issues"],
+  "required": ["ok", "window_safe", "summary", "issues"],
   "properties": {
     "ok": {
       "type": "boolean",
       "description": "False if any error-severity issue (or, under --strict, any warning)."
     },
+    "window_safe": {
+      "type": "boolean",
+      "description": "Top-level blue-green window-safety verdict (#154): true iff confiture certifies every checked migration is forward-compatible for a two-version shared-DB window AND has a safe down path. False when any PFLIGHT_REPLICA_* finding is present (a replica-unsafe op, OR a non-SQL .py migration the classifier cannot read), or any PFLIGHT_MISSING_DOWN (not reversible) / PFLIGHT_NON_TRANSACTIONAL (no transactional rollback). This is the whole safety contract: consume it directly instead of prefix-matching codes; a consumer treats its absence (older confiture) as fail-safe blocked. Note `ok` cannot substitute for it — the replica/transactional cases are warn-by-default, so `ok` can be true while `window_safe` is false.",
+      "$comment": "STABILITY: this field and its semantics are a cross-repo contract (#154). It must remain present and a strict superset of the safety conditions above."
+    },
     "summary": {
       "type": "object",
-      "required": ["errors", "warnings", "info", "migrations_checked", "window_safe"],
+      "required": ["errors", "warnings", "info", "migrations_checked"],
       "additionalProperties": false,
       "properties": {
         "errors": { "type": "integer", "minimum": 0 },
         "warnings": { "type": "integer", "minimum": 0 },
         "info": { "type": "integer", "minimum": 0 },
-        "migrations_checked": { "type": "integer", "minimum": 0 },
-        "window_safe": {
-          "type": "boolean",
-          "description": "Blue-green window-safety verdict (#154): false when any PFLIGHT_REPLICA_* finding is present (an unsafe operation OR a .py migration the classifier cannot read). The typed form of fraisier's presence rule — consume this instead of prefix-matching codes."
-        }
+        "migrations_checked": { "type": "integer", "minimum": 0 }
       }
     },
     "issues": {

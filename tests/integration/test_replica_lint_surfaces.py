@@ -80,8 +80,8 @@ def test_preflight_replica_bypass_downgrades(tmp_path: Path) -> None:
     assert r.exit_code == 0, r.output  # bypass downgrades to warning
 
 
-def test_preflight_summary_window_safe_false_when_unsafe(tmp_path: Path) -> None:
-    """The typed `window_safe` verdict is False when a replica finding is present (#154)."""
+def test_preflight_window_safe_false_when_unsafe(tmp_path: Path) -> None:
+    """The top-level `window_safe` verdict is False when a replica finding is present (#154)."""
     migs = tmp_path / "migrations"
     migs.mkdir()
     (migs / "20260531_1200_drop.up.sql").write_text("ALTER TABLE t DROP COLUMN c;")
@@ -91,11 +91,11 @@ def test_preflight_summary_window_safe_false_when_unsafe(tmp_path: Path) -> None
         app, ["migrate", "preflight", "--migrations-dir", str(migs), "--format", "json"]
     )
     assert r.exit_code == 0, r.output  # warn-by-default, but window-unsafe
-    assert json.loads(r.stdout)["summary"]["window_safe"] is False
+    assert json.loads(r.stdout)["window_safe"] is False
 
 
-def test_preflight_summary_window_safe_true_when_clean(tmp_path: Path) -> None:
-    """A nullable ADD COLUMN is forward-compatible → window_safe True (#154)."""
+def test_preflight_window_safe_true_when_fully_certified(tmp_path: Path) -> None:
+    """Forward-compatible + reversible + transactional → top-level window_safe True (#154)."""
     migs = tmp_path / "migrations"
     migs.mkdir()
     (migs / "20260531_1200_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
@@ -105,7 +105,7 @@ def test_preflight_summary_window_safe_true_when_clean(tmp_path: Path) -> None:
         app, ["migrate", "preflight", "--migrations-dir", str(migs), "--format", "json"]
     )
     assert r.exit_code == 0, r.output
-    assert json.loads(r.stdout)["summary"]["window_safe"] is True
+    assert json.loads(r.stdout)["window_safe"] is True
 
 
 def test_preflight_py_migration_is_window_unsafe(tmp_path: Path) -> None:
@@ -121,7 +121,22 @@ def test_preflight_py_migration_is_window_unsafe(tmp_path: Path) -> None:
     payload = json.loads(r.stdout)
     codes = {i["code"] for i in payload["issues"]}
     assert "PFLIGHT_REPLICA_UNCLASSIFIED" in codes
-    assert payload["summary"]["window_safe"] is False
+    assert payload["window_safe"] is False
+
+
+def test_preflight_window_safe_false_when_not_reversible(tmp_path: Path) -> None:
+    """A missing .down.sql (unsafe down path) folds into the top-level verdict (#154)."""
+    migs = tmp_path / "migrations"
+    migs.mkdir()
+    # nullable ADD is forward-compatible, but there is no .down.sql sibling
+    (migs / "20260531_1200_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
+
+    r = runner.invoke(
+        app, ["migrate", "preflight", "--migrations-dir", str(migs), "--format", "json"]
+    )
+    payload = json.loads(r.stdout)
+    assert "PFLIGHT_MISSING_DOWN" in {i["code"] for i in payload["issues"]}
+    assert payload["window_safe"] is False
 
 
 # ── lint surface ──────────────────────────────────────────────────────────────

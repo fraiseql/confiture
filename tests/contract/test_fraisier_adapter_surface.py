@@ -150,19 +150,14 @@ def test_replica_codes_keep_the_pflight_replica_prefix() -> None:
     assert all(code.startswith("PFLIGHT_REPLICA_") for code in replica_lint_codes())
 
 
-def test_preflight_summary_carries_window_safe_verdict(tmp_path: Path) -> None:
-    """The default preflight summary exposes the typed `window_safe` verdict (#154).
-
-    The fraisier window-safety gate can read one typed boolean instead of
-    prefix-matching ``PFLIGHT_REPLICA_*`` codes. Filesystem-only — no DB needed —
-    and validated against the published schema so the field is a pinned contract.
-    """
+def _preflight_payload(tmp_path: Path, up_sql: str, down_sql: str | None) -> dict:
+    """Run the default (no-DB) preflight the adapter consumes and return its JSON."""
     md = tmp_path / "migrations"
-    md.mkdir()
-    (md / "20260101000001_a.up.sql").write_text("ALTER TABLE t DROP COLUMN c;")
-    (md / "20260101000001_a.down.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
+    md.mkdir(parents=True)
+    (md / "20260101000001_a.up.sql").write_text(up_sql)
+    if down_sql is not None:
+        (md / "20260101000001_a.down.sql").write_text(down_sql)
     report = tmp_path / "report.json"
-
     result = runner.invoke(
         app,
         [
@@ -177,11 +172,35 @@ def test_preflight_summary_carries_window_safe_verdict(tmp_path: Path) -> None:
             str(md),
         ],
     )
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in EXIT_CODE_MEANINGS, result.output
     payload = json.loads(report.read_text())
     _schema("migrate-preflight.schema.json").validate(payload)
-    # DROP COLUMN is not forward-compatible for the shared-DB read window.
-    assert payload["summary"]["window_safe"] is False
+    return payload
+
+
+def test_preflight_exposes_top_level_window_safe_verdict(tmp_path: Path) -> None:
+    """`window_safe` is a top-level typed boolean, pinned against the schema (#154).
+
+    fraisier's window-safety gate reads this single field instead of prefix-matching
+    ``PFLIGHT_REPLICA_*`` codes — and (since fraisier dropped its own safety nets)
+    it is the *whole* safety contract. Filesystem-only, no DB. This is the Phase-3
+    commitment.
+    """
+    # A forward-compatible, reversible, transactional migration → certified safe.
+    safe = _preflight_payload(
+        tmp_path / "safe",
+        "ALTER TABLE t ADD COLUMN c int;",
+        "ALTER TABLE t DROP COLUMN c;",
+    )
+    assert safe["window_safe"] is True
+
+    # A replica-unsafe op (DROP COLUMN) → not certifiable, even though reversible.
+    unsafe = _preflight_payload(
+        tmp_path / "unsafe",
+        "ALTER TABLE t DROP COLUMN c;",
+        "ALTER TABLE t ADD COLUMN c int;",
+    )
+    assert unsafe["window_safe"] is False
 
 
 def test_version_output_shape_matches_adapter_parser() -> None:
@@ -330,6 +349,8 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
     preflight_payload = _read_report(result, report)
     _schema("migrate-preflight.schema.json").validate(preflight_payload)
     assert isinstance(preflight_payload["ok"], bool)
+    # #154: the typed window-safety verdict the adapter now consumes directly.
+    assert isinstance(preflight_payload["window_safe"], bool)
 
     # 6. down-to the first version → exit 0; rolled_back lists the newer migration.
     result = invoke("down-to", _VERSIONS[0][0])

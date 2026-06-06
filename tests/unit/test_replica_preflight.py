@@ -11,10 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from confiture.core.linting.libraries.replica import (
-    is_window_safe,
-    replica_preflight_issues,
-)
+from confiture.core.linting.libraries.replica import replica_preflight_issues
+from confiture.core.preflight import is_window_safe, run_preflight
 
 
 def test_py_migration_emits_unclassified(tmp_path: Path) -> None:
@@ -52,14 +50,44 @@ def test_sql_only_dir_has_no_unclassified(tmp_path: Path) -> None:
     assert all(i.code != "PFLIGHT_REPLICA_UNCLASSIFIED" for i in issues)
 
 
-def test_is_window_safe_reflects_replica_findings(tmp_path: Path) -> None:
-    """is_window_safe() is the typed form of fraisier's presence rule (#154)."""
-    (tmp_path / "20260606120000_drop.up.sql").write_text("ALTER TABLE t DROP COLUMN c;")
-    unsafe = replica_preflight_issues(tmp_path, has_replicas=False, bypass=False)
-    assert is_window_safe(unsafe) is False
+def _all_issues(migrations_dir: Path):
+    """The full preflight issue set the CLI builds: static + replica findings."""
+    static = run_preflight(migrations_dir).issues
+    replica = replica_preflight_issues(migrations_dir, has_replicas=False, bypass=False)
+    return static + replica
 
-    safe_dir = tmp_path / "safe"
-    safe_dir.mkdir()
-    (safe_dir / "20260606120000_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
-    safe = replica_preflight_issues(safe_dir, has_replicas=False, bypass=False)
-    assert is_window_safe(safe) is True
+
+def test_is_window_safe_false_on_replica_unsafe_op(tmp_path: Path) -> None:
+    """A replica-unsafe op (DROP COLUMN) makes the window unsafe (#154)."""
+    (tmp_path / "20260606120000_drop.up.sql").write_text("ALTER TABLE t DROP COLUMN c;")
+    (tmp_path / "20260606120000_drop.down.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
+    assert is_window_safe(_all_issues(tmp_path)) is False
+
+
+def test_is_window_safe_false_on_unreadable_py(tmp_path: Path) -> None:
+    """A `.py` migration the classifier can't read makes the window unsafe (#154)."""
+    (tmp_path / "20260606120000_data.py").write_text("def up(cur):\n    pass\n")
+    assert is_window_safe(_all_issues(tmp_path)) is False
+
+
+def test_is_window_safe_false_when_not_reversible(tmp_path: Path) -> None:
+    """A migration with no .down.sql folds into the verdict — unsafe down path (#154)."""
+    (tmp_path / "20260606120000_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
+    # no .down.sql sibling → PFLIGHT_MISSING_DOWN
+    assert is_window_safe(_all_issues(tmp_path)) is False
+
+
+def test_is_window_safe_false_when_non_transactional(tmp_path: Path) -> None:
+    """A non-transactional statement folds into the verdict — unsafe down path (#154)."""
+    (tmp_path / "20260606120000_idx.up.sql").write_text(
+        "CREATE INDEX CONCURRENTLY idx_t_c ON t (c);"
+    )
+    (tmp_path / "20260606120000_idx.down.sql").write_text("DROP INDEX idx_t_c;")
+    assert is_window_safe(_all_issues(tmp_path)) is False
+
+
+def test_is_window_safe_true_when_fully_certified(tmp_path: Path) -> None:
+    """Forward-compatible + reversible + transactional → window safe (#154)."""
+    (tmp_path / "20260606120000_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
+    (tmp_path / "20260606120000_add.down.sql").write_text("ALTER TABLE t DROP COLUMN c;")
+    assert is_window_safe(_all_issues(tmp_path)) is True

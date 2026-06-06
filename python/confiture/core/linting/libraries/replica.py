@@ -12,7 +12,7 @@ One engine (`_iter_findings`) feeds two surfaces: the `confiture lint` rule
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -191,16 +191,3 @@ def replica_preflight_issues(
         for py in _unreadable_migrations(migrations_dir)
     )
     return issues
-
-
-def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
-    """Whether a preflight issue set certifies blue-green window safety (#154).
-
-    The typed form of fraisier's gate: ``True`` iff no replica forward-compat
-    finding is present. Reuses :func:`replica_lint_codes` so the verdict tracks the
-    pinned namespace exactly. With the ``*.py`` coverage above this is total — a
-    ``False`` means "blocked or uninspected", a ``True`` means "inspected and
-    forward-compatible for a two-version shared-DB window".
-    """
-    codes = replica_lint_codes()
-    return not any(issue.code in codes for issue in issues)
