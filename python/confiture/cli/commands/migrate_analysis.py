@@ -2108,7 +2108,11 @@ def migrate_preflight(
     from rich.table import Table
 
     from confiture.core.linting.libraries.replica import replica_preflight_issues
-    from confiture.core.preflight import preflight_exit_code, run_preflight
+    from confiture.core.preflight import (
+        is_window_safe,
+        preflight_exit_code,
+        run_preflight,
+    )
 
     if check_dependents not in {"off", "fail", "warn"}:
         error_console.print(
@@ -2148,6 +2152,10 @@ def migrate_preflight(
         if format_type == "json":
             payload = {
                 "ok": exit_code == 0,
+                # #154: top-level typed blue-green window-safety verdict — the whole
+                # safety contract for the consumer (folds in replica-unsafe ops,
+                # unreadable .py migrations, and the down path).
+                "window_safe": is_window_safe(all_issues),
                 "summary": summary,
                 "issues": [i.to_dict() for i in all_issues],
             }
@@ -2321,6 +2329,8 @@ def migrate_preflight(
     if format_type == "json":
         payload: dict[str, Any] = {
             "ok": exit_code == 0,
+            # #154: same top-level typed window-safety verdict as the no-`--against` path.
+            "window_safe": is_window_safe(all_issues),
             "summary": summary,
             "issues": [i.to_dict() for i in all_issues],
         }

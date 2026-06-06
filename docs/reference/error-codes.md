@@ -177,10 +177,14 @@ default, error when replicas are declared, downgraded by
 | `PFLIGHT_REPLICA_CHANGE_TYPE` | `ALTER COLUMN ... TYPE` | add new column → backfill → swap readers → drop old |
 | `PFLIGHT_REPLICA_ADD_CONSTRAINT` | `ADD CONSTRAINT` (immediate) | `NOT VALID` → backfill → `VALIDATE` |
 | `PFLIGHT_REPLICA_CREATE_INDEX` | non-concurrent `CREATE INDEX` | `CREATE INDEX CONCURRENTLY` |
-| `PFLIGHT_REPLICA_UNCLASSIFIED` | dynamic / unparseable DDL | review manually (always a warning) |
+| `PFLIGHT_REPLICA_UNCLASSIFIED` | dynamic / unparseable DDL, or a non-SQL `.py` migration the classifier cannot read | review manually (always a warning) |
 
 See the [replica-safe migrations guide](replica-safe-migrations.md) for the full
-rationale.
+rationale. This `PFLIGHT_REPLICA_*` set is also a **cross-repo wire contract**:
+fraisier's blue-green window-safety gate blocks on the presence of any of these
+codes in `migrate preflight`'s `issues[]`, so the set is pinned by the
+[fraisier-adapter contract](fraisier-adapter-contract.md#replica-forward-compatibility-namespace-window-safety-seam)
+(renames are breaking, additions are allowed).
 
 ## Stability contract
 

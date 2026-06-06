@@ -47,6 +47,23 @@ UNINITIALISED_ERROR_CODE = "PRECON_1001"  # current → "no current revision"
 NO_DSN_ERROR_CODE = "CONFIG_010"  # InvalidConfig
 LOCK_EXIT_CODE = 6  # LOCK_1300, retriable
 
+# The PFLIGHT_REPLICA_* namespace fraisier's blue-green window-safety gate keys on
+# (fraisier-core/src/window_safety.rs blocks the deploy on the presence of ANY of
+# these in preflight's issues[]). Pinned here as a cross-repo stability commitment:
+# renames/removals are breaking (major bump); additions are allowed by extending
+# this literal. See docs/reference/fraisier-adapter-contract.md.
+EXPECTED_REPLICA_CODES = frozenset(
+    {
+        "PFLIGHT_REPLICA_ADD_COLUMN",
+        "PFLIGHT_REPLICA_ADD_CONSTRAINT",
+        "PFLIGHT_REPLICA_CHANGE_TYPE",
+        "PFLIGHT_REPLICA_CREATE_INDEX",
+        "PFLIGHT_REPLICA_DROP_COLUMN",
+        "PFLIGHT_REPLICA_RENAME_COLUMN",
+        "PFLIGHT_REPLICA_UNCLASSIFIED",
+    }
+)
+
 _SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "docs" / "reference" / "json-schemas"
 
 # Two real migrations so `down-to` rolls something back.
@@ -110,6 +127,80 @@ def test_adapter_pinned_error_codes_keep_their_exit_numbers() -> None:
     assert CANONICAL_EXIT_CODES[UNINITIALISED_ERROR_CODE] == 2
     assert CANONICAL_EXIT_CODES[NO_DSN_ERROR_CODE] == 5
     assert CANONICAL_EXIT_CODES["LOCK_1300"] == LOCK_EXIT_CODE
+
+
+def test_replica_code_namespace_is_a_stability_commitment() -> None:
+    """The exact set fraisier's blue-green window-safety gate keys on (#154).
+
+    fraisier blocks a deploy on the *presence* of any ``PFLIGHT_REPLICA_*`` issue
+    in preflight's ``issues[]``. A rename of one of these codes would silently make
+    that gate match nothing — blue-green would proceed on an uncertified migration
+    with confiture CI still green. Pin the set so a rename fails here instead.
+    """
+    from confiture.core.linting.libraries.replica import replica_lint_codes
+
+    assert replica_lint_codes() == EXPECTED_REPLICA_CODES
+
+
+def test_replica_codes_keep_the_pflight_replica_prefix() -> None:
+    """Every emittable replica code carries the prefix fraisier string-matches on."""
+    from confiture.core.linting.libraries.replica import replica_lint_codes
+
+    assert replica_lint_codes(), "the replica lint must emit at least one code"
+    assert all(code.startswith("PFLIGHT_REPLICA_") for code in replica_lint_codes())
+
+
+def _preflight_payload(tmp_path: Path, up_sql: str, down_sql: str | None) -> dict:
+    """Run the default (no-DB) preflight the adapter consumes and return its JSON."""
+    md = tmp_path / "migrations"
+    md.mkdir(parents=True)
+    (md / "20260101000001_a.up.sql").write_text(up_sql)
+    if down_sql is not None:
+        (md / "20260101000001_a.down.sql").write_text(down_sql)
+    report = tmp_path / "report.json"
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "preflight",
+            "--no-config",
+            "--format",
+            "json",
+            "--output",
+            str(report),
+            "--migrations-dir",
+            str(md),
+        ],
+    )
+    assert result.exit_code in EXIT_CODE_MEANINGS, result.output
+    payload = json.loads(report.read_text())
+    _schema("migrate-preflight.schema.json").validate(payload)
+    return payload
+
+
+def test_preflight_exposes_top_level_window_safe_verdict(tmp_path: Path) -> None:
+    """`window_safe` is a top-level typed boolean, pinned against the schema (#154).
+
+    fraisier's window-safety gate reads this single field instead of prefix-matching
+    ``PFLIGHT_REPLICA_*`` codes — and (since fraisier dropped its own safety nets)
+    it is the *whole* safety contract. Filesystem-only, no DB. This is the Phase-3
+    commitment.
+    """
+    # A forward-compatible, reversible, transactional migration → certified safe.
+    safe = _preflight_payload(
+        tmp_path / "safe",
+        "ALTER TABLE t ADD COLUMN c int;",
+        "ALTER TABLE t DROP COLUMN c;",
+    )
+    assert safe["window_safe"] is True
+
+    # A replica-unsafe op (DROP COLUMN) → not certifiable, even though reversible.
+    unsafe = _preflight_payload(
+        tmp_path / "unsafe",
+        "ALTER TABLE t DROP COLUMN c;",
+        "ALTER TABLE t ADD COLUMN c int;",
+    )
+    assert unsafe["window_safe"] is False
 
 
 def test_version_output_shape_matches_adapter_parser() -> None:
@@ -258,6 +349,8 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
     preflight_payload = _read_report(result, report)
     _schema("migrate-preflight.schema.json").validate(preflight_payload)
     assert isinstance(preflight_payload["ok"], bool)
+    # #154: the typed window-safety verdict the adapter now consumes directly.
+    assert isinstance(preflight_payload["window_safe"], bool)
 
     # 6. down-to the first version → exit 0; rolled_back lists the newer migration.
     result = invoke("down-to", _VERSIONS[0][0])

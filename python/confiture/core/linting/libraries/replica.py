@@ -43,6 +43,21 @@ REPLICA_CODE_BY_OP = {
 }
 
 
+def replica_lint_codes() -> frozenset[str]:
+    """The exact set of ``PFLIGHT_REPLICA_*`` codes the replica lint can emit.
+
+    fraisier's blue-green **window-safety gate** keys on the *presence* of any of
+    these in ``migrate preflight``'s ``issues[]`` to decide whether a migration is
+    forward-compatible for a two-version shared-DB cutover window. This set is a
+    **cross-repo stability commitment** (issue #154): renames/removals are
+    breaking and require a major version bump; additions are allowed. It is the
+    single source for that namespace — derived from :data:`REPLICA_CODE_BY_OP`, so
+    there is no second copy of the code strings to drift. The contract test in
+    ``tests/contract/test_fraisier_adapter_surface.py`` pins it.
+    """
+    return frozenset(REPLICA_CODE_BY_OP.values())
+
+
 @dataclass(frozen=True)
 class ReplicaFinding:
     """A single replica-unsafe (or unclassifiable) operation in a migration."""
@@ -111,13 +126,39 @@ class Replica001ForwardCompat:
         ]
 
 
+def _unreadable_migrations(migrations_dir: Path) -> Iterator[Path]:
+    """Yield migration files the SQL replica classifier cannot read.
+
+    Mirrors ``run_preflight``'s Python-migration discovery filter (skip
+    ``__init__.py`` and ``_``-prefixed helpers). A ``.py`` migration is opaque to
+    the SQL classifier, so its forward-compatibility cannot be certified.
+    """
+    if not migrations_dir.exists():
+        return
+    yield from sorted(
+        (
+            f
+            for f in migrations_dir.glob("*.py")
+            if f.name != "__init__.py" and not f.name.startswith("_")
+        ),
+        key=lambda f: f.name,
+    )
+
+
 def replica_preflight_issues(
     migrations_dir: Path, *, has_replicas: bool, bypass: bool
 ) -> list[PreflightIssue]:
-    """Return the same findings as PreflightIssues (#148 shape) for preflight."""
+    """Return replica findings as PreflightIssues (#148 shape) for preflight.
+
+    Covers both the SQL operations the classifier reads (``*.up.sql``) and, per
+    issue #154, the migrations it *cannot* read (``*.py``) — the latter surface as
+    ``PFLIGHT_REPLICA_UNCLASSIFIED`` warnings so "no replica issue" can never
+    silently mean "never inspected". UNCLASSIFIED is always a warning (opacity
+    never hard-blocks).
+    """
     from confiture.models.results import PreflightIssue
 
-    return [
+    issues = [
         PreflightIssue(
             severity=f.severity,
             code=f.code,
@@ -129,3 +170,24 @@ def replica_preflight_issues(
         )
         for f in _iter_findings(migrations_dir, has_replicas=has_replicas, bypass=bypass)
     ]
+    issues.extend(
+        PreflightIssue(
+            severity="warning",
+            code="PFLIGHT_REPLICA_UNCLASSIFIED",
+            message=(
+                "non-SQL (.py) migration: the replica forward-compatibility "
+                "classifier cannot inspect it, so window-safety cannot be "
+                "certified automatically; review manually"
+            ),
+            migration=None,
+            file=py.name,
+            actionable=(
+                "review the migration's DDL by hand for replica "
+                "forward-compatibility, or express the schema change as a "
+                ".up.sql so it can be classified"
+            ),
+            details={"operation": "NonSqlMigration"},
+        )
+        for py in _unreadable_migrations(migrations_dir)
+    )
+    return issues

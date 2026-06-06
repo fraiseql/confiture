@@ -57,7 +57,89 @@ The adapter-consumed fields per command:
 - **up** — `applied[].version` (the new head).
 - **down-to** — `from`, `to`, `rolled_back[]`.
 - **verify** — `failed_count` (ok ⇔ `0`) and each `results[].{version, name, status, error}`.
-- **preflight** — `ok`, `summary`, each `issues[].{severity, code, message, migration}`.
+- **preflight** — `ok`, the top-level `window_safe` verdict (the typed blue-green
+  window-safety contract — see [below](#replica-forward-compatibility-namespace-window-safety-seam)),
+  `summary`, each `issues[].{severity, code, message, migration}`.
+
+## Replica forward-compatibility namespace (window-safety seam)
+
+fraisier's **blue-green window-safety gate** consumes `migrate preflight` to
+decide whether a pending migration is forward-compatible for a two-version
+shared-DB cutover window (both N-1 and N served against one Postgres during the
+swap). It **blocks the deploy on the presence of any `PFLIGHT_REPLICA_*` issue**
+(warning *or* error) in `preflight`'s `issues[]`.
+
+`preflight`'s `ok` flag alone **cannot** certify window safety: the replica lint
+is warn-by-default unless `infrastructure.replicas` is declared, so an unsafe
+`DROP COLUMN` produces `ok == true` with a `warning`-severity
+`PFLIGHT_REPLICA_DROP_COLUMN`. The gate therefore keys on the **code prefix**,
+which makes the namespace below a wire contract.
+
+The complete namespace the lint can emit:
+
+| Code | Operation |
+|------|-----------|
+| `PFLIGHT_REPLICA_ADD_COLUMN` | `ADD COLUMN` NOT NULL / DEFAULT |
+| `PFLIGHT_REPLICA_DROP_COLUMN` | `DROP COLUMN` |
+| `PFLIGHT_REPLICA_RENAME_COLUMN` | `RENAME COLUMN` |
+| `PFLIGHT_REPLICA_CHANGE_TYPE` | `ALTER COLUMN ... TYPE` |
+| `PFLIGHT_REPLICA_ADD_CONSTRAINT` | immediate `ADD CONSTRAINT` |
+| `PFLIGHT_REPLICA_CREATE_INDEX` | non-concurrent `CREATE INDEX` |
+| `PFLIGHT_REPLICA_UNCLASSIFIED` | dynamic / unparseable DDL (always a warning) |
+
+This set is a **stability commitment**: existing codes are **never renamed or
+removed** (that is a breaking change requiring a major version bump and a
+CHANGELOG note); **new codes may be added**. The set is the single value returned
+by `confiture.core.linting.libraries.replica.replica_lint_codes()`, and
+[`test_fraisier_adapter_surface.py`](../../tests/contract/test_fraisier_adapter_surface.py)
+pins it (`test_replica_code_namespace_is_a_stability_commitment`) against a
+hardcoded literal — so a rename fails Confiture's CI instead of silently
+disarming fraisier's gate. See the per-code remediation table in
+[error-codes.md](error-codes.md#replica-safety-codes-pflight_replica_-lint-replica_001-139).
+
+### Non-SQL (`.py`) migrations are covered
+
+The replica classifier reads SQL (`*.up.sql`). A schema change inside a `.py`
+migration is **opaque** to it, so Confiture emits a `PFLIGHT_REPLICA_UNCLASSIFIED`
+warning for every `.py` migration — "no replica issue" therefore always means
+*inspected-and-safe*, never *never-inspected*. The presence rule covers `.py`
+migrations automatically; a downstream gate does not need a separate "refuse any
+`.py` in the set" rule.
+
+### Typed verdict: top-level `window_safe`
+
+The preferred surface is the single **top-level** boolean `window_safe` (#154),
+which a consumer reads instead of prefix-matching codes:
+
+```json
+{ "ok": true, "window_safe": true, "summary": { ... }, "issues": [ ... ] }
+```
+
+`window_safe == true` iff confiture certifies **every checked migration** is
+forward-compatible for a two-version shared-DB window. It is `false` when any
+`PFLIGHT_REPLICA_*` finding is present:
+
+- a replica-unsafe op, **or**
+- a non-SQL `.py` migration the classifier could not read
+  (`PFLIGHT_REPLICA_UNCLASSIFIED`).
+
+Window-safety is purely **forward-compatibility**, not atomicity. Reversibility
+(`PFLIGHT_MISSING_DOWN`) and transactionality (`PFLIGHT_NON_TRANSACTIONAL`) are
+reported as their own issues but do **not** gate this verdict — in a blue-green
+cutover, rollback is a traffic swap-back to the still-hot old version (no DB
+rollback), so a non-transactional `CREATE INDEX CONCURRENTLY` — the canonical
+online-migration op — is window-safe. Genuine apply failures are caught at the
+migrate step, before any traffic moves.
+
+So `true` means "every pending op is forward-compatible"; `false` means "unsafe
+or uninspectable". The fraisier gate consumes it as
+`PreflightReport.window_safe: Option<bool>`: `Some(true)` → allowed
+(authoritative), `Some(false)` → blocked, **absent → `None` → blocked**
+(fail-safe, so an older confiture that cannot certify is refused, not waved
+through). It is present at top level in both the default and `--against` payloads
+and pinned in the published schemas + the contract test. The `ok` flag **cannot**
+substitute for it: replica findings are warn-by-default, so `ok == true` can
+coincide with `window_safe == false`.
 
 ## Exit codes
 

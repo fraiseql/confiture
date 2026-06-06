@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-06-06
+
+Hardens the confiture↔fraisier blue-green seam (issue #154): the
+`PFLIGHT_REPLICA_*` code namespace is now a pinned cross-repo contract, non-SQL
+migrations are no longer a blind spot in the replica preflight, and the
+window-safety decision is available as one typed `summary.window_safe` field. All
+changes are additive (new schema field, new warning, a new accessor); no exit
+code, existing field, or existing code value changed.
+
+### Added
+
+- **`migrate preflight` now carries a typed blue-green window-safety verdict**
+  (issue #154). The structured report gains a **top-level** `window_safe` boolean
+  so a consumer (e.g. the fraisier blue-green window-safety gate) reads one typed
+  field instead of prefix-matching codes. `window_safe == true` iff confiture
+  certifies every checked migration is forward-compatible for a two-version
+  shared-DB window — it is `false` when any `PFLIGHT_REPLICA_*` finding is present
+  (a replica-unsafe op **or** an unreadable `.py` migration). Window-safety is
+  forward-compatibility only, **not** atomicity: reversibility
+  (`PFLIGHT_MISSING_DOWN`) and transactionality (`PFLIGHT_NON_TRANSACTIONAL`) are
+  reported but do not gate it, so a non-transactional `CREATE INDEX CONCURRENTLY`
+  is window-safe. Present in both the default and `--against` payloads and pinned
+  in the published JSON schemas. (`ok` cannot substitute: replica findings are
+  warn-by-default, so `ok` can be true while `window_safe` is false.)
+- **The `PFLIGHT_REPLICA_*` code namespace is now a pinned cross-repo contract**
+  (issue #154). `replica_lint_codes()` is the single source for the set, and
+  `tests/contract/test_fraisier_adapter_surface.py` pins it against a literal so a
+  rename fails CI instead of silently disarming a downstream window-safety gate.
+  Documented as a stability commitment in the
+  [fraisier-adapter contract](docs/reference/fraisier-adapter-contract.md)
+  (renames breaking, additions allowed).
+
+### Changed
+
+- **Non-SQL (`.py`) migrations now surface in the replica preflight** (issue
+  #154). The SQL classifier cannot read `.py` migrations, so `migrate preflight`
+  emits a `PFLIGHT_REPLICA_UNCLASSIFIED` **warning** for each one — "no replica
+  issue" can no longer ambiguously mean "never inspected". Non-fatal (warning,
+  `ok` unchanged); adds one warning line per `.py` migration to preflight output.
+
 ## [0.22.0] - 2026-06-04
 
 A quality-remediation bundle: the error/exit-code contract is now universal and

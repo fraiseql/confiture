@@ -8,13 +8,47 @@ Filesystem-only checks that require no database connection:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
+
+if TYPE_CHECKING:
+    from confiture.models.results import PreflightIssue
+
+
+def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
+    """Typed blue-green window-safety verdict over a preflight issue set (#154).
+
+    ``True`` iff confiture certifies every checked migration is **forward-compatible
+    for a two-version shared-DB window** — both N-1 and N serving against one
+    Postgres during the cutover. It is ``False`` when any ``PFLIGHT_REPLICA_*``
+    finding is present: a replica-unsafe op, **or** a non-SQL ``.py`` migration the
+    classifier could not read (``PFLIGHT_REPLICA_UNCLASSIFIED``).
+
+    Window-safety is purely about forward-compatibility, **not** atomicity:
+    reversibility (``PFLIGHT_MISSING_DOWN``) and transactionality
+    (``PFLIGHT_NON_TRANSACTIONAL``) are reported as their own issues but do **not**
+    gate this verdict. In a blue-green cutover, rollback is a traffic swap-back to
+    the still-hot old version (no DB rollback), so a non-transactional op such as
+    ``CREATE INDEX CONCURRENTLY`` — the canonical online-migration operation — is
+    window-safe. Genuine apply failures are caught at the migrate step, before any
+    traffic moves.
+
+    This is the *whole* window-safety contract for the consumer: ``True`` means
+    "every pending op is forward-compatible", ``False`` means "unsafe or
+    uninspectable". The field's absence is treated fail-safe (blocked) by the
+    consumer, so older confiture keeps working.
+    """
+    from confiture.core.linting.libraries.replica import replica_lint_codes
+
+    replica_codes = replica_lint_codes()
+    return not any(issue.code in replica_codes for issue in issues)
 
 
 def preflight_exit_code(summary: dict[str, int], *, strict: bool) -> int:

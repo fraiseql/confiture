@@ -4,15 +4,26 @@
   "title": "confiture migrate preflight --against <url> --format json",
   "description": "Structured preflight report (issue #151): the SAME {ok, summary, issues[]} envelope as `migrate preflight` without --against. Static findings (reversibility, transactionality, duplicate versions, checksums) and replica-forward-compat lints are joined by per-migration execution-replay results: each migration that fails to replay against the --against database appears as a `PFLIGHT_REPLAY_FAILED` issue (the database error is in `details.error`). Run-level metadata that is not a finding — `db_consumed` — rides in `summary`. A preflight that *crashed* (config/DB/connection error, e.g. an unreachable --against URL → CONFIG_006/exit 3) emits the #145 error envelope instead — branch on `issues` vs `error`.\n\nNote: `summary.migrations_checked` is the number of migrations *replayed* (the pending set), which may be smaller than the directory-wide set the static findings are drawn from.",
   "type": "object",
-  "required": ["ok", "summary", "issues"],
+  "required": ["ok", "window_safe", "summary", "issues"],
   "properties": {
     "ok": {
       "type": "boolean",
       "description": "False if any error-severity issue (e.g. a failed replay), or — under --strict — any warning."
     },
+    "window_safe": {
+      "type": "boolean",
+      "description": "Top-level blue-green window-safety verdict (#154): true iff confiture certifies every checked migration is forward-compatible for a two-version shared-DB window. False when any PFLIGHT_REPLICA_* finding is present: a replica-unsafe op, OR a non-SQL .py migration the classifier cannot read. Forward-compatibility only — NOT atomicity: PFLIGHT_MISSING_DOWN (reversibility) and PFLIGHT_NON_TRANSACTIONAL are reported but do not gate this (a non-transactional CREATE INDEX CONCURRENTLY is window-safe). The whole window-safety contract: consume it directly instead of prefix-matching codes; its absence (older confiture) is fail-safe blocked. (Replay failures are reported as PFLIGHT_REPLAY_FAILED and independently set `ok` false.)",
+      "$comment": "STABILITY: this field and its semantics are a cross-repo contract (#154). It must remain present and false whenever any PFLIGHT_REPLICA_* finding (incl. PFLIGHT_REPLICA_UNCLASSIFIED for unreadable migrations) is present."
+    },
     "summary": {
       "type": "object",
-      "required": ["errors", "warnings", "info", "migrations_checked", "db_consumed"],
+      "required": [
+        "errors",
+        "warnings",
+        "info",
+        "migrations_checked",
+        "db_consumed"
+      ],
       "additionalProperties": false,
       "properties": {
         "errors": { "type": "integer", "minimum": 0 },
