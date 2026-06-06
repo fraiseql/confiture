@@ -47,6 +47,23 @@ UNINITIALISED_ERROR_CODE = "PRECON_1001"  # current → "no current revision"
 NO_DSN_ERROR_CODE = "CONFIG_010"  # InvalidConfig
 LOCK_EXIT_CODE = 6  # LOCK_1300, retriable
 
+# The PFLIGHT_REPLICA_* namespace fraisier's blue-green window-safety gate keys on
+# (fraisier-core/src/window_safety.rs blocks the deploy on the presence of ANY of
+# these in preflight's issues[]). Pinned here as a cross-repo stability commitment:
+# renames/removals are breaking (major bump); additions are allowed by extending
+# this literal. See docs/reference/fraisier-adapter-contract.md.
+EXPECTED_REPLICA_CODES = frozenset(
+    {
+        "PFLIGHT_REPLICA_ADD_COLUMN",
+        "PFLIGHT_REPLICA_ADD_CONSTRAINT",
+        "PFLIGHT_REPLICA_CHANGE_TYPE",
+        "PFLIGHT_REPLICA_CREATE_INDEX",
+        "PFLIGHT_REPLICA_DROP_COLUMN",
+        "PFLIGHT_REPLICA_RENAME_COLUMN",
+        "PFLIGHT_REPLICA_UNCLASSIFIED",
+    }
+)
+
 _SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "docs" / "reference" / "json-schemas"
 
 # Two real migrations so `down-to` rolls something back.
@@ -110,6 +127,61 @@ def test_adapter_pinned_error_codes_keep_their_exit_numbers() -> None:
     assert CANONICAL_EXIT_CODES[UNINITIALISED_ERROR_CODE] == 2
     assert CANONICAL_EXIT_CODES[NO_DSN_ERROR_CODE] == 5
     assert CANONICAL_EXIT_CODES["LOCK_1300"] == LOCK_EXIT_CODE
+
+
+def test_replica_code_namespace_is_a_stability_commitment() -> None:
+    """The exact set fraisier's blue-green window-safety gate keys on (#154).
+
+    fraisier blocks a deploy on the *presence* of any ``PFLIGHT_REPLICA_*`` issue
+    in preflight's ``issues[]``. A rename of one of these codes would silently make
+    that gate match nothing — blue-green would proceed on an uncertified migration
+    with confiture CI still green. Pin the set so a rename fails here instead.
+    """
+    from confiture.core.linting.libraries.replica import replica_lint_codes
+
+    assert replica_lint_codes() == EXPECTED_REPLICA_CODES
+
+
+def test_replica_codes_keep_the_pflight_replica_prefix() -> None:
+    """Every emittable replica code carries the prefix fraisier string-matches on."""
+    from confiture.core.linting.libraries.replica import replica_lint_codes
+
+    assert replica_lint_codes(), "the replica lint must emit at least one code"
+    assert all(code.startswith("PFLIGHT_REPLICA_") for code in replica_lint_codes())
+
+
+def test_preflight_summary_carries_window_safe_verdict(tmp_path: Path) -> None:
+    """The default preflight summary exposes the typed `window_safe` verdict (#154).
+
+    The fraisier window-safety gate can read one typed boolean instead of
+    prefix-matching ``PFLIGHT_REPLICA_*`` codes. Filesystem-only — no DB needed —
+    and validated against the published schema so the field is a pinned contract.
+    """
+    md = tmp_path / "migrations"
+    md.mkdir()
+    (md / "20260101000001_a.up.sql").write_text("ALTER TABLE t DROP COLUMN c;")
+    (md / "20260101000001_a.down.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
+    report = tmp_path / "report.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "preflight",
+            "--no-config",
+            "--format",
+            "json",
+            "--output",
+            str(report),
+            "--migrations-dir",
+            str(md),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(report.read_text())
+    _schema("migrate-preflight.schema.json").validate(payload)
+    # DROP COLUMN is not forward-compatible for the shared-DB read window.
+    assert payload["summary"]["window_safe"] is False
 
 
 def test_version_output_shape_matches_adapter_parser() -> None:

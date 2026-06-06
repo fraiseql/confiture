@@ -2107,7 +2107,10 @@ def migrate_preflight(
     """
     from rich.table import Table
 
-    from confiture.core.linting.libraries.replica import replica_preflight_issues
+    from confiture.core.linting.libraries.replica import (
+        is_window_safe,
+        replica_preflight_issues,
+    )
     from confiture.core.preflight import preflight_exit_code, run_preflight
 
     if check_dependents not in {"off", "fail", "warn"}:
@@ -2142,6 +2145,9 @@ def migrate_preflight(
             "warnings": sum(1 for i in all_issues if i.severity == "warning"),
             "info": sum(1 for i in all_issues if i.severity == "info"),
             "migrations_checked": len(result.migrations),
+            # #154: typed blue-green window-safety verdict (fraisier's presence
+            # rule, computed here) — False when any PFLIGHT_REPLICA_* finding fires.
+            "window_safe": is_window_safe(all_issues),
         }
         exit_code = preflight_exit_code(summary, strict=strict)
 
@@ -2315,6 +2321,8 @@ def migrate_preflight(
         "info": sum(1 for i in all_issues if i.severity == "info"),
         "migrations_checked": len(against_result.migrations),
         "db_consumed": against_result.db_consumed,
+        # #154: same typed window-safety verdict as the no-`--against` path.
+        "window_safe": is_window_safe(all_issues),
     }
     exit_code = preflight_exit_code(summary, strict=strict)
 

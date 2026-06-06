@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-06-06
+
+Hardens the confiture↔fraisier blue-green seam (issue #154): the
+`PFLIGHT_REPLICA_*` code namespace is now a pinned cross-repo contract, non-SQL
+migrations are no longer a blind spot in the replica preflight, and the
+window-safety decision is available as one typed `summary.window_safe` field. All
+changes are additive (new schema field, new warning, a new accessor); no exit
+code, existing field, or existing code value changed.
+
+### Added
+
+- **`migrate preflight` now carries a typed blue-green window-safety verdict**
+  (issue #154). The structured report's `summary` gains a `window_safe` boolean —
+  `false` exactly when any `PFLIGHT_REPLICA_*` finding is present — so a consumer
+  (e.g. the fraisier blue-green window-safety gate) can read one typed field
+  instead of prefix-matching codes. Present in both the default and `--against`
+  payloads and pinned in the published JSON schemas. (`ok` still cannot certify
+  window safety: the replica lint is warn-by-default.)
+- **The `PFLIGHT_REPLICA_*` code namespace is now a pinned cross-repo contract**
+  (issue #154). `replica_lint_codes()` is the single source for the set, and
+  `tests/contract/test_fraisier_adapter_surface.py` pins it against a literal so a
+  rename fails CI instead of silently disarming a downstream window-safety gate.
+  Documented as a stability commitment in the
+  [fraisier-adapter contract](docs/reference/fraisier-adapter-contract.md)
+  (renames breaking, additions allowed).
+
+### Changed
+
+- **Non-SQL (`.py`) migrations now surface in the replica preflight** (issue
+  #154). The SQL classifier cannot read `.py` migrations, so `migrate preflight`
+  emits a `PFLIGHT_REPLICA_UNCLASSIFIED` **warning** for each one — "no replica
+  issue" can no longer ambiguously mean "never inspected". Non-fatal (warning,
+  `ok` unchanged); adds one warning line per `.py` migration to preflight output.
+
 ## [0.22.0] - 2026-06-04
 
 A quality-remediation bundle: the error/exit-code contract is now universal and

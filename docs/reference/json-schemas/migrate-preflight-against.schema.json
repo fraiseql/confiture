@@ -12,7 +12,14 @@
     },
     "summary": {
       "type": "object",
-      "required": ["errors", "warnings", "info", "migrations_checked", "db_consumed"],
+      "required": [
+        "errors",
+        "warnings",
+        "info",
+        "migrations_checked",
+        "db_consumed",
+        "window_safe"
+      ],
       "additionalProperties": false,
       "properties": {
         "errors": { "type": "integer", "minimum": 0 },
@@ -26,6 +33,10 @@
         "db_consumed": {
           "type": "boolean",
           "description": "True when non-transactional migrations ran outside the SAVEPOINT (--allow-non-transactional). The preflight DB is no longer in its original state — reprovision before the next run."
+        },
+        "window_safe": {
+          "type": "boolean",
+          "description": "Blue-green window-safety verdict (#154): false when any PFLIGHT_REPLICA_* finding is present (an unsafe operation OR a .py migration the classifier cannot read). The typed form of fraisier's presence rule — consume this instead of prefix-matching codes."
         }
       }
     },

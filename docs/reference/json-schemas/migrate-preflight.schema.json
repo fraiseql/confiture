@@ -12,13 +12,17 @@
     },
     "summary": {
       "type": "object",
-      "required": ["errors", "warnings", "info", "migrations_checked"],
+      "required": ["errors", "warnings", "info", "migrations_checked", "window_safe"],
       "additionalProperties": false,
       "properties": {
         "errors": { "type": "integer", "minimum": 0 },
         "warnings": { "type": "integer", "minimum": 0 },
         "info": { "type": "integer", "minimum": 0 },
-        "migrations_checked": { "type": "integer", "minimum": 0 }
+        "migrations_checked": { "type": "integer", "minimum": 0 },
+        "window_safe": {
+          "type": "boolean",
+          "description": "Blue-green window-safety verdict (#154): false when any PFLIGHT_REPLICA_* finding is present (an unsafe operation OR a .py migration the classifier cannot read). The typed form of fraisier's presence rule — consume this instead of prefix-matching codes."
+        }
       }
     },
     "issues": {
