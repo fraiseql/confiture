@@ -116,27 +116,30 @@ which a consumer reads instead of prefix-matching codes:
 ```
 
 `window_safe == true` iff confiture certifies **every checked migration** is
-forward-compatible for a two-version shared-DB window **and** has a safe down
-path. It is the *whole* safety contract — it folds in:
+forward-compatible for a two-version shared-DB window. It is `false` when any
+`PFLIGHT_REPLICA_*` finding is present:
 
-- any `PFLIGHT_REPLICA_*` finding — a replica-unsafe op **or** a non-SQL `.py`
-  migration the classifier could not read;
-- reversibility (`PFLIGHT_MISSING_DOWN`) and transactionality
-  (`PFLIGHT_NON_TRANSACTIONAL`) — the down path.
+- a replica-unsafe op, **or**
+- a non-SQL `.py` migration the classifier could not read
+  (`PFLIGHT_REPLICA_UNCLASSIFIED`).
 
-So `true` means "inspected everything and it is all forward-compatible +
-reversible"; `false` means "unsafe or uninspectable". The fraisier gate consumes
-it as `PreflightReport.window_safe: Option<bool>`: `Some(true)` → allowed
+Window-safety is purely **forward-compatibility**, not atomicity. Reversibility
+(`PFLIGHT_MISSING_DOWN`) and transactionality (`PFLIGHT_NON_TRANSACTIONAL`) are
+reported as their own issues but do **not** gate this verdict — in a blue-green
+cutover, rollback is a traffic swap-back to the still-hot old version (no DB
+rollback), so a non-transactional `CREATE INDEX CONCURRENTLY` — the canonical
+online-migration op — is window-safe. Genuine apply failures are caught at the
+migrate step, before any traffic moves.
+
+So `true` means "every pending op is forward-compatible"; `false` means "unsafe
+or uninspectable". The fraisier gate consumes it as
+`PreflightReport.window_safe: Option<bool>`: `Some(true)` → allowed
 (authoritative), `Some(false)` → blocked, **absent → `None` → blocked**
 (fail-safe, so an older confiture that cannot certify is refused, not waved
 through). It is present at top level in both the default and `--against` payloads
 and pinned in the published schemas + the contract test. The `ok` flag **cannot**
-substitute for it: the replica and non-transactional cases are warn-by-default,
-so `ok == true` can coincide with `window_safe == false`.
-
-> **Note — `CREATE INDEX CONCURRENTLY`:** a concurrent index is replica-safe but
-> *non-transactional*, so it reads `window_safe == false` (the down path is not
-> transactionally reversible). This is intentional under the contract above.
+substitute for it: replica findings are warn-by-default, so `ok == true` can
+coincide with `window_safe == false`.
 
 ## Exit codes
 

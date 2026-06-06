@@ -21,32 +21,34 @@ from confiture.models.results import MigrationPreflightInfo, PreflightResult
 if TYPE_CHECKING:
     from confiture.models.results import PreflightIssue
 
-# Preflight issue codes that, beyond the replica namespace, make a migration set
-# unsafe for a two-version blue-green window (#154): an unsafe down path.
-_DOWN_PATH_BLOCKING_CODES = frozenset({"PFLIGHT_MISSING_DOWN", "PFLIGHT_NON_TRANSACTIONAL"})
-
 
 def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
     """Typed blue-green window-safety verdict over a preflight issue set (#154).
 
-    ``True`` iff confiture certifies every checked migration is forward-compatible
-    for a two-version shared-DB window *and* has a safe down path. It folds in,
-    per the fraisier window-safety contract:
+    ``True`` iff confiture certifies every checked migration is **forward-compatible
+    for a two-version shared-DB window** — both N-1 and N serving against one
+    Postgres during the cutover. It is ``False`` when any ``PFLIGHT_REPLICA_*``
+    finding is present: a replica-unsafe op, **or** a non-SQL ``.py`` migration the
+    classifier could not read (``PFLIGHT_REPLICA_UNCLASSIFIED``).
 
-    - any ``PFLIGHT_REPLICA_*`` finding — a replica-unsafe op, **or** a non-SQL
-      ``.py`` migration the classifier could not read (``PFLIGHT_REPLICA_UNCLASSIFIED``);
-    - reversibility (``PFLIGHT_MISSING_DOWN``) and transactionality
-      (``PFLIGHT_NON_TRANSACTIONAL``) — the down path.
+    Window-safety is purely about forward-compatibility, **not** atomicity:
+    reversibility (``PFLIGHT_MISSING_DOWN``) and transactionality
+    (``PFLIGHT_NON_TRANSACTIONAL``) are reported as their own issues but do **not**
+    gate this verdict. In a blue-green cutover, rollback is a traffic swap-back to
+    the still-hot old version (no DB rollback), so a non-transactional op such as
+    ``CREATE INDEX CONCURRENTLY`` — the canonical online-migration operation — is
+    window-safe. Genuine apply failures are caught at the migrate step, before any
+    traffic moves.
 
-    This is the *whole* safety contract for the consumer: ``True`` means "inspected
-    everything and it is all forward-compatible + reversible", ``False`` means
-    "unsafe or uninspectable". The field's absence is treated fail-safe (blocked)
-    by the consumer, so older confiture keeps working.
+    This is the *whole* window-safety contract for the consumer: ``True`` means
+    "every pending op is forward-compatible", ``False`` means "unsafe or
+    uninspectable". The field's absence is treated fail-safe (blocked) by the
+    consumer, so older confiture keeps working.
     """
     from confiture.core.linting.libraries.replica import replica_lint_codes
 
-    blocking = replica_lint_codes() | _DOWN_PATH_BLOCKING_CODES
-    return not any(issue.code in blocking for issue in issues)
+    replica_codes = replica_lint_codes()
+    return not any(issue.code in replica_codes for issue in issues)
 
 
 def preflight_exit_code(summary: dict[str, int], *, strict: bool) -> int:

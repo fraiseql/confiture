@@ -23,14 +23,14 @@ code, existing field, or existing code value changed.
   so a consumer (e.g. the fraisier blue-green window-safety gate) reads one typed
   field instead of prefix-matching codes. `window_safe == true` iff confiture
   certifies every checked migration is forward-compatible for a two-version
-  shared-DB window **and** has a safe down path — it folds in any
-  `PFLIGHT_REPLICA_*` finding (a replica-unsafe op **or** an unreadable `.py`
-  migration), `PFLIGHT_MISSING_DOWN` (reversibility), and
-  `PFLIGHT_NON_TRANSACTIONAL` (transactionality). Present in both the default and
-  `--against` payloads and pinned in the published JSON schemas. (`ok` cannot
-  substitute: the replica/transactional cases are warn-by-default, so `ok` can be
-  true while `window_safe` is false. Note: `CREATE INDEX CONCURRENTLY` is
-  replica-safe but non-transactional, so it reads `window_safe == false`.)
+  shared-DB window — it is `false` when any `PFLIGHT_REPLICA_*` finding is present
+  (a replica-unsafe op **or** an unreadable `.py` migration). Window-safety is
+  forward-compatibility only, **not** atomicity: reversibility
+  (`PFLIGHT_MISSING_DOWN`) and transactionality (`PFLIGHT_NON_TRANSACTIONAL`) are
+  reported but do not gate it, so a non-transactional `CREATE INDEX CONCURRENTLY`
+  is window-safe. Present in both the default and `--against` payloads and pinned
+  in the published JSON schemas. (`ok` cannot substitute: replica findings are
+  warn-by-default, so `ok` can be true while `window_safe` is false.)
 - **The `PFLIGHT_REPLICA_*` code namespace is now a pinned cross-repo contract**
   (issue #154). `replica_lint_codes()` is the single source for the set, and
   `tests/contract/test_fraisier_adapter_surface.py` pins it against a literal so a

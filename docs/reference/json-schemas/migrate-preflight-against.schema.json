@@ -12,8 +12,8 @@
     },
     "window_safe": {
       "type": "boolean",
-      "description": "Top-level blue-green window-safety verdict (#154): true iff confiture certifies every checked migration is forward-compatible for a two-version shared-DB window AND has a safe down path. False when any PFLIGHT_REPLICA_* finding is present (a replica-unsafe op, OR a non-SQL .py migration the classifier cannot read), or any PFLIGHT_MISSING_DOWN (not reversible) / PFLIGHT_NON_TRANSACTIONAL (no transactional rollback). The whole safety contract: consume it directly instead of prefix-matching codes; its absence (older confiture) is fail-safe blocked. (Replay failures are reported as PFLIGHT_REPLAY_FAILED and independently set `ok` false.)",
-      "$comment": "STABILITY: this field and its semantics are a cross-repo contract (#154). It must remain present and a strict superset of the safety conditions above."
+      "description": "Top-level blue-green window-safety verdict (#154): true iff confiture certifies every checked migration is forward-compatible for a two-version shared-DB window. False when any PFLIGHT_REPLICA_* finding is present: a replica-unsafe op, OR a non-SQL .py migration the classifier cannot read. Forward-compatibility only — NOT atomicity: PFLIGHT_MISSING_DOWN (reversibility) and PFLIGHT_NON_TRANSACTIONAL are reported but do not gate this (a non-transactional CREATE INDEX CONCURRENTLY is window-safe). The whole window-safety contract: consume it directly instead of prefix-matching codes; its absence (older confiture) is fail-safe blocked. (Replay failures are reported as PFLIGHT_REPLAY_FAILED and independently set `ok` false.)",
+      "$comment": "STABILITY: this field and its semantics are a cross-repo contract (#154). It must remain present and false whenever any PFLIGHT_REPLICA_* finding (incl. PFLIGHT_REPLICA_UNCLASSIFIED for unreadable migrations) is present."
     },
     "summary": {
       "type": "object",

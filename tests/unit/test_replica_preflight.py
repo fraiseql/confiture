@@ -70,24 +70,26 @@ def test_is_window_safe_false_on_unreadable_py(tmp_path: Path) -> None:
     assert is_window_safe(_all_issues(tmp_path)) is False
 
 
-def test_is_window_safe_false_when_not_reversible(tmp_path: Path) -> None:
-    """A migration with no .down.sql folds into the verdict — unsafe down path (#154)."""
+def test_is_window_safe_true_despite_missing_down(tmp_path: Path) -> None:
+    """Reversibility is NOT a window-safety property — a forward-compatible op with
+    no .down.sql is still window-safe (#154)."""
     (tmp_path / "20260606120000_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
-    # no .down.sql sibling → PFLIGHT_MISSING_DOWN
-    assert is_window_safe(_all_issues(tmp_path)) is False
+    # no .down.sql sibling → PFLIGHT_MISSING_DOWN, but window-safety ignores it
+    assert is_window_safe(_all_issues(tmp_path)) is True
 
 
-def test_is_window_safe_false_when_non_transactional(tmp_path: Path) -> None:
-    """A non-transactional statement folds into the verdict — unsafe down path (#154)."""
+def test_is_window_safe_true_for_concurrent_index(tmp_path: Path) -> None:
+    """CREATE INDEX CONCURRENTLY is the canonical online op — window-safe despite
+    being non-transactional (#154)."""
     (tmp_path / "20260606120000_idx.up.sql").write_text(
         "CREATE INDEX CONCURRENTLY idx_t_c ON t (c);"
     )
     (tmp_path / "20260606120000_idx.down.sql").write_text("DROP INDEX idx_t_c;")
-    assert is_window_safe(_all_issues(tmp_path)) is False
+    assert is_window_safe(_all_issues(tmp_path)) is True
 
 
-def test_is_window_safe_true_when_fully_certified(tmp_path: Path) -> None:
-    """Forward-compatible + reversible + transactional → window safe (#154)."""
+def test_is_window_safe_true_when_forward_compatible(tmp_path: Path) -> None:
+    """A nullable ADD COLUMN is forward-compatible → window safe (#154)."""
     (tmp_path / "20260606120000_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
     (tmp_path / "20260606120000_add.down.sql").write_text("ALTER TABLE t DROP COLUMN c;")
     assert is_window_safe(_all_issues(tmp_path)) is True

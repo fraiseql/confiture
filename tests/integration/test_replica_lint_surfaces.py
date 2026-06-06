@@ -124,11 +124,12 @@ def test_preflight_py_migration_is_window_unsafe(tmp_path: Path) -> None:
     assert payload["window_safe"] is False
 
 
-def test_preflight_window_safe_false_when_not_reversible(tmp_path: Path) -> None:
-    """A missing .down.sql (unsafe down path) folds into the top-level verdict (#154)."""
+def test_preflight_window_safe_decoupled_from_reversibility(tmp_path: Path) -> None:
+    """Window-safety is forward-compatibility only: a missing .down.sql is reported
+    but does not flip the top-level verdict (#154)."""
     migs = tmp_path / "migrations"
     migs.mkdir()
-    # nullable ADD is forward-compatible, but there is no .down.sql sibling
+    # nullable ADD is forward-compatible; no .down.sql sibling → PFLIGHT_MISSING_DOWN
     (migs / "20260531_1200_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
 
     r = runner.invoke(
@@ -136,7 +137,7 @@ def test_preflight_window_safe_false_when_not_reversible(tmp_path: Path) -> None
     )
     payload = json.loads(r.stdout)
     assert "PFLIGHT_MISSING_DOWN" in {i["code"] for i in payload["issues"]}
-    assert payload["window_safe"] is False
+    assert payload["window_safe"] is True
 
 
 # ── lint surface ──────────────────────────────────────────────────────────────
