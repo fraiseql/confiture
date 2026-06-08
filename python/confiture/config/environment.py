@@ -147,6 +147,24 @@ class BuildConfig(BaseModel):
     lint: BuildLintConfig = Field(default_factory=BuildLintConfig)
 
 
+class SeedProfile(BaseModel):
+    """A named subset of seed files, selected by glob patterns.
+
+    Patterns match seed *filenames* (seed discovery is top-level, non-recursive).
+    Selection is include-then-exclude: an empty ``include`` starts from all
+    files; ``exclude`` then removes matches. Lets CI apply a lean test seed
+    (e.g. excluding large ETL-statistics partitions) for faster, higher-parallel
+    test databases.
+
+    Attributes:
+        include: Globs a file must match to be included (empty = all files).
+        exclude: Globs that remove an otherwise-included file.
+    """
+
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
 class SeedConfig(BaseModel):
     """Seed data application configuration.
 
@@ -158,11 +176,37 @@ class SeedConfig(BaseModel):
         execution_mode: Execution strategy ("concatenate" | "sequential")
         continue_on_error: Continue applying files if one fails (default: False)
         transaction_mode: Transaction isolation ("savepoint" | "transaction")
+        profiles: Named seed subsets (see :class:`SeedProfile`). Absent ⇒ today's
+            apply-all behaviour is unchanged.
     """
 
     execution_mode: str = "concatenate"  # "concatenate" | "sequential"
     continue_on_error: bool = False
     transaction_mode: str = "savepoint"  # "savepoint" | "transaction"
+    profiles: dict[str, SeedProfile] = Field(default_factory=dict)
+
+    def get_profile(self, name: str) -> SeedProfile:
+        """Return the named seed profile, or raise a clear configuration error.
+
+        Args:
+            name: Profile name to resolve.
+
+        Returns:
+            The matching :class:`SeedProfile`.
+
+        Raises:
+            ConfigurationError: If no profile by that name is defined.
+        """
+        try:
+            return self.profiles[name]
+        except KeyError:
+            defined = ", ".join(sorted(self.profiles)) or "(none defined)"
+            raise ConfigurationError(
+                f"Unknown seed profile: {name!r}. Defined profiles: {defined}.",
+                error_code="CONFIG_010",
+                resolution_hint="Define it under seed.profiles.<name> in the environment "
+                "config, or omit --profile/--seed-profile.",
+            ) from None
 
 
 class LockingConfig(BaseModel):

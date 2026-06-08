@@ -6,14 +6,39 @@ sequentially (each in own savepoint) or concatenated (default behavior).
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import psycopg
 from rich.console import Console
 
 from confiture.core.progress import ProgressManager
 from confiture.core.seed_executor import SeedExecutor
+
+if TYPE_CHECKING:
+    from confiture.config.environment import SeedProfile
+
+
+def _apply_profile_filter(files: list[Path], profile: SeedProfile) -> list[Path]:
+    """Filter *files* by a profile's include-then-exclude filename globs.
+
+    Order is preserved. Empty ``include`` means "start from all files".
+    """
+
+    def _matches_any(name: str, patterns: list[str]) -> bool:
+        return any(fnmatch.fnmatch(name, pat) for pat in patterns)
+
+    result: list[Path] = []
+    for path in files:
+        name = path.name
+        if profile.include and not _matches_any(name, profile.include):
+            continue
+        if profile.exclude and _matches_any(name, profile.exclude):
+            continue
+        result.append(path)
+    return result
 
 
 def apply_seed_files(connection_url: str, seed_files: list[Path]) -> int:
@@ -49,6 +74,7 @@ class ApplyResult:
     succeeded: int = 0
     failed: int = 0
     failed_files: list[str] = field(default_factory=list)
+    seed_profile: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization.
@@ -62,6 +88,7 @@ class ApplyResult:
             "failed": self.failed,
             "failed_files": self.failed_files,
             "success": self.failed == 0,
+            "seed_profile": self.seed_profile,
         }
 
 
@@ -95,24 +122,34 @@ class SeedApplier:
         self.connection = connection
         self.console = console or Console()
 
-    def find_seed_files(self) -> list[Path]:
-        """Discover and return sorted seed files.
+    def find_seed_files(self, profile: SeedProfile | None = None) -> list[Path]:
+        """Discover and return sorted seed files, optionally filtered by *profile*.
 
-        Returns SQL files in sorted order from seeds directory.
-        Non-SQL files are ignored.
+        Returns SQL files in sorted order from the (top-level, non-recursive)
+        seeds directory. Non-SQL files are ignored. When *profile* is None the
+        result is byte-identical to the historical apply-all behaviour.
+
+        Args:
+            profile: Optional seed profile selecting an include/exclude subset by
+                filename glob.
 
         Returns:
-            List of Path objects for SQL files in sorted order
+            List of Path objects for SQL files in sorted order.
         """
         if not self.seeds_dir.exists():
             return []
 
-        # Find all .sql files
+        # Find all .sql files (top-level only — globs match filenames)
         sql_files = sorted(self.seeds_dir.glob("*.sql"))
-        return sql_files
+        if profile is None:
+            return sql_files
+        return _apply_profile_filter(sql_files, profile)
 
     def apply_sequential(
-        self, continue_on_error: bool = False, progress: ProgressManager | None = None
+        self,
+        continue_on_error: bool = False,
+        progress: ProgressManager | None = None,
+        profile: SeedProfile | None = None,
     ) -> ApplyResult:
         """Apply seed files sequentially with savepoints.
 
@@ -122,6 +159,7 @@ class SeedApplier:
         Args:
             continue_on_error: Continue applying files if one fails
             progress: Optional ProgressManager for displaying progress
+            profile: Optional seed profile selecting a subset of files
 
         Returns:
             ApplyResult with tracking info
@@ -137,7 +175,7 @@ class SeedApplier:
             discover_task = progress.add_task("Discovering seed files...", total=None)
 
         # Discover seed files
-        files = self.find_seed_files()
+        files = self.find_seed_files(profile=profile)
         result = ApplyResult(total=len(files))
 
         if progress and discover_task is not None:

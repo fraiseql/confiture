@@ -40,6 +40,11 @@ def provision_template(
         help="Restore a pg_dump -Fc/-Fd artifact (from 'build --dump') instead of "
         "applying DDL.",
     ),
+    seed_profile: str = typer.Option(
+        None,
+        "--seed-profile",
+        help="Apply only the named seed profile (seed.profiles.<name>) on the DDL path.",
+    ),
     force: bool = typer.Option(
         False, "--force", help="Replace a same-named database even if not confiture-managed."
     ),
@@ -62,6 +67,11 @@ def provision_template(
         else:
             schema_sql = builder.build(schema_only=True)
             _schema_files, seed_files = builder.categorize_sql_files()
+            if seed_profile is not None:
+                from confiture.core.seed_applier import _apply_profile_filter
+
+                profile_obj = builder.env_config.seed.get_profile(seed_profile)
+                seed_files = _apply_profile_filter(seed_files, profile_obj)
             status = provisioner.provision_template(
                 template,
                 schema_hash=schema_hash,

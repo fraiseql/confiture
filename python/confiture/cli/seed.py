@@ -460,6 +460,11 @@ def apply(
             "back-compat alias for --output/-o (DOCS-M2)."
         ),
     ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="Apply only the named seed profile (seed.profiles.<name> in env config).",
+    ),
 ) -> None:
     """Load seed data into the database.
 
@@ -525,6 +530,16 @@ def apply(
                 output_file=report_output,
             )
 
+        # Resolve a named seed profile (before connecting): unknown → exit 5.
+        seed_profile = None
+        if profile is not None:
+            from confiture.config.environment import Environment
+
+            try:
+                seed_profile = Environment.load(env).seed.get_profile(profile)
+            except Exception as e:
+                fail(e, json_mode=is_json(format_type), output_file=report_output)
+
         # Get database connection
         if database_url:
             # Use provided URL directly
@@ -577,7 +592,9 @@ def apply(
                 result = applier.apply_sequential(
                     continue_on_error=continue_on_error,
                     progress=progress,
+                    profile=seed_profile,
                 )
+            result.seed_profile = profile
 
             # Format output
             from confiture.cli.formatters.seed_formatter import format_apply_result

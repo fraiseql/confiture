@@ -289,6 +289,12 @@ def build(
         help="Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). "
         "Default: custom.",
     ),
+    seed_profile: str | None = typer.Option(
+        None,
+        "--seed-profile",
+        help="Apply only the named seed profile (seed.profiles.<name>) during "
+        "--sequential seed application and --dump. Unknown name → exit 5.",
+    ),
 ) -> None:
     """Build complete schema from DDL files in one fast operation.
 
@@ -425,6 +431,14 @@ def build(
             output_dir.mkdir(parents=True, exist_ok=True)
             output = output_dir / f"schema_{env}.sql"
 
+        # Resolve a named seed profile from env config (unknown → exit 5).
+        seed_profile_obj = None
+        if seed_profile is not None:
+            try:
+                seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
+            except Exception as e:
+                fail(e, json_mode=is_json(format_type), output_file=report_output)
+
         # Determine if we should apply seeds sequentially
         apply_sequential = sequential or (
             builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
@@ -504,7 +518,9 @@ def build(
                         connection=connection,
                         console=console,
                     )
-                    result = applier.apply_sequential(continue_on_error=continue_on_error)
+                    result = applier.apply_sequential(
+                        continue_on_error=continue_on_error, profile=seed_profile_obj
+                    )
 
                     seed_files_applied = result.succeeded
                     console.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
@@ -588,7 +604,7 @@ def build(
 
             if dump.is_dir() or str(dump).endswith("/"):
                 artifact_out = default_artifact_path(
-                    dump, env, schema_hash, dump_format=dump_format
+                    dump, env, schema_hash, profile=seed_profile, dump_format=dump_format
                 )
             else:
                 artifact_out = dump
@@ -599,6 +615,10 @@ def build(
                 artifact_seed_files: list[Path] | None = None
             else:
                 _schema_files, seed_paths = builder.categorize_sql_files()
+                if seed_profile_obj is not None:
+                    from confiture.core.seed_applier import _apply_profile_filter
+
+                    seed_paths = _apply_profile_filter(seed_paths, seed_profile_obj)
                 artifact_seed_files = seed_paths or None
 
             artifact_result = build_schema_artifact(
@@ -633,6 +653,7 @@ def build(
             seed_files_applied=seed_files_applied,
             artifact_path=artifact_path_str,
             artifact_hash=artifact_hash_str,
+            seed_profile=seed_profile,
         )
 
         # Format and output result
