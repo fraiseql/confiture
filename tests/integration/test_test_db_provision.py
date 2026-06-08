@@ -83,9 +83,7 @@ class TestProvisionAndClone:
         assert result.target == _CLONE
         assert _tables(provisioner, _CLONE) == {"widget"}
 
-    def test_provision_from_artifact(
-        self, provisioner: TestDbProvisioner, tmp_path: Path
-    ) -> None:
+    def test_provision_from_artifact(self, provisioner: TestDbProvisioner, tmp_path: Path) -> None:
         artifact = tmp_path / "p2.full.hash.pgdump"
         build_schema_artifact(
             server_url=provisioner.server_url,
@@ -107,9 +105,7 @@ class TestStaleness:
         assert provisioner.template_status(_TEMPLATE, "hash-v2").state is TemplateState.STALE
 
     def test_status_absent_when_missing(self, provisioner: TestDbProvisioner) -> None:
-        assert (
-            provisioner.template_status(_TEMPLATE, "hash-v1").state is TemplateState.ABSENT
-        )
+        assert provisioner.template_status(_TEMPLATE, "hash-v1").state is TemplateState.ABSENT
 
 
 class TestDropSafety:
@@ -149,9 +145,7 @@ class TestConcurrencyAndPrune:
         for i in range(6):
             assert _tables(provisioner, f"{_CLONE}_{i}") == {"widget"}
 
-    def test_prune_drops_all_clones_of_template(
-        self, provisioner: TestDbProvisioner
-    ) -> None:
+    def test_prune_drops_all_clones_of_template(self, provisioner: TestDbProvisioner) -> None:
         provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
         provisioner.clone(_TEMPLATE, f"{_CLONE}_0")
         provisioner.clone(_TEMPLATE, f"{_CLONE}_1")

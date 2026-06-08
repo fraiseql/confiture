@@ -119,9 +119,7 @@ class SchemaArtifactDumper:
         argv += ["-d", str(source_url), "-f", str(output_path)]
         return argv
 
-    def dump(
-        self, source_url: str, output_path: Path, dump_format: str = "custom"
-    ) -> None:
+    def dump(self, source_url: str, output_path: Path, dump_format: str = "custom") -> None:
         """Run ``pg_dump`` to produce the archive.
 
         Args:

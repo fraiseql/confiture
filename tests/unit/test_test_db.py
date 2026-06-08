@@ -78,16 +78,12 @@ class TestClassifyTemplate:
         assert st.state is TemplateState.ABSENT
 
     def test_current_when_hash_matches(self) -> None:
-        st = _classify_template(
-            comment="confiture:template:h1", current_hash="h1", exists=True
-        )
+        st = _classify_template(comment="confiture:template:h1", current_hash="h1", exists=True)
         assert st.state is TemplateState.CURRENT
         assert st.stored_hash == "h1"
 
     def test_stale_when_hash_differs(self) -> None:
-        st = _classify_template(
-            comment="confiture:template:OLD", current_hash="NEW", exists=True
-        )
+        st = _classify_template(comment="confiture:template:OLD", current_hash="NEW", exists=True)
         assert st.state is TemplateState.STALE
         assert st.stored_hash == "OLD"
 

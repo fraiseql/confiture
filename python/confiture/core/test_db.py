@@ -156,7 +156,9 @@ def _managed_kind(comment: str | None) -> str | None:
     return None
 
 
-def _classify_template(comment: str | None, current_hash: str | None, exists: bool) -> TemplateStatus:
+def _classify_template(
+    comment: str | None, current_hash: str | None, exists: bool
+) -> TemplateStatus:
     """Classify a template's staleness from its stored comment.
 
     Args:
@@ -340,9 +342,7 @@ class TestDbProvisioner:
             finally:
                 conn.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
 
-    def _restore_into(
-        self, target: str, artifact: Path, restorer: DatabaseRestorer | None
-    ) -> None:
+    def _restore_into(self, target: str, artifact: Path, restorer: DatabaseRestorer | None) -> None:
         restorer = restorer or DatabaseRestorer()
         result = restorer.restore(
             RestoreOptions(
@@ -416,8 +416,7 @@ class TestDbProvisioner:
                 ) from e
 
         raise SchemaError(
-            f"Could not clone {template!r} into {target!r} after {retries} attempts: "
-            f"{last_err}",
+            f"Could not clone {template!r} into {target!r} after {retries} attempts: {last_err}",
             error_code="SCHEMA_001",
             resolution_hint="The template was continuously in use; reduce clone concurrency.",
         )

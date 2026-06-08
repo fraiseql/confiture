@@ -44,18 +44,28 @@ def _project(tmp_path: Path, *, profiles: bool = True) -> None:
 class TestSeedApplyProfile:
     @patch("confiture.cli.seed.SeedApplier")
     @patch("confiture.core.connection.create_connection")
-    def test_profile_threaded_to_applier(
-        self, _mock_conn, mock_applier_cls, tmp_path, monkeypatch
-    ):
+    def test_profile_threaded_to_applier(self, _mock_conn, mock_applier_cls, tmp_path, monkeypatch):
         _project(tmp_path)
         monkeypatch.chdir(tmp_path)
         mock_applier_cls.return_value.apply_sequential.return_value = ApplyResult(total=0)
 
         result = runner.invoke(
             app,
-            ["seed", "apply", "--sequential", "--env", "local",
-             "--seeds-dir", str(tmp_path / "db" / "seeds"),
-             "--database-url", _URL, "--profile", "slim", "--format", "json"],
+            [
+                "seed",
+                "apply",
+                "--sequential",
+                "--env",
+                "local",
+                "--seeds-dir",
+                str(tmp_path / "db" / "seeds"),
+                "--database-url",
+                _URL,
+                "--profile",
+                "slim",
+                "--format",
+                "json",
+            ],
         )
 
         assert result.exit_code == 0, result.output
@@ -68,9 +78,19 @@ class TestSeedApplyProfile:
         monkeypatch.chdir(tmp_path)
         result = runner.invoke(
             app,
-            ["seed", "apply", "--sequential", "--env", "local",
-             "--seeds-dir", str(tmp_path / "db" / "seeds"),
-             "--database-url", _URL, "--profile", "nope"],
+            [
+                "seed",
+                "apply",
+                "--sequential",
+                "--env",
+                "local",
+                "--seeds-dir",
+                str(tmp_path / "db" / "seeds"),
+                "--database-url",
+                _URL,
+                "--profile",
+                "nope",
+            ],
         )
         assert result.exit_code == 5
         assert "Unknown seed profile" in result.output
@@ -81,8 +101,7 @@ class TestBuildSeedProfile:
         _project(tmp_path)
         result = runner.invoke(
             app,
-            ["build", "--env", "local", "--project-dir", str(tmp_path),
-             "--seed-profile", "nope"],
+            ["build", "--env", "local", "--project-dir", str(tmp_path), "--seed-profile", "nope"],
         )
         assert result.exit_code == 5
         assert "Unknown seed profile" in result.output
@@ -103,8 +122,17 @@ class TestBuildSeedProfile:
         mock_build.side_effect = _capture
         result = runner.invoke(
             app,
-            ["build", "--env", "local", "--project-dir", str(tmp_path),
-             "--dump", str(art_dir), "--seed-profile", "slim"],
+            [
+                "build",
+                "--env",
+                "local",
+                "--project-dir",
+                str(tmp_path),
+                "--dump",
+                str(art_dir),
+                "--seed-profile",
+                "slim",
+            ],
         )
         assert result.exit_code == 0, result.output
         # The content-addressed name carries the profile segment.
@@ -117,8 +145,16 @@ class TestProvisionTemplateSeedProfile:
         _project(tmp_path)
         result = runner.invoke(
             app,
-            ["test-db", "provision-template", "--template", "t",
-             "--project-dir", str(tmp_path), "--seed-profile", "nope"],
+            [
+                "test-db",
+                "provision-template",
+                "--template",
+                "t",
+                "--project-dir",
+                str(tmp_path),
+                "--seed-profile",
+                "nope",
+            ],
         )
         assert result.exit_code == 5
 
@@ -130,8 +166,16 @@ class TestProvisionTemplateSeedProfile:
         )
         result = runner.invoke(
             app,
-            ["test-db", "provision-template", "--template", "t",
-             "--project-dir", str(tmp_path), "--seed-profile", "slim"],
+            [
+                "test-db",
+                "provision-template",
+                "--template",
+                "t",
+                "--project-dir",
+                str(tmp_path),
+                "--seed-profile",
+                "slim",
+            ],
         )
         assert result.exit_code == 0, result.output
         _, kwargs = mock_cls.return_value.provision_template.call_args

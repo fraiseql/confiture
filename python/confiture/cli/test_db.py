@@ -17,9 +17,7 @@ from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
 from confiture.core.test_db import TemplateState, TestDbProvisioner
 
-test_db_app = typer.Typer(
-    help="Provision isolated template/clone test databases for parallel CI."
-)
+test_db_app = typer.Typer(help="Provision isolated template/clone test databases for parallel CI.")
 
 
 def _resolve_server_url(database_url: str | None, env: str, project_dir: Path) -> str:
@@ -37,8 +35,7 @@ def provision_template(
     from_artifact: Path = typer.Option(
         None,
         "--from-artifact",
-        help="Restore a pg_dump -Fc/-Fd artifact (from 'build --dump') instead of "
-        "applying DDL.",
+        help="Restore a pg_dump -Fc/-Fd artifact (from 'build --dump') instead of applying DDL.",
     ),
     seed_profile: str = typer.Option(
         None,

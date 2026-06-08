@@ -60,9 +60,7 @@ class TestDump:
     @patch("confiture.core.schema_artifact.subprocess.run")
     def test_dump_invokes_pg_dump(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
-        SchemaArtifactDumper().dump(
-            "postgresql://localhost/tmp", Path("/out/a.pgdump"), "custom"
-        )
+        SchemaArtifactDumper().dump("postgresql://localhost/tmp", Path("/out/a.pgdump"), "custom")
         argv = mock_run.call_args.args[0]
         assert argv[0] == "pg_dump"
         assert "-Fc" in argv
@@ -130,9 +128,7 @@ class TestBuildArtifactSkip:
         dumper.dump.assert_not_called()
 
     @patch("confiture.core.schema_artifact.TempDatabase")
-    def test_builds_and_dumps_when_absent(
-        self, mock_tempdb: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_builds_and_dumps_when_absent(self, mock_tempdb: MagicMock, tmp_path: Path) -> None:
         # TempDatabase context yields a temp URL; apply_schema is a no-op mock.
         instance = mock_tempdb.return_value
         instance.__enter__.return_value = "postgresql://localhost/confiture_tmp_x"

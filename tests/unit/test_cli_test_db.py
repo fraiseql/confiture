@@ -43,8 +43,18 @@ class TestClone:
         prov.clone.return_value = CloneResult("tmpl", "c0", f"{_URL[:-15]}/c0")
         result = runner.invoke(
             app,
-            ["test-db", "clone", "--template", "tmpl", "--target", "c0",
-             "--database-url", _URL, "--format", "json"],
+            [
+                "test-db",
+                "clone",
+                "--template",
+                "tmpl",
+                "--target",
+                "c0",
+                "--database-url",
+                _URL,
+                "--format",
+                "json",
+            ],
         )
         assert result.exit_code == 0
         prov.clone.assert_called_once_with("tmpl", "c0")
@@ -58,9 +68,18 @@ class TestClone:
         )
         result = runner.invoke(
             app,
-            ["test-db", "clone", "--template", "tmpl", "--target", "c0",
-             "--database-url", "postgresql://user:secretpw@host:5432/db",
-             "--format", "json"],
+            [
+                "test-db",
+                "clone",
+                "--template",
+                "tmpl",
+                "--target",
+                "c0",
+                "--database-url",
+                "postgresql://user:secretpw@host:5432/db",
+                "--format",
+                "json",
+            ],
         )
         assert result.exit_code == 0
         assert "secretpw" not in result.stdout
@@ -71,9 +90,7 @@ class TestDrop:
     @patch("confiture.cli.test_db.TestDbProvisioner")
     def test_drop_invokes_provisioner(self, mock_cls: MagicMock) -> None:
         mock_cls.return_value.drop.return_value = True
-        result = runner.invoke(
-            app, ["test-db", "drop", "--target", "c0", "--database-url", _URL]
-        )
+        result = runner.invoke(app, ["test-db", "drop", "--target", "c0", "--database-url", _URL])
         assert result.exit_code == 0
         mock_cls.return_value.drop.assert_called_once_with("c0", force=False)
 
@@ -124,8 +141,7 @@ class TestProvisionTemplate:
         )
         result = runner.invoke(
             app,
-            ["test-db", "provision-template", "--template", "tmpl",
-             "--project-dir", str(tmp_path)],
+            ["test-db", "provision-template", "--template", "tmpl", "--project-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
         # DDL path → schema_sql passed, not from_artifact.
@@ -141,9 +157,7 @@ class TestListAndPrune:
             ManagedDatabase("tmpl", "template", "h"),
             ManagedDatabase("c0", "clone", "tmpl"),
         ]
-        result = runner.invoke(
-            app, ["test-db", "list", "--database-url", _URL, "--format", "json"]
-        )
+        result = runner.invoke(app, ["test-db", "list", "--database-url", _URL, "--format", "json"])
         assert result.exit_code == 0
         assert '"name": "c0"' in result.stdout
 
@@ -152,8 +166,7 @@ class TestListAndPrune:
         mock_cls.return_value.prune.return_value = ["c0", "c1"]
         result = runner.invoke(
             app,
-            ["test-db", "prune", "--template", "tmpl", "--database-url", _URL,
-             "--format", "json"],
+            ["test-db", "prune", "--template", "tmpl", "--database-url", _URL, "--format", "json"],
         )
         assert result.exit_code == 0
         mock_cls.return_value.prune.assert_called_once_with("tmpl")

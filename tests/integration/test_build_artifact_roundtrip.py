@@ -60,9 +60,7 @@ def fresh_target(server_url: str) -> Iterator[str]:
     maint = _maintenance_url(server_url)
     target_id = psycopg.sql.Identifier(target)
     with psycopg.connect(maint, autocommit=True) as conn:
-        conn.execute(
-            psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(target_id)
-        )
+        conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(target_id))
         conn.execute(psycopg.sql.SQL("CREATE DATABASE {}").format(target_id))
     try:
         yield target
@@ -118,9 +116,7 @@ def test_artifact_round_trips_through_restore(
     assert _restored_tables(server_url, fresh_target) == {"parent", "child"}
 
 
-def test_skip_when_artifact_exists_is_a_noop(
-    server_url: str, tmp_path: Path
-) -> None:
+def test_skip_when_artifact_exists_is_a_noop(server_url: str, tmp_path: Path) -> None:
     artifact = tmp_path / "schema_test.full.deadbeefcafe.pgdump"
     artifact.write_bytes(b"PGDMP-stub")  # pretend a cached artifact is present
 

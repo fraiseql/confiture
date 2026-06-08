@@ -47,9 +47,7 @@ class TestResolveWorkerDbUrl:
         )
 
     def test_preserves_credentials_and_port(self) -> None:
-        url = resolve_worker_db_url(
-            "postgresql://u:p@host:5433/app", worker_id="gw0"
-        )
+        url = resolve_worker_db_url("postgresql://u:p@host:5433/app", worker_id="gw0")
         assert url == "postgresql://u:p@host:5433/app_gw0"
 
     def test_no_worker_keeps_url(self) -> None:

@@ -256,9 +256,7 @@ def confiture_worker_db(
     from confiture.testing.worker_db import resolve_worker_db_name
 
     provisioner = TestDbProvisioner(confiture_test_server_url)
-    target = resolve_worker_db_name(
-        f"{confiture_template_db}_db", worker_id=confiture_worker_id
-    )
+    target = resolve_worker_db_name(f"{confiture_template_db}_db", worker_id=confiture_worker_id)
 
     try:
         provisioner.drop(target)  # reap a leftover clone from a crashed run

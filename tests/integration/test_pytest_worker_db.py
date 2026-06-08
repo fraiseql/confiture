@@ -61,9 +61,7 @@ def clean_server() -> Iterator[None]:
 
 
 class TestEnsureTemplateSingleFlight:
-    def test_concurrent_ensure_builds_once_and_is_consistent(
-        self, clean_server: None
-    ) -> None:
+    def test_concurrent_ensure_builds_once_and_is_consistent(self, clean_server: None) -> None:
         provisioner = TestDbProvisioner(_server_url())
         errors: list[Exception] = []
 
@@ -82,9 +80,7 @@ class TestEnsureTemplateSingleFlight:
         assert not errors, errors
         status = provisioner.template_status(_TEMPLATE, "h1")
         assert status.state is TemplateState.CURRENT
-        with psycopg.connect(
-            _replace_dbname(_server_url(), _TEMPLATE), autocommit=True
-        ) as conn:
+        with psycopg.connect(_replace_dbname(_server_url(), _TEMPLATE), autocommit=True) as conn:
             tables = {
                 r[0]
                 for r in conn.execute(
@@ -142,9 +138,7 @@ def _write_inner_project(root: Path, server_url: str) -> None:
     )
 
 
-def test_real_xdist_n2_gives_each_worker_its_own_db(
-    clean_server: None, tmp_path: Path
-) -> None:
+def test_real_xdist_n2_gives_each_worker_its_own_db(clean_server: None, tmp_path: Path) -> None:
     """A genuine `pytest -n2` run yields two distinct, isolated worker databases."""
     pytest.importorskip("xdist")
 
