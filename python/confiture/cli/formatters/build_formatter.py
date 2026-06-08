@@ -40,6 +40,8 @@ def format_build_result(
                 ["hash", result.hash or ""],
                 ["execution_time_ms", str(result.execution_time_ms)],
                 ["seed_files_applied", str(result.seed_files_applied)],
+                ["artifact_path", result.artifact_path or ""],
+                ["artifact_hash", result.artifact_hash or ""],
             ],
         )
         handle_output(format_type, result.to_dict(), csv_data, output_path, console)
@@ -61,6 +63,8 @@ def format_text(result: BuildResult, console: Console) -> None:
             console.print(f"🔐 Hash: {result.hash}")
         if result.seed_files_applied > 0:
             console.print(f"🌱 Seeds: {result.seed_files_applied} files applied")
+        if result.artifact_path:
+            console.print(f"📦 Artifact: {result.artifact_path}")
         if result.execution_time_ms > 0:
             console.print(f"⏱️ Time: {result.execution_time_ms}ms")
         if result.warnings:

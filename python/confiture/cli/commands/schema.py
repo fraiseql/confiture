@@ -19,6 +19,7 @@ from confiture.core.error_handler import handle_cli_error, print_error_to_consol
 from confiture.core.introspector import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import LintConfig as LinterConfig
+from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
 from confiture.core.seed_applier import SeedApplier
 from confiture.exceptions import ConfigurationError, SchemaError, SeedError
 
@@ -272,6 +273,21 @@ def build(
             "Save structured build report (JSON/CSV) to file (default: stdout). "
             "Distinct from --output/-o, which is the generated *schema* file."
         ),
+    ),
+    dump: Path = typer.Option(
+        None,
+        "--dump",
+        help=(
+            "Also emit a content-addressed pg_dump -Fc artifact restorable by "
+            "'confiture restore'. Pass a file path, or an existing directory to "
+            "auto-name 'schema_{env}.{profile}.{hash}.pgdump' inside it (cache by db/ hash)."
+        ),
+    ),
+    dump_format: str = typer.Option(
+        "custom",
+        "--dump-format",
+        help="Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). "
+        "Default: custom.",
     ),
 ) -> None:
     """Build complete schema from DDL files in one fast operation.
@@ -537,6 +553,72 @@ def build(
                 output_file=report_output,
             )
 
+        # Emit a cacheable pg_dump artifact when --dump is given. The schema is
+        # built into an ephemeral throwaway database and dumped from there, so
+        # the artifact content always matches the db/ hash that names it.
+        artifact_path_str: str | None = None
+        artifact_hash_str: str | None = None
+        if dump is not None:
+            if dump_format not in ("custom", "directory"):
+                fail(
+                    ConfigurationError(
+                        f"Invalid dump format: {dump_format}. Use custom or directory.",
+                        resolution_hint="Pass --dump-format custom or directory.",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
+
+            server_url = database_url or builder.env_config.database_url
+            if not server_url:
+                fail(
+                    ConfigurationError(
+                        "--dump requires a database server URL to build the ephemeral "
+                        "dump database.",
+                        error_code="CONFIG_010",
+                        resolution_hint="Provide --database-url or set it in the environment "
+                        "config.",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_output,
+                )
+
+            if schema_hash is None:
+                schema_hash = builder.compute_hash()
+
+            if dump.is_dir() or str(dump).endswith("/"):
+                artifact_out = default_artifact_path(
+                    dump, env, schema_hash, dump_format=dump_format
+                )
+            else:
+                artifact_out = dump
+
+            # Schema-only DDL plus seed files, applied into the ephemeral DB.
+            artifact_schema_sql = builder.build(schema_only=True)
+            if schema_only:
+                artifact_seed_files: list[Path] | None = None
+            else:
+                _schema_files, seed_paths = builder.categorize_sql_files()
+                artifact_seed_files = seed_paths or None
+
+            artifact_result = build_schema_artifact(
+                server_url=server_url,
+                schema_sql=artifact_schema_sql,
+                output_path=artifact_out,
+                schema_hash=schema_hash,
+                seed_files=artifact_seed_files,
+                dump_format=dump_format,
+            )
+            artifact_path_str = str(artifact_result.artifact_path)
+            artifact_hash_str = artifact_result.artifact_hash
+            if format_type == "text":
+                if artifact_result.skipped:
+                    console.print(
+                        f"[cyan]📦 Artifact up-to-date (cache hit): {artifact_path_str}[/cyan]"
+                    )
+                else:
+                    console.print(f"[green]📦 Artifact written: {artifact_path_str}[/green]")
+
         # Create and format build result
         from confiture.cli.formatters.build_formatter import format_build_result
         from confiture.models.results import BuildResult
@@ -549,6 +631,8 @@ def build(
             hash=schema_hash,
             execution_time_ms=0,  # Could track this if needed
             seed_files_applied=seed_files_applied,
+            artifact_path=artifact_path_str,
+            artifact_hash=artifact_hash_str,
         )
 
         # Format and output result

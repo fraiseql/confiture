@@ -143,6 +143,8 @@ class BuildResult:
     hash: str | None = None
     execution_time_ms: int = 0
     seed_files_applied: int = 0
+    artifact_path: str | None = None
+    artifact_hash: str | None = None
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
 
@@ -160,6 +162,8 @@ class BuildResult:
             "hash": self.hash,
             "execution_time_ms": self.execution_time_ms,
             "seed_files_applied": self.seed_files_applied,
+            "artifact_path": self.artifact_path,
+            "artifact_hash": self.artifact_hash,
             "warnings": self.warnings,
             "error": self.error,
         }
