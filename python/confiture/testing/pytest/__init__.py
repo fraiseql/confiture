@@ -19,18 +19,42 @@ Usage:
 # Re-export from the plugin module
 from confiture.testing.pytest_plugin import (
     confiture_db_url,
+    confiture_env,
+    confiture_project_dir,
     confiture_sandbox,
     confiture_snapshotter,
+    confiture_template_db,
+    confiture_template_name,
+    confiture_test_server_url,
     confiture_validator,
+    confiture_worker_db,
+    confiture_worker_id,
     migration_test,
+)
+from confiture.testing.worker_db import (
+    current_worker_id,
+    resolve_worker_db_name,
+    resolve_worker_db_url,
 )
 
 __all__ = [
     # Decorator
     "migration_test",
-    # Fixtures (for documentation, actual fixtures registered via plugin)
+    # Migration-sandbox fixtures (for documentation; registered via plugin)
     "confiture_db_url",
     "confiture_sandbox",
     "confiture_validator",
     "confiture_snapshotter",
+    # Per-worker test-database fixtures (pytest-xdist)
+    "confiture_test_server_url",
+    "confiture_template_name",
+    "confiture_env",
+    "confiture_project_dir",
+    "confiture_worker_id",
+    "confiture_template_db",
+    "confiture_worker_db",
+    # Import-time helpers (primary integration surface)
+    "resolve_worker_db_name",
+    "resolve_worker_db_url",
+    "current_worker_id",
 ]

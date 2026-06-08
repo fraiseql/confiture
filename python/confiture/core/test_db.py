@@ -14,6 +14,7 @@ never races a concurrent clone — and are not copied into clones.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from dataclasses import dataclass
@@ -131,6 +132,17 @@ def _create_db_sql(name: str) -> psycopg.sql.Composed:
 
 def _comment_sql(name: str, value: str) -> psycopg.sql.Composed:
     return SQL("COMMENT ON DATABASE {} IS {}").format(Identifier(name), Literal(value))
+
+
+def _advisory_key(name: str) -> int:
+    """Derive a process-stable signed 64-bit advisory-lock key from *name*.
+
+    Used to single-flight template provisioning across xdist workers. Python's
+    builtin ``hash`` is not stable across processes (PYTHONHASHSEED), so a
+    SHA-256 prefix is used instead.
+    """
+    digest = hashlib.sha256(name.encode("utf-8")).digest()[:8]
+    return int.from_bytes(digest, "big", signed=True)
 
 
 def _managed_kind(comment: str | None) -> str | None:
@@ -286,6 +298,47 @@ class TestDbProvisioner:
             self._set_comment(conn, template, _TEMPLATE_PREFIX + schema_hash)
 
         return TemplateStatus(template, TemplateState.CURRENT, schema_hash, schema_hash)
+
+    def ensure_template(
+        self,
+        template: str,
+        *,
+        schema_hash: str,
+        schema_sql: str | None = None,
+        seed_files: list[Path] | None = None,
+        from_artifact: Path | None = None,
+        restorer: DatabaseRestorer | None = None,
+    ) -> TemplateStatus:
+        """Provision *template* only if stale, single-flight across processes.
+
+        A session-level PostgreSQL advisory lock keyed on the template name
+        serialises concurrent callers (e.g. xdist workers all entering the
+        session template fixture): the first to acquire the lock builds, and the
+        rest observe ``CURRENT`` and return without rebuilding.
+
+        Args mirror :meth:`provision_template`.
+
+        Returns:
+            The resulting :class:`TemplateStatus` (always ``CURRENT`` on success).
+        """
+        _validate_identifier(template)
+        lock_key = _advisory_key(template)
+        with self._maintenance_conn() as conn:
+            conn.execute("SELECT pg_advisory_lock(%s)", (lock_key,))
+            try:
+                status = self.template_status(template, schema_hash)
+                if status.state is TemplateState.CURRENT:
+                    return status
+                return self.provision_template(
+                    template,
+                    schema_hash=schema_hash,
+                    schema_sql=schema_sql,
+                    seed_files=seed_files,
+                    from_artifact=from_artifact,
+                    restorer=restorer,
+                )
+            finally:
+                conn.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
 
     def _restore_into(
         self, target: str, artifact: Path, restorer: DatabaseRestorer | None
