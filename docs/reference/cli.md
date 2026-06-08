@@ -283,6 +283,42 @@ confiture build --env legacy --no-validate-comments --no-fail-on-unclosed --no-f
 
 ---
 
+## `confiture build --dump` (cacheable artifact)
+
+`confiture build` also emits a content-addressed `pg_dump` artifact for fast,
+cached CI provisioning:
+
+| Option | Description |
+|---|---|
+| `--dump <path>` | Also write a `pg_dump` artifact. A directory auto-names `schema_{env}.{profile}.{hash}.pgdump` inside it (cache by `db/` hash); a file path is used verbatim. Requires a server URL (`--database-url` or env). |
+| `--dump-format custom\|directory` | `custom` = `-Fc` (default), `directory` = `-Fd` (parallel dump). |
+| `--seed-profile <name>` | Apply only the named seed profile (see `seed.profiles`) during `--sequential` seed application and `--dump`. |
+
+The artifact is restorable by [`confiture restore`](#confiture-restore). See the
+[Parallel CI provisioning guide](../guides/parallel-ci-provisioning.md).
+
+---
+
+## `confiture test-db`
+
+CI-path primitive for parallel-test database provisioning: build a template once,
+hand out lock-free per-worker clones. See the
+[Parallel CI provisioning guide](../guides/parallel-ci-provisioning.md).
+
+| Subcommand | Description | Exit codes |
+|---|---|---|
+| `provision-template --template <name> [--env] [--from-artifact <path>] [--seed-profile <name>] [--force]` | Build/apply (or restore an artifact) into a template DB and stamp its `db/` hash. | 0 ok; 5 bad input/refused clobber; 4 build/restore failed |
+| `clone --template <src> --target <dst>` | Clone via `CREATE DATABASE … WITH TEMPLATE` (retries while the source is in use). `--format json` redacts DSN passwords in `target_url`. | 0 ok; 4 clone failed |
+| `drop --target <name> [--force]` | Drop a confiture-managed clone/template (refuses unmanaged DBs without `--force`). | 0 ok; 5 refused |
+| `status --template <name> [--env]` | Report staleness vs the current `db/` hash. | **0 current; 1 stale/absent** |
+| `list` | List confiture-managed templates and clones. | 0 |
+| `prune --template <name>` | Drop every clone of a template (reap leaked clones). | 0 |
+
+All accept `--database-url` (else the env config supplies the server URL),
+`--env`, `--project-dir`, and `--format text\|json`.
+
+---
+
 ## `confiture sync`
 
 Copy data from a production database to a local/staging target (Medium 3), with

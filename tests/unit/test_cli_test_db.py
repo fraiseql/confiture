@@ -50,6 +50,22 @@ class TestClone:
         prov.clone.assert_called_once_with("tmpl", "c0")
         assert '"target": "c0"' in result.stdout
 
+    @patch("confiture.cli.test_db.TestDbProvisioner")
+    def test_clone_json_redacts_dsn_password(self, mock_cls: MagicMock) -> None:
+        prov = mock_cls.return_value
+        prov.clone.return_value = CloneResult(
+            "tmpl", "c0", "postgresql://user:secretpw@host:5432/c0"
+        )
+        result = runner.invoke(
+            app,
+            ["test-db", "clone", "--template", "tmpl", "--target", "c0",
+             "--database-url", "postgresql://user:secretpw@host:5432/db",
+             "--format", "json"],
+        )
+        assert result.exit_code == 0
+        assert "secretpw" not in result.stdout
+        assert "***" in result.stdout
+
 
 class TestDrop:
     @patch("confiture.cli.test_db.TestDbProvisioner")

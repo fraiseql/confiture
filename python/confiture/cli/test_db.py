@@ -12,7 +12,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.error_json import fail
-from confiture.cli.helpers import _output_json, console, is_json
+from confiture.cli.helpers import _output_json, console, is_json, redact_url
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
 from confiture.core.test_db import TemplateState, TestDbProvisioner
@@ -106,7 +106,9 @@ def clone(
         provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
         result = provisioner.clone(template, target)
         if is_json(format_type):
-            _output_json(result.to_dict(), None, console)
+            payload = result.to_dict()
+            payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs
+            _output_json(payload, None, console)
         else:
             console.print(f"[green]✅ Cloned '{template}' → '{target}'[/green]")
     except typer.Exit:
