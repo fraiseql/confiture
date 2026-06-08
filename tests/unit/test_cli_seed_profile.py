@@ -32,12 +32,16 @@ def _project(tmp_path: Path, *, profiles: bool = True) -> None:
     (seeds_dir / "stats_1.sql").write_text("SELECT 1;")
     env_dir = tmp_path / "db" / "environments"
     env_dir.mkdir(parents=True)
-    profiles_yaml = (
-        "  profiles:\n    slim:\n      exclude:\n        - 'stats_*.sql'\n" if profiles else ""
+    # NB: do NOT set execution_mode: sequential here — it would make `build`
+    # apply seeds to a real database (this is a unit test; CI's role needs a
+    # password). The profile filtering/naming under test is DB-free.
+    seed_block = (
+        "seed:\n  profiles:\n    slim:\n      exclude:\n        - 'stats_*.sql'\n"
+        if profiles
+        else ""
     )
     (env_dir / "local.yaml").write_text(
-        f'name: local\ndatabase_url: "{_URL}"\n'
-        f"include_dirs:\n  - {schema_dir}\nseed:\n  execution_mode: sequential\n{profiles_yaml}"
+        f'name: local\ndatabase_url: "{_URL}"\ninclude_dirs:\n  - {schema_dir}\n{seed_block}'
     )
 
 
