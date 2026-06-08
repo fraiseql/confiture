@@ -52,6 +52,7 @@ from confiture.cli.helpers import console
 from confiture.cli.schema_to_schema import schema_to_schema_app
 from confiture.cli.seed import seed_app
 from confiture.cli.sync import sync
+from confiture.cli.test_db import test_db_app
 
 # Valid output formats for linting
 LINT_FORMATS = ("table", "json", "csv")
@@ -109,6 +110,9 @@ app.add_typer(coordinate_app, name="coordinate")
 
 # Add seed subcommand group (seed validation)
 app.add_typer(seed_app, name="seed")
+
+# Add test-db subcommand group (CI template/clone provisioning)
+app.add_typer(test_db_app, name="test-db")
 
 # Add mcp subcommand group (MCP server)
 app.add_typer(mcp_app, name="mcp")

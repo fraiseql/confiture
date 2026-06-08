@@ -9,10 +9,33 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import psycopg
 from rich.console import Console
 
 from confiture.core.progress import ProgressManager
 from confiture.core.seed_executor import SeedExecutor
+
+
+def apply_seed_files(connection_url: str, seed_files: list[Path]) -> int:
+    """Apply ordered seed files into the database at *connection_url*.
+
+    Each file runs inside its own savepoint for failure isolation. Used to load
+    seeds into ephemeral / template databases (artifact builds, test-db
+    provisioning) where no long-lived :class:`SeedApplier` is in play.
+
+    Args:
+        connection_url: Connection URL of the target database.
+        seed_files: Ordered seed files to apply.
+
+    Returns:
+        The number of seed files applied.
+    """
+    with psycopg.connect(connection_url, autocommit=False) as conn:
+        executor = SeedExecutor(connection=conn)
+        for i, seed_file in enumerate(seed_files, 1):
+            executor.execute_file(seed_file, savepoint_name=f"sp_seed_{i:03d}")
+        conn.commit()
+    return len(seed_files)
 
 
 @dataclass

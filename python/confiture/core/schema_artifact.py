@@ -18,9 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-import psycopg
-
-from confiture.core.seed_executor import SeedExecutor
+from confiture.core.seed_applier import apply_seed_files
 from confiture.core.temp_database import TempDatabase
 from confiture.exceptions import SchemaError
 
@@ -151,24 +149,6 @@ class SchemaArtifactDumper:
             )
 
 
-def _apply_seed_files(temp_url: str, seed_files: list[Path]) -> int:
-    """Apply seed files into the ephemeral database, each in its own savepoint.
-
-    Args:
-        temp_url: Connection URL of the ephemeral database.
-        seed_files: Ordered seed files to apply.
-
-    Returns:
-        The number of seed files applied.
-    """
-    with psycopg.connect(temp_url, autocommit=False) as conn:
-        executor = SeedExecutor(connection=conn)
-        for i, seed_file in enumerate(seed_files, 1):
-            executor.execute_file(seed_file, savepoint_name=f"sp_artifact_seed_{i:03d}")
-        conn.commit()
-    return len(seed_files)
-
-
 def build_schema_artifact(
     *,
     server_url: str,
@@ -219,7 +199,7 @@ def build_schema_artifact(
     with temp_db as temp_url:
         temp_db.apply_schema(temp_url, schema_sql)
         if seed_files:
-            seeds_applied = _apply_seed_files(temp_url, seed_files)
+            seeds_applied = apply_seed_files(temp_url, seed_files)
         dumper.dump(temp_url, output_path, dump_format)
 
     return ArtifactResult(

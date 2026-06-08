@@ -89,6 +89,7 @@ _ALLOWLIST: dict[str, int] = {
     "helpers.py": 2,  # success-signal: idempotency gate → Exit(1) on findings
     # commands/mcp.py: fully converted (Cycle 1) — connection → CONFIG_006,
     # missing-extra → generic ConfiturError, both via fail().
+    "test_db.py": 1,  # success-signal: test-db status → Exit(1) on stale/absent template (CI gate)
 }
 
 _EXCLUDED = {"error_json.py"}
