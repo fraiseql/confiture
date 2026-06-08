@@ -262,6 +262,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 **Guides**
 - [Build from DDL](docs/guides/01-build-from-ddl.md)
 - [Incremental Migrations](docs/guides/02-incremental-migrations.md) — `up`, `down`, rollback.
+- [Parallel, cacheable CI provisioning](docs/guides/parallel-ci-provisioning.md) — `build --dump` artifacts, `test-db` template/clone, per-worker xdist fixtures, slim seed profiles.
 - [Production Data Sync](docs/guides/03-production-sync.md)
 - [Zero-Downtime Migrations](docs/guides/04-schema-to-schema.md)
 - [Dry-Run + Preflight](docs/guides/dry-run.md)

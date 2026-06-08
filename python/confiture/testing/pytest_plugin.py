@@ -25,6 +25,7 @@ Example test file:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from collections.abc import Generator
 from pathlib import Path
@@ -146,6 +147,128 @@ def confiture_snapshotter(confiture_sandbox: MigrationSandbox) -> SchemaSnapshot
         SchemaSnapshotter instance
     """
     return confiture_sandbox.snapshotter
+
+
+# ---------------------------------------------------------------------------
+# Per-worker test-database fixtures (pytest-xdist)
+#
+# These are OPT-IN: they only run when a test requests them, so existing plugin
+# users are unaffected. The primary integration surface for apps that freeze a
+# settings/pool singleton at import time is the import-time helper
+# ``confiture.testing.worker_db.resolve_worker_db_url`` (call it from conftest.py
+# BEFORE importing the app) — these fixtures are convenience for apps that read
+# their database URL lazily and cannot retro-fix an already-frozen singleton.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def confiture_test_server_url() -> str:
+    """PG server URL for test-db provisioning (override to customise).
+
+    ``CONFITURE_TEST_DB_URL`` takes precedence.
+    """
+    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+
+
+@pytest.fixture(scope="session")
+def confiture_template_name() -> str:
+    """Template database name (override to customise)."""
+    return "confiture_template"
+
+
+@pytest.fixture(scope="session")
+def confiture_env() -> str:
+    """Environment whose schema builds the template (override to customise)."""
+    return "local"
+
+
+@pytest.fixture(scope="session")
+def confiture_project_dir() -> Path:
+    """Project directory the template schema is built from (override to customise)."""
+    return Path(".")
+
+
+@pytest.fixture(scope="session")
+def confiture_worker_id() -> str | None:
+    """The active pytest-xdist worker id (``"gw0"``…), or None for single-process."""
+    from confiture.testing.worker_db import current_worker_id
+
+    return current_worker_id()
+
+
+@pytest.fixture(scope="session")
+def confiture_template_db(
+    confiture_test_server_url: str,
+    confiture_template_name: str,
+    confiture_env: str,
+    confiture_project_dir: Path,
+) -> str:
+    """Ensure the shared template database exists and matches the current db/ hash.
+
+    Built exactly once even under ``-n N`` (single-flight via a PostgreSQL
+    advisory lock in :meth:`TestDbProvisioner.ensure_template`). Skips cleanly
+    when no database is reachable.
+
+    Returns:
+        The template database name.
+    """
+    import psycopg
+
+    from confiture.core.builder import SchemaBuilder
+    from confiture.core.test_db import TestDbProvisioner
+
+    try:
+        builder = SchemaBuilder(env=confiture_env, project_dir=confiture_project_dir)
+        schema_hash = builder.compute_hash()
+        schema_sql = builder.build(schema_only=True)
+        _schema_files, seed_files = builder.categorize_sql_files()
+        provisioner = TestDbProvisioner(confiture_test_server_url)
+        provisioner.ensure_template(
+            confiture_template_name,
+            schema_hash=schema_hash,
+            schema_sql=schema_sql,
+            seed_files=seed_files or None,
+        )
+    except psycopg.OperationalError as e:
+        pytest.skip(f"confiture test database unavailable: {e}")
+    return confiture_template_name
+
+
+@pytest.fixture(scope="session")
+def confiture_worker_db(
+    confiture_template_db: str,
+    confiture_test_server_url: str,
+    confiture_worker_id: str | None,
+) -> Generator[str, None, None]:
+    """Yield a per-worker database cloned from the shared template.
+
+    One clone per xdist worker (session scope is per worker process), dropped on
+    teardown. The yielded value is the clone's connection URL.
+
+    Note:
+        Apps that freeze their settings/pool at import time must instead call
+        ``confiture.testing.worker_db.resolve_worker_db_url`` from conftest.py at
+        import time — this fixture runs too late to fix a frozen singleton.
+    """
+    import psycopg
+
+    from confiture.core.test_db import TestDbProvisioner
+    from confiture.testing.worker_db import resolve_worker_db_name
+
+    provisioner = TestDbProvisioner(confiture_test_server_url)
+    target = resolve_worker_db_name(f"{confiture_template_db}_db", worker_id=confiture_worker_id)
+
+    try:
+        provisioner.drop(target)  # reap a leftover clone from a crashed run
+        clone = provisioner.clone(confiture_template_db, target)
+    except psycopg.OperationalError as e:
+        pytest.skip(f"confiture test database unavailable: {e}")
+
+    try:
+        yield clone.target_url
+    finally:
+        with contextlib.suppress(psycopg.OperationalError):
+            provisioner.drop(target)  # best-effort teardown
 
 
 def migration_test(migration_name: str):

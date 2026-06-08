@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-06-08
+
+Turns three pieces of hand-rolled, every-confiture-project-reinvents-it plumbing
+into reusable, Dagger-cacheable confiture capabilities for parallel-test CI
+(issue #156). **Purely additive** — every change is a new flag, command, fixture,
+or config field; no exit code, existing field, or existing behaviour changed.
+
+This is a **CI-path** capability (developer/CI tooling), not the deploy ops-path:
+the fraisier adapter contract is unaffected.
+
+### Added
+
+- **`confiture build --dump <path> [--dump-format custom|directory]`** emits a
+  content-addressed `pg_dump -Fc`/`-Fd` artifact restorable by the existing
+  three-phase `confiture restore`. The schema (+ seeds) is built into an
+  **ephemeral throwaway database** and dumped from there, so the artifact content
+  always matches the `db/` hash that names it — never a drifted live database.
+  The filename embeds env + seed-profile + schema hash, so an unchanged `db/` is
+  a cache hit (skipped no-op) and slim/full dumps never collide. `BuildResult`
+  gains `artifact_path` / `artifact_hash`. This lets CI cache schema provisioning
+  by `db/` hash instead of treating schema-apply as an uncacheable live-DB side
+  effect.
+- **`confiture test-db`** group — a CI-callable provisioning primitive:
+  `provision-template` (build/apply or `--from-artifact` restore + stamp the
+  `db/` hash), `clone` (lock-free `CREATE DATABASE … WITH TEMPLATE`), `drop`,
+  `status` (exit 0 current / 1 stale-or-absent), `list`, and `prune` (reap clones
+  leaked by crashed workers). Template staleness is recorded as a
+  `COMMENT ON DATABASE` and read connection-free from the maintenance DB, so a
+  status check never connects to the template and never races a concurrent clone;
+  the comment also marks confiture-managed databases so `drop` refuses to
+  fat-finger an unrelated database. Concurrent clones retry on "source database
+  is being accessed". DB identifiers are always quoted via `psycopg.sql.Identifier`.
+- **Per-worker pytest-xdist fixtures** in `confiture.testing.pytest_plugin`
+  (`confiture_template_db`, `confiture_worker_db`, plus override-able config
+  fixtures): each xdist worker gets its own database cloned from a shared template
+  built once per session (single-flight via a PostgreSQL advisory lock). The
+  **primary** integration surface is the import-time helper
+  `confiture.testing.worker_db.resolve_worker_db_url`, callable from a consumer's
+  `conftest.py` **before** the app freezes its settings/pool singleton (a fixture
+  runs too late for that); the fixture is convenience for apps that read their URL
+  lazily. `pytest-xdist` added to the `[testing]` extra.
+- **Declarative slim seed profiles** — `seed.profiles.<name>` (include/exclude
+  filename globs) in env config, surfaced on `seed apply --profile`,
+  `build --sequential --seed-profile`, and `test-db provision-template
+  --seed-profile`. Lets CI apply a lean test seed (e.g. excluding large
+  ETL-statistics partitions) for faster, higher-parallel test databases. Absent
+  profile ⇒ apply-all behaviour unchanged; an unknown name exits 5 listing the
+  defined profiles.
+
+### Security
+
+- `test-db clone --format json` redacts any DSN password (`***`) in the emitted
+  `target_url`, so connection credentials never leak to stdout / CI logs.
+
 ## [0.23.0] - 2026-06-06
 
 Hardens the confiture↔fraisier blue-green seam (issue #154): the

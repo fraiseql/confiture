@@ -33,6 +33,44 @@ def _replace_dbname(server_url: str, dbname: str) -> str:
     return urlunparse(parsed._replace(path=f"/{dbname}"))
 
 
+def terminate_backends(conn: psycopg.Connection, db_name: str) -> None:
+    """Terminate all other sessions connected to *db_name*.
+
+    Needed before ``CREATE DATABASE … WITH TEMPLATE`` (PostgreSQL forbids cloning
+    a database that has other active sessions) and before dropping on PG < 13.
+
+    Args:
+        conn: An autocommit maintenance connection.
+        db_name: Database whose backends should be terminated.
+    """
+    conn.execute(
+        "SELECT pg_terminate_backend(pid) "
+        "FROM pg_stat_activity "
+        "WHERE datname = %s AND pid <> pg_backend_pid()",
+        (db_name,),
+    )
+
+
+def force_drop_database(conn: psycopg.Connection, db_name: str) -> None:
+    """Drop *db_name* if it exists, terminating any remaining backends first.
+
+    Uses ``DROP DATABASE … WITH (FORCE)`` on PostgreSQL >= 13, falling back to an
+    explicit :func:`terminate_backends` + plain ``DROP DATABASE`` on older
+    versions. The database name is quoted via :class:`psycopg.sql.Identifier`
+    (never string-interpolated).
+
+    Args:
+        conn: An autocommit maintenance connection.
+        db_name: Database to drop.
+    """
+    db_id = psycopg.sql.Identifier(db_name)
+    if conn.info.server_version >= 130000:
+        conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(db_id))
+    else:
+        terminate_backends(conn, db_name)
+        conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {}").format(db_id))
+
+
 class TempDatabase:
     """Context manager that creates a throwaway PostgreSQL database.
 
