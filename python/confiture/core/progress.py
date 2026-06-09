@@ -4,7 +4,6 @@ Provides a unified interface for displaying progress bars using Rich.
 Automatically detects CI/CD environments and disables progress display.
 """
 
-import os
 import sys
 
 from rich.progress import (
@@ -17,28 +16,20 @@ from rich.progress import (
 
 
 def _is_ci_environment() -> bool:
-    """Detect if running in CI/CD environment.
+    """Detect if running in a CI/CD environment (suppress progress bars).
+
+    Reuses the single CI-var source of truth in
+    :func:`confiture.testing.worker_db.is_ci` and adds the progress-specific
+    non-TTY check: a piped or redirected stdout also suppresses the bar even
+    outside CI. Keeping the env-var list in exactly one place avoids the two
+    drifting lists the eternal-sunshine rule warns against.
 
     Returns:
-        True if running in CI/CD (no TTY), False otherwise
+        True if running in CI/CD or without an interactive TTY, False otherwise.
     """
-    # Check for CI environment variables
-    ci_vars = {
-        "CI",
-        "GITHUB_ACTIONS",
-        "GITLAB_CI",
-        "CIRCLECI",
-        "BUILD_ID",
-        "BUILD_NUMBER",
-        "RUN_ID",
-        "TRAVIS",
-        "JENKINS_URL",
-    }
-    if any(var in os.environ for var in ci_vars):
-        return True
+    from confiture.testing.worker_db import is_ci
 
-    # Check if stdout is a TTY (interactive terminal)
-    return not sys.stdout.isatty()
+    return is_ci() or not sys.stdout.isatty()
 
 
 class ProgressManager:

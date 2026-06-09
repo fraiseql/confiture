@@ -7,6 +7,8 @@ out lock-free per-worker clones.
 
 from __future__ import annotations
 
+import os
+import pwd
 from pathlib import Path
 
 import typer
@@ -15,9 +17,20 @@ from confiture.cli.error_json import fail
 from confiture.cli.helpers import _output_json, console, is_json, redact_url
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
-from confiture.core.test_db import TemplateState, TestDbProvisioner
+from confiture.core.test_db import RamSetupResult, TemplateState, TestDbProvisioner
+from confiture.exceptions import ConfigurationError
 
 test_db_app = typer.Typer(help="Provision isolated template/clone test databases for parallel CI.")
+
+# tmpfs roots a RAM tablespace LOCATION may live under without --force. Guards a
+# fat-fingered real path (e.g. /var/lib/...) from becoming a dropped tablespace.
+_RAM_LOCATION_ROOTS = ("/dev/shm", "/run")  # nosec B108 - tmpfs mount roots for an allowlist, not temp-file creation
+
+# ram-setup exit code when confiture lacks the OS rights to prepare the LOCATION
+# dir and a privileged manual step is required (the "guided" mode). It shares the
+# precondition bucket (5); the machine-readable distinguisher is the result's
+# ``action_required`` field (and ``action_command`` in JSON).
+_ACTION_REQUIRED_EXIT_CODE = 5
 
 
 def _resolve_server_url(database_url: str | None, env: str, project_dir: Path) -> str:
@@ -25,6 +38,67 @@ def _resolve_server_url(database_url: str | None, env: str, project_dir: Path) -
     if database_url:
         return database_url
     return Environment.load(env, project_dir).database_url
+
+
+def _guard_ram_location(location: str, *, force: bool) -> None:
+    """Reject a LOCATION outside the tmpfs allowlist unless *force*."""
+    if force:
+        return
+    if not any(location == root or location.startswith(root + "/") for root in _RAM_LOCATION_ROOTS):
+        raise ConfigurationError(
+            f"Refusing a tablespace LOCATION outside {_RAM_LOCATION_ROOTS}: {location!r}.",
+            error_code="CONFIG_010",
+            resolution_hint="Use a path under /dev/shm or /run, or pass --force to override.",
+        )
+
+
+def _resolve_owner(owner: str) -> tuple[int, int]:
+    """Resolve *owner* to a (uid, gid), or fail clearly if the user does not exist."""
+    try:
+        pw = pwd.getpwnam(owner)
+    except KeyError as e:
+        raise ConfigurationError(
+            f"Owner user {owner!r} does not exist on this host.",
+            error_code="CONFIG_010",
+            resolution_hint="Pass --owner naming the OS user the PostgreSQL server runs as.",
+        ) from e
+    return pw.pw_uid, pw.pw_gid
+
+
+def _prepare_location_dir(location: str, uid: int, gid: int) -> bool:
+    """Create *location* and hand it to the PG OS user. True if prepared, else False.
+
+    PostgreSQL requires the LOCATION dir to exist, be empty, and be owned by the
+    server's OS user before ``CREATE TABLESPACE``. Returns False (caller switches
+    to guided mode) when confiture lacks the rights — it is a *client* and may run
+    as a different user than the server.
+    """
+    try:
+        os.makedirs(location, mode=0o700, exist_ok=True)
+        os.chown(location, uid, gid)
+    except PermissionError:
+        return False
+    return True
+
+
+def _print_ram_setup_text(result: RamSetupResult, guided_command: str | None) -> None:
+    if result.action_required:
+        console.print(
+            f"[yellow]⚠ Action required:[/yellow] confiture cannot prepare the LOCATION "
+            f"directory {result.location!r} (insufficient OS privileges)."
+        )
+        console.print(
+            "Run this once as a privileged user, then re-run `confiture test-db ram-setup`:"
+        )
+        console.print(f"  [bold]{guided_command}[/bold]")
+        return
+    verb = "Reset" if result.recreated else "Created"
+    console.print(f"[green]✅ {verb} tablespace '{result.tablespace}' at {result.location}[/green]")
+    if result.dropped_databases:
+        names = ", ".join(result.dropped_databases)
+        console.print(
+            f"  Dropped {len(result.dropped_databases)} database(s) in the tablespace: {names}"
+        )
 
 
 @test_db_app.command("provision-template")
@@ -96,18 +170,78 @@ def clone(
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
     project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    sync_commit_off: bool = typer.Option(
+        True,
+        "--sync-commit-off/--no-sync-commit-off",
+        help="Set synchronous_commit=off on the clone (default on; opt out for durable commits).",
+    ),
     format_type: str = typer.Option("text", "--format", "-f", help="text or json."),
 ) -> None:
     """Clone a template into a fresh database via CREATE DATABASE … WITH TEMPLATE."""
     try:
         provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        result = provisioner.clone(template, target)
+        result = provisioner.clone(template, target, sync_commit_off=sync_commit_off)
         if is_json(format_type):
             payload = result.to_dict()
             payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs
             _output_json(payload, None, console)
         else:
             console.print(f"[green]✅ Cloned '{template}' → '{target}'[/green]")
+    except typer.Exit:
+        raise
+    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
+        fail(e, json_mode=is_json(format_type))
+
+
+@test_db_app.command("ram-setup")
+def ram_setup(
+    tablespace: str = typer.Option(..., "--tablespace", help="Tablespace name to (re)create."),
+    location: str = typer.Option(
+        ..., "--location", help="tmpfs LOCATION directory (e.g. /dev/shm/<dir>)."
+    ),
+    owner: str = typer.Option(
+        "postgres", "--owner", help="OS user the PG server runs as (owns the LOCATION dir)."
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Drop non-managed DBs in the tablespace and bypass the tmpfs-root allowlist.",
+    ),
+    env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
+    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    format_type: str = typer.Option("text", "--format", "-f", help="text or json."),
+) -> None:
+    """Create or idempotently reset a tmpfs-backed tablespace for RAM clones.
+
+    A *reset*: drops the databases living in the tablespace (only confiture-managed
+    ones unless --force), drops and re-creates the tablespace (the post-reboot
+    /dev/shm fix), and verifies it is usable. When confiture lacks the OS rights to
+    prepare the LOCATION dir, it prints the privileged command instead of failing
+    silently (exit 5, action_required).
+    """
+    try:
+        _guard_ram_location(location, force=force)
+        uid, gid = _resolve_owner(owner)
+        provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
+        prepared = _prepare_location_dir(location, uid, gid)
+        result = provisioner.setup_ram_tablespace(
+            tablespace, location, owner=owner, force=force, dir_prepared=prepared
+        )
+        guided_command = (
+            None if prepared else f"sudo install -d -o {owner} -g {owner} -m 700 {location}"
+        )
+
+        if is_json(format_type):
+            payload = result.to_dict()
+            if guided_command is not None:
+                payload["action_command"] = guided_command
+            _output_json(payload, None, console)
+        else:
+            _print_ram_setup_text(result, guided_command)
+
+        if result.action_required:
+            raise typer.Exit(_ACTION_REQUIRED_EXIT_CODE)
     except typer.Exit:
         raise
     except Exception as e:  # noqa: BLE001 - fail() envelope boundary

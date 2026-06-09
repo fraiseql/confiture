@@ -7,7 +7,9 @@ fixture teardown.
 
 from __future__ import annotations
 
+import logging
 import os
+import shutil
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -69,6 +71,45 @@ def _tables(provisioner: TestDbProvisioner, db: str) -> set[str]:
     return {r[0] for r in rows}
 
 
+def _show_synchronous_commit(provisioner: TestDbProvisioner, db: str) -> str:
+    """Read ``synchronous_commit`` on a fresh connection to *db* (its effective default)."""
+    from confiture.core.temp_database import _replace_dbname
+
+    with psycopg.connect(_replace_dbname(provisioner.server_url, db), autocommit=True) as conn:
+        return conn.execute("SHOW synchronous_commit").fetchone()[0]
+
+
+def _per_db_settings(provisioner: TestDbProvisioner, db: str) -> list[str]:
+    """Return the database-wide ``pg_db_role_setting`` entries for *db* (empty if none)."""
+    with psycopg.connect(_maintenance_url(provisioner.server_url), autocommit=True) as conn:
+        row = conn.execute(
+            "SELECT s.setconfig FROM pg_db_role_setting s "
+            "JOIN pg_database d ON s.setdatabase = d.oid "
+            "WHERE d.datname = %s AND s.setrole = 0",
+            (db,),
+        ).fetchone()
+    return list(row[0]) if row and row[0] else []
+
+
+def _clone_tablespace(provisioner: TestDbProvisioner, db: str) -> str | None:
+    """Return the spcname of the tablespace *db* lives in, or None if it is gone."""
+    with psycopg.connect(_maintenance_url(provisioner.server_url), autocommit=True) as conn:
+        row = conn.execute(
+            "SELECT t.spcname FROM pg_database d "
+            "JOIN pg_tablespace t ON d.dattablespace = t.oid WHERE d.datname = %s",
+            (db,),
+        ).fetchone()
+    return row[0] if row else None
+
+
+def _db_exists(provisioner: TestDbProvisioner, db: str) -> bool:
+    with psycopg.connect(_maintenance_url(provisioner.server_url), autocommit=True) as conn:
+        return (
+            conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db,)).fetchone()
+            is not None
+        )
+
+
 class TestProvisionAndClone:
     def test_provision_template_ddl_path(self, provisioner: TestDbProvisioner) -> None:
         status = provisioner.provision_template(
@@ -96,6 +137,151 @@ class TestProvisionAndClone:
         )
         assert status.state is TemplateState.CURRENT
         assert _tables(provisioner, _TEMPLATE) == {"widget"}
+
+
+class TestSynchronousCommit:
+    def test_clone_sets_synchronous_commit_off(self, provisioner: TestDbProvisioner) -> None:
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        clone = f"{_CLONE}_0"
+        provisioner.clone(_TEMPLATE, clone)  # sync_commit_off=True by default
+        # A new connection to the clone observes the per-database default.
+        assert _show_synchronous_commit(provisioner, clone) == "off"
+        # The GUC rides on the clone only — the template carries no such per-db setting.
+        assert not any(
+            s.startswith("synchronous_commit=") for s in _per_db_settings(provisioner, _TEMPLATE)
+        )
+
+    def test_clone_opt_out_leaves_cluster_default(self, provisioner: TestDbProvisioner) -> None:
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        clone = f"{_CLONE}_1"
+        provisioner.clone(_TEMPLATE, clone, sync_commit_off=False)
+        # Opt-out leaves no per-database synchronous_commit override (cluster default applies).
+        assert not any(
+            s.startswith("synchronous_commit=") for s in _per_db_settings(provisioner, clone)
+        )
+
+
+class TestTablespaceUsable:
+    """The cheap usability gate (#158). Absent/built-in paths run anywhere; the
+    create-a-real-tablespace paths use the ``ram_tablespace`` fixture and skip
+    cleanly where the environment can't host one."""
+
+    def test_absent_returns_false(self, provisioner: TestDbProvisioner) -> None:
+        assert provisioner.tablespace_usable("confiture_absent_ts_xyz") is False
+
+    def test_builtin_returns_true(self, provisioner: TestDbProvisioner) -> None:
+        # pg_default reports an empty LOCATION → always usable, no fs probe needed.
+        assert provisioner.tablespace_usable("pg_default") is True
+
+    def test_present_via_probe_returns_true(
+        self, inplace_tablespace: tuple[TestDbProvisioner, str]
+    ) -> None:
+        # A real tablespace with a non-empty LOCATION exercises the pg_stat_file
+        # probe path (not the empty-string built-in short-circuit).
+        provisioner, name = inplace_tablespace
+        assert provisioner.tablespace_usable(name) is True
+
+    def test_present_tmpfs_returns_true(
+        self, ram_tablespace: tuple[TestDbProvisioner, str, str]
+    ) -> None:
+        provisioner, name, _location = ram_tablespace
+        assert provisioner.tablespace_usable(name) is True
+
+    def test_false_when_location_removed(
+        self, ram_tablespace: tuple[TestDbProvisioner, str, str]
+    ) -> None:
+        # Simulate the post-reboot tmpfs wipe: the catalog row + symlink survive,
+        # the LOCATION dir is gone. The probe sees the absent path → False, no raise.
+        provisioner, name, location = ram_tablespace
+        shutil.rmtree(location, ignore_errors=True)
+        assert provisioner.tablespace_usable(name) is False
+
+
+class TestRamClone:
+    """Clone into a tablespace + the on-disk fallback (#158). The happy path runs
+    against a real in-place tablespace anywhere a superuser PG is reachable; the
+    broken-tmpfs fallback uses the tmpfs fixture and skips where unavailable."""
+
+    def test_clone_into_tablespace(
+        self,
+        provisioner: TestDbProvisioner,
+        inplace_tablespace: tuple[TestDbProvisioner, str],
+    ) -> None:
+        _prov, tablespace = inplace_tablespace
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        clone = f"{_CLONE}_0"
+        result = provisioner.clone(_TEMPLATE, clone, tablespace=tablespace)
+        assert result.tablespace == tablespace
+        # The clone genuinely landed in the tablespace…
+        assert _clone_tablespace(provisioner, clone) == tablespace
+        assert _tables(provisioner, clone) == {"widget"}
+        # …and synchronous_commit=off still rides on the RAM clone.
+        assert _show_synchronous_commit(provisioner, clone) == "off"
+
+    def test_falls_back_to_disk_when_tablespace_absent(
+        self, provisioner: TestDbProvisioner, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A clone targeting a tablespace that does not exist (UndefinedObject) must
+        # degrade to an on-disk clone — the same safety net as a broken tmpfs, and
+        # one that exercises the real fallback end-to-end on any reachable PG.
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        clone = f"{_CLONE}_2"
+        with caplog.at_level(logging.WARNING):
+            result = provisioner.clone(_TEMPLATE, clone, tablespace="confiture_no_such_ts")
+        assert _db_exists(provisioner, clone)
+        assert result.tablespace is None
+        assert _clone_tablespace(provisioner, clone) == "pg_default"
+        assert _tables(provisioner, clone) == {"widget"}
+        assert any("falling back to an on-disk clone" in r.message for r in caplog.records)
+
+    def test_falls_back_to_disk_when_tablespace_dir_broken(
+        self,
+        provisioner: TestDbProvisioner,
+        ram_tablespace: tuple[TestDbProvisioner, str, str],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        _prov, tablespace, location = ram_tablespace
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        # Simulate a post-reboot tmpfs: catalog row + symlink survive, dir is gone.
+        shutil.rmtree(location, ignore_errors=True)
+        clone = f"{_CLONE}_1"
+        with caplog.at_level(logging.WARNING):
+            result = provisioner.clone(_TEMPLATE, clone, tablespace=tablespace)
+        assert _db_exists(provisioner, clone)  # the suite is not broken
+        assert result.tablespace is None  # it fell back to disk
+        assert _clone_tablespace(provisioner, clone) == "pg_default"
+        assert any("falling back to an on-disk clone" in r.message for r in caplog.records)
+
+
+class TestRamSetup:
+    """Real DROP+CREATE of a tmpfs tablespace. Skips where the box can't host one
+    (not superuser, or no chown rights to hand /dev/shm to the PG OS user)."""
+
+    def test_setup_creates_then_recreates_dropping_managed_clone(
+        self,
+        provisioner: TestDbProvisioner,
+        ram_setup_env: tuple[TestDbProvisioner, str, str, str],
+    ) -> None:
+        ram_prov, name, location, owner = ram_setup_env
+
+        first = ram_prov.setup_ram_tablespace(name, location, owner=owner)
+        assert first.recreated is False
+        assert first.action_required is False
+        assert ram_prov.tablespace_usable(name) is True
+
+        # A clone lands in the new tablespace…
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        clone = f"{_CLONE}_3"
+        clone_result = provisioner.clone(_TEMPLATE, clone, tablespace=name)
+        assert clone_result.tablespace == name
+        assert _clone_tablespace(provisioner, clone) == name
+
+        # …and a second ram-setup resets the tablespace, dropping that managed clone.
+        second = ram_prov.setup_ram_tablespace(name, location, owner=owner)
+        assert second.recreated is True
+        assert clone in second.dropped_databases
+        assert ram_prov.tablespace_usable(name) is True
+        assert not _db_exists(provisioner, clone)
 
 
 class TestStaleness:

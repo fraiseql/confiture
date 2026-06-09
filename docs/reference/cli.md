@@ -308,7 +308,8 @@ hand out lock-free per-worker clones. See the
 | Subcommand | Description | Exit codes |
 |---|---|---|
 | `provision-template --template <name> [--env] [--from-artifact <path>] [--seed-profile <name>] [--force]` | Build/apply (or restore an artifact) into a template DB and stamp its `db/` hash. | 0 ok; 5 bad input/refused clobber; 4 build/restore failed |
-| `clone --template <src> --target <dst>` | Clone via `CREATE DATABASE … WITH TEMPLATE` (retries while the source is in use). `--format json` redacts DSN passwords in `target_url`. | 0 ok; 4 clone failed |
+| `clone --template <src> --target <dst> [--tablespace <ts>] [--no-sync-commit-off]` | Clone via `CREATE DATABASE … WITH TEMPLATE` (retries while the source is in use). `--tablespace` places the clone in a (tmpfs) tablespace, falling back to disk on any tablespace failure; `--no-sync-commit-off` keeps durable commits (default sets `synchronous_commit=off` on the clone). `--format json` redacts DSN passwords in `target_url`. | 0 ok; 4 clone failed |
+| `ram-setup --tablespace <name> --location <dir> [--owner <user>] [--force]` | Create or idempotently reset a tmpfs tablespace for RAM clones (DROP+re-CREATE, dropping managed clones in it). Refuses a LOCATION outside `/dev/shm`/`/run` without `--force`. Prints a `sudo install -d …` command when it lacks the OS rights to prepare the dir. | 0 ok; 5 bad input / refused / **action required** (`action_required` flag set) |
 | `drop --target <name> [--force]` | Drop a confiture-managed clone/template (refuses unmanaged DBs without `--force`). | 0 ok; 5 refused |
 | `status --template <name> [--env]` | Report staleness vs the current `db/` hash. | **0 current; 1 stale/absent** |
 | `list` | List confiture-managed templates and clones. | 0 |

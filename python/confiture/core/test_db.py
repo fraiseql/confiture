@@ -15,6 +15,7 @@ never races a concurrent clone — and are not copied into clones.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -37,6 +38,8 @@ from confiture.core.temp_database import (
 )
 from confiture.exceptions import ConfigurationError, SchemaError
 
+logger = logging.getLogger(__name__)
+
 # Marker comments stamped on confiture-managed databases (see module docstring).
 _TEMPLATE_PREFIX = "confiture:template:"
 _CLONE_PREFIX = "confiture:clone:"
@@ -45,6 +48,31 @@ _MANAGED_PREFIX = "confiture:"
 # PostgreSQL identifier: leading letter/underscore, then letters/digits/underscore,
 # 1–63 ASCII chars. Quoting still happens via Identifier; this is defence in depth.
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+
+# Tablespace LOCATION lookup. No row → the tablespace does not exist; an empty
+# string → a built-in tablespace (pg_default/pg_global) living in the data dir.
+_TABLESPACE_LOCATION_SQL = (
+    "SELECT pg_tablespace_location(oid) FROM pg_tablespace WHERE spcname = %s"
+)
+
+# Presence probe for a tablespace LOCATION dir. Two #158 gotchas are baked in:
+#   1. Extract a NON-NULL scalar field (``.size``) — ``pg_stat_file(loc)`` as a
+#      whole record reads NULL for an existing dir on Linux (its creation-time
+#      field is null), so ``record IS NOT NULL`` wrongly returns false.
+#   2. ``missing_ok = true`` (the second arg) makes an absent path return NULL
+#      instead of raising, so the probe yields a clean False rather than an error.
+# This deliberately CANNOT detect a post-reboot-broken tmpfs (the LOCATION dir
+# survives; only the inner PG_<version> dir is gone) — that is why clone()'s disk
+# fallback, not this probe, is the real safety net.
+_TABLESPACE_PROBE_SQL = "SELECT (pg_stat_file(%s, true)).size IS NOT NULL"
+
+# Databases living in a tablespace, with their managed-marker comment. The
+# tablespace name is bound as a parameter; nothing is interpolated.
+_DBS_IN_TABLESPACE_SQL = (
+    "SELECT d.datname, shobj_description(d.oid, 'pg_database') "
+    "FROM pg_database d JOIN pg_tablespace t ON d.dattablespace = t.oid "
+    "WHERE t.spcname = %s"
+)
 
 
 class TemplateState(str, Enum):
@@ -75,14 +103,39 @@ class TemplateStatus:
 
 @dataclass
 class CloneResult:
-    """Result of a template clone."""
+    """Result of a template clone.
+
+    ``tablespace`` is the tablespace the clone actually landed in: the requested
+    one on a successful RAM clone, or ``None`` for an on-disk clone — including
+    after a tablespace failure fell back to disk. Callers can assert which path ran.
+    """
 
     template: str
     target: str
     target_url: str
+    tablespace: str | None = None
 
     def to_dict(self) -> dict:
-        return {"template": self.template, "target": self.target, "target_url": self.target_url}
+        return {
+            "template": self.template,
+            "target": self.target,
+            "target_url": self.target_url,
+            "tablespace": self.tablespace,
+        }
+
+
+class _TablespaceUnavailable(Exception):
+    """Internal signal: the requested tablespace cannot host the clone → use disk.
+
+    Raised inside the clone retry loop when a tablespace is in play and the create
+    fails for a non-retryable reason (a broken/absent tmpfs dir, a denied
+    tablespace, etc.). Caught by :meth:`TestDbProvisioner.clone`, which retries the
+    clone on disk. Never escapes the module.
+    """
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
 
 
 @dataclass
@@ -95,6 +148,36 @@ class ManagedDatabase:
 
     def to_dict(self) -> dict:
         return {"name": self.name, "kind": self.kind, "detail": self.detail}
+
+
+@dataclass
+class RamSetupResult:
+    """Result of :meth:`TestDbProvisioner.setup_ram_tablespace`.
+
+    ``recreated`` is True when an existing tablespace was dropped and rebuilt (the
+    post-reboot reset path), False on a clean first creation. ``action_required``
+    is True when the LOCATION dir could not be prepared (the CLI lacked OS rights)
+    so the caller must run a privileged command and re-run. ``dropped_databases``
+    lists the databases removed from the tablespace — surfaced for transparency,
+    since dropping them is destructive.
+    """
+
+    tablespace: str
+    location: str
+    owner: str
+    recreated: bool
+    action_required: bool
+    dropped_databases: list[str]
+
+    def to_dict(self) -> dict:
+        return {
+            "tablespace": self.tablespace,
+            "location": self.location,
+            "owner": self.owner,
+            "recreated": self.recreated,
+            "action_required": self.action_required,
+            "dropped_databases": self.dropped_databases,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -120,18 +203,46 @@ def _validate_identifier(name: str) -> None:
         )
 
 
-def _clone_sql(target: str, template: str) -> psycopg.sql.Composed:
-    return SQL("CREATE DATABASE {} WITH TEMPLATE {}").format(
+def _clone_sql(target: str, template: str, tablespace: str | None = None) -> psycopg.sql.Composed:
+    base = SQL("CREATE DATABASE {} WITH TEMPLATE {}").format(
         Identifier(target), Identifier(template)
     )
+    if tablespace is None:
+        return base
+    return base + SQL(" TABLESPACE {}").format(Identifier(tablespace))
 
 
 def _create_db_sql(name: str) -> psycopg.sql.Composed:
     return SQL("CREATE DATABASE {}").format(Identifier(name))
 
 
+def _alter_db_set_sql(name: str, guc: str, value: str) -> psycopg.sql.Composed:
+    """Build ``ALTER DATABASE <name> SET <guc> TO <value>`` (a per-database GUC default).
+
+    The value is rendered as a quoted SQL literal (``'off'``), never interpolated —
+    same injection-safe discipline as the other ``_*_sql`` builders. PostgreSQL
+    accepts a quoted string for enum GUCs such as ``synchronous_commit``.
+    """
+    return SQL("ALTER DATABASE {} SET {} TO {}").format(
+        Identifier(name), Identifier(guc), Literal(value)
+    )
+
+
 def _comment_sql(name: str, value: str) -> psycopg.sql.Composed:
     return SQL("COMMENT ON DATABASE {} IS {}").format(Identifier(name), Literal(value))
+
+
+def _create_tablespace_sql(name: str, location: str) -> psycopg.sql.Composed:
+    return SQL("CREATE TABLESPACE {} LOCATION {}").format(Identifier(name), Literal(location))
+
+
+def _drop_tablespace_sql(name: str) -> psycopg.sql.Composed:
+    return SQL("DROP TABLESPACE {}").format(Identifier(name))
+
+
+def _dbs_in_tablespace_sql() -> str:
+    """Return the parameterised query for databases living in a tablespace."""
+    return _DBS_IN_TABLESPACE_SQL
 
 
 def _advisory_key(name: str) -> int:
@@ -222,6 +333,149 @@ class TestDbProvisioner:
 
     def _set_comment(self, conn: psycopg.Connection, db_name: str, value: str) -> None:
         conn.execute(_comment_sql(db_name, value))
+
+    # -- tablespace usability ----------------------------------------------
+
+    def _tablespace_location(self, conn: psycopg.Connection, name: str) -> str | None:
+        """Return the LOCATION dir of tablespace *name*, or None if it has no row.
+
+        An empty string is a built-in tablespace (``pg_default``/``pg_global``),
+        which lives in the data directory and has no separate LOCATION.
+        """
+        row = conn.execute(_TABLESPACE_LOCATION_SQL, (name,)).fetchone()
+        return row[0] if row else None
+
+    def tablespace_usable(self, name: str) -> bool:
+        """Cheap gate: does tablespace *name* exist with a present LOCATION dir?
+
+        This is a **gate, not a guarantee.** It answers "is it worth *attempting* a
+        RAM clone in this tablespace?" — nothing more. A tmpfs LOCATION can pass
+        this probe yet still fail the actual ``CREATE DATABASE … TABLESPACE`` after a
+        reboot (the ``pg_tablespace`` row and the data-dir symlink survive a reboot,
+        but the inner ``PG_<version>`` directory is cleared from ``/dev/shm``). That
+        post-reboot breakage is impossible to detect cheaply, which is exactly why
+        :meth:`clone`'s on-disk fallback — not this probe — is the real safety net.
+
+        Returns False (never raises) for an absent tablespace, an absent LOCATION
+        dir, or any error reading it (e.g. ``pg_stat_file`` denied for lack of
+        ``pg_read_server_files``/superuser): when we cannot verify, the safe answer
+        is "don't attempt RAM," and the on-disk clone path is always correct.
+
+        A built-in tablespace (empty LOCATION) is always usable.
+        """
+        if not name:
+            return False
+        try:
+            with self._maintenance_conn() as conn:
+                location = self._tablespace_location(conn, name)
+                if location is None:
+                    return False  # no such tablespace
+                if location == "":
+                    return True  # built-in (pg_default/pg_global) — always usable
+                row = conn.execute(_TABLESPACE_PROBE_SQL, (location,)).fetchone()
+                return bool(row and row[0])
+        except psycopg.Error:
+            return False
+
+    def _dbs_in_tablespace(
+        self, conn: psycopg.Connection, name: str
+    ) -> list[tuple[str, str | None]]:
+        """Return ``(datname, comment)`` for every database living in tablespace *name*."""
+        rows = conn.execute(_dbs_in_tablespace_sql(), (name,)).fetchall()
+        return [(r[0], r[1]) for r in rows]
+
+    def setup_ram_tablespace(
+        self,
+        name: str,
+        location: str,
+        *,
+        owner: str,
+        force: bool = False,
+        dir_prepared: bool = True,
+    ) -> RamSetupResult:
+        """(Re)create tmpfs tablespace *name* at *location* — an idempotent reset.
+
+        This owns the post-reboot DROP+re-CREATE dance: ``/dev/shm`` is cleared on
+        boot, so the ``pg_tablespace`` row and the data-dir symlink survive but the
+        inner ``PG_<version>`` directory is gone. Recreating that dir is not enough —
+        the catalog still points at a tablespace PostgreSQL believes is initialised.
+        The fix is to **drop the tablespace (after dropping the databases inside it)
+        and re-create it**, which re-runs PostgreSQL's tablespace initialisation.
+
+        By default only confiture-managed databases in the tablespace are dropped;
+        a non-managed database blocks with a ``CONFIG_010`` error unless *force*
+        (the same marker discipline as :meth:`provision_template`/:meth:`drop`). The
+        OS-side dir preparation (create + chown to the PG server user) is the
+        caller's job — when it could not be done (*dir_prepared* is False, e.g. the
+        client lacks chown rights), nothing is dropped or created and the result
+        flags ``action_required`` so the caller can print the privileged command.
+
+        Args:
+            name: Tablespace name to (re)create.
+            location: The tmpfs LOCATION directory.
+            owner: OS user that owns *location* (recorded on the result).
+            force: Drop even non-managed databases living in the tablespace.
+            dir_prepared: Whether *location* is ready (exists, empty, PG-owned).
+
+        Returns:
+            A :class:`RamSetupResult`.
+
+        Raises:
+            ConfigurationError: Invalid name, or a non-managed database present
+                without *force*.
+            SchemaError: The tablespace was created but is not usable afterwards.
+        """
+        _validate_identifier(name)
+
+        if not dir_prepared:
+            # We cannot finish the create, so we must not start: leave the catalog
+            # untouched and signal that a privileged OS step is required.
+            return RamSetupResult(
+                tablespace=name,
+                location=location,
+                owner=owner,
+                recreated=False,
+                action_required=True,
+                dropped_databases=[],
+            )
+
+        with self._maintenance_conn() as conn:
+            existing = self._tablespace_location(conn, name) is not None
+            dbs = self._dbs_in_tablespace(conn, name)
+            unmanaged = sorted(d for d, comment in dbs if _managed_kind(comment) is None)
+            if unmanaged and not force:
+                raise ConfigurationError(
+                    f"Tablespace {name!r} holds non-confiture-managed database(s): "
+                    f"{', '.join(unmanaged)}. Refusing to drop them.",
+                    error_code="CONFIG_010",
+                    resolution_hint="Move or drop them yourself, or pass --force to "
+                    "drop everything living in the tablespace.",
+                )
+
+            dropped: list[str] = []
+            for db_name, _comment in dbs:
+                force_drop_database(conn, db_name)
+                dropped.append(db_name)
+            if existing:
+                conn.execute(_drop_tablespace_sql(name))
+            conn.execute(_create_tablespace_sql(name, location))
+
+        if not self.tablespace_usable(name):
+            raise SchemaError(
+                f"Created tablespace {name!r} but it is not usable at {location!r}.",
+                error_code="SCHEMA_001",
+                resolution_hint="Check that the LOCATION dir exists, is empty, and is "
+                "owned by the PostgreSQL server OS user.",
+            )
+
+        return RamSetupResult(
+            tablespace=name,
+            location=location,
+            owner=owner,
+            recreated=existing,
+            action_required=False,
+            dropped_databases=dropped,
+        )
 
     # -- staleness ---------------------------------------------------------
 
@@ -368,7 +622,14 @@ class TestDbProvisioner:
     # -- cloning -----------------------------------------------------------
 
     def clone(
-        self, template: str, target: str, *, retries: int = 5, backoff: float = 0.25
+        self,
+        template: str,
+        target: str,
+        *,
+        retries: int = 5,
+        backoff: float = 0.25,
+        sync_commit_off: bool = True,
+        tablespace: str | None = None,
     ) -> CloneResult:
         """Clone *template* into *target* via ``CREATE DATABASE … WITH TEMPLATE``.
 
@@ -381,9 +642,25 @@ class TestDbProvisioner:
             target: Clone database name to create.
             retries: Bounded retries on "source is being accessed".
             backoff: Seconds to wait between retries (grows linearly).
+            sync_commit_off: When true (default), set ``synchronous_commit = off``
+                as a per-database default on the fresh clone. This is a per-database
+                GUC — it affects only sessions connecting to *target*, never other
+                databases on a shared cluster — so it is safe where a cluster-wide
+                ``fsync=off`` is not. Ephemeral test clones do not need durable
+                commits; this drops the per-commit fsync wait that dominates under
+                parallel test runs on an ``fsync=on`` cluster. Applied regardless of
+                which tablespace path (RAM or disk-fallback) ultimately wins.
+            tablespace: When set, create the clone in this tablespace
+                (``CREATE DATABASE … TABLESPACE <ram>``) — e.g. a tmpfs tablespace
+                for fast RAM-backed clones. On *any* tablespace-related failure (a
+                broken/absent tmpfs dir, a denied tablespace), the clone falls back
+                **once** to a plain on-disk clone with a fresh retry budget, logs a
+                WARNING, and records ``tablespace=None`` on the result. When
+                ``None`` (default), behaviour is byte-for-byte unchanged.
 
         Returns:
-            A :class:`CloneResult` with the clone's connection URL.
+            A :class:`CloneResult`; ``result.tablespace`` is the tablespace the
+            clone actually landed in (``None`` for on-disk, including a fallback).
 
         Raises:
             ConfigurationError: On invalid identifiers.
@@ -391,18 +668,72 @@ class TestDbProvisioner:
         """
         _validate_identifier(template)
         _validate_identifier(target)
+        if tablespace is not None:
+            _validate_identifier(tablespace)
 
+        try:
+            return self._clone_with_retries(
+                template,
+                target,
+                tablespace=tablespace,
+                retries=retries,
+                backoff=backoff,
+                sync_commit_off=sync_commit_off,
+            )
+        except _TablespaceUnavailable as exc:
+            # The tmpfs probe is only a cheap gate; a post-reboot tablespace passes
+            # it yet fails the actual CREATE. This on-disk fallback is the real
+            # safety net. One shot, with a *fresh* retry budget — a tablespace
+            # failure must never exhaust the ObjectInUse backoff before disk runs.
+            logger.warning(
+                "Clone into tablespace %r failed (%s); falling back to an on-disk "
+                "clone of %r → %r.",
+                tablespace,
+                exc.cause,
+                template,
+                target,
+            )
+            return self._clone_with_retries(
+                template,
+                target,
+                tablespace=None,
+                retries=retries,
+                backoff=backoff,
+                sync_commit_off=sync_commit_off,
+            )
+
+    def _clone_with_retries(
+        self,
+        template: str,
+        target: str,
+        *,
+        tablespace: str | None,
+        retries: int,
+        backoff: float,
+        sync_commit_off: bool,
+    ) -> CloneResult:
+        """Run the bounded ``ObjectInUse`` retry loop for one tablespace choice.
+
+        ``ObjectInUse`` retries on the same tablespace (a busy template is unrelated
+        to where the clone lands). ``DuplicateDatabase`` raises ``SCHEMA_001``. When
+        a *tablespace* is in play, any other failure signals
+        :class:`_TablespaceUnavailable` so :meth:`clone` can retry on disk; on the
+        disk path (``tablespace is None``) such errors propagate unchanged.
+        """
         last_err: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
                 with self._maintenance_conn() as conn:
                     terminate_backends(conn, template)
-                    conn.execute(_clone_sql(target, template))
+                    conn.execute(_clone_sql(target, template, tablespace))
                     self._set_comment(conn, target, _CLONE_PREFIX + template)
+                    if sync_commit_off:
+                        conn.execute(_alter_db_set_sql(target, "synchronous_commit", "off"))
                 return CloneResult(
                     template=template,
                     target=target,
                     target_url=_replace_dbname(self.server_url, target),
+                    tablespace=tablespace,
                 )
             except psycopg.errors.ObjectInUse as e:
                 last_err = e
@@ -414,6 +745,10 @@ class TestDbProvisioner:
                     error_code="SCHEMA_001",
                     resolution_hint="Drop it first or choose a different target name.",
                 ) from e
+            except psycopg.Error as e:
+                if tablespace is not None:
+                    raise _TablespaceUnavailable(e) from e
+                raise
 
         raise SchemaError(
             f"Could not clone {template!r} into {target!r} after {retries} attempts: {last_err}",

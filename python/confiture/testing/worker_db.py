@@ -32,6 +32,43 @@ from confiture.core.temp_database import _replace_dbname
 _WORKER_SUFFIX_RE = re.compile(r"_gw\d+$")
 _WORKER_ID_RE = re.compile(r"^gw\d+$")
 
+# Environment variables that signal a CI / automation context. This tuple is the
+# single source of truth for the CI var-set: ``core/progress.py`` composes its
+# TTY check on top of :func:`is_ci` rather than maintaining a second, drifting
+# list (the eternal-sunshine anti-duplication rule).
+_CI_ENV_VARS = (
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "CIRCLECI",
+    "BUILD_ID",
+    "BUILD_NUMBER",
+    "RUN_ID",
+    "TRAVIS",
+    "JENKINS_URL",
+    "BUILDKITE",
+    "DAGGER_SESSION_PORT",  # set by `dagger run` — the repo's local CI gate
+)
+
+# Values that mean an explicitly-disabled CI variable (e.g. ``CI=false``).
+_CI_FALSEY = frozenset({"", "0", "false", "no", "off"})
+
+
+def is_ci() -> bool:
+    """Return True when running under a CI / automation environment.
+
+    Detects the common CI signals (``CI``, ``GITHUB_ACTIONS``, ``GITLAB_CI``,
+    ``BUILDKITE``, Dagger, …). A variable counts only when present **and** not
+    explicitly false-y — ``CI=false`` is not CI. Pure over ``os.environ`` with no
+    TTY check (that belongs to progress-bar suppression, a deliberately different
+    predicate; see :func:`confiture.core.progress._is_ci_environment`).
+
+    This is advisory: it informs documented defaults (CI → pre-provisioned
+    template + on-disk clones; local → RAM clones) and lets a consumer's conftest
+    choose ``--from-artifact``. It is not branching logic inside the fixtures.
+    """
+    return any(os.environ.get(var, "").strip().lower() not in _CI_FALSEY for var in _CI_ENV_VARS)
+
 
 def current_worker_id() -> str | None:
     """Return the active pytest-xdist worker id (``"gw0"``…), or None.

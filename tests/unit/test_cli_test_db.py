@@ -9,12 +9,19 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.cli.test_db import (
+    _guard_ram_location,
+    _prepare_location_dir,
+    _resolve_owner,
+)
 from confiture.core.test_db import (
     CloneResult,
     ManagedDatabase,
+    RamSetupResult,
     TemplateState,
     TemplateStatus,
 )
@@ -57,8 +64,29 @@ class TestClone:
             ],
         )
         assert result.exit_code == 0
-        prov.clone.assert_called_once_with("tmpl", "c0")
+        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=True)
         assert '"target": "c0"' in result.stdout
+
+    @patch("confiture.cli.test_db.TestDbProvisioner")
+    def test_clone_no_sync_commit_off_flag(self, mock_cls: MagicMock) -> None:
+        prov = mock_cls.return_value
+        prov.clone.return_value = CloneResult("tmpl", "c0", f"{_URL[:-15]}/c0")
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "clone",
+                "--template",
+                "tmpl",
+                "--target",
+                "c0",
+                "--database-url",
+                _URL,
+                "--no-sync-commit-off",
+            ],
+        )
+        assert result.exit_code == 0
+        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=False)
 
     @patch("confiture.cli.test_db.TestDbProvisioner")
     def test_clone_json_redacts_dsn_password(self, mock_cls: MagicMock) -> None:
@@ -148,6 +176,170 @@ class TestProvisionTemplate:
         _, kwargs = mock_cls.return_value.provision_template.call_args
         assert kwargs.get("schema_sql") is not None
         assert kwargs.get("from_artifact") is None
+
+
+class TestRamSetupHelpers:
+    """The pure CLI-layer helpers (allowlist, owner resolution, dir prep)."""
+
+    def test_guard_allows_tmpfs_roots(self) -> None:
+        _guard_ram_location("/dev/shm/ram_ts", force=False)  # no raise
+        _guard_ram_location("/run/ram_ts", force=False)  # no raise
+
+    def test_guard_rejects_non_tmpfs_without_force(self) -> None:
+        with pytest.raises(ConfigurationError, match="Refusing"):
+            _guard_ram_location("/var/lib/postgresql/data", force=False)
+
+    def test_guard_bypassed_by_force(self) -> None:
+        _guard_ram_location("/var/lib/postgresql/data", force=True)  # no raise
+
+    def test_resolve_owner_unknown_user_raises(self) -> None:
+        with pytest.raises(ConfigurationError, match="does not exist"):
+            _resolve_owner("definitely_no_such_user_xyz")
+
+    def test_resolve_owner_root_resolves_to_uid_0(self) -> None:
+        # root exists on every Linux host → deterministic.
+        assert _resolve_owner("root") == (0, 0)
+
+    @patch("confiture.cli.test_db.os.chown")
+    @patch("confiture.cli.test_db.os.makedirs")
+    def test_prepare_dir_true_on_success(self, _md: MagicMock, _chown: MagicMock) -> None:
+        assert _prepare_location_dir("/dev/shm/ram_ts", 70, 70) is True
+
+    @patch("confiture.cli.test_db.os.chown", side_effect=PermissionError("not permitted"))
+    @patch("confiture.cli.test_db.os.makedirs")
+    def test_prepare_dir_false_when_chown_denied(self, _md: MagicMock, _chown: MagicMock) -> None:
+        assert _prepare_location_dir("/dev/shm/ram_ts", 70, 70) is False
+
+
+class TestRamSetupCli:
+    def _pw(self) -> object:
+        return type("PW", (), {"pw_uid": 70, "pw_gid": 70})()
+
+    @patch("confiture.cli.test_db.os.makedirs")
+    @patch("confiture.cli.test_db.os.chown", side_effect=PermissionError("not permitted"))
+    @patch("confiture.cli.test_db.pwd.getpwnam")
+    def test_guided_mode_prints_sudo_command(
+        self, mock_getpwnam: MagicMock, _chown: MagicMock, _md: MagicMock
+    ) -> None:
+        # chown denied → guided mode: no DB is touched (setup returns early), the
+        # privileged command is printed, and the action-required exit code is used.
+        mock_getpwnam.return_value = self._pw()
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "ram-setup",
+                "--tablespace",
+                "ram_ts",
+                "--location",
+                "/dev/shm/ram_ts",
+                "--database-url",
+                _URL,
+            ],
+        )
+        assert result.exit_code == 5
+        assert "sudo install -d" in result.stdout
+        assert "/dev/shm/ram_ts" in result.stdout
+
+    @patch("confiture.cli.test_db.os.makedirs")
+    @patch("confiture.cli.test_db.os.chown", side_effect=PermissionError("not permitted"))
+    @patch("confiture.cli.test_db.pwd.getpwnam")
+    def test_guided_mode_json_payload(
+        self, mock_getpwnam: MagicMock, _chown: MagicMock, _md: MagicMock
+    ) -> None:
+        mock_getpwnam.return_value = self._pw()
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "ram-setup",
+                "--tablespace",
+                "ram_ts",
+                "--location",
+                "/dev/shm/ram_ts",
+                "--database-url",
+                _URL,
+                "--format",
+                "json",
+            ],
+        )
+        assert result.exit_code == 5
+        assert '"action_required": true' in result.stdout
+        assert '"action_command":' in result.stdout
+
+    def test_rejects_non_tmpfs_location(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "ram-setup",
+                "--tablespace",
+                "ram_ts",
+                "--location",
+                "/var/lib/postgresql/data",
+                "--database-url",
+                _URL,
+            ],
+        )
+        assert result.exit_code == 5  # hard CONFIG_010 (allowlist), not action_required
+
+    @patch("confiture.cli.test_db._prepare_location_dir", return_value=True)
+    @patch("confiture.cli.test_db._resolve_owner", return_value=(70, 70))
+    @patch("confiture.cli.test_db.TestDbProvisioner")
+    def test_success_path_threads_args(
+        self, mock_cls: MagicMock, _owner: MagicMock, _prep: MagicMock
+    ) -> None:
+        mock_cls.return_value.setup_ram_tablespace.return_value = RamSetupResult(
+            "ram_ts", "/dev/shm/ram_ts", "postgres", True, False, ["ram_ts_db_gw0"]
+        )
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "ram-setup",
+                "--tablespace",
+                "ram_ts",
+                "--location",
+                "/dev/shm/ram_ts",
+                "--database-url",
+                _URL,
+                "--force",
+            ],
+        )
+        assert result.exit_code == 0
+        _, kwargs = mock_cls.return_value.setup_ram_tablespace.call_args
+        assert kwargs["dir_prepared"] is True
+        assert kwargs["force"] is True
+        assert kwargs["owner"] == "postgres"
+        assert "Reset" in result.stdout
+
+    @patch("confiture.cli.test_db._prepare_location_dir", return_value=True)
+    @patch("confiture.cli.test_db._resolve_owner", return_value=(70, 70))
+    @patch("confiture.cli.test_db.TestDbProvisioner")
+    def test_success_path_json(
+        self, mock_cls: MagicMock, _owner: MagicMock, _prep: MagicMock
+    ) -> None:
+        mock_cls.return_value.setup_ram_tablespace.return_value = RamSetupResult(
+            "ram_ts", "/dev/shm/ram_ts", "postgres", False, False, []
+        )
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "ram-setup",
+                "--tablespace",
+                "ram_ts",
+                "--location",
+                "/dev/shm/ram_ts",
+                "--database-url",
+                _URL,
+                "--format",
+                "json",
+            ],
+        )
+        assert result.exit_code == 0
+        assert '"action_required": false' in result.stdout
+        assert '"recreated": false' in result.stdout
 
 
 class TestListAndPrune:

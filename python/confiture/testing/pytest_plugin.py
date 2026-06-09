@@ -197,6 +197,58 @@ def confiture_worker_id() -> str | None:
 
 
 @pytest.fixture(scope="session")
+def confiture_ram_tablespace() -> str | None:
+    """RAM (tmpfs) tablespace for worker clones, from ``CONFITURE_TEST_RAM_TABLESPACE``.
+
+    None (the default, unset) → on-disk clones, behaviour unchanged. When set, the
+    worker-db fixture asks for clones in this tablespace; a misconfigured or
+    post-reboot-broken tablespace silently degrades to disk via the provisioner's
+    fallback (we never ``pytest.exit()`` inside a worker). Provision it once per
+    host with ``confiture test-db ram-setup``.
+    """
+    return os.getenv("CONFITURE_TEST_RAM_TABLESPACE")
+
+
+@pytest.fixture(scope="session")
+def confiture_ram_tablespace_usable(
+    confiture_ram_tablespace: str | None,
+    confiture_test_server_url: str,
+) -> str | None:
+    """The RAM tablespace name if configured **and** usable here, else None.
+
+    Consulted once per worker process (session scope under xdist is per-worker).
+    Swaps N failed ``CREATE DATABASE`` attempts for one cheap probe when the
+    tablespace is clearly absent — but correctness never depends on it: the
+    provisioner's disk fallback still covers the pass-but-broken post-reboot case.
+    ``tablespace_usable`` never raises (it degrades to False on any error,
+    including an unreachable server), so this fixture never skips or exits.
+    """
+    if not confiture_ram_tablespace:
+        return None
+    from confiture.core.test_db import TestDbProvisioner
+
+    provisioner = TestDbProvisioner(confiture_test_server_url)
+    return (
+        confiture_ram_tablespace
+        if provisioner.tablespace_usable(confiture_ram_tablespace)
+        else None
+    )
+
+
+@pytest.fixture(scope="session")
+def confiture_ci() -> bool:
+    """True when running under CI/automation (see ``worker_db.is_ci``).
+
+    Advisory: a consumer's conftest can branch defaults on it (CI →
+    ``--from-artifact`` + on-disk clones; local → RAM clones). The fixtures
+    themselves do not branch on it — ``ensure_template`` is already idempotent.
+    """
+    from confiture.testing.worker_db import is_ci
+
+    return is_ci()
+
+
+@pytest.fixture(scope="session")
 def confiture_template_db(
     confiture_test_server_url: str,
     confiture_template_name: str,
@@ -239,11 +291,17 @@ def confiture_worker_db(
     confiture_template_db: str,
     confiture_test_server_url: str,
     confiture_worker_id: str | None,
+    confiture_ram_tablespace_usable: str | None,
 ) -> Generator[str, None, None]:
     """Yield a per-worker database cloned from the shared template.
 
     One clone per xdist worker (session scope is per worker process), dropped on
     teardown. The yielded value is the clone's connection URL.
+
+    When ``CONFITURE_TEST_RAM_TABLESPACE`` names a usable tmpfs tablespace, the
+    clone is placed there for speed; otherwise (or if it turns out unusable) the
+    clone lands on disk via the provisioner's fallback. Either way the worker
+    never crashes — ``pytest.skip`` is reserved for total DB-unavailability.
 
     Note:
         Apps that freeze their settings/pool at import time must instead call
@@ -260,7 +318,9 @@ def confiture_worker_db(
 
     try:
         provisioner.drop(target)  # reap a leftover clone from a crashed run
-        clone = provisioner.clone(confiture_template_db, target)
+        clone = provisioner.clone(
+            confiture_template_db, target, tablespace=confiture_ram_tablespace_usable
+        )
     except psycopg.OperationalError as e:
         pytest.skip(f"confiture test database unavailable: {e}")
 

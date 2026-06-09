@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-06-10
+
+Fast per-xdist-worker test-DB provisioning: RAM-backed clones and ephemeral
+commit settings, building directly on the `test-db` primitive from 0.24.0
+(issue #158). **Purely additive / non-breaking** — every change is a new flag,
+command, fixture, env var, or method with a backwards-compatible default; no exit
+code, existing field, or existing behaviour changed. This is a **CI-path**
+capability (developer/CI tooling), not the deploy ops-path: the fraisier adapter
+contract is unaffected.
+
+The two costs are fixed together — one without the other "leaves a wall": the
+**commit** cost (the per-transaction `fsync` wait) and the **clone** cost (copying
+the template's files).
+
+### Added
+
+- **`synchronous_commit = off` per clone.** `test-db clone` sets it as a
+  **per-database** default on every fresh clone (opt out with
+  `--no-sync-commit-off`; `clone(sync_commit_off=...)` in the library). A
+  per-database GUC touches only sessions connecting to that throwaway clone, never
+  other databases on a shared cluster — safe where a cluster-wide `fsync=off` is
+  not. This drops the per-commit `fsync` wait that dominates parallel runs on an
+  `fsync=on` developer cluster.
+- **RAM-backed clones.** `test-db clone --tablespace <ts>` (and
+  `clone(tablespace=...)`) places the clone in a tmpfs tablespace via
+  `CREATE DATABASE … WITH TEMPLATE … TABLESPACE`. On **any** tablespace failure
+  (a broken/absent tmpfs, a denied tablespace) it falls back **once** to a plain
+  on-disk clone with a fresh retry budget, logs a WARNING, and records
+  `CloneResult.tablespace = None` — so a misconfigured or post-reboot tablespace
+  degrades gracefully instead of breaking the suite. The template stays on disk;
+  only the throwaway clones go to RAM.
+- **`confiture test-db ram-setup --tablespace <name> --location <dir>`** creates or
+  idempotently resets a tmpfs tablespace (the post-reboot DROP + re-CREATE dance,
+  dropping the confiture-managed clones inside it; `--force` for non-managed DBs
+  and to bypass the `/dev/shm`,`/run` allowlist). Two auto-selected modes:
+  **self-service** (confiture creates + `chown`s the LOCATION dir) and **guided**
+  (it prints the exact `sudo install -d …` command and exits `5` with
+  `action_required` rather than failing silently).
+- **xdist fixture wiring.** `CONFITURE_TEST_RAM_TABLESPACE` opts each worker clone
+  into a tmpfs tablespace (new `confiture_ram_tablespace` fixture + a per-worker
+  usability memo); **unset → on-disk clones, unchanged**. The fixtures never call
+  `pytest.exit()` inside a worker (it surfaces as an opaque `INTERNALERROR`); the
+  disk fallback is what makes that safe.
+- **CI-vs-local detection.** `confiture.testing.worker_db.is_ci()` (and a
+  `confiture_ci` fixture) — a single source of truth for the CI env-var set
+  (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, Dagger, …, with false-y
+  handling so `CI=false` is not CI). `core/progress.py` now composes its TTY check
+  on top of it instead of keeping a second, drifting list. Advisory only — it
+  informs documented CI (pre-provisioned template + on-disk clones) vs. local (RAM
+  clones) defaults; the fixtures do not branch on it.
+
+### Note
+
+Issue #158 item 1 (single-builder template coordination) was **already shipped in
+0.24.0** — `ensure_template()` single-flights via a PostgreSQL advisory lock, done
+better than the issue's file-lock sketch — so this release lands items 2–4 only.
+
 ## [0.24.0] - 2026-06-08
 
 Turns three pieces of hand-rolled, every-confiture-project-reinvents-it plumbing

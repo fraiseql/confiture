@@ -160,6 +160,101 @@ listing the defined profiles. The artifact filename carries the profile segment
 
 ---
 
+## 5. RAM tablespace for fast clones
+
+Two independent costs dominate per-worker provisioning, and you need to fix
+**both** — one without the other "leaves a wall":
+
+- **The commit cost.** Every transaction in the cloned DB pays an `fsync` wait on
+  a developer's `fsync=on` cluster. confiture sets `synchronous_commit = off` as a
+  **per-database** default on every clone (opt out with `clone --no-sync-commit-off`).
+  This is a per-database GUC — it touches only sessions connecting to that throwaway
+  clone, never other databases on a shared cluster — so it is safe where a
+  cluster-wide `fsync=off` is not.
+- **The clone cost.** `CREATE DATABASE … WITH TEMPLATE` copies the template's files.
+  On a ~1 GB+ template that is ~15–20 s on disk; from a **tmpfs** (RAM) tablespace
+  it drops to ~3–5 s. The template stays on disk (it is the durable, rebuilt-on-hash
+  source and survives a reboot); only the throwaway **clones** go to RAM.
+
+> One anonymized real suite: **~355 s** single-process → **~130 s** at `-n6` with a
+> RAM tablespace (~2.7×). Illustrative, not a benchmark — your numbers depend on
+> template size, core count, and disk.
+
+### `confiture test-db ram-setup`
+
+Create (or idempotently reset) a tmpfs tablespace once per host:
+
+```bash
+confiture test-db ram-setup --tablespace ram_test --location /dev/shm/ram_test
+```
+
+It runs in one of **two auto-selected modes**:
+
+- **Self-service** — confiture can create and `chown` the LOCATION dir to the PG
+  server's OS user (it *is* that user, or has the rights). It does so, then
+  `CREATE TABLESPACE`.
+- **Guided** — confiture is a client and lacks the rights (PG runs as another
+  user, or is remote). It does **not** fail silently: it prints the exact
+  privileged command and exits `5` with `action_required` so a script can detect
+  "human step needed":
+
+  ```bash
+  sudo install -d -o postgres -g postgres -m 700 /dev/shm/ram_test
+  # …then re-run the ram-setup command above.
+  ```
+
+`ram-setup` is a **reset**: it drops the databases living in the tablespace (only
+**confiture-managed** clones unless `--force`), drops and re-creates the
+tablespace, and verifies it is usable. It refuses a LOCATION outside `/dev/shm`
+or `/run` without `--force` — a guard against a fat-fingered real path becoming a
+dropped tablespace.
+
+### Wiring it into the fixtures
+
+Point the fixtures at the tablespace with one environment variable:
+
+```bash
+export CONFITURE_TEST_RAM_TABLESPACE=ram_test
+pytest -n auto
+```
+
+`confiture_worker_db` then asks for each clone in `ram_test`. When the variable is
+unset, clones go to disk exactly as before — **zero-config behaviour is unchanged.**
+
+### Three gotchas this bakes in
+
+1. **Post-reboot tmpfs.** `/dev/shm` is cleared on boot: the `pg_tablespace` row
+   and the data-dir symlink survive, but the inner `PG_<version>` directory is
+   gone, so a clone fails with *"could not create directory … No such file or
+   directory."* Re-creating the empty dir is **not** enough — `ram-setup` does a
+   **DROP + re-CREATE** (after dropping the DBs inside), which re-runs PostgreSQL's
+   tablespace initialisation. Run it once on every boot before the suite.
+2. **The probe can't promise success.** `tablespace_usable()` is a cheap *gate*,
+   not a guarantee — a post-reboot-broken tablespace still passes it. (It uses
+   `(pg_stat_file(loc, true)).size IS NOT NULL`, because the naive
+   `record IS NOT NULL` reads false for an existing dir on Linux.) The real safety
+   net is the next point.
+3. **The disk fallback, not `pytest.exit()`.** On *any* tablespace failure
+   `clone()` falls back **once** to an on-disk clone (logging a WARNING) — so a
+   misconfigured or post-reboot tablespace silently degrades instead of breaking
+   the suite. The fixtures never call `pytest.exit()` inside a worker (it surfaces
+   as an opaque `INTERNALERROR` attributed to a random test); `pytest.skip` stays
+   reserved for total DB-unavailability.
+
+### Recommended recipe: CI vs. local
+
+| | Template | Clones |
+|---|---|---|
+| **CI** | pre-provisioned via `--from-artifact` | **on-disk** — runners rarely have a useful tmpfs, and the PG service image owns its own tablespace config |
+| **Local** | built from DDL | **RAM** — `ram-setup` once, then `CONFITURE_TEST_RAM_TABLESPACE=ram_test` |
+
+CI detection is advisory: `confiture.testing.worker_db.is_ci()` (and the
+`confiture_ci` fixture) let a consumer's conftest choose `--from-artifact` and
+skip the RAM tablespace in CI. `ensure_template` is already idempotent and
+single-flight, so the template path does not need divergent CI-vs-local code.
+
+---
+
 ## Putting it together (Dagger / GitHub Actions)
 
 ```python
@@ -182,9 +277,9 @@ parallel = build.with_exec([
 
 ### Server tuning (your responsibility, not confiture's)
 
-For the *ephemeral CI* PostgreSQL only, these unsafe-but-fast settings make
-template builds and clones cheaper. confiture **documents** them; it never sets
-them — they are PostgreSQL server configuration:
+For the *ephemeral CI* PostgreSQL only, these unsafe-but-fast **cluster-wide**
+settings make template builds and clones cheaper. confiture **documents** them; it
+never sets them — they are PostgreSQL server configuration:
 
 ```
 fsync = off
@@ -193,6 +288,11 @@ full_page_writes = off
 ```
 
 Never use these on a database whose data you care about.
+
+> Note: confiture *does* set `synchronous_commit = off` as a **per-database**
+> default on each clone (§5) — that is safe on a shared cluster because it touches
+> only the throwaway clone. The cluster-wide `synchronous_commit`/`fsync` above are
+> a different, blunter knob that only makes sense on a disposable CI server.
 
 ---
 

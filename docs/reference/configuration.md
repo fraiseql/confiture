@@ -649,6 +649,17 @@ require_confirmation: false # Fully automated
     pytest
 ```
 
+### Test-harness environment variables
+
+The pytest-xdist provisioning fixtures (see the
+[parallel CI provisioning guide](../guides/parallel-ci-provisioning.md)) read a
+small set of environment variables — they are independent of the YAML config:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CONFITURE_TEST_DB_URL` | `postgresql://localhost/confiture_test` | PG **server** URL the `test-db` fixtures provision against (the database component is ignored for admin work). |
+| `CONFITURE_TEST_RAM_TABLESPACE` | unset | Name of a tmpfs tablespace to place per-worker clones in (provision it with `confiture test-db ram-setup`). **Unset → on-disk clones, behaviour unchanged.** A misconfigured or post-reboot-broken tablespace degrades to disk automatically. |
+
 ---
 
 ## Advanced Configuration

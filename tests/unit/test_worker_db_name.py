@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 
 from confiture.testing.worker_db import (
+    _CI_ENV_VARS,
     current_worker_id,
+    is_ci,
     resolve_worker_db_name,
     resolve_worker_db_url,
 )
@@ -55,6 +57,33 @@ class TestResolveWorkerDbUrl:
             resolve_worker_db_url("postgresql://localhost/app", worker_id=None)
             == "postgresql://localhost/app"
         )
+
+
+class TestIsCi:
+    @pytest.mark.parametrize(
+        ("env", "expected"),
+        [
+            ({}, False),
+            ({"CI": "true"}, True),
+            ({"CI": "1"}, True),
+            ({"CI": "false"}, False),  # false-y string → not CI
+            ({"CI": ""}, False),  # present-but-empty → not CI
+            ({"CI": "off"}, False),
+            ({"GITHUB_ACTIONS": "true"}, True),
+            ({"GITLAB_CI": "true"}, True),
+            ({"BUILDKITE": "true"}, True),
+            ({"DAGGER_SESSION_PORT": "54321"}, True),
+            ({"JENKINS_URL": "http://ci.example"}, True),
+        ],
+    )
+    def test_permutations(
+        self, monkeypatch: pytest.MonkeyPatch, env: dict[str, str], expected: bool
+    ) -> None:
+        for var in _CI_ENV_VARS:
+            monkeypatch.delenv(var, raising=False)
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        assert is_ci() is expected
 
 
 class TestCurrentWorkerId:
