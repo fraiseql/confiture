@@ -32,6 +32,11 @@ COPY-bearing schema, then pointing at another broken path.
   is absent. Failures raise `SchemaError` with the **redacted** URL and the last
   few `psql` stderr lines. No `--single-transaction` — per-statement autocommit
   semantics (and `CREATE … CONCURRENTLY`) are preserved.
+- **Ephemeral apply runs with `synchronous_commit=off`.** The applier passes
+  `PGOPTIONS=-c synchronous_commit=off` (appended to any `PGOPTIONS` you already
+  set) for the throwaway template / `build --dump` databases, speeding large
+  `COPY` reference-data loads on an `fsync=on` cluster. These DBs are dropped and
+  rebuilt on failure, so the relaxed durability is never observable.
 
 ### Changed
 
