@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-06-10
+
+Makes the **DDL** provisioning paths work for real-world schemas that carry
+inline `COPY … FROM stdin` reference data and ordering-prefixed seed directories
+(issue #159, reported by the reference consumer of #158). **Not breaking** —
+strictly more capable. One behaviour note (ephemeral seed apply is now per-file
+fail-fast) and one new runtime requirement (`psql` on the ephemeral apply paths).
+This is a **CI-path** capability (developer/CI tooling), not the deploy ops-path:
+the fraisier adapter contract is unaffected.
+
+Three defects shared one user-visible symptom — `test-db provision-template`
+(without `--from-artifact`) and `build --dump` failing cryptically on a
+COPY-bearing schema, then pointing at another broken path.
+
+### Added
+
+- **Shared COPY-aware `psql` applier** (`core/psql_applier.py`):
+  `apply_sql_via_psql` runs `psql -X -q -v ON_ERROR_STOP=1` (SQL via stdin, or
+  `-f <path>` for a file), so inline `COPY … FROM stdin` data blocks apply
+  correctly — psycopg's `execute()` cannot consume inline COPY rows (the first
+  data row parses as SQL). A `contains_inline_copy` predicate drives a
+  safety-net hint pointing at the COPY-safe `--from-artifact` route when `psql`
+  is absent. Failures raise `SchemaError` with the **redacted** URL and the last
+  few `psql` stderr lines. No `--single-transaction` — per-statement autocommit
+  semantics (and `CREATE … CONCURRENTLY`) are preserved.
+
+### Changed
+
+- **All three ephemeral apply sites route through the applier**:
+  `TempDatabase.apply_schema` (`build --dump`), `TestDbProvisioner.provision_template`
+  (DDL path), and `apply_seed_files` (ephemeral seed loading). The long-lived
+  interactive `SeedApplier` / `confiture seed apply` path is **untouched**.
+- **Seed-directory classification** (`SchemaBuilder._is_seed_file`) now matches
+  `seed`/`seeds` as a whole token in any component below the schema root —
+  `(^|[_-])seeds?($|[_-])` — so ordering-prefixed layouts (`30_seed_backend`,
+  `seed_common`, `10-seeds`) are recognised as seeds instead of being silently
+  concatenated into the schema. Look-alikes (`seedling`, `proceeds`, `seeded`)
+  are rejected, and matching ignores the absolute checkout path.
+- **Honest error classification**: a schema/seed *apply* failure (e.g. a DDL
+  syntax error) is no longer mislabeled “the schema directory doesn’t exist”.
+  The `*_DIR_NOT_FOUND` contexts are now gated on an explicit missing-path signal
+  ("not found" / "could not find" / "no such" / …); apply failures fall through
+  to `SQL_SYNTAX_ERROR`, surfacing the real cause.
+- `redact_url` was promoted to `core/url_redaction.py` (re-exported from
+  `cli/helpers` for back-compat) so `core` callers can redact DSN credentials
+  without a `core → cli` import.
+
+> **Behaviour note — ephemeral seed apply.** On the **ephemeral** paths
+> (`provision-template` DDL, `build --dump`) seed files are now applied **per
+> file** via `psql`, in order, **fail-fast**: a bad seed aborts immediately and
+> leaves earlier files committed (no per-file savepoint, no whole-batch
+> rollback). This is safe because the throwaway template is dropped and rebuilt
+> on any failure. **New requirement:** `psql` (from `postgresql-client`, already
+> implied by the `pg_dump`/`pg_restore` paths) must be on `PATH` for these paths.
+
 ## [0.25.0] - 2026-06-10
 
 Fast per-xdist-worker test-DB provisioning: RAM-backed clones and ephemeral

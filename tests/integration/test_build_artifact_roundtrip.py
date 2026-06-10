@@ -116,6 +116,70 @@ def test_artifact_round_trips_through_restore(
     assert _restored_tables(server_url, fresh_target) == {"parent", "child"}
 
 
+_COPY_SCHEMA_SQL = """
+CREATE TABLE country (code text PRIMARY KEY, name text);
+COPY country (code, name) FROM stdin;
+FR\tFrance
+DE\tGermany
+\\.
+CREATE TABLE city (id int PRIMARY KEY, country_code text REFERENCES country (code), name text);
+"""
+
+
+def _row_count(server_url: str, target_db: str, table: str) -> int:
+    target_url = server_url.rsplit("/", 1)[0] + f"/{target_db}"
+    with psycopg.connect(target_url, autocommit=True) as conn:
+        return conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+
+
+def test_copy_bearing_schema_and_seed_round_trip(
+    server_url: str, fresh_target: str, tmp_path: Path
+) -> None:
+    """#159 end-to-end: build --dump applies a COPY-bearing schema *and* a
+    COPY-bearing seed file via psql, then the artifact restores with rows intact."""
+    seed = tmp_path / "30_seed_backend" / "cities.sql"
+    seed.parent.mkdir(parents=True)
+    seed.write_text(
+        "COPY city (id, country_code, name) FROM stdin;\n"
+        "1\tFR\tParis\n"
+        "2\tDE\tBerlin\n"
+        "3\tFR\tLyon\n"
+        "\\.\n"
+    )
+
+    artifact = tmp_path / "schema_test.full.copecafe0000.pgdump"
+    result = build_schema_artifact(
+        server_url=server_url,
+        schema_sql=_COPY_SCHEMA_SQL,
+        output_path=artifact,
+        schema_hash="copecafe00000000",
+        seed_files=[seed],
+        dumper=SchemaArtifactDumper(jobs=2),
+    )
+    assert result.skipped is False
+    assert result.seed_files_applied == 1
+    assert artifact.exists()
+
+    restore = DatabaseRestorer().restore(
+        RestoreOptions(
+            backup_path=artifact,
+            target_db=fresh_target,
+            host="localhost",
+            port=5432,
+            jobs=2,
+            parallel_restore=True,
+            no_owner=True,
+            no_acl=True,
+        )
+    )
+    assert restore.success, restore.errors
+
+    assert _restored_tables(server_url, fresh_target) == {"country", "city"}
+    # COPY data from both the schema file and the seed file survived the round-trip.
+    assert _row_count(server_url, fresh_target, "country") == 2
+    assert _row_count(server_url, fresh_target, "city") == 3
+
+
 def test_skip_when_artifact_exists_is_a_noop(server_url: str, tmp_path: Path) -> None:
     artifact = tmp_path / "schema_test.full.deadbeefcafe.pgdump"
     artifact.write_bytes(b"PGDMP-stub")  # pretend a cached artifact is present

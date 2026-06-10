@@ -75,6 +75,31 @@ template and never races a concurrent clone. The same comment marks
 confiture-managed databases, so `drop` refuses to remove a database it did not
 create (pass `--force` to override).
 
+### COPY-bearing schemas and prefixed seed dirs
+
+The ephemeral apply paths — the DDL `provision-template` (without
+`--from-artifact`) and `build --dump`'s ephemeral build — apply schema **and**
+seed files with **`psql`**, so a schema or seed file that embeds an inline
+`COPY … FROM stdin; … \.` data block loads correctly. (psycopg's per-statement
+`execute()` cannot consume inline COPY rows — the first data row parses as SQL —
+so these paths previously failed on COPY-bearing reference data.)
+
+- **Requirement:** `psql` must be on `PATH` (it ships with `postgresql-client`,
+  the same package the `pg_dump`/`pg_restore` paths already need). If `psql` is
+  absent, provisioning raises a clear error; for a COPY-bearing schema it points
+  you at the COPY-safe `--from-artifact` route (which restores via `pg_restore`).
+- **Ephemeral seed apply is per-file and fail-fast.** On the ephemeral paths each
+  seed file is applied independently via `psql`, in order; a bad file aborts
+  immediately and leaves earlier files committed (there is no per-file savepoint
+  and no whole-batch rollback). This is safe because the throwaway template is
+  dropped and rebuilt on any failure, so partial commits never escape. The
+  long-lived `confiture seed apply` path is unchanged.
+- **Seed-directory naming.** A file is treated as a **seed** (not schema) when any
+  directory component below your schema root carries `seed`/`seeds` as a whole
+  token — i.e. it matches `(^|[_-])seeds?($|[_-])`. So ordering-prefixed layouts
+  like `30_seed_backend/`, `seed_common/`, and `10-seeds/` are recognised, while
+  look-alikes such as `seedling/` and `proceeds/` are not.
+
 ---
 
 ## 3. Per-worker pytest-xdist fixtures
