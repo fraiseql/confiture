@@ -59,6 +59,15 @@ COPY-bearing schema, then pointing at another broken path.
   `cli/helpers` for back-compat) so `core` callers can redact DSN credentials
   without a `core → cli` import.
 
+### Security
+
+- **DSN passwords are kept off the subprocess command line.** `psql` /
+  `pg_dump` are now invoked with the password stripped from the `-d <url>` argv
+  and passed via `PGPASSWORD` instead, so it no longer appears in the process
+  list (`ps aux`). Covers the COPY applier, `pg_dump_schema`, and the
+  schema-artifact dumper; the three-phase restorer already used separate
+  host/port/user args with no password on argv.
+
 > **Behaviour note — ephemeral seed apply.** On the **ephemeral** paths
 > (`provision-template` DDL, `build --dump`) seed files are now applied **per
 > file** via `psql`, in order, **fail-fast**: a bad seed aborts immediately and

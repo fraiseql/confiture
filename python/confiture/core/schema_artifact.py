@@ -20,6 +20,7 @@ from pathlib import Path
 
 from confiture.core.seed_applier import apply_seed_files
 from confiture.core.temp_database import TempDatabase
+from confiture.core.url_redaction import libpq_env, split_password
 from confiture.exceptions import SchemaError
 
 # Supported pg_dump archive formats → the format flag and on-disk extension.
@@ -130,9 +131,13 @@ class SchemaArtifactDumper:
         Raises:
             SchemaError: If ``pg_dump`` is missing or exits non-zero.
         """
-        argv = self.build_argv(source_url, output_path, dump_format)
+        # Keep the password off argv (visible in ``ps aux``); pass it via PGPASSWORD.
+        safe_url, password = split_password(source_url)
+        argv = self.build_argv(safe_url, output_path, dump_format)
         try:
-            result = subprocess.run(argv, capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                argv, capture_output=True, text=True, check=False, env=libpq_env(password)
+            )
         except FileNotFoundError as e:
             raise SchemaError(
                 "pg_dump not found on PATH. Install postgresql-client.",

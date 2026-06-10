@@ -15,6 +15,7 @@ import psycopg
 import psycopg.sql
 
 from confiture.core.psql_applier import apply_sql_via_psql
+from confiture.core.url_redaction import libpq_env, split_password
 from confiture.exceptions import SchemaError
 
 
@@ -198,12 +199,15 @@ def pg_dump_schema(database_url: str) -> str:
     Raises:
         SchemaError: If ``pg_dump`` is not found, or the dump fails.
     """
+    # Keep the password off argv (visible in ``ps aux``); pass it via PGPASSWORD.
+    safe_url, password = split_password(database_url)
     try:
         result = subprocess.run(
-            ["pg_dump", "--schema-only", "--no-owner", "--no-privileges", database_url],
+            ["pg_dump", "--schema-only", "--no-owner", "--no-privileges", safe_url],
             capture_output=True,
             text=True,
             check=True,
+            env=libpq_env(password),
         )
     except FileNotFoundError as exc:
         raise SchemaError(

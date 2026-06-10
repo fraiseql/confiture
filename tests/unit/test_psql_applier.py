@@ -118,6 +118,24 @@ class TestApplySqlViaPsql:
         )
         assert apply_sql_via_psql(_URL, "SELECT 1;") is None
 
+    def test_password_kept_off_argv_and_in_pgpassword(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            captured["env"] = kwargs.get("env")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        apply_sql_via_psql("postgresql://user:secret@host/db", "SELECT 1;")
+
+        assert "secret" not in captured["argv"]  # never on the command line
+        assert captured["argv"][6] == "postgresql://user@host/db"  # -d <safe_url>
+        assert captured["env"]["PGPASSWORD"] == "secret"
+
     def test_sets_synchronous_commit_off_via_pgoptions(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

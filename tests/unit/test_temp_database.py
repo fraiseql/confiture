@@ -210,18 +210,24 @@ class TestPgDumpSchema:
         mock_run.return_value = MagicMock(stdout="CREATE TABLE t (id int);")
         result = pg_dump_schema("postgresql://localhost/mydb")
         assert result == "CREATE TABLE t (id int);"
-        mock_run.assert_called_once_with(
-            [
-                "pg_dump",
-                "--schema-only",
-                "--no-owner",
-                "--no-privileges",
-                "postgresql://localhost/mydb",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        args, kwargs = mock_run.call_args
+        assert args[0] == [
+            "pg_dump",
+            "--schema-only",
+            "--no-owner",
+            "--no-privileges",
+            "postgresql://localhost/mydb",
+        ]
+        assert kwargs["check"] is True
+        assert "env" in kwargs  # a libpq env (with optional PGPASSWORD) is passed
+
+    @patch("confiture.core.temp_database.subprocess.run")
+    def test_password_kept_off_argv(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(stdout="")
+        pg_dump_schema("postgresql://user:secret@host/mydb")
+        args, kwargs = mock_run.call_args
+        assert "secret" not in args[0][-1]  # the URL on argv carries no password
+        assert kwargs["env"]["PGPASSWORD"] == "secret"
 
     @patch("confiture.core.temp_database.subprocess.run")
     def test_raises_on_missing_pg_dump(self, mock_run: MagicMock) -> None:

@@ -66,6 +66,16 @@ class TestDump:
         assert "-Fc" in argv
 
     @patch("confiture.core.schema_artifact.subprocess.run")
+    def test_dump_keeps_password_off_argv(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
+        SchemaArtifactDumper().dump(
+            "postgresql://user:secret@host/tmp", Path("/out/a.pgdump"), "custom"
+        )
+        argv = mock_run.call_args.args[0]
+        assert "secret" not in argv[argv.index("-d") + 1]  # the URL carries no password
+        assert mock_run.call_args.kwargs["env"]["PGPASSWORD"] == "secret"
+
+    @patch("confiture.core.schema_artifact.subprocess.run")
     def test_dump_raises_on_nonzero_returncode(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             [], 1, "", "pg_dump: error: connection failed\n"
