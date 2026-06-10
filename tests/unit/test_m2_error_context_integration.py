@@ -237,10 +237,13 @@ class TestErrorContextCoverage:
 
     def test_coverage_file_errors(self):
         """Verify file-related errors are covered."""
+        # Each message carries a "missing" signal — required since #159 gated the
+        # *_DIR_NOT_FOUND contexts so apply/syntax failures are no longer
+        # mislabeled as missing directories.
         errors_to_cover = [
             ("SEEDS_DIR_NOT_FOUND", "seed directory not found"),
-            ("MIGRATIONS_DIR_NOT_FOUND", "migration directory"),
-            ("SCHEMA_DIR_NOT_FOUND", "schema directory"),
+            ("MIGRATIONS_DIR_NOT_FOUND", "migration directory not found"),
+            ("SCHEMA_DIR_NOT_FOUND", "schema directory not found"),
         ]
         for expected_code, msg in errors_to_cover:
             error = FileNotFoundError(msg)

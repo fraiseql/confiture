@@ -13,6 +13,22 @@ from confiture.exceptions import ConfiturError
 
 console = Console()
 
+# Phrases that signal a genuinely *missing* path. A ``*_DIR_NOT_FOUND`` context is
+# only chosen when one of these is present — otherwise a schema/seed *apply*
+# failure that merely carries the word "schema"/"seed" (e.g. a syntax error while
+# applying DDL) would be mislabeled as a missing directory (#159). "could not
+# find" / "not find" keep the FileNotFoundError dir messages classified; "no
+# such" also covers a raw OS ``[Errno 2] No such file or directory``.
+_MISSING_DIR_SIGNALS = (
+    "not found",
+    "could not find",
+    "not find",
+    "does not exist",
+    "doesn't exist",
+    "no such",
+    "no sql files",
+)
+
 
 def _detect_error_context(error: Exception) -> str | None:
     """Detect error context code from exception type and message.
@@ -54,8 +70,13 @@ def _detect_error_context(error: Exception) -> str | None:
             return "DB_PERMISSION_DENIED"
         return "DB_CONNECTION_FAILED"
 
-    # File not found errors
-    if isinstance(error, (SchemaError, FileNotFoundError)):
+    # Missing-directory errors. Gated on an explicit "missing" signal so an
+    # apply/syntax failure carrying the bare word "schema"/"seed" is not
+    # mislabeled as a missing directory (#159); those fall through to the
+    # SQL_SYNTAX_ERROR check below.
+    if isinstance(error, (SchemaError, FileNotFoundError)) and any(
+        signal in error_msg for signal in _MISSING_DIR_SIGNALS
+    ):
         if "seeds" in error_msg or "seed" in error_msg:
             return "SEEDS_DIR_NOT_FOUND"
         if "migration" in error_msg:

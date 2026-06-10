@@ -12,8 +12,45 @@ from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
     MigrationError,
+    SchemaError,
 )
 from confiture.models.error import ErrorSeverity
+
+
+class TestApplyFailureClassification:
+    """#159: a schema/seed *apply* failure must never be reported as a missing
+    directory. The ``*_DIR_NOT_FOUND`` contexts now require a real "missing"
+    signal in the message, so an apply failure falls through to SQL_SYNTAX_ERROR.
+    """
+
+    def test_schema_apply_failure_not_dir_not_found(self) -> None:
+        err = SchemaError(
+            "Schema application failed in temporary database: "
+            'psql failed applying SQL: syntax error at or near "COPY"'
+        )
+        detected = _detect_error_context(err)
+        assert detected != "SCHEMA_DIR_NOT_FOUND"
+        assert detected == "SQL_SYNTAX_ERROR"
+
+    def test_seed_apply_failure_not_seeds_dir_not_found(self) -> None:
+        err = SchemaError(
+            "Failed to apply seed file 02_data.sql: psql failed: syntax error at or near"
+        )
+        detected = _detect_error_context(err)
+        assert detected != "SEEDS_DIR_NOT_FOUND"
+        assert detected == "SQL_SYNTAX_ERROR"
+
+    def test_missing_schema_dir_still_classified(self) -> None:
+        err = SchemaError("Schema directory not found at db/schema")
+        assert _detect_error_context(err) == "SCHEMA_DIR_NOT_FOUND"
+
+    def test_missing_seed_dir_via_could_not_find_still_classified(self) -> None:
+        err = FileNotFoundError("Could not find seed directory at db/seeds")
+        assert _detect_error_context(err) == "SEEDS_DIR_NOT_FOUND"
+
+    def test_raw_oserror_no_such_file_classified_as_schema(self) -> None:
+        err = SchemaError("schema build failed: [Errno 2] No such file or directory")
+        assert _detect_error_context(err) == "SCHEMA_DIR_NOT_FOUND"
 
 
 class TestDsnPrecedenceErrorContext:
