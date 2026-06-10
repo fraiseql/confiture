@@ -7,6 +7,7 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 """
 
 import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,6 +17,12 @@ from confiture.core.progress import ProgressManager
 from confiture.core.validators import CommentValidator
 from confiture.exceptions import SchemaError
 from confiture.models.results import SplitBuildResult
+
+# A path component is a seed dir when "seed"/"seeds" appears as a whole token,
+# delimited by start/end or a ``_`` / ``-`` separator. This recognises
+# ordering-prefixed layouts (``30_seed_backend``, ``seed_common``, ``10-seeds``)
+# while rejecting look-alikes (``seedling``, ``proceeds``, ``seeded``).
+_SEED_DIR_RE = re.compile(r"(?:^|[_-])seeds?(?:$|[_-])")
 
 # Try to import Rust extension for 10-50x performance boost
 _core: Any = None
@@ -406,23 +413,46 @@ class SchemaBuilder:
     def _is_seed_file(self, file_path: Path) -> bool:
         """Check if file is a seed file based on path.
 
-        Files are considered seeds if their path contains 'seed' or 'seeds'
-        as a directory component.
+        A file is a seed when any path component contains ``seed`` or ``seeds``
+        as a whole token — delimited by the component's start/end or a ``_`` /
+        ``-`` separator (see :data:`_SEED_DIR_RE`). This recognises
+        ordering-prefixed layouts such as ``30_seed_backend`` / ``seed_common``
+        / ``10-seeds`` that an exact ``== "seed"`` match would miss, while still
+        rejecting look-alikes like ``seedling`` and ``proceeds``.
+
+        The env config's ``include_dirs`` deliberately does *not* drive this:
+        ``SeedConfig`` has no seed-directory concept, so seeds are identified by
+        this path heuristic rather than configuration (do not "fix" it back to a
+        config lookup — there is no such option to honour).
+
+        Matching is anchored at the include-root level (``self.base_dir`` and
+        below) — the absolute filesystem prefix *above* the project is ignored,
+        so a project living under e.g. ``/home/me/my_seed_app/`` does not have
+        all of its files misclassified as seeds. The include root's own name is
+        still considered, so a project whose root *is* ``seeds`` works.
 
         Args:
             file_path: Path to check
 
         Returns:
-            True if file is in a seed/seeds directory
+            True if a path component at/below the include root is a seed directory
         """
-        parts = [part.lower() for part in file_path.parts]
-        return "seed" in parts or "seeds" in parts
+        anchor = self.base_dir.parent
+        try:
+            components = file_path.relative_to(anchor).parts
+        except ValueError:
+            # Defensive: file is not under the include root (e.g. no common
+            # parent). Fall back to the full path so a genuine seed dir is never
+            # silently missed.
+            components = file_path.parts
+        return any(_SEED_DIR_RE.search(part.lower()) for part in components)
 
     def categorize_sql_files(self) -> tuple[list[Path], list[Path]]:
         """Categorize SQL files into schema and seed files.
 
-        Uses path heuristic to identify seeds: files are seeds if their path
-        contains 'seed' or 'seeds' as a directory component.
+        Uses a path heuristic to identify seeds: a file is a seed when a path
+        component carries ``seed``/``seeds`` as a whole token (start/end or
+        ``_``/``-`` delimited) — see :meth:`_is_seed_file`.
 
         Returns:
             Tuple of (schema_files, seed_files)

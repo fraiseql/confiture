@@ -1,5 +1,7 @@
 """Unit tests for SchemaBuilder (Milestone 1.3-1.5)."""
 
+from pathlib import Path
+
 import pytest
 
 from confiture.config.environment import Environment
@@ -658,6 +660,73 @@ database_url: postgresql://localhost/test
         assert len(schema_files) == 1
         assert len(seed_files) == 1
         assert any("seed/data.sql" in str(f) for f in seed_files)
+
+
+class TestSeedFileClassification:
+    """#159: ordering-prefixed seed dirs (e.g. ``30_seed_backend``) must classify
+    as seeds, while look-alikes (``seedling``, ``proceeds``) must not."""
+
+    @pytest.fixture
+    def builder(self):
+        env = Environment(
+            name="test",
+            include_dirs=["db/schema"],
+            exclude_dirs=[],
+            database_url="postgresql://localhost/test",
+        )
+        return SchemaBuilder(env=env)
+
+    @pytest.mark.parametrize(
+        "component",
+        [
+            "seed",
+            "seeds",
+            "30_seed_backend",
+            "seed_common",
+            "10-seeds",
+            "x-seeds",
+            "10-seed-common",
+        ],
+    )
+    def test_seed_components_classified_as_seed(self, builder, component):
+        assert builder._is_seed_file(Path("db") / component / "data.sql") is True
+
+    @pytest.mark.parametrize(
+        "component",
+        ["seedling", "proceeds", "seeded", "schema", "10_tables", "00_common"],
+    )
+    def test_lookalike_components_not_seed(self, builder, component):
+        assert builder._is_seed_file(Path("db") / component / "data.sql") is False
+
+    def test_categorize_ordering_prefixed_dirs(self, tmp_path):
+        """A project with ordering-prefixed seed dirs yields non-empty seeds.
+
+        (The test name intentionally avoids a ``seed`` token: ``tmp_path`` is
+        derived from it, and a seed-bearing ancestor component would itself
+        match the per-component heuristic.)
+        """
+        schema_dir = tmp_path / "db" / "schema"
+        (schema_dir / "10_tables").mkdir(parents=True)
+        (schema_dir / "30_seed_backend").mkdir(parents=True)
+        (schema_dir / "10_tables" / "users.sql").write_text("CREATE TABLE users (id int)")
+        (schema_dir / "30_seed_backend" / "data.sql").write_text("INSERT INTO users VALUES (1)")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        (config_dir / "test.yaml").write_text(f"""
+name: test
+include_dirs:
+  - {schema_dir}
+exclude_dirs: []
+database_url: postgresql://localhost/test
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+        schema_files, seed_files = builder.categorize_sql_files()
+
+        assert any("10_tables" in str(f) for f in schema_files)
+        assert any("30_seed_backend" in str(f) for f in seed_files)
+        assert len(seed_files) == 1
 
 
 class TestSchemaBuilderSchemaOnly:
