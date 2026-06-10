@@ -115,9 +115,7 @@ def apply_sql_via_psql(
         "-f",
         source_arg,
     ]
-    _run_psql(
-        argv, connection_url, stdin=sql, source_for_hint=sql or sql_file, password=password
-    )
+    _run_psql(argv, connection_url, stdin=sql, source_for_hint=sql or sql_file, password=password)
 
 
 def _run_psql(

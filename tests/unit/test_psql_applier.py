@@ -66,9 +66,7 @@ class TestApplySqlViaPsql:
         with pytest.raises(ValueError):
             apply_sql_via_psql(_URL, "SELECT 1;", sql_file=Path("/tmp/x.sql"))
 
-    def test_missing_psql_raises_schema_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_psql_raises_schema_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_run(argv, **kwargs):
             raise FileNotFoundError("psql")
 
@@ -97,7 +95,7 @@ class TestApplySqlViaPsql:
             raise subprocess.CalledProcessError(
                 1,
                 "psql",
-                stderr="psql:-:1: ERROR:  syntax error at or near \"BAD\"",
+                stderr='psql:-:1: ERROR:  syntax error at or near "BAD"',
             )
 
         monkeypatch.setattr(subprocess, "run", fake_run)

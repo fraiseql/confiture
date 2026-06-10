@@ -124,9 +124,7 @@ class TestProvisionAndClone:
         assert result.target == _CLONE
         assert _tables(provisioner, _CLONE) == {"widget"}
 
-    def test_provision_template_copy_bearing_schema(
-        self, provisioner: TestDbProvisioner
-    ) -> None:
+    def test_provision_template_copy_bearing_schema(self, provisioner: TestDbProvisioner) -> None:
         """#159: a schema with an inline COPY … FROM stdin block provisions on the
         DDL path (psql applier consumes the data rows; psycopg.execute() cannot)."""
         copy_schema = (
