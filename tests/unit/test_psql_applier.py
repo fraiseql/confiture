@@ -188,3 +188,21 @@ class TestContainsInlineCopy:
 
     def test_plain_ddl_not_detected(self) -> None:
         assert not contains_inline_copy("CREATE TABLE t (id int);")
+
+    def test_multiline_string_literal_copy_not_detected(self) -> None:
+        # COPY begins a line, but inside a single-quoted string literal.
+        assert not contains_inline_copy(
+            "INSERT INTO doc (body) VALUES ('intro\nCOPY x FROM stdin\nmore');"
+        )
+
+    def test_dollar_quoted_body_copy_not_detected(self) -> None:
+        # COPY begins a line inside a dollar-quoted function body.
+        assert not contains_inline_copy(
+            "CREATE FUNCTION f() RETURNS text AS $body$\nCOPY t FROM stdin\n$body$ LANGUAGE sql;"
+        )
+
+    def test_real_copy_after_a_string_literal_still_detected(self) -> None:
+        # A genuine COPY must still be found even alongside an innocent string.
+        assert contains_inline_copy(
+            "INSERT INTO t VALUES ('hi');\nCOPY t (a) FROM stdin;\n1\n\\.\n"
+        )

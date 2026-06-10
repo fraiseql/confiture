@@ -33,6 +33,11 @@ from confiture.exceptions import SchemaError
 _COPY_FROM_STDIN_RE = re.compile(r"^\s*COPY\b.*\bFROM\s+stdin\b", re.IGNORECASE | re.MULTILINE)
 _LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+# Dollar-quoted bodies ($tag$ … $tag$) and single-quoted literals ('' = escaped
+# quote). Stripped before matching so COPY text inside a function body or a
+# multi-line string literal does not trip the predicate.
+_DOLLAR_QUOTED_RE = re.compile(r"\$(\w*)\$.*?\$\1\$", re.DOTALL)
+_SINGLE_QUOTED_RE = re.compile(r"'(?:[^']|'')*'", re.DOTALL)
 
 _MISSING_PSQL_BASE = (
     "psql is required to apply COPY-bearing schemas and seeds. "
@@ -49,9 +54,12 @@ _MISSING_PSQL_COPY = (
 def contains_inline_copy(sql: str) -> bool:
     """Return True if *sql* contains an inline ``COPY … FROM stdin`` block.
 
-    Comments (``--`` line and ``/* … */`` block) are stripped first so the word
-    ``copy`` inside a comment does not trigger a false positive. Server-side
-    ``COPY … FROM '/path'`` is not matched (it has no ``stdin`` token).
+    Comments (``--`` line and ``/* … */`` block), dollar-quoted bodies, and
+    single-quoted string literals are stripped first so the word ``copy`` — or a
+    whole ``COPY … FROM stdin`` line — inside a comment, a function body, or a
+    string does not trigger a false positive. Server-side ``COPY … FROM '/path'``
+    is not matched (it has no ``stdin`` token). This is a best-effort heuristic
+    (it drives a hint), not a full SQL lexer.
 
     Args:
         sql: SQL text to inspect.
@@ -61,6 +69,8 @@ def contains_inline_copy(sql: str) -> bool:
     """
     stripped = _BLOCK_COMMENT_RE.sub(" ", sql)
     stripped = _LINE_COMMENT_RE.sub("", stripped)
+    stripped = _DOLLAR_QUOTED_RE.sub(" ", stripped)
+    stripped = _SINGLE_QUOTED_RE.sub(" ", stripped)
     return bool(_COPY_FROM_STDIN_RE.search(stripped))
 
 
