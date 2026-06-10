@@ -20,7 +20,7 @@ import pytest
 from confiture.core.schema_artifact import build_schema_artifact
 from confiture.core.temp_database import _maintenance_url
 from confiture.core.test_db import TemplateState, TestDbProvisioner
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, SchemaError
 
 pytestmark = pytest.mark.integration
 
@@ -161,6 +161,19 @@ class TestProvisionAndClone:
         )
         assert status.state is TemplateState.CURRENT
         assert _tables(provisioner, _TEMPLATE) == {"widget"}
+
+
+class TestCloneMissingTemplate:
+    """#160: cloning an absent template fails once, actionably, before any CREATE."""
+
+    def test_clone_missing_template_fails_fast(self, provisioner: TestDbProvisioner) -> None:
+        # The fixture drops _TEMPLATE before yielding, so it does not exist here.
+        with pytest.raises(SchemaError, match="does not exist") as exc_info:
+            provisioner.clone(_TEMPLATE, _CLONE)
+        assert _TEMPLATE in str(exc_info.value)
+        assert exc_info.value.error_code == "SCHEMA_001"
+        # No half-built clone leaked — we failed before CREATE DATABASE.
+        assert not _db_exists(provisioner, _CLONE)
 
 
 class TestSynchronousCommit:

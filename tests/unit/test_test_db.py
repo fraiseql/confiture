@@ -69,11 +69,18 @@ class _CloneFakeConn:
     exception to raise, or ``None`` to succeed) and records whether that CREATE
     carried a ``TABLESPACE`` clause. Every other statement (``terminate_backends``,
     ``COMMENT``, ``ALTER``) is accepted and succeeds.
+
+    The existence-precondition probe in ``clone()`` reads a marker comment via the
+    ``shobj_description`` SELECT; *template_exists* drives whether that probe sees a
+    row (the template is present) or ``None`` (the template is missing).
     """
 
-    def __init__(self, create_outcomes: list[Exception | None]) -> None:
+    def __init__(
+        self, create_outcomes: list[Exception | None], *, template_exists: bool = True
+    ) -> None:
         self._outcomes = list(create_outcomes)
         self.create_tablespaces: list[bool] = []
+        self._template_exists = template_exists
 
     def __enter__(self) -> _CloneFakeConn:
         return self
@@ -88,6 +95,10 @@ class _CloneFakeConn:
             outcome = self._outcomes.pop(0) if self._outcomes else None
             if outcome is not None:
                 raise outcome
+        elif "shobj_description" in text:
+            # clone()'s existence precondition (_read_comment).
+            row = ("confiture:template:h",) if self._template_exists else None
+            return _FakeCursor(row)
         return _FakeCursor(None)
 
 
@@ -403,6 +414,49 @@ class TestCloneTablespaceFallback:
         monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
         result = prov.clone("tmpl", "c0", retries=3, backoff=0)
         assert result.tablespace is None
+        assert fake.create_tablespaces == [False]
+
+
+# ---------------------------------------------------------------------------
+# Missing-template precondition (#160): fail once, actionably, before cloning
+# ---------------------------------------------------------------------------
+
+
+class TestCloneMissingTemplate:
+    def test_raises_actionable_error_when_template_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # An absent template must fail the cheap precondition BEFORE any CREATE
+        # DATABASE is attempted — never the raw psycopg "template database does not
+        # exist" once per collected test (#160).
+        prov = _prov()
+        fake = _CloneFakeConn([], template_exists=False)
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        with pytest.raises(SchemaError, match="does not exist"):
+            prov.clone("missing_tmpl", "c0", retries=3, backoff=0)
+        assert fake.create_tablespaces == []  # failed fast, no clone attempted
+
+    def test_error_names_template_and_points_at_provisioning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        prov = _prov()
+        fake = _CloneFakeConn([], template_exists=False)
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        with pytest.raises(SchemaError) as exc_info:
+            prov.clone("missing_tmpl", "c0", retries=3, backoff=0)
+        err = exc_info.value
+        assert "missing_tmpl" in str(err)
+        assert err.error_code == "SCHEMA_001"
+        assert "provision" in (err.resolution_hint or "").lower()
+
+    def test_present_template_clones_normally(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The precondition is transparent on the happy path: a present template
+        # clones exactly as before.
+        prov = _prov()
+        fake = _CloneFakeConn([None], template_exists=True)
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        result = prov.clone("tmpl", "c0", retries=3, backoff=0)
+        assert result.target == "c0"
         assert fake.create_tablespaces == [False]
 
 

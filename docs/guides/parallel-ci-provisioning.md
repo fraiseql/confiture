@@ -75,6 +75,14 @@ template and never races a concurrent clone. The same comment marks
 confiture-managed databases, so `drop` refuses to remove a database it did not
 create (pass `--force` to override).
 
+`clone` checks that the template exists first (the same connection-free read) and
+fails once with an actionable `SchemaError` if it is absent — rather than letting
+`CREATE DATABASE … WITH TEMPLATE` emit the raw `template database … does not
+exist` from every worker. If a CI job intentionally skips building the template
+(e.g. `if not is_ci(): ensure_template(...)`), make sure the template is
+pre-provisioned, or point the worker DB at an already-applied database to bypass
+the clone.
+
 ### COPY-bearing schemas and prefixed seed dirs
 
 The ephemeral apply paths — the DDL `provision-template` (without

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-06-10
+
+### Changed
+
+- **`TestDbProvisioner.clone()` fails fast with an actionable error when the
+  source template is missing** (issue #160). Previously a `CREATE DATABASE …
+  WITH TEMPLATE <missing>` surfaced the raw psycopg `template database "<name>"
+  does not exist` — and because the clone runs from the session provisioning
+  fixture, that cryptic message repeated once per collected test (one CI job saw
+  1120 identical errors) while pointing at neither the cause nor the fix. `clone()`
+  now runs a cheap, connection-free existence precondition (the same
+  `shobj_description` read that backs `template_status`) and raises a single
+  `SchemaError` (`SCHEMA_001`) naming the template and the remediation: provision
+  it first (`provision_template()` / `ensure_template()`), or bypass the clone by
+  pointing the worker DB at an already-applied database. **Not breaking** — a
+  present template clones exactly as before; only the missing-template signal
+  improved. Surfaces through the `test-db clone` CLI envelope as well.
+
 ## [0.26.0] - 2026-06-10
 
 Makes the **DDL** provisioning paths work for real-world schemas that carry

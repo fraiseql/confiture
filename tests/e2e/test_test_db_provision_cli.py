@@ -110,6 +110,32 @@ def test_provision_template_copy_schema_via_cli(project) -> None:
     assert count == 2
 
 
+def test_clone_missing_template_reports_actionable_error(project) -> None:
+    # #160: cloning an absent template must surface ONE actionable error through
+    # the fail() envelope, not the raw psycopg "template database … does not exist".
+    tmp_path, _schema_dir = project
+    result = runner.invoke(
+        app,
+        [
+            "test-db",
+            "clone",
+            "--template",
+            _TEMPLATE,  # never provisioned by this test → absent
+            "--target",
+            "confiture_e2e_clone_target",
+            "--env",
+            "test",
+            "--project-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    out = _combined_output(result)
+    assert "does not exist" in out
+    assert "provision" in out  # the remediation points at the fix
+
+
 def test_broken_schema_reports_syntax_not_missing_dir(project) -> None:
     tmp_path, schema_dir = project
     # Unterminated CREATE TABLE → psql reports a syntax error.

@@ -621,6 +621,32 @@ class TestDbProvisioner:
 
     # -- cloning -----------------------------------------------------------
 
+    def _require_template_exists(self, template: str) -> None:
+        """Fail fast with an actionable error if *template* is absent.
+
+        ``CREATE DATABASE … WITH TEMPLATE <missing>`` otherwise surfaces a raw
+        psycopg ``template database "<name>" does not exist`` — and because the
+        clone runs from the session provisioning fixture, that cryptic message
+        repeats once per collected test (one CI job saw 1120 identical errors)
+        while pointing at neither the cause nor the fix. The probe reuses the same
+        connection-free ``shobj_description`` read that backs
+        :meth:`template_status`, so the precondition is cheap.
+
+        Raises:
+            SchemaError: If no database named *template* exists.
+        """
+        with self._maintenance_conn() as conn:
+            exists, _comment = self._read_comment(conn, template)
+        if not exists:
+            raise SchemaError(
+                f"Cannot clone: template database {template!r} does not exist.",
+                error_code="SCHEMA_001",
+                resolution_hint="Provision it first "
+                "(TestDbProvisioner.provision_template() / ensure_template()), or "
+                "bypass the clone by pointing the worker DB at an already-applied "
+                "database.",
+            )
+
     def clone(
         self,
         template: str,
@@ -670,6 +696,8 @@ class TestDbProvisioner:
         _validate_identifier(target)
         if tablespace is not None:
             _validate_identifier(tablespace)
+
+        self._require_template_exists(template)
 
         try:
             return self._clone_with_retries(
