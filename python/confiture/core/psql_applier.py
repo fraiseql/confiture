@@ -20,6 +20,7 @@ semantics and avoids breaking any ``CREATE … CONCURRENTLY`` in schema files.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -105,6 +106,21 @@ def apply_sql_via_psql(
     _run_psql(argv, connection_url, stdin=sql, source_for_hint=sql or sql_file)
 
 
+def _psql_env() -> dict[str, str]:
+    """Return the full environment for ``psql`` with ``synchronous_commit=off``.
+
+    These are throwaway ephemeral databases (template/artifact builds), so the
+    per-commit ``fsync`` wait buys no durability we care about — turning it off
+    materially speeds up large ``COPY`` reference-data loads on an ``fsync=on``
+    developer cluster. Any ``PGOPTIONS`` already in the environment is preserved
+    and appended to, not replaced.
+    """
+    env = os.environ.copy()
+    existing = env.get("PGOPTIONS", "")
+    env["PGOPTIONS"] = f"{existing} -c synchronous_commit=off".strip()
+    return env
+
+
 def _run_psql(
     argv: list[str],
     connection_url: str,
@@ -114,7 +130,9 @@ def _run_psql(
 ) -> None:
     """Run *argv*, translating ``psql`` failures into :class:`SchemaError`."""
     try:
-        subprocess.run(argv, input=stdin, capture_output=True, text=True, check=True)
+        subprocess.run(
+            argv, input=stdin, capture_output=True, text=True, check=True, env=_psql_env()
+        )
     except FileNotFoundError as exc:
         raise SchemaError(
             "psql not found on PATH.",

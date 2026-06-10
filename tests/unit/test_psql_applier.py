@@ -118,6 +118,39 @@ class TestApplySqlViaPsql:
         )
         assert apply_sql_via_psql(_URL, "SELECT 1;") is None
 
+    def test_sets_synchronous_commit_off_via_pgoptions(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_run(argv, **kwargs):
+            captured["env"] = kwargs.get("env")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        apply_sql_via_psql(_URL, "SELECT 1;")
+
+        env = captured["env"]
+        assert env is not None  # full environment is passed through, not None
+        assert "synchronous_commit=off" in env["PGOPTIONS"]
+
+    def test_preserves_existing_pgoptions(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PGOPTIONS", "-c statement_timeout=5000")
+        captured: dict[str, object] = {}
+
+        def fake_run(argv, **kwargs):
+            captured["env"] = kwargs.get("env")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        apply_sql_via_psql(_URL, "SELECT 1;")
+
+        pgoptions = captured["env"]["PGOPTIONS"]
+        assert "statement_timeout=5000" in pgoptions
+        assert "synchronous_commit=off" in pgoptions
+
 
 class TestContainsInlineCopy:
     def test_detects_from_stdin(self) -> None:
