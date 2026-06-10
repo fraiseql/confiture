@@ -1,11 +1,53 @@
-"""Tests for SeedApplier file discovery.
-
-Phase 9, Cycle 2: File discovery tests
-"""
+"""Tests for SeedApplier file discovery and the ephemeral ``apply_seed_files``."""
 
 from pathlib import Path
 
-from confiture.core.seed_applier import SeedApplier
+import pytest
+
+from confiture.core.seed_applier import SeedApplier, apply_seed_files
+from confiture.exceptions import SchemaError
+
+
+class TestApplySeedFiles:
+    """The ephemeral, COPY-aware, per-file ``apply_seed_files`` primitive."""
+
+    def test_applies_each_file_in_order_via_psql(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        calls: list[Path] = []
+
+        def fake_apply(url, sql=None, *, sql_file=None):
+            assert sql is None
+            calls.append(sql_file)
+
+        monkeypatch.setattr("confiture.core.seed_applier.apply_sql_via_psql", fake_apply)
+
+        files = [tmp_path / "01_a.sql", tmp_path / "02_b.sql", tmp_path / "03_c.sql"]
+        for f in files:
+            f.write_text("INSERT INTO t VALUES (1);")
+
+        applied = apply_seed_files("postgresql://localhost/db", files)
+
+        assert applied == 3
+        assert calls == files
+
+    def test_failure_names_offending_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        bad = tmp_path / "02_broken.sql"
+
+        def fake_apply(url, sql=None, *, sql_file=None):
+            if sql_file == bad:
+                raise SchemaError("psql failed: syntax error", resolution_hint="fix it")
+
+        monkeypatch.setattr("confiture.core.seed_applier.apply_sql_via_psql", fake_apply)
+
+        good = tmp_path / "01_ok.sql"
+        good.write_text("INSERT INTO t VALUES (1);")
+        bad.write_text("BROKEN;")
+
+        with pytest.raises(SchemaError, match="02_broken.sql"):
+            apply_seed_files("postgresql://localhost/db", [good, bad])
 
 
 def test_find_seed_files_basic(tmp_path):

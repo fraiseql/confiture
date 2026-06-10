@@ -14,6 +14,7 @@ from urllib.parse import urlparse, urlunparse
 import psycopg
 import psycopg.sql
 
+from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.exceptions import SchemaError
 
 
@@ -154,10 +155,12 @@ class TempDatabase:
                 self._maintenance_conn.close()
 
     def apply_schema(self, temp_db_url: str, schema_sql: str) -> None:
-        """Execute multi-statement schema SQL on the temporary database.
+        """Apply multi-statement schema SQL to the temporary database via ``psql``.
 
-        Uses the simple query protocol (``prepare=False``) so that
-        multi-statement strings and DO blocks work correctly.
+        Delegates to :func:`confiture.core.psql_applier.apply_sql_via_psql` so
+        that ``COPY … FROM stdin`` blocks (which psycopg's ``execute()`` cannot
+        consume) apply correctly. Per-statement autocommit semantics are
+        preserved (no ``--single-transaction``).
 
         Args:
             temp_db_url: Connection URL for the temporary database
@@ -165,22 +168,22 @@ class TempDatabase:
             schema_sql: Full schema SQL to execute.
 
         Raises:
-            SchemaError: If schema application fails.
+            SchemaError: If schema application fails or ``psql`` is unavailable.
         """
         try:
-            with psycopg.connect(temp_db_url, autocommit=True) as conn:
-                conn.execute(schema_sql, prepare=False)
-        except psycopg.Error as exc:
-            msg = f"Schema application failed in temporary database: {exc}"
-            hint = "Check your DDL files for syntax errors."
+            apply_sql_via_psql(temp_db_url, schema_sql)
+        except SchemaError as exc:
             err_str = str(exc).lower()
             if "extension" in err_str and "does not exist" in err_str:
-                hint = (
-                    "A CREATE EXTENSION statement failed. Ensure the required "
-                    "extension is installed on the PostgreSQL server "
-                    "(e.g. apt install postgresql-XX-postgis)."
-                )
-            raise SchemaError(msg, resolution_hint=hint) from exc
+                raise SchemaError(
+                    f"Schema application failed in temporary database: {exc}",
+                    resolution_hint=(
+                        "A CREATE EXTENSION statement failed. Ensure the required "
+                        "extension is installed on the PostgreSQL server "
+                        "(e.g. apt install postgresql-XX-postgis)."
+                    ),
+                ) from exc
+            raise
 
 
 def pg_dump_schema(database_url: str) -> str:

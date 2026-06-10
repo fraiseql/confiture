@@ -28,6 +28,7 @@ import psycopg.errors
 import psycopg.sql
 from psycopg.sql import SQL, Identifier, Literal
 
+from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.restorer import DatabaseRestorer, RestoreOptions
 from confiture.core.seed_applier import apply_seed_files
 from confiture.core.temp_database import (
@@ -545,8 +546,7 @@ class TestDbProvisioner:
         if from_artifact is not None:
             self._restore_into(template, from_artifact, restorer)
         else:
-            with psycopg.connect(template_url, autocommit=True) as c:
-                c.execute(schema_sql, prepare=False)  # type: ignore[arg-type]
+            apply_sql_via_psql(template_url, schema_sql)
             if seed_files:
                 apply_seed_files(template_url, seed_files)
 

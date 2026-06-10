@@ -18,6 +18,7 @@ from confiture.core.linting.schema_linter import (
 from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
+from confiture.core.url_redaction import redact_url as redact_url  # re-export (layering)
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
@@ -462,31 +463,6 @@ def _output_json(data: dict[str, Any], output_file: Path | None, console: Consol
     else:
         # Use print() instead of console.print() to avoid Rich wrapping long lines
         print(json_str)
-
-
-def redact_url(url: str) -> str:
-    """Return *url* with any password replaced by ``***`` (username preserved).
-
-    Use before emitting a connection URL into JSON output or logs so DSN
-    credentials never leak to stdout / CI artifacts.
-
-    Args:
-        url: A connection URL that may embed a password.
-
-    Returns:
-        The URL with its password redacted (unchanged if there is none).
-    """
-    from urllib.parse import urlparse, urlunparse
-
-    parsed = urlparse(url)
-    if not parsed.password:
-        return url
-    host_part = parsed.hostname or ""
-    if parsed.port:
-        host_part = f"{host_part}:{parsed.port}"
-    if parsed.username:
-        host_part = f"{parsed.username}:***@{host_part}"
-    return urlunparse(parsed._replace(netloc=host_part))
 
 
 def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:

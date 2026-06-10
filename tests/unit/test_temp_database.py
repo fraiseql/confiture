@@ -171,42 +171,26 @@ class TestTempDatabase:
 
 
 class TestApplySchema:
-    @patch("confiture.core.temp_database.psycopg.connect")
-    def test_applies_sql_with_simple_protocol(self, mock_connect: MagicMock) -> None:
-        mock_conn = MagicMock()
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_connect.return_value = mock_conn
-
+    @patch("confiture.core.temp_database.apply_sql_via_psql")
+    def test_delegates_to_psql_applier(self, mock_apply: MagicMock) -> None:
         td = TempDatabase("postgresql://localhost/myapp")
         td.apply_schema("postgresql://localhost/tmp_db", "CREATE TABLE t (id int);")
 
-        mock_connect.assert_called_once_with("postgresql://localhost/tmp_db", autocommit=True)
-        mock_conn.execute.assert_called_once_with("CREATE TABLE t (id int);", prepare=False)
+        mock_apply.assert_called_once_with(
+            "postgresql://localhost/tmp_db", "CREATE TABLE t (id int);"
+        )
 
-    @patch("confiture.core.temp_database.psycopg.connect")
-    def test_raises_schema_error_on_failure(self, mock_connect: MagicMock) -> None:
-        import psycopg
-
-        mock_conn = MagicMock()
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_conn.execute.side_effect = psycopg.Error("syntax error")
-        mock_connect.return_value = mock_conn
+    @patch("confiture.core.temp_database.apply_sql_via_psql")
+    def test_reraises_schema_error_on_failure(self, mock_apply: MagicMock) -> None:
+        mock_apply.side_effect = SchemaError("psql failed applying SQL: syntax error")
 
         td = TempDatabase("postgresql://localhost/myapp")
-        with pytest.raises(SchemaError, match="Schema application failed"):
+        with pytest.raises(SchemaError, match="syntax error"):
             td.apply_schema("postgresql://localhost/tmp_db", "BAD SQL;")
 
-    @patch("confiture.core.temp_database.psycopg.connect")
-    def test_extension_error_has_specific_hint(self, mock_connect: MagicMock) -> None:
-        import psycopg
-
-        mock_conn = MagicMock()
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_conn.execute.side_effect = psycopg.Error('extension "postgis" does not exist')
-        mock_connect.return_value = mock_conn
+    @patch("confiture.core.temp_database.apply_sql_via_psql")
+    def test_extension_error_has_specific_hint(self, mock_apply: MagicMock) -> None:
+        mock_apply.side_effect = SchemaError('extension "postgis" does not exist')
 
         td = TempDatabase("postgresql://localhost/myapp")
         with pytest.raises(SchemaError) as exc_info:

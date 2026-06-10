@@ -11,11 +11,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import psycopg
 from rich.console import Console
 
 from confiture.core.progress import ProgressManager
+from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed_executor import SeedExecutor
+from confiture.exceptions import SchemaError
 
 if TYPE_CHECKING:
     from confiture.config.environment import SeedProfile
@@ -42,11 +43,21 @@ def _apply_profile_filter(files: list[Path], profile: SeedProfile) -> list[Path]
 
 
 def apply_seed_files(connection_url: str, seed_files: list[Path]) -> int:
-    """Apply ordered seed files into the database at *connection_url*.
+    """Apply ordered seed files into the database at *connection_url* via ``psql``.
 
-    Each file runs inside its own savepoint for failure isolation. Used to load
-    seeds into ephemeral / template databases (artifact builds, test-db
-    provisioning) where no long-lived :class:`SeedApplier` is in play.
+    Used to load seeds into **ephemeral** / template databases (artifact builds,
+    test-db provisioning) where no long-lived :class:`SeedApplier` is in play.
+    Each file is applied independently with
+    :func:`confiture.core.psql_applier.apply_sql_via_psql`, so ``COPY … FROM
+    stdin`` data loads correctly (psycopg's ``execute()`` cannot consume inline
+    COPY rows).
+
+    Requires ``psql`` on PATH. Application is **fail-fast and per-file**: there is
+    no per-file savepoint and no whole-batch rollback — on a bad seed file this
+    raises immediately, leaving earlier files committed. This is safe for the
+    ephemeral callers, which drop and rebuild the database on any failure so
+    partial commits never escape. The interactive :class:`SeedApplier` /
+    ``confiture seed apply`` path is unaffected.
 
     Args:
         connection_url: Connection URL of the target database.
@@ -54,12 +65,19 @@ def apply_seed_files(connection_url: str, seed_files: list[Path]) -> int:
 
     Returns:
         The number of seed files applied.
+
+    Raises:
+        SchemaError: If ``psql`` is unavailable or a seed file fails to apply
+            (the message names the offending file).
     """
-    with psycopg.connect(connection_url, autocommit=False) as conn:
-        executor = SeedExecutor(connection=conn)
-        for i, seed_file in enumerate(seed_files, 1):
-            executor.execute_file(seed_file, savepoint_name=f"sp_seed_{i:03d}")
-        conn.commit()
+    for seed_file in seed_files:
+        try:
+            apply_sql_via_psql(connection_url, sql_file=seed_file)
+        except SchemaError as exc:
+            raise SchemaError(
+                f"Failed to apply seed file {seed_file.name}: {exc}",
+                resolution_hint=exc.resolution_hint,
+            ) from exc
     return len(seed_files)
 
 

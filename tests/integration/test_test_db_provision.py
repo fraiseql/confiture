@@ -124,6 +124,32 @@ class TestProvisionAndClone:
         assert result.target == _CLONE
         assert _tables(provisioner, _CLONE) == {"widget"}
 
+    def test_provision_template_copy_bearing_schema(
+        self, provisioner: TestDbProvisioner
+    ) -> None:
+        """#159: a schema with an inline COPY … FROM stdin block provisions on the
+        DDL path (psql applier consumes the data rows; psycopg.execute() cannot)."""
+        copy_schema = (
+            "CREATE TABLE country (code text PRIMARY KEY, name text);\n"
+            "COPY country (code, name) FROM stdin;\n"
+            "FR\tFrance\n"
+            "DE\tGermany\n"
+            "\\.\n"
+        )
+        status = provisioner.provision_template(
+            _TEMPLATE, schema_hash="copy-v1", schema_sql=copy_schema
+        )
+        assert status.state is TemplateState.CURRENT
+        assert _tables(provisioner, _TEMPLATE) == {"country"}
+
+        from confiture.core.temp_database import _replace_dbname
+
+        with psycopg.connect(
+            _replace_dbname(provisioner.server_url, _TEMPLATE), autocommit=True
+        ) as conn:
+            count = conn.execute("SELECT count(*) FROM country").fetchone()[0]
+        assert count == 2
+
     def test_provision_from_artifact(self, provisioner: TestDbProvisioner, tmp_path: Path) -> None:
         artifact = tmp_path / "p2.full.hash.pgdump"
         build_schema_artifact(
