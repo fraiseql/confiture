@@ -577,6 +577,41 @@ class FunctionCoverage(BaseModel):
     ignore: list[str] = Field(default_factory=list)
 
 
+class SecurityLinting(BaseModel):
+    """The ``security_lint:`` block in environment YAML (issue #161).
+
+    Enables the ``sec_002`` lint rule that flags ``SECURITY DEFINER``
+    functions and procedures that do not pin ``search_path``.
+
+    Opt-in by default (``enabled=False``).  Set ``enabled: true`` to
+    activate.  Use ``severity: error`` to make the check a hard CI gate
+    (default ``warning`` is advisory).
+
+    Attributes:
+        enabled: Master switch.
+        apply_to: Schema-name patterns (``fnmatch``-style) that scope
+            the check.  ``["*"]`` covers every schema.
+        ignore: Object-path globs (``schema.name``) that opt specific
+            callables out of detection for deliberate exceptions.
+        severity: Violation severity — ``"warning"`` (advisory, exit 0)
+            or ``"error"`` (hard gate, exit 1).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    apply_to: list[str] = Field(default_factory=lambda: ["*"])
+    ignore: list[str] = Field(default_factory=list)
+    severity: str = "warning"
+
+    @field_validator("severity")
+    @classmethod
+    def _check_severity(cls, v: str) -> str:
+        if v not in ("warning", "error"):
+            raise ValueError(f"severity must be 'warning' or 'error', got {v!r}")
+        return v
+
+
 _PRIVILEGE_KEYWORDS: frozenset[str] = frozenset(
     {
         "SELECT",
@@ -711,6 +746,10 @@ class Environment(BaseModel):
     # leaves the rule disabled; set ``function_coverage.enabled: true``
     # in the env YAML to opt in.
     function_coverage: FunctionCoverage | None = None
+    # Issue #161 — SECURITY DEFINER / search_path lint (``sec_002``).  ``None``
+    # leaves the rule disabled; set ``security_lint.enabled: true`` in the env
+    # YAML to opt in.
+    security_lint: SecurityLinting | None = None
 
     @property
     def database(self) -> DatabaseConfig:

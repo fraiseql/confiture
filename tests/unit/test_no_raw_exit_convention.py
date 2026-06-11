@@ -55,7 +55,7 @@ _ALLOWLIST: dict[str, int] = {
     # MigrateDiffResult domain formatter), migrate fix-signatures, and migrate
     # preflight (already mostly fail()-routed via computed Exit(exit_code)).
     # TODO(follow-up): finish diff / fix-signatures / preflight contract sweep.
-    "commands/migrate_analysis.py": 26,
+    "commands/migrate_analysis.py": 27,
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.

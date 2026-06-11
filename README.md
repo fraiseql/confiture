@@ -270,6 +270,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - [Bootstrap](docs/guides/bootstrap.md) — `confiture bootstrap` for one-shot env ownership setup.
 - [Superuser Migrations](docs/guides/superuser-migrations.md) — `requires_superuser = True` + `migrate apply-as` recovery workflow.
 - [Function Uniqueness](docs/guides/function-uniqueness.md) — `func_001` catches duplicate `CREATE FUNCTION` across DDL files.
+- [Security-Definer Lint](docs/guides/security-definer-lint.md) — `sec_002` flags `SECURITY DEFINER` functions/procedures that don't pin `search_path` (CVE-2018-1058); static DDL scan and live `pg_proc` path; `--emit-remediation` generates ALTER scripts.
 - [Named Schemas](docs/guides/named-schemas.md)
 - [Hooks](docs/guides/hooks.md)
 - [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)

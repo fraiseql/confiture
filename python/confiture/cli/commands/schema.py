@@ -738,6 +738,18 @@ def lint(
         help="Enable the multi-tenant isolation rule (tenant_001): flag function "
         "INSERTs missing the FK column a tenant-scoped view requires (default: off).",
     ),
+    check_security_definer: bool = typer.Option(
+        False,
+        "--check-security-definer",
+        help="Also run sec_002 over the env's schema DDL: flag SECURITY DEFINER "
+        "functions/procedures that do not pin search_path (CVE-2018-1058). "
+        "No-op when the config has no `security_lint:` block or "
+        "`security_lint.enabled` is false. Default severity is advisory "
+        "(warning); set `security_lint.severity: error` to make it a hard gate. "
+        "Machine-readable output: use `migrate validate --check-security-definer "
+        "--format json` instead of `lint --format json`, which does not include "
+        "sec_002 findings in its JSON report.",
+    ),
 ) -> None:
     """Validate schema against best practices.
 
@@ -872,6 +884,72 @@ def lint(
                 )
             else:
                 console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
+
+        # #161: sec_002 — SECURITY DEFINER / search_path bolt-on.
+        # Scans the env's schema DDL (same DDL as confiture build uses).
+        # Note: sec_002 findings print to the console here; they are NOT
+        # folded into the JSON report produced above.  For machine-readable
+        # output use `migrate validate --check-security-definer --format json`.
+        if check_security_definer:
+            from confiture.core.builder import SchemaBuilder
+            from confiture.core.linting.libraries.security_definer import (
+                Sec002SecurityDefinerSearchPath,
+            )
+            from confiture.core.linting.schema_linter import RuleSeverity as _RS
+
+            sd_violations: list = []
+            _sec_cfg = None
+            try:
+                _pd = project_dir or Path.cwd()
+                _cfg_path = _pd / "db" / "environments" / f"{env}.yaml"
+                if _cfg_path.exists():
+                    from confiture.core.connection import load_config as _lc
+                    from confiture.core.validation.config_loaders import (
+                        load_security_lint as _lsl,
+                    )
+
+                    _sec_cfg = _lsl(_lc(_cfg_path), _cfg_path, require=False)
+                if _sec_cfg is not None and not _sec_cfg.enabled:
+                    _sec_cfg = None
+            except Exception:  # noqa: BLE001 — degrade gracefully
+                _sec_cfg = None
+
+            if _sec_cfg is not None:
+                _severity = _RS.ERROR if _sec_cfg.severity == "error" else _RS.WARNING
+                try:
+                    _sb = SchemaBuilder(env=env, project_dir=project_dir)
+                    _ddl_paths = _sb.find_sql_files()
+                except Exception:  # noqa: BLE001
+                    _ddl_paths = (
+                        sorted(Path("db/schema").rglob("*.sql"))
+                        if Path("db/schema").exists()
+                        else []
+                    )
+                _rule = Sec002SecurityDefinerSearchPath(
+                    apply_to=_sec_cfg.apply_to,
+                    ignore=_sec_cfg.ignore,
+                    severity=_severity,
+                )
+                sd_violations = _rule.check(_ddl_paths or [Path("db/schema")])
+
+            if sd_violations:
+                console.print("\n[cyan]🔒 Security-definer search_path lint:[/cyan]")
+                for _v in sd_violations:
+                    _color = "red" if _v.severity == _RS.ERROR else "yellow"
+                    _loc = f" ({_v.file_path}:{_v.line_number})" if _v.line_number else ""
+                    console.print(
+                        f"  [{_color}]{_v.severity.value.upper()}[/{_color}] "
+                        f"{_v.rule_id} ({_v.object_name}){_loc}: {_v.message}"
+                    )
+                _sd_errors = any(_v.severity == _RS.ERROR for _v in sd_violations)
+                _sd_warnings = any(_v.severity == _RS.WARNING for _v in sd_violations)
+                should_fail = (
+                    should_fail
+                    or (_sd_errors and fail_on_error)
+                    or (_sd_warnings and fail_on_warning)
+                )
+            elif check_security_definer and _sec_cfg is not None:
+                console.print("\n[green]🔒 Security-definer search_path lint: no issues[/green]")
 
         if should_fail:
             raise typer.Exit(1)  # success-signal: lint found violations

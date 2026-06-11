@@ -34,6 +34,19 @@ _CHAR_TO_VOLATILITY: dict[str, Volatility] = {
 }
 
 
+def _proconfig_pins_search_path(proconfig: list[str] | None) -> bool:
+    """Return True when *proconfig* contains a ``search_path=…`` entry.
+
+    ``SET search_path = value`` and ``SET search_path FROM CURRENT`` both
+    write a ``search_path=<value>`` entry to ``proconfig``; ``RESET`` and
+    ``SET DEFAULT`` do not — so a ``search_path=`` prefix is the correct
+    live-catalog test, matching the static-path definition.
+    """
+    if not proconfig:
+        return False
+    return any(c.startswith("search_path=") for c in proconfig)
+
+
 class FunctionIntrospector:
     """Introspects functions and procedures from a PostgreSQL database.
 
@@ -115,7 +128,9 @@ class FunctionIntrospector:
                 p.proargnames                                AS arg_names,
                 p.proargmodes                                AS arg_modes,
                 COALESCE(p.proallargtypes::oid[], p.proargtypes::oid[]) AS arg_type_oids,
-                d.description                                AS comment
+                d.description                                AS comment,
+                p.prosecdef                                  AS security_definer,
+                p.proconfig                                  AS proconfig
             FROM pg_proc p
             JOIN pg_namespace n ON n.oid = p.pronamespace
             JOIN pg_language l  ON l.oid = p.prolang
@@ -144,6 +159,8 @@ class FunctionIntrospector:
             source=row["source"],
             estimated_cost=float(row["cost"]),
             comment=row["comment"],
+            security_definer=bool(row.get("security_definer", False)),
+            search_path_pinned=_proconfig_pins_search_path(row.get("proconfig")),
         )
 
     def _parse_params(self, row: dict[str, Any]) -> list[FunctionParam]:

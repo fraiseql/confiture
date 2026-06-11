@@ -115,6 +115,37 @@ def render_function_uniqueness(report: Any, *, json_mode: bool, output_file: Pat
         console.print("[green]✅ All callables have unique signatures[/green]")
 
 
+def render_security_definer(report: Any, *, json_mode: bool, output_file: Path | None) -> None:
+    """Render the ``--check-security-definer`` result."""
+    from confiture.core.linting.schema_linter import RuleSeverity
+
+    if json_mode:
+        _output_json(
+            {
+                "check": "security_definer",
+                "violations": [
+                    _violation_dict(v, include_object_type=True, include_line=True)
+                    for v in report.violations
+                ],
+            },
+            output_file,
+            console,
+        )
+    elif report.violations:
+        console.print(
+            f"[yellow]⚠[/yellow] Security-definer check: {len(report.violations)} violation(s)"
+        )
+        for v in report.violations:
+            color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
+            mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
+            loc = f" ({v.file_path}:{v.line_number})" if v.line_number else ""
+            console.print(
+                f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] {v.object_name}{loc}: {v.message}"
+            )
+    else:
+        console.print("[green]✅ No unpinned SECURITY DEFINER functions found[/green]")
+
+
 def render_import_check(result: Any, *, json_mode: bool, output_file: Path | None) -> None:
     """Render the ``--check-imports`` ImportCheckResult."""
     from pathlib import Path as _Path

@@ -25,6 +25,7 @@ from confiture.config.environment import (
     AclExpectation,
     FunctionCoverage,
     OwnershipExpectation,
+    SecurityLinting,
 )
 from confiture.exceptions import ConfigurationError
 
@@ -144,8 +145,48 @@ def load_function_coverage(
         ) from exc
 
 
+def load_security_lint(
+    config_data: dict[str, Any],
+    config_path: Path,
+    *,
+    require: bool,
+) -> SecurityLinting | None:
+    """Pull, expand, and validate the ``security_lint:`` block.
+
+    Args:
+        config_data: Parsed YAML as returned by
+            :func:`confiture.core.connection.load_config`.
+        config_path: Path the config came from — included in error messages.
+        require: When ``True``, a missing ``security_lint:`` block raises
+            ``ConfigurationError``. When ``False`` (the lint rule's "no-op when
+            absent" semantics), ``None`` is returned.
+
+    Returns:
+        The validated :class:`SecurityLinting`, or ``None`` when the block is
+        absent and ``require=False``.
+
+    Raises:
+        ConfigurationError: ``security_lint:`` is required but absent, or
+            malformed.
+    """
+    raw = config_data.get("security_lint")
+    if not raw:
+        if require:
+            raise ConfigurationError(
+                f"--check-security-definer requires a `security_lint:` block in {config_path}"
+            )
+        return None
+
+    expanded = expand_env_vars(raw, context="security_lint")
+    try:
+        return SecurityLinting.model_validate(expanded)
+    except ValidationError as exc:
+        raise ConfigurationError(f"Invalid security_lint: block in {config_path}: {exc}") from exc
+
+
 __all__ = [
     "load_acl_expectations",
     "load_function_coverage",
     "load_ownership_expectation",
+    "load_security_lint",
 ]

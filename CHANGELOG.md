@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-06-11
+
+Adds **`sec_002`** — a static lint rule that flags `SECURITY DEFINER`
+functions and procedures that do not pin `search_path` (issue #161,
+CVE-2018-1058). **Not breaking** — additive opt-in only. Projects with no
+`security_lint:` config block are entirely unaffected.
+
+### Added
+
+- **`sec_002` — Security Definer / search_path lint** (`core/linting/libraries/security_definer.py`):
+  Parses DDL source with pglast and flags every `SECURITY DEFINER` function or
+  procedure that lacks a `SET search_path = …` or `SET search_path FROM CURRENT`
+  clause. An unpinned function resolves unqualified names through the *caller's*
+  `search_path`, the classic privilege-escalation vector (CVE-2018-1058).
+  Correctly classifies all AST edge cases: `FROM CURRENT` → pinned; `RESET` /
+  `SET DEFAULT` → not pinned; `SECURITY INVOKER` and no-security-clause → never
+  flagged; procedures and `CREATE OR REPLACE` handled; `apply_to`/`ignore`
+  fnmatch scoping; `pg_catalog`/`information_schema` always skipped;
+  `-- confiture:secdef-allow-unpinned` directive for deliberate exceptions.
+  Falls back to a no-op skip notice when the `[ast]` extra is absent.
+- **`migrate validate --check-security-definer`**: static scan of DDL directories
+  (`--ddl-dir`, default `db/schema`). Advisory by default (exit 0 on warnings);
+  set `security_lint.severity: error` in the env config for a hard CI gate (exit
+  1). JSON output via `--format json`. Mirrors `--check-function-uniqueness`.
+- **`confiture lint --check-security-definer`**: bolt-on over the env's schema
+  DDL (same files `confiture build` uses), folded into `should_fail` honoring
+  `--fail-on-error` / `--fail-on-warning`. Mirrors `--replica-safe`. Note: lint's
+  JSON report is saved before this bolt-on; for machine-readable sec_002 output
+  use `migrate validate --check-security-definer --format json`.
+- **`security_lint:` config block** (`config/environment.py::SecurityLinting`):
+  `enabled` (default `false`), `apply_to` (schema patterns), `ignore` (object
+  globs), `severity` (`"warning"` | `"error"`). Loaded by
+  `core/validation/config_loaders.load_security_lint`.
+- **`core/validation/security_definer.py`**: `SecurityDefinerReport` +
+  `check_security_definer()` wrapper (mirrors `function_uniqueness.py`).
+- **`cli/formatters/validate_formatter.py::render_security_definer`**.
+
+- **Live catalog path** (`--against-db`): `migrate validate --check-security-definer
+  --against-db` queries `pg_proc.proconfig` directly — authoritative for
+  migrate-strategy databases where `ALTER FUNCTION … SET search_path` patched the
+  function after the original `CREATE` (which defeats the static scan).
+  `FROM CURRENT` is correctly reported as pinned by both paths. Extension-owned
+  functions excluded by default (via `pg_depend deptype = 'e'`). Reuses
+  `--schemas` / `--ssh` for connection scoping. `check_security_definer_live()`
+  wrapper in `core/validation/security_definer.py`.
+- **`FunctionInfo.security_definer` / `.search_path_pinned`** fields: the full
+  `FunctionIntrospector` (used by `confiture generate` etc.) now selects
+  `prosecdef` and `proconfig` and maps them onto these new fields.
+- **`LintViolation.suggested_fix`** (optional `str | None`): both the static and
+  live sec_002 paths now populate a ready-to-apply `ALTER FUNCTION … SET
+  search_path = pg_catalog, public;` statement on every violation. Live path uses
+  `pg_get_function_identity_arguments(oid)` for the canonical argument signature;
+  static path renders the signature from the pglast AST.
+- **`migrate validate --check-security-definer --emit-remediation <path>`**:
+  writes a SQL script containing one `ALTER FUNCTION …` statement per flagged
+  callable; `emit_remediation()` also available as a Python API in
+  `core/validation/security_definer`.
+
+### Known limitation
+
+- Static scan, split definition: `CREATE FUNCTION … SECURITY DEFINER` in one
+  file and `ALTER FUNCTION … SET search_path` in another → false positive on the
+  static path. Use `--against-db` for the authoritative result, or suppress with
+  `-- confiture:secdef-allow-unpinned`.
+
 ## [0.27.0] - 2026-06-10
 
 ### Changed

@@ -351,12 +351,49 @@ def migrate_validate(
             "`function_coverage.enabled` is false. Requires the [ast] extra (pglast)."
         ),
     ),
+    check_security_definer: bool = typer.Option(
+        False,
+        "--check-security-definer",
+        help=(
+            "Flag `SECURITY DEFINER` functions/procedures that do not pin "
+            "`search_path` (CVE-2018-1058). Rule `sec_002`. "
+            "Without `--against-db`: static DDL scan (no DB, requires [ast]/pglast). "
+            "With `--against-db`: live `pg_proc` query (authoritative; works even when "
+            "ALTER FUNCTION patched the search_path separately from the CREATE). "
+            "No-op when config has no `security_lint:` block or "
+            "`security_lint.enabled` is false. Default severity advisory "
+            "(warning, exit 0); set `security_lint.severity: error` for exit 1. "
+            "See docs/guides/security-definer-lint.md."
+        ),
+    ),
+    secdef_against_db: bool = typer.Option(
+        False,
+        "--against-db",
+        help=(
+            "Used with `--check-security-definer`: query the live database "
+            "(`pg_proc.proconfig`) instead of scanning DDL source files. "
+            "Authoritative for migrate-strategy databases where "
+            "`ALTER FUNCTION … SET search_path` may have been applied after "
+            "the original CREATE."
+        ),
+    ),
+    emit_remediation: Path | None = typer.Option(
+        None,
+        "--emit-remediation",
+        help=(
+            "Used with `--check-security-definer`: write a SQL remediation script "
+            "containing one `ALTER FUNCTION … SET search_path = …` statement per "
+            "flagged callable to the given file path. Does nothing when no violations "
+            "are found."
+        ),
+    ),
     ddl_dir: list[Path] = typer.Option(
         None,
         "--ddl-dir",
         help=(
-            "DDL directory to scan for `--check-function-uniqueness` "
-            "(repeatable). Defaults to `db/schema` if not provided."
+            "DDL directory to scan for `--check-function-uniqueness` and "
+            "`--check-security-definer` (repeatable). "
+            "Defaults to `db/schema` if not provided."
         ),
     ),
     check_signature_schemas: str = typer.Option(
@@ -661,6 +698,43 @@ def migrate_validate(
             render_function_uniqueness(func_report, json_mode=json_mode, output_file=output_file)
             if func_report.has_violations:
                 raise typer.Exit(1)  # success-signal: duplicate signatures found
+            return
+
+        # Run security-definer lint — static (DDL) or live (pg_proc).
+        if check_security_definer:
+            from confiture.cli.formatters.validate_formatter import (
+                render_security_definer,
+            )
+
+            if secdef_against_db:
+                from confiture.core.validation.security_definer import (
+                    check_security_definer_live,
+                )
+
+                sd_report = check_security_definer_live(
+                    config_path=config,
+                    schemas=check_signature_schemas,
+                    ssh_via=ssh_via,
+                )
+            else:
+                from confiture.core.validation.security_definer import (
+                    check_security_definer,
+                )
+
+                scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
+                sd_report = check_security_definer(scan_paths, config)
+
+            render_security_definer(sd_report, json_mode=json_mode, output_file=output_file)
+            if emit_remediation is not None and sd_report.has_violations:
+                from confiture.core.validation.security_definer import emit_remediation as _emit
+
+                count = _emit(sd_report, emit_remediation)
+                console.print(
+                    f"[dim]Remediation script ({count} statement(s)) written to "
+                    f"{emit_remediation}[/dim]"
+                )
+            if sd_report.has_errors:
+                raise typer.Exit(1)  # success-signal: ERROR-severity violations found
             return
 
         # Run import check on Python migration modules

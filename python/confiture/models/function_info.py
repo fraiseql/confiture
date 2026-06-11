@@ -51,6 +51,8 @@ class FunctionInfo:
     source: str | None
     estimated_cost: float
     comment: str | None = None
+    security_definer: bool = False
+    search_path_pinned: bool = False
 
     @property
     def qualified_name(self) -> str:

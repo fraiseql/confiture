@@ -39,6 +39,7 @@ class LintViolation:
     message: str
     file_path: str | None = None
     line_number: int | None = None
+    suggested_fix: str | None = None
 
     def __str__(self) -> str:
         """String representation of violation."""
