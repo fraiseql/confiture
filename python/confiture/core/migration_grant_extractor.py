@@ -256,6 +256,25 @@ class GrantStatement:
     privilege: str  # one privilege per statement; ALL expanded per objtype
     grant_option: bool = field(default=False, compare=False)
 
+    def describe(self) -> str:
+        """Render a human-readable SQL-ish form for failure messages."""
+        if self.target_kind == "ALL_IN_SCHEMA":
+            plural = {
+                "TABLE": "TABLES",
+                "SEQUENCE": "SEQUENCES",
+                "FUNCTION": "FUNCTIONS",
+            }.get(self.objtype, f"{self.objtype}S")
+            target = f"ALL {plural} IN SCHEMA {self.schema}"
+        elif self.objtype == "SCHEMA":
+            target = f"SCHEMA {self.schema}"
+        elif self.objtype == "TABLE":
+            target = f"{self.schema}.{self.object}"
+        else:
+            target = f"{self.objtype} {self.schema}.{self.object}"
+        preposition = "TO" if self.action == "GRANT" else "FROM"
+        suffix = " WITH GRANT OPTION" if self.grant_option and self.action == "GRANT" else ""
+        return f"{self.action} {self.privilege} ON {target} {preposition} {self.grantee}{suffix}"
+
 
 @dataclass(frozen=True)
 class UnrepresentableGrant:

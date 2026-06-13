@@ -241,3 +241,96 @@ class TestGitRepository:
 
             with pytest.raises(GitError):
                 git_repo.get_file_at_ref(Path("test.sql"), "nonexistent_ref")
+
+
+def _run(repo_path: Path, *args: str) -> str:
+    import subprocess
+
+    result = subprocess.run(
+        ["git", *args], cwd=repo_path, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def _init_repo(repo_path: Path) -> None:
+    _run(repo_path, "init")
+    _run(repo_path, "config", "user.email", "test@test.com")
+    _run(repo_path, "config", "user.name", "Test User")
+    _run(repo_path, "config", "commit.gpgsign", "false")
+
+
+class TestGitPlumbingIssue162:
+    """Tests for the merge-base + staged-content plumbing (issue #162, Phase 3)."""
+
+    def test_get_staged_file_content_returns_staged_blob(self):
+        """Staged content is the index blob, not the (dirtier) working tree."""
+        with TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_repo(repo_path)
+            f = repo_path / "g.sql"
+            f.write_text("GRANT SELECT ON s.t TO r;\n")
+            _run(repo_path, "add", "g.sql")
+            # Working tree diverges from the index after staging.
+            f.write_text("GRANT SELECT ON s.t TO r;\nGRANT INSERT ON s.t TO r;\n")
+
+            git_repo = GitRepository(repo_path)
+            staged = git_repo.get_staged_file_content(Path("g.sql"))
+            assert staged == "GRANT SELECT ON s.t TO r;\n"
+
+    def test_get_staged_file_content_none_when_not_staged(self):
+        with TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_repo(repo_path)
+            (repo_path / "README.md").write_text("# Test")
+            _run(repo_path, "add", ".")
+            _run(repo_path, "commit", "-m", "init")
+
+            git_repo = GitRepository(repo_path)
+            assert git_repo.get_staged_file_content(Path("absent.sql")) is None
+
+    def test_get_merge_base_returns_common_ancestor(self):
+        """merge-base must be the fork point, not the tip of base."""
+        with TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_repo(repo_path)
+            (repo_path / "a.txt").write_text("1")
+            _run(repo_path, "add", ".")
+            _run(repo_path, "commit", "-m", "c1")
+            fork_point = _run(repo_path, "rev-parse", "HEAD")
+            _run(repo_path, "branch", "feature")
+
+            # Advance main (base) past the fork point.
+            (repo_path / "a.txt").write_text("2")
+            _run(repo_path, "commit", "-am", "c2-on-main")
+
+            # Commit on the feature branch.
+            _run(repo_path, "checkout", "feature")
+            (repo_path / "b.txt").write_text("1")
+            _run(repo_path, "add", ".")
+            _run(repo_path, "commit", "-m", "c3-on-feature")
+
+            git_repo = GitRepository(repo_path)
+            mb = git_repo.get_merge_base("master", "feature")
+            # Some git versions default the initial branch to "main".
+            if mb is None or mb == "master":
+                mb = git_repo.get_merge_base("main", "feature")
+            assert mb == fork_point
+
+    def test_get_merge_base_falls_back_on_unrelated_histories(self):
+        """Unrelated histories have no merge-base → fall back to base_ref."""
+        with TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_repo(repo_path)
+            (repo_path / "a.txt").write_text("1")
+            _run(repo_path, "add", ".")
+            _run(repo_path, "commit", "-m", "c1")
+            # Orphan branch — a second root with no common ancestor.
+            _run(repo_path, "checkout", "--orphan", "orphan")
+            (repo_path / "c.txt").write_text("1")
+            _run(repo_path, "add", ".")
+            _run(repo_path, "commit", "-m", "orphan-root")
+
+            git_repo = GitRepository(repo_path)
+            base = git_repo.get_merge_base("master", "orphan")
+            base = base if base not in (None, "master") else git_repo.get_merge_base("main", "orphan")
+            assert base in ("master", "main")

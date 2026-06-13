@@ -102,8 +102,15 @@ class GitRepository:
         if result.returncode != 0:
             error_msg = result.stderr.strip()
 
-            # Check if file doesn't exist at ref (not found)
-            if "does not exist" in error_msg or "not found" in error_msg:
+            # Check if file doesn't exist at ref (not found). A file that is
+            # new in the working tree but absent from the ref's tree reports
+            # "exists on disk, but not in '<ref>'" — also a legitimate "absent
+            # at this ref" signal, not an error.
+            if (
+                "does not exist" in error_msg
+                or "not found" in error_msg
+                or "but not in" in error_msg
+            ):
                 return None
 
             # Check if ref doesn't exist
@@ -183,6 +190,101 @@ class GitRepository:
             GitError: If git command fails for a reason other than missing file
         """
         return self.get_file_at_ref(file_path, ref)
+
+    def get_staged_file_content(self, file_path: Path) -> str | None:
+        """Return a file's content from the staging index (``git show :<path>``).
+
+        This is the index blob, which can differ from the working tree when a
+        file is staged and then edited further. ``get_file_at_ref`` can't reach
+        it: the index is addressed by the bare ``:`` prefix, which
+        ``_VALID_GIT_REF_RE`` rejects.
+
+        Args:
+            file_path: Relative path to file from repo root
+
+        Returns:
+            Staged content as string, or None if the file is not in the index
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository
+            GitError: If git command fails for a reason other than a missing path
+        """
+        if not self.is_git_repo():
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
+
+        index_path = f":{file_path.as_posix()}"
+        try:
+            result = subprocess.run(
+                ["git", "show", index_path],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(f"Git command timed out retrieving staged '{file_path}'") from e
+
+        if result.returncode != 0:
+            error_msg = result.stderr.strip()
+            # A path absent from the index reports one of these, depending on
+            # whether it also exists in the working tree. Both mean "not staged".
+            if (
+                "does not exist" in error_msg
+                or "not found" in error_msg
+                or "but not in the index" in error_msg
+            ):
+                return None
+            raise GitError(f"Git command failed reading staged '{file_path}': {error_msg}")
+
+        return result.stdout
+
+    def get_merge_base(self, base_ref: str, target_ref: str) -> str | None:
+        """Return the merge-base commit of two refs (``git merge-base``).
+
+        The merge-base is the common ancestor that three-dot diff semantics
+        (``base...target``, used by :meth:`get_changed_files`) compare against.
+        Anchoring per-file content diffs here — rather than on the tip of
+        ``base_ref`` — keeps the changed-file set and the changed-content set
+        consistent when ``base_ref`` has advanced past the fork point.
+
+        Args:
+            base_ref: Base git reference
+            target_ref: Target git reference
+
+        Returns:
+            The merge-base commit hash, or ``base_ref`` itself when the two
+            histories share no common ancestor (unrelated histories).
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository
+            GitError: If either ref is syntactically invalid
+        """
+        if not self.is_git_repo():
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
+
+        for ref in (base_ref, target_ref):
+            if not _VALID_GIT_REF_RE.match(ref):
+                raise GitError(f"Invalid git reference: {ref!r}")
+
+        try:
+            result = subprocess.run(
+                ["git", "merge-base", base_ref, target_ref],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(
+                f"Git command timed out finding merge-base of '{base_ref}' and '{target_ref}'"
+            ) from e
+
+        if result.returncode != 0 or not result.stdout.strip():
+            # No common ancestor (unrelated histories) — fall back to the base
+            # tip so the caller still has a usable anchor.
+            return base_ref
+
+        return result.stdout.strip()
 
     def get_staged_files(self) -> list[Path]:
         """Get list of currently staged files.
