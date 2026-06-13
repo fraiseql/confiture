@@ -157,6 +157,69 @@ def validate_migration_accompaniment(
         raise
 
 
+def _render_grant_report(report, console: Console) -> None:
+    """Render the semantic grant-accompaniment report for human eyes (issue #162).
+
+    Three sections, driven by the report: unmatched grants (the hard failure,
+    naming each grant + where it changed + the migrations inspected),
+    degradation notes (shown, non-fatal when a migration is present), and the
+    pass line. Defensive against partially-stubbed report objects.
+    """
+    unmatched = getattr(report, "unmatched_grants", None)
+    unmatched = unmatched if isinstance(unmatched, list) else []
+    notes = getattr(report, "unverifiable_notes", None)
+    notes = notes if isinstance(notes, list) else []
+
+    if not report.has_grant_changes:
+        console.print("[green]✅ No grant file changes detected[/green]")
+        return
+
+    if unmatched:
+        console.print("[red]❌ Grant changes not carried by any migration:[/red]\n")
+        for grant in unmatched:
+            statement = grant.get("statement", "<grant>") if isinstance(grant, dict) else str(grant)
+            changed_in = grant.get("changed_in") if isinstance(grant, dict) else None
+            inspected = grant.get("migrations_inspected") if isinstance(grant, dict) else None
+            console.print(f"   [bold]{statement}[/bold]")
+            if changed_in:
+                console.print(f"     changed in {changed_in}")
+            if inspected:
+                console.print(f"     not found in: {', '.join(inspected)}")
+            else:
+                console.print("     no accompanying migration carries it")
+            console.print("")
+        console.print(
+            "  Migrate environments (staging, production) apply grants ONLY via migrations;\n"
+            "  these grants will not reach them. Add each to a migration (SQL or Python),\n"
+            "  or run with --allow-grant-only if this branch uses build-only deployment."
+        )
+        if notes:
+            console.print("")
+
+    if notes:
+        if report.is_valid:
+            console.print(
+                "[yellow]⚠️  Could not statically verify (relying on migration presence):[/yellow]"
+            )
+        else:
+            console.print("[yellow]⚠️  Could not statically verify:[/yellow]")
+        for note in notes:
+            console.print(f"     - {note}")
+        if not report.is_valid and not unmatched:
+            console.print(
+                "\n  No accompanying migration was found, so these unverifiable grant\n"
+                "  changes are not guaranteed to reach migrate environments. Add a\n"
+                "  migration, or run with --allow-grant-only for build-only branches."
+            )
+
+    if report.is_valid and not notes:
+        console.print("[green]✅ Grant changes accompanied by migrations[/green]")
+        console.print(f"   Grant files: {len(report.grant_files_changed)}")
+        console.print(f"   Migrations: {len(report.migration_files_staged)}")
+    elif report.is_valid:
+        console.print("\n[green]✅ Grant changes carried by accompanying migrations[/green]")
+
+
 def validate_grant_accompaniment(
     base_ref: str,
     target_ref: str,
@@ -166,10 +229,12 @@ def validate_grant_accompaniment(
     grant_dir: str = "db/7_grant",
     migrations_dir: str = "db/migrations",
 ) -> dict:
-    """Validate that grant file changes have migration files.
+    """Validate that grant file changes are carried by accompanying migrations.
 
-    Uses file-level detection: if any file under grant_dir changed, at least
-    one .up.sql migration must also be present in the changeset.
+    Semantic (issue #162): verifies that each *changed* GRANT/REVOKE statement
+    in ``grant_dir`` is present in an accompanying migration (``.up.sql`` or
+    ``.py``). Grants that can't be statically represented degrade to a
+    file-presence check and are surfaced as notes — never silently passed.
 
     Args:
         base_ref: Base git reference (used when staged_only=False)
@@ -201,28 +266,7 @@ def validate_grant_accompaniment(
         )
 
         if format_output == "text":
-            if not report.has_grant_changes:
-                console.print("[green]✅ No grant file changes detected[/green]")
-            elif report.is_valid:
-                console.print("[green]✅ Grant changes accompanied by migrations[/green]")
-                console.print(f"   Grant files: {len(report.grant_files_changed)}")
-                console.print(f"   Migrations: {len(report.migration_files_staged)}")
-            else:
-                console.print(
-                    "[red]❌ Grant changes without migration files[/red]\n\n  Grant files changed:"
-                )
-                for f in report.grant_files_changed:
-                    console.print(f"    {f}")
-                console.print(
-                    "\n"
-                    "  No migration file (.up.sql) was staged.\n"
-                    "\n"
-                    "  Migrate environments (staging, production) will NOT apply these grants\n"
-                    "  until they appear in a migration file.\n"
-                    "\n"
-                    "  Fix: Add GRANT statements to a new migration, or run with --allow-grant-only\n"
-                    "  if this branch uses build-only deployment."
-                )
+            _render_grant_report(report, console)
 
         return report.to_dict()
 

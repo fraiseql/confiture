@@ -130,8 +130,12 @@ class GrantAccompanimentChecker:
         covered, covered_notes = self._compute_covered(migration_files, target_ref, staged_only)
         notes.extend(covered_notes)
 
-        unmatched = [stmt for stmt in required if stmt not in covered]
-        report.unmatched_grants = [self._serialize_unmatched(stmt) for stmt in unmatched]
+        inspected = [f.as_posix() for f in migration_files]
+        report.unmatched_grants = [
+            self._serialize_unmatched(stmt, source.as_posix(), inspected)
+            for stmt, source in required.items()
+            if stmt not in covered
+        ]
         report.unverifiable_notes = notes
         return report
 
@@ -145,9 +149,9 @@ class GrantAccompanimentChecker:
         base_ref: str,
         target_ref: str,
         staged_only: bool,
-    ) -> tuple[set[GrantStatement], list[str]]:
-        """Return the added/changed grant statements and any degradation notes."""
-        required: set[GrantStatement] = set()
+    ) -> tuple[dict[GrantStatement, Path], list[str]]:
+        """Return added/changed grants (mapped to their source file) + degrade notes."""
+        required: dict[GrantStatement, Path] = {}
         notes: list[str] = []
 
         for grant_file in grant_files:
@@ -181,9 +185,10 @@ class GrantAccompanimentChecker:
 
             target_statements = set(target_extraction.statements)
 
-            # Newly added / changed grants are the required set.
+            # Newly added / changed grants are the required set (first source
+            # file wins so failure messages can name where it changed).
             for stmt in target_statements - base_statements:
-                required.add(stmt)
+                required.setdefault(stmt, grant_file)
 
             # A grant that differs only by WITH GRANT OPTION yields no key
             # change (the flag is out of the match key) — surface it (D9).
@@ -304,7 +309,9 @@ class GrantAccompanimentChecker:
         return False
 
     @staticmethod
-    def _serialize_unmatched(stmt: GrantStatement) -> dict[str, Any]:
+    def _serialize_unmatched(
+        stmt: GrantStatement, changed_in: str, inspected: list[str]
+    ) -> dict[str, Any]:
         return {
             "statement": stmt.describe(),
             "action": stmt.action,
@@ -314,6 +321,8 @@ class GrantAccompanimentChecker:
             "object": stmt.object,
             "grantee": stmt.grantee,
             "privilege": stmt.privilege,
+            "changed_in": changed_in,
+            "migrations_inspected": inspected,
         }
 
     # ------------------------------------------------------------------ #

@@ -264,7 +264,12 @@ def migrate_validate(
     require_grant_migration: bool = typer.Option(
         False,
         "--require-grant-migration",
-        help="Fail if staged changes in db/7_grant/ exist without a corresponding migration file (default: off)",
+        help=(
+            "Verify that each changed GRANT/REVOKE in the grant directory is carried by an "
+            "accompanying migration (SQL or Python). Semantic match across "
+            "table/schema/sequence/function objects; grants that can't be statically verified "
+            "degrade to a file-presence check and are surfaced as notes (default: off)."
+        ),
     ),
     allow_grant_only: bool = typer.Option(
         False,
@@ -604,6 +609,21 @@ def migrate_validate(
             # Run grant accompaniment check
             grant_passed = True
             if require_grant_migration and not allow_grant_only:
+                # Honor a non-default grant directory from the config — a
+                # "broad coverage" gate that ignored it would be a trap.
+                grant_dir = "db/7_grant"
+                if config and Path(config).exists():
+                    try:
+                        cfg_data = load_config(Path(config))
+                        configured = (
+                            cfg_data.get("migration", {}).get("grant_dir")
+                            if isinstance(cfg_data, dict)
+                            else None
+                        )
+                        if configured:
+                            grant_dir = configured
+                    except Exception:  # noqa: BLE001 — fall back to the default
+                        pass
                 try:
                     grant_result = validate_grant_accompaniment(
                         base_ref=effective_base_ref,
@@ -611,6 +631,7 @@ def migrate_validate(
                         staged_only=staged,
                         console=console,
                         format_output=format_output,
+                        grant_dir=grant_dir,
                         migrations_dir=str(migrations_dir),
                     )
                 except Exception as e:
