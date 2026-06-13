@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-06-13
+
+Makes `migrate validate --require-grant-migration` **semantic** (issue #162):
+it verifies that each *changed* `GRANT`/`REVOKE` in the grant directory is
+actually carried by an accompanying migration — not merely that some migration
+happens to be in the changeset. Also recognizes Python (`.py`) migrations
+everywhere `.up.sql` migrations were recognized. (This single release folds in
+what was scoped as 0.29.0 — the Python-migration recognition fix — together
+with the semantic engine; the 0.29.0 version number was not separately cut.)
+
+### Fixed
+
+- **`--require-grant-migration` recognizes Python migrations.** `db/migrations/*.py`
+  now counts as an accompanying migration alongside `.up.sql`
+  (`_`-prefixed modules and `__init__.py` excluded), matching the canonical
+  migration loader. Previously the gate false-positived on every grant change in
+  Python-migration projects. (#162)
+- **`--check-acls` (ACL coverage lint) scans Python migrations too.** The same
+  blind spot is closed in `Acl001GrantCoverage`: a `CREATE TABLE` / `GRANT`
+  carried by a `.py` migration is now seen. (#162)
+
+### Changed
+
+- ⚠️ **`migrate validate --require-grant-migration` is now semantic.** It verifies
+  that each *changed* `GRANT`/`REVOKE` in the grant directory is actually carried
+  by an accompanying migration, for both SQL (`.up.sql`) and Python (`.py`)
+  migrations. Coverage spans GRANT/REVOKE across table, schema-wide
+  (`… IN SCHEMA`), sequence, and function objects. The required set is diffed
+  against the **merge-base** of your base and target refs.
+  - **Tightening:** a branch that previously passed because an *unrelated*
+    migration happened to be present may now fail — the failure names the
+    missing grant (object, privilege, grantee) and the migration(s) inspected.
+  - **Loosening:** a comment-only / whitespace-only / reorder-only edit to a
+    grant file (nothing semantically changed) now passes without requiring a
+    migration.
+  - **Honest degradation (never silent-pass):** grants that can't be statically
+    verified — dynamic SQL, parse failures, object classes outside
+    table/schema/sequence/function (`ON DATABASE`, `LANGUAGE`, `TYPE`,
+    `DOMAIN`, `FOREIGN DATA WRAPPER`, `TABLESPACE`, …), `ALTER DEFAULT
+    PRIVILEGES`, column-level privileges, `WITH GRANT OPTION`-only changes,
+    grants behind a non-public `SET search_path`, or a grant *removed* from a
+    file — fall back to the previous file-presence check and are surfaced as
+    notes.
+  - `migrate validate --require-grant-migration --format json` now carries
+    `unmatched_grants` and `unverifiable_notes`; a new (non-adapter-contract)
+    schema is published at `docs/reference/json-schemas/migrate-validate-grant.schema.json`.
+  - `MigrationGrantExtractor` gains `extract_grant_statements()` (the richer
+    `GrantStatement` API); the legacy `extract_grants()` is unchanged.
+  (#162)
+
 ## [0.28.0] - 2026-06-11
 
 Adds **`sec_002`** — a static lint rule that flags `SECURITY DEFINER`
