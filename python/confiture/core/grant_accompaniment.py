@@ -18,7 +18,8 @@ class GrantAccompanimentChecker:
 
     Unlike MigrationAccompanimentChecker (semantic DDL diff), this uses
     file-level detection: if any file under grant_dir changed, at least
-    one .up.sql migration must also be present in the changeset.
+    one migration (``.up.sql`` or ``.py``) must also be present in the
+    changeset.
 
     Attributes:
         repo_path: Repository root directory
@@ -107,17 +108,30 @@ class GrantAccompanimentChecker:
         return result
 
     def _filter_migration_files(self, files: list[Path]) -> list[Path]:
-        """Filter to .up.sql files under migrations_dir.
+        """Filter to migration files under migrations_dir.
+
+        Recognizes both SQL (``.up.sql``) and Python (``.py``) migrations,
+        matching the canonical migration loader (``_migrator/discovery.py``)
+        and ``MigrationAccompanimentChecker._get_new_migrations``: a ``.py``
+        file counts as a migration unless its name starts with ``_`` (which
+        excludes ``__init__.py`` and private helper modules). Migrate
+        environments apply both formats, so both must satisfy the gate.
 
         Args:
             files: List of file paths to filter
 
         Returns:
-            Files that are .up.sql files under the migrations directory
+            Files that are migration files under the migrations directory
         """
         migrations_parts = Path(self.migrations_dir).parts
         result = []
         for f in files:
-            if f.parts[: len(migrations_parts)] == migrations_parts and f.name.endswith(".up.sql"):
+            if f.parts[: len(migrations_parts)] != migrations_parts:
+                continue
+            is_sql = f.name.endswith(".up.sql")
+            # "not _-prefixed" excludes __init__.py and _helpers.py. Parity
+            # with the loader: a migration the loader would run must count.
+            is_py = f.name.endswith(".py") and not f.name.startswith("_")
+            if is_sql or is_py:
                 result.append(f)
         return result

@@ -168,6 +168,39 @@ class TestGrantAccompanimentChecker:
         assert report.has_migration_changes is False
         assert report.is_valid is False
 
+    def test_grant_change_with_python_migration_is_valid(self):
+        """Issue #162: a Python migration counts as an accompanying migration."""
+        checker = self._make_checker()
+        checker.git_repo.get_staged_files.return_value = [
+            Path("db/7_grant/741_grant_reporter.sql"),
+            Path("db/migrations/20260613130000_add_reporter.py"),
+        ]
+        report = checker.check_accompaniment(staged_only=True)
+        assert report.is_valid is True
+        assert report.has_migration_changes is True
+
+    def test_python_init_module_not_counted(self):
+        """__init__.py is package machinery, not a migration (issue #162)."""
+        checker = self._make_checker()
+        checker.git_repo.get_staged_files.return_value = [
+            Path("db/7_grant/741_grant_reporter.sql"),
+            Path("db/migrations/__init__.py"),
+        ]
+        report = checker.check_accompaniment(staged_only=True)
+        assert report.has_migration_changes is False
+        assert report.is_valid is False
+
+    def test_private_python_module_not_counted(self):
+        """_-prefixed modules are helpers, not migrations (issue #162)."""
+        checker = self._make_checker()
+        checker.git_repo.get_staged_files.return_value = [
+            Path("db/7_grant/741_grant_reporter.sql"),
+            Path("db/migrations/_helpers.py"),
+        ]
+        report = checker.check_accompaniment(staged_only=True)
+        assert report.has_migration_changes is False
+        assert report.is_valid is False
+
     def test_nested_grant_file_is_detected(self):
         checker = self._make_checker()
         checker.git_repo.get_staged_files.return_value = [
