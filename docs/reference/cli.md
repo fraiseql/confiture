@@ -1195,6 +1195,8 @@ confiture migrate validate [OPTIONS]
 |--------|-------|------|---------|-------------|
 | `--migrations-dir` | - | Path | `db/migrations` | Directory containing migration files |
 | `--fix-naming` | - | Flag | `False` | Automatically rename orphaned migration files to match naming convention |
+| `--require-grant-migration` | - | Flag | `False` | Verify each changed `GRANT`/`REVOKE` in the grant directory is carried by an accompanying migration (`.up.sql` or `.py`). Semantic match across table/schema/sequence/function objects; unverifiable grants degrade to a file-presence check with a surfaced note. See the [migrate validate guide](../guides/migrate-validate.md#--require-grant-migration). |
+| `--allow-grant-only` | - | Flag | `False` | Suppress `--require-grant-migration` for build-only branches |
 | `--dry-run` | - | Flag | `False` | Preview changes without actually renaming files |
 | `--format` | `-f` | Text | `text` | Output format: `text` (default) or `json` |
 | `--output` | `-o` | Path | None | Save output to file |
@@ -1214,6 +1216,9 @@ confiture migrate validate --fix-naming
 # Output as JSON for CI/CD integration
 confiture migrate validate --format json
 confiture migrate validate --fix-naming --format json
+
+# Verify changed grants are carried by an accompanying migration (pre-commit)
+confiture migrate validate --require-grant-migration --staged
 ```
 
 #### Recognized Migration File Patterns

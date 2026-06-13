@@ -154,6 +154,39 @@ Static check that every `CREATE TABLE` in `db/migrations/` has a matching `GRANT
 }
 ```
 
+### `confiture migrate validate --require-grant-migration --format json`
+
+[migrate-validate-grant.schema.json](./json-schemas/migrate-validate-grant.schema.json)
+
+Semantic grant-accompaniment report (issue #162): verifies that each *changed* `GRANT`/`REVOKE` in the grant directory is carried by an accompanying migration (`.up.sql` or `.py`). Emitted as a failure envelope. **Not part of the fraisier adapter contract** — provided for completeness.
+
+```json
+{
+  "status": "failed",
+  "check": "grant_accompaniment",
+  "is_valid": false,
+  "has_grant_changes": true,
+  "has_migration_changes": true,
+  "grant_files_changed": ["db/7_grant/71_grant.sql"],
+  "migration_files_staged": ["db/migrations/20260613130000_x.py"],
+  "unmatched_grants": [
+    {
+      "statement": "GRANT SELECT ON s.t TO reporter",
+      "action": "GRANT",
+      "objtype": "TABLE",
+      "target_kind": "OBJECT",
+      "schema": "s",
+      "object": "t",
+      "grantee": "reporter",
+      "privilege": "SELECT",
+      "changed_in": "db/7_grant/71_grant.sql",
+      "migrations_inspected": ["db/migrations/20260613130000_x.py"]
+    }
+  ],
+  "unverifiable_notes": []
+}
+```
+
 ### `confiture migrate validate --check-function-uniqueness --format json`
 
 [migrate-validate-check-function-uniqueness.schema.json](./json-schemas/migrate-validate-check-function-uniqueness.schema.json)

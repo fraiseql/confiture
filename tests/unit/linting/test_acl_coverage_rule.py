@@ -276,6 +276,52 @@ def test_handles_various_migration_filename_styles(tmp_path: Path, filename: str
 
 
 # ---------------------------------------------------------------------------
+# Python-migration coverage (issue #162 twin gap — same blind spot as the
+# grant-accompaniment gate)
+# ---------------------------------------------------------------------------
+
+
+def test_python_migration_create_with_grant_is_covered(tmp_path: Path) -> None:
+    _write_migration(
+        tmp_path,
+        "20260613130000_add_foo.py",
+        "from confiture import Migration\n"
+        "class M(Migration):\n"
+        "    def up(self):\n"
+        "        self.execute('CREATE TABLE foo (id int);')\n"
+        "        self.execute('GRANT SELECT, INSERT ON foo TO my_app;')\n",
+    )
+    rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
+    assert rule.check(tmp_path) == []
+
+
+def test_python_migration_create_without_grant_is_flagged(tmp_path: Path) -> None:
+    _write_migration(
+        tmp_path,
+        "20260613130000_add_foo.py",
+        "from confiture import Migration\n"
+        "class M(Migration):\n"
+        "    def up(self):\n"
+        "        self.execute('CREATE TABLE foo (id int);')\n",
+    )
+    rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
+    violations = rule.check(tmp_path)
+    assert len(violations) >= 1
+
+
+def test_python_init_and_private_modules_are_skipped(tmp_path: Path) -> None:
+    # __init__.py / _-prefixed modules are package machinery, not migrations.
+    _write_migration(tmp_path, "__init__.py", "")
+    _write_migration(
+        tmp_path,
+        "_helpers.py",
+        "x = 'CREATE TABLE ghost (id int);'\n",
+    )
+    rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
+    assert rule.check(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
 # Owner-only directive — per-table scoping
 #
 # The directive must apply only to the immediately-following CREATE TABLE.

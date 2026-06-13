@@ -21,6 +21,9 @@ confiture migrate validate --idempotent --strict-cor
 # Python migrations are detected but never rewritten — they're listed
 # under "manual_fix_required" so you know to edit them by hand.
 confiture migrate fix --idempotent
+
+# Verify changed grants are carried by an accompanying migration
+confiture migrate validate --require-grant-migration --staged
 ```
 
 JSON output is available with `--format json` for every variant.
@@ -313,6 +316,60 @@ written before 0.12.1 keep working.
 Python migrations are intentionally **not** auto-rewritten — unparsing
 the AST would lose comments and formatting. Violations in `.py` files
 must be fixed by hand.
+
+## `--require-grant-migration`
+
+Build environments apply grants straight from the grant sweep directory
+(`db/7_grant/` by default); migrate environments (staging, production) apply
+grants **only** through migrations. So a grant changed in the sweep directory
+without a migration that carries it silently never reaches production. This
+flag closes that gap.
+
+It is **semantic** (issue #162): it verifies that each *changed* `GRANT` /
+`REVOKE` statement is actually present in an accompanying migration — not
+merely that *some* migration happens to be in the changeset.
+
+- **Both migration formats are recognized.** A `.up.sql` migration *or* a `.py`
+  migration (its `self.execute("GRANT …")` / `self.execute_file(...)` calls are
+  statically extracted) can carry the grant. `_`-prefixed modules
+  (`__init__.py`, `_helpers.py`) are not migrations.
+- **Diff-aware.** Only the *added or changed* grants are required. Editing one
+  grant in a 50-grant file requires only that one grant in a migration; the
+  required set is diffed against the **merge-base** of your base and target
+  refs (consistent with three-dot changed-file semantics).
+- **Broad coverage.** `GRANT` and `REVOKE`, across **table**, **schema-wide**
+  (`… IN SCHEMA`), **sequence**, and **function** objects. `GRANT ALL` and an
+  explicit privilege list compare equal (both expand to the same per-object-type
+  set), so you can write `ALL` in the sweep and enumerate in the migration.
+
+### Honest degradation — what is *not* semantically verified
+
+Some grant forms parse cleanly but can't be turned into a comparable key. Rather
+than silently pass them (the exact bug this flag exists to prevent), they
+**degrade to a file-presence check** — a migration must be present — and the
+reason is surfaced as a note. These are:
+
+- Object classes outside table/schema/sequence/function: `GRANT … ON DATABASE`,
+  `LANGUAGE`, `TYPE`, `DOMAIN`, `FOREIGN DATA WRAPPER`, `TABLESPACE`, …
+- `ALTER DEFAULT PRIVILEGES … GRANT/REVOKE …`
+- Column-level privileges (`GRANT SELECT (col) ON t …`)
+- `WITH GRANT OPTION`-only changes (the option is outside the match key)
+- Grants behind a non-public `SET search_path` (the unqualified object name is
+  ambiguous — qualify it explicitly to get full semantic verification)
+- Dynamic SQL (`EXECUTE format('GRANT …')`) and parse failures
+- A grant *removed* from a file (v1 does not auto-require a `REVOKE` migration)
+
+A no-op edit (comment-only, whitespace, reorder) changes nothing representable
+and is **not** unverifiable, so it passes without requiring a migration.
+
+### Bypass
+
+`--allow-grant-only` suppresses the check for build-only branches that don't
+deploy through migrations.
+
+```bash
+confiture migrate validate --require-grant-migration --allow-grant-only --staged
+```
 
 ## Known limitations
 

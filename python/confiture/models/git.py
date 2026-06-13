@@ -118,15 +118,23 @@ class MigrationAccompanimentReport:
 class GrantAccompanimentReport:
     """Report of grant accompaniment validation.
 
-    Validates that changes to grant files (db/7_grant/) are accompanied
-    by migration files, since migrate environments only apply grants
-    through migration files.
+    Validates that the *changed* GRANT/REVOKE statements in the grant
+    directory (db/7_grant/) are actually carried by an accompanying migration
+    (``.up.sql`` or ``.py``), since migrate environments apply grants only
+    through migrations. Grants that can't be statically represented degrade to
+    a file-presence check (a migration must be present) and are surfaced as
+    notes — never silently passed.
 
     Attributes:
         has_grant_changes: Whether any grant files changed
-        has_migration_changes: Whether any .up.sql migration files changed
+        has_migration_changes: Whether any migration files (``.up.sql``/``.py``) changed
         grant_files_changed: List of changed grant file paths
-        migration_files_staged: List of staged migration file paths
+        migration_files_staged: List of accompanying migration file paths
+        unmatched_grants: Changed grants (serialized) not carried by any
+            migration — each a hard failure
+        unverifiable_notes: Human-readable notes for grants that degraded to
+            file-presence (dynamic SQL, unmodeled object classes, removed
+            grants, search_path-relative schemas, …)
 
     Example:
         >>> report = GrantAccompanimentReport(
@@ -134,6 +142,7 @@ class GrantAccompanimentReport:
         ...     has_migration_changes=False,
         ...     grant_files_changed=[Path("db/7_grant/grants.sql")],
         ...     migration_files_staged=[],
+        ...     unmatched_grants=[{"statement": "GRANT SELECT ON s.t TO r"}],
         ... )
         >>> print(f"Valid: {report.is_valid}")
         Valid: False
@@ -143,16 +152,34 @@ class GrantAccompanimentReport:
     has_migration_changes: bool
     grant_files_changed: list[Path] = field(default_factory=list)
     migration_files_staged: list[Path] = field(default_factory=list)
+    unmatched_grants: list[dict[str, Any]] = field(default_factory=list)
+    unverifiable_notes: list[str] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
-        """Valid when no grant changes, or grant changes + migration present."""
-        return (not self.has_grant_changes) or self.has_migration_changes
+        """Valid when no grant changes; else every changed grant is carried.
+
+        A representable grant change must be matched by an accompanying
+        migration (no ``unmatched_grants``). Grants that couldn't be verified
+        statically (``unverifiable_notes``) degrade to the file-presence
+        check: at least one migration must be present.
+        """
+        if not self.has_grant_changes:
+            return True
+        if self.unmatched_grants:
+            return False
+        if self.unverifiable_notes:
+            return self.has_migration_changes
+        return True
 
     def summary(self) -> str:
         """Get human-readable summary of validation result."""
         if not self.has_grant_changes:
             return "No grant file changes"
+        if self.unmatched_grants:
+            return f"{len(self.unmatched_grants)} grant change(s) not carried by any migration"
+        if self.unverifiable_notes and not self.has_migration_changes:
+            return "Grant changes could not be statically verified and no migration is present"
         if self.is_valid:
             return f"Grant changes accompanied by {len(self.migration_files_staged)} migration(s)"
         return f"Grant changes without migration files ({len(self.grant_files_changed)} file(s) changed)"
@@ -165,4 +192,6 @@ class GrantAccompanimentReport:
             "has_migration_changes": self.has_migration_changes,
             "grant_files_changed": [f.as_posix() for f in self.grant_files_changed],
             "migration_files_staged": [f.as_posix() for f in self.migration_files_staged],
+            "unmatched_grants": self.unmatched_grants,
+            "unverifiable_notes": self.unverifiable_notes,
         }
