@@ -243,8 +243,8 @@ class GrantStatement:
     *are* the match key the semantic engine compares; ``grant_option`` is
     deliberately excluded from equality/hash (``compare=False``) because
     Confiture treats the grant itself — not its propagation flag — as the unit
-    of coverage. Phase 3 still reads ``grant_option`` to detect a change that
-    differs *only* by the option.
+    of coverage. The accompaniment engine still reads ``grant_option`` to detect
+    a change that differs *only* by the option.
     """
 
     action: str  # "GRANT" | "REVOKE"

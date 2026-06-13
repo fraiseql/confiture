@@ -179,8 +179,8 @@ class Acl001GrantCoverage:
         created: list[tuple[str, str, Path]] = []  # (schema, table, migration file)
         owner_only: set[tuple[str, str]] = set()
 
-        for migration in sorted(migrations_dir.rglob("*.up.sql")):
-            text = migration.read_text()
+        for migration in self._migration_files(migrations_dir):
+            text = self._migration_sql_text(migration)
             creates = self._extractor.extract_creates(text)
             drops = self._extractor.extract_drops(text)
             grants = self._extractor.extract_grants(text)
@@ -233,6 +233,42 @@ class Acl001GrantCoverage:
     # ------------------------------------------------------------------ #
     # Helpers                                                             #
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _migration_files(migrations_dir: Path) -> list[Path]:
+        """Migration files to scan: ``.up.sql`` plus ``.py`` (issue #162 twin gap).
+
+        Recognizes Python migrations the same way the loader does — excluding
+        ``__init__.py`` and ``_``-prefixed helper modules — so a CREATE/GRANT
+        carried by a Python migration is no longer a blind spot in the ACL lint.
+        """
+        sql = sorted(migrations_dir.rglob("*.up.sql"))
+        py = sorted(
+            f
+            for f in migrations_dir.rglob("*.py")
+            if f.name != "__init__.py" and not f.name.startswith("_")
+        )
+        return sql + py
+
+    def _migration_sql_text(self, migration: Path) -> str:
+        """Return the SQL text of a migration, statically extracting from ``.py``.
+
+        For Python migrations the resolvable ``self.execute(...)`` /
+        ``self.execute_file(...)`` snippets are concatenated; dynamic SQL is
+        invisible to static parsing and simply isn't scanned (consistent with
+        the rest of the lint).
+        """
+        if migration.name.endswith(".py"):
+            from confiture.core.idempotency.python_migration_extractor import (  # noqa: PLC0415
+                extract_sql_from_python_migration,
+            )
+
+            try:
+                result = extract_sql_from_python_migration(migration)
+            except Exception:  # noqa: BLE001 — never let a migration break the lint
+                return ""
+            return "\n".join(snippet.sql for snippet in result.snippets)
+        return migration.read_text()
 
     def _format_violation(
         self,

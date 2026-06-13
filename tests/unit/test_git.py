@@ -332,5 +332,7 @@ class TestGitPlumbingIssue162:
 
             git_repo = GitRepository(repo_path)
             base = git_repo.get_merge_base("master", "orphan")
-            base = base if base not in (None, "master") else git_repo.get_merge_base("main", "orphan")
+            base = (
+                base if base not in (None, "master") else git_repo.get_merge_base("main", "orphan")
+            )
             assert base in ("master", "main")
