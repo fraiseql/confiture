@@ -78,6 +78,22 @@ def bad_migrations_dir(tmp_path):
 
 
 @pytest.fixture()
+def interdependent_migrations_dir(tmp_path):
+    """Two inter-dependent migrations: 002 creates a view over 001's table."""
+    (tmp_path / "20260401000001_create_widgets.up.sql").write_text(
+        "CREATE TABLE public.widgets (id BIGINT PRIMARY KEY);"
+    )
+    (tmp_path / "20260401000001_create_widgets.down.sql").write_text("DROP TABLE public.widgets;")
+    (tmp_path / "20260401000002_add_widgets_view.up.sql").write_text(
+        "CREATE OR REPLACE VIEW public.v_widgets AS SELECT id FROM public.widgets;"
+    )
+    (tmp_path / "20260401000002_add_widgets_view.down.sql").write_text(
+        "DROP VIEW public.v_widgets;"
+    )
+    return tmp_path
+
+
+@pytest.fixture()
 def non_transactional_migrations_dir(tmp_path):
     """Two migrations: 001 transactional (CREATE TABLE), 002 non-transactional (Python, CONCURRENTLY)."""
     (tmp_path / "20260401000001_create_foo.up.sql").write_text(
@@ -159,6 +175,39 @@ def test_preflight_against_continues_past_failure(preflight_db, bad_migrations_d
     assert result.migrations[1].error is not None
 
     # Even the passing migrations are rolled back.
+    assert _count_public_tables(preflight_db) == 0
+
+
+@pytest.mark.integration
+def test_preflight_against_later_pending_sees_earlier_pending(
+    preflight_db, interdependent_migrations_dir
+):
+    """A later pending migration sees an earlier pending migration's object.
+
+    Regression guard for issue #250: ``run_against`` applies pending migrations
+    cumulatively (success → ``RELEASE SAVEPOINT`` keeps the DDL within the outer
+    envelope), so ``V2``'s view over ``V1``'s table resolves and both succeed.
+    The complement to ``test_preflight_against_continues_past_failure`` (which
+    proves failure isolation); this one proves cumulative success.
+    """
+    pending = sorted(interdependent_migrations_dir.glob("*.up.sql"))
+
+    session = MigratorSession(
+        config=None,
+        migrations_dir=interdependent_migrations_dir,
+        database_url_override=preflight_db,
+    )
+    with session:
+        result = session.run_against(pending, against_url=preflight_db)
+
+    assert result.all_passed is True
+    assert len(result.migrations) == 2
+    assert result.migrations[0].success is True  # create_widgets
+    assert result.migrations[1].success is True  # add_widgets_view — sees widgets
+    assert all(m.error is None for m in result.migrations)
+    assert result.db_consumed is False
+
+    # Outer rollback left no trace: neither the table nor the view remains.
     assert _count_public_tables(preflight_db) == 0
 
 
