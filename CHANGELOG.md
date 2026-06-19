@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-06-19
+
+### Added
+
+- **`test_preflight_against_later_pending_sees_earlier_pending`** — regression guard proving that `MigratorSession.run_against()` applies pending migrations **cumulatively**: a later pending migration sees an object created by an earlier pending one. Two inter-dependent migrations (`V1 CREATE TABLE widgets`, `V2 CREATE VIEW v_widgets … FROM widgets`) both report `success=True`, and the outer rollback leaves no trace. This is the missing counterpart to the existing `test_preflight_against_continues_past_failure` (which proves *failure isolation*) — the absence of a *cumulative success* test is what let fraiseql/fraisier#250 be filed against already-correct behaviour. The engine itself is unchanged; this release only closes the coverage gap.
+
 ## [0.30.0] - 2026-06-13
 
 Makes `migrate validate --require-grant-migration` **semantic** (issue #162):
