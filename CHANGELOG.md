@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-06-25
+
+Bounds per-worker clone concurrency adaptively so large templates on an
+`fsync=on` cluster no longer thrash WAL/checkpoint and time out under
+`pytest -nN` (issue #166). Purely additive and CI-path-only: `clone()` and the
+`test-db clone` CLI default to the previous unbounded behaviour, and `fsync=off`
+clusters (typical CI) are left unbounded — so existing callers and CI are
+unaffected.
+
 ### Added
 
 - **Adaptive bounded clone concurrency for `test-db` provisioning (#166).** The
