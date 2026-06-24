@@ -288,6 +288,50 @@ single-flight, so the template path does not need divergent CI-vs-local code.
 
 ---
 
+## 6. Bounded clone concurrency on `fsync=on` clusters
+
+The template *build* is single-flighted (one advisory lock across all workers),
+but the per-worker *clones* are independent — so under `pytest -nN` every worker
+fires its `CREATE DATABASE … TEMPLATE` at roughly the same instant. On a cluster
+with **`fsync=on`** and a large (~1 GB+) template, those simultaneous clones each
+force a checkpoint / WAL flush; they do **not** parallelise, they pile up and
+serialise with heavy overhead. With a strict per-test timeout (`pytest-timeout`)
+none of them return in time and every DB-dependent test fails at fixture setup.
+
+> A RAM tablespace (§5) does **not** fix this: the contention is WAL/checkpoint,
+> not data-file IO, so moving the clone's data files to tmpfs changes nothing here.
+
+The `confiture_worker_db` fixture handles this automatically. It probes the
+cluster's `fsync` (`TestDbProvisioner.cluster_fsync_on()`) and, when it is `on`,
+**bounds concurrent clones** to a small default (2) using cross-process
+advisory-lock *slots* — separate from the build lock — so clones run in small
+waves instead of all at once. On `fsync=off` (the typical CI server) clones are
+cheap and stay **unbounded**, so CI is unaffected.
+
+Override the cap with one environment variable:
+
+```bash
+# Serialise clones strictly (each runs back-to-back), e.g. a very large template:
+export CONFITURE_TEST_MAX_CLONE_CONCURRENCY=1
+
+# Force a specific cap regardless of fsync:
+export CONFITURE_TEST_MAX_CLONE_CONCURRENCY=4
+
+# Force unbounded (opt out of throttling) even on fsync=on:
+export CONFITURE_TEST_MAX_CLONE_CONCURRENCY=0
+```
+
+The same bound is available on the raw primitive
+(`provisioner.clone(template, target, max_concurrency=N)`) and the CLI
+(`confiture test-db clone --max-clone-concurrency N`); both default to unbounded,
+so only the fixture opts in adaptively. Bounding clones trades wall-clock for
+determinism — each clone completes instead of all of them timing out.
+
+The fastest fix remains server tuning: an ephemeral test cluster with
+`fsync=off` (below) makes concurrent clones cheap and the bound a no-op.
+
+---
+
 ## Putting it together (Dagger / GitHub Actions)
 
 ```python

@@ -64,7 +64,7 @@ class TestClone:
             ],
         )
         assert result.exit_code == 0
-        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=True)
+        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=True, max_concurrency=None)
         assert '"target": "c0"' in result.stdout
 
     @patch("confiture.cli.test_db.TestDbProvisioner")
@@ -86,7 +86,31 @@ class TestClone:
             ],
         )
         assert result.exit_code == 0
-        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=False)
+        prov.clone.assert_called_once_with(
+            "tmpl", "c0", sync_commit_off=False, max_concurrency=None
+        )
+
+    @patch("confiture.cli.test_db.TestDbProvisioner")
+    def test_clone_max_concurrency_flag(self, mock_cls: MagicMock) -> None:
+        prov = mock_cls.return_value
+        prov.clone.return_value = CloneResult("tmpl", "c0", f"{_URL[:-15]}/c0")
+        result = runner.invoke(
+            app,
+            [
+                "test-db",
+                "clone",
+                "--template",
+                "tmpl",
+                "--target",
+                "c0",
+                "--database-url",
+                _URL,
+                "--max-clone-concurrency",
+                "3",
+            ],
+        )
+        assert result.exit_code == 0
+        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=True, max_concurrency=3)
 
     @patch("confiture.cli.test_db.TestDbProvisioner")
     def test_clone_json_redacts_dsn_password(self, mock_cls: MagicMock) -> None:

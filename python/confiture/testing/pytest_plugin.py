@@ -303,6 +303,11 @@ def confiture_worker_db(
     clone lands on disk via the provisioner's fallback. Either way the worker
     never crashes — ``pytest.skip`` is reserved for total DB-unavailability.
 
+    To avoid all workers thrashing WAL/checkpoint at session start (#166), the
+    number of concurrent clones is bounded automatically on an ``fsync=on`` cluster
+    (and left unbounded on ``fsync=off``, e.g. CI); override with
+    ``CONFITURE_TEST_MAX_CLONE_CONCURRENCY``.
+
     Note:
         Apps that freeze their settings/pool at import time must instead call
         ``confiture.testing.worker_db.resolve_worker_db_url`` from conftest.py at
@@ -311,15 +316,19 @@ def confiture_worker_db(
     import psycopg
 
     from confiture.core.test_db import TestDbProvisioner
-    from confiture.testing.worker_db import resolve_worker_db_name
+    from confiture.testing.worker_db import resolve_clone_concurrency, resolve_worker_db_name
 
     provisioner = TestDbProvisioner(confiture_test_server_url)
     target = resolve_worker_db_name(f"{confiture_template_db}_db", worker_id=confiture_worker_id)
+    max_concurrency = resolve_clone_concurrency(fsync_on=provisioner.cluster_fsync_on())
 
     try:
         provisioner.drop(target)  # reap a leftover clone from a crashed run
         clone = provisioner.clone(
-            confiture_template_db, target, tablespace=confiture_ram_tablespace_usable
+            confiture_template_db,
+            target,
+            tablespace=confiture_ram_tablespace_usable,
+            max_concurrency=max_concurrency,
         )
     except psycopg.OperationalError as e:
         pytest.skip(f"confiture test database unavailable: {e}")

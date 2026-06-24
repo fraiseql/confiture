@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 from confiture.core.temp_database import _replace_dbname
@@ -53,6 +54,15 @@ _CI_ENV_VARS = (
 # Values that mean an explicitly-disabled CI variable (e.g. ``CI=false``).
 _CI_FALSEY = frozenset({"", "0", "false", "no", "off"})
 
+# Env override for the clone-concurrency cap (#166). A valid int: >= 1 caps
+# concurrent clones to that many; <= 0 forces unbounded. Unset or unparseable →
+# auto (throttle only on an fsync=on cluster).
+_MAX_CLONE_CONCURRENCY_VAR = "CONFITURE_TEST_MAX_CLONE_CONCURRENCY"
+
+# Auto cap applied when the cluster has fsync=on and no override is set. Small
+# enough to stop the WAL/checkpoint pile-up, large enough to keep some overlap.
+_DEFAULT_FSYNC_ON_CLONE_CAP = 2
+
 
 def is_ci() -> bool:
     """Return True when running under a CI / automation environment.
@@ -68,6 +78,39 @@ def is_ci() -> bool:
     choose ``--from-artifact``. It is not branching logic inside the fixtures.
     """
     return any(os.environ.get(var, "").strip().lower() not in _CI_FALSEY for var in _CI_ENV_VARS)
+
+
+def resolve_clone_concurrency(
+    *, fsync_on: bool, env: Mapping[str, str] | None = None
+) -> int | None:
+    """Resolve the cap on concurrent clones for the worker-db fixture (#166).
+
+    ``CONFITURE_TEST_MAX_CLONE_CONCURRENCY`` wins when set to a valid int: ``>= 1``
+    caps concurrent clones to that many, ``<= 0`` forces unbounded. When it is unset
+    or unparseable, the cap is chosen automatically: throttle to a small default
+    only when *fsync_on* — concurrent ``CREATE DATABASE`` calls thrash WAL/checkpoint
+    on an ``fsync=on`` cluster — and stay unbounded otherwise (typical CI runs
+    ``fsync=off``, where concurrent clones are cheap).
+
+    Args:
+        fsync_on: Whether the target cluster runs with ``fsync = on`` (see
+            :meth:`confiture.core.test_db.TestDbProvisioner.cluster_fsync_on`).
+        env: Environment mapping to read (defaults to ``os.environ``).
+
+    Returns:
+        The cap to pass as ``clone(max_concurrency=...)``: a positive int, or
+        ``None`` for unbounded.
+    """
+    environ = env if env is not None else os.environ
+    raw = environ.get(_MAX_CLONE_CONCURRENCY_VAR, "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = None
+        if value is not None:
+            return value if value >= 1 else None
+    return _DEFAULT_FSYNC_ON_CLONE_CAP if fsync_on else None
 
 
 def current_worker_id() -> str | None:

@@ -175,12 +175,23 @@ def clone(
         "--sync-commit-off/--no-sync-commit-off",
         help="Set synchronous_commit=off on the clone (default on; opt out for durable commits).",
     ),
+    max_clone_concurrency: int = typer.Option(
+        None,
+        "--max-clone-concurrency",
+        help="Bound concurrent clones of this template across processes (>=1); "
+        "default unbounded. Throttles WAL/checkpoint thrash on fsync=on clusters.",
+    ),
     format_type: str = typer.Option("text", "--format", "-f", help="text or json."),
 ) -> None:
     """Clone a template into a fresh database via CREATE DATABASE … WITH TEMPLATE."""
     try:
         provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        result = provisioner.clone(template, target, sync_commit_off=sync_commit_off)
+        result = provisioner.clone(
+            template,
+            target,
+            sync_commit_off=sync_commit_off,
+            max_concurrency=max_clone_concurrency,
+        )
         if is_json(format_type):
             payload = result.to_dict()
             payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs

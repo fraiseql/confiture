@@ -15,6 +15,8 @@ from confiture.core.test_db import (
     _TABLESPACE_PROBE_SQL,
     TemplateState,
     TestDbProvisioner,
+    _acquire_advisory_slot,
+    _advisory_key,
     _alter_db_set_sql,
     _classify_template,
     _clone_sql,
@@ -81,6 +83,10 @@ class _CloneFakeConn:
         self._outcomes = list(create_outcomes)
         self.create_tablespaces: list[bool] = []
         self._template_exists = template_exists
+        # Clone-concurrency slot acquire/release keys (#166); empty unless a
+        # max_concurrency cap is in play.
+        self.advisory_locks: list[int] = []
+        self.advisory_unlocks: list[int] = []
 
     def __enter__(self) -> _CloneFakeConn:
         return self
@@ -95,6 +101,12 @@ class _CloneFakeConn:
             outcome = self._outcomes.pop(0) if self._outcomes else None
             if outcome is not None:
                 raise outcome
+        elif "pg_try_advisory_lock" in text:
+            self.advisory_locks.append(params[0])  # type: ignore[index]
+            return _FakeCursor((True,))
+        elif "pg_advisory_unlock" in text:
+            self.advisory_unlocks.append(params[0])  # type: ignore[index]
+            return _FakeCursor((True,))
         elif "shobj_description" in text:
             # clone()'s existence precondition (_read_comment).
             row = ("confiture:template:h",) if self._template_exists else None
@@ -458,6 +470,122 @@ class TestCloneMissingTemplate:
         result = prov.clone("tmpl", "c0", retries=3, backoff=0)
         assert result.target == "c0"
         assert fake.create_tablespaces == [False]
+
+
+# ---------------------------------------------------------------------------
+# Bounded clone concurrency (#166) — advisory-slot acquire, fsync probe, gating
+# ---------------------------------------------------------------------------
+
+
+class _SlotFakeConn:
+    """Fake maintenance conn driving ``_acquire_advisory_slot``.
+
+    Each ``pg_try_advisory_lock`` consumes one boolean from *try_results* (default
+    True once exhausted); acquired/released keys are recorded for assertions.
+    """
+
+    def __init__(self, try_results: list[bool]) -> None:
+        self._results = list(try_results)
+        self.acquired: list[int] = []
+        self.released: list[int] = []
+
+    def __enter__(self) -> _SlotFakeConn:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+    def execute(self, query: object, params: object = None, **kwargs: object) -> _FakeCursor:
+        text = str(query)
+        if "pg_try_advisory_lock" in text:
+            got = self._results.pop(0) if self._results else True
+            if got:
+                self.acquired.append(params[0])  # type: ignore[index]
+            return _FakeCursor((got,))
+        if "pg_advisory_unlock" in text:
+            self.released.append(params[0])  # type: ignore[index]
+            return _FakeCursor((True,))
+        return _FakeCursor(None)
+
+
+class TestAcquireAdvisorySlot:
+    def test_returns_first_free_slot(self) -> None:
+        conn = _SlotFakeConn([True])
+        assert _acquire_advisory_slot(conn, [10, 20, 30], poll=0) == 10
+        assert conn.acquired == [10]
+
+    def test_skips_busy_slots(self) -> None:
+        # First slot held, second free → second is taken (no extra acquire recorded).
+        conn = _SlotFakeConn([False, True])
+        assert _acquire_advisory_slot(conn, [10, 20], poll=0) == 20
+        assert conn.acquired == [20]
+
+    def test_spins_until_a_slot_frees(self) -> None:
+        # All slots busy for two scans, then one frees: the scan loops, never raises.
+        conn = _SlotFakeConn([False, False, True])
+        assert _acquire_advisory_slot(conn, [10], poll=0) == 10
+        assert conn.acquired == [10]
+
+
+class TestClusterFsyncOn:
+    def test_true_when_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        prov = _prov()
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: _FakeConn(row=("on",)))
+        assert prov.cluster_fsync_on() is True
+
+    def test_false_when_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        prov = _prov()
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: _FakeConn(row=("off",)))
+        assert prov.cluster_fsync_on() is False
+
+    def test_normalises_case_and_whitespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        prov = _prov()
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: _FakeConn(row=(" On ",)))
+        assert prov.cluster_fsync_on() is True
+
+    def test_degrades_to_throttle_on_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # If fsync can't be read, throttle (True) — always correct, just slower.
+        prov = _prov()
+        boom = psycopg.OperationalError("connection refused")
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: _FakeConn(raises=boom))
+        assert prov.cluster_fsync_on() is True
+
+
+class TestCloneMaxConcurrency:
+    def test_no_cap_takes_no_slot(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # max_concurrency=None (default) is byte-for-byte unchanged: no advisory lock.
+        prov = _prov()
+        fake = _CloneFakeConn([None])
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        prov.clone("tmpl", "c0", retries=3, backoff=0)
+        assert fake.advisory_locks == []
+        assert fake.advisory_unlocks == []
+
+    def test_cap_below_one_is_unbounded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        prov = _prov()
+        fake = _CloneFakeConn([None])
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        prov.clone("tmpl", "c0", retries=3, backoff=0, max_concurrency=0)
+        assert fake.advisory_locks == []
+
+    def test_cap_acquires_and_releases_one_slot(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A cap takes the first slot (index 0), holds it across the clone, releases it.
+        prov = _prov()
+        fake = _CloneFakeConn([None])
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        prov.clone("tmpl", "c0", retries=3, backoff=0, max_concurrency=2)
+        slot0 = _advisory_key("clone:tmpl:0")
+        assert fake.advisory_locks == [slot0]
+        assert fake.advisory_unlocks == [slot0]
+
+    def test_slot_released_even_when_clone_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The slot must be released on the failure path too (finally), or workers wedge.
+        prov = _prov()
+        fake = _CloneFakeConn([psycopg.errors.DuplicateDatabase("already exists")])
+        monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
+        with pytest.raises(SchemaError):
+            prov.clone("tmpl", "c0", retries=3, backoff=0, max_concurrency=2)
+        assert fake.advisory_unlocks == [_advisory_key("clone:tmpl:0")]
 
 
 # ---------------------------------------------------------------------------

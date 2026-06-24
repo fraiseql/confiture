@@ -23,6 +23,7 @@ class _StubProvisioner:
 
     usable_names: set[str] = set()
     clone_calls: list[dict] = []
+    fsync_on: bool = False
 
     def __init__(self, url: str) -> None:
         self.url = url
@@ -33,9 +34,24 @@ class _StubProvisioner:
     def tablespace_usable(self, name: str) -> bool:
         return name in _StubProvisioner.usable_names
 
-    def clone(self, template: str, target: str, *, tablespace: str | None = None) -> object:
+    def cluster_fsync_on(self) -> bool:
+        return _StubProvisioner.fsync_on
+
+    def clone(
+        self,
+        template: str,
+        target: str,
+        *,
+        tablespace: str | None = None,
+        max_concurrency: int | None = None,
+    ) -> object:
         _StubProvisioner.clone_calls.append(
-            {"template": template, "target": target, "tablespace": tablespace}
+            {
+                "template": template,
+                "target": target,
+                "tablespace": tablespace,
+                "max_concurrency": max_concurrency,
+            }
         )
         return SimpleNamespace(target_url=f"postgresql://localhost/{target}")
 
@@ -44,6 +60,7 @@ class _StubProvisioner:
 def _reset_stub() -> None:
     _StubProvisioner.usable_names = set()
     _StubProvisioner.clone_calls = []
+    _StubProvisioner.fsync_on = False
 
 
 class TestRamTablespaceFixture:
@@ -93,6 +110,29 @@ class TestWorkerDbThreadsTablespace:
         monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
         call = self._run(ram_tablespace=None)
         assert call["tablespace"] is None
+
+    def test_unbounded_clone_when_fsync_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # fsync=off + no override → clones run unbounded (None), CI unaffected (#166).
+        monkeypatch.delenv("CONFITURE_TEST_MAX_CLONE_CONCURRENCY", raising=False)
+        monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
+        _StubProvisioner.fsync_on = False
+        call = self._run(ram_tablespace=None)
+        assert call["max_concurrency"] is None
+
+    def test_throttles_clone_when_fsync_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # fsync=on + no override → the fixture bounds concurrent clones (#166).
+        monkeypatch.delenv("CONFITURE_TEST_MAX_CLONE_CONCURRENCY", raising=False)
+        monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
+        _StubProvisioner.fsync_on = True
+        call = self._run(ram_tablespace=None)
+        assert call["max_concurrency"] == 2
+
+    def test_env_override_wins_over_fsync(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CONFITURE_TEST_MAX_CLONE_CONCURRENCY", "1")
+        monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
+        _StubProvisioner.fsync_on = False
+        call = self._run(ram_tablespace=None)
+        assert call["max_concurrency"] == 1
 
 
 class TestNoPytestExitInWorker:

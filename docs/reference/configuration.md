@@ -659,6 +659,7 @@ small set of environment variables — they are independent of the YAML config:
 |----------|---------|---------|
 | `CONFITURE_TEST_DB_URL` | `postgresql://localhost/confiture_test` | PG **server** URL the `test-db` fixtures provision against (the database component is ignored for admin work). |
 | `CONFITURE_TEST_RAM_TABLESPACE` | unset | Name of a tmpfs tablespace to place per-worker clones in (provision it with `confiture test-db ram-setup`). **Unset → on-disk clones, behaviour unchanged.** A misconfigured or post-reboot-broken tablespace degrades to disk automatically. |
+| `CONFITURE_TEST_MAX_CLONE_CONCURRENCY` | auto | Cap on concurrent per-worker clones (#166). A valid int: `>= 1` bounds clones to that many across processes; `<= 0` forces unbounded. **Unset → auto:** throttle to 2 on an `fsync=on` cluster (concurrent clones thrash WAL/checkpoint), unbounded on `fsync=off` (typical CI). Set `=1` to serialise a very large template. |
 
 ---
 

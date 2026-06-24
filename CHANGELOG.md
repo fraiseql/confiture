@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Adaptive bounded clone concurrency for `test-db` provisioning (#166).** The
+  template *build* was already single-flighted, but the per-worker *clones* ran
+  fully concurrently — under `pytest -nN` every xdist worker fired its
+  `CREATE DATABASE … WITH TEMPLATE` at once. On an `fsync=on` cluster with a large
+  template, those simultaneous clones thrash WAL/checkpoint, serialise with heavy
+  overhead, and blow past per-test timeouts (invisible in CI, which runs
+  `fsync=off`; a RAM tablespace does **not** help, as the contention is
+  WAL/checkpoint, not data-file IO). The `confiture_worker_db` fixture now probes
+  the cluster's `fsync` and bounds concurrent clones to a small default (2) via
+  cross-process advisory-lock *slots* (a namespace distinct from the build lock)
+  **only when `fsync=on`** — leaving `fsync=off` unbounded, so CI is unaffected.
+  - New `TestDbProvisioner.cluster_fsync_on()` (degrades to throttle if the
+    setting can't be read) and `clone(..., max_concurrency=N)` — `None`/`<1` keeps
+    the previous byte-for-byte unbounded behaviour, so direct callers are unchanged.
+  - New `confiture.testing.worker_db.resolve_clone_concurrency()` and the
+    `CONFITURE_TEST_MAX_CLONE_CONCURRENCY` env override (`>=1` caps, `<=0` forces
+    unbounded, unset → auto).
+  - New `confiture test-db clone --max-clone-concurrency N` flag (default unbounded).
+
 ## [0.31.0] - 2026-06-19
 
 ### Added
