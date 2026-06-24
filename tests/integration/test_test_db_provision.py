@@ -378,3 +378,71 @@ class TestConcurrencyAndPrune:
         assert set(dropped) == {f"{_CLONE}_0", f"{_CLONE}_1"}
         # Template itself survives prune.
         assert provisioner.template_status(_TEMPLATE, "h").state is TemplateState.CURRENT
+
+
+class TestBoundedCloneConcurrency:
+    """Cross-process clone throttling (#166): real advisory-lock slots on PG."""
+
+    def test_cluster_fsync_on_matches_show_fsync(self, provisioner: TestDbProvisioner) -> None:
+        with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as conn:
+            expected = conn.execute("SHOW fsync").fetchone()[0] == "on"
+        assert provisioner.cluster_fsync_on() is expected
+
+    def test_clone_blocks_until_a_slot_frees(self, provisioner: TestDbProvisioner) -> None:
+        # Deterministic proof the cap gates: hold every slot from a separate session,
+        # start a capped clone (it must NOT proceed), free one slot, and watch it
+        # acquire that slot and complete.
+        from confiture.core.test_db import _advisory_key
+
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        cap = 2
+        keys = [_advisory_key(f"clone:{_TEMPLATE}:{i}") for i in range(cap)]
+        done = threading.Event()
+        errors: list[Exception] = []
+
+        with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as holder:
+            for k in keys:
+                holder.execute("SELECT pg_advisory_lock(%s)", (k,))
+
+            def _clone() -> None:
+                try:
+                    provisioner.clone(_TEMPLATE, f"{_CLONE}_0", max_concurrency=cap, backoff=0)
+                except Exception as e:  # noqa: BLE001 - recorded for assertion
+                    errors.append(e)
+                finally:
+                    done.set()
+
+            worker = threading.Thread(target=_clone)
+            worker.start()
+            try:
+                # All slots held → the clone is parked on the slot scan, cannot run.
+                assert not done.wait(timeout=1.0), "clone ran while every slot was held"
+                # Free one slot → the clone grabs it and finishes.
+                holder.execute("SELECT pg_advisory_unlock(%s)", (keys[0],))
+                assert done.wait(timeout=15.0), "clone did not proceed after a slot freed"
+            finally:
+                worker.join(timeout=5.0)
+
+        assert not errors, errors
+        assert _tables(provisioner, f"{_CLONE}_0") == {"widget"}
+
+    def test_capped_concurrent_clones_all_succeed(self, provisioner: TestDbProvisioner) -> None:
+        # Throttling must not change the outcome: every clone still lands intact.
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+        errors: list[Exception] = []
+
+        def _clone(i: int) -> None:
+            try:
+                provisioner.clone(_TEMPLATE, f"{_CLONE}_{i}", max_concurrency=2, backoff=0)
+            except Exception as e:  # noqa: BLE001 - recorded for assertion
+                errors.append(e)
+
+        threads = [threading.Thread(target=_clone, args=(i,)) for i in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, errors
+        for i in range(6):
+            assert _tables(provisioner, f"{_CLONE}_{i}") == {"widget"}

@@ -14,10 +14,12 @@ never races a concurrent clone — and are not copied into clones.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -49,6 +51,11 @@ _MANAGED_PREFIX = "confiture:"
 # PostgreSQL identifier: leading letter/underscore, then letters/digits/underscore,
 # 1–63 ASCII chars. Quoting still happens via Identifier; this is defence in depth.
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+
+# Advisory-lock namespace for throttling concurrent clones (#166), kept distinct
+# from the template-build lock (which keys on the bare template name). A clone
+# slot key is ``_advisory_key(f"clone:{template}:{i}")``.
+_CLONE_SLOT_NAMESPACE = "clone:"
 
 # Tablespace LOCATION lookup. No row → the tablespace does not exist; an empty
 # string → a built-in tablespace (pg_default/pg_global) living in the data dir.
@@ -257,6 +264,23 @@ def _advisory_key(name: str) -> int:
     return int.from_bytes(digest, "big", signed=True)
 
 
+def _acquire_advisory_slot(conn: psycopg.Connection, keys: list[int], *, poll: float = 0.05) -> int:
+    """Grab one of *keys* as a non-blocking advisory lock, spinning until one frees.
+
+    Scans the slot keys in order, taking the first whose ``pg_try_advisory_lock``
+    succeeds; if all are currently held, sleeps *poll* seconds and rescans. Returns
+    the key that was acquired — the caller is responsible for releasing it. Bounding
+    the number of slots bounds concurrent holders across *every* process on the
+    cluster, which is what throttles concurrent clones (#166).
+    """
+    while True:
+        for key in keys:
+            row = conn.execute("SELECT pg_try_advisory_lock(%s)", (key,)).fetchone()
+            if row is not None and row[0]:
+                return key
+        time.sleep(poll)
+
+
 def _managed_kind(comment: str | None) -> str | None:
     """Return ``"template"``/``"clone"`` for a managed comment, else ``None``."""
     if not comment:
@@ -334,6 +358,23 @@ class TestDbProvisioner:
 
     def _set_comment(self, conn: psycopg.Connection, db_name: str, value: str) -> None:
         conn.execute(_comment_sql(db_name, value))
+
+    def cluster_fsync_on(self) -> bool:
+        """Return True when the cluster runs with ``fsync = on`` (the default).
+
+        Decides whether concurrent clones need throttling (#166): on ``fsync=on``
+        each ``CREATE DATABASE`` forces a checkpoint / WAL flush, so N simultaneous
+        clones of a large template thrash and serialise with heavy overhead; on
+        ``fsync=off`` (typical CI) they are cheap and need no bound. Degrades to
+        True — throttle, which is always correct and merely slower — if the setting
+        cannot be read.
+        """
+        try:
+            with self._maintenance_conn() as conn:
+                row = conn.execute("SHOW fsync").fetchone()
+        except psycopg.Error:
+            return True
+        return row is not None and str(row[0]).strip().lower() == "on"
 
     # -- tablespace usability ----------------------------------------------
 
@@ -647,6 +688,28 @@ class TestDbProvisioner:
                 "database.",
             )
 
+    @contextlib.contextmanager
+    def _clone_concurrency_slot(self, template: str, cap: int | None) -> Iterator[None]:
+        """Hold one of *cap* cross-process clone slots for the wrapped clone (#166).
+
+        ``cap`` None or < 1 → no throttling (unbounded, behaviour byte-for-byte
+        unchanged). Otherwise a dedicated maintenance connection holds an
+        advisory-lock slot — keyed on the template in a namespace distinct from the
+        template-build lock — for the whole clone, *including* the on-disk fallback,
+        so concurrent ``CREATE DATABASE`` calls across xdist workers never exceed
+        *cap*. The slot is released when the clone completes (or raises).
+        """
+        if cap is None or cap < 1:
+            yield
+            return
+        keys = [_advisory_key(f"{_CLONE_SLOT_NAMESPACE}{template}:{i}") for i in range(cap)]
+        with self._maintenance_conn() as conn:
+            key = _acquire_advisory_slot(conn, keys)
+            try:
+                yield
+            finally:
+                conn.execute("SELECT pg_advisory_unlock(%s)", (key,))
+
     def clone(
         self,
         template: str,
@@ -656,6 +719,7 @@ class TestDbProvisioner:
         backoff: float = 0.25,
         sync_commit_off: bool = True,
         tablespace: str | None = None,
+        max_concurrency: int | None = None,
     ) -> CloneResult:
         """Clone *template* into *target* via ``CREATE DATABASE … WITH TEMPLATE``.
 
@@ -683,6 +747,12 @@ class TestDbProvisioner:
                 **once** to a plain on-disk clone with a fresh retry budget, logs a
                 WARNING, and records ``tablespace=None`` on the result. When
                 ``None`` (default), behaviour is byte-for-byte unchanged.
+            max_concurrency: When >= 1, bound the number of clones of *template*
+                that run concurrently across *all* processes on the cluster to this
+                many, via cross-process advisory-lock slots (#166). This stops N
+                xdist workers from firing ``CREATE DATABASE`` simultaneously and
+                thrashing WAL/checkpoint on an ``fsync=on`` cluster. ``None`` (the
+                default) or < 1 → unbounded, behaviour byte-for-byte unchanged.
 
         Returns:
             A :class:`CloneResult`; ``result.tablespace`` is the tablespace the
@@ -699,36 +769,38 @@ class TestDbProvisioner:
 
         self._require_template_exists(template)
 
-        try:
-            return self._clone_with_retries(
-                template,
-                target,
-                tablespace=tablespace,
-                retries=retries,
-                backoff=backoff,
-                sync_commit_off=sync_commit_off,
-            )
-        except _TablespaceUnavailable as exc:
-            # The tmpfs probe is only a cheap gate; a post-reboot tablespace passes
-            # it yet fails the actual CREATE. This on-disk fallback is the real
-            # safety net. One shot, with a *fresh* retry budget — a tablespace
-            # failure must never exhaust the ObjectInUse backoff before disk runs.
-            logger.warning(
-                "Clone into tablespace %r failed (%s); falling back to an on-disk "
-                "clone of %r → %r.",
-                tablespace,
-                exc.cause,
-                template,
-                target,
-            )
-            return self._clone_with_retries(
-                template,
-                target,
-                tablespace=None,
-                retries=retries,
-                backoff=backoff,
-                sync_commit_off=sync_commit_off,
-            )
+        with self._clone_concurrency_slot(template, max_concurrency):
+            try:
+                return self._clone_with_retries(
+                    template,
+                    target,
+                    tablespace=tablespace,
+                    retries=retries,
+                    backoff=backoff,
+                    sync_commit_off=sync_commit_off,
+                )
+            except _TablespaceUnavailable as exc:
+                # The tmpfs probe is only a cheap gate; a post-reboot tablespace
+                # passes it yet fails the actual CREATE. This on-disk fallback is the
+                # real safety net. One shot, with a *fresh* retry budget — a
+                # tablespace failure must never exhaust the ObjectInUse backoff
+                # before disk runs.
+                logger.warning(
+                    "Clone into tablespace %r failed (%s); falling back to an on-disk "
+                    "clone of %r → %r.",
+                    tablespace,
+                    exc.cause,
+                    template,
+                    target,
+                )
+                return self._clone_with_retries(
+                    template,
+                    target,
+                    tablespace=None,
+                    retries=retries,
+                    backoff=backoff,
+                    sync_commit_off=sync_commit_off,
+                )
 
     def _clone_with_retries(
         self,

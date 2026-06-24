@@ -6,8 +6,10 @@ import pytest
 
 from confiture.testing.worker_db import (
     _CI_ENV_VARS,
+    _MAX_CLONE_CONCURRENCY_VAR,
     current_worker_id,
     is_ci,
+    resolve_clone_concurrency,
     resolve_worker_db_name,
     resolve_worker_db_url,
 )
@@ -84,6 +86,47 @@ class TestIsCi:
         for key, value in env.items():
             monkeypatch.setenv(key, value)
         assert is_ci() is expected
+
+
+class TestResolveCloneConcurrency:
+    """The cap resolver for bounded clone concurrency (#166)."""
+
+    def test_auto_throttles_on_fsync_on(self) -> None:
+        # No override + fsync=on → the small default cap (concurrent clones thrash).
+        assert resolve_clone_concurrency(fsync_on=True, env={}) == 2
+
+    def test_auto_unbounded_on_fsync_off(self) -> None:
+        # No override + fsync=off (typical CI) → unbounded; clones are cheap there.
+        assert resolve_clone_concurrency(fsync_on=False, env={}) is None
+
+    def test_override_caps_regardless_of_fsync(self) -> None:
+        env = {_MAX_CLONE_CONCURRENCY_VAR: "4"}
+        assert resolve_clone_concurrency(fsync_on=False, env=env) == 4
+        assert resolve_clone_concurrency(fsync_on=True, env=env) == 4
+
+    def test_override_one_is_serial(self) -> None:
+        env = {_MAX_CLONE_CONCURRENCY_VAR: "1"}
+        assert resolve_clone_concurrency(fsync_on=True, env=env) == 1
+
+    @pytest.mark.parametrize("raw", ["0", "-1", "-5"])
+    def test_override_non_positive_forces_unbounded(self, raw: str) -> None:
+        # An explicit opt-out (<= 0) wins even on fsync=on.
+        env = {_MAX_CLONE_CONCURRENCY_VAR: raw}
+        assert resolve_clone_concurrency(fsync_on=True, env=env) is None
+
+    def test_override_whitespace_is_stripped(self) -> None:
+        env = {_MAX_CLONE_CONCURRENCY_VAR: "  3  "}
+        assert resolve_clone_concurrency(fsync_on=True, env=env) == 3
+
+    @pytest.mark.parametrize("raw", ["abc", "2.5", ""])
+    def test_override_invalid_falls_through_to_auto(self, raw: str) -> None:
+        env = {_MAX_CLONE_CONCURRENCY_VAR: raw}
+        assert resolve_clone_concurrency(fsync_on=True, env=env) == 2
+        assert resolve_clone_concurrency(fsync_on=False, env=env) is None
+
+    def test_defaults_to_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(_MAX_CLONE_CONCURRENCY_VAR, "5")
+        assert resolve_clone_concurrency(fsync_on=False) == 5
 
 
 class TestCurrentWorkerId:
