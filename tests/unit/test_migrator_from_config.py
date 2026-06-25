@@ -126,6 +126,43 @@ class TestMigratorFromConfig:
                 assert isinstance(m, MigratorSession)
             mock_conn.close.assert_called_once()
 
+    def test_from_config_accepts_database_url_only_config(self, tmp_path):
+        """Issue #168: the migrate-only Python API must accept the same minimal
+        ``database_url``-only config the CLI's ``migrate up`` accepts.
+
+        The build-only fields ``name``/``include_dirs`` are never read on the
+        migrate path (``MigratorSession`` uses only ``database_url`` and
+        ``migration.tracking_table``), so ``from_config`` must not require them.
+        """
+        config_file = tmp_path / "min.yaml"
+        config_file.write_text("database_url: postgresql://localhost/db\n")
+        mock_conn = MagicMock()
+        with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
+            session = Migrator.from_config(config_file)
+            assert isinstance(session, MigratorSession)
+            # The session is usable: defaults didn't leak into the migrate path.
+            with session as m:
+                assert callable(m.up)
+
+    def test_from_config_database_url_only_uses_default_tracking_table(self, tmp_path):
+        """A minimal config still resolves the default tracking table."""
+        config_file = tmp_path / "min.yaml"
+        config_file.write_text("database_url: postgresql://localhost/db\n")
+        mock_conn = MagicMock()
+        with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
+            with Migrator.from_config(config_file) as m:
+                assert m._migrator.migration_table == "tb_confiture"
+
+    def test_from_config_still_rejects_missing_database_url(self, tmp_path):
+        """A config without database_url is genuinely invalid and must fail."""
+        from confiture.exceptions import ConfigurationError
+
+        config_file = tmp_path / "empty.yaml"
+        config_file.write_text("name: test\n")
+        with pytest.raises(ConfigurationError) as exc_info:
+            Migrator.from_config(config_file)
+        assert exc_info.value.error_code == "CONFIG_002"
+
     def test_from_config_nonexistent_file_raises(self):
         from confiture.exceptions import ConfigurationError
 

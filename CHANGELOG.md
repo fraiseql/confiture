@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Two consistency fixes found while migrating fraisier to confiture 0.32: the
+public Python API now accepts the same minimal config the CLI does (#168), and
+SQL-file migrations that contain non-transactional statements no longer
+false-positive in preflight (#169). Both align a stricter/divergent path back to
+`migrate up`; no breaking changes.
+
+### Fixed
+
+- **`Migrator.from_config()` accepts a minimal `database_url`-only config (#168).**
+  The documented Python entry point validated through `Environment`, which
+  hard-requires the build-only fields `name`/`include_dirs` — so a config the
+  CLI's `migrate up --config` accepts was rejected by `from_config`. The
+  migrate path never reads those fields (`MigratorSession` uses only
+  `database_url` and `migration.tracking_table`), so `from_config` now defaults
+  them when absent, matching the CLI's lenient loader. A genuinely invalid
+  config (e.g. missing `database_url`) still fails with `CONFIG_002`.
+
+- **SQL-file migrations auto-detect non-transactional statements (#169).** A
+  pure `.up.sql` migration cannot declare `transactional = False`, so one
+  containing `CREATE INDEX CONCURRENTLY` (or `VACUUM`, `REINDEX … CONCURRENTLY`,
+  `ALTER TYPE … ADD VALUE`, …) inherited `transactional = True` and was run
+  inside a SAVEPOINT — failing under both `migrate up` ("cannot run inside a
+  transaction block") and `preflight --against` (an error-severity
+  `PFLIGHT_REPLAY_FAILED`, exit 7, beside the `PFLIGHT_NON_TRANSACTIONAL`
+  warning the static analyzer already emits). `FileSQLMigration` now reflects
+  its `.up.sql` content via the same `MigrationAnalyzer` the static preflight
+  check uses, so such a migration runs in autocommit under `migrate up` and is
+  skipped under `preflight --against` — exactly like a Python migration with
+  `transactional = False`. This restores the 0.9.x preflight-skip semantics
+  while keeping the informative warning. See
+  [transaction-contract.md](docs/reference/transaction-contract.md) §5.
+
 ## [0.32.0] - 2026-06-25
 
 Bounds per-worker clone concurrency adaptively so large templates on an

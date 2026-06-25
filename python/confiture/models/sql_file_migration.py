@@ -43,6 +43,30 @@ from confiture.models.migration import Migration
 logger = logging.getLogger(__name__)
 
 
+def _detect_transactional(up_file: Path) -> bool:
+    """Return ``False`` when a SQL migration must run outside a transaction.
+
+    A pure ``.up.sql`` migration has no Python class to carry
+    ``transactional = False``, yet statements such as ``CREATE INDEX
+    CONCURRENTLY``, ``VACUUM``, ``REINDEX … CONCURRENTLY`` and ``ALTER TYPE …
+    ADD VALUE`` are rejected by PostgreSQL inside any transaction block.  This
+    mirrors the static ``preflight`` check (``MigrationAnalyzer`` on the up
+    file) so such a migration runs in autocommit under ``migrate up`` and is
+    skipped under ``preflight --against`` — exactly like a Python migration
+    that declares ``transactional = False`` (issue #169).
+
+    Any read or analysis failure degrades to ``True`` (transactional), the
+    historical default; the real error surfaces when the migration executes.
+    """
+    from confiture.core.migration_analyzer import MigrationAnalyzer
+
+    try:
+        sql = up_file.read_text(encoding="utf-8")
+        return not MigrationAnalyzer().analyze(sql)
+    except Exception:  # noqa: BLE001 — never let detection break migration loading
+        return True
+
+
 class FileSQLMigration(Migration):
     """Migration loaded from .up.sql/.down.sql file pair.
 
@@ -93,6 +117,10 @@ class FileSQLMigration(Migration):
                 "name": parts[1] if len(parts) > 1 else base_name,
                 "up_file": up_file,
                 "down_file": down_file,
+                # Issue #169 — auto-detect non-transactional SQL so the
+                # migration runs in autocommit instead of failing inside a
+                # SAVEPOINT.
+                "transactional": _detect_transactional(up_file),
             },
         )
 
@@ -236,6 +264,11 @@ class FileSQLMigration(Migration):
                 "down_file": down_file,
                 "up_preconditions": up_preconditions,
                 "down_preconditions": down_preconditions,
+                # Issue #169 — a SQL file containing CREATE INDEX CONCURRENTLY,
+                # VACUUM, etc. cannot run inside a transaction; detect that here
+                # (same analyzer as the static preflight check) so `migrate up`
+                # applies it in autocommit and `preflight --against` skips it.
+                "transactional": _detect_transactional(up_file),
                 "__init__": init_method,
                 "up": up_method,
                 "down": down_method,
