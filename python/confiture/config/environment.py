@@ -717,9 +717,17 @@ class Environment(BaseModel):
         seed: Seed data application configuration
     """
 
-    name: str
+    # ``name`` and ``include_dirs`` are build-only fields and are never read on
+    # the migrate path (``MigratorSession`` uses only ``database_url`` and
+    # ``migration.tracking_table``).  They default here so a migrate-only
+    # Python-API consumer can ``Environment.model_validate({"database_url": …})``
+    # without supplying build metadata — matching the CLI's lenient config
+    # loader (issue #168).  Build safety is unaffected: ``Environment.load``
+    # injects ``name`` and guards a missing ``include_dirs``, and
+    # ``SchemaBuilder`` independently rejects an empty ``include_dirs``.
+    name: str = ""
     database_url: str
-    include_dirs: list[str | DirectoryConfig]
+    include_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_post_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     exclude_dirs: list[str] = Field(default_factory=list)

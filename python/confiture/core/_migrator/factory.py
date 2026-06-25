@@ -50,17 +50,12 @@ def from_config(
             )
         with open(config_path) as f:
             raw: dict[str, Any] = yaml.safe_load(f)
-        # Issue #168: the migrate-only Python entry point must accept the same
-        # minimal ``database_url``-only config the CLI's ``migrate up`` accepts.
-        # The CLI loads a raw dict (``connection.load_config``) and never
-        # validates the build-only fields ``name``/``include_dirs``; those are
-        # never read on the migrate path either (``MigratorSession`` uses only
-        # ``database_url`` and ``migration.tracking_table``).  Default them when
-        # absent so ``from_config`` isn't stricter than the CLI.  A truly
-        # invalid config (e.g. missing ``database_url``) still fails validation.
-        if isinstance(raw, dict):
-            raw.setdefault("name", config_path.stem)
-            raw.setdefault("include_dirs", [])
+        # Issue #168: a migrate-only config need only carry ``database_url`` —
+        # the build-only fields ``name``/``include_dirs`` default on the
+        # ``Environment`` model itself, so ``from_config`` (and any consumer
+        # calling ``Environment.model_validate`` directly) accepts the same
+        # minimal config the CLI's ``migrate up`` does.  A truly invalid config
+        # (e.g. missing ``database_url``) still fails validation.
         try:
             env = Environment.model_validate(raw)
         except Exception as e:

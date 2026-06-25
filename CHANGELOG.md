@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Completes the 0.33.0 #168 fix at the model layer so every Python-API consumer —
+not just `Migrator.from_config` — can validate a migrate-only config.
+
+### Fixed
+
+- **`Environment` defaults the build-only fields `name`/`include_dirs` (#168
+  follow-up).** 0.33.0 accepted a minimal `database_url`-only config in
+  `Migrator.from_config(path)`, but a consumer that builds the model directly —
+  `Environment.model_validate({"database_url": …})`, e.g. to inject a
+  `database_url` override — still hit the required-field wall. Those two fields
+  are build-only (never read on the migrate path) and now default on the model
+  itself (`name=""`, `include_dirs=[]`), so the documented Python entry points
+  are uniformly as lenient as the CLI. Build safety is unchanged: a missing
+  `include_dirs` for an actual build still fails loudly — `Environment.load`
+  injects `name` and guards `include_dirs`, and `SchemaBuilder` independently
+  rejects an empty `include_dirs`. `database_url` remains required and its
+  format is still validated. The redundant defaulting added to
+  `from_config` in 0.33.0 is removed (the model is now the single source).
+
 ## [0.33.0] - 2026-06-25
 
 Two consistency fixes found while migrating fraisier to confiture 0.32: the
