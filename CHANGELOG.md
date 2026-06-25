@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-06-25
+
 Two consistency fixes found while migrating fraisier to confiture 0.32: the
 public Python API now accepts the same minimal config the CLI does (#168), and
 SQL-file migrations that contain non-transactional statements no longer
