@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-06-25
+
 Completes the 0.33.0 #168 fix at the model layer so every Python-API consumer —
 not just `Migrator.from_config` — can validate a migrate-only config.
 
