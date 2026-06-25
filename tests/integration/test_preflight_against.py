@@ -118,6 +118,27 @@ def non_transactional_migrations_dir(tmp_path):
     return tmp_path
 
 
+@pytest.fixture()
+def sql_non_transactional_migrations_dir(tmp_path):
+    """Issue #169 — a pure SQL-file migration with CREATE INDEX CONCURRENTLY.
+
+    001 creates a table (transactional); 002 is a ``.up.sql`` file whose only
+    statement is non-transactional.  Such a file cannot declare
+    ``transactional = False`` — confiture must auto-detect it.
+    """
+    (tmp_path / "20260401000001_create_foo.up.sql").write_text(
+        "CREATE TABLE foo (id SERIAL PRIMARY KEY, val TEXT);"
+    )
+    (tmp_path / "20260401000001_create_foo.down.sql").write_text("DROP TABLE foo;")
+    (tmp_path / "20260401000002_add_idx.up.sql").write_text(
+        "CREATE INDEX CONCURRENTLY idx_foo_val ON foo (val);"
+    )
+    (tmp_path / "20260401000002_add_idx.down.sql").write_text(
+        "DROP INDEX CONCURRENTLY IF EXISTS idx_foo_val;"
+    )
+    return tmp_path
+
+
 def _count_public_tables(db_url: str) -> int:
     conn = psycopg.connect(db_url)
     try:
@@ -237,6 +258,39 @@ def test_preflight_non_transactional_skipped_by_default(
     assert result.db_consumed is False
 
     # 001 DDL was also rolled back.
+    assert _count_public_tables(preflight_db) == 0
+
+
+@pytest.mark.integration
+def test_preflight_sql_file_concurrently_skipped_by_default(
+    preflight_db, sql_non_transactional_migrations_dir
+):
+    """Issue #169 — a SQL-file CREATE INDEX CONCURRENTLY migration is skipped,
+    not reported as a failed replay.
+
+    Before the fix it inherited ``transactional = True`` and failed to replay
+    inside a SAVEPOINT ("cannot run inside a transaction block"), surfacing an
+    error-severity ``PFLIGHT_REPLAY_FAILED`` and exit 7.
+    """
+    pending = sorted(sql_non_transactional_migrations_dir.glob("*.up.sql"))
+
+    session = MigratorSession(
+        config=None,
+        migrations_dir=sql_non_transactional_migrations_dir,
+        database_url_override=preflight_db,
+    )
+    with session:
+        result = session.run_against(pending, against_url=preflight_db)
+
+    assert len(result.migrations) == 2
+    assert result.migrations[0].success is True  # create_foo (transactional)
+    assert result.migrations[1].skipped is True  # CONCURRENTLY auto-detected
+    assert result.migrations[1].error is None  # not a replay failure
+    assert result.all_passed is True  # skipped is neutral → no exit 7
+    assert result.failures == []
+    assert result.db_consumed is False
+
+    # Outer rollback left no trace.
     assert _count_public_tables(preflight_db) == 0
 
 

@@ -126,7 +126,8 @@ END $$;
 
 (Note: `CREATE INDEX CONCURRENTLY` itself cannot run inside any
 transaction; the example is illustrative of the `EXCEPTION` block
-pattern.  Real `CONCURRENTLY` work needs `transactional = False`.)
+pattern.  Real `CONCURRENTLY` work needs `transactional = False` — or, in a
+`.up.sql` file, is auto-detected; see point 5.)
 
 **Implication for authors:** `EXCEPTION WHEN` handlers, including the
 `IF EXISTS` / `IF NOT EXISTS` idioms inside `DO` blocks, are safe under
@@ -162,6 +163,28 @@ class CreateIndexConcurrently(Migration):
         self.execute("CREATE INDEX CONCURRENTLY idx_users_email ON users(email)")
 ```
 
+### SQL-file migrations auto-detect (issue #169)
+
+A pure `.up.sql` migration has no Python class to carry
+`transactional = False`.  Confiture therefore inspects the `.up.sql`
+content (the same `MigrationAnalyzer` the static `preflight` check uses)
+and treats the migration as non-transactional automatically when it
+contains a statement PostgreSQL forbids inside a transaction —
+`CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`,
+`REINDEX … CONCURRENTLY`, `VACUUM`, `CLUSTER`, `ALTER TYPE … ADD VALUE`,
+`CREATE/DROP DATABASE`.  No declaration is needed (and none is possible):
+
+```sql
+-- 20260528121500_create_index_concurrently.up.sql
+CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
+```
+
+Such a SQL file behaves exactly like a Python migration with
+`transactional = False`: `migrate up` runs it in autocommit, and the
+verification modes below skip it.  (Detection failure degrades to
+transactional — the historical default — so the real error, if any,
+surfaces when the migration executes.)
+
 Non-transactional migrations:
 
 - Are skipped under `--dry-run-execute` (no savepoint envelope can
@@ -187,8 +210,8 @@ migration body.
 |---------------|-----|
 | Group inserts/updates under a sub-rollback | `with self.connection.transaction(): …` |
 | Run `IF EXISTS`-style conditional DDL | `DO $$ … EXCEPTION WHEN … END $$` |
-| Run `CREATE INDEX CONCURRENTLY` | `transactional = False` |
-| Run `VACUUM` / `REINDEX CONCURRENTLY` | `transactional = False` |
+| Run `CREATE INDEX CONCURRENTLY` | `transactional = False` (Python) — auto-detected in a `.up.sql` file |
+| Run `VACUUM` / `REINDEX CONCURRENTLY` | `transactional = False` (Python) — auto-detected in a `.up.sql` file |
 | Test the migration without persisting | `migrate up --dry-run-execute` |
 | Test against a parallel database | `migrate preflight --against <db>` |
 
