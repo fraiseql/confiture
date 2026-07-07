@@ -11,7 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.core.restorer import DatabaseRestorer, RestoreOptions, RestoreResult
+from confiture.core.restorer import (
+    DatabaseRestorer,
+    RestoreOptions,
+    RestoreResult,
+    TocEntry,
+)
 from confiture.exceptions import RestoreError
 
 # ---------------------------------------------------------------------------
@@ -303,11 +308,12 @@ class TestRestoreOrchestration:
         def fake_validate(path):
             pass
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             calls.append((section, parallel))
             return RestoreResult(success=True, phases_completed=[section])
 
         restorer._validate_dump_format = fake_validate  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
         restorer._run_section = fake_run  # type: ignore[method-assign]
         result = restorer.restore(self._opts())
         assert calls == [("pre-data", False), ("data", True), ("post-data", False)]
@@ -321,7 +327,7 @@ class TestRestoreOrchestration:
         def fake_validate(path):
             raise RestoreError("bad format")
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             run_called.append(section)
             return RestoreResult(success=True, phases_completed=[section])
 
@@ -336,8 +342,9 @@ class TestRestoreOrchestration:
         calls: list[str] = []
 
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             calls.append(section)
             if section == "pre-data":
                 return RestoreResult(success=False, phases_completed=[], errors=["DDL error"])
@@ -352,8 +359,9 @@ class TestRestoreOrchestration:
         restorer = DatabaseRestorer()
         calls: list[str] = []
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             calls.append(section)
             if section == "data":
                 return RestoreResult(success=False, phases_completed=[], errors=["data error"])
@@ -367,8 +375,9 @@ class TestRestoreOrchestration:
     def test_warnings_accumulated_across_phases(self):
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             return RestoreResult(
                 success=True, phases_completed=[section], warnings=[f"warn from {section}"]
             )
@@ -381,8 +390,11 @@ class TestRestoreOrchestration:
         restorer = DatabaseRestorer()
         validate_table_called = []
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
         restorer._run_section = (  # type: ignore[method-assign]
-            lambda s, o, p, on_stderr_line=None: RestoreResult(success=True, phases_completed=[s])
+            lambda s, o, p, on_stderr_line=None, use_list=None: RestoreResult(
+                success=True, phases_completed=[s]
+            )
         )
 
         def fake_validate_table(opts):
@@ -397,8 +409,11 @@ class TestRestoreOrchestration:
         restorer = DatabaseRestorer()
         validate_table_called = []
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
         restorer._run_section = (  # type: ignore[method-assign]
-            lambda s, o, p, on_stderr_line=None: RestoreResult(success=True, phases_completed=[s])
+            lambda s, o, p, on_stderr_line=None, use_list=None: RestoreResult(
+                success=True, phases_completed=[s]
+            )
         )
 
         def fake_validate_table(opts):
@@ -536,8 +551,9 @@ class TestDiagnosePostDataErrors:
         """End-to-end: out-of-shared-memory error in post-data → hint in RestoreResult."""
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             if section == "post-data":
                 return RestoreResult(
                     success=False,
@@ -556,8 +572,9 @@ class TestDiagnosePostDataErrors:
         """out-of-shared-memory in a warning on a lenient restore → hint in RestoreResult."""
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def fake_run(section, opts, parallel, on_stderr_line=None):
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             if section == "post-data":
                 return RestoreResult(
                     success=True,
@@ -575,8 +592,11 @@ class TestDiagnosePostDataErrors:
     def test_restore_result_no_diagnostics_on_clean_restore(self):
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
         restorer._run_section = (  # type: ignore[method-assign]
-            lambda s, o, p, on_stderr_line=None: RestoreResult(success=True, phases_completed=[s])
+            lambda s, o, p, on_stderr_line=None, use_list=None: RestoreResult(
+                success=True, phases_completed=[s]
+            )
         )
         result = restorer.restore(RestoreOptions(backup_path=Path("d.pgdump"), target_db="db"))
         assert result.diagnostics == []
@@ -596,8 +616,11 @@ class TestParallelRestoreFlag:
     def _make_restorer(self):
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
         restorer._run_section = (  # type: ignore[method-assign]
-            lambda s, o, p, on_stderr_line=None: RestoreResult(success=True, phases_completed=[s])
+            lambda s, o, p, on_stderr_line=None, use_list=None: RestoreResult(
+                success=True, phases_completed=[s]
+            )
         )
         return restorer
 
@@ -607,8 +630,9 @@ class TestParallelRestoreFlag:
 
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def capture_run(section, opts, parallel, on_stderr_line=None):
+        def capture_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             seen_options.append(opts)
             return RestoreResult(success=True, phases_completed=[section])
 
@@ -622,8 +646,9 @@ class TestParallelRestoreFlag:
 
         restorer = DatabaseRestorer()
         restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: []  # type: ignore[method-assign]  # fast path: no matviews
 
-        def capture_run(section, opts, parallel, on_stderr_line=None):
+        def capture_run(section, opts, parallel, on_stderr_line=None, use_list=None):
             seen_options.append(opts)
             return RestoreResult(success=True, phases_completed=[section])
 
@@ -655,3 +680,405 @@ class TestParallelRestoreFlag:
         with caplog.at_level(logging.WARNING, logger="confiture.core.restorer"):
             restorer.restore(self._opts(parallel_restore=True, exit_on_error=False))
         assert not any("parallel_restore" in msg for msg in caplog.messages)
+
+
+# ---------------------------------------------------------------------------
+# Issue #172, Phase 1: TOC parsing
+# ---------------------------------------------------------------------------
+
+# A representative `pg_restore -l` listing: header comments, a table + its data,
+# a matview definition (pre-data) + its DATA entry (the REFRESH), an index and an
+# FK constraint (post-data). Owners/tablespaces vary in real output.
+_SAMPLE_TOC = """;
+; Archive created at 2026-07-07 09:00:00 UTC
+;     dbname: prod
+;     TOC Entries: 8
+;     Compression: -1
+;     Dump Version: 1.14-0
+;     Format: CUSTOM
+;
+;
+; Selected TOC Entries:
+;
+215; 1259 16405 TABLE public tb_order postgres
+3001; 0 16405 TABLE DATA public tb_order postgres
+216; 1259 16410 MATERIALIZED VIEW public mv_maintenance_price postgres
+3002; 0 16410 MATERIALIZED VIEW DATA public mv_maintenance_price postgres
+217; 1259 16420 MATERIALIZED VIEW public mv_count_all postgres
+3003; 0 16420 MATERIALIZED VIEW DATA public mv_count_all postgres
+2801; 1259 16430 INDEX public tb_order_pkey postgres
+2900; 2606 16435 FK CONSTRAINT public tb_order tb_order_customer_fkey postgres
+"""
+
+
+class TestParseTocLines:
+    def _parse(self):
+        return DatabaseRestorer._parse_toc_lines(_SAMPLE_TOC.splitlines())
+
+    def test_skips_comment_and_blank_lines(self):
+        entries = self._parse()
+        # 8 real entries; every comment (`;`) and blank line dropped.
+        assert len(entries) == 8
+        assert all(isinstance(e, TocEntry) for e in entries)
+
+    def test_extracts_dump_id(self):
+        entries = self._parse()
+        assert [e.dump_id for e in entries] == [215, 3001, 216, 3002, 217, 3003, 2801, 2900]
+
+    def test_preserves_raw_line_for_use_list_round_trip(self):
+        entries = self._parse()
+        matview_data = [e for e in entries if e.is_matview_data]
+        assert "3002; 0 16410 MATERIALIZED VIEW DATA public mv_maintenance_price postgres" in [
+            e.raw_line for e in matview_data
+        ]
+
+    def test_matview_data_detected(self):
+        entries = self._parse()
+        mv_data = [e for e in entries if e.is_matview_data]
+        assert len(mv_data) == 2
+        assert {e.dump_id for e in mv_data} == {3002, 3003}
+
+    def test_matview_definition_is_not_matview_data(self):
+        """CREATE MATERIALIZED VIEW (pre-data) must not be mistaken for its DATA entry."""
+        entries = self._parse()
+        definitions = [e for e in entries if e.dump_id in (216, 217)]
+        assert len(definitions) == 2
+        assert all(not e.is_matview_data for e in definitions)
+        assert all(e.description == "MATERIALIZED VIEW" for e in definitions)
+
+    def test_table_data_classified(self):
+        entries = self._parse()
+        table_data = [e for e in entries if e.description == "TABLE DATA"]
+        assert [e.dump_id for e in table_data] == [3001]
+        assert all(not e.is_matview_data for e in table_data)
+
+    def test_matview_data_description(self):
+        entries = self._parse()
+        mv_data = [e for e in entries if e.is_matview_data]
+        assert all(e.description == "MATERIALIZED VIEW DATA" for e in mv_data)
+
+    def test_empty_input_returns_empty(self):
+        assert DatabaseRestorer._parse_toc_lines([]) == []
+
+    def test_comment_only_input_returns_empty(self):
+        lines = [";", "; header", ";     dbname: x", ""]
+        assert DatabaseRestorer._parse_toc_lines(lines) == []
+
+
+# ---------------------------------------------------------------------------
+# Issue #172, Phase 2: use-list partitioning + _build_command -L
+# ---------------------------------------------------------------------------
+
+
+class TestPartitionEntries:
+    def _entries(self):
+        return DatabaseRestorer._parse_toc_lines(_SAMPLE_TOC.splitlines())
+
+    def test_partition_splits_matview_data_from_the_rest(self):
+        non_matview, matview_data = DatabaseRestorer._partition_entries(self._entries())
+        assert {e.dump_id for e in matview_data} == {3002, 3003}
+        # Everything else (table, table-data, matview definitions, index, FK) stays.
+        assert {e.dump_id for e in non_matview} == {215, 3001, 216, 217, 2801, 2900}
+
+    def test_partition_no_matviews_returns_empty_matview_list(self):
+        no_mv = [
+            "215; 1259 16405 TABLE public tb_order postgres",
+            "3001; 0 16405 TABLE DATA public tb_order postgres",
+        ]
+        entries = DatabaseRestorer._parse_toc_lines(no_mv)
+        non_matview, matview_data = DatabaseRestorer._partition_entries(entries)
+        assert matview_data == []
+        assert len(non_matview) == 2
+
+    def test_write_use_list_preserves_raw_lines(self, tmp_path):
+        _, matview_data = DatabaseRestorer._partition_entries(self._entries())
+        path = tmp_path / "matviews.list"
+        DatabaseRestorer._write_use_list(matview_data, path)
+        written = path.read_text().splitlines()
+        assert (
+            "3002; 0 16410 MATERIALIZED VIEW DATA public mv_maintenance_price postgres" in written
+        )
+        assert "3003; 0 16420 MATERIALIZED VIEW DATA public mv_count_all postgres" in written
+        assert len(written) == 2
+
+
+class TestBuildCommandUseList:
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {"backup_path": Path("dump.pgdump"), "target_db": "mydb"}
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def test_use_list_adds_dash_L_with_path(self, tmp_path):
+        use_list = tmp_path / "tables.list"
+        cmd = DatabaseRestorer()._build_command(
+            "data", self._opts(), parallel=True, use_list=use_list
+        )
+        assert "-L" in cmd
+        assert str(use_list) in cmd
+        # -L must reference the list, immediately following the flag.
+        assert cmd[cmd.index("-L") + 1] == str(use_list)
+
+    def test_no_use_list_omits_dash_L(self):
+        cmd = DatabaseRestorer()._build_command("data", self._opts(), parallel=True)
+        assert "-L" not in cmd
+
+    def test_backup_path_still_last_with_use_list(self, tmp_path):
+        use_list = tmp_path / "tables.list"
+        cmd = DatabaseRestorer()._build_command(
+            "data", self._opts(), parallel=True, use_list=use_list
+        )
+        assert cmd[-1] == "dump.pgdump"
+
+    def test_section_none_omits_section_flag(self, tmp_path):
+        """The deferred refresh runs with -L but no --section (version-robust)."""
+        use_list = tmp_path / "matviews.list"
+        cmd = DatabaseRestorer()._build_command(
+            None, self._opts(), parallel=False, use_list=use_list
+        )
+        assert not any(a.startswith("--section") for a in cmd)
+        assert "-L" in cmd
+        assert cmd[-1] == "dump.pgdump"
+
+
+# ---------------------------------------------------------------------------
+# Issue #172, Phase 3: ANALYZE phase
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAnalyzeCommand:
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {"backup_path": Path("dump.pgdump"), "target_db": "mydb"}
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def test_runs_psql_analyze_on_target_db(self):
+        cmd = DatabaseRestorer()._build_analyze_command(self._opts())
+        assert "psql" in cmd
+        assert "-d" in cmd
+        assert "mydb" in cmd
+        assert "ANALYZE" in cmd
+        assert "-h" in cmd
+        assert "/var/run/postgresql" in cmd
+        assert "-p" in cmd
+        assert "5432" in cmd
+
+    def test_stops_on_error(self):
+        cmd = DatabaseRestorer()._build_analyze_command(self._opts())
+        assert "ON_ERROR_STOP=1" in cmd
+
+    def test_username_added_when_set(self):
+        cmd = DatabaseRestorer()._build_analyze_command(self._opts(username="appuser"))
+        assert "-U" in cmd
+        assert "appuser" in cmd
+
+    def test_no_username_when_none(self):
+        cmd = DatabaseRestorer()._build_analyze_command(self._opts(username=None))
+        assert "-U" not in cmd
+
+    def test_superuser_prepends_sudo(self):
+        cmd = DatabaseRestorer()._build_analyze_command(self._opts(superuser="postgres"))
+        assert cmd[:3] == ["sudo", "-u", "postgres"]
+
+
+class TestRunAnalyze:
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {"backup_path": Path("d.pgdump"), "target_db": "db"}
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def test_success_returns_analyze_phase(self):
+        mock_proc = _make_proc(["ANALYZE\n"], 0)
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = DatabaseRestorer()._run_analyze(self._opts())
+        assert result.success is True
+        assert result.phases_completed == ["analyze"]
+
+    def test_nonzero_exit_with_error_line_returns_failure(self):
+        mock_proc = _make_proc(["ERROR:  permission denied for table tb_order\n"], 1)
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = DatabaseRestorer()._run_analyze(self._opts())
+        assert result.success is False
+        assert any("permission denied" in e for e in result.errors)
+
+    def test_nonzero_exit_without_error_line_still_fails(self):
+        mock_proc = _make_proc(["some noise\n"], 2)
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = DatabaseRestorer()._run_analyze(self._opts())
+        assert result.success is False
+        assert result.errors  # a synthetic exit-code error is recorded
+
+    def test_psql_not_found_raises_restore_error(self):
+        with patch("subprocess.Popen", side_effect=FileNotFoundError("psql")):
+            with pytest.raises(RestoreError, match="psql not found"):
+                DatabaseRestorer()._run_analyze(self._opts())
+
+    def test_keyboard_interrupt_kills_process(self):
+        mock_proc = MagicMock()
+        mock_proc.stderr = iter([])
+        mock_proc.wait.side_effect = KeyboardInterrupt
+        mock_proc.__enter__ = lambda s: s
+        mock_proc.__exit__ = MagicMock(return_value=False)
+        with patch("subprocess.Popen", return_value=mock_proc):
+            with pytest.raises(RestoreError, match="interrupted"):
+                DatabaseRestorer()._run_analyze(self._opts())
+        mock_proc.kill.assert_called_once()
+
+    def test_on_stderr_line_callback_called(self):
+        mock_proc = _make_proc(["ANALYZE\n"], 0)
+        lines: list[str] = []
+        with patch("subprocess.Popen", return_value=mock_proc):
+            DatabaseRestorer()._run_analyze(self._opts(), on_stderr_line=lines.append)
+        assert lines == ["ANALYZE"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #172, Phase 4: deferred-matview orchestration
+# ---------------------------------------------------------------------------
+
+
+class TestDeferredMatviewOrchestration:
+    """restore() with a backup that contains materialized-view data."""
+
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {"backup_path": Path("d.pgdump"), "target_db": "db"}
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def _restorer_with_matviews(self, calls: list, *, refresh_ok=True, analyze_ok=True):
+        """A restorer whose TOC has 2 matview-data entries; phase runs are recorded."""
+        restorer = DatabaseRestorer()
+        entries = DatabaseRestorer._parse_toc_lines(_SAMPLE_TOC.splitlines())
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: entries  # type: ignore[method-assign]
+
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
+            calls.append(("section", section, parallel, use_list.name if use_list else None))
+            ok = refresh_ok or use_list is None or use_list.name != "matviews.list"
+            return RestoreResult(
+                success=ok,
+                phases_completed=[section] if ok else [],
+                errors=[] if ok else ["refresh boom"],
+            )
+
+        def fake_analyze(opts, on_stderr_line=None):
+            calls.append(("analyze",))
+            return RestoreResult(
+                success=analyze_ok,
+                phases_completed=["analyze"] if analyze_ok else [],
+                errors=[] if analyze_ok else ["analyze boom"],
+            )
+
+        restorer._run_section = fake_run  # type: ignore[method-assign]
+        restorer._run_analyze = fake_analyze  # type: ignore[method-assign]
+        return restorer
+
+    def test_defers_matview_refresh_past_analyze(self):
+        calls: list = []
+        restorer = self._restorer_with_matviews(calls)
+        result = restorer.restore(self._opts())
+
+        assert result.success is True
+        # Every phase excludes matview data (tables.list); the refresh runs
+        # serially after ANALYZE with no --section (section=None).
+        assert calls == [
+            ("section", "pre-data", False, "tables.list"),
+            ("section", "data", True, "tables.list"),
+            ("section", "post-data", False, "tables.list"),
+            ("analyze",),
+            ("section", None, False, "matviews.list"),
+        ]
+
+    def test_reports_deferred_and_refreshed_counts(self):
+        calls: list = []
+        restorer = self._restorer_with_matviews(calls)
+        result = restorer.restore(self._opts())
+        assert result.matviews_deferred == 2
+        assert result.matviews_refreshed == 2
+        assert result.analyze_ran is True
+        assert "analyze" in result.phases_completed
+        assert "refresh-matviews" in result.phases_completed
+
+    def test_no_refresh_matviews_skips_analyze_and_refresh(self):
+        calls: list = []
+        restorer = self._restorer_with_matviews(calls)
+        result = restorer.restore(self._opts(no_refresh_matviews=True))
+
+        assert result.success is True
+        # Matview data filtered out of every phase, but no analyze / no refresh.
+        assert calls == [
+            ("section", "pre-data", False, "tables.list"),
+            ("section", "data", True, "tables.list"),
+            ("section", "post-data", False, "tables.list"),
+        ]
+        assert result.matviews_deferred == 2
+        assert result.matviews_refreshed == 0
+        assert result.analyze_ran is False
+
+    def test_analyze_failure_aborts_before_refresh(self):
+        calls: list = []
+        restorer = self._restorer_with_matviews(calls, analyze_ok=False)
+        result = restorer.restore(self._opts())
+
+        assert result.success is False
+        assert any("analyze boom" in e for e in result.errors)
+        # The matview refresh never runs after a failed ANALYZE.
+        assert ("section", None, False, "matviews.list") not in calls
+        assert result.matviews_deferred == 2
+
+    def test_refresh_failure_surfaces_as_failure(self):
+        calls: list = []
+        restorer = self._restorer_with_matviews(calls, refresh_ok=False)
+        result = restorer.restore(self._opts())
+
+        assert result.success is False
+        assert any("refresh boom" in e for e in result.errors)
+        assert result.analyze_ran is True
+
+    def test_no_matview_toc_takes_classic_path(self):
+        """A TOC without matview data → no use-list, no analyze phase."""
+        calls: list = []
+        restorer = DatabaseRestorer()
+        no_mv = DatabaseRestorer._parse_toc_lines(
+            [
+                "215; 1259 16405 TABLE public tb_order postgres",
+                "3001; 0 16405 TABLE DATA public tb_order postgres",
+            ]
+        )
+        restorer._validate_dump_format = lambda p: None  # type: ignore[method-assign]
+        restorer._list_toc = lambda o: no_mv  # type: ignore[method-assign]
+
+        def fake_run(section, opts, parallel, on_stderr_line=None, use_list=None):
+            calls.append((section, parallel, use_list))
+            return RestoreResult(success=True, phases_completed=[section])
+
+        restorer._run_section = fake_run  # type: ignore[method-assign]
+        result = restorer.restore(self._opts())
+
+        assert calls == [
+            ("pre-data", False, None),
+            ("data", True, None),  # no -L use-list: byte-for-byte the classic path
+            ("post-data", False, None),
+        ]
+        assert result.matviews_deferred is None
+        assert result.matviews_refreshed is None
+        assert result.analyze_ran is False
+
+    def test_use_lists_written_with_correct_partition(self):
+        """_prepare_use_lists writes tables.list (no matview) + matviews.list (only matview)."""
+        entries = DatabaseRestorer._parse_toc_lines(_SAMPLE_TOC.splitlines())
+        non_matview, matview_data = DatabaseRestorer._partition_entries(entries)
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            tables_list, matviews_list = DatabaseRestorer()._prepare_use_lists(
+                stack, non_matview, matview_data
+            )
+            assert tables_list is not None and matviews_list is not None
+            tables_txt = tables_list.read_text()
+            matviews_txt = matviews_list.read_text()
+
+        # matview REFRESH entries only in matviews.list; base table data only in tables.list.
+        assert "MATERIALIZED VIEW DATA" not in tables_txt
+        assert "TABLE DATA public tb_order" in tables_txt
+        assert "MATERIALIZED VIEW DATA public mv_maintenance_price" in matviews_txt
+        assert "TABLE DATA" not in matviews_txt

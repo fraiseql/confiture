@@ -294,7 +294,7 @@ cached CI provisioning:
 | `--dump-format custom\|directory` | `custom` = `-Fc` (default), `directory` = `-Fd` (parallel dump). |
 | `--seed-profile <name>` | Apply only the named seed profile (see `seed.profiles`) during `--sequential` seed application and `--dump`. |
 
-The artifact is restorable by [`confiture restore`](#confiture-restore). See the
+The artifact is restorable by [`confiture restore`](../guides/restore.md). See the
 [Parallel CI provisioning guide](../guides/parallel-ci-provisioning.md).
 
 ---

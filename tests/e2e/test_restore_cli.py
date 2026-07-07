@@ -178,3 +178,85 @@ class TestRestoreCLI:
             runner.invoke(app, ["restore", str(backup), "--database", "db"])
         assert captured["opts"].no_owner is False
         assert captured["opts"].no_acl is False
+
+
+# ---------------------------------------------------------------------------
+# Issue #172: matview refresh deferral flag + reporting
+# ---------------------------------------------------------------------------
+
+
+class TestRestoreMatviewCLI:
+    def test_no_refresh_matviews_flag_in_help(self):
+        import re
+
+        result = runner.invoke(app, ["restore", "--help"])
+        assert result.exit_code == 0
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--no-refresh-matviews" in clean
+
+    def test_refresh_matviews_defaults_to_enabled(self, tmp_path):
+        backup = tmp_path / "dump.pgdump"
+        backup.touch()
+        captured: dict = {}
+
+        def capture(opts, on_stderr_line=None):
+            captured["opts"] = opts
+            return RestoreResult(success=True, phases_completed=["pre-data", "data", "post-data"])
+
+        with patch("confiture.core.restorer.DatabaseRestorer.restore", side_effect=capture):
+            runner.invoke(app, ["restore", str(backup), "--database", "db"])
+        assert captured["opts"].no_refresh_matviews is False
+
+    def test_no_refresh_matviews_forwarded(self, tmp_path):
+        backup = tmp_path / "dump.pgdump"
+        backup.touch()
+        captured: dict = {}
+
+        def capture(opts, on_stderr_line=None):
+            captured["opts"] = opts
+            return RestoreResult(success=True, phases_completed=["pre-data", "data", "post-data"])
+
+        with patch("confiture.core.restorer.DatabaseRestorer.restore", side_effect=capture):
+            runner.invoke(
+                app, ["restore", str(backup), "--database", "db", "--no-refresh-matviews"]
+            )
+        assert captured["opts"].no_refresh_matviews is True
+
+    def test_refreshed_count_reported(self, tmp_path):
+        backup = tmp_path / "dump.pgdump"
+        backup.touch()
+        with patch(
+            "confiture.core.restorer.DatabaseRestorer.restore",
+            return_value=RestoreResult(
+                success=True,
+                phases_completed=["pre-data", "data", "post-data", "analyze", "refresh-matviews"],
+                matviews_deferred=3,
+                matviews_refreshed=3,
+                analyze_ran=True,
+            ),
+        ):
+            result = runner.invoke(app, ["restore", str(backup), "--database", "db"])
+        assert result.exit_code == 0
+        assert "3" in result.output
+        assert "refresh" in result.output.lower()
+
+    def test_deferred_but_not_refreshed_reported(self, tmp_path):
+        backup = tmp_path / "dump.pgdump"
+        backup.touch()
+        with patch(
+            "confiture.core.restorer.DatabaseRestorer.restore",
+            return_value=RestoreResult(
+                success=True,
+                phases_completed=["pre-data", "data", "post-data"],
+                matviews_deferred=2,
+                matviews_refreshed=0,
+                analyze_ran=False,
+            ),
+        ):
+            result = runner.invoke(
+                app, ["restore", str(backup), "--database", "db", "--no-refresh-matviews"]
+            )
+        assert result.exit_code == 0
+        out = result.output.lower()
+        assert "2" in result.output
+        assert "no data" in out or "not refreshed" in out or "skipped" in out
