@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`confiture restore` defers materialized-view refreshes until after `ANALYZE`
+  (#172).** A logical dump carries no planner statistics, so a freshly loaded
+  database starts with empty `pg_statistic`. Previously the matview `REFRESH`
+  bundled into the archive ran during the restore with those empty stats, and a
+  stats-sensitive matview (self-joins + window functions over a resolved view)
+  could replan into a catastrophic nested loop — a ~5-second refresh becoming
+  tens of minutes to hours, blowing deploy timeouts and wedging the restore.
+  `DatabaseRestorer` now lists the archive TOC (`pg_restore -l`), holds every
+  `MATERIALIZED VIEW DATA` item out of **all** restore phases (they land in the
+  data *or* post-data section depending on the pg_dump version, so a whole-restore
+  `-L` filter is the version-robust exclusion), runs a database-wide `ANALYZE`,
+  then refreshes the matviews serially on real statistics. Backups without
+  materialized views take the classic three-phase path with byte-for-byte
+  unchanged `pg_restore` invocations. `RestoreResult` gains `matviews_deferred`,
+  `matviews_refreshed`, and `analyze_ran`.
+
+### Added
+
+- **`confiture restore --no-refresh-matviews`.** Restores materialized views
+  `WITH NO DATA` (excluded from every phase, no `ANALYZE`/refresh), leaving them
+  for the caller to refresh on their own schedule. See the new
+  [restore guide](docs/guides/restore.md).
+
+### Changed
+
+- **`confiture restore` default behavior change** (pre-1.0): a backup containing
+  materialized views now restores through the deferred `ANALYZE` + refresh path
+  by default instead of refreshing inline. Use `--no-refresh-matviews` for the
+  fast, leave-them-empty behavior. Restores of matview-free backups are
+  unaffected. `ANALYZE` runs via `psql`, so PostgreSQL client tools must be on
+  `PATH` (they already are for `pg_restore`).
+
 ## [0.34.0] - 2026-06-25
 
 Completes the 0.33.0 #168 fix at the model layer so every Python-API consumer —

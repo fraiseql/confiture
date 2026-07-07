@@ -474,12 +474,27 @@ def restore(
         "--superuser",
         help="Run pg_restore via sudo as this OS user",
     ),
+    refresh_matviews: bool = typer.Option(
+        True,
+        "--refresh-matviews/--no-refresh-matviews",
+        help=(
+            "Refresh materialized views after a database-wide ANALYZE (default). "
+            "--no-refresh-matviews leaves them WITH NO DATA for you to refresh later."
+        ),
+    ),
 ) -> None:
     """Restore a PostgreSQL backup using three-phase pg_restore.
 
     Prevents FK constraint race conditions during parallel restore by running
     pre-data and post-data phases serially, parallelising only the data phase
     (where no FK constraints exist yet).
+
+    When the backup contains materialized views, their REFRESH is deferred out of
+    the parallel data phase: base tables load first, then a database-wide ANALYZE
+    runs, then the matviews are refreshed serially — so every refresh replans on
+    real statistics instead of the empty stats of a freshly loaded database (which
+    can turn a fast refresh into a multi-hour nested loop). Use
+    --no-refresh-matviews to leave them empty and refresh on your own schedule.
 
     Requires custom format (-Fc) or directory format (-Fd) dumps. To create one:
 
@@ -492,6 +507,8 @@ def restore(
       confiture restore prod.pgdump --database staging --jobs 8 --min-tables 300
 
       confiture restore /backups/dump --database staging --superuser postgres
+
+      confiture restore prod.pgdump --database staging --no-refresh-matviews
     """
     from confiture.core.restorer import DatabaseRestorer, RestoreOptions
     from confiture.exceptions import RestoreError
@@ -518,6 +535,7 @@ def restore(
         superuser=superuser,
         min_tables=min_tables,
         min_tables_schema=min_tables_schema,
+        no_refresh_matviews=not refresh_matviews,
     )
 
     console.print(
@@ -540,6 +558,16 @@ def restore(
 
     if result.success:
         console.print(f"[green]✓ Restore complete[/green] ({len(result.phases_completed)} phases)")
+        if result.matviews_deferred:
+            if result.matviews_refreshed:
+                console.print(
+                    f"  Materialized views: {result.matviews_refreshed} refreshed after ANALYZE"
+                )
+            else:
+                console.print(
+                    f"  Materialized views: {result.matviews_deferred} left WITH NO DATA "
+                    "(not refreshed) — refresh them after ANALYZE on your own schedule"
+                )
         if result.table_count is not None:
             console.print(f"  Tables verified: {result.table_count} (≥ {min_tables} required)")
     else:
