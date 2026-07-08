@@ -37,11 +37,23 @@ class TestMaintenanceUrl:
         result = _maintenance_url("postgresql://host:5432")
         assert result == "postgresql://host:5432/postgres"
 
+    def test_hostless_socket_dsn_keeps_authority_marker(self) -> None:
+        """A hostless DSN (postgresql:///db) must not lose its '//' marker.
+
+        urlunparse drops the authority marker for an empty netloc, yielding the
+        malformed 'postgresql:/postgres'; it must round-trip to a libpq-valid
+        'postgresql:///postgres'.
+        """
+        assert _maintenance_url("postgresql:///confiture_test") == "postgresql:///postgres"
+
 
 class TestReplaceDbname:
     def test_replaces_database_component(self) -> None:
         result = _replace_dbname("postgresql://user:pass@host:5432/myapp", "new_db")
         assert result == "postgresql://user:pass@host:5432/new_db"
+
+    def test_hostless_socket_dsn_keeps_authority_marker(self) -> None:
+        assert _replace_dbname("postgresql:///myapp", "tmp_db") == "postgresql:///tmp_db"
 
 
 # ---------------------------------------------------------------------------

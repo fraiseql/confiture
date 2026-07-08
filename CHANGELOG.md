@@ -26,7 +26,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FunctionBodyDriftReport.to_dict()` (both `include_bodies=`-gated) now back the
   serialization, replacing the previously inlined `body_drift` dict.
 
+- **Internal: `ExpectedSchemaDB` scratch-database foundation
+  (`core/expected_db.py`).** A context manager that builds the *expected* schema
+  into a throwaway database — either from source DDL (`from_source`) or by
+  replaying migrations (`from_base_plus_migrations`) — and yields a live
+  connection, so upcoming drift checks (view drift #174, replay drift #179,
+  require-migration bodies #178) can normalise the expected side through
+  PostgreSQL's own deparser (`pg_get_viewdef`, `pg_proc.prosrc`) instead of
+  text-normalising DDL. Wraps the existing `TempDatabase` lifecycle with
+  exception-safe cleanup (a failed build still drops the scratch DB). No CLI
+  surface yet.
+
 ### Fixed
+
+- **Scratch/temporary-database helpers now accept hostless socket DSNs
+  (`postgresql:///dbname`).** `TempDatabase`'s URL rewriting round-tripped the
+  connection string through `urllib.parse.urlunparse`, which drops the `//`
+  authority marker when the netloc is empty — turning `postgresql:///db` into the
+  malformed `postgresql:/db` and breaking every scratch-DB consumer
+  (`--live-snapshot`, `test-db` provisioning, and the new drift foundation) on a
+  Unix-socket DSN. The marker is now preserved; host-qualified URLs are
+  byte-for-byte unchanged.
 
 - **`confiture drift --schema` now parses the DDL that `confiture build` emits
   (#175).** The expected-schema parser used by `drift` yielded zero tables on any
