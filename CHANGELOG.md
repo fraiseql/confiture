@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`migrate validate --check-signatures` no longer strips the `[]` array suffix
+  from function parameters (#176).** The signature parser dropped the array
+  suffix — the pglast (AST) path read `argType.names` but ignored
+  `argType.arrayBounds`, and the regex fallback kept `[]` but failed to alias the
+  base type through it (`int[]` vs the live `integer[]`). Because the live
+  (introspected) side keeps the canonical array type, an array-typed function was
+  falsely reported as a **stale overload** and its generated `remediation_sql`
+  was a destructive `DROP FUNCTION` for a function that exists in **both** the
+  database and the DDL. The same signature mismatch also prevented `--check-body`
+  from pairing the function, silently skipping its body diff. Array parameters
+  (`text[]`, `bigint[]`, `numeric(10,2)[]`, multidimensional `int[][]`, sized
+  `text[5]`) now round-trip correctly on both parser tiers and stay symmetric
+  with the live side. As a safety net, the drift detector never emits a
+  `DROP FUNCTION` for a "stale overload" whose base name and arity match a source
+  signature differing only by an array suffix.
+
 ## [0.35.0] - 2026-07-07
 
 ### Fixed
