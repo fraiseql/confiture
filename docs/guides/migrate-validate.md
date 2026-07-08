@@ -387,6 +387,61 @@ To re-apply the source body over the live drift, use
 `confiture migrate fix-signatures --check-body --apply` (dry-run without
 `--apply`).
 
+## `--check-body-views`
+
+The view/materialized-view counterpart to `--check-body`. It catches a view whose
+predicate or projection was changed directly in the database — an out-of-band
+`CREATE OR REPLACE VIEW` on production — without the DDL being updated. (This is
+the class of bug behind a real ETL incident where a committed
+`meter_at > max_volume_date` had silently become `meter_at > (max_volume_date + 1)`
+on prod, dropping every other day's data for months.)
+
+Views are harder than functions: PostgreSQL doesn't store a view's text, so
+`pg_get_viewdef` returns a *deparsed* rendering (schema-qualified, `*`-expanded,
+reparenthesised). A naive text compare of your `CREATE VIEW` DDL against that would
+report **false positives** on views that are only formatted differently. Instead,
+`--check-body-views` builds the expected views into a throwaway **scratch
+database** and reads them back through the **same** `pg_get_viewdef` deparser as
+live — so string equality means semantic equality, and only genuine logic changes
+register.
+
+```bash
+# Terse: hash-only, exits 1 on drift
+confiture migrate validate --check-body-views --config confiture.yaml --schema db/generated/schema.sql
+
+# Triage: unified diff of the deparsed definitions per drifted view
+confiture migrate validate --check-body-views --show-diff \
+    --schemas public,catalog --config confiture.yaml --schema db/generated/schema.sql
+```
+
+- Covers **regular and materialized** views; honours `--schemas`.
+- `--show-diff` adds `expected_def`, `live_def`, and `unified_diff` to each drifted
+  view (text and JSON). Default output is hash-only.
+- **Remote read-only live (`--ssh`)**: the scratch database is built on a
+  *writable* server, which the read-only production replica is not. Pass
+  `--scratch-url postgresql://localhost/postgres` (or a CI server) so the expected
+  side builds locally while the live side is read over the tunnel.
+
+The JSON payload mirrors `--check-body`:
+
+```json
+{
+  "check": "view_body_drift",
+  "has_drift": true,
+  "body_drifts": [
+    {
+      "schema": "public",
+      "name": "v_etl_unused_meters",
+      "relkind": "v",
+      "source_hash": "e442d2211789",
+      "db_hash": "251751b4699c"
+    }
+  ],
+  "views_checked": 2,
+  "detection_time_ms": 0.18
+}
+```
+
 ## `--require-grant-migration`
 
 Build environments apply grants straight from the grant sweep directory

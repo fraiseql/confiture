@@ -325,7 +325,29 @@ def migrate_validate(
             "With --check-body: also emit, per drifted function, the expected body, the "
             "live body, and a unified diff of the two (normalised) bodies. Requires "
             "--check-body. Opt-in because bodies can be large; the default output stays "
-            "hash-only for terse CI logs."
+            "hash-only for terse CI logs. Also applies to --check-body-views."
+        ),
+    ),
+    check_body_views: bool = typer.Option(
+        False,
+        "--check-body-views",
+        help=(
+            "Compare view and materialized-view definitions between the source schema "
+            "and the live database. The expected views are built into a scratch DB and "
+            "read back through the same pg_get_viewdef deparser as live, so only genuine "
+            "predicate/projection changes register (formatting, schema-qualification and "
+            "*-expansion differences do not). Requires --config (or --env) and --schema. "
+            "Honours --schemas and --ssh (with --scratch-url)."
+        ),
+    ),
+    scratch_url: str | None = typer.Option(
+        None,
+        "--scratch-url",
+        help=(
+            "Writable PostgreSQL server on which to build the expected scratch database "
+            "for --check-body-views (default: the live server from the config). Required "
+            "when using --ssh, since the scratch DB cannot be built on the remote "
+            "read-only live server."
         ),
     ),
     check_acls: bool = typer.Option(
@@ -687,9 +709,9 @@ def migrate_validate(
         if check_body and not check_signatures:
             raise ConfigurationError("--check-body requires --check-signatures")
 
-        # Guard: --show-diff requires --check-body
-        if show_diff and not check_body:
-            raise ConfigurationError("--show-diff requires --check-body")
+        # Guard: --show-diff requires --check-body or --check-body-views
+        if show_diff and not (check_body or check_body_views):
+            raise ConfigurationError("--show-diff requires --check-body or --check-body-views")
 
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
@@ -822,6 +844,35 @@ def migrate_validate(
             )
             if sig_result.has_any_drift:
                 raise typer.Exit(1)  # success-signal: drift found
+            return
+
+        # Run live view / materialized-view body-drift check
+        if check_body_views:
+            from confiture.cli.formatters.validate_formatter import render_view_drift
+            from confiture.core.validation.view_drift import check_view_drift
+
+            view_result = check_view_drift(
+                config_path=config,
+                schema_file=schema_file,
+                schemas=check_signature_schemas,
+                ssh_via=ssh_via,
+                scratch_url=scratch_url,
+            )
+            if not json_mode:
+                if view_result.auto_built:
+                    console.print("[dim]  (schema auto-built from DDL files)[/dim]")
+                if view_result.ssh_target:
+                    console.print(
+                        f"[dim]  (connecting via SSH tunnel to {view_result.ssh_target})[/dim]"
+                    )
+            render_view_drift(
+                view_result.view_report,
+                json_mode=json_mode,
+                output_file=output_file,
+                show_diff=show_diff,
+            )
+            if view_result.has_drift:
+                raise typer.Exit(1)  # success-signal: view drift found
             return
 
         if not migrations_dir.exists():

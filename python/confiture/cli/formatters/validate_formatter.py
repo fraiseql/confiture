@@ -249,3 +249,51 @@ def render_signature_drift(
         display_signature_drift_report(drift_report, console)
         if body_report is not None:
             _display_body_drift_report(body_report, show_diff=show_diff)
+
+
+_RELKIND_LABEL = {"v": "view", "m": "materialized view"}
+
+
+def render_view_drift(
+    view_report: Any,
+    *,
+    json_mode: bool,
+    output_file: Path | None,
+    show_diff: bool = False,
+) -> None:
+    """Render the ``--check-body-views`` ViewBodyDriftReport.
+
+    ``show_diff`` (from ``--show-diff``) surfaces each drifted view's expected
+    and live definitions plus a unified diff; otherwise output stays hash-only.
+    """
+    if json_mode:
+        _output_json(
+            {"check": "view_body_drift", **view_report.to_dict(include_defs=show_diff)},
+            output_file,
+            console,
+        )
+        return
+
+    if not view_report.has_drift:
+        console.print(
+            f"[green]✓[/green] 0 view definition drift(s) detected "
+            f"({view_report.views_checked} checked, {view_report.detection_time_ms:.1f}ms)"
+        )
+        return
+
+    console.print(
+        f"[yellow]⚠[/yellow]  {len(view_report.body_drifts)} view definition "
+        f"drift(s) detected ({view_report.views_checked} checked)"
+    )
+    for drift in view_report.body_drifts:
+        label = _RELKIND_LABEL.get(drift.relkind, drift.relkind)
+        console.print(f"\n  [bold]{drift.schema}.{drift.name}[/bold] [dim]({label})[/dim]")
+        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
+        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        if show_diff and drift.unified_diff:
+            console.print("    [dim]Unified diff (expected → live, deparsed):[/dim]")
+            _print_unified_diff(drift.unified_diff)
+        console.print(
+            "    Hint: view definition differs from source — re-apply the committed "
+            "DDL or capture the live change in a migration"
+        )

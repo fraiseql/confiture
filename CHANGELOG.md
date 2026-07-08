@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`migrate validate --check-body-views` detects view and materialized-view
+  definition drift (#174).** The missing half of `--check-body`: it catches when a
+  live view's predicate or projection was changed directly in the database (an
+  out-of-band `CREATE OR REPLACE VIEW` on prod) without updating the DDL — the
+  class of bug behind the `printoptim_backend` ETL incident where a committed
+  `meter_at > max_volume_date` had silently become `meter_at > (max_volume_date +
+  1)` on production, dropping every other day's volume for months. Views aren't
+  stored verbatim (`pg_get_viewdef` returns pg's *deparsed* tree — schema-qualified,
+  `*`-expanded, reparenthesised), so a naive text compare of source DDL against
+  live would flag semantically-identical views as false positives. Instead the
+  expected views are built into a throwaway scratch database and read back through
+  the **same** `pg_get_viewdef(oid, true)` deparser as live — string equality then
+  means semantic equality, so only genuine logic changes register. Covers regular
+  (`relkind='v'`) and materialized (`'m'`) views, honours `--schemas`, exits 1 on
+  drift, and (with `--show-diff`) emits the expected/live definitions and a unified
+  diff. For a remote read-only live database over `--ssh`, pass `--scratch-url` to
+  point the scratch build at a writable local/CI server. New modules
+  `core/view_body_drift.py` and `core/live_view_catalog.py`.
+
 - **`migrate validate --check-body --show-diff` emits the expected body, the live
   body, and a unified diff per drifted function (#177).** Previously a body drift
   reported only two 12-char hashes (`source_hash`, `db_hash`), so every consumer
