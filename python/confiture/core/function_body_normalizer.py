@@ -53,6 +53,26 @@ class FunctionBodyNormalizer:
         collapsed = re.sub(r"\s+", " ", lowered).strip()
         return collapsed
 
+    def normalize_for_diff(self, body: str) -> str:
+        """Return a line-oriented normalised form of *body* for unified diffs.
+
+        Unlike :meth:`normalize` — which collapses everything to a single line
+        for hashing — this preserves newlines so :func:`difflib.unified_diff`
+        produces readable per-line output. Each surviving line is
+        comment-stripped, lowercased, has internal whitespace runs collapsed to
+        a single space, and is trimmed; blank lines are dropped. The result is
+        that pure-formatting churn (re-indentation, added blank lines, casing)
+        does not appear as diff noise — only genuine logic changes do.
+        """
+        stripped = self._TOKENIZER.sub(self._replace_token, body)
+        lowered = stripped.lower()
+        lines = []
+        for raw_line in lowered.splitlines():
+            collapsed = re.sub(r"\s+", " ", raw_line).strip()
+            if collapsed:
+                lines.append(collapsed)
+        return "\n".join(lines)
+
     def hash_body(self, body: str) -> str:
         """Return a 12-character hex digest of the normalised *body*.
 

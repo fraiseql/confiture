@@ -318,6 +318,16 @@ def migrate_validate(
             "signature-only comparison."
         ),
     ),
+    show_diff: bool = typer.Option(
+        False,
+        "--show-diff",
+        help=(
+            "With --check-body: also emit, per drifted function, the expected body, the "
+            "live body, and a unified diff of the two (normalised) bodies. Requires "
+            "--check-body. Opt-in because bodies can be large; the default output stays "
+            "hash-only for terse CI logs."
+        ),
+    ),
     check_acls: bool = typer.Option(
         False,
         "--check-acls",
@@ -677,6 +687,10 @@ def migrate_validate(
         if check_body and not check_signatures:
             raise ConfigurationError("--check-body requires --check-signatures")
 
+        # Guard: --show-diff requires --check-body
+        if show_diff and not check_body:
+            raise ConfigurationError("--show-diff requires --check-body")
+
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
             from confiture.cli.formatters.validate_formatter import render_acl_coverage
@@ -804,6 +818,7 @@ def migrate_validate(
                 sig_result.body_report,
                 json_mode=json_mode,
                 output_file=output_file,
+                show_diff=show_diff,
             )
             if sig_result.has_any_drift:
                 raise typer.Exit(1)  # success-signal: drift found

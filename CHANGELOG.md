@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`migrate validate --check-body --show-diff` emits the expected body, the live
+  body, and a unified diff per drifted function (#177).** Previously a body drift
+  reported only two 12-char hashes (`source_hash`, `db_hash`), so every consumer
+  hand-wrote a `prosrc` differ to classify drift (the PrintOptim audit did this
+  for 120 functions). `FunctionBodyDrift` now also carries `expected_body`,
+  `live_body`, and a `unified_diff` computed with `difflib` over a new
+  line-oriented normalisation (`FunctionBodyNormalizer.normalize_for_diff`) — it
+  strips comments, lowercases, collapses indentation, and drops blank lines, so
+  the diff shows only genuine logic changes, not formatting churn. The new opt-in
+  `--show-diff` flag (requires `--check-body`) surfaces these in both the text
+  renderer (rich-highlighted `+/-` lines) and the JSON payload
+  (`body_drift.body_drifts[].expected_body` / `.live_body` / `.unified_diff`).
+  The default (`--check-body` without `--show-diff`) output is byte-for-byte
+  unchanged — hash-only — for terse CI logs. `FunctionBodyDrift.to_dict()` and
+  `FunctionBodyDriftReport.to_dict()` (both `include_bodies=`-gated) now back the
+  serialization, replacing the previously inlined `body_drift` dict.
+
 ### Fixed
 
 - **`confiture drift --schema` now parses the DDL that `confiture build` emits

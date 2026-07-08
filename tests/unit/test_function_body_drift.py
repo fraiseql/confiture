@@ -81,6 +81,83 @@ def test_drift_detected_only_changed_functions_listed():
 
 
 # ---------------------------------------------------------------------------
+# Cycle 2b (#177): drift record carries both bodies + a unified diff
+# ---------------------------------------------------------------------------
+
+
+def test_drift_record_includes_bodies_and_unified_diff():
+    """A drifted function exposes both raw bodies and a line-oriented diff."""
+    source = {"public.foo(integer)": "SELECT $1 + 1;"}
+    live = {"public.foo(integer)": "SELECT $1 + 2;"}
+    report = FunctionBodyDriftDetector().compare(source, live)
+
+    assert report.has_drift
+    drift = report.body_drifts[0]
+    # Raw bodies preserved verbatim.
+    assert drift.expected_body == "SELECT $1 + 1;"
+    assert drift.live_body == "SELECT $1 + 2;"
+    # Unified diff mentions both changed lines and is line-oriented.
+    assert "-select $1 + 1;" in drift.unified_diff
+    assert "+select $1 + 2;" in drift.unified_diff
+
+
+def test_unified_diff_is_line_oriented_not_collapsed():
+    """Multi-line bodies produce a per-line diff, not one collapsed line."""
+    source = {"public.f()": "SELECT a\nFROM t\nWHERE x = 1;"}
+    live = {"public.f()": "SELECT a\nFROM t\nWHERE x = 2;"}
+    report = FunctionBodyDriftDetector().compare(source, live)
+
+    drift = report.body_drifts[0]
+    # Only the WHERE line changed; the unchanged lines must not appear as +/-.
+    assert "-where x = 1;" in drift.unified_diff
+    assert "+where x = 2;" in drift.unified_diff
+    assert "-select a" not in drift.unified_diff
+    assert "-from t" not in drift.unified_diff
+
+
+def test_no_drift_produces_no_record_with_bodies():
+    """A non-drifted function still yields no record (bodies not surfaced)."""
+    source = {"public.foo(integer)": "SELECT $1 + 1;  -- comment"}
+    live = {"public.foo(integer)": "select $1 + 1;"}
+    report = FunctionBodyDriftDetector().compare(source, live)
+    assert not report.has_drift
+    assert report.body_drifts == []
+
+
+def test_drift_to_dict_hash_only_by_default():
+    """to_dict() omits bodies/diff unless include_bodies=True (back-compat)."""
+    source = {"public.foo(integer)": "SELECT $1 + 1;"}
+    live = {"public.foo(integer)": "SELECT $1 + 2;"}
+    drift = FunctionBodyDriftDetector().compare(source, live).body_drifts[0]
+
+    terse = drift.to_dict()
+    assert set(terse) == {"schema", "name", "signature_key", "source_hash", "db_hash"}
+
+    verbose = drift.to_dict(include_bodies=True)
+    assert verbose["expected_body"] == "SELECT $1 + 1;"
+    assert verbose["live_body"] == "SELECT $1 + 2;"
+    assert "unified_diff" in verbose
+
+
+def test_report_to_dict_matches_inline_shape():
+    """FunctionBodyDriftReport.to_dict() reproduces the historical JSON keys."""
+    source = {"public.foo(integer)": "SELECT $1 + 1;"}
+    live = {"public.foo(integer)": "SELECT $1 + 2;"}
+    report = FunctionBodyDriftDetector().compare(source, live)
+
+    payload = report.to_dict()
+    assert payload["has_drift"] is True
+    assert payload["functions_checked"] == 1
+    assert "detection_time_ms" in payload
+    assert len(payload["body_drifts"]) == 1
+    # Hash-only by default — no bodies leak.
+    assert "expected_body" not in payload["body_drifts"][0]
+
+    verbose = report.to_dict(include_bodies=True)
+    assert verbose["body_drifts"][0]["expected_body"] == "SELECT $1 + 1;"
+
+
+# ---------------------------------------------------------------------------
 # Cycle 3: None-body handling
 # ---------------------------------------------------------------------------
 

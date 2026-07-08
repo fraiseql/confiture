@@ -317,6 +317,76 @@ Python migrations are intentionally **not** auto-rewritten — unparsing
 the AST would lose comments and formatting. Violations in `.py` files
 must be fixed by hand.
 
+## `--check-signatures` and `--check-body`
+
+These two flags compare the functions declared in your source DDL against the
+**live** database, catching functions that were changed out-of-band (an ad-hoc
+`CREATE OR REPLACE` on production) without the repo being updated. Both require
+`--config` (or `--env`) and connect to the database; pass `--schema` to compare
+against an explicit schema file, otherwise the schema is auto-built from your DDL.
+
+- **`--check-signatures`** compares function *signatures*, detecting stale
+  overloads left behind when a `CREATE OR REPLACE` changed a parameter type
+  (the old overload lingers under the previous signature).
+- **`--check-body`** (requires `--check-signatures`) additionally compares each
+  function *body* (`pg_proc.prosrc`) against the source. Bodies are compared
+  after normalisation — comments, whitespace, and keyword casing are ignored — so
+  only genuine logic changes register as drift. Opt-in because body comparison is
+  heavier than signature-only.
+
+Either flag exits `1` when drift is found, `0` when clean.
+
+### `--show-diff` — see *what* changed, not just *that* it changed
+
+By default a body drift reports only two 12-char hashes (`source_hash`,
+`db_hash`) — enough to know a function drifted, but not what to do about it.
+`--show-diff` (requires `--check-body`) surfaces, per drifted function, the
+**expected body**, the **live body**, and a **unified diff** of the two. The diff
+is computed over a line-oriented normalisation (comments stripped, indentation
+and blank-line churn collapsed), so it pinpoints the changed lines instead of
+drowning them in reformatting noise.
+
+```bash
+# Terse (default): hash-only, ideal for CI logs
+confiture migrate validate --check-signatures --check-body --config confiture.yaml
+
+# Triage: show the expected/live bodies and a unified diff per drift
+confiture migrate validate --check-signatures --check-body --show-diff \
+    --config confiture.yaml
+```
+
+Text output under `--show-diff` prints a rich-highlighted `+/-` diff beneath each
+drifted function. The JSON payload (`--format json`) gains the bodies and diff on
+each entry — but **only** when `--show-diff` is set; the default JSON shape stays
+hash-only for back-compatibility:
+
+```json
+{
+  "check": "function_signature_drift",
+  "body_drift": {
+    "has_drift": true,
+    "body_drifts": [
+      {
+        "schema": "public",
+        "name": "calc_total",
+        "signature_key": "public.calc_total(numeric)",
+        "source_hash": "f111676f0375",
+        "db_hash": "6dc531b06f14",
+        "expected_body": "BEGIN\n  RETURN amount * 1.20;\nEND;",
+        "live_body": "BEGIN\n  RETURN amount * 1.196;\nEND;",
+        "unified_diff": "--- public.calc_total(numeric) (expected)\n+++ public.calc_total(numeric) (live)\n@@ -1,3 +1,3 @@\n begin\n-return amount * 1.20;\n+return amount * 1.196;\n end;"
+      }
+    ],
+    "functions_checked": 1,
+    "detection_time_ms": 0.08
+  }
+}
+```
+
+To re-apply the source body over the live drift, use
+`confiture migrate fix-signatures --check-body --apply` (dry-run without
+`--apply`).
+
 ## `--require-grant-migration`
 
 Build environments apply grants straight from the grant sweep directory
