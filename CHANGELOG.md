@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`migrate validate --require-migration-bodies` fails a function/procedure body
+  change that has no accompanying migration (#178).** `--require-migration` already
+  gates table/column DDL and function *signature* changes, but not function
+  *bodies* — so a body edit that ships to rebuilt-from-DDL environments (dev/test)
+  without a migration silently never reaches migrate-only environments
+  (staging/production). In the PrintOptim audit ~120 functions ran different bodies
+  in prod purely because body edits never got a migration. The new opt-in flag
+  extends the accompaniment check: it diffs function bodies between `--base-ref` and
+  HEAD (static, git-based, **no DB**) and requires each changed body to be carried
+  by a migration that re-defines the function (`CREATE OR REPLACE`, in a `.sql` *or*
+  `.py` migration). Comment/whitespace/case-only changes don't count; a parameter-
+  type change is left to the existing signature check. Because it's diff-scoped, it
+  flags only what changed in the changeset, not the standing backlog. It is **off by
+  default** — drain the backlog first with the companion report-only flag
+  **`--list-unmigrated-bodies`** (lists un-migrated body changes without failing,
+  exit 0), then turn enforcement on. The failure message names each function and
+  shows a unified diff. This is the static PR-time gate; its runtime counterpart —
+  verifying the migration actually *produces* the intended body against a live DB —
+  is `--check-body-replay` (#179). New module `core/function_body_checker.py`.
+
 - **`migrate validate --check-body-replay` reports out-of-band function hot-patches
   via migration replay (#179).** The durable production drift signal. `--check-body`
   builds its expected side from source DDL, so it is dominated by the

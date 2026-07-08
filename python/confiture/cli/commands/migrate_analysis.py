@@ -246,6 +246,26 @@ def migrate_validate(
             "Companion to --check-signatures which detects stale overloads in a live DB."
         ),
     ),
+    require_migration_bodies: bool = typer.Option(
+        False,
+        "--require-migration-bodies",
+        help=(
+            "Additionally require a function/procedure BODY change (between --base-ref "
+            "and HEAD) to be carried by a migration that re-defines it (#178). Static, "
+            "no DB. Implies --require-migration. OFF by default — drain the standing "
+            "backlog first (see --list-unmigrated-bodies). The runtime counterpart is "
+            "--check-body-replay."
+        ),
+    ),
+    list_unmigrated_bodies: bool = typer.Option(
+        False,
+        "--list-unmigrated-bodies",
+        help=(
+            "Report-only: list function body changes (between --base-ref and HEAD) not "
+            "carried by a migration, WITHOUT failing (exit 0). Use to size and drain the "
+            "backlog before enabling --require-migration-bodies."
+        ),
+    ),
     base_ref: str = typer.Option(
         "origin/main",
         "--base-ref",
@@ -582,7 +602,28 @@ def migrate_validate(
         config = _resolve_config(config, env)
 
         # Handle git validation flags
-        if check_drift or require_migration or require_grant_migration or staged:
+        # Report-only backlog listing (#178) — never fails, exits 0.
+        if list_unmigrated_bodies:
+            from confiture.cli.git_validation import report_unmigrated_bodies
+
+            body_result = report_unmigrated_bodies(
+                env="local",
+                base_ref=since or base_ref,
+                target_ref="HEAD",
+                console=console,
+                format_output=format_output,
+            )
+            if json_mode:
+                _output_json({"check": "unmigrated_bodies", **body_result}, output_file, console)
+            return
+
+        if (
+            check_drift
+            or require_migration
+            or require_migration_bodies
+            or require_grant_migration
+            or staged
+        ):
             from confiture.cli.git_validation import (
                 validate_git_drift,
                 validate_git_flags_in_repo,
@@ -628,9 +669,9 @@ def migrate_validate(
                         )
                         raise typer.Exit(1)  # success-signal: drift found
 
-            # Run migration accompaniment check
+            # Run migration accompaniment check (--require-migration-bodies implies it)
             accompaniment_passed = True
-            if require_migration:
+            if require_migration or require_migration_bodies:
                 try:
                     acc_result = validate_migration_accompaniment(
                         env="local",
@@ -638,6 +679,7 @@ def migrate_validate(
                         target_ref=target_ref,
                         console=console,
                         format_output=format_output,
+                        check_bodies=require_migration_bodies,
                     )
                 except Exception as e:
                     raise GitError(f"Accompaniment check failed: {e}") from e
@@ -704,7 +746,7 @@ def migrate_validate(
                             c
                             for c, flag in [
                                 ("drift", check_drift),
-                                ("accompaniment", require_migration),
+                                ("accompaniment", require_migration or require_migration_bodies),
                                 ("grant_accompaniment", require_grant_migration),
                             ]
                             if flag

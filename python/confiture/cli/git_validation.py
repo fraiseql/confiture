@@ -93,6 +93,8 @@ def validate_migration_accompaniment(
     target_ref: str,
     console: Console,
     format_output: str = "text",
+    *,
+    check_bodies: bool = False,
 ) -> dict:
     """Validate that DDL changes have migration files.
 
@@ -102,6 +104,8 @@ def validate_migration_accompaniment(
         target_ref: Target git reference
         console: Rich console for output
         format_output: Output format (text or json)
+        check_bodies: Also require function *body* changes to be carried by a
+            migration (#178).
 
     Returns:
         Dictionary with validation results
@@ -114,7 +118,7 @@ def validate_migration_accompaniment(
         validate_git_flags_in_repo()
 
         checker = MigrationAccompanimentChecker(env)
-        report = checker.check_accompaniment(base_ref, target_ref)
+        report = checker.check_accompaniment(base_ref, target_ref, check_bodies=check_bodies)
 
         if format_output == "text":
             if report.migration_error:
@@ -125,7 +129,11 @@ def validate_migration_accompaniment(
                     "[yellow]   Schema may be too large for static analysis "
                     "— DDL accompaniment check was not run.[/yellow]"
                 )
-            elif not report.has_ddl_changes and not report.has_signature_violations:
+            elif (
+                not report.has_ddl_changes
+                and not report.has_signature_violations
+                and not report.has_body_violations
+            ):
                 console.print("[green]✅ No DDL changes detected[/green]")
             elif report.is_valid:
                 console.print("[green]✅ DDL changes accompanied by migrations[/green]")
@@ -148,6 +156,8 @@ def validate_migration_accompaniment(
                             f"     [yellow]Fix: add DROP FUNCTION {v.old_signature}; "
                             f"before CREATE OR REPLACE in a migration[/yellow]"
                         )
+                if report.body_violations:
+                    _render_body_violations(report.body_violations, console)
 
         return report.to_dict()
 
@@ -155,6 +165,53 @@ def validate_migration_accompaniment(
         if format_output == "text":
             console.print(f"[red]❌ Git validation error: {e}[/red]")
         raise
+
+
+def _render_body_violations(violations: list, console: Console) -> None:
+    """Print function body-change violations (#178) for human eyes."""
+    console.print("[red]❌ Function body changes detected without an accompanying migration[/red]")
+    for v in violations:
+        console.print(f"   • {v.signature_key}")
+        console.print(
+            f"     [yellow]Fix: add a migration with "
+            f"CREATE OR REPLACE FUNCTION {v.function_key}(...)[/yellow]"
+        )
+
+
+def report_unmigrated_bodies(
+    env: str,
+    base_ref: str,
+    target_ref: str,
+    console: Console,
+    format_output: str = "text",
+) -> dict:
+    """Report function body changes not carried by a migration — without failing.
+
+    The drain-first companion to ``--require-migration-bodies``: lists the body
+    changes between refs that lack a re-defining migration so a repo can size and
+    clear its backlog before turning enforcement on. Always non-failing.
+
+    Returns:
+        ``{"body_violations": [...], "count": N}``.
+    """
+    validate_git_flags_in_repo()
+
+    checker = MigrationAccompanimentChecker(env)
+    report = checker.check_accompaniment(base_ref, target_ref, check_bodies=True)
+    violations = report.body_violations
+
+    if format_output == "text":
+        if not violations:
+            console.print("[green]✅ No un-migrated function body changes[/green]")
+        else:
+            console.print(
+                f"[yellow]⚠ {len(violations)} function body change(s) not carried by a "
+                f"migration (report-only):[/yellow]"
+            )
+            for v in violations:
+                console.print(f"   • {v.signature_key}")
+
+    return {"body_violations": [v.to_dict() for v in violations], "count": len(violations)}
 
 
 def _render_grant_report(report, console: Console) -> None:

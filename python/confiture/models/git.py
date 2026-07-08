@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from confiture.models.schema import SchemaChange
 
 if TYPE_CHECKING:
+    from confiture.core.function_body_checker import FunctionBodyViolation
     from confiture.core.function_signature_checker import FunctionSignatureViolation
 
 
@@ -51,11 +52,17 @@ class MigrationAccompanimentReport:
     base_ref: str | None = None
     target_ref: str | None = None
     signature_violations: list[FunctionSignatureViolation] = field(default_factory=list)
+    body_violations: list[FunctionBodyViolation] = field(default_factory=list)
 
     @property
     def has_signature_violations(self) -> bool:
         """True if any function parameter type changes lack a DROP FUNCTION migration."""
         return len(self.signature_violations) > 0
+
+    @property
+    def has_body_violations(self) -> bool:
+        """True if any function body change lacks a re-defining migration (#178)."""
+        return len(self.body_violations) > 0
 
     @property
     def is_valid(self) -> bool:
@@ -64,12 +71,12 @@ class MigrationAccompanimentReport:
         Valid if:
         - No DDL changes (nothing to accompany), or
         - DDL changes exist AND new migrations exist
-        AND no function signature violations.
+        AND no function signature violations AND no function body violations.
 
         Returns:
             True if validation passed, False otherwise
         """
-        if self.has_signature_violations:
+        if self.has_signature_violations or self.has_body_violations:
             return False
         if not self.has_ddl_changes:
             return True
@@ -111,6 +118,7 @@ class MigrationAccompanimentReport:
             "base_ref": self.base_ref,
             "target_ref": self.target_ref,
             "signature_violations": [v.to_dict() for v in self.signature_violations],
+            "body_violations": [v.to_dict() for v in self.body_violations],
         }
 
 

@@ -487,6 +487,50 @@ confiture migrate validate --check-body-replay --show-diff \
 A deploy scheduler (e.g. fraisier) can run this post-deploy and on a timer as a
 standing production drift guard — the consuming repo keeps only config.
 
+## `--require-migration-bodies` — gate un-migrated body edits at PR time
+
+`--require-migration` ensures table/column DDL changes and function *signature*
+changes have a migration, but it does **not** check function/procedure *bodies*.
+So a body edit in the schema DDL that ships to rebuilt-from-DDL environments
+(dev/test) without a migration silently never reaches migrate-only environments
+(staging/production) — the root cause of a whole class of prod↔source drift (in
+one audit, ~120 functions ran different bodies in prod for exactly this reason).
+
+`--require-migration-bodies` closes the gap. It is **static and git-based (no
+DB)**: it diffs function bodies between `--base-ref` and HEAD and requires each
+changed body to be carried by a migration that re-defines the function (a
+`CREATE OR REPLACE`, in a `.sql` or `.py` migration). Comment/whitespace/case-only
+changes don't count; parameter-type changes are the existing signature check's
+job. Because it's diff-scoped, it flags only what changed in the changeset — not
+your standing backlog.
+
+This is the PR-time static gate. Its runtime counterpart, which verifies the
+migration actually *produces* the intended body against a live database, is
+[`--check-body-replay`](#--check-body-replay--the-production-drift-guard).
+
+### Drain-first workflow
+
+It is **off by default**: an existing repo carries a backlog of body edits that
+predate the check, and turning it on cold would fail the first PR that touches any
+of them. Adopt it in three steps:
+
+```bash
+# 1. Size the backlog (report-only, never fails — exit 0)
+confiture migrate validate --list-unmigrated-bodies --base-ref origin/main
+
+# 2. Drain it: add migrations that re-apply each listed function, or accept them
+#    into a baseline. Re-run step 1 until the list is empty.
+
+# 3. Enforce in CI (fails the build on a new un-migrated body change)
+confiture migrate validate --require-migration-bodies --base-ref origin/main
+```
+
+`--require-migration-bodies` implies `--require-migration` (it runs the full
+accompaniment check plus the body check). On violation it names each function,
+shows a unified diff of the change, and exits 1. JSON failures carry a
+`body_violations` array (`function_key`, `signature_key`, `unified_diff`); the
+report-only mode emits `{"check": "unmigrated_bodies", "count": N, ...}`.
+
 ## `--require-grant-migration`
 
 Build environments apply grants straight from the grant sweep directory
