@@ -442,6 +442,51 @@ The JSON payload mirrors `--check-body`:
 }
 ```
 
+## `--check-body-replay` — the production drift guard
+
+`--check-body` and `--check-body-replay` both detect function/procedure body drift
+against live, but they build the **expected** side differently:
+
+| | Expected side | Best for |
+|---|---|---|
+| `--check-body` | source DDL (`build`) | a repo where DDL *is* the source of truth |
+| `--check-body-replay` | replay of all migrations | migrate-strategy prod: isolate a *new* hot-patch |
+
+On a migrate-strategy database (staging, production), `--check-body`'s
+source-DDL expectation is swamped by the **build-vs-migrate backlog**: every body
+that shipped to dev/test (rebuilt from DDL) but never got a migration reads as
+"drift", so a genuinely new out-of-band `CREATE OR REPLACE` on prod is lost in the
+noise.
+
+`--check-body-replay` gives the clean signal. It rebuilds the expected database by
+replaying **all migrations** into a throwaway scratch DB — no source DDL, no
+hot-patches — and diffs `pg_proc.prosrc` against live. The difference is exactly
+the definitions **no migration produced**: true out-of-band hot-patches.
+
+```bash
+# Isolate live hot-patches that no migration carries
+confiture migrate validate --check-body-replay --env production \
+    --schemas public,catalog
+
+# With the diff, over an SSH tunnel to a read-only replica
+confiture migrate validate --check-body-replay --show-diff \
+    --env production --ssh deploy@db.internal \
+    --scratch-url postgresql://localhost/postgres
+```
+
+- Both sides are real databases introspected identically, so signature pairing is
+  exact — this path never text-parses signatures.
+- A migration that **fails at HEAD** surfaces as an error (non-zero exit), *not*
+  as false drift.
+- Heaviest drift check (replays the whole migration history). Explicitly opt-in.
+- `--scratch-url` is **required** with `--ssh` (the replay needs a writable server;
+  the read-only replica is not one). JSON `check` is `replay_body_drift`; the
+  `body_drifts` shape matches `--check-body` (with `--show-diff` adding
+  `expected_body`/`live_body`/`unified_diff`).
+
+A deploy scheduler (e.g. fraisier) can run this post-deploy and on a timer as a
+standing production drift guard — the consuming repo keeps only config.
+
 ## `--require-grant-migration`
 
 Build environments apply grants straight from the grant sweep directory

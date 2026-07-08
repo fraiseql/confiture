@@ -251,6 +251,52 @@ def render_signature_drift(
             _display_body_drift_report(body_report, show_diff=show_diff)
 
 
+def render_replay_drift(
+    body_report: Any,
+    *,
+    json_mode: bool,
+    output_file: Path | None,
+    show_diff: bool = False,
+) -> None:
+    """Render the ``--check-body-replay`` FunctionBodyDriftReport.
+
+    Reuses the function-body report shape (Phase 3) but frames drifts as
+    out-of-band hot-patches — definitions live has but a clean migration replay
+    does not produce. ``show_diff`` surfaces the expected/live bodies + diff.
+    """
+    if json_mode:
+        _output_json(
+            {"check": "replay_body_drift", **body_report.to_dict(include_bodies=show_diff)},
+            output_file,
+            console,
+        )
+        return
+
+    if not body_report.has_drift:
+        console.print(
+            f"[green]✓[/green] 0 out-of-band hot-patch(es) detected "
+            f"({body_report.functions_checked} checked, {body_report.detection_time_ms:.1f}ms)"
+        )
+        return
+
+    console.print(
+        f"[yellow]⚠[/yellow]  {len(body_report.body_drifts)} out-of-band hot-patch(es) "
+        f"detected ({body_report.functions_checked} checked) — live differs from a clean "
+        f"migration replay"
+    )
+    for drift in body_report.body_drifts:
+        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
+        console.print(f"    Replayed hash: [cyan]{drift.source_hash}[/cyan]")
+        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        if show_diff and drift.unified_diff:
+            console.print("    [dim]Unified diff (replayed → live, normalised):[/dim]")
+            _print_unified_diff(drift.unified_diff)
+        console.print(
+            "    Hint: no migration produced this body — capture the live change in a "
+            "migration, or re-apply the migration-produced definition"
+        )
+
+
 _RELKIND_LABEL = {"v": "view", "m": "materialized view"}
 
 

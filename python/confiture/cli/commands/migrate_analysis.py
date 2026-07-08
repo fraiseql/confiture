@@ -340,14 +340,27 @@ def migrate_validate(
             "Honours --schemas and --ssh (with --scratch-url)."
         ),
     ),
+    check_body_replay: bool = typer.Option(
+        False,
+        "--check-body-replay",
+        help=(
+            "Detect out-of-band function/procedure hot-patches by REPLAY: rebuild the "
+            "expected database by replaying all migrations into a scratch DB, then diff "
+            "prosrc against live. Unlike --check-body (expected = source DDL, swamped by "
+            "the build-vs-migrate backlog), this reports only definitions no migration "
+            "produced — the clean production drift signal. Requires --config (or --env); "
+            "honours --schemas, --migrations-dir, --ssh (with --scratch-url). Heaviest "
+            "drift check (replays the full migration history)."
+        ),
+    ),
     scratch_url: str | None = typer.Option(
         None,
         "--scratch-url",
         help=(
             "Writable PostgreSQL server on which to build the expected scratch database "
-            "for --check-body-views (default: the live server from the config). Required "
-            "when using --ssh, since the scratch DB cannot be built on the remote "
-            "read-only live server."
+            "for --check-body-views / --check-body-replay (default: the live server from "
+            "the config). Required when using --ssh, since the scratch DB cannot be built "
+            "on the remote read-only live server."
         ),
     ),
     check_acls: bool = typer.Option(
@@ -709,9 +722,11 @@ def migrate_validate(
         if check_body and not check_signatures:
             raise ConfigurationError("--check-body requires --check-signatures")
 
-        # Guard: --show-diff requires --check-body or --check-body-views
-        if show_diff and not (check_body or check_body_views):
-            raise ConfigurationError("--show-diff requires --check-body or --check-body-views")
+        # Guard: --show-diff requires one of the body-drift checks
+        if show_diff and not (check_body or check_body_views or check_body_replay):
+            raise ConfigurationError(
+                "--show-diff requires --check-body, --check-body-views, or --check-body-replay"
+            )
 
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
@@ -873,6 +888,32 @@ def migrate_validate(
             )
             if view_result.has_drift:
                 raise typer.Exit(1)  # success-signal: view drift found
+            return
+
+        # Run replay-based function-body drift check (clean hot-patch signal)
+        if check_body_replay:
+            from confiture.cli.formatters.validate_formatter import render_replay_drift
+            from confiture.core.validation.replay_drift import check_replay_drift
+
+            replay_result = check_replay_drift(
+                config_path=config,
+                migrations_dir=migrations_dir,
+                schemas=check_signature_schemas,
+                ssh_via=ssh_via,
+                scratch_url=scratch_url,
+            )
+            if not json_mode and replay_result.ssh_target:
+                console.print(
+                    f"[dim]  (connecting via SSH tunnel to {replay_result.ssh_target})[/dim]"
+                )
+            render_replay_drift(
+                replay_result.body_report,
+                json_mode=json_mode,
+                output_file=output_file,
+                show_diff=show_diff,
+            )
+            if replay_result.has_drift:
+                raise typer.Exit(1)  # success-signal: hot-patch drift found
             return
 
         if not migrations_dir.exists():

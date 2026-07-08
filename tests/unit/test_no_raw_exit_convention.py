@@ -55,9 +55,10 @@ _ALLOWLIST: dict[str, int] = {
     # MigrateDiffResult domain formatter), migrate fix-signatures, and migrate
     # preflight (already mostly fail()-routed via computed Exit(exit_code)).
     # TODO(follow-up): finish diff / fix-signatures / preflight contract sweep.
-    # +1 (28): --check-body-views drift gate (Exit(1), success-signal — same kind
-    # as the --check-signatures gate; a CI drift signal, not a failure path).
-    "commands/migrate_analysis.py": 28,
+    # +2 (29): --check-body-views (28) and --check-body-replay (29) drift gates —
+    # both Exit(1) success-signals (CI drift signals, same kind as the
+    # --check-signatures gate), not failure paths.
+    "commands/migrate_analysis.py": 29,
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.

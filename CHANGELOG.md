@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`migrate validate --check-body-replay` reports out-of-band function hot-patches
+  via migration replay (#179).** The durable production drift signal. `--check-body`
+  builds its expected side from source DDL, so it is dominated by the
+  build-vs-migrate backlog — every body that shipped to rebuilt-from-DDL
+  environments but never got a migration reads as "drift", drowning out any *new*
+  hot-patch. `--check-body-replay` instead rebuilds the expected database by
+  replaying all migrations into a throwaway scratch DB (no source DDL, no
+  hot-patches) and diffs `pg_proc.prosrc` against live: `live − replayed` is
+  exactly the definitions that no migration produced — true out-of-band
+  `CREATE OR REPLACE` hot-patches. Both sides are real databases introspected
+  identically, so signature pairing is exact (this path never text-parses
+  signatures, sidestepping the #176 class entirely). A migration that fails at HEAD
+  surfaces as an error, not as false drift. Honours `--schemas` and
+  `--migrations-dir`; `--show-diff` shows the replayed vs live bodies; over `--ssh`
+  pass `--scratch-url` for the writable replay server. New module
+  `core/validation/replay_drift.py`. A scheduler (e.g. fraisier) can run this
+  post-deploy and on a timer as a standing drift guard.
+
 - **`migrate validate --check-body-views` detects view and materialized-view
   definition drift (#174).** The missing half of `--check-body`: it catches when a
   live view's predicate or projection was changed directly in the database (an
