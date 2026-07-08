@@ -172,6 +172,48 @@ class TestDriftCommand:
         assert "drift_items" in data
         assert data["has_drift"] is False
 
+    @patch("confiture.cli.commands.drift.create_connection")
+    @patch("confiture.cli.commands.drift.load_config")
+    @patch("confiture.cli.commands.drift.SchemaDriftDetector")
+    def test_drift_unparseable_schema_exits_4(
+        self, mock_detector_class, mock_load_config, mock_create_connection, tmp_path
+    ):
+        """A SCHEMA_202 parse failure (issue #175) surfaces as exit 4 with its own
+        error code, not wrapped as a generic config error."""
+        from confiture.exceptions import SchemaError
+
+        config_file = tmp_path / "confiture.yaml"
+        config_file.write_text("database_url: postgresql://localhost/test\n")
+        schema_file = tmp_path / "schema.sql"
+        schema_file.write_text("/* sep */\nCREATE TABLE users (id int);\n")
+
+        mock_load_config.return_value = MagicMock()
+        mock_create_connection.return_value = MagicMock()
+        mock_detector = MagicMock()
+        mock_detector_class.return_value = mock_detector
+        mock_detector.compare_with_schema_file.side_effect = SchemaError(
+            "Parsed 0 tables from a schema that contains CREATE TABLE statement(s)",
+            error_code="SCHEMA_202",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "drift",
+                "--config",
+                str(config_file),
+                "--schema",
+                str(schema_file),
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 4
+        data = json.loads(result.stdout)
+        assert data["ok"] is False
+        assert data["error"]["code"] == "SCHEMA_202"
+
     def test_drift_command_missing_schema_flag_is_config_error(self, tmp_path):
         """Missing --schema is a config error (exit 5), not the reserved exit 2."""
         config_file = tmp_path / "confiture.yaml"

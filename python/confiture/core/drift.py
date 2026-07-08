@@ -6,14 +6,17 @@ to detect unauthorized changes or migration mishaps.
 
 import fnmatch
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import psycopg
+import sqlparse
 
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
+from confiture.exceptions import SchemaError
 
 if TYPE_CHECKING:
     from confiture.config.environment import (
@@ -439,62 +442,93 @@ class SchemaDriftDetector:
         report.expected_schema_source = f"file:{schema_file_path}"
         return report
 
+    # Dollar-quoted body: AS $tag$ ... $tag$ (group 1 closes the tag exactly).
+    # Stripped from the guard text so a dynamic `CREATE TABLE` inside a function
+    # body can't spuriously trip the zero-tables guard.
+    _DOLLAR_BODY_RE = re.compile(r"\$([^$]*)\$.*?\$\1\$", re.DOTALL)
+
     def _parse_schema_from_sql(self, sql: str) -> SchemaInfo:
         """Parse SQL DDL to extract schema information.
 
         This is a simplified parser that extracts table and column info
         from CREATE TABLE statements.
 
+        Comments are stripped up front: ``confiture build`` emits block-comment
+        file separators by default (and real schemas carry ``--`` line comments,
+        some non-ASCII), and ``sqlparse`` keeps a leading comment attached to the
+        statement that follows it — which the position-anchored ``CREATE TABLE``
+        match then never sees, yielding zero tables and 100 % false ``extra_table``
+        drift with exit 0 (issue #175).
+
         Args:
             sql: SQL DDL statements
 
         Returns:
             SchemaInfo extracted from SQL
+
+        Raises:
+            SchemaError: If the input clearly declares tables (contains a
+                top-level ``CREATE TABLE``) but none were parsed — a parser
+                failure surfaced loudly rather than as a silent empty expectation.
         """
-        import re
-
-        import sqlparse
-
         info = SchemaInfo()
 
-        # Parse CREATE TABLE statements
-        statements = sqlparse.parse(sql)
-        for stmt in statements:
+        # Strip comments before parsing so leading separators/comments can't hide
+        # the statement that follows them.  Dollar-quoted bodies are preserved.
+        stripped = sqlparse.format(sql, strip_comments=True)
+
+        for stmt in sqlparse.parse(stripped):
             stmt_str = str(stmt).strip()
             if not stmt_str:
                 continue
 
-            # Check for CREATE TABLE
-            match = re.match(
+            # Anchored match (not search): after comment stripping each statement
+            # starts with its keyword, so anchoring avoids matching a dynamic
+            # `CREATE TABLE` embedded inside a function body.
+            table_match = re.match(
                 r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\")?(\w+)(?:\")?",
                 stmt_str,
                 re.IGNORECASE,
             )
-            if match:
-                table_name = match.group(1).lower()
+            if table_match:
+                table_name = table_match.group(1).lower()
                 columns = self._extract_columns_from_create(stmt_str)
                 info.tables[table_name] = columns
 
-            # Check for CREATE INDEX
-            match = re.match(
+            index_match = re.match(
                 r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?"
                 r"(?:IF\s+NOT\s+EXISTS\s+)?(?:\")?(\w+)(?:\")?\s+ON\s+(?:\")?(\w+)(?:\")?",
                 stmt_str,
                 re.IGNORECASE,
             )
-            if match:
-                index_name = match.group(1).lower()
-                table_name = match.group(2).lower()
+            if index_match:
+                index_name = index_match.group(1).lower()
+                table_name = index_match.group(2).lower()
                 if table_name not in info.indexes:
                     info.indexes[table_name] = []
                 info.indexes[table_name].append(index_name)
+
+        # Guard: input declares tables but we parsed none → parser failure, not an
+        # empty expectation.  Ignore CREATE TABLE occurrences inside function
+        # bodies so a helper that does dynamic DDL doesn't false-trigger it.
+        if not info.tables:
+            guard_text = self._DOLLAR_BODY_RE.sub("", stripped)
+            if re.search(r"\bCREATE\s+TABLE\b", guard_text, re.IGNORECASE):
+                raise SchemaError(
+                    "Parsed 0 tables from a schema that contains CREATE TABLE "
+                    "statement(s) — the expected-schema parser failed. Comparing "
+                    "against this would report every live table as spurious drift.",
+                    error_code="SCHEMA_202",
+                    resolution_hint=(
+                        "This is a confiture parser bug — please report the schema "
+                        "file. As a workaround, regenerate it or simplify the DDL."
+                    ),
+                )
 
         return info
 
     def _extract_columns_from_create(self, create_stmt: str) -> dict[str, dict]:
         """Extract column definitions from CREATE TABLE statement."""
-        import re
-
         columns: dict[str, dict] = {}
 
         # Find the column definitions between parentheses

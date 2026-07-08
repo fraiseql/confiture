@@ -19,20 +19,39 @@ from confiture.core.url_redaction import libpq_env, split_password
 from confiture.exceptions import SchemaError
 
 
+def _rebuild_with_path(server_url: str, path: str) -> str:
+    """Return *server_url* with its path replaced by *path*.
+
+    ``urlunparse`` drops the ``//`` authority marker when the netloc is empty
+    (``postgresql:///db`` round-trips to the malformed ``postgresql:/db``), which
+    breaks hostless socket DSNs. Restore the marker so libpq still accepts the
+    result. Host-qualified URLs are unaffected — ``urlunparse`` already emits
+    ``//`` for a non-empty netloc.
+    """
+    parsed = urlparse(server_url)
+    rebuilt = urlunparse(parsed._replace(path=path))
+    scheme_prefix = f"{parsed.scheme}:"
+    if (
+        parsed.scheme
+        and rebuilt.startswith(scheme_prefix)
+        and not rebuilt.startswith(f"{parsed.scheme}://")
+    ):
+        rebuilt = f"{parsed.scheme}://" + rebuilt[len(scheme_prefix) :]
+    return rebuilt
+
+
 def _maintenance_url(server_url: str) -> str:
     """Replace the database component of *server_url* with ``postgres``.
 
     The maintenance DB is used to issue ``CREATE DATABASE`` / ``DROP DATABASE``
     since the user's target database may not exist yet.
     """
-    parsed = urlparse(server_url)
-    return urlunparse(parsed._replace(path="/postgres"))
+    return _rebuild_with_path(server_url, "/postgres")
 
 
 def _replace_dbname(server_url: str, dbname: str) -> str:
     """Return *server_url* with its database component replaced by *dbname*."""
-    parsed = urlparse(server_url)
-    return urlunparse(parsed._replace(path=f"/{dbname}"))
+    return _rebuild_with_path(server_url, f"/{dbname}")
 
 
 def terminate_backends(conn: psycopg.Connection, db_name: str) -> None:

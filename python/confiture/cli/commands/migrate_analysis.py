@@ -246,6 +246,26 @@ def migrate_validate(
             "Companion to --check-signatures which detects stale overloads in a live DB."
         ),
     ),
+    require_migration_bodies: bool = typer.Option(
+        False,
+        "--require-migration-bodies",
+        help=(
+            "Additionally require a function/procedure BODY change (between --base-ref "
+            "and HEAD) to be carried by a migration that re-defines it (#178). Static, "
+            "no DB. Implies --require-migration. OFF by default — drain the standing "
+            "backlog first (see --list-unmigrated-bodies). The runtime counterpart is "
+            "--check-body-replay."
+        ),
+    ),
+    list_unmigrated_bodies: bool = typer.Option(
+        False,
+        "--list-unmigrated-bodies",
+        help=(
+            "Report-only: list function body changes (between --base-ref and HEAD) not "
+            "carried by a migration, WITHOUT failing (exit 0). Use to size and drain the "
+            "backlog before enabling --require-migration-bodies."
+        ),
+    ),
     base_ref: str = typer.Option(
         "origin/main",
         "--base-ref",
@@ -316,6 +336,51 @@ def migrate_validate(
             "Compare function bodies (prosrc) between source SQL and the live database. "
             "Requires --check-signatures. Opt-in because body comparison is heavier than "
             "signature-only comparison."
+        ),
+    ),
+    show_diff: bool = typer.Option(
+        False,
+        "--show-diff",
+        help=(
+            "With --check-body: also emit, per drifted function, the expected body, the "
+            "live body, and a unified diff of the two (normalised) bodies. Requires "
+            "--check-body. Opt-in because bodies can be large; the default output stays "
+            "hash-only for terse CI logs. Also applies to --check-body-views."
+        ),
+    ),
+    check_body_views: bool = typer.Option(
+        False,
+        "--check-body-views",
+        help=(
+            "Compare view and materialized-view definitions between the source schema "
+            "and the live database. The expected views are built into a scratch DB and "
+            "read back through the same pg_get_viewdef deparser as live, so only genuine "
+            "predicate/projection changes register (formatting, schema-qualification and "
+            "*-expansion differences do not). Requires --config (or --env) and --schema. "
+            "Honours --schemas and --ssh (with --scratch-url)."
+        ),
+    ),
+    check_body_replay: bool = typer.Option(
+        False,
+        "--check-body-replay",
+        help=(
+            "Detect out-of-band function/procedure hot-patches by REPLAY: rebuild the "
+            "expected database by replaying all migrations into a scratch DB, then diff "
+            "prosrc against live. Unlike --check-body (expected = source DDL, swamped by "
+            "the build-vs-migrate backlog), this reports only definitions no migration "
+            "produced — the clean production drift signal. Requires --config (or --env); "
+            "honours --schemas, --migrations-dir, --ssh (with --scratch-url). Heaviest "
+            "drift check (replays the full migration history)."
+        ),
+    ),
+    scratch_url: str | None = typer.Option(
+        None,
+        "--scratch-url",
+        help=(
+            "Writable PostgreSQL server on which to build the expected scratch database "
+            "for --check-body-views / --check-body-replay (default: the live server from "
+            "the config). Required when using --ssh, since the scratch DB cannot be built "
+            "on the remote read-only live server."
         ),
     ),
     check_acls: bool = typer.Option(
@@ -537,7 +602,28 @@ def migrate_validate(
         config = _resolve_config(config, env)
 
         # Handle git validation flags
-        if check_drift or require_migration or require_grant_migration or staged:
+        # Report-only backlog listing (#178) — never fails, exits 0.
+        if list_unmigrated_bodies:
+            from confiture.cli.git_validation import report_unmigrated_bodies
+
+            body_result = report_unmigrated_bodies(
+                env="local",
+                base_ref=since or base_ref,
+                target_ref="HEAD",
+                console=console,
+                format_output=format_output,
+            )
+            if json_mode:
+                _output_json({"check": "unmigrated_bodies", **body_result}, output_file, console)
+            return
+
+        if (
+            check_drift
+            or require_migration
+            or require_migration_bodies
+            or require_grant_migration
+            or staged
+        ):
             from confiture.cli.git_validation import (
                 validate_git_drift,
                 validate_git_flags_in_repo,
@@ -583,9 +669,9 @@ def migrate_validate(
                         )
                         raise typer.Exit(1)  # success-signal: drift found
 
-            # Run migration accompaniment check
+            # Run migration accompaniment check (--require-migration-bodies implies it)
             accompaniment_passed = True
-            if require_migration:
+            if require_migration or require_migration_bodies:
                 try:
                     acc_result = validate_migration_accompaniment(
                         env="local",
@@ -593,6 +679,7 @@ def migrate_validate(
                         target_ref=target_ref,
                         console=console,
                         format_output=format_output,
+                        check_bodies=require_migration_bodies,
                     )
                 except Exception as e:
                     raise GitError(f"Accompaniment check failed: {e}") from e
@@ -659,7 +746,7 @@ def migrate_validate(
                             c
                             for c, flag in [
                                 ("drift", check_drift),
-                                ("accompaniment", require_migration),
+                                ("accompaniment", require_migration or require_migration_bodies),
                                 ("grant_accompaniment", require_grant_migration),
                             ]
                             if flag
@@ -676,6 +763,12 @@ def migrate_validate(
         # Guard: --check-body requires --check-signatures
         if check_body and not check_signatures:
             raise ConfigurationError("--check-body requires --check-signatures")
+
+        # Guard: --show-diff requires one of the body-drift checks
+        if show_diff and not (check_body or check_body_views or check_body_replay):
+            raise ConfigurationError(
+                "--show-diff requires --check-body, --check-body-views, or --check-body-replay"
+            )
 
         # Run ACL coverage check on migration files (static, no DB).
         if check_acls:
@@ -804,9 +897,65 @@ def migrate_validate(
                 sig_result.body_report,
                 json_mode=json_mode,
                 output_file=output_file,
+                show_diff=show_diff,
             )
             if sig_result.has_any_drift:
                 raise typer.Exit(1)  # success-signal: drift found
+            return
+
+        # Run live view / materialized-view body-drift check
+        if check_body_views:
+            from confiture.cli.formatters.validate_formatter import render_view_drift
+            from confiture.core.validation.view_drift import check_view_drift
+
+            view_result = check_view_drift(
+                config_path=config,
+                schema_file=schema_file,
+                schemas=check_signature_schemas,
+                ssh_via=ssh_via,
+                scratch_url=scratch_url,
+            )
+            if not json_mode:
+                if view_result.auto_built:
+                    console.print("[dim]  (schema auto-built from DDL files)[/dim]")
+                if view_result.ssh_target:
+                    console.print(
+                        f"[dim]  (connecting via SSH tunnel to {view_result.ssh_target})[/dim]"
+                    )
+            render_view_drift(
+                view_result.view_report,
+                json_mode=json_mode,
+                output_file=output_file,
+                show_diff=show_diff,
+            )
+            if view_result.has_drift:
+                raise typer.Exit(1)  # success-signal: view drift found
+            return
+
+        # Run replay-based function-body drift check (clean hot-patch signal)
+        if check_body_replay:
+            from confiture.cli.formatters.validate_formatter import render_replay_drift
+            from confiture.core.validation.replay_drift import check_replay_drift
+
+            replay_result = check_replay_drift(
+                config_path=config,
+                migrations_dir=migrations_dir,
+                schemas=check_signature_schemas,
+                ssh_via=ssh_via,
+                scratch_url=scratch_url,
+            )
+            if not json_mode and replay_result.ssh_target:
+                console.print(
+                    f"[dim]  (connecting via SSH tunnel to {replay_result.ssh_target})[/dim]"
+                )
+            render_replay_drift(
+                replay_result.body_report,
+                json_mode=json_mode,
+                output_file=output_file,
+                show_diff=show_diff,
+            )
+            if replay_result.has_drift:
+                raise typer.Exit(1)  # success-signal: hot-patch drift found
             return
 
         if not migrations_dir.exists():

@@ -317,6 +317,220 @@ Python migrations are intentionally **not** auto-rewritten — unparsing
 the AST would lose comments and formatting. Violations in `.py` files
 must be fixed by hand.
 
+## `--check-signatures` and `--check-body`
+
+These two flags compare the functions declared in your source DDL against the
+**live** database, catching functions that were changed out-of-band (an ad-hoc
+`CREATE OR REPLACE` on production) without the repo being updated. Both require
+`--config` (or `--env`) and connect to the database; pass `--schema` to compare
+against an explicit schema file, otherwise the schema is auto-built from your DDL.
+
+- **`--check-signatures`** compares function *signatures*, detecting stale
+  overloads left behind when a `CREATE OR REPLACE` changed a parameter type
+  (the old overload lingers under the previous signature).
+- **`--check-body`** (requires `--check-signatures`) additionally compares each
+  function *body* (`pg_proc.prosrc`) against the source. Bodies are compared
+  after normalisation — comments, whitespace, and keyword casing are ignored — so
+  only genuine logic changes register as drift. Opt-in because body comparison is
+  heavier than signature-only.
+
+Either flag exits `1` when drift is found, `0` when clean.
+
+### `--show-diff` — see *what* changed, not just *that* it changed
+
+By default a body drift reports only two 12-char hashes (`source_hash`,
+`db_hash`) — enough to know a function drifted, but not what to do about it.
+`--show-diff` (requires `--check-body`) surfaces, per drifted function, the
+**expected body**, the **live body**, and a **unified diff** of the two. The diff
+is computed over a line-oriented normalisation (comments stripped, indentation
+and blank-line churn collapsed), so it pinpoints the changed lines instead of
+drowning them in reformatting noise.
+
+```bash
+# Terse (default): hash-only, ideal for CI logs
+confiture migrate validate --check-signatures --check-body --config confiture.yaml
+
+# Triage: show the expected/live bodies and a unified diff per drift
+confiture migrate validate --check-signatures --check-body --show-diff \
+    --config confiture.yaml
+```
+
+Text output under `--show-diff` prints a rich-highlighted `+/-` diff beneath each
+drifted function. The JSON payload (`--format json`) gains the bodies and diff on
+each entry — but **only** when `--show-diff` is set; the default JSON shape stays
+hash-only for back-compatibility:
+
+```json
+{
+  "check": "function_signature_drift",
+  "body_drift": {
+    "has_drift": true,
+    "body_drifts": [
+      {
+        "schema": "public",
+        "name": "calc_total",
+        "signature_key": "public.calc_total(numeric)",
+        "source_hash": "f111676f0375",
+        "db_hash": "6dc531b06f14",
+        "expected_body": "BEGIN\n  RETURN amount * 1.20;\nEND;",
+        "live_body": "BEGIN\n  RETURN amount * 1.196;\nEND;",
+        "unified_diff": "--- public.calc_total(numeric) (expected)\n+++ public.calc_total(numeric) (live)\n@@ -1,3 +1,3 @@\n begin\n-return amount * 1.20;\n+return amount * 1.196;\n end;"
+      }
+    ],
+    "functions_checked": 1,
+    "detection_time_ms": 0.08
+  }
+}
+```
+
+To re-apply the source body over the live drift, use
+`confiture migrate fix-signatures --check-body --apply` (dry-run without
+`--apply`).
+
+## `--check-body-views`
+
+The view/materialized-view counterpart to `--check-body`. It catches a view whose
+predicate or projection was changed directly in the database — an out-of-band
+`CREATE OR REPLACE VIEW` on production — without the DDL being updated. (This is
+the class of bug behind a real ETL incident where a committed
+`meter_at > max_volume_date` had silently become `meter_at > (max_volume_date + 1)`
+on prod, dropping every other day's data for months.)
+
+Views are harder than functions: PostgreSQL doesn't store a view's text, so
+`pg_get_viewdef` returns a *deparsed* rendering (schema-qualified, `*`-expanded,
+reparenthesised). A naive text compare of your `CREATE VIEW` DDL against that would
+report **false positives** on views that are only formatted differently. Instead,
+`--check-body-views` builds the expected views into a throwaway **scratch
+database** and reads them back through the **same** `pg_get_viewdef` deparser as
+live — so string equality means semantic equality, and only genuine logic changes
+register.
+
+```bash
+# Terse: hash-only, exits 1 on drift
+confiture migrate validate --check-body-views --config confiture.yaml --schema db/generated/schema.sql
+
+# Triage: unified diff of the deparsed definitions per drifted view
+confiture migrate validate --check-body-views --show-diff \
+    --schemas public,catalog --config confiture.yaml --schema db/generated/schema.sql
+```
+
+- Covers **regular and materialized** views; honours `--schemas`.
+- `--show-diff` adds `expected_def`, `live_def`, and `unified_diff` to each drifted
+  view (text and JSON). Default output is hash-only.
+- **Remote read-only live (`--ssh`)**: the scratch database is built on a
+  *writable* server, which the read-only production replica is not. Pass
+  `--scratch-url postgresql://localhost/postgres` (or a CI server) so the expected
+  side builds locally while the live side is read over the tunnel.
+
+The JSON payload mirrors `--check-body`:
+
+```json
+{
+  "check": "view_body_drift",
+  "has_drift": true,
+  "body_drifts": [
+    {
+      "schema": "public",
+      "name": "v_etl_unused_meters",
+      "relkind": "v",
+      "source_hash": "e442d2211789",
+      "db_hash": "251751b4699c"
+    }
+  ],
+  "views_checked": 2,
+  "detection_time_ms": 0.18
+}
+```
+
+## `--check-body-replay` — the production drift guard
+
+`--check-body` and `--check-body-replay` both detect function/procedure body drift
+against live, but they build the **expected** side differently:
+
+| | Expected side | Best for |
+|---|---|---|
+| `--check-body` | source DDL (`build`) | a repo where DDL *is* the source of truth |
+| `--check-body-replay` | replay of all migrations | migrate-strategy prod: isolate a *new* hot-patch |
+
+On a migrate-strategy database (staging, production), `--check-body`'s
+source-DDL expectation is swamped by the **build-vs-migrate backlog**: every body
+that shipped to dev/test (rebuilt from DDL) but never got a migration reads as
+"drift", so a genuinely new out-of-band `CREATE OR REPLACE` on prod is lost in the
+noise.
+
+`--check-body-replay` gives the clean signal. It rebuilds the expected database by
+replaying **all migrations** into a throwaway scratch DB — no source DDL, no
+hot-patches — and diffs `pg_proc.prosrc` against live. The difference is exactly
+the definitions **no migration produced**: true out-of-band hot-patches.
+
+```bash
+# Isolate live hot-patches that no migration carries
+confiture migrate validate --check-body-replay --env production \
+    --schemas public,catalog
+
+# With the diff, over an SSH tunnel to a read-only replica
+confiture migrate validate --check-body-replay --show-diff \
+    --env production --ssh deploy@db.internal \
+    --scratch-url postgresql://localhost/postgres
+```
+
+- Both sides are real databases introspected identically, so signature pairing is
+  exact — this path never text-parses signatures.
+- A migration that **fails at HEAD** surfaces as an error (non-zero exit), *not*
+  as false drift.
+- Heaviest drift check (replays the whole migration history). Explicitly opt-in.
+- `--scratch-url` is **required** with `--ssh` (the replay needs a writable server;
+  the read-only replica is not one). JSON `check` is `replay_body_drift`; the
+  `body_drifts` shape matches `--check-body` (with `--show-diff` adding
+  `expected_body`/`live_body`/`unified_diff`).
+
+A deploy scheduler (e.g. fraisier) can run this post-deploy and on a timer as a
+standing production drift guard — the consuming repo keeps only config.
+
+## `--require-migration-bodies` — gate un-migrated body edits at PR time
+
+`--require-migration` ensures table/column DDL changes and function *signature*
+changes have a migration, but it does **not** check function/procedure *bodies*.
+So a body edit in the schema DDL that ships to rebuilt-from-DDL environments
+(dev/test) without a migration silently never reaches migrate-only environments
+(staging/production) — the root cause of a whole class of prod↔source drift (in
+one audit, ~120 functions ran different bodies in prod for exactly this reason).
+
+`--require-migration-bodies` closes the gap. It is **static and git-based (no
+DB)**: it diffs function bodies between `--base-ref` and HEAD and requires each
+changed body to be carried by a migration that re-defines the function (a
+`CREATE OR REPLACE`, in a `.sql` or `.py` migration). Comment/whitespace/case-only
+changes don't count; parameter-type changes are the existing signature check's
+job. Because it's diff-scoped, it flags only what changed in the changeset — not
+your standing backlog.
+
+This is the PR-time static gate. Its runtime counterpart, which verifies the
+migration actually *produces* the intended body against a live database, is
+[`--check-body-replay`](#--check-body-replay--the-production-drift-guard).
+
+### Drain-first workflow
+
+It is **off by default**: an existing repo carries a backlog of body edits that
+predate the check, and turning it on cold would fail the first PR that touches any
+of them. Adopt it in three steps:
+
+```bash
+# 1. Size the backlog (report-only, never fails — exit 0)
+confiture migrate validate --list-unmigrated-bodies --base-ref origin/main
+
+# 2. Drain it: add migrations that re-apply each listed function, or accept them
+#    into a baseline. Re-run step 1 until the list is empty.
+
+# 3. Enforce in CI (fails the build on a new un-migrated body change)
+confiture migrate validate --require-migration-bodies --base-ref origin/main
+```
+
+`--require-migration-bodies` implies `--require-migration` (it runs the full
+accompaniment check plus the body check). On violation it names each function,
+shows a unified diff of the change, and exits 1. JSON failures carry a
+`body_violations` array (`function_key`, `signature_key`, `unified_diff`); the
+report-only mode emits `{"check": "unmigrated_bodies", "count": N, ...}`.
+
 ## `--require-grant-migration`
 
 Build environments apply grants straight from the grant sweep directory

@@ -73,6 +73,35 @@ def _drift_body_report() -> FunctionBodyDriftReport:
     )
 
 
+def _drift_body_report_with_bodies() -> FunctionBodyDriftReport:
+    """Like _drift_body_report but with bodies + a unified diff populated."""
+    return FunctionBodyDriftReport(
+        body_drifts=[
+            FunctionBodyDrift(
+                schema="public",
+                name="my_function",
+                signature_key="public.my_function(uuid,bigint)",
+                source_hash="a3f8c1d2e4f9",
+                db_hash="7b2e09f1c3a8",
+                expected_body="SELECT $1 + 1;",
+                live_body="SELECT $1 + 2;",
+                expected_normalized="select $1 + 1;",
+                live_normalized="select $1 + 2;",
+                unified_diff=(
+                    "--- public.my_function(uuid,bigint) (expected)\n"
+                    "+++ public.my_function(uuid,bigint) (live)\n"
+                    "@@ -1 +1 @@\n"
+                    "-select $1 + 1;\n"
+                    "+select $1 + 2;"
+                ),
+            )
+        ],
+        functions_checked=1,
+        has_drift=True,
+        detection_time_ms=10.0,
+    )
+
+
 runner = CliRunner()
 
 
@@ -470,3 +499,101 @@ class TestCheckBodyFlag:
             )
 
         assert result.exit_code == expected_exit
+
+    # ------------------------------------------------------------------
+    # Cycle 6 (#177): --show-diff surfaces bodies + unified diff
+    # ------------------------------------------------------------------
+
+    def _run_show_diff(self, tmp_path, args: list[str]):
+        config = tmp_path / "confiture.yaml"
+        config.write_text("database:\n  url: postgresql://localhost/test\n")
+        schema = tmp_path / "schema.sql"
+        schema.write_text("-- no functions")
+
+        with (
+            patch(
+                "confiture.core.validation.signature_drift.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.core.validation.signature_drift.open_connection",
+                self._make_open_conn_mock(),
+            ),
+            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
+            patch(
+                "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
+                return_value=_empty_report(),
+            ),
+            patch(
+                "confiture.core.function_body_drift.FunctionBodyDriftDetector.compare",
+                return_value=_drift_body_report_with_bodies(),
+            ),
+        ):
+            MockIntr.return_value.introspect.return_value = MagicMock(functions=[])
+            return runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "validate",
+                    "--check-signatures",
+                    "--check-body",
+                    *args,
+                    "--config",
+                    str(config),
+                    "--schema",
+                    str(schema),
+                ],
+            )
+
+    def test_show_diff_requires_check_body(self, tmp_path):
+        config = tmp_path / "confiture.yaml"
+        config.write_text("database:\n  url: postgresql://localhost/test\n")
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "validate",
+                "--check-signatures",
+                "--show-diff",
+                "--config",
+                str(config),
+            ],
+        )
+        # Usage guard routes through fail() (CONFIG_001 → exit 5), same as --check-body.
+        assert result.exit_code == 5
+
+    def test_check_body_show_diff_json_includes_bodies(self, tmp_path):
+        import json
+
+        result = self._run_show_diff(tmp_path, ["--show-diff", "--format", "json"])
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        entry = data["body_drift"]["body_drifts"][0]
+        assert entry["expected_body"] == "SELECT $1 + 1;"
+        assert entry["live_body"] == "SELECT $1 + 2;"
+        assert "-select $1 + 1;" in entry["unified_diff"]
+        assert "+select $1 + 2;" in entry["unified_diff"]
+        # Hashes still present (back-compat).
+        assert entry["source_hash"] == "a3f8c1d2e4f9"
+
+    def test_check_body_without_show_diff_stays_hash_only(self, tmp_path):
+        import json
+
+        # Even when the report carries bodies, the default JSON must not leak them.
+        result = self._run_show_diff(tmp_path, ["--format", "json"])
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        entry = data["body_drift"]["body_drifts"][0]
+        assert set(entry) == {"schema", "name", "signature_key", "source_hash", "db_hash"}
+        assert "expected_body" not in entry
+        assert "unified_diff" not in entry
+
+    def test_check_body_show_diff_text_prints_diff(self, tmp_path):
+        result = self._run_show_diff(tmp_path, ["--show-diff"])
+
+        assert result.exit_code == 1
+        output = _strip_ansi(result.output)
+        assert "-select $1 + 1;" in output
+        assert "+select $1 + 2;" in output

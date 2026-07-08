@@ -97,3 +97,40 @@ def test_hash_body_same_with_case_variation():
     a = "SELECT $1 + 1;"
     b = "select $1 + 1;"
     assert norm.hash_body(a) == norm.hash_body(b)
+
+
+# ---------------------------------------------------------------------------
+# Cycle 4 (#177): normalize_for_diff — line-oriented normalisation
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_for_diff_preserves_newlines():
+    """Unlike normalize(), normalize_for_diff keeps line structure."""
+    norm = FunctionBodyNormalizer()
+    result = norm.normalize_for_diff("SELECT a\nFROM t\nWHERE x = 1;")
+    assert result.splitlines() == ["select a", "from t", "where x = 1;"]
+
+
+def test_normalize_for_diff_strips_comments_and_lowercases():
+    norm = FunctionBodyNormalizer()
+    result = norm.normalize_for_diff("-- header\nSELECT ID -- trailing\nFROM Users;")
+    assert "header" not in result
+    assert "trailing" not in result
+    assert "--" not in result
+    assert result.splitlines() == ["select id", "from users;"]
+
+
+def test_normalize_for_diff_collapses_indentation_and_blank_lines():
+    """Leading indentation, internal runs, and blank lines must not add diff noise."""
+    norm = FunctionBodyNormalizer()
+    a = norm.normalize_for_diff("SELECT   a,\n    b\nFROM t;")
+    b = norm.normalize_for_diff("SELECT a,\n\nb\nFROM t;")
+    assert a == b == "select a,\nb\nfrom t;"
+
+
+def test_normalize_for_diff_is_line_oriented_where_normalize_is_flat():
+    """normalize() collapses to one line; normalize_for_diff does not."""
+    norm = FunctionBodyNormalizer()
+    body = "SELECT 1;\nSELECT 2;"
+    assert "\n" not in norm.normalize(body)
+    assert "\n" in norm.normalize_for_diff(body)

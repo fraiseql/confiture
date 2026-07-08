@@ -156,6 +156,13 @@ class FunctionSignatureParser:
                         type_str = ".".join(n.sval for n in names if hasattr(n, "sval"))
                         if type_str.startswith("pg_catalog."):
                             type_str = type_str[len("pg_catalog.") :]
+                        # pglast records array-ness in arrayBounds (one entry per
+                        # dimension, -1 = unbounded), NOT in names.  Append a '[]'
+                        # per dimension so array types survive normalisation and
+                        # stay symmetric with the introspected live side (#176).
+                        array_bounds = getattr(arg_type, "arrayBounds", None)
+                        if array_bounds:
+                            type_str += "[]" * len(array_bounds)
                         param_types.append(self._normalise_type(type_str))
 
                 result.append(
@@ -347,6 +354,11 @@ class FunctionSignatureParser:
 
         return result
 
+    # Trailing array suffix: one or more '[]' groups, each optionally sized
+    # (e.g. 'text[]', 'int[][]', 'text[5]').  PostgreSQL ignores the size, so we
+    # canonicalise every dimension to bare '[]'.
+    _ARRAY_SUFFIX_RE = re.compile(r"(?:\s*\[\s*\d*\s*\])+\s*$")
+
     def _normalise_type(self, raw: str) -> str:
         """Normalise a PostgreSQL type name to a canonical form.
 
@@ -355,10 +367,25 @@ class FunctionSignatureParser:
             'BIGINT' -> 'bigint'
             'pg_catalog.int4' -> 'integer'
             'VARCHAR(255)' -> 'character varying'
+            'int4[]' -> 'integer[]'
+            'numeric(10,2)[]' -> 'numeric[]'
+
+        The array suffix is split off first so the *base* type is aliased and the
+        canonical ``[]`` re-appended per dimension.  This keeps the source side
+        symmetric with the live side (which introspects ``format_type`` output
+        such as ``integer[]``); without it, array params falsely read as stale
+        overloads and generate a destructive ``DROP FUNCTION`` (issue #176).
         """
         clean = raw.lower().strip()
         if clean.startswith("pg_catalog."):
             clean = clean[len("pg_catalog.") :]
+        # Split off a trailing array suffix so the base can be aliased.
+        array_dims = 0
+        suffix_match = self._ARRAY_SUFFIX_RE.search(clean)
+        if suffix_match:
+            array_dims = suffix_match.group(0).count("[")
+            clean = clean[: suffix_match.start()].strip()
         # Strip precision/scale: varchar(255) -> varchar
         clean = re.sub(r"\([^)]*\)", "", clean).strip()
-        return _TYPE_ALIASES.get(clean, clean)
+        base = _TYPE_ALIASES.get(clean, clean)
+        return base + "[]" * array_dims

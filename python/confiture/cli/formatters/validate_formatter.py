@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from rich.markup import escape
+
 from confiture.cli.helpers import _output_json, console
 
 if TYPE_CHECKING:
@@ -177,7 +179,22 @@ def render_live_drift(report: Any, *, json_mode: bool, output_file: Path | None)
         display_drift_report(report, console)
 
 
-def _display_body_drift_report(report: Any) -> None:
+def _print_unified_diff(unified_diff: str) -> None:
+    """Print a unified diff with rich-highlighted +/- lines, indented."""
+    for line in unified_diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            color = "green"
+        elif line.startswith("-") and not line.startswith("---"):
+            color = "red"
+        elif line.startswith("@@"):
+            color = "cyan"
+        else:
+            color = "dim"
+        # Escape any Rich markup in the SQL so brackets aren't parsed as tags.
+        console.print(f"      [{color}]{escape(line)}[/{color}]")
+
+
+def _display_body_drift_report(report: Any, *, show_diff: bool = False) -> None:
     """Print a FunctionBodyDriftReport to the console in human-readable form."""
     if not report.has_drift:
         console.print(
@@ -195,6 +212,9 @@ def _display_body_drift_report(report: Any) -> None:
         console.print(f"\n  [bold]{drift.signature_key}[/bold]")
         console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
         console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        if show_diff and drift.unified_diff:
+            console.print("    [dim]Unified diff (expected → live, normalised):[/dim]")
+            _print_unified_diff(drift.unified_diff)
         console.print(
             "    Hint: function body differs — run "
             "[bold]fix-signatures --apply[/bold] to re-apply from source"
@@ -207,8 +227,14 @@ def render_signature_drift(
     *,
     json_mode: bool,
     output_file: Path | None,
+    show_diff: bool = False,
 ) -> None:
-    """Render the ``--check-signatures`` (+ ``--check-body``) result."""
+    """Render the ``--check-signatures`` (+ ``--check-body``) result.
+
+    ``show_diff`` (from ``--show-diff``) surfaces each drifted function's bodies
+    and unified diff; when ``False`` the output stays hash-only for both JSON and
+    text — the historical, terse shape.
+    """
     from confiture.cli.formatters.common import display_signature_drift_report
 
     if json_mode:
@@ -217,23 +243,103 @@ def render_signature_drift(
             **drift_report.to_dict(),
         }
         if body_report is not None:
-            payload["body_drift"] = {
-                "has_drift": body_report.has_drift,
-                "body_drifts": [
-                    {
-                        "schema": d.schema,
-                        "name": d.name,
-                        "signature_key": d.signature_key,
-                        "source_hash": d.source_hash,
-                        "db_hash": d.db_hash,
-                    }
-                    for d in body_report.body_drifts
-                ],
-                "functions_checked": body_report.functions_checked,
-                "detection_time_ms": body_report.detection_time_ms,
-            }
+            payload["body_drift"] = body_report.to_dict(include_bodies=show_diff)
         _output_json(payload, output_file, console)
     else:
         display_signature_drift_report(drift_report, console)
         if body_report is not None:
-            _display_body_drift_report(body_report)
+            _display_body_drift_report(body_report, show_diff=show_diff)
+
+
+def render_replay_drift(
+    body_report: Any,
+    *,
+    json_mode: bool,
+    output_file: Path | None,
+    show_diff: bool = False,
+) -> None:
+    """Render the ``--check-body-replay`` FunctionBodyDriftReport.
+
+    Reuses the function-body report shape (Phase 3) but frames drifts as
+    out-of-band hot-patches — definitions live has but a clean migration replay
+    does not produce. ``show_diff`` surfaces the expected/live bodies + diff.
+    """
+    if json_mode:
+        _output_json(
+            {"check": "replay_body_drift", **body_report.to_dict(include_bodies=show_diff)},
+            output_file,
+            console,
+        )
+        return
+
+    if not body_report.has_drift:
+        console.print(
+            f"[green]✓[/green] 0 out-of-band hot-patch(es) detected "
+            f"({body_report.functions_checked} checked, {body_report.detection_time_ms:.1f}ms)"
+        )
+        return
+
+    console.print(
+        f"[yellow]⚠[/yellow]  {len(body_report.body_drifts)} out-of-band hot-patch(es) "
+        f"detected ({body_report.functions_checked} checked) — live differs from a clean "
+        f"migration replay"
+    )
+    for drift in body_report.body_drifts:
+        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
+        console.print(f"    Replayed hash: [cyan]{drift.source_hash}[/cyan]")
+        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        if show_diff and drift.unified_diff:
+            console.print("    [dim]Unified diff (replayed → live, normalised):[/dim]")
+            _print_unified_diff(drift.unified_diff)
+        console.print(
+            "    Hint: no migration produced this body — capture the live change in a "
+            "migration, or re-apply the migration-produced definition"
+        )
+
+
+_RELKIND_LABEL = {"v": "view", "m": "materialized view"}
+
+
+def render_view_drift(
+    view_report: Any,
+    *,
+    json_mode: bool,
+    output_file: Path | None,
+    show_diff: bool = False,
+) -> None:
+    """Render the ``--check-body-views`` ViewBodyDriftReport.
+
+    ``show_diff`` (from ``--show-diff``) surfaces each drifted view's expected
+    and live definitions plus a unified diff; otherwise output stays hash-only.
+    """
+    if json_mode:
+        _output_json(
+            {"check": "view_body_drift", **view_report.to_dict(include_defs=show_diff)},
+            output_file,
+            console,
+        )
+        return
+
+    if not view_report.has_drift:
+        console.print(
+            f"[green]✓[/green] 0 view definition drift(s) detected "
+            f"({view_report.views_checked} checked, {view_report.detection_time_ms:.1f}ms)"
+        )
+        return
+
+    console.print(
+        f"[yellow]⚠[/yellow]  {len(view_report.body_drifts)} view definition "
+        f"drift(s) detected ({view_report.views_checked} checked)"
+    )
+    for drift in view_report.body_drifts:
+        label = _RELKIND_LABEL.get(drift.relkind, drift.relkind)
+        console.print(f"\n  [bold]{drift.schema}.{drift.name}[/bold] [dim]({label})[/dim]")
+        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
+        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        if show_diff and drift.unified_diff:
+            console.print("    [dim]Unified diff (expected → live, deparsed):[/dim]")
+            _print_unified_diff(drift.unified_diff)
+        console.print(
+            "    Hint: view definition differs from source — re-apply the committed "
+            "DDL or capture the live change in a migration"
+        )

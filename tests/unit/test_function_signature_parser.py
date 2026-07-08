@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from confiture.core.function_signature_parser import FunctionSignature, FunctionSignatureParser
 
 
@@ -132,6 +134,102 @@ class TestFunctionSignatureParserNormalise:
 
     def test_unknown_type_lowercased(self):
         assert self.parser._normalise_type("JSONB") == "jsonb"
+
+    # Issue #176: array suffix must survive normalisation, and the base type must
+    # still be aliased through the suffix so source and live sides stay symmetric.
+    def test_array_suffix_preserved(self):
+        assert self.parser._normalise_type("text[]") == "text[]"
+        assert self.parser._normalise_type("uuid[]") == "uuid[]"
+
+    def test_array_suffix_aliased_base(self):
+        assert self.parser._normalise_type("int[]") == "integer[]"
+        assert self.parser._normalise_type("int4[]") == "integer[]"
+        assert self.parser._normalise_type("varchar[]") == "character varying[]"
+        assert self.parser._normalise_type("bigint[]") == "bigint[]"
+
+    def test_array_suffix_with_precision(self):
+        assert self.parser._normalise_type("numeric(10,2)[]") == "numeric[]"
+
+    def test_array_suffix_sized_is_unsized(self):
+        # PostgreSQL ignores array size; format_type renders text[5] as text[].
+        assert self.parser._normalise_type("text[5]") == "text[]"
+
+    def test_multidimensional_array(self):
+        assert self.parser._normalise_type("int4[][]") == "integer[][]"
+
+    def test_pg_catalog_array(self):
+        assert self.parser._normalise_type("pg_catalog.int4[]") == "integer[]"
+
+
+class TestFunctionSignatureParserArrays:
+    """Array parameter types must round-trip with the ``[]`` suffix on BOTH tiers.
+
+    Regression for issue #176: the pglast path dropped ``[]`` (it read
+    ``argType.names`` but ignored ``argType.arrayBounds``), producing false stale
+    overloads and a destructive ``DROP FUNCTION`` for functions that exist in both
+    the DB and the DDL; the regex path kept ``[]`` but failed to alias the base
+    type through the suffix (``int[]`` vs live ``integer[]``).
+    """
+
+    def setup_method(self):
+        self.parser = FunctionSignatureParser()
+
+    def test_regex_preserves_array_suffix(self):
+        sql = "CREATE FUNCTION f(a TEXT, b TEXT[]) RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser._parse_regex(sql)
+        assert sigs[0].param_types == ("text", "text[]")
+
+    def test_regex_aliases_base_through_array_suffix(self):
+        sql = "CREATE FUNCTION f(a INT[], b VARCHAR[], c NUMERIC(10,2)[]) RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser._parse_regex(sql)
+        assert sigs[0].param_types == ("integer[]", "character varying[]", "numeric[]")
+
+    def test_regex_array_with_default_expression(self):
+        # The exact shape from issue #176: col TYPE[] DEFAULT ARRAY[]::TYPE[]
+        sql = (
+            "CREATE FUNCTION f(a text, b text[] DEFAULT ARRAY[]::text[]) "
+            "RETURNS void AS $$ $$ LANGUAGE sql;"
+        )
+        sigs = self.parser._parse_regex(sql)
+        assert sigs[0].param_types == ("text", "text[]")
+
+    def test_regex_multidim_array(self):
+        sql = "CREATE FUNCTION f(m INT[][]) RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser._parse_regex(sql)
+        assert sigs[0].param_types == ("integer[][]",)
+
+    def test_pglast_preserves_array_suffix(self):
+        # parse() routes to pglast when installed — the production path.
+        pytest.importorskip("pglast")
+        sql = (
+            "CREATE FUNCTION core.build_mutation_response("
+            "a text, b text, c uuid, d text, e jsonb, tags text[], g jsonb, h jsonb) "
+            "RETURNS void AS $$ $$ LANGUAGE sql;"
+        )
+        sigs = self.parser.parse(sql)
+        assert len(sigs) == 1
+        assert sigs[0].param_types == (
+            "text",
+            "text",
+            "uuid",
+            "text",
+            "jsonb",
+            "text[]",
+            "jsonb",
+            "jsonb",
+        )
+
+    def test_pglast_aliases_base_through_array_suffix(self):
+        pytest.importorskip("pglast")
+        sql = "CREATE FUNCTION f(a INT[], b BIGINT[], c VARCHAR[]) RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser.parse(sql)
+        assert sigs[0].param_types == ("integer[]", "bigint[]", "character varying[]")
+
+    def test_pglast_multidimensional_array(self):
+        pytest.importorskip("pglast")
+        sql = "CREATE FUNCTION f(m int[][]) RETURNS void AS $$ $$ LANGUAGE sql;"
+        sigs = self.parser.parse(sql)
+        assert sigs[0].param_types == ("integer[][]",)
 
 
 class TestFunctionSignatureKey:

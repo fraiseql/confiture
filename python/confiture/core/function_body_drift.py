@@ -9,7 +9,9 @@ updating the corresponding source file.
 from __future__ import annotations
 
 import dataclasses
+import difflib
 import time
+from typing import Any
 
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
 
@@ -26,6 +28,12 @@ class FunctionBodyDrift:
         signature_key: Canonical key — ``"schema.name(type1,type2)"``.
         source_hash: 12-char hex of the normalised source body.
         db_hash: 12-char hex of the normalised live-DB body.
+        expected_body: Raw function body from the source SQL (verbatim).
+        live_body: Raw ``pg_proc.prosrc`` body from the live database (verbatim).
+        expected_normalized: Line-oriented normalised source body (diff basis).
+        live_normalized: Line-oriented normalised live body (diff basis).
+        unified_diff: ``difflib`` unified diff of the two normalised bodies —
+            empty when the bodies are not surfaced (e.g. constructed directly).
     """
 
     schema: str
@@ -33,6 +41,32 @@ class FunctionBodyDrift:
     signature_key: str
     source_hash: str
     db_hash: str
+    expected_body: str = ""
+    live_body: str = ""
+    expected_normalized: str = ""
+    live_normalized: str = ""
+    unified_diff: str = ""
+
+    def to_dict(self, *, include_bodies: bool = False) -> dict[str, Any]:
+        """Serialize this drift record.
+
+        Args:
+            include_bodies: When ``True``, add ``expected_body``, ``live_body``,
+                and ``unified_diff``. Defaults to ``False`` so the terse
+                hash-only shape (the historical CLI output) is preserved.
+        """
+        payload: dict[str, Any] = {
+            "schema": self.schema,
+            "name": self.name,
+            "signature_key": self.signature_key,
+            "source_hash": self.source_hash,
+            "db_hash": self.db_hash,
+        }
+        if include_bodies:
+            payload["expected_body"] = self.expected_body
+            payload["live_body"] = self.live_body
+            payload["unified_diff"] = self.unified_diff
+        return payload
 
 
 @dataclasses.dataclass
@@ -51,6 +85,20 @@ class FunctionBodyDriftReport:
     functions_checked: int
     has_drift: bool
     detection_time_ms: float
+
+    def to_dict(self, *, include_bodies: bool = False) -> dict[str, Any]:
+        """Serialize the report to the CLI's ``body_drift`` JSON shape.
+
+        Args:
+            include_bodies: Forwarded to each drift's :meth:`FunctionBodyDrift.to_dict`
+                so bodies/diff are emitted only when ``--show-diff`` is set.
+        """
+        return {
+            "has_drift": self.has_drift,
+            "body_drifts": [d.to_dict(include_bodies=include_bodies) for d in self.body_drifts],
+            "functions_checked": self.functions_checked,
+            "detection_time_ms": self.detection_time_ms,
+        }
 
 
 def _parse_schema_name(key: str) -> tuple[str, str]:
@@ -113,6 +161,17 @@ class FunctionBodyDriftDetector:
             live_hash = self._normalizer.hash_body(live)
             if src_hash != live_hash:
                 schema, name = _parse_schema_name(key)
+                exp_norm = self._normalizer.normalize_for_diff(src)
+                live_norm = self._normalizer.normalize_for_diff(live)
+                unified = "\n".join(
+                    difflib.unified_diff(
+                        exp_norm.splitlines(),
+                        live_norm.splitlines(),
+                        fromfile=f"{key} (expected)",
+                        tofile=f"{key} (live)",
+                        lineterm="",
+                    )
+                )
                 drifts.append(
                     FunctionBodyDrift(
                         schema=schema,
@@ -120,6 +179,11 @@ class FunctionBodyDriftDetector:
                         signature_key=key,
                         source_hash=src_hash,
                         db_hash=live_hash,
+                        expected_body=src,
+                        live_body=live,
+                        expected_normalized=exp_norm,
+                        live_normalized=live_norm,
+                        unified_diff=unified,
                     )
                 )
 

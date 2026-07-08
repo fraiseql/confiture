@@ -15,11 +15,41 @@ avoids false positives for built-ins, extensions, and unmanaged functions.
 from __future__ import annotations
 
 import dataclasses
+import re
 import time
 from collections import defaultdict
 from typing import Any
 
 from confiture.core.function_signature_parser import FunctionSignature
+
+# Trailing array suffix (one or more '[]', possibly sized) used to compare two
+# param types ignoring array-ness — see the defensive guard in ``compare``.
+_ARRAY_SUFFIX_RE = re.compile(r"(?:\s*\[\s*\d*\s*\])+\s*$")
+
+
+def _strip_array(param_type: str) -> str:
+    """Return ``param_type`` with any trailing array suffix removed."""
+    return _ARRAY_SUFFIX_RE.sub("", param_type).strip()
+
+
+def _array_only_difference(
+    stale_params: tuple[str, ...], source_param_sets: set[tuple[str, ...]]
+) -> bool:
+    """True when a source signature of equal arity matches ``stale_params`` after
+    stripping array suffixes from both sides.
+
+    Guards against a normalisation gap emitting a destructive ``DROP FUNCTION``
+    for a function that plainly exists in source, differing only by an array
+    suffix (issue #176).  Conservative by design: suppressing a genuine
+    scalar/array overload is non-destructive, whereas dropping a live function is
+    catastrophic.
+    """
+    stale_base = tuple(_strip_array(p) for p in stale_params)
+    return any(
+        len(source_params) == len(stale_params)
+        and tuple(_strip_array(p) for p in source_params) == stale_base
+        for source_params in source_param_sets
+    )
 
 
 @dataclasses.dataclass
@@ -149,6 +179,10 @@ class FunctionSignatureDriftDetector:
                 continue
             stale_param_sets = live_by_fn[fn_key] - source_param_sets
             for stale_params in sorted(stale_param_sets):
+                # Never emit a destructive DROP for a base-name + arity match that
+                # differs only by an array suffix (issue #176 safety net).
+                if _array_only_difference(stale_params, source_param_sets):
+                    continue
                 schema, name = fn_key.split(".", 1)
                 stale_overloads.append(
                     StaleOverload(

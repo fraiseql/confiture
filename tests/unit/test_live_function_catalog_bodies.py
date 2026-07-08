@@ -132,6 +132,31 @@ def test_get_bodies_empty_when_no_functions():
 # ---------------------------------------------------------------------------
 
 
+def test_array_signature_body_key_pairs_with_source_parser():
+    """Issue #176 blind spot: with the array suffix preserved on both sides, a
+    live array-typed function's body key must equal the source parser's key so
+    ``--check-body`` can pair (and diff) it instead of silently skipping."""
+    from confiture.core.function_signature_parser import FunctionSignatureParser
+
+    conn = MagicMock()
+    with patch("confiture.core.live_function_catalog.FunctionIntrospector") as intr_cls:
+        intr_cls.return_value.introspect.return_value = _catalog_mock(
+            [_make_fn_info("core", "build_response", ["text", "text[]", "uuid[]"], "LIVE_BODY")]
+        )
+        live = LiveFunctionCatalog(conn)
+        live_bodies = live.get_bodies(schemas=["core"])
+
+    source_sigs = FunctionSignatureParser().parse(
+        "CREATE FUNCTION core.build_response(a text, tags text[], ids uuid[]) "
+        "RETURNS void AS $$ $$ LANGUAGE sql;"
+    )
+    source_keys = {s.signature_key() for s in source_sigs}
+
+    assert "core.build_response(text,text[],uuid[])" in live_bodies
+    # The pairing key (intersection) is non-empty — the blind spot is closed.
+    assert set(live_bodies) & source_keys == {"core.build_response(text,text[],uuid[])"}
+
+
 def test_get_signatures_and_get_bodies_share_one_introspect_call():
     conn = MagicMock()
     with patch("confiture.core.live_function_catalog.FunctionIntrospector") as intr_cls:

@@ -86,6 +86,43 @@ class TestFunctionSignatureDriftDetectorStaleOverloads:
         assert report.stale_overloads[0].schema == "auth"
 
 
+class TestFunctionSignatureDriftArraySafety:
+    """Issue #176: array-typed functions must not produce false stale overloads
+    (and never a destructive DROP) when they are present identically in source
+    and live."""
+
+    def test_array_signature_not_reported_stale(self):
+        # Same array signature in both source and live → no drift, no DROP.
+        types = ("text", "text", "uuid", "text", "jsonb", "text[]", "jsonb", "jsonb")
+        source = [_sig("build_mutation_response", types, schema="core")]
+        live = [_sig("build_mutation_response", types, schema="core")]
+        report = FunctionSignatureDriftDetector().compare(source, live)
+        assert not report.has_drift
+        assert report.stale_overloads == []
+        assert report.to_dict()["remediation_sql"] == []
+
+    def test_array_only_difference_never_emits_drop(self):
+        # Defensive guard (Change C): even if a normalisation gap leaves the live
+        # array signature differing from the source signature only by an array
+        # suffix on one position, a base-name + arity match must NOT be dropped.
+        source = [_sig("f", ("text",), schema="core")]
+        live = [
+            _sig("f", ("text",), schema="core"),
+            _sig("f", ("text[]",), schema="core"),  # differs only by []
+        ]
+        report = FunctionSignatureDriftDetector().compare(source, live)
+        assert report.stale_overloads == []
+        assert report.to_dict()["remediation_sql"] == []
+
+    def test_genuine_scalar_overload_still_flagged(self):
+        # Change C must not suppress genuine drift: different base type → still stale.
+        source = [_sig("g", ("bigint",))]
+        live = [_sig("g", ("bigint",)), _sig("g", ("integer",))]
+        report = FunctionSignatureDriftDetector().compare(source, live)
+        assert report.has_drift
+        assert report.stale_overloads[0].stale_signature == "public.g(integer)"
+
+
 class TestFunctionSignatureDriftReportToDict:
     def test_to_dict_no_drift(self):
         source = [_sig("f", ("integer",))]

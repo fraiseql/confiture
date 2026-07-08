@@ -49,7 +49,7 @@ class MigrationAccompanimentChecker:
         self.differ = GitSchemaDiffer(env, self.repo_path)
 
     def check_accompaniment(
-        self, base_ref: str, target_ref: str = "HEAD"
+        self, base_ref: str, target_ref: str = "HEAD", *, check_bodies: bool = False
     ) -> MigrationAccompanimentReport:
         """Check if DDL changes are accompanied by migrations.
 
@@ -61,6 +61,9 @@ class MigrationAccompanimentChecker:
         Args:
             base_ref: Base git reference (e.g., "origin/main")
             target_ref: Target git reference (default "HEAD")
+            check_bodies: Also flag function *body* changes not carried by a
+                migration (#178). Off by default — opt-in via
+                ``--require-migration-bodies``.
 
         Returns:
             MigrationAccompanimentReport with validation results
@@ -99,6 +102,13 @@ class MigrationAccompanimentChecker:
             new_migrations, base_ref, target_ref
         )
 
+        # Check function body violations (body edits need a re-defining migration)
+        body_violations = (
+            self._check_body_violations(new_migrations, base_ref, target_ref)
+            if check_bodies
+            else []
+        )
+
         return MigrationAccompanimentReport(
             has_ddl_changes=has_ddl_changes,
             has_new_migrations=len(new_migrations) > 0,
@@ -107,6 +117,7 @@ class MigrationAccompanimentChecker:
             base_ref=base_ref,
             target_ref=target_ref,
             signature_violations=signature_violations,
+            body_violations=body_violations,
         )
 
     def _check_signature_violations(
@@ -134,6 +145,33 @@ class MigrationAccompanimentChecker:
             )
         except Exception:
             # Signature check is best-effort — never block CI on unexpected errors
+            return []
+
+    def _check_body_violations(
+        self,
+        new_migrations: list[Path],
+        base_ref: str,
+        target_ref: str,
+    ) -> list:
+        """Return function body violations for changed function files (#178)."""
+        try:
+            function_files = self._get_changed_function_files(base_ref, target_ref)
+            if not function_files:
+                return []
+
+            from confiture.core.function_body_checker import (
+                FunctionBodyChecker,  # noqa: PLC0415
+            )
+
+            checker = FunctionBodyChecker(self.git_repo)
+            return checker.check(
+                changed_sql_files=function_files,
+                migration_file_paths=new_migrations,
+                base_ref=base_ref,
+                target_ref=target_ref,
+            )
+        except Exception:
+            # Body check is best-effort — never block CI on unexpected errors.
             return []
 
     def _get_changed_function_files(self, base_ref: str, target_ref: str) -> list[Path]:

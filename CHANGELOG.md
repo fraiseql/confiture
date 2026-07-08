@@ -7,6 +7,136 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-07-08
+
+### Added
+
+- **`migrate validate --require-migration-bodies` fails a function/procedure body
+  change that has no accompanying migration (#178).** `--require-migration` already
+  gates table/column DDL and function *signature* changes, but not function
+  *bodies* — so a body edit that ships to rebuilt-from-DDL environments (dev/test)
+  without a migration silently never reaches migrate-only environments
+  (staging/production). In the PrintOptim audit ~120 functions ran different bodies
+  in prod purely because body edits never got a migration. The new opt-in flag
+  extends the accompaniment check: it diffs function bodies between `--base-ref` and
+  HEAD (static, git-based, **no DB**) and requires each changed body to be carried
+  by a migration that re-defines the function (`CREATE OR REPLACE`, in a `.sql` *or*
+  `.py` migration). Comment/whitespace/case-only changes don't count; a parameter-
+  type change is left to the existing signature check. Because it's diff-scoped, it
+  flags only what changed in the changeset, not the standing backlog. It is **off by
+  default** — drain the backlog first with the companion report-only flag
+  **`--list-unmigrated-bodies`** (lists un-migrated body changes without failing,
+  exit 0), then turn enforcement on. The failure message names each function and
+  shows a unified diff. This is the static PR-time gate; its runtime counterpart —
+  verifying the migration actually *produces* the intended body against a live DB —
+  is `--check-body-replay` (#179). New module `core/function_body_checker.py`.
+
+- **`migrate validate --check-body-replay` reports out-of-band function hot-patches
+  via migration replay (#179).** The durable production drift signal. `--check-body`
+  builds its expected side from source DDL, so it is dominated by the
+  build-vs-migrate backlog — every body that shipped to rebuilt-from-DDL
+  environments but never got a migration reads as "drift", drowning out any *new*
+  hot-patch. `--check-body-replay` instead rebuilds the expected database by
+  replaying all migrations into a throwaway scratch DB (no source DDL, no
+  hot-patches) and diffs `pg_proc.prosrc` against live: `live − replayed` is
+  exactly the definitions that no migration produced — true out-of-band
+  `CREATE OR REPLACE` hot-patches. Both sides are real databases introspected
+  identically, so signature pairing is exact (this path never text-parses
+  signatures, sidestepping the #176 class entirely). A migration that fails at HEAD
+  surfaces as an error, not as false drift. Honours `--schemas` and
+  `--migrations-dir`; `--show-diff` shows the replayed vs live bodies; over `--ssh`
+  pass `--scratch-url` for the writable replay server. New module
+  `core/validation/replay_drift.py`. A scheduler (e.g. fraisier) can run this
+  post-deploy and on a timer as a standing drift guard.
+
+- **`migrate validate --check-body-views` detects view and materialized-view
+  definition drift (#174).** The missing half of `--check-body`: it catches when a
+  live view's predicate or projection was changed directly in the database (an
+  out-of-band `CREATE OR REPLACE VIEW` on prod) without updating the DDL — the
+  class of bug behind the `printoptim_backend` ETL incident where a committed
+  `meter_at > max_volume_date` had silently become `meter_at > (max_volume_date +
+  1)` on production, dropping every other day's volume for months. Views aren't
+  stored verbatim (`pg_get_viewdef` returns pg's *deparsed* tree — schema-qualified,
+  `*`-expanded, reparenthesised), so a naive text compare of source DDL against
+  live would flag semantically-identical views as false positives. Instead the
+  expected views are built into a throwaway scratch database and read back through
+  the **same** `pg_get_viewdef(oid, true)` deparser as live — string equality then
+  means semantic equality, so only genuine logic changes register. Covers regular
+  (`relkind='v'`) and materialized (`'m'`) views, honours `--schemas`, exits 1 on
+  drift, and (with `--show-diff`) emits the expected/live definitions and a unified
+  diff. For a remote read-only live database over `--ssh`, pass `--scratch-url` to
+  point the scratch build at a writable local/CI server. New modules
+  `core/view_body_drift.py` and `core/live_view_catalog.py`.
+
+- **`migrate validate --check-body --show-diff` emits the expected body, the live
+  body, and a unified diff per drifted function (#177).** Previously a body drift
+  reported only two 12-char hashes (`source_hash`, `db_hash`), so every consumer
+  hand-wrote a `prosrc` differ to classify drift (the PrintOptim audit did this
+  for 120 functions). `FunctionBodyDrift` now also carries `expected_body`,
+  `live_body`, and a `unified_diff` computed with `difflib` over a new
+  line-oriented normalisation (`FunctionBodyNormalizer.normalize_for_diff`) — it
+  strips comments, lowercases, collapses indentation, and drops blank lines, so
+  the diff shows only genuine logic changes, not formatting churn. The new opt-in
+  `--show-diff` flag (requires `--check-body`) surfaces these in both the text
+  renderer (rich-highlighted `+/-` lines) and the JSON payload
+  (`body_drift.body_drifts[].expected_body` / `.live_body` / `.unified_diff`).
+  The default (`--check-body` without `--show-diff`) output is byte-for-byte
+  unchanged — hash-only — for terse CI logs. `FunctionBodyDrift.to_dict()` and
+  `FunctionBodyDriftReport.to_dict()` (both `include_bodies=`-gated) now back the
+  serialization, replacing the previously inlined `body_drift` dict.
+
+- **Internal: `ExpectedSchemaDB` scratch-database foundation
+  (`core/expected_db.py`).** A context manager that builds the *expected* schema
+  into a throwaway database — either from source DDL (`from_source`) or by
+  replaying migrations (`from_base_plus_migrations`) — and yields a live
+  connection, so upcoming drift checks (view drift #174, replay drift #179,
+  require-migration bodies #178) can normalise the expected side through
+  PostgreSQL's own deparser (`pg_get_viewdef`, `pg_proc.prosrc`) instead of
+  text-normalising DDL. Wraps the existing `TempDatabase` lifecycle with
+  exception-safe cleanup (a failed build still drops the scratch DB). No CLI
+  surface yet.
+
+### Fixed
+
+- **Scratch/temporary-database helpers now accept hostless socket DSNs
+  (`postgresql:///dbname`).** `TempDatabase`'s URL rewriting round-tripped the
+  connection string through `urllib.parse.urlunparse`, which drops the `//`
+  authority marker when the netloc is empty — turning `postgresql:///db` into the
+  malformed `postgresql:/db` and breaking every scratch-DB consumer
+  (`--live-snapshot`, `test-db` provisioning, and the new drift foundation) on a
+  Unix-socket DSN. The marker is now preserved; host-qualified URLs are
+  byte-for-byte unchanged.
+
+- **`confiture drift --schema` now parses the DDL that `confiture build` emits
+  (#175).** The expected-schema parser used by `drift` yielded zero tables on any
+  schema whose statements were preceded by a comment — which includes
+  `confiture build`'s own default block-comment file separators and ordinary
+  `--` line comments (non-ASCII content such as an em-dash included). `sqlparse`
+  keeps a leading comment attached to the statement that follows it, and the
+  position-anchored `CREATE TABLE` match never saw past it, so every live table
+  was reported as spurious `extra_table` drift **with exit 0** — a silent false
+  positive on the documented `drift --schema db/generated/schema_local.sql`
+  workflow. Comments are now stripped before parsing. Additionally, a schema that
+  declares tables (contains a top-level `CREATE TABLE`) but parses to zero now
+  fails loudly with `SchemaError` (`SCHEMA_202`, exit 4) instead of degrading to
+  an empty expectation; `CREATE TABLE` text inside function bodies does not
+  trigger this guard.
+- **`migrate validate --check-signatures` no longer strips the `[]` array suffix
+  from function parameters (#176).** The signature parser dropped the array
+  suffix — the pglast (AST) path read `argType.names` but ignored
+  `argType.arrayBounds`, and the regex fallback kept `[]` but failed to alias the
+  base type through it (`int[]` vs the live `integer[]`). Because the live
+  (introspected) side keeps the canonical array type, an array-typed function was
+  falsely reported as a **stale overload** and its generated `remediation_sql`
+  was a destructive `DROP FUNCTION` for a function that exists in **both** the
+  database and the DDL. The same signature mismatch also prevented `--check-body`
+  from pairing the function, silently skipping its body diff. Array parameters
+  (`text[]`, `bigint[]`, `numeric(10,2)[]`, multidimensional `int[][]`, sized
+  `text[5]`) now round-trip correctly on both parser tiers and stay symmetric
+  with the live side. As a safety net, the drift detector never emits a
+  `DROP FUNCTION` for a "stale overload" whose base name and arity match a source
+  signature differing only by an array suffix.
+
 ## [0.35.0] - 2026-07-07
 
 ### Fixed
