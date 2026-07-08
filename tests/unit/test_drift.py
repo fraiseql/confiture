@@ -12,6 +12,12 @@ from confiture.core.drift import (
     SchemaDriftDetector,
 )
 from confiture.core.schema_analyzer import SchemaInfo
+from confiture.exceptions import SchemaError
+
+# Exact block-comment file separator emitted by SchemaBuilder (block_comment is
+# the default separator style) — reproduced here so the drift parser is proven
+# to round-trip confiture's own build output (issue #175).
+_BUILD_BLOCK_SEP = "\n/* " + "=" * 42 + "\n * File: {rel}\n * " + "=" * 42 + " */\n\n"
 
 
 class TestDriftItem:
@@ -406,3 +412,105 @@ class TestSchemaDriftDetector:
         # Incompatible pairs
         assert not detector._types_compatible("integer", "text")
         assert not detector._types_compatible("boolean", "integer")
+
+    # ------------------------------------------------------------------ #
+    # Issue #175 — comment handling + silent-failure guard                #
+    # ------------------------------------------------------------------ #
+
+    def test_parse_schema_with_block_comment_separators(self, mock_connection):
+        """confiture build's default block-comment file separators must not hide
+        the CREATE TABLE that follows them (issue #175)."""
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+
+        sql = (
+            _BUILD_BLOCK_SEP.format(rel="db/schema/10_tables/10_machine.sql")
+            + "CREATE TABLE tb_machine (pk_machine UUID PRIMARY KEY, name TEXT NOT NULL);\n"
+            + _BUILD_BLOCK_SEP.format(rel="db/schema/10_tables/20_part.sql")
+            + "CREATE TABLE tb_part (pk_part UUID PRIMARY KEY, label TEXT NOT NULL);\n"
+        )
+
+        info = detector._parse_schema_from_sql(sql)
+
+        assert set(info.tables) == {"tb_machine", "tb_part"}
+
+    def test_parse_schema_with_non_ascii_line_comment(self, mock_connection):
+        """A non-ASCII (em-dash) line comment before a table must not hide it."""
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+
+        sql = (
+            "-- Machine registry — core entity\n"
+            "CREATE TABLE tb_machine (pk_machine UUID PRIMARY KEY, name TEXT NOT NULL);\n"
+            "COMMENT ON TABLE tb_machine IS 'Machines';\n"
+        )
+
+        info = detector._parse_schema_from_sql(sql)
+
+        assert "tb_machine" in info.tables
+        assert "name" in info.tables["tb_machine"]
+
+    def test_create_table_in_function_body_not_parsed_as_table(self, mock_connection):
+        """A dynamic ``CREATE TABLE`` inside a function body must not be mistaken
+        for a real table, and must not trip the zero-tables guard when a real
+        table is present."""
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+
+        sql = (
+            "CREATE OR REPLACE FUNCTION make_tmp() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    EXECUTE 'CREATE TABLE tmp_scratch (id int)';\n"
+            "END;\n"
+            "$$;\n"
+            "CREATE TABLE tb_real (id UUID PRIMARY KEY);\n"
+        )
+
+        info = detector._parse_schema_from_sql(sql)
+
+        assert "tb_real" in info.tables
+        assert "tmp_scratch" not in info.tables
+
+    def test_zero_tables_from_nonempty_schema_raises(self, mock_connection, monkeypatch):
+        """A schema that declares tables but parses to zero must fail loudly
+        instead of silently reporting every live table as spurious drift."""
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+
+        # Simulate an (unknown/future) parser breakage: no statements extracted.
+        monkeypatch.setattr("confiture.core.drift.sqlparse.parse", lambda _sql: [])
+
+        with pytest.raises(SchemaError):
+            detector._parse_schema_from_sql(
+                "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT);"
+            )
+
+    def test_index_or_type_only_schema_does_not_raise(self, mock_connection):
+        """A schema with no CREATE TABLE (indexes/types only) is a legitimate
+        empty-table expectation, not a parse failure — must NOT raise."""
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+
+        sql = "CREATE TYPE order_status AS ENUM ('pending', 'shipped');\n"
+
+        info = detector._parse_schema_from_sql(sql)  # must not raise
+
+        assert info.tables == {}
+
+    def test_function_body_only_create_table_does_not_raise(self, mock_connection):
+        """A schema whose only ``CREATE TABLE`` text lives inside a function body
+        is table-less — the guard must not false-fire on it."""
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+
+        sql = (
+            "CREATE OR REPLACE FUNCTION make_tmp() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    EXECUTE 'CREATE TABLE tmp_scratch (id int)';\n"
+            "END;\n"
+            "$$;\n"
+        )
+
+        info = detector._parse_schema_from_sql(sql)  # must not raise
+
+        assert info.tables == {}

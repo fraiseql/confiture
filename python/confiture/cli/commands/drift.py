@@ -99,7 +99,7 @@ def drift(
       0 - No drift detected
       1 - Drift detected (critical, or warning when --fail-on-warning)
       3 - Database connection failed
-      4 - Schema file not found
+      4 - Schema file not found, or unparseable (declares tables but parsed zero)
       5 - Invalid configuration (missing --schema, bad --format, config errors)
 
     JSON SCHEMA:
@@ -210,6 +210,10 @@ def drift(
             SchemaError(str(e), error_code="SCHEMA_201"),
             json_mode=json_mode,
         )
+    except SchemaError as e:
+        # e.g. SCHEMA_202: the --schema file declares tables but parsed to zero
+        # (issue #175) — surface with its own code/exit, not as a config error.
+        fail(e, json_mode=json_mode)
     except Exception as e:
         fail(
             ConfigurationError(

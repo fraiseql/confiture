@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`confiture drift --schema` now parses the DDL that `confiture build` emits
+  (#175).** The expected-schema parser used by `drift` yielded zero tables on any
+  schema whose statements were preceded by a comment — which includes
+  `confiture build`'s own default block-comment file separators and ordinary
+  `--` line comments (non-ASCII content such as an em-dash included). `sqlparse`
+  keeps a leading comment attached to the statement that follows it, and the
+  position-anchored `CREATE TABLE` match never saw past it, so every live table
+  was reported as spurious `extra_table` drift **with exit 0** — a silent false
+  positive on the documented `drift --schema db/generated/schema_local.sql`
+  workflow. Comments are now stripped before parsing. Additionally, a schema that
+  declares tables (contains a top-level `CREATE TABLE`) but parses to zero now
+  fails loudly with `SchemaError` (`SCHEMA_202`, exit 4) instead of degrading to
+  an empty expectation; `CREATE TABLE` text inside function bodies does not
+  trigger this guard.
 - **`migrate validate --check-signatures` no longer strips the `[]` array suffix
   from function parameters (#176).** The signature parser dropped the array
   suffix — the pglast (AST) path read `argType.names` but ignored
