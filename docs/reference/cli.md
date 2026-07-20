@@ -1498,6 +1498,91 @@ fi
 
 ---
 
+### `confiture migrate verify` — runtime correctness
+
+Runs each applied migration's `.verify.sql` sidecar (a `SELECT` returning a
+truthy value) inside a read-only `SAVEPOINT`. This checks *runtime state*; for
+*file integrity* — have applied migration files been modified since? — use
+[`confiture verify-checksums`](#confiture-verify-checksums--file-integrity).
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--migrations-dir` | Path | `db/migrations` | Migrations directory |
+| `--config` / `-c` | Path | None | Configuration file |
+| `--database-url` / `-d` | String | None | Tracking DB DSN |
+| `--version` | String | None | Verify a single migration version |
+| `--format` / `-f` | Text | `text` | `text` or `json` |
+| `--output` / `-o` | Path | None | Write output to a file |
+| `--allow-uninitialized` | Flag | `False` | Treat "no migration ledger" as success (exit 0) instead of exit 2 |
+
+#### Exit codes
+
+| Exit | Meaning |
+|------|---------|
+| `0` | All verified (or no ledger, under `--allow-uninitialized`) |
+| `1` | At least one `.verify.sql` failed |
+| `2` | `PRECON_1001` — the database has no migration ledger |
+| `3` | Database connection failed |
+| `5` | Configuration problem |
+
+The JSON payload carries `ledger_present` (0.37.0+): `false` means the database
+has no migration ledger at all, and is only emitted under
+`--allow-uninitialized`. A present-but-empty ledger reports `true` with
+`total_applied: 0` — "not initialized" and "nothing applied yet" are different
+states.
+
+```bash
+# CI gate against a migrated database
+confiture migrate verify -c db/environments/production.yaml
+
+# A database built from schema files legitimately has no ledger
+confiture migrate verify -c db/environments/ci.yaml --allow-uninitialized
+```
+
+---
+
+### `confiture verify-checksums` — file integrity
+
+Compares SHA-256 checksums of migration files against the checksums stored when
+they were applied, detecting files modified after application (tampering /
+schema drift). Top-level, **not** a `migrate` subcommand.
+
+`confiture verify` is a deprecated alias, removed in the next major; it accepts
+the same options.
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--migrations-dir` | Path | `db/migrations` | Migrations directory |
+| `--config` / `-c` | Path | `db/environments/local.yaml` | Configuration file |
+| `--fix` | Flag | `False` | Update stored checksums to match current files (dangerous) |
+| `--allow-uninitialized` | Flag | `False` | Treat "no migration ledger" as success (exit 0) instead of exit 2 |
+
+#### Exit codes
+
+| Exit | Meaning |
+|------|---------|
+| `0` | All checksums verified (or no ledger, under `--allow-uninitialized`) |
+| `1` | Checksum mismatches found — the CI gate this command exists to trip |
+| `2` | `PRECON_1001` — the database has no migration ledger |
+
+Before 0.37.0 an absent ledger crashed to exit 1 with a raw psycopg
+`relation "tb_confiture" does not exist`, making it indistinguishable from
+"checksums are wrong". See [exit codes](exit-codes.md) for why exit 2 rather
+than 0 was chosen.
+
+```bash
+confiture verify-checksums --config db/environments/production.yaml
+
+# Post-restore, where the ledger may legitimately be absent
+confiture verify-checksums --allow-uninitialized
+```
+
+---
+
 ### `confiture migrate validate` - Git-Aware Schema Validation
 
 Enable automatic validation of database schema changes using git history. Perfect for CI/CD pipelines, pre-commit hooks, and code review gates.
@@ -1519,6 +1604,65 @@ Enable automatic validation of database schema changes using git history. Perfec
 # Static, no database connection.  Pre-merge gate.
 confiture migrate validate --check-acl-coverage --config confiture.yaml
 ```
+
+#### Scoping `--idempotent` to changed migrations (0.37.0)
+
+**In CI you must set `fetch-depth: 0`.** `actions/checkout` defaults to a
+shallow clone with no `origin/main` and no merge base; without full history the
+run fails with `GIT_003` (exit 7).
+
+`--idempotent` scans every migration by default. In a project with an
+unremediated back-catalogue that makes it unusable as a hard gate, since every
+branch trips on violations it did not introduce. Scope it to what the branch
+actually changed:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0          # required
+- run: confiture migrate validate --idempotent --base-ref origin/main
+```
+
+For a pre-commit hook use `--staged`, which reads the **staging index** rather
+than the working tree — so it judges what is about to be committed, and catches
+a migration that has been staged but not yet committed (`--base-ref` compares
+committed trees and cannot see one):
+
+```bash
+confiture migrate validate --idempotent --staged
+```
+
+⚠️ **Scoping requires an explicit flag.** `--base-ref` carries a default of
+`origin/main`, but that default does **not** scope — a bare
+`confiture migrate validate --idempotent` scans everything, exactly as before,
+and still works outside a git repository. Only an explicitly passed
+`--base-ref`, `--since`, or `--staged` turns scoping on. When both `--staged`
+and `--base-ref` are given, `--staged` wins.
+
+Scoping fails loud rather than silently selecting nothing: an unreachable base
+ref is `GIT_003` (exit 7), a migrations directory outside the repository is a
+configuration error, and running outside a git repository with an explicit
+scope flag is `GIT_002` (exit 7). A gate that scanned zero files must never be
+mistakable for a gate that passed.
+
+Under `--format json`, a scoped run reports its selection under `meta.scope`:
+
+```json
+"meta": {
+  "backend": "ast",
+  "scope": {"mode": "base-ref", "base_ref": "origin/main",
+            "files_selected": 3, "files_skipped": 412}
+}
+```
+
+An unscoped run emits no `scope` key at all. When the scope selects no
+migrations the run succeeds with a `message` explaining that nothing changed
+since the base ref — deliberately distinct from the "directory contains no
+files" message, since the remedies differ.
+
+⚠️ `--idempotent` cannot be combined with `--check-drift`,
+`--require-migration`, `--require-migration-bodies`, or
+`--require-grant-migration`: only one check would run. Invoke them separately.
 
 #### Examples
 
@@ -1667,7 +1811,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Validate schema
         run: |

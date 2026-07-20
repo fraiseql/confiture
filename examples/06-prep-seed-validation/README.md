@@ -77,7 +77,7 @@ VALUES
 
 ```bash
 cd examples/06-prep-seed-validation
-pip install confiture
+pip install fraiseql-confiture
 ```
 
 ### 2. Quick Test (Levels 1-3)

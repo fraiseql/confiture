@@ -177,7 +177,7 @@ atomically (no partial rollback) if any is missing.
 |--------|---------|
 | `reinit(...)` | Rebuild the tracking table from the migration files on disk. |
 | `rebuild(...)` | Drop and recreate the tracking table (recovery). |
-| `preflight(...)` | Static safety checks on pending migrations (the `migrate preflight` engine). |
+| `preflight(...)` | Static safety checks on pending migrations (the `migrate preflight` engine). On a database with no migration ledger it skips the checksum step and sets `checksum_verified=False` with a `checksum_skipped_reason`, rather than raising — consistent with `status()` and `current_revision()`. |
 | `run_against(...)` | SAVEPOINT-replay pending migrations against a target database. |
 | `is_locked()` | Whether the migration advisory lock is currently held. |
 | `get_lock_holder()` | Details of the process holding the lock, or `None`. |

@@ -31,7 +31,7 @@ lint-migrations:
   stage: lint
   script:
     - confiture lint db/migrations/
-    - confiture migrate verify-checksums
+    - confiture verify-checksums
   rules:
     - changes:
         - db/migrations/**/*

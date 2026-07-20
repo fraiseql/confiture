@@ -62,10 +62,10 @@ Confiture is available on PyPI:
 
 ```bash
 # Install with pip
-pip install confiture
+pip install fraiseql-confiture
 
 # Or with uv (recommended)
-uv pip install confiture
+uv pip install fraiseql-confiture
 ```
 
 ### First Lint Command
@@ -794,7 +794,7 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      - run: pip install confiture
+      - run: pip install fraiseql-confiture
       - run: confiture lint --env production --fail-on-warning
 ```
 

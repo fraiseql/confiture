@@ -76,6 +76,50 @@ number:
 exist" signal and **2** for "tracking table absent" — both are
 success-with-signal exit codes specific to that command, not errors.
 
+### `GIT_003` — base ref unreachable in this checkout
+
+New in 0.37.0, exits **7** like the rest of the git family. Raised when
+`--base-ref`/`--since` names a ref that does not resolve in the current
+checkout, or when the histories are too shallow to compare.
+
+This is the one git failure a CI author can act on, so it is a distinct,
+greppable code rather than a reuse of `GIT_001`, and the message states the
+remedy verbatim:
+
+```
+Base ref 'origin/main' is not available in this checkout.
+In CI, set fetch-depth: 0 (actions/checkout) or run 'git fetch --unshallow origin main'.
+```
+
+`actions/checkout`'s default `fetch-depth: 1` triggers it. Confiture fails loud
+here rather than silently scanning nothing, because a scoping gate that selects
+zero files reports success while checking nothing at all.
+
+### Commands that emit exit 2 for an absent migration ledger
+
+Since 0.37.0, `verify-checksums` (and its deprecated `verify` alias) and
+`migrate verify` also exit **2** (`PRECON_1001`) when the database has no
+migration ledger — typically a database built from schema files rather than
+migrated. Previously both surfaced a raw psycopg `relation "tb_confiture" does
+not exist` and exited **1**.
+
+Exit 2 rather than 0 is deliberate. `verify-checksums` already uses exit 1 for
+"checksum mismatches found" — the CI gate the command exists to trip — so
+before 0.37.0 "no ledger" and "checksums are wrong" were *the same integer*.
+Returning 0 would merely have merged it with the other neighbour. Exit 2 is the
+only choice that adds information, and `PRECON_1001` → 2 is an already-frozen
+contract (see the carve-out table above and the reconciliation appendix below).
+
+Pass `--allow-uninitialized` to treat "no ledger" as success (exit 0). That is
+the sanctioned downgrade for gates that legitimately run against schema-built
+databases — a post-restore check, for instance. It is opt-in rather than the
+default because the failure mode of forgetting it is a green ship gate against
+an unmigrated production database.
+
+Note that "no ledger" and "ledger present but empty" stay distinct: a database
+with an empty `tb_confiture` is initialized, so it succeeds normally and
+reports `ledger_present: true` with `total_applied: 0`.
+
 ## How the convention was decided (issue #146)
 
 Confiture 0.18.0 shipped **three incompatible** exit-code conventions: the CLI's

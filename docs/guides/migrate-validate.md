@@ -317,6 +317,111 @@ Python migrations are intentionally **not** auto-rewritten — unparsing
 the AST would lose comments and formatting. Violations in `.py` files
 must be fixed by hand.
 
+### Scoping to changed migrations — `--base-ref` / `--since` / `--staged`
+
+*New in 0.37.0.*
+
+By default `--idempotent` scans **every** migration in the directory. In a
+project that adopted the check after accumulating a back-catalogue, that makes
+it unusable as a hard gate: every branch fails on violations it did not
+introduce, so the gate gets set to warn-only and stops protecting anything.
+
+Scope it instead to what the branch actually changed, and the gate becomes a
+ratchet — new migrations must be idempotent, the backlog drains on its own
+schedule:
+
+```bash
+confiture migrate validate --idempotent --base-ref origin/main
+```
+
+**In CI, `fetch-depth: 0` is required.** `actions/checkout` defaults to a
+shallow clone with no `origin/main` and no merge base:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0          # ← required
+- run: confiture migrate validate --idempotent --base-ref origin/main
+```
+
+Omit it and the run fails with `GIT_003` (exit 7) naming the remedy. That is
+deliberate — see *fail loud*, below.
+
+#### Pre-commit hooks: use `--staged`
+
+`--base-ref` compares **committed trees**, so a migration that is staged but
+not yet committed is invisible to it and a pre-commit hook would scope to zero
+and pass. `--staged` reads the **staging index** instead:
+
+```yaml
+# .pre-commit-config.yaml
+- repo: local
+  hooks:
+    - id: confiture-idempotent
+      name: Validate staged migrations are idempotent
+      entry: confiture migrate validate --idempotent --staged
+      language: system
+      pass_filenames: false
+```
+
+It analyzes the index blob, not the working tree — the two differ when a file is
+staged and then edited further, and the hook must judge what is about to be
+committed. When both `--staged` and `--base-ref` are passed, `--staged` wins.
+
+#### Scoping requires an explicit flag
+
+⚠️ `--base-ref` carries a default value of `origin/main`, but **that default
+does not scope**. A bare `confiture migrate validate --idempotent` scans
+everything, exactly as it did before 0.37.0, and still works outside a git
+repository entirely. Only an explicitly passed `--base-ref`, `--since`, or
+`--staged` turns scoping on.
+
+This matters more than it looks: gating on the *value* rather than on whether
+the flag was passed would silently scope every run in the project, and make a
+plain `--idempotent` fail on any non-git tree.
+
+#### Fail loud, never silently empty
+
+Scoping errors are hard failures rather than empty selections, because a gate
+that scanned zero files reports success while checking nothing — strictly worse
+than the backlog problem it was introduced to solve:
+
+| Situation | Outcome |
+|---|---|
+| Base ref not in this checkout (shallow clone) | `GIT_003`, exit 7, message names `fetch-depth: 0` |
+| Not in a git repository, with an explicit scope flag | `GIT_002`, exit 7 |
+| `--migrations-dir` outside the repository | Configuration error — the intersection could only ever be empty |
+| Nothing changed since the base ref | **Exit 0**, with a message distinct from "directory is empty" |
+
+Shallow clones that *do* have the ref but no merge base still work: scoping
+anchors on `git merge-base` and diffs two-dot, which is equivalent to three-dot
+wherever a merge base exists and survives where it cannot be computed.
+
+#### Reporting
+
+Text mode prints the selection before the backend banner:
+
+```
+🔍 Scoped to 3 migration(s) changed since origin/main (412 skipped)
+```
+
+JSON reports it under `meta.scope`:
+
+```json
+"meta": {
+  "backend": "ast",
+  "scope": {"mode": "base-ref", "base_ref": "origin/main",
+            "files_selected": 3, "files_skipped": 412}
+}
+```
+
+An unscoped run emits no `scope` key at all, so a consumer can tell the two
+apart.
+
+⚠️ Only `--idempotent` is scopable today. The other directory-wide checks —
+`--check-acls`, `--check-ownership-coverage`, `--check-function-uniqueness`,
+`--check-security-definer`, `--check-imports` — still scan everything.
+
 ## `--check-signatures` and `--check-body`
 
 These two flags compare the functions declared in your source DDL against the

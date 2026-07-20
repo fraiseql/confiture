@@ -57,6 +57,14 @@ The adapter-consumed fields per command:
 - **up** — `applied[].version` (the new head).
 - **down-to** — `from`, `to`, `rolled_back[]`.
 - **verify** — `failed_count` (ok ⇔ `0`) and each `results[].{version, name, status, error}`.
+  The `ok ⇔ failed_count == 0` rule is **unchanged** in 0.37.0. That release
+  added an optional `ledger_present` boolean: `false` means the database has no
+  migration ledger at all — typically built from schema files rather than
+  migrated — and is only emitted under `--allow-uninitialized`, since without
+  that flag the same state raises `PRECON_1001` (exit 2). It is declared in the
+  schema but **not required**, so payloads from earlier versions stay valid.
+  Note that the schema sets `additionalProperties: false`, so consumers pinned
+  to the pre-0.37.0 schema must update to accept the new field.
 - **preflight** — `ok`, the top-level `window_safe` verdict (the typed blue-green
   window-safety contract — see [below](#replica-forward-compatibility-namespace-window-safety-seam)),
   `summary`, each `issues[].{severity, code, message, migration}`.

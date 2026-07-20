@@ -80,7 +80,7 @@ jobs:
       # Install dependencies
       - name: Install dependencies
         run: |
-          uv pip install confiture
+          uv pip install fraiseql-confiture
 
       # Run linting on staging environment
       - name: Lint schema (staging)
@@ -141,7 +141,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install confiture
+          uv pip install fraiseql-confiture
 
       # Validate production schema with strict mode
       - name: Validate production schema (strict)
@@ -191,7 +191,7 @@ jobs:
       - name: Install dependencies
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv pip install confiture
+          uv pip install fraiseql-confiture
 
       # Generate lint report
       - name: Generate lint report

@@ -22,7 +22,7 @@ jobs:
 
       - name: Install Confiture
         run: |
-          pip install confiture psycopg[binary]
+          pip install fraiseql-confiture psycopg[binary]
 
       - name: Check migration status
         run: |

@@ -36,7 +36,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install confiture pytest pytest-cov psycopg[binary]
+          pip install fraiseql-confiture pytest pytest-cov psycopg[binary]
 
       - name: Build schema from DDL
         run: |

@@ -222,6 +222,7 @@ confiture/
 │   │   │   └── sql_ast.py          # CTENode, JSONBKey
 │   │   ├── connection.py        # create_connection, load_config
 │   │   ├── error_codes.py       # ErrorCodeDefinition, ErrorCodeRegistry
+│   │   ├── ledger.py            # ledger_exists() — shared migration-ledger probe
 │   │   ├── linting/             # SchemaLinter and rules
 │   │   ├── seed/                # Seed validation system (5 levels)
 │   │   ├── seed_validation/     # PrepSeedOrchestrator and validators

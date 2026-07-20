@@ -100,7 +100,7 @@ confiture migrate schema-to-schema --source old --target new
 
 ```bash
 # Install
-pip install confiture
+pip install fraiseql-confiture
 
 # Initialize project
 confiture init

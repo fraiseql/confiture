@@ -224,7 +224,7 @@ sudo systemctl start postgresql
 
 # Verify recovery
 confiture migrate status
-confiture migrate verify-checksums
+confiture verify-checksums
 ```
 
 **Recovery Option B: Full Restore**
@@ -366,7 +366,7 @@ This command:
 ```bash
 confiture migrate status
 confiture migrate drift-detect
-confiture migrate verify-checksums
+confiture verify-checksums
 ```
 
 **If sync-history is not available:**
@@ -442,11 +442,18 @@ pg_waldump /var/lib/postgresql/data/pg_wal/0000000100000001000000AB
 
 ### Verification Commands
 
+> After a restore the migration ledger may legitimately be absent — a database
+> rebuilt from schema files has none. `verify-checksums` and `migrate verify`
+> report that state and exit **2** (`PRECON_1001`) rather than failing with a
+> raw psycopg error. Add `--allow-uninitialized` when a ledger-less database is
+> the expected outcome of the recovery path you took; leave it off when the
+> restore was supposed to bring the ledger back, so its absence still trips.
+
 ```bash
 # Schema verification
 confiture migrate status
 confiture migrate drift-detect
-confiture migrate verify-checksums
+confiture verify-checksums
 
 # Database integrity
 psql << 'EOF'

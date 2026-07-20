@@ -425,7 +425,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Lint schema
         run: confiture lint --strict

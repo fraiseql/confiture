@@ -78,7 +78,7 @@ changes     testing        build       test     approval    approval
 
 - **Python 3.11+**: `python --version`
 - **PostgreSQL 14+**: `psql --version`
-- **Confiture**: `pip install confiture`
+- **Confiture**: `pip install fraiseql-confiture`
 - **Git**: `git --version`
 - **Make** (optional but recommended): `make --version`
 
@@ -458,7 +458,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install confiture pytest pytest-cov
+          pip install fraiseql-confiture pytest pytest-cov
 
       - name: Build schema
         run: |
@@ -528,7 +528,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Check migration status
         env:
@@ -651,7 +651,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Backup production database
         run: |

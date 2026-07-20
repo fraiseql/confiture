@@ -143,7 +143,7 @@ Check `include_dirs` in your environment config matches your directory structure
 Add `IF NOT EXISTS` to all CREATE statements.
 
 ### Build slow (>5s)
-Rust extension may not be installed. Reinstall with: `pip install confiture`
+Rust extension may not be installed. Reinstall with: `pip install fraiseql-confiture`
 
 ---
 

@@ -16,7 +16,7 @@ Install Confiture using pip or uv:
 
 ```bash
 # Using pip
-pip install confiture
+pip install fraiseql-confiture
 
 # Using uv (recommended)
 uv add confiture
@@ -408,7 +408,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Validate schema changes
         run: |

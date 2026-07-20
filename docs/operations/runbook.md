@@ -63,8 +63,16 @@ Overall: HEALTHY
 ### Verify Checksums
 
 ```bash
-confiture migrate verify-checksums
+confiture verify-checksums
 ```
+
+> A database with **no migration ledger** — one built from schema files rather
+> than migrated, which includes some restore paths — exits **2**
+> (`PRECON_1001`) with a message saying so, rather than a raw psycopg error.
+> If that state is expected for the database you are checking, add
+> `--allow-uninitialized` to treat it as success (exit 0). Do not add it
+> blanket-wide: against a database that *should* be migrated, exit 2 is the
+> signal you want.
 
 **Expected Output:**
 ```
@@ -348,7 +356,7 @@ PoolExhaustedError: No connections available (max: 10)
 
 ```cron
 # First of every month at 1 AM
-0 1 1 * * confiture migrate verify-checksums --full >> /var/log/confiture/checksum-audit.log 2>&1
+0 1 1 * * confiture verify-checksums >> /var/log/confiture/checksum-audit.log 2>&1
 ```
 
 ### Daily: Health Check (for Monitoring)
@@ -477,7 +485,7 @@ PoolExhaustedError: No connections available (max: 10)
 | Rollback one | `confiture migrate down --steps 1` |
 | Dry run | `confiture migrate up --dry-run` |
 | Check drift | `confiture migrate drift-detect` |
-| Verify checksums | `confiture migrate verify-checksums` |
+| Verify checksums | `confiture verify-checksums` |
 | Health check | `confiture health check` |
 
 ### Environment Variables

@@ -18,6 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Required by --base-ref scoping below: the default fetch-depth of 1
+          # leaves no origin/main to compare against, and no merge base to
+          # anchor on. Confiture reports this as GIT_003 (exit 7) rather than
+          # scanning nothing, but the fix belongs here.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,13 +31,20 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Lint migrations
         run: confiture lint db/migrations/
 
+      # Scoped to migrations this PR actually touched, so a pre-existing
+      # backlog does not block the branch. Drop --base-ref to scan everything.
+      - name: Validate idempotency (changed migrations only)
+        run: confiture migrate validate --idempotent --base-ref origin/main
+
+      # A database built from schema files has no migration ledger; without
+      # --allow-uninitialized that is exit 2, not a pass.
       - name: Verify checksums
-        run: confiture migrate verify-checksums
+        run: confiture verify-checksums
 
   dry-run:
     name: Dry Run Migration
@@ -61,7 +74,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Build test schema
         env:
@@ -108,7 +121,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Check schema drift
         env:

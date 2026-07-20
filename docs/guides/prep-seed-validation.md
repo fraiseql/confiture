@@ -373,7 +373,7 @@ FROM postgres:15
 
 # Install confiture
 COPY requirements.txt .
-RUN pip install confiture
+RUN pip install fraiseql-confiture
 
 # Copy seed files
 COPY db/ /app/db/

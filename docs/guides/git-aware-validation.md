@@ -91,7 +91,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Validate schema changes
         run: |
@@ -109,7 +109,7 @@ jobs:
 validate_schema:
   stage: test
   script:
-    - pip install confiture
+    - pip install fraiseql-confiture
     - confiture migrate validate \
         --check-drift \
         --require-migration \

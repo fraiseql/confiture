@@ -377,7 +377,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Validate migration naming
         run: |
