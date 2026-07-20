@@ -47,7 +47,7 @@ reference from the CLI with `confiture --exit-codes`.
 - **6** — Lock or connection-pool contention — another writer holds the lock
   - LOCK_1300, LOCK_1301, POOL_1200, POOL_1201
 - **7** — Git / pgGit / grant-accompaniment error
-  - GIT_001, GIT_002, GIT_800, GIT_801, GIT_802, GRANT_001, PGGIT_900, PGGIT_901
+  - GIT_001, GIT_002, GIT_003, GIT_800, GIT_801, GIT_802, GRANT_001, PGGIT_900, PGGIT_901
 - **8** — Irreversible rollback, or inconsistent state after rollback
   - ROLLBACK_001, ROLLBACK_600, ROLLBACK_601, ROLLBACK_602
 <!-- END GENERATED -->

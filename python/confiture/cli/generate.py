@@ -50,21 +50,13 @@ def _detect_repo_root(schema_dir: Path) -> Path | None:
     when the test layout is ``tmp_path/schema/`` rather than
     ``tmp_path/db/schema/``).
     """
+    from confiture.core.git import GitRepository
+    from confiture.exceptions import ConfiturError
+
     resolved = schema_dir.resolve()
     try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=str(resolved if resolved.exists() else Path.cwd()),
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-        if out.returncode == 0:
-            top = out.stdout.strip()
-            if top:
-                return Path(top)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return GitRepository(resolved if resolved.exists() else Path.cwd()).get_repo_root()
+    except (ConfiturError, FileNotFoundError, subprocess.TimeoutExpired):
         pass
     # Canonical layout fallback only — don't guess outside it.
     if resolved.parent.name == "db":

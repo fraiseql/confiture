@@ -779,6 +779,16 @@ def _create_global_registry() -> ErrorCodeRegistry:
             resolution_hint="Initialize a git repository or use a valid repository path",
         ),
         ErrorCodeDefinition(
+            code="GIT_003",
+            message_template="Base ref unreachable in this checkout",
+            severity=ErrorSeverity.ERROR,
+            exit_code=7,
+            resolution_hint=(
+                "In CI, set fetch-depth: 0 (actions/checkout) or run "
+                "'git fetch --unshallow origin <branch>'"
+            ),
+        ),
+        ErrorCodeDefinition(
             code="GRANT_001",
             message_template="Grant accompaniment error",
             severity=ErrorSeverity.ERROR,
@@ -905,6 +915,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     # GIT / PGGIT / GRANT → 7.
     "GIT_001": 7,
     "GIT_002": 7,
+    "GIT_003": 7,
     "GIT_800": 7,
     "GIT_801": 7,
     "GIT_802": 7,
