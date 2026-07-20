@@ -62,7 +62,7 @@ dev = [
     "ruff>=0.6.0",
     "ty>=0.0.7",  # Astral's ultra-fast type checker (replaces mypy)
     "maturin>=1.7.0",
-    "pglast>=6.0",
+    "pglast>=6.0,<8",  # see the `ast` extra for why the upper bound is pinned
     "fastapi>=0.111",
     "httpx>=0.27",
     "jsonschema>=4",  # Validate JSON output schemas in docs/reference/json-schemas/
@@ -85,7 +85,18 @@ seed-uuid = [
 ]
 
 ast = [
-    "pglast>=6.0",
+    # Upper bound is deliberate. pglast 8.0 reshaped the AST that
+    # `core/idempotency/ast_detector.py`, `core/linting/libraries/security_definer.py`
+    # and `core/operation_classifier.py` walk — ALTER TABLE subtype handling,
+    # OWNER TO detection and constraint nodes all moved, which is 19 test
+    # failures and 3 ty errors, not a typing nit. Supporting 8.x is real work
+    # with its own risk surface; until then, cap rather than resolve into it.
+    #
+    # This matters more than usual here: `uv.lock` is gitignored, so CI resolves
+    # the dependency tree fresh on every run. An unbounded specifier means an
+    # upstream major release turns CI red on an unrelated PR — which is exactly
+    # what pglast 8.2 (2026-07-10) did to the first PR opened after it landed.
+    "pglast>=6.0,<8",
 ]
 
 mcp-http = [
