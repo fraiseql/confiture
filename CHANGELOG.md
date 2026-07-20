@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-07-20
+
+Ship-gate ergonomics: two contract bugs found by wiring confiture into a CI
+ship gate, where the gate broke on states confiture should treat as normal.
+
+### BREAKING
+
+- `migrate verify` now exits **2** (`PRECON_1001`) instead of crashing to exit 1
+  when the database has no migration ledger, and its JSON payload gained a
+  `ledger_present` field.  Both are contract changes under the fraisier adapter
+  contract, amended in step: exit 2 from `verify` means "no migration ledger",
+  **not** `InvalidConfig`.  Consumers validating against the previous
+  `migrate-verify` schema must update — it sets `additionalProperties: false`.
+  `ledger_present` is declared optional, so it is not added to `required`.
+
+### Fixed
+
+- `verify-checksums`, its deprecated `verify` alias, and `migrate verify` no
+  longer surface a raw `relation "tb_confiture" does not exist` against a
+  database with no migration ledger.  They report the state clearly and exit 2.
+  Previously this crashed to exit 1 — the same code `verify-checksums` uses for
+  "checksum mismatches found" — so a CI gate could not tell the two apart.
+  (#182)
+- `MigratorSession.preflight()` no longer raises on a ledger-less database; it
+  skips the checksum step and reports `checksum_skipped_reason`, consistent
+  with `status()` and `current_revision()`.  This third call site is
+  library-only, but it is the documented idiom.  (#182)
+- `migrate verify -c <config>` crashed with `AttributeError: 'str' object has
+  no attribute 'exists'` — the command's own documented primary invocation.  It
+  passed `str(config)` to `load_config`, which calls `config_file.exists()`;
+  every other call site in the CLI passes the `Path`.
+- `--base-ref` scoping anchors on the merge-base and diffs two-dot, so it works
+  in shallow CI clones where a three-dot diff fails with "no merge base" (rc
+  128, previously unclassified and reported without a remedy).  The same fix
+  applies to `--require-migration --base-ref`, which carried the latent bug.
+- `--base-ref` scoping resolves the repository root explicitly, so it is
+  correct when run from a subdirectory.  `GitRepository.repo_path` is the
+  subprocess cwd, not the root, while `git diff --name-only` reports
+  root-relative paths — the mismatch produced an empty selection and a gate
+  that passed having scanned nothing.
+- `--idempotent` combined with `--check-drift`, `--require-migration`,
+  `--require-migration-bodies` or `--require-grant-migration` now errors
+  instead of silently running only the first: all branches end in a bare
+  `return` and are evaluated in source order.
+- Corrected `confiture migrate verify-checksums` → `confiture verify-checksums`
+  in the shipped CI templates (GitHub Actions, GitLab, Argo, Jenkins) and the
+  operations docs — 11 sites, none of which named an existing command.  Also
+  removed a non-existent `--env` flag and a non-existent `--full` flag from the
+  examples, and corrected `pip install confiture` to `fraiseql-confiture`.
+
+### Added
+
+- `--allow-uninitialized` on `verify-checksums` and `migrate verify`: treat "no
+  migration ledger" as success (exit 0), for gates that legitimately run
+  against schema-built databases.  Opt-in rather than default, because the
+  failure mode of forgetting it is a green ship gate against an unmigrated
+  database.  (#182)
+- `--base-ref` / `--since` on `migrate validate --idempotent`: validate only
+  migrations added or modified since a git ref, so the check is usable as a
+  hard gate in a project with an unremediated back-catalogue.  Requires an
+  **explicit** flag — the option's `origin/main` default does not scope, and
+  the unscoped behaviour is unchanged.  (#181)
+- `--staged` now works with `--idempotent`, analyzing the staging **index**
+  rather than the working tree, for pre-commit gates.  Previously the
+  combination was silently ignored and idempotency never ran.  (#181)
+- `ledger_present` in `migrate verify` JSON; `meta.scope` in
+  `migrate validate --idempotent` JSON (absent entirely when unscoped).
+- New `GIT_003` (exit 7): base ref unreachable in this checkout, with the
+  `fetch-depth: 0` / `git fetch --unshallow` remedy stated in the message.
+- `confiture.core.ledger.ledger_exists()` — one connection-level ledger probe,
+  replacing two byte-identical copies of the query in `core/_migrator/state.py`.
+- `docs/reference/cli.md` gained `migrate verify` and `verify-checksums`
+  sections; neither command was documented there before.
+
+### Known scope limits
+
+`--base-ref` scoping covers `--idempotent` only.  The other directory-wide
+`migrate validate` checks — `--check-acls`, `--check-ownership-coverage`,
+`--check-function-uniqueness`, `--check-security-definer`, `--check-imports` —
+still scan everything, and three of them block on any violation.
+
 ## [0.36.0] - 2026-07-08
 
 ### Added
