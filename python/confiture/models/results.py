@@ -636,6 +636,10 @@ class VerifyAllResult:
         failed_count: Number of migrations that failed verification
         skipped_count: Number of applied migrations with no verify file
         total_applied: Total number of applied migrations checked
+        ledger_present: Whether the migration ledger table exists.  False means
+            the database has no recorded migrations at all (built from schema
+            files rather than migrated) — distinct from a present-but-empty
+            ledger, which reports True with ``total_applied == 0``.
     """
 
     results: list[VerifyResult]
@@ -643,6 +647,7 @@ class VerifyAllResult:
     failed_count: int
     skipped_count: int
     total_applied: int
+    ledger_present: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -651,6 +656,7 @@ class VerifyAllResult:
             "failed_count": self.failed_count,
             "skipped_count": self.skipped_count,
             "total_applied": self.total_applied,
+            "ledger_present": self.ledger_present,
             "results": [
                 {
                     "version": r.version,
@@ -762,6 +768,9 @@ class PreflightResult:
     duplicate_versions: dict[str, list[str]] = field(default_factory=dict)
     checksum_mismatches: list[str] = field(default_factory=list)
     checksum_verified: bool = False
+    #: Why checksum verification did not run, when it did not. ``None`` when it
+    #: ran, or when there was no connection to run it against.
+    checksum_skipped_reason: str | None = None
 
     @property
     def all_reversible(self) -> bool:

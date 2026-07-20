@@ -149,8 +149,8 @@ codes it specifically recognises:
 | Exit | Adapter handling |
 |------|------------------|
 | `0` | success |
-| `2` (`PRECON_1001`) | from `current`: a reachable-but-uninitialised DB → "no current revision" (not an error) |
-| `2`, `5` | `InvalidConfig` (configuration problem) |
+| `2` (`PRECON_1001`) | a reachable-but-uninitialised DB (no migration ledger). From `current` → "no current revision"; from `verify` and `verify-checksums` → "nothing recorded to verify". **Not an error, and never `InvalidConfig`** — pass `--allow-uninitialized` to get exit 0 instead. |
+| `2`, `5` | `InvalidConfig` (configuration problem) — only when the code is **not** `PRECON_1001` |
 | `6` (`LOCK_1300`) | migration lock held by another process — **retriable** |
 | everything else | execution failure |
 

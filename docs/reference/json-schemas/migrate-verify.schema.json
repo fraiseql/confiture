@@ -23,6 +23,10 @@
       "type": "integer",
       "description": "Total applied migrations considered."
     },
+    "ledger_present": {
+      "type": "boolean",
+      "description": "Whether the migration ledger table (tracking_table, default tb_confiture) exists. False means the database has no recorded migrations at all — typically built from schema files rather than migrated — and is only emitted under --allow-uninitialized, since without that flag the absent ledger raises PRECON_1001 (exit 2). Distinct from a present-but-empty ledger, which reports true with total_applied 0. Added in 0.37.0; not required, so payloads from earlier versions remain valid."
+    },
     "results": {
       "type": "array",
       "description": "Per-migration verification outcome.",

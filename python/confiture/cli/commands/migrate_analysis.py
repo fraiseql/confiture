@@ -1407,6 +1407,15 @@ def migrate_verify(
         "-o",
         help="Save output to file (default: stdout)",
     ),
+    allow_uninitialized: bool = typer.Option(
+        False,
+        "--allow-uninitialized",
+        help=(
+            "Treat a database with no migration ledger as success (exit 0) instead "
+            "of exit 2.  For gates that legitimately run against schema-built "
+            "databases."
+        ),
+    ),
 ) -> None:
     """Verify applied migrations using .verify.sql sidecar files (runtime correctness).
 
@@ -1432,6 +1441,7 @@ def migrate_verify(
       confiture migrate status  - View migration history
       confiture migrate up      - Apply pending migrations
     """
+    from confiture.cli.commands.admin import _NO_LEDGER_HINT
     from confiture.cli.formatters.migrate_formatter import format_verify_results
     from confiture.cli.helpers import (
         _get_tracking_table,
@@ -1442,6 +1452,7 @@ def migrate_verify(
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
+    from confiture.exceptions import DatabaseNotInitializedError
     from confiture.models.results import VerifyAllResult
 
     json_mode = is_json(format_output)
@@ -1461,7 +1472,7 @@ def migrate_verify(
             if _db_url_override is not None:
                 config_data = {"database_url": _db_url_override}
             elif config and config.exists():
-                config_data = load_config(str(config))
+                config_data = load_config(config)
         if config_data is None:
             raise ConfigurationError("Config file or --database-url required for migrate verify")
         tracking_table = _get_tracking_table(config_data)
@@ -1469,6 +1480,35 @@ def migrate_verify(
         conn = create_connection(config_data)
         try:
             migrator = Migrator(connection=conn, migration_table=tracking_table)
+
+            # #182: get_applied_versions() raises psycopg's UndefinedTable on an
+            # absent ledger. Absent is a distinct state from "present but empty",
+            # so probe rather than swallowing the error into an empty result.
+            if not migrator.tracking_table_exists():
+                if not allow_uninitialized:
+                    raise DatabaseNotInitializedError(
+                        f"No migration ledger found: `{tracking_table}` is not present "
+                        "in this database",
+                        resolution_hint=_NO_LEDGER_HINT,
+                    )
+                empty = VerifyAllResult(
+                    results=[],
+                    verified_count=0,
+                    failed_count=0,
+                    skipped_count=0,
+                    total_applied=0,
+                    ledger_present=False,
+                )
+                if format_output == "json":
+                    _output_json(empty.to_dict(), output_file, console)
+                else:
+                    console.print(
+                        f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
+                        "present in this database) — 0 migrations recorded, nothing to "
+                        "verify.[/yellow]"
+                    )
+                return
+
             applied_versions = migrator.get_applied_versions()
 
             verifier = MigrationVerifier(connection=conn, migrations_dir=migrations_dir)
