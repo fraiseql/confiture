@@ -81,6 +81,16 @@ ship gate, where the gate broke on states confiture should treat as normal.
 - `docs/reference/cli.md` gained `migrate verify` and `verify-checksums`
   sections; neither command was documented there before.
 
+### Changed
+
+- The `ast` extra now requires `pglast>=6.0,<8` rather than `pglast>=6.0`.
+  pglast 8.0 reshaped the AST that the idempotency detector, the
+  `sec_002` security-definer rule and the operation classifier walk — ALTER
+  TABLE subtype handling, OWNER TO detection and constraint nodes all moved.
+  Installing `fraiseql-confiture[ast]` alongside pglast 8.x previously produced
+  silently degraded analysis; it is now a resolver conflict instead.  If you
+  need pglast 8, stay on the regex fallback until 8.x support lands.
+
 ### Known scope limits
 
 `--base-ref` scoping covers `--idempotent` only.  The other directory-wide
