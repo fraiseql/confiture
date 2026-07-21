@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-07-21
+
+Machine-readable exit-code contract: confiture becomes the single source of truth for the `(exit_code → semantic class)` taxonomy the FraiseQL `fraisier` migration adapters branch on, replacing two independently hand-maintained (and drifting) copies.
+
 ### Added
 
 - **Machine-readable exit-code contract for wrapper authors.** Each exit integer
