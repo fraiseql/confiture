@@ -23,7 +23,7 @@ blog_app
 ### 1. Install Confiture
 
 ```bash
-pip install confiture
+pip install fraiseql-confiture
 ```
 
 ### 2. Set Up Database

@@ -48,7 +48,7 @@ jobs:
 
       - name: Install Confiture
         run: |
-          pip install confiture psycopg[binary]
+          pip install fraiseql-confiture psycopg[binary]
 
       - name: Pre-deployment notification
         uses: slackapi/slack-github-action@v1.24.0

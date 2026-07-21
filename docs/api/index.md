@@ -10,13 +10,13 @@
 
 ```bash
 # Install with pip
-pip install confiture
+pip install fraiseql-confiture
 
 # Install with uv (recommended)
 uv add confiture
 
 # With Rust acceleration (10-50x faster)
-pip install confiture[rust]
+pip install fraiseql-confiture[rust]
 ```
 
 ---

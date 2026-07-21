@@ -131,7 +131,7 @@ GRANT ALL PRIVILEGES ON DATABASE ecommerce_staging TO confiture_sync_user;
 
 ```bash
 # Confiture installed
-pip install confiture
+pip install fraiseql-confiture
 
 # PostgreSQL client tools (for pg_dump/restore)
 sudo apt-get install postgresql-client-15
@@ -894,7 +894,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Sync Production to Staging
         env:

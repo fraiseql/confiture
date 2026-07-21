@@ -6,7 +6,7 @@
 
 ## Prerequisites Checklist
 
-- [ ] Confiture installed: `pip install confiture`
+- [ ] Confiture installed: `pip install fraiseql-confiture`
 - [ ] PostgreSQL client tools: `psql`, `pg_dump`
 - [ ] Production database credentials (read-only)
 - [ ] Staging database credentials (read-write)

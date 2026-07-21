@@ -1037,6 +1037,18 @@ class MigratorSession:
 
         # Checksum verification (only when DB is connected)
         if self._conn is not None:
+            # #182: verify_all() raises psycopg's UndefinedTable on an absent
+            # ledger. preflight is an advisory aggregator, not a gate, so it
+            # skips and reports rather than raising — consistent with the
+            # probes in status() and current_revision().
+            if self._migrator is not None and not self._migrator.tracking_table_exists():
+                result.checksum_verified = False
+                result.checksum_skipped_reason = (
+                    "no migration ledger in this database — nothing recorded to "
+                    "verify checksums against"
+                )
+                return result
+
             from confiture.core.checksum import (
                 ChecksumConfig,
                 ChecksumMismatchBehavior,

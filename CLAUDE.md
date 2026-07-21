@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.36.0
-**Last Updated**: 2026-07-08
+**Version**: 0.37.0
+**Last Updated**: 2026-07-20
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -222,6 +222,7 @@ confiture/
 │   │   │   └── sql_ast.py          # CTENode, JSONBKey
 │   │   ├── connection.py        # create_connection, load_config
 │   │   ├── error_codes.py       # ErrorCodeDefinition, ErrorCodeRegistry
+│   │   ├── ledger.py            # ledger_exists() — shared migration-ledger probe
 │   │   ├── linting/             # SchemaLinter and rules
 │   │   ├── seed/                # Seed validation system (5 levels)
 │   │   ├── seed_validation/     # PrepSeedOrchestrator and validators
@@ -925,8 +926,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: 2026-07-08
-**Version**: 0.36.0
+**Last Updated**: 2026-07-20
+**Version**: 0.37.0
 
 ---
 

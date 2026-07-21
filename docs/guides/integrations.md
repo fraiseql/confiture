@@ -57,7 +57,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Dry-run migrations
         env:
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Run migrations
         env:
@@ -143,7 +143,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Extract modified tables
         id: tables
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Extract feature info
         id: feature
@@ -299,7 +299,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Export coordination status
         env:
@@ -333,7 +333,7 @@ schema-conflict-check:
   variables:
     COORDINATION_DB_URL: $COORDINATION_DB_URL
   before_script:
-    - pip install confiture
+    - pip install fraiseql-confiture
   script:
     - |
       # Extract modified tables

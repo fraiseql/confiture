@@ -61,7 +61,7 @@ spec:
             echo "Linting migrations..."
             confiture lint db/migrations/
             echo "Verifying checksums..."
-            confiture migrate verify-checksums
+            confiture verify-checksums
 
     # Dry run migrations
     - name: dry-run-migration
@@ -277,7 +277,7 @@ spec:
           - |
             pip install --quiet confiture
             confiture lint db/migrations/
-            confiture migrate verify-checksums
+            confiture verify-checksums
 
     - name: dry-run-migration
       inputs:

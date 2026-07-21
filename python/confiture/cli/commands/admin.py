@@ -17,7 +17,26 @@ from confiture.cli.helpers import (
 )
 from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import (
+    ConfigurationError,
+    ConfiturError,
+    DatabaseNotInitializedError,
+)
+
+#: Shared by `verify-checksums` and `migrate verify` — both hit the same state
+#: (a database built from schema files rather than migrated) and both offer the
+#: same three ways forward.
+_NO_LEDGER_HINT = (
+    "This database has no recorded migrations — it was likely built from schema "
+    "files rather than migrated. Run `confiture migrate up` to apply migrations, "
+    "`confiture migrate baseline --through <version>` if the schema is already "
+    "present, or pass --allow-uninitialized to treat 'no ledger' as success."
+)
+
+ALLOW_UNINITIALIZED_HELP = (
+    "Treat a database with no migration ledger as success (exit 0) instead of "
+    "exit 2.  For gates that legitimately run against schema-built databases."
+)
 
 
 def install_helpers(
@@ -184,6 +203,11 @@ def verify_checksums(
         "--fix",
         help="Update stored checksums to match current files (dangerous)",
     ),
+    allow_uninitialized: bool = typer.Option(
+        False,
+        "--allow-uninitialized",
+        help=ALLOW_UNINITIALIZED_HELP,
+    ),
 ) -> None:
     """Verify migration file integrity against stored checksums.
 
@@ -216,11 +240,30 @@ def verify_checksums(
         MigrationChecksumVerifier,
     )
     from confiture.core.connection import create_connection, load_config
+    from confiture.core.ledger import ledger_exists
 
     try:
         # Load config and connect
         config_data = load_config(config)
         conn = create_connection(config_data)
+
+        # Probe before building the verifier: if verify_all() returned [] for
+        # "no table", that would be indistinguishable from "no mismatches" —
+        # the absent-vs-empty conflation this guard exists to prevent.
+        tracking_table = _get_tracking_table(config_data)
+        if not ledger_exists(conn, tracking_table):
+            conn.close()
+            if allow_uninitialized:
+                console.print(
+                    f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
+                    "present in this database) — 0 migrations recorded, nothing to "
+                    "verify.[/yellow]"
+                )
+                return
+            raise DatabaseNotInitializedError(
+                f"No migration ledger found: `{tracking_table}` is not present in this database",
+                resolution_hint=_NO_LEDGER_HINT,
+            )
 
         # Run verification (warn mode - we'll handle display)
         verifier = MigrationChecksumVerifier(
@@ -229,7 +272,7 @@ def verify_checksums(
                 enabled=True,
                 on_mismatch=ChecksumMismatchBehavior.WARN,
             ),
-            migration_table=_get_tracking_table(config_data),
+            migration_table=tracking_table,
         )
         mismatches = verifier.verify_all(migrations_dir)
 
@@ -288,6 +331,11 @@ def verify_deprecated(
         "--fix",
         help="Update stored checksums to match current files (dangerous)",
     ),
+    allow_uninitialized: bool = typer.Option(
+        False,
+        "--allow-uninitialized",
+        help=ALLOW_UNINITIALIZED_HELP,
+    ),
 ) -> None:
     """[DEPRECATED] Alias for `confiture verify-checksums`.
 
@@ -301,7 +349,12 @@ def verify_deprecated(
         "future major release. Use 'confiture verify-checksums' for checksum "
         "integrity (or 'confiture migrate verify' for runtime correctness).[/yellow]"
     )
-    verify_checksums(migrations_dir=migrations_dir, config=config, fix=fix)
+    verify_checksums(
+        migrations_dir=migrations_dir,
+        config=config,
+        fix=fix,
+        allow_uninitialized=allow_uninitialized,
+    )
 
 
 def validate_config(

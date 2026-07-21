@@ -26,7 +26,7 @@ pipeline {
                 echo 'Installing Confiture...'
                 sh '''
                     python -m pip install --upgrade pip
-                    pip install confiture
+                    pip install fraiseql-confiture
                 '''
             }
         }
@@ -41,7 +41,7 @@ pipeline {
             steps {
                 echo 'Linting migrations...'
                 sh 'confiture lint db/migrations/'
-                sh 'confiture migrate verify-checksums'
+                sh 'confiture verify-checksums'
             }
         }
 

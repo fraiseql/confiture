@@ -528,7 +528,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Download baseline
         uses: actions/download-artifact@v4

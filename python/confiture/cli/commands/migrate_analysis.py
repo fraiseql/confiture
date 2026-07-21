@@ -20,6 +20,7 @@ from confiture.cli.helpers import (
     console,
     error_console,
     is_json,
+    param_is_explicit,
 )
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
@@ -200,6 +201,7 @@ def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
 
 
 def migrate_validate(
+    ctx: typer.Context,
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-dir",
@@ -597,6 +599,33 @@ def migrate_validate(
             _emit_pattern_catalog(format_output, output_file)
             return
 
+        # Every branch below ends in a bare `return` and they are evaluated in
+        # source order, so a git-accompaniment flag combined with --idempotent
+        # would run only the former and silently skip idempotency. #181 fixed
+        # the --staged case by dispatch; fail loud on the rest rather than
+        # leave another silently-lying combination behind.
+        if idempotent:
+            _conflicting = [
+                name
+                for name, on in (
+                    ("--check-drift", check_drift),
+                    ("--require-migration", require_migration),
+                    ("--require-migration-bodies", require_migration_bodies),
+                    ("--require-grant-migration", require_grant_migration),
+                )
+                if on
+            ]
+            if _conflicting:
+                raise ConfigurationError(
+                    f"--idempotent cannot be combined with {', '.join(_conflicting)}: "
+                    "only one check would run.",
+                    resolution_hint=(
+                        "Run the checks as separate invocations, e.g. "
+                        "`confiture migrate validate --idempotent` then "
+                        f"`confiture migrate validate {_conflicting[0]}`."
+                    ),
+                )
+
         # Resolve --env / --config to a single config path (raises
         # ConfigurationError, funneled through the fail() boundary below).
         config = _resolve_config(config, env)
@@ -622,7 +651,12 @@ def migrate_validate(
             or require_migration
             or require_migration_bodies
             or require_grant_migration
-            or staged
+            # #181/D4: --staged used to enter this block and return, so
+            # `--idempotent --staged` silently never ran idempotency. When
+            # --idempotent is set and no git-accompaniment check was asked
+            # for, fall through to the idempotency branch, which now scopes
+            # to the staging index itself.
+            or (staged and not idempotent)
         ):
             from confiture.cli.git_validation import (
                 validate_git_drift,
@@ -966,7 +1000,20 @@ def migrate_validate(
 
         # Handle idempotency validation
         if idempotent:
-            _validate_idempotency(migrations_dir, format_output, output_file, strict_cor=strict_cor)
+            # #181: --base-ref carries a truthy default ("origin/main"), so the
+            # value alone cannot say whether the operator asked for scoping.
+            # Gate on the parameter source; without this every unscoped run
+            # would silently scope, and a plain --idempotent in a non-git tree
+            # would exit 7.
+            scoping_requested = staged or param_is_explicit(ctx, "base_ref", "since")
+            _validate_idempotency(
+                migrations_dir,
+                format_output,
+                output_file,
+                strict_cor=strict_cor,
+                base_ref=(since or base_ref) if scoping_requested and not staged else None,
+                staged=staged,
+            )
             return
 
         # Use Migrator to find orphaned files (needs instance for method)
@@ -1407,6 +1454,15 @@ def migrate_verify(
         "-o",
         help="Save output to file (default: stdout)",
     ),
+    allow_uninitialized: bool = typer.Option(
+        False,
+        "--allow-uninitialized",
+        help=(
+            "Treat a database with no migration ledger as success (exit 0) instead "
+            "of exit 2.  For gates that legitimately run against schema-built "
+            "databases."
+        ),
+    ),
 ) -> None:
     """Verify applied migrations using .verify.sql sidecar files (runtime correctness).
 
@@ -1432,6 +1488,7 @@ def migrate_verify(
       confiture migrate status  - View migration history
       confiture migrate up      - Apply pending migrations
     """
+    from confiture.cli.commands.admin import _NO_LEDGER_HINT
     from confiture.cli.formatters.migrate_formatter import format_verify_results
     from confiture.cli.helpers import (
         _get_tracking_table,
@@ -1442,6 +1499,7 @@ def migrate_verify(
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
+    from confiture.exceptions import DatabaseNotInitializedError
     from confiture.models.results import VerifyAllResult
 
     json_mode = is_json(format_output)
@@ -1461,7 +1519,7 @@ def migrate_verify(
             if _db_url_override is not None:
                 config_data = {"database_url": _db_url_override}
             elif config and config.exists():
-                config_data = load_config(str(config))
+                config_data = load_config(config)
         if config_data is None:
             raise ConfigurationError("Config file or --database-url required for migrate verify")
         tracking_table = _get_tracking_table(config_data)
@@ -1469,6 +1527,35 @@ def migrate_verify(
         conn = create_connection(config_data)
         try:
             migrator = Migrator(connection=conn, migration_table=tracking_table)
+
+            # #182: get_applied_versions() raises psycopg's UndefinedTable on an
+            # absent ledger. Absent is a distinct state from "present but empty",
+            # so probe rather than swallowing the error into an empty result.
+            if not migrator.tracking_table_exists():
+                if not allow_uninitialized:
+                    raise DatabaseNotInitializedError(
+                        f"No migration ledger found: `{tracking_table}` is not present "
+                        "in this database",
+                        resolution_hint=_NO_LEDGER_HINT,
+                    )
+                empty = VerifyAllResult(
+                    results=[],
+                    verified_count=0,
+                    failed_count=0,
+                    skipped_count=0,
+                    total_applied=0,
+                    ledger_present=False,
+                )
+                if format_output == "json":
+                    _output_json(empty.to_dict(), output_file, console)
+                else:
+                    console.print(
+                        f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
+                        "present in this database) — 0 migrations recorded, nothing to "
+                        "verify.[/yellow]"
+                    )
+                return
+
             applied_versions = migrator.get_applied_versions()
 
             verifier = MigrationVerifier(connection=conn, migrations_dir=migrations_dir)

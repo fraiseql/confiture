@@ -151,7 +151,7 @@ format:
 # Environment setup
 setup:
 	@echo "🛠️  Setting up development environment..."
-	@command -v confiture >/dev/null 2>&1 || { echo "Installing confiture..."; pip install confiture; }
+	@command -v confiture >/dev/null 2>&1 || { echo "Installing confiture..."; pip install fraiseql-confiture; }
 	@command -v pytest >/dev/null 2>&1 || { echo "Installing pytest..."; pip install pytest pytest-cov; }
 	@command -v sqlfluff >/dev/null 2>&1 || { echo "Installing sqlfluff..."; pip install sqlfluff; }
 	@command -v ruff >/dev/null 2>&1 || { echo "Installing ruff..."; pip install ruff; }

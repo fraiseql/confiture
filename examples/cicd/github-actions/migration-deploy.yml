@@ -34,7 +34,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Check pending migrations
         id: check
@@ -91,7 +91,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Pre-migration health check
         env:
@@ -166,7 +166,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Confiture
-        run: pip install confiture
+        run: pip install fraiseql-confiture
 
       - name: Attempt rollback
         env:

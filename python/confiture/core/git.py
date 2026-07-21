@@ -24,7 +24,12 @@ class GitRepository:
     No external dependencies required.
 
     Attributes:
-        repo_path: Root directory of git repository
+        repo_path: The working directory git commands run in — **not**
+            necessarily the repository root. It defaults to ``Path.cwd()``,
+            which is a subdirectory of the root whenever the caller was
+            invoked from one. Since ``git diff --name-only`` reports paths
+            relative to the *root* regardless of cwd, resolving those paths
+            requires :meth:`get_repo_root`, not this attribute.
 
     Example:
         >>> repo = GitRepository(Path("."))
@@ -33,13 +38,46 @@ class GitRepository:
     """
 
     def __init__(self, repo_path: Path | None = None):
-        """Initialize GitRepository with optional repo path.
+        """Initialize GitRepository with optional working directory.
 
         Args:
-            repo_path: Root directory of git repository.
-                      If None, uses current directory.
+            repo_path: Directory to run git commands from (any directory
+                inside the repository). If None, uses the current directory.
+                See the class docstring: this is not the repository root.
         """
         self.repo_path = repo_path or Path.cwd()
+
+    def get_repo_root(self) -> Path:
+        """Return the repository root (``git rev-parse --show-toplevel``).
+
+        ``git diff --name-only`` reports paths relative to the repository
+        root regardless of the directory git runs in, so joining those paths
+        onto :attr:`repo_path` produces garbage whenever the caller is in a
+        subdirectory (an ordinary monorepo layout). Resolve them against this
+        instead.
+
+        Returns:
+            Absolute path to the repository root.
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository.
+            GitError: If the git command fails or times out.
+        """
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError("Git command timed out resolving the repository root") from e
+
+        if result.returncode != 0 or not result.stdout.strip():
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
+
+        return Path(result.stdout.strip())
 
     def is_git_repo(self) -> bool:
         """Check if directory is a git repository.
@@ -122,8 +160,48 @@ class GitRepository:
 
         return result.stdout
 
+    def require_ref(self, ref: str) -> None:
+        """Assert a ref resolves in this checkout, or raise ``GIT_003``.
+
+        A shallow ``actions/checkout`` (the default ``fetch-depth: 1``) has no
+        ``origin/main``, so a gate scoped against it would otherwise fail with
+        git's own wording and no remedy. This is the one git failure a CI
+        author can act on, so it gets its own greppable code.
+
+        Args:
+            ref: The git reference to verify.
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository.
+            GitError: ``GIT_003`` if the ref does not resolve to a commit.
+        """
+        if not self.is_git_repo():
+            raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
+
+        if not _VALID_GIT_REF_RE.match(ref):
+            raise GitError(f"Invalid git reference: {ref!r}")
+
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(f"Git command timed out verifying ref '{ref}'") from e
+
+        if result.returncode != 0:
+            raise GitError(
+                f"Base ref '{ref}' is not available in this checkout. "
+                "In CI, set fetch-depth: 0 (actions/checkout) or run "
+                f"'git fetch --unshallow origin {ref.rsplit('/', 1)[-1]}'.",
+                error_code="GIT_003",
+            )
+
     def get_changed_files(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
-        """Get list of files changed between two refs.
+        """Get list of files changed between two refs (three-dot).
 
         Args:
             base_ref: Base git reference (e.g., "origin/main")
@@ -136,6 +214,12 @@ class GitRepository:
             NotAGitRepositoryError: If not in a git repository
             GitError: If git command fails
 
+        Note:
+            Three-dot ``base...target`` fails with ``no merge base`` in a
+            shallow clone. :meth:`get_changed_files_two_dot`, anchored on
+            :meth:`get_merge_base`, is equivalent whenever a merge base exists
+            and survives when one cannot be computed.
+
         Example:
             >>> repo = GitRepository(Path("."))
             >>> files = repo.get_changed_files("origin/main", "HEAD")
@@ -144,6 +228,32 @@ class GitRepository:
             db/schema/users.sql
             db/migrations/001_add_users.up.sql
         """
+        return self._diff_name_only(f"{base_ref}...{target_ref}", base_ref, target_ref)
+
+    def get_changed_files_two_dot(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
+        """Get list of files changed between two refs (two-dot).
+
+        Two-dot ``base..target`` asks "what does target have that base does
+        not", without needing to compute a merge base — so it works in shallow
+        clones, where three-dot dies with ``fatal: ... no merge base``. Pair it
+        with :meth:`get_merge_base` as the base to recover three-dot semantics
+        wherever a merge base is computable.
+
+        Args:
+            base_ref: Base git reference, typically a merge-base commit
+            target_ref: Target git reference (default "HEAD")
+
+        Returns:
+            List of file paths (relative to repo root) that changed
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository
+            GitError: If git command fails
+        """
+        return self._diff_name_only(f"{base_ref}..{target_ref}", base_ref, target_ref)
+
+    def _diff_name_only(self, spec: str, base_ref: str, target_ref: str) -> list[Path]:
+        """Run ``git diff --name-only <spec>`` and classify failures."""
         if not self.is_git_repo():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
@@ -154,7 +264,7 @@ class GitRepository:
         # Get list of changed files (both added and modified)
         try:
             result = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_ref}...{target_ref}"],
+                ["git", "diff", "--name-only", spec],
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -167,6 +277,16 @@ class GitRepository:
             error_msg = result.stderr.strip()
             if "bad revision" in error_msg or "unknown revision" in error_msg:
                 raise GitError(f"Invalid git reference: {error_msg}")
+            if "no merge base" in error_msg or "unrelated histories" in error_msg:
+                # Shallow clone: the histories are present but truncated before
+                # their fork point. Name the remedy — this message previously
+                # fell into the generic bucket and never mentioned it.
+                raise GitError(
+                    f"Cannot compare '{base_ref}' to '{target_ref}': no merge base. "
+                    "This usually means a shallow clone. In CI, set fetch-depth: 0 "
+                    "(actions/checkout) or run 'git fetch --unshallow'.",
+                    error_code="GIT_003",
+                )
             raise GitError(f"Git command failed: {error_msg}")
 
         if not result.stdout.strip():

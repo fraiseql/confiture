@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext
+from confiture.core.ledger import ledger_exists
 from confiture.exceptions import MigrationError, SQLError
 
 if TYPE_CHECKING:
@@ -22,6 +23,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _qualified_table(migrator: Migrator) -> str:
+    """Reassemble the migrator's tracking table into a single name.
+
+    ``Migrator`` splits the configured ``tracking_table`` into
+    ``_table_schema`` / ``_table_base``; :func:`ledger_exists` takes the
+    combined form.
+    """
+    if migrator._table_schema is not None:
+        return f"{migrator._table_schema}.{migrator._table_base}"
+    return str(migrator._table_base)
+
+
 def initialize(migrator: Migrator) -> None:
     """Create the tracking table (Trinity identity pattern). Idempotent.
 
@@ -29,32 +42,7 @@ def initialize(migrator: Migrator) -> None:
         MigrationError: If table creation fails.
     """
     try:
-        # Check if table exists (schema-aware)
-        with migrator.connection.cursor() as cursor:
-            if migrator._table_schema is not None:
-                cursor.execute(
-                    """
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_schema = %s AND table_name = %s
-                    )
-                    """,
-                    (migrator._table_schema, migrator._table_base),
-                )
-            else:
-                cursor.execute(
-                    """
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_name = %s
-                    )
-                    """,
-                    (migrator._table_base,),
-                )
-            result = cursor.fetchone()
-            table_exists = result[0] if result else False
-
-        if not table_exists:
+        if not ledger_exists(migrator.connection, _qualified_table(migrator)):
             # Create new table with Trinity pattern
             migrator._execute_sql(
                 pgsql.SQL("""
@@ -192,29 +180,7 @@ def get_current_revision_row(migrator: Migrator) -> dict[str, Any] | None:
 
 def tracking_table_exists(migrator: Migrator) -> bool:
     """Return True if the tracking table exists in the database."""
-    with migrator.connection.cursor() as cursor:
-        if migrator._table_schema is not None:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                )
-                """,
-                (migrator._table_schema, migrator._table_base),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_name = %s
-                )
-                """,
-                (migrator._table_base,),
-            )
-        result = cursor.fetchone()
-        return bool(result[0]) if result else False
+    return ledger_exists(migrator.connection, _qualified_table(migrator))
 
 
 def trigger_hook(

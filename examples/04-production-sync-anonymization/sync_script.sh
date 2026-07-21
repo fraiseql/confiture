@@ -93,7 +93,7 @@ check_prerequisites() {
 
     # Check if confiture is installed
     if ! command -v confiture &> /dev/null; then
-        log ERROR "confiture command not found. Install with: pip install confiture"
+        log ERROR "confiture command not found. Install with: pip install fraiseql-confiture"
         exit 1
     fi
 
@@ -258,7 +258,7 @@ verify_anonymization() {
     # First, run built-in confiture verification
     log INFO "Step 1/2: Built-in verification checks..."
 
-    if confiture verify --env staging --config "$CONFIG_FILE" 2>&1 | tee -a "$LOG_FILE"; then
+    if confiture verify-checksums --config "$CONFIG_FILE" 2>&1 | tee -a "$LOG_FILE"; then
         log SUCCESS "Built-in verification passed"
     else
         log ERROR "Built-in verification failed"

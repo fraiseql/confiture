@@ -370,6 +370,42 @@ def resolve_database_url(
     return None
 
 
+def param_is_explicit(ctx: Any, *params: str) -> bool:
+    """Whether any named parameter was set on the command line / via env.
+
+    The generic core of :func:`config_is_explicit`. A typer option with a
+    truthy default cannot be told apart from an operator-supplied value by
+    inspecting the value alone — ``--base-ref`` defaults to ``"origin/main"``,
+    so ``if base_ref:`` is always true. Click's parameter source can tell them
+    apart, and that distinction is what keeps an unscoped ``--idempotent`` run
+    unscoped (#181).
+
+    Compares the ``click.core.ParameterSource`` enum by member name rather than
+    importing it: ``click`` is only a transitive dependency (via typer), so a
+    direct ``import click`` is not guaranteed to resolve. ``ctx`` is already a
+    typer/click Context, so no import is needed.
+
+    Args:
+        ctx: The typer/click context.
+        params: Parameter names to check. A parameter the command does not
+            declare yields no source and is ignored, so passing a superset is
+            safe.
+
+    Returns:
+        True if *any* named parameter was set explicitly; False defensively
+        when no source is available.
+    """
+    for param in params:
+        try:
+            source = ctx.get_parameter_source(param)
+        except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
+            continue
+        name = getattr(source, "name", None)
+        if name is not None and name not in ("DEFAULT", "DEFAULT_MAP"):
+            return True
+    return False
+
+
 def config_is_explicit(ctx: Any, *params: str) -> bool:
     """Whether ``--config`` or ``--env`` was set explicitly, not defaulted (#152).
 
@@ -388,16 +424,11 @@ def config_is_explicit(ctx: Any, *params: str) -> bool:
     importing it: ``click`` is only a transitive dependency (via typer), so a
     direct ``import click`` is not guaranteed to resolve. ``ctx`` is already a
     typer/click Context, so no import is needed.
+
+    Thin wrapper over :func:`param_is_explicit` supplying the ``#152`` default
+    parameter set; the mechanism is shared, the defaults are not.
     """
-    for param in params or ("config", "env"):
-        try:
-            source = ctx.get_parameter_source(param)
-        except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
-            continue
-        name = getattr(source, "name", None)
-        if name is not None and name not in ("DEFAULT", "DEFAULT_MAP"):
-            return True
-    return False
+    return param_is_explicit(ctx, *(params or ("config", "env")))
 
 
 def has_intentional_dsn_source(ctx: Any, flag: str | None, no_config: bool) -> bool:
@@ -535,11 +566,24 @@ def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) 
     console.print("[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]")
 
 
+def _repo_root_for(path: Path) -> Path:
+    """Resolve the project root that owns ``path``, for extractor boundaries.
+
+    Delegates to the extractor's own anchor search so a staged ``.py``
+    migration analyzed from a temp file gets the same ``execute_file``
+    boundary it would have had on disk.
+    """
+    from confiture.core.idempotency.python_migration_extractor import _resolve_project_root
+
+    return _resolve_project_root(path)
+
+
 def _collect_idempotency_report(
     sql_files: list[Path],
     py_files: list[Path],
     validator: Any,
     project_root: Path | None = None,
+    staged_content: dict[Path, str] | None = None,
 ) -> Any:
     """Run the idempotency validator against .sql files and Python migrations.
 
@@ -551,25 +595,48 @@ def _collect_idempotency_report(
     path-boundary checking; passing ``None`` lets the extractor auto-detect
     the root (the nearest ancestor with ``pyproject.toml``, ``.git``, or
     ``db/``).
+
+    ``staged_content`` maps a path to its **staging-index** blob. When a path
+    is present there, that content is analyzed instead of the working tree —
+    the two differ when a file is staged and then edited further, and a
+    pre-commit gate must judge what is about to be committed (#181, D4).
     """
+    import tempfile
+
     from confiture.core.idempotency.models import IdempotencyReport
     from confiture.core.idempotency.python_migration_extractor import (
         extract_sql_from_python_migration,
     )
 
     combined = IdempotencyReport()
+    staged_content = staged_content or {}
 
     for sql_path in sorted(sql_files):
-        if not sql_path.is_file():
+        if sql_path in staged_content:
+            file_report = validator.validate_sql(staged_content[sql_path], file_path=str(sql_path))
+        elif sql_path.is_file():
+            file_report = validator.validate_file(sql_path)
+        else:
             continue
-        file_report = validator.validate_file(sql_path)
         for scanned in file_report.scanned_files:
             combined.add_file_scanned(scanned)
         for violation in file_report.violations:
             combined.add_violation(violation)
 
     for py_path in sorted(py_files):
-        extraction = extract_sql_from_python_migration(py_path, project_root=project_root)
+        if py_path in staged_content:
+            # The extractor only reads from disk, so materialize the index
+            # blob. project_root is passed explicitly, since auto-detection
+            # from a temp directory would find the wrong boundary.
+            with tempfile.TemporaryDirectory() as td:
+                staged_py = Path(td) / py_path.name
+                staged_py.write_text(staged_content[py_path], encoding="utf-8")
+                extraction = extract_sql_from_python_migration(
+                    staged_py,
+                    project_root=project_root or _repo_root_for(py_path),
+                )
+        else:
+            extraction = extract_sql_from_python_migration(py_path, project_root=project_root)
         combined.add_file_scanned(str(py_path))
         combined.warnings.extend(extraction.warnings)
         for snippet in extraction.snippets:
@@ -582,7 +649,92 @@ def _collect_idempotency_report(
     return combined
 
 
-def _idempotent_backend_banner(format_output: str) -> dict[str, str]:
+def _scope_files_to_git(
+    candidates: list[Path],
+    migrations_dir: Path,
+    *,
+    base_ref: str | None,
+    staged: bool,
+) -> tuple[list[Path], dict[str, Any]]:
+    """Narrow ``candidates`` to the files changed on this branch or staged (#181).
+
+    Intersects **glob ∩ diff** rather than iterating the diff, which makes
+    deletions safe by construction: a deleted migration appears in the diff but
+    not in the glob, so it is never handed to the analyzer.
+
+    Args:
+        candidates: The full globbed file set (already on disk).
+        migrations_dir: The directory those files were globbed from.
+        base_ref: Git ref to scope against, or None when ``staged``.
+        staged: Scope to the staging index instead of a ref comparison.
+
+    Returns:
+        ``(selected_files, scope_meta)``.
+
+    Raises:
+        GitError: ``GIT_003`` when the base ref is unreachable in this
+            checkout, or the diff cannot be computed.
+        NotAGitRepositoryError: ``GIT_002`` when not in a git repository.
+        ConfigurationError: When ``migrations_dir`` lies outside the repository,
+            where the intersection could only ever be empty.
+    """
+    from confiture.core.git import GitRepository
+    from confiture.exceptions import ConfigurationError
+
+    repo = GitRepository()
+    if not repo.is_git_repo():
+        from confiture.exceptions import NotAGitRepositoryError
+
+        raise NotAGitRepositoryError(
+            f"Not a git repository: {Path.cwd()}",
+            resolution_hint=(
+                "--base-ref/--since/--staged scope against git history. Run from "
+                "inside a repository, or drop the flag to scan every migration."
+            ),
+        )
+
+    # `git diff --name-only` reports paths relative to the repository ROOT
+    # regardless of the directory git runs in, so they must be resolved against
+    # the root — not against cwd. Getting this wrong yields an empty
+    # intersection and a green gate that scanned nothing.
+    repo_root = repo.get_repo_root().resolve()
+
+    resolved_dir = migrations_dir.resolve()
+    if not resolved_dir.is_relative_to(repo_root):
+        raise ConfigurationError(
+            f"Cannot scope by git: migrations directory {resolved_dir} is outside "
+            f"the repository at {repo_root}",
+            error_code="CONFIG_004",
+            resolution_hint=(
+                "Point --migrations-dir at a directory inside the repository, or "
+                "drop --base-ref/--since/--staged to scan every migration."
+            ),
+        )
+
+    scope_meta: dict[str, Any]
+    if staged or base_ref is None:
+        changed = repo.get_staged_files()
+        scope_meta = {"mode": "staged"}
+    else:
+        # Preflight the ref so an unfetched origin/main names its own remedy
+        # rather than surfacing git's wording.
+        repo.require_ref(base_ref)
+        # Merge-base + two-dot rather than three-dot: equivalent whenever a
+        # merge base exists, and survives shallow clones, where three-dot fails
+        # with "no merge base". get_merge_base already degrades to base_ref.
+        anchor = repo.get_merge_base(base_ref, "HEAD") or base_ref
+        changed = repo.get_changed_files_two_dot(anchor, "HEAD")
+        scope_meta = {"mode": "base-ref", "base_ref": base_ref}
+
+    changed_abs = {(repo_root / path).resolve() for path in changed}
+    selected = [path for path in candidates if path.resolve() in changed_abs]
+
+    scope_meta["files_selected"] = len(selected)
+    scope_meta["files_skipped"] = len(candidates) - len(selected)
+    return selected, scope_meta
+
+
+def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
     """Report which idempotency backend is active.
 
     Text mode prints a one-line banner to ``console`` (stdout) — it's a
@@ -610,12 +762,80 @@ def _idempotent_backend_banner(format_output: str) -> dict[str, str]:
     return {"backend": backend}
 
 
+def _read_staged_content(paths: list[Path]) -> dict[Path, str]:
+    """Read each path's blob from the staging index (``git show :<path>``).
+
+    The index blob is what is about to be committed; it differs from the
+    working tree whenever a file was staged and then edited further. A
+    pre-commit gate must judge the former.
+    """
+    from confiture.core.git import GitRepository
+
+    repo = GitRepository()
+    repo_root = repo.get_repo_root().resolve()
+
+    content: dict[Path, str] = {}
+    for path in paths:
+        rel = path.resolve().relative_to(repo_root)
+        blob = repo.get_staged_file_content(rel)
+        if blob is not None:
+            content[path] = blob
+    return content
+
+
+def _report_empty_scope(
+    scope_meta: dict[str, Any],
+    migrations_dir: Path,
+    meta: dict[str, Any],
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Report "nothing in scope changed" — a real success, distinct from "no files".
+
+    Deliberately *not* the empty-directory message: the remedies differ. An
+    empty directory usually means ``--migrations-dir`` points somewhere wrong;
+    an empty scope means the branch genuinely touched no migrations.
+
+    Emits ``oneOf`` branch 2 of ``migrate-validate-idempotent.schema.json``
+    verbatim (both top-level branches set ``additionalProperties: false``, and
+    branch 2 forbids the scan counters), varying only the ``message`` string.
+    """
+    if scope_meta["mode"] == "staged":
+        message = f"No staged migration files in `{migrations_dir}` — nothing to validate."
+    else:
+        message = (
+            f"No migration files in `{migrations_dir}` changed since "
+            f"{scope_meta['base_ref']} — nothing to validate. "
+            f"({scope_meta['files_skipped']} unchanged file(s) skipped.)"
+        )
+
+    hints: list[dict[str, Any]] = []
+    _emit_hint(message, hints_list=hints, format_=format_output)
+
+    if format_output == "json":
+        _output_json(
+            {
+                "status": "ok",
+                "message": message,
+                "violations": [],
+                "meta": meta,
+                "hints": hints,
+            },
+            output_file,
+            console,
+        )
+    else:
+        console.print(f"[green]✅ {message}[/green]")
+
+
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
     output_file: Path | None,
     *,
     strict_cor: bool = False,
+    base_ref: str | None = None,
+    staged: bool = False,
 ) -> None:
     """Validate idempotency of SQL and Python migration files.
 
@@ -626,6 +846,13 @@ def _validate_idempotency(
         strict_cor: If True, info-severity CREATE OR REPLACE findings flip
             the exit code to 1 (default False — info findings render but
             don't fail the gate).
+        base_ref: Scope to migrations changed since this git ref. ``None``
+            means scan everything — the caller must pass ``None`` unless the
+            operator set ``--base-ref``/``--since`` *explicitly*, since the
+            option's own default (``origin/main``) is truthy and would
+            otherwise scope every run (#181).
+        staged: Scope to staged migrations, reading the index blob rather than
+            the working tree. Takes precedence over ``base_ref``.
     """
     import typer
 
@@ -639,6 +866,36 @@ def _validate_idempotency(
 
     sql_files = sorted(migrations_dir.glob("*.up.sql"))
     py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
+
+    scope_meta: dict[str, Any] | None = None
+    staged_content: dict[Path, str] = {}
+    if staged or base_ref is not None:
+        candidates = sql_files + py_files
+        selected, scope_meta = _scope_files_to_git(
+            candidates, migrations_dir, base_ref=base_ref, staged=staged
+        )
+        meta["scope"] = scope_meta
+        selected_set = {p.resolve() for p in selected}
+        sql_files = [p for p in sql_files if p.resolve() in selected_set]
+        py_files = [p for p in py_files if p.resolve() in selected_set]
+
+        if staged:
+            staged_content = _read_staged_content(selected)
+
+        if not sql_files and not py_files:
+            _report_empty_scope(scope_meta, migrations_dir, meta, format_output, output_file)
+            return
+
+        if format_output == "text":
+            where = (
+                "staged"
+                if scope_meta["mode"] == "staged"
+                else f"changed since {scope_meta['base_ref']}"
+            )
+            console.print(
+                f"[cyan]🔍 Scoped to {scope_meta['files_selected']} migration(s) "
+                f"{where} ({scope_meta['files_skipped']} skipped)[/cyan]"
+            )
 
     if not sql_files and not py_files:
         # Quiet-success ambiguity: "no migrations" can mean the user
@@ -665,7 +922,9 @@ def _validate_idempotency(
             console.print("[green]✅ No migration files found to validate[/green]")
         return
 
-    combined_report = _collect_idempotency_report(sql_files, py_files, validator)
+    combined_report = _collect_idempotency_report(
+        sql_files, py_files, validator, staged_content=staged_content
+    )
     fail = combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
 
     if format_output == "json":

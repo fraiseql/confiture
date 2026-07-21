@@ -178,7 +178,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install confiture
+          pip install fraiseql-confiture
           pip install -r requirements-test.txt
 
       - name: Build database with seeds
@@ -441,7 +441,7 @@ FROM postgres:16-alpine AS builder
 
 # Install Python and Confiture
 RUN apk add --no-cache python3 py3-pip
-RUN pip install confiture
+RUN pip install fraiseql-confiture
 
 # Copy schema and seeds
 COPY db/schema /app/db/schema

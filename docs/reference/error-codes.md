@@ -57,6 +57,7 @@ resolution hint surfaced in the envelope.
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
+| `GIT_003` | 7 | error | Base ref unreachable in this checkout | In CI, set fetch-depth: 0 (actions/checkout) or run 'git fetch --unshallow origin <branch>' |
 | `GIT_800` | 7 | error | Git command failed | Check git repository status |
 | `GIT_801` | 7 | error | Invalid git reference: {ref} | Check the git reference name |
 | `GIT_802` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
