@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Machine-readable exit-code contract for wrapper authors.** Each exit integer
+  `0..8` now carries a stable *semantic class* (`ok`, `internal_error`,
+  `precondition_failed`, `db_unreachable`, `schema_error`, `invalid_config`,
+  `lock_contention`, `git_error`, `irreversible_rollback`), exposed as
+  `EXIT_CODE_SEMANTIC_CLASS` in `confiture.core.error_codes` and emitted as JSON by
+  a new hidden `confiture --exit-codes-json` flag (alongside the human
+  `--exit-codes`). This is the single source of truth the FraiseQL `fraisier`
+  migration adapters (Rust `fraisier-core` and Python `fraisier`) project onto
+  their own error taxonomies, replacing two independently hand-maintained copies
+  that had drifted. The Rust adapter vendors the JSON and diffs it against the live
+  command; the Python adapter reads it when the installed confiture is new enough.
+  The class names are a frozen contract (a rename is a breaking change), covered by
+  `tests/unit/test_exit_code_convention.py` and pinned from the consumer's side in
+  `tests/contract/test_fraisier_adapter_surface.py`. See
+  `docs/reference/exit-codes.md` and `docs/reference/fraisier-adapter-contract.md`.
+
 ## [0.37.0] - 2026-07-20
 
 Ship-gate ergonomics: two contract bugs found by wiring confiture into a CI

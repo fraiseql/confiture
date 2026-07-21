@@ -166,6 +166,22 @@ The full universe of codes is `0..8`; the contract test asserts every observed
 exit code falls within it, and that `PRECON_1001`/`CONFIG_010`/`LOCK_1300` keep
 the integer values the adapter hardcodes.
 
+### Machine-readable classification seam
+
+Each exit integer maps to a stable **semantic class** (`ok`, `internal_error`,
+`precondition_failed`, `db_unreachable`, `schema_error`, `invalid_config`,
+`lock_contention`, `git_error`, `irreversible_rollback`) — the taxonomy both
+fraisier adapters project onto their own error types. Confiture is the single
+source of truth: the table lives in `EXIT_CODE_SEMANTIC_CLASS`
+([`error_codes.py`](../../python/confiture/core/error_codes.py)) and is emitted as
+JSON by **`confiture --exit-codes-json`** (see
+[exit-codes.md](exit-codes.md#semantic-classes-machine-readable)). The Rust adapter
+vendors that JSON and diffs it against the live command in its own contract test;
+the Python adapter reads it directly when the installed confiture is new enough.
+The class names are frozen — a rename is a breaking change requiring a major bump —
+and pinned from confiture's side by
+[`test_fraisier_adapter_surface.py`](../../tests/contract/test_fraisier_adapter_surface.py).
+
 ## Compatibility policy
 
 The exit-code convention and the JSON shapes above are a **stability contract**

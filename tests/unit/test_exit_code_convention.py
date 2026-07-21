@@ -8,6 +8,7 @@ is the enforcement mechanism — a drift between them fails here, not in
 production. Deriving one from the other would make this test a tautology.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -15,11 +16,32 @@ import pytest
 from confiture.core.error_codes import (
     CANONICAL_EXIT_CODES,
     ERROR_CODE_REGISTRY,
+    EXIT_CODE_MEANINGS,
+    EXIT_CODE_SEMANTIC_CLASS,
+    NO_LEDGER_ERROR_CODE,
     render_exit_codes_doc,
+    render_exit_codes_json,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _EXIT_CODES_DOC = _REPO_ROOT / "docs" / "reference" / "exit-codes.md"
+
+# The frozen semantic-class vocabulary — an independent hand-authored source, so a
+# drift from EXIT_CODE_SEMANTIC_CLASS fails here rather than in a consumer's CI.
+# This is the taxonomy the fraisier adapters (Rust + Python) project onto.
+_CANONICAL_CLASSES = frozenset(
+    {
+        "ok",
+        "internal_error",
+        "precondition_failed",
+        "db_unreachable",
+        "schema_error",
+        "invalid_config",
+        "lock_contention",
+        "git_error",
+        "irreversible_rollback",
+    }
+)
 
 
 @pytest.mark.parametrize(
@@ -96,3 +118,46 @@ def test_exit_codes_doc_embeds_current_generated_section() -> None:
     assert embedded == render_exit_codes_doc().strip(), (
         "exit-codes.md generated block is stale; regenerate with `confiture --exit-codes`"
     )
+
+
+# ---------------------------------------------------------------------------
+# Semantic classes — the machine-readable taxonomy the fraisier adapters consume
+# (fraisier-core Rust + fraisier Python). Redundancy against the hand-authored
+# _CANONICAL_CLASSES is the enforcement, exactly as above.
+# ---------------------------------------------------------------------------
+
+
+def test_semantic_class_covers_exactly_the_used_exit_codes() -> None:
+    """Every in-use exit integer has a semantic class, and no stray ones exist."""
+    used = set(CANONICAL_EXIT_CODES.values())
+    assert set(EXIT_CODE_SEMANTIC_CLASS) == used, (
+        f"only classed: {sorted(set(EXIT_CODE_SEMANTIC_CLASS) - used)}; "
+        f"only used: {sorted(used - set(EXIT_CODE_SEMANTIC_CLASS))}"
+    )
+
+
+def test_semantic_classes_are_the_frozen_vocabulary() -> None:
+    """The classes are exactly the 9 frozen names, one per exit code (a bijection)."""
+    assert set(EXIT_CODE_SEMANTIC_CLASS.values()) == _CANONICAL_CLASSES
+    assert len(set(EXIT_CODE_SEMANTIC_CLASS.values())) == len(EXIT_CODE_SEMANTIC_CLASS)
+
+
+def test_no_ledger_error_code_is_precondition_at_exit_two() -> None:
+    """The no-ledger code the adapters key on stays PRECON_1001 → exit 2 → precondition."""
+    assert NO_LEDGER_ERROR_CODE == "PRECON_1001"
+    assert CANONICAL_EXIT_CODES[NO_LEDGER_ERROR_CODE] == 2
+    assert EXIT_CODE_SEMANTIC_CLASS[2] == "precondition_failed"
+
+
+def test_render_exit_codes_json_matches_the_registry() -> None:
+    """The machine-readable emit is generated from the same tables, without drift."""
+    payload = json.loads(render_exit_codes_json())
+    assert payload["no_ledger_error_code"] == NO_LEDGER_ERROR_CODE
+    assert set(payload["classes"]) == _CANONICAL_CLASSES
+    for code_str, entry in payload["exit_codes"].items():
+        code = int(code_str)
+        assert entry["class"] == EXIT_CODE_SEMANTIC_CLASS[code]
+        assert entry["meaning"] == EXIT_CODE_MEANINGS[code]
+        symbols = sorted(c for c, ec in CANONICAL_EXIT_CODES.items() if ec == code)
+        assert entry["symbolic_codes"] == symbols
+    assert {int(c) for c in payload["exit_codes"]} == set(CANONICAL_EXIT_CODES.values())

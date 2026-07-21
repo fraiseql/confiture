@@ -33,7 +33,29 @@ from referencing.jsonschema import DRAFT202012
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.core.error_codes import CANONICAL_EXIT_CODES, EXIT_CODE_MEANINGS
+from confiture.core.error_codes import (
+    CANONICAL_EXIT_CODES,
+    EXIT_CODE_MEANINGS,
+    EXIT_CODE_SEMANTIC_CLASS,
+)
+
+# The frozen semantic-class vocabulary the fraisier adapters project onto. Pinned
+# here as a cross-repo stability commitment (a rename is a breaking change): the
+# Rust adapter vendors `confiture --exit-codes-json` and diffs it, the Python
+# adapter reads it — a rename here would silently split the two taxonomies.
+EXPECTED_SEMANTIC_CLASSES = frozenset(
+    {
+        "ok",
+        "internal_error",
+        "precondition_failed",
+        "db_unreachable",
+        "schema_error",
+        "invalid_config",
+        "lock_contention",
+        "git_error",
+        "irreversible_rollback",
+    }
+)
 
 runner = CliRunner()
 # Strip ANSI: CI (FORCE_COLOR) renders colored help that splits flag tokens.
@@ -120,6 +142,30 @@ def test_migrations_dir_gating_matches_adapter() -> None:
 def test_documented_exit_code_set_is_frozen() -> None:
     """The documented exit-code universe is exactly 0..8 (exit-codes.md contract)."""
     assert set(EXIT_CODE_MEANINGS) == set(range(9))
+
+
+def test_exit_codes_json_seam_is_the_adapter_contract() -> None:
+    """`confiture --exit-codes-json` is the machine-readable table the adapters read.
+
+    The Rust adapter vendors this exact output and diffs it in its own contract
+    test; the Python adapter reads it when the installed confiture is new enough.
+    Pin the shape, the frozen 9-class vocabulary, and the one-class-per-exit-code
+    (``0..8``) invariant so a drift fails confiture's CI, not a downstream deploy.
+    """
+    result = runner.invoke(app, ["--exit-codes-json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(_ANSI.sub("", result.output))
+
+    assert payload["no_ledger_error_code"] == UNINITIALISED_ERROR_CODE
+    assert set(payload["classes"]) == EXPECTED_SEMANTIC_CLASSES
+    # One class per documented exit integer, and the map agrees with the registry.
+    assert {int(c) for c in payload["exit_codes"]} == set(range(9))
+    for code_str, entry in payload["exit_codes"].items():
+        assert entry["class"] == EXIT_CODE_SEMANTIC_CLASS[int(code_str)]
+        assert entry["class"] in EXPECTED_SEMANTIC_CLASSES
+    # The no-ledger code the adapters key on is exit 2 → precondition_failed.
+    assert payload["exit_codes"]["2"]["class"] == "precondition_failed"
+    assert UNINITIALISED_ERROR_CODE in payload["exit_codes"]["2"]["symbolic_codes"]
 
 
 def test_adapter_pinned_error_codes_keep_their_exit_numbers() -> None:
