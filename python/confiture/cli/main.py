@@ -143,6 +143,21 @@ def exit_codes_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def exit_codes_json_callback(value: bool) -> None:
+    """Print the machine-readable exit-code contract as JSON and exit.
+
+    The stable seam wrapper authors (the fraisier adapters) parse to keep their
+    exit-code classifiers in lockstep with this contract. Emitted with
+    ``typer.echo`` — raw, never through the Rich console, so the JSON's ``[``/``]``
+    are not mistaken for markup and no soft-wrapping corrupts the payload.
+    """
+    if value:
+        from confiture.core.error_codes import render_exit_codes_json
+
+        typer.echo(render_exit_codes_json())
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     version: bool = typer.Option(
@@ -159,6 +174,14 @@ def main(
         is_eager=True,
         hidden=True,
         help="Print the canonical exit-code convention and exit",
+    ),
+    exit_codes_json: bool = typer.Option(
+        False,
+        "--exit-codes-json",
+        callback=exit_codes_json_callback,
+        is_eager=True,
+        hidden=True,
+        help="Print the machine-readable exit-code contract (JSON) and exit",
     ),
 ) -> None:
     """Confiture - PostgreSQL migrations, sweetly done 🍓."""

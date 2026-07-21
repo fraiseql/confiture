@@ -32,6 +32,7 @@ docs/reference/exit-codes.md and CANONICAL_EXIT_CODES below for the contract):
     (carve-out: LINT_1501 non-blocking advisory → 0)
 """
 
+import json
 from dataclasses import dataclass
 
 from confiture.models.error import ErrorSeverity
@@ -963,6 +964,71 @@ EXIT_CODE_MEANINGS: dict[int, str] = {
     7: "Git / pgGit / grant-accompaniment error",
     8: "Irreversible rollback, or inconsistent state after rollback",
 }
+
+# The canonical *semantic class* per exit integer — the machine-readable taxonomy
+# the fraisier migration adapters (Rust ``fraisier-core`` and Python ``fraisier``)
+# project onto their own error types. It is a stability contract alongside
+# ``EXIT_CODE_MEANINGS``: exactly one class per documented exit code, and the class
+# names are frozen (a rename is a breaking change requiring a major bump and a
+# CHANGELOG note). Consumers keep an identical table verified against
+# ``render_exit_codes_json`` / ``confiture --exit-codes-json`` so a drift fails CI
+# on both sides. See docs/reference/exit-codes.md and fraisier-adapter-contract.md.
+EXIT_CODE_SEMANTIC_CLASS: dict[int, str] = {
+    0: "ok",
+    1: "internal_error",
+    2: "precondition_failed",
+    3: "db_unreachable",
+    4: "schema_error",
+    5: "invalid_config",
+    6: "lock_contention",
+    7: "git_error",
+    8: "irreversible_rollback",
+}
+
+# The symbolic error code (exit 2) for a reachable-but-uninitialised database — no
+# migration ledger. It is the one code a consumer keys on to recognise "no ledger"
+# when only the structured ``--format json`` envelope (not the exit integer) is in
+# hand, and to distinguish it from any unrelated failure.
+NO_LEDGER_ERROR_CODE = "PRECON_1001"
+
+
+def render_exit_codes_json() -> str:
+    """Render the exit-code contract as machine-readable JSON for wrapper authors.
+
+    The fraisier migration adapters consume this (Rust vendors it and diffs it
+    against ``confiture --exit-codes-json``; Python reads it when the installed
+    confiture is new enough) to keep their exit-code classifiers in lockstep with
+    this frozen contract. Generated from the same hand-authored tables the Markdown
+    reference is (``CANONICAL_EXIT_CODES`` + ``EXIT_CODE_MEANINGS`` +
+    ``EXIT_CODE_SEMANTIC_CLASS``), so the two can never drift.
+
+    Returns:
+        A stable (sorted-key, 2-space-indented) JSON document with the shape::
+
+            {
+              "no_ledger_error_code": "PRECON_1001",
+              "classes": [<the 9 semantic class names, in exit order>],
+              "exit_codes": {
+                "<n>": {"class": ..., "meaning": ..., "symbolic_codes": [...]},
+                ...
+              }
+            }
+    """
+    used_codes = sorted(set(CANONICAL_EXIT_CODES.values()))
+    exit_codes = {
+        str(code): {
+            "class": EXIT_CODE_SEMANTIC_CLASS[code],
+            "meaning": EXIT_CODE_MEANINGS.get(code, "(reserved)"),
+            "symbolic_codes": sorted(c for c, ec in CANONICAL_EXIT_CODES.items() if ec == code),
+        }
+        for code in used_codes
+    }
+    payload = {
+        "no_ledger_error_code": NO_LEDGER_ERROR_CODE,
+        "classes": [EXIT_CODE_SEMANTIC_CLASS[code] for code in used_codes],
+        "exit_codes": exit_codes,
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def render_exit_codes_doc() -> str:

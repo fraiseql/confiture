@@ -178,6 +178,49 @@ Going forward, the exit-code convention is **frozen**:
 The one sanctioned break before this contract took effect was the #146
 renumbering documented in the reconciliation appendix above.
 
+## Semantic classes (machine-readable)
+
+Each exit integer also carries a stable **semantic class** — a short token wrapper
+authors branch on instead of the bare number. The classes are a frozen contract
+alongside the meanings above (renaming one is a breaking change): exactly one class
+per exit code, from this fixed set.
+
+| Exit | Class |
+|------|-------|
+| 0 | `ok` |
+| 1 | `internal_error` |
+| 2 | `precondition_failed` |
+| 3 | `db_unreachable` |
+| 4 | `schema_error` |
+| 5 | `invalid_config` |
+| 6 | `lock_contention` |
+| 7 | `git_error` |
+| 8 | `irreversible_rollback` |
+
+The authoritative source is `EXIT_CODE_SEMANTIC_CLASS` in
+[`error_codes.py`](../../python/confiture/core/error_codes.py). Emit the whole
+contract as JSON with **`confiture --exit-codes-json`**:
+
+```json
+{
+  "no_ledger_error_code": "PRECON_1001",
+  "classes": ["ok", "internal_error", "precondition_failed", "…"],
+  "exit_codes": {
+    "2": {
+      "class": "precondition_failed",
+      "meaning": "Tracking table absent …",
+      "symbolic_codes": ["PRECON_1001"]
+    }
+  }
+}
+```
+
+This is the seam the FraiseQL `fraisier` migration adapters consume to keep their
+own exit-code classifiers in lockstep with this contract (the Rust adapter vendors
+the JSON and diffs it against the live command; the Python adapter reads it when
+the installed confiture is new enough). See the [fraisier adapter
+contract](fraisier-adapter-contract.md).
+
 ## See also
 
 - [Symbolic error-code reference](../error-reference.md)
