@@ -630,13 +630,20 @@ def migrate_validate(
         # ConfigurationError, funneled through the fail() boundary below).
         config = _resolve_config(config, env)
 
+        # The git checks build the expected schema via GitSchemaBuilder(env),
+        # so --env must reach them: on projects whose `local` env includes
+        # seed data, pointing at a DDL-only env is the difference between a
+        # working gate and a silent no-op (#194). --config-only callers keep
+        # the historical "local" default.
+        git_env = env or "local"
+
         # Handle git validation flags
         # Report-only backlog listing (#178) — never fails, exits 0.
         if list_unmigrated_bodies:
             from confiture.cli.git_validation import report_unmigrated_bodies
 
             body_result = report_unmigrated_bodies(
-                env="local",
+                env=git_env,
                 base_ref=since or base_ref,
                 target_ref="HEAD",
                 console=console,
@@ -685,7 +692,7 @@ def migrate_validate(
             if check_drift:
                 try:
                     drift_result = validate_git_drift(
-                        env="local",
+                        env=git_env,
                         base_ref=effective_base_ref,
                         target_ref=target_ref,
                         console=console,
@@ -708,7 +715,7 @@ def migrate_validate(
             if require_migration or require_migration_bodies:
                 try:
                     acc_result = validate_migration_accompaniment(
-                        env="local",
+                        env=git_env,
                         base_ref=effective_base_ref,
                         target_ref=target_ref,
                         console=console,
