@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-07-29
+
+`migrate validate` git checks: honor `--env`, and never go blind on seed data (#194, PR #195).
+
+### Fixed
+
+- **`--check-drift` / `--require-migration[-bodies]` / `--list-unmigrated-bodies` now honor `--env`.**
+  All four checks previously called the git-validation layer with a hardcoded
+  `env="local"`, silently ignoring `--env`. Pointing the DDL-accompaniment gate at a
+  DDL-only environment (`--env production`) is the natural setup when the local
+  environment embeds seed data — the flag now reaches `GitSchemaBuilder`.
+  `--config`-only callers keep the historical `local` default.
+- **`SchemaDiffer.parse_schema` survives `COPY … FROM stdin` blocks.** Inline COPY
+  data is psql client protocol, not parseable SQL; one such block anywhere in a
+  concatenated schema made `pglast.parse_sql()` raise, and the silent sqlparse
+  fallback then missed DDL past its token limits — so
+  `migrate validate --require-migration` reported "No DDL changes detected" while
+  blind (observed: a probe `CREATE TABLE` sailing through a downstream ship gate,
+  with sqlparse parsing 556 of 637 tables). COPY-stdin blocks (statement through the
+  `\.` terminator) are now stripped before any parser or regex pass.
+- **The pglast→sqlparse fallback logs a warning** instead of degrading silently —
+  a gate that quietly loses its parser is worse than one that fails loudly.
+
 ## [0.38.0] - 2026-07-21
 
 Machine-readable exit-code contract: confiture becomes the single source of truth for the `(exit_code → semantic class)` taxonomy the FraiseQL `fraisier` migration adapters branch on, replacing two independently hand-maintained (and drifting) copies.
