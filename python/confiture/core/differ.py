@@ -6,6 +6,7 @@ This module provides functionality to:
 - Generate migrations from schema diffs
 """
 
+import logging
 import re
 from typing import Any
 
@@ -139,6 +140,18 @@ _INDEX_RE = re.compile(
 # before passing individual statements to sqlparse (avoids MAX_GROUPING_TOKENS crash).
 _DDL_PREFIXES = ("CREATE", "ALTER", "DROP", "TRUNCATE", "COMMENT")
 
+logger = logging.getLogger(__name__)
+
+# ``COPY … FROM stdin;`` + inline rows + ``\.`` terminator is psql client
+# protocol, not SQL — pglast rejects the data lines, and one such block
+# anywhere in a concatenated schema used to kill the whole pglast pass (#194).
+# The data lines are free-form text (semicolons, quotes, SQL-looking noise),
+# so the block is stripped wholesale, COPY statement through terminator.
+_COPY_STDIN_RE = re.compile(
+    r"^COPY\s.*?\bFROM\s+stdin\b.*?;.*?^\\\.[ \t]*$\n?",
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
 # pglast reports internal type aliases rather than the SQL keyword the user wrote.
 # Map them back to the canonical names in _COLUMN_TYPE_MAP.
 _PGLAST_TYPE_ALIASES: dict[str, str] = {
@@ -224,6 +237,11 @@ class SchemaDiffer:
         if not sql or not sql.strip():
             return ParsedSchema()
 
+        # Strip inline-COPY data blocks before ANY parser or regex pass sees
+        # the text: pglast rejects them outright (#194), and the free-form data
+        # lines could false-match the regex passes below.
+        sql = _COPY_STDIN_RE.sub("", sql)
+
         result = ParsedSchema()
 
         # Primary path: pglast — uses PostgreSQL's actual C parser, no token limits.
@@ -291,8 +309,15 @@ class SchemaDiffer:
         """
         try:
             tree = pglast.parse_sql(sql)
-        except Exception:
-            # pglast parse error (e.g. non-PostgreSQL syntax) — fall back to sqlparse
+        except Exception as exc:
+            # pglast parse error (e.g. non-PostgreSQL syntax) — fall back to
+            # sqlparse. Never silently: sqlparse has token limits and can miss
+            # DDL, which turned a blocking accompaniment gate into a no-op (#194).
+            logger.warning(
+                "pglast failed to parse schema (%s) — falling back to sqlparse, "
+                "which may miss DDL beyond its token limits",
+                exc,
+            )
             self._parse_create_tables_sqlparse(sql, result)
             return
 
