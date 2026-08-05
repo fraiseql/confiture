@@ -59,10 +59,13 @@ jobs:
         # Create virtual environment with uv
         uv venv
 
-        # Install all dependencies, including the [notifications] and [ast]
-        # extras — tests/unit/hooks/notifications/ requires jinja2, and the
-        # SQL parsers depend on pglast for the primary path.
-        uv pip install ".[dev,notifications,ast]"
+        # Sync from the COMMITTED uv.lock so this run is a function of the
+        # commit alone (#191). --locked fails loudly when the lock has drifted
+        # from pyproject.toml; the fix is `uv lock` + commit, never a silent
+        # re-resolve. The [notifications] and [ast] extras are required —
+        # tests/unit/hooks/notifications/ requires jinja2, and the SQL parsers
+        # depend on pglast for the primary path.
+        uv sync --locked --extra dev --extra notifications --extra ast
 
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv
@@ -118,6 +121,51 @@ jobs:
         fail_ci_if_error: false
       continue-on-error: true
 
+  # The lockfile pins ONE pglast. That is right for reproducibility and wrong
+  # for a library whose `[ast]` extra accepts a range: #192 was a silent
+  # misclassification that only appeared on the version CI did not install.
+  # This leg walks the range's ends explicitly.
+  pglast-matrix:
+    name: AST backend (pglast ${{ matrix.pglast }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the current major. Both are claimed by the `[ast]`
+        # extra's `pglast>=6.0`, so both are tested.
+        pglast: ['>=6,<7', '>=8']
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+    - name: Install dependencies, then override pglast
+      run: |
+        uv venv
+        # Locked tree first (#191), then deliberately step pglast off the lock —
+        # `uv pip install` does not touch uv.lock, so this overrides exactly one
+        # package and leaves the rest reproducible.
+        uv sync --locked --no-install-project --extra dev --extra notifications --extra ast
+        uv pip install "pglast${{ matrix.pglast }}"
+        uv run --no-sync python -c "import pglast; print('pglast', pglast.__version__)"
+    - name: Run the AST-backed suites
+      # --no-sync: a re-sync would restore the locked pglast and silently
+      # test the wrong thing — which is this leg's entire failure mode.
+      run: |
+        uv run --no-sync pytest \
+          tests/unit/idempotency \
+          tests/unit/test_operation_classifier.py \
+          tests/unit/test_replica_corpus.py \
+          tests/unit/test_replica_rule.py \
+          tests/unit/test_replica_preflight.py \
+          tests/unit/test_idempotency_captures.py \
+          tests/unit/test_idempotency_suggestion_wiring.py \
+          tests/unit/test_pglast_enum_binding.py \
+          -q
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -168,7 +216,7 @@ jobs:
         # WITHOUT building the project (--no-install-project), so no Rust toolchain
         # is needed here — ty skips the `_core` import via TYPE_CHECKING.
         uv venv
-        uv sync --no-install-project --all-extras
+        uv sync --locked --no-install-project --all-extras
         # Pinned: ty is pre-1.0 and adds default rules frequently, so an unpinned
         # install can turn CI red on an unrelated PR. Keep in lockstep with the ty
         # pre-commit hook / dev extra, deliberately.
@@ -193,7 +241,9 @@ jobs:
       run: cargo fmt --check
 
     - name: Run cargo clippy
-      run: cargo clippy -- -D warnings
+      # --locked: resolve from the committed Cargo.lock (#191), so an upstream
+      # crate release cannot turn an unrelated PR red.
+      run: cargo clippy --locked -- -D warnings
 
   security:
     name: Security
@@ -233,7 +283,7 @@ jobs:
   quality-gate:
     name: Quality Gate ✅
     runs-on: ubuntu-latest
-    needs: [test, lint, type-check, rust-checks, security]
+    needs: [test, pglast-matrix, lint, type-check, rust-checks, security]
     if: always()
     steps:
       - name: Check quality gate status
@@ -241,6 +291,13 @@ jobs:
           # This job will fail if any of the required jobs failed
           if [[ "${{ needs.test.result }}" != "success" ]]; then
             echo "❌ Tests failed - Quality gate blocked"
+            exit 1
+          fi
+          # Required, not advisory: the `[ast]` extra accepts pglast >=6.0, and
+          # #192 was a silent misclassification on a version the lock did not
+          # pin. An advisory leg here would have let it ship again.
+          if [[ "${{ needs.pglast-matrix.result }}" != "success" ]]; then
+            echo "❌ AST backend matrix failed - Quality gate blocked"
             exit 1
           fi
           if [[ "${{ needs.lint.result }}" != "success" ]]; then

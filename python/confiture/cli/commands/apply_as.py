@@ -22,7 +22,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.error_json import fail
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import _get_tracking_table, console, is_json
 from confiture.core.connection import load_config, load_migration_class
 from confiture.exceptions import ConfigurationError, MigrationError
 
@@ -160,7 +160,10 @@ def migrate_apply_as(
         )
 
     try:
-        tracking_table = config_data.get("migration", {}).get("tracking_table") or "tb_confiture"
+        # The shared resolver, not a local re-implementation: it also handles
+        # Environment objects and coerces a non-string candidate to the default
+        # rather than leaking it into an SQL identifier (#152).
+        tracking_table = _get_tracking_table(config_data)
         migrator = Migrator(connection=conn, migration_table=tracking_table)
         migrator.initialize()
 

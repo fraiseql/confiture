@@ -1324,18 +1324,19 @@ def migrate_introspect(
                 snap_count = len(list(snapshots_dir.glob("*.sql")))
                 console.print(f"  ({snap_count} snapshot(s) found)")
             console.print(
-                f"  tb_confiture: {'PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]'}"
+                f"  {_get_tracking_table(config_data)}: "
+                f"{'PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]'}"
             )
 
         if not snapshots_dir.exists():
             if format_output == "json":
                 print(
                     json.dumps(
-                        {
-                            "tb_confiture_present": tb_present,
-                            "detected_version": None,
-                            "error": "snapshots_dir not found",
-                        },
+                        _introspect_payload(
+                            tb_present,
+                            detected_version=None,
+                            error="snapshots_dir not found",
+                        ),
                         indent=2,
                     )
                 )
@@ -1370,13 +1371,15 @@ def migrate_introspect(
             if format_output == "json":
                 print(
                     json.dumps(
-                        {
-                            "tb_confiture_present": tb_present,
-                            "detected_version": detected_version,
-                            "detected_migration_name": detected_name,
-                            "confidence": "exact",
-                            "recommendation": f"confiture migrate baseline --through {detected_version}",
-                        },
+                        _introspect_payload(
+                            tb_present,
+                            detected_version=detected_version,
+                            detected_migration_name=detected_name,
+                            confidence="exact",
+                            recommendation=(
+                                f"confiture migrate baseline --through {detected_version}"
+                            ),
+                        ),
                         indent=2,
                     )
                 )
@@ -1395,11 +1398,9 @@ def migrate_introspect(
         else:
             closest = detector.last_closest
             if format_output == "json":
-                result: dict = {
-                    "tb_confiture_present": tb_present,
-                    "detected_version": None,
-                    "confidence": "none",
-                }
+                result: dict = _introspect_payload(
+                    tb_present, detected_version=None, confidence="none"
+                )
                 if closest:
                     result["closest_version"] = closest[0]
                     result["closest_similarity"] = round(closest[1], 4)
@@ -2048,30 +2049,89 @@ def _preflight_version_from_filename(filename: str) -> str:
     return filename.split("_")[0]
 
 
-def _target_tracking_table_is_empty(session: MigratorSession) -> bool:
-    """Return True when the preflight target's ``tb_confiture`` is empty / missing.
+def _introspect_payload(ledger_present: bool, **extra: Any) -> dict[str, Any]:
+    """Build ``migrate introspect``'s JSON payload (#186).
 
-    A best-effort probe: any database error (table missing, permission
-    denied, connection drop) is treated as "looks empty" — the worst
-    case is emitting an extra hint, which is advisory anyway.
+    Emits **both** spellings during the deprecation window:
+
+    * ``ledger_present`` — forward-correct and table-name-agnostic, the
+      spelling ``migrate verify`` adopted in 0.37.0;
+    * ``tb_confiture_present`` — **deprecated**, hardcodes the default table
+      name and is wrong for any project that configured ``tracking_table``.
+
+    One builder for all three emit sites, because the point of a deprecation
+    window is that the two keys agree throughout it. ``tb_confiture_present``
+    is removed in 0.40.0.
+    """
+    return {"ledger_present": ledger_present, "tb_confiture_present": ledger_present, **extra}
+
+
+def _preflight_tracking_table(config: Path | None) -> str:
+    """Resolve the configured ledger name for the preflight target (#190).
+
+    Falls back to the default only when there is no config to read — never
+    because the name was hardcoded.
+    """
+    if config is None or not Path(config).exists():
+        return "tb_confiture"
+
+    from confiture.cli.helpers import _get_tracking_table  # noqa: PLC0415
+    from confiture.core.connection import load_config  # noqa: PLC0415
+
+    try:
+        return _get_tracking_table(load_config(Path(config)))
+    except (OSError, ValueError, ConfigurationError):
+        # An unreadable or malformed config: the preflight run itself fails
+        # loudly a few lines later, so this advisory probe just defaults. The
+        # catch is deliberately narrow — a bare `except Exception` here masked
+        # a NameError and made this function silently return the default.
+        return "tb_confiture"
+
+
+def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[bool, bool]:
+    """Return ``(exists, is_empty)`` for the preflight target's ledger.
+
+    Split apart (#190) because the caller's hint means different things for the
+    two states: a ledger that is *absent* was probably dropped during
+    anonymization, while one that is *present but empty* was probably truncated.
+    The old probe collapsed both — plus every error — into a single "looks
+    empty" boolean, and queried the literal ``tb_confiture`` regardless of
+    ``tracking_table``, which raises ``UndefinedTable`` on any project that
+    renamed its ledger.
+
+    Best-effort: presence comes from :func:`core.ledger.ledger_exists`, and any
+    database error still degrades to "absent and empty", because the worst case
+    is one extra advisory hint.
     """
     import contextlib
 
+    from psycopg import sql as pgsql
+
+    from confiture.core.ledger import ledger_exists  # noqa: PLC0415
+
     conn = getattr(session, "_conn", None)
     if conn is None:
-        return False
+        return (False, False)
+
     try:
+        if not ledger_exists(conn, table):
+            with contextlib.suppress(Exception):
+                conn.rollback()
+            return (False, True)
+
+        schema, _, base = table.partition(".")
+        ident = pgsql.Identifier(schema, base) if base else pgsql.Identifier(schema)
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM tb_confiture LIMIT 1")
+            cur.execute(pgsql.SQL("SELECT 1 FROM {} LIMIT 1").format(ident))
             row = cur.fetchone()
         # Roll back any aborted transaction state so run_against starts clean.
         with contextlib.suppress(Exception):
             conn.rollback()
-        return row is None
-    except Exception:  # noqa: BLE001 — best-effort: missing table / perm denied
+        return (True, row is None)
+    except Exception:  # noqa: BLE001 — best-effort: permission denied / connection drop
         with contextlib.suppress(Exception):
             conn.rollback()
-        return True
+        return (False, True)
 
 
 def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tuple[bool, bool]:
@@ -2595,19 +2655,25 @@ def migrate_preflight(
         )
 
     target_tracking_empty = False
+    target_tracking_exists = True
+    # Resolved once and threaded through the override, the probe and the hint
+    # (#190) — three sites that previously each spelled the default by hand.
+    target_tracking_table = _preflight_tracking_table(config)
     try:
         session = MigratorSession(
             config=None,
             migrations_dir=migrations_dir,
             database_url_override=against,
-            migration_table_override="tb_confiture",
+            migration_table_override=target_tracking_table,
         )
         with session:
             # Snapshot whether the target's tracking table is empty BEFORE
             # the SAVEPOINT-bounded run_against — used to emit a
             # quiet-success hint when the target looks like a restored
             # backup with the tracking table stripped.
-            target_tracking_empty = _target_tracking_table_is_empty(session)
+            target_tracking_exists, target_tracking_empty = _target_tracking_table_state(
+                session, target_tracking_table
+            )
             against_result = session.run_against(
                 pending_files,
                 against_url=against,
@@ -2637,9 +2703,10 @@ def migrate_preflight(
         )
 
     if target_tracking_empty and pending_files:
+        _state = "is empty" if target_tracking_exists else "is missing"
         _emit_hint(
-            "`tb_confiture` on the target is empty. If --against points at a "
-            "restored backup, was the tracking table dropped during "
+            f"`{target_tracking_table}` on the target {_state}. If --against points "
+            "at a restored backup, was the tracking table dropped during "
             "anonymization?",
             # The unified --against envelope (#151) has no `hints` array; in
             # text mode this still prints the breadcrumb to stderr.

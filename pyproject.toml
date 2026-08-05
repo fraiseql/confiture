@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "0.38.1"
+version = "0.39.0"
 description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -62,7 +62,7 @@ dev = [
     "ruff>=0.6.0",
     "ty>=0.0.7",  # Astral's ultra-fast type checker (replaces mypy)
     "maturin>=1.7.0",
-    "pglast>=6.0,<8",  # see the `ast` extra for why the upper bound is pinned
+    "pglast>=6.0",  # see the `ast` extra; uncapped since 0.39.0 (#192)
     "fastapi>=0.111",
     "httpx>=0.27",
     "jsonschema>=4",  # Validate JSON output schemas in docs/reference/json-schemas/
@@ -79,24 +79,32 @@ fraiseql = [
 # was deleted (ECO-rec2). This OPT-IN extra pulls in the canonical definition for
 # projects that want structured-pattern validation, and lets the convention-seam
 # guard test (tests/unit/test_uuid_convention_seam.py) assert alignment when present.
-# Not installed by CI (no workflow uses --all-extras); core install never requires it.
+# Core install never requires it. It IS present in the type-check leg, which syncs
+# --all-extras; the test legs sync only dev/notifications/ast, so the seam test's
+# alignment half stays skipped there.
 seed-uuid = [
     "fraiseql-uuid>=0.1.3",
 ]
 
 ast = [
-    # Upper bound is deliberate. pglast 8.0 reshaped the AST that
-    # `core/idempotency/ast_detector.py`, `core/linting/libraries/security_definer.py`
-    # and `core/operation_classifier.py` walk — ALTER TABLE subtype handling,
-    # OWNER TO detection and constraint nodes all moved, which is 19 test
-    # failures and 3 ty errors, not a typing nit. Supporting 8.x is real work
-    # with its own risk surface; until then, cap rather than resolve into it.
+    # Deliberately UNCAPPED again as of 0.39.0 (#192). The `<8` bound existed
+    # because the AST visitors compared `cmd.subtype` against hardcoded enum
+    # ordinals, and PG18's insertion into `AlterTableType` shifted every member
+    # at index >= 13 down by one under pglast 8 — which dropped operations
+    # SILENTLY and could report a replica-unsafe migration as
+    # `window_safe: true`.
     #
-    # This matters more than usual here: `uv.lock` is gitignored, so CI resolves
-    # the dependency tree fresh on every run. An unbounded specifier means an
-    # upstream major release turns CI red on an unrelated PR — which is exactly
-    # what pglast 8.2 (2026-07-10) did to the first PR opened after it landed.
-    "pglast>=6.0,<8",
+    # The members are now resolved BY NAME at import
+    # (`core/_pglast_enums.py`), so a renumbering cannot reach the visitors.
+    # `tests/unit/test_pglast_enum_binding.py` fails if a literal reappears or
+    # if upstream drops a member confiture walks, and CI runs the suite on both
+    # 7.x and 8.x. Verified green on 6.16, 7.14/7.17 and 8.4 — the >=6.0 floor
+    # is measured, not inherited.
+    #
+    # Reproducibility is no longer this specifier's job: `uv.lock` is committed
+    # and CI syncs `--locked` (#191), so an upstream release lands on the
+    # scheduled bump PR instead of on someone's unrelated feature branch.
+    "pglast>=6.0",
 ]
 
 mcp-http = [

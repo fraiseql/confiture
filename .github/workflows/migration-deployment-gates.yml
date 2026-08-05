@@ -150,7 +150,9 @@ jobs:
     - name: Setup environment
       run: |
         uv venv
-        uv pip install ".[dev,testing]"
+        # Sync from the committed uv.lock (#191) so the run is a function of
+        # the commit alone. Regenerate with `uv lock` and commit it.
+        uv sync --locked --extra dev --extra testing
 
     - name: Verify PostgreSQL Connection
       env:
@@ -221,7 +223,9 @@ jobs:
     - name: Setup environment
       run: |
         uv venv
-        uv pip install ".[dev,testing]"
+        # Sync from the committed uv.lock (#191) so the run is a function of
+        # the commit alone. Regenerate with `uv lock` and commit it.
+        uv sync --locked --extra dev --extra testing
 
     - name: Verify PostgreSQL
       env:
@@ -291,7 +295,9 @@ jobs:
     - name: Setup environment
       run: |
         uv venv
-        uv pip install ".[dev,testing]"
+        # Sync from the committed uv.lock (#191) so the run is a function of
+        # the commit alone. Regenerate with `uv lock` and commit it.
+        uv sync --locked --extra dev --extra testing
 
     - name: Verify PostgreSQL
       env:

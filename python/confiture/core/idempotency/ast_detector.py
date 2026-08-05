@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from typing import TYPE_CHECKING
 
+from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency._ast_visitor import (
     _extract_snippet_from_stmt,
     _iter_statements,
@@ -71,29 +72,34 @@ def is_pglast_available() -> bool:
 # Enum constants
 # ---------------------------------------------------------------------------
 
-# pglast.enums.parsenodes.ObjectType
-_OBJECT_TABLE = 41
-_OBJECT_VIEW = 51
-_OBJECT_MATVIEW = 23
-_OBJECT_INDEX = 20
-_OBJECT_FUNCTION = 19
-_OBJECT_PROCEDURE = 29
-_OBJECT_TYPE = 49
-_OBJECT_SCHEMA = 36
-_OBJECT_SEQUENCE = 37
-_OBJECT_COLUMN = 6
+# Resolved BY NAME, never by literal ordinal (#192). ObjectType and ConstrType
+# happen to be stable across pglast 7 and 8 while AlterTableType is not — but
+# the bug class is "literal ordinal", not "this particular literal ordinal", so
+# leaving the stable ones as literals would just invite the next addition.
+_OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
+_OBJECT_VIEW = _pg_member("ObjectType", "OBJECT_VIEW")
+_OBJECT_MATVIEW = _pg_member("ObjectType", "OBJECT_MATVIEW")
+_OBJECT_INDEX = _pg_member("ObjectType", "OBJECT_INDEX")
+_OBJECT_FUNCTION = _pg_member("ObjectType", "OBJECT_FUNCTION")
+_OBJECT_PROCEDURE = _pg_member("ObjectType", "OBJECT_PROCEDURE")
+_OBJECT_TYPE = _pg_member("ObjectType", "OBJECT_TYPE")
+_OBJECT_SCHEMA = _pg_member("ObjectType", "OBJECT_SCHEMA")
+_OBJECT_SEQUENCE = _pg_member("ObjectType", "OBJECT_SEQUENCE")
+_OBJECT_COLUMN = _pg_member("ObjectType", "OBJECT_COLUMN")
 
-# pglast.enums.parsenodes.AlterTableType
-_AT_ADD_COLUMN = 0
-_AT_ADD_CONSTRAINT = 17
-_AT_DROP_CONSTRAINT = 23
-_AT_CHANGE_OWNER = 27
+_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
+_AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
+_AT_DROP_CONSTRAINT = _pg_member("AlterTableType", "AT_DropConstraint")
+_AT_CHANGE_OWNER = _pg_member("AlterTableType", "AT_ChangeOwner")
 
-# pglast.enums.parsenodes.ConstrType
 _CONSTRAINT_PATTERNS: dict[int, IdempotencyPattern] = {
-    5: IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK,
-    6: IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY,
-    7: IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE,
+    _pg_member("ConstrType", "CONSTR_CHECK"): (IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK),
+    _pg_member("ConstrType", "CONSTR_PRIMARY"): (
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY
+    ),
+    _pg_member("ConstrType", "CONSTR_UNIQUE"): (
+        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE
+    ),
 }
 
 _OWNER_PATTERNS: dict[int, IdempotencyPattern] = {

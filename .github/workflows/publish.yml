@@ -56,14 +56,24 @@ jobs:
         # Build optimized release wheel (production-ready)
         maturin build --release --out dist
 
-        echo "=== Installing built wheel with dependencies ==="
+        echo "=== Installing dependency tree from the lockfile ==="
+        # The tree comes from the COMMITTED uv.lock (#191), not from a fresh
+        # resolve of the wheel's metadata, so the release gate tests the same
+        # dependency set the quality gate did. [notifications] and [ast] give
+        # the test gate jinja2 and pglast — matches quality-gate.yml.
+        uv sync --locked --no-install-project --extra dev --extra notifications --extra ast
+
+        echo "=== Installing built wheel (the artefact under test) ==="
         WHEEL=$(ls dist/fraiseql_confiture-*.whl)
-        # Include [notifications] and [ast] so the test gate has jinja2 and
-        # pglast — matches the install line in quality-gate.yml.
-        uv pip install "$WHEEL[dev,notifications,ast]" --no-cache
+        # --no-deps: the wheel is here to be exercised, not to resolve. Its
+        # dependencies are already installed above, pinned by the lock.
+        uv pip install "$WHEEL" --no-deps --no-cache
 
         echo "=== Verifying bundled Rust extension ==="
-        uv run python -c "from confiture.core.builder import HAS_RUST; print(f'Rust extension available: {HAS_RUST}')"
+        # --no-sync throughout this job: `uv run` would otherwise reinstall the
+        # project from source and silently replace the wheel we just built,
+        # which is the one thing this job exists to exercise.
+        uv run --no-sync python -c "from confiture.core.builder import HAS_RUST; print(f'Rust extension available: {HAS_RUST}')"
 
     - name: Create test databases
       run: |
@@ -100,8 +110,9 @@ jobs:
     - name: Run core tests with coverage
       run: |
         echo "=== Running Core Tests for Release ==="
-        # Run core tests - MUST PASS for release
-        uv run pytest tests/ --cov=confiture --cov-report=xml --cov-report=term-missing -v
+        # Run core tests against the BUILT WHEEL - MUST PASS for release.
+        # --no-sync keeps the wheel installed (see the install step above).
+        uv run --no-sync pytest tests/ --cov=confiture --cov-report=xml --cov-report=term-missing -v
       env:
         DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
         SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
@@ -151,7 +162,7 @@ jobs:
         # the _core import via TYPE_CHECKING), then run the pinned ty. Keep this in
         # lockstep with quality-gate.yml's type-check job.
         uv venv
-        uv sync --no-install-project --all-extras
+        uv sync --locked --no-install-project --all-extras
         uv pip install 'ty==0.0.43'
     - name: Run ty (Astral's type checker)
       run: uv run --no-sync ty check python/confiture/

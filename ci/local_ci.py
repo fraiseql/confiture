@@ -48,10 +48,11 @@ SOURCE_EXCLUDE = [
     ".venv",
     "venv",
     "target",
-    # Exclude the local lockfile so the container resolves deps FRESH, exactly
-    # like GitHub (which has no committed lock) — otherwise the type-check leg's
-    # `uv sync` would pin to our local (possibly older) deps and miss real drift.
-    "uv.lock",
+    # NOTE: `uv.lock` is deliberately NOT excluded. It used to be, so the
+    # container would resolve fresh "exactly like GitHub" — true while the lock
+    # was gitignored, false since #191. CI now syncs with `--locked`, so mounting
+    # the tracked lock is what makes this gate faithful; excluding it would
+    # recreate the 0.22.0 divergence in the opposite direction.
     "**/__pycache__",
     "**/*.pyc",
     ".dagger",
@@ -101,7 +102,7 @@ def type_check() -> dagger.Container:
     return (
         _uv_base()
         .with_exec(["uv", "venv", "--python", PY_VERSION])
-        .with_exec(["uv", "sync", "--no-install-project", "--all-extras"])
+        .with_exec(["uv", "sync", "--locked", "--no-install-project", "--all-extras"])
         .with_exec(["uv", "pip", "install", TY.replace("@", "==")])
         # --no-sync: don't let `uv run` rebuild the project (which needs Rust).
         .with_exec(["uv", "run", "--no-sync", "ty", "check", "python/confiture/"])
@@ -136,7 +137,7 @@ def rust_checks() -> dagger.Container:
         .with_mounted_directory("/src", _source())
         .with_workdir("/src")
         .with_exec(["cargo", "fmt", "--check"])
-        .with_exec(["cargo", "clippy", "--all-targets", "--", "-D", "warnings"])
+        .with_exec(["cargo", "clippy", "--locked", "--all-targets", "--", "-D", "warnings"])
     )
 
 
@@ -200,7 +201,20 @@ def test() -> dagger.Container:
         # build env: venv + deps (incl. extras) + Rust extension (maturin develop)
         .with_exec(["uv", "venv", "--python", PY_VERSION])
         .with_exec(["uv", "tool", "install", "maturin"])
-        .with_exec(["uv", "pip", "install", ".[dev,notifications,ast]"])
+        .with_exec(
+            # From the tracked lock, matching quality-gate.yml exactly (#191).
+            [
+                "uv",
+                "sync",
+                "--locked",
+                "--extra",
+                "dev",
+                "--extra",
+                "notifications",
+                "--extra",
+                "ast",
+            ]
+        )
         .with_exec(["uv", "run", "maturin", "develop", "--uv"])
         # sanity: Rust extension actually loaded (mirrors CI's HAS_RUST verify step)
         .with_exec(
@@ -261,7 +275,7 @@ def _diag(pytest_args: list[str]) -> dagger.Container:
     return (
         _uv_base()
         .with_exec(["uv", "venv", "--python", PY_VERSION])
-        .with_exec(["uv", "sync", "--no-install-project", "--all-extras"])
+        .with_exec(["uv", "sync", "--locked", "--no-install-project", "--all-extras"])
         .with_env_variable("DATABASE_URL", f"{dsn}/{PG_MAIN_DB}")
         .with_env_variable("SOURCE_DB_URL", f"{dsn}/{EXTRA_DBS[0]}")
         .with_env_variable("TARGET_DB_URL", f"{dsn}/{EXTRA_DBS[1]}")

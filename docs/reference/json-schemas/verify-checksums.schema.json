@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/verify-checksums.schema.json",
+  "title": "confiture verify-checksums --format json",
+  "description": "File-integrity verification of applied migrations: SHA-256 of each migration file compared against the checksum stored when it was applied. Detects files modified after application. Distinct from `migrate verify`, which checks runtime state via .verify.sql sidecars. Added in 0.39.0 (#189). Consumers read ok (⇔ summary.mismatched == 0) and issues[]. Exit code is 1 when mismatches are found — a success-signal, not an error — so a crash (config/DB error, or an absent ledger without --allow-uninitialized) emits the error envelope (error-envelope.schema.json) instead of this shape. NOT part of the fraisier adapter contract.",
+  "type": "object",
+  "required": ["ok", "ledger_present", "summary", "issues"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True when no checksum mismatch was found. Equivalent to summary.mismatched == 0."
+    },
+    "ledger_present": {
+      "type": "boolean",
+      "description": "Whether the migration ledger table (tracking_table, default tb_confiture) exists. False is only emitted under --allow-uninitialized; without that flag an absent ledger raises PRECON_1001 (exit 2) with the error envelope. Distinct from a present-but-empty ledger, which reports true with summary.checked 0. Spelled ledger_present, not tb_confiture_present, because the table name is configurable (#190)."
+    },
+    "fixed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of stored checksums rewritten to match the current files. Present only when --fix was passed."
+    },
+    "summary": {
+      "type": "object",
+      "required": ["checked", "mismatched"],
+      "additionalProperties": false,
+      "properties": {
+        "checked": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Applied migrations whose checksums were compared. 0 when the ledger is absent."
+        },
+        "mismatched": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Applied migrations whose file no longer matches its stored checksum."
+        },
+        "tracking_table": {
+          "type": "string",
+          "description": "The resolved ledger name actually queried — the configured tracking_table, not necessarily the tb_confiture default."
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "description": "One entry per checksum mismatch, using the shared issue object. Empty on a clean run.",
+      "items": { "$ref": "issue-object.schema.json" }
+    }
+  }
+}

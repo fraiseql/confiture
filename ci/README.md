@@ -30,9 +30,16 @@ warm uv + cargo cache volumes.
   the exact versions pinned in the workflow (and the `[dependency-groups]` /
   pre-commit dev pins). Keep `RUFF`/`TY` here in lockstep with those.
 - **`type-check` installs deps.** ty's `unresolved-import` rule needs the
-  third-party packages present, so the leg `uv sync --no-install-project
-  --all-extras` (deps without building the Rust ext — ty skips `_core` via
-  `TYPE_CHECKING`) before running ty.
+  third-party packages present, so the leg `uv sync --locked
+  --no-install-project --all-extras` (deps without building the Rust ext — ty
+  skips `_core` via `TYPE_CHECKING`) before running ty.
+- **The lockfiles are mounted, not excluded.** `uv.lock` and `Cargo.lock` are
+  tracked (#191) and every leg here syncs with `--locked`, matching CI. This is
+  the reverse of the pre-0.39.0 arrangement, where the gate deliberately dropped
+  the local lock so the container would resolve fresh "like GitHub". GitHub no
+  longer resolves fresh, so mounting the tracked lock is what keeps the gate
+  faithful. If `--locked` fails here, run `uv lock` and commit — do not relax
+  the flag.
 - **`test` mirrors GitHub exactly.** It sets the `DATABASE_URL` family +
   `POSTGRES_*` but **not** `CONFITURE_*_DB_URL`, so DB-backed integration tests
   skip on the credential-less fallback just as they do on GitHub. One caveat
