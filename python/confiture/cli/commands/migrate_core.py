@@ -898,6 +898,36 @@ def migrate_up(
 
         # Auto-detect baseline pre-flight (before initialize so we can check absence)
         if auto_detect_baseline and not migrator.tracking_table_exists():
+            # #188: "absent" got stricter. It used to mean "no table of this
+            # name in any schema"; it now means "this session cannot resolve
+            # one", which is the right precondition for reading the ledger and
+            # the wrong trigger for rebuilding it. A ledger parked in a schema
+            # off `search_path` reads absent here, and auto-baseline would
+            # answer by creating a second one and marking every migration
+            # applied in it. This is the only path in the command that can
+            # rewrite migration history unprompted, so it refuses rather than
+            # guesses. `LedgerProbe.resolved_name` cannot answer this — it is
+            # None exactly when the probe says absent.
+            from confiture.core.ledger import find_ledger_relations
+
+            _elsewhere = find_ledger_relations(conn, _get_tracking_table(config_data))
+            if _elsewhere:
+                from confiture.exceptions import ConfigurationError
+
+                conn.close()
+                raise ConfigurationError(
+                    f"--auto-detect-baseline: {_get_tracking_table(config_data)!r} does not "
+                    f"resolve for this session, but a relation of that name exists in "
+                    f"{', '.join(_elsewhere)}. Refusing to auto-baseline: doing so would "
+                    f"create a second ledger and mark every migration applied in it.",
+                    resolution_hint=(
+                        "Point at the existing ledger — set `migration.tracking_table` to "
+                        f"{_elsewhere[0]!r}, or put its schema on the connection's "
+                        "search_path — then re-run. If the ledger really is meant to be "
+                        "new, drop or rename the other relation first."
+                    ),
+                )
+
             _resolved_snapshots_dir = snapshots_dir_up or Path("db/schema_history")
             if not _resolved_snapshots_dir.exists():
                 error_console.print(

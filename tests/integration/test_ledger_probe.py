@@ -290,3 +290,122 @@ class TestFindLedgerRelations:
         self, conn: psycopg.Connection, tag: str
     ) -> None:
         assert find_ledger_relations(conn, f"tb_absent_{tag}") == []
+
+
+@pytest.fixture
+def migrator_conn(test_db_url: str) -> Iterator[psycopg.Connection]:
+    """A second, transactional connection — the one a Migrator would hold."""
+    try:
+        connection = psycopg.connect(test_db_url)
+    except psycopg.OperationalError as e:  # pragma: no cover - environment gate
+        pytest.skip(f"PostgreSQL not available: {e}")
+    try:
+        yield connection
+    finally:
+        connection.rollback()
+        connection.close()
+
+
+class TestInitializeFollowsTheResolvedLedger:
+    """`initialize()` must create the ledger the session will go on to read.
+
+    It probes with `_qualified_table()`, which returns a **bare** name whenever
+    `tracking_table` is unqualified — the default. Phase 05 recorded that this
+    path "always" uses the qualified probe; it does not, and that is what puts
+    `initialize()` in the blast radius of the search_path fix rather than out
+    of it.
+    """
+
+    def test_a_reachable_ledger_is_not_recreated(
+        self, conn: psycopg.Connection, migrator_conn: psycopg.Connection, tag: str
+    ) -> None:
+        from confiture.core.migrator import Migrator
+
+        schema = f"initon_{tag}"
+        _make_ledger(conn, schema)
+        try:
+            migrator_conn.execute(f'SET search_path TO "{schema}"')
+
+            Migrator(connection=migrator_conn).initialize()
+
+            assert find_ledger_relations(conn, "tb_confiture") == [f"{schema}.tb_confiture"]
+        finally:
+            migrator_conn.rollback()
+            _drop_schemas(conn, schema)
+
+    def test_an_unreachable_ledger_does_not_suppress_creation(
+        self, conn: psycopg.Connection, migrator_conn: psycopg.Connection, tag: str
+    ) -> None:
+        """The pre-0.41.0 dead end, now navigable.
+
+        With a ledger in a schema off `search_path`, the schema-blind probe
+        reported present, `initialize()` skipped the CREATE, and the very next
+        statement — the #137 additive ALTER — failed with `relation
+        "tb_confiture" does not exist`. Nothing could recover it but hand-editing
+        the config. The session now gets a ledger where it reads.
+        """
+        from confiture.core.migrator import Migrator
+
+        hidden, session = f"initoff_{tag}", f"initsess_{tag}"
+        _make_ledger(conn, hidden)
+        conn.execute(f'CREATE SCHEMA "{session}"')
+        try:
+            migrator_conn.execute(f'SET search_path TO "{session}"')
+
+            migrator = Migrator(connection=migrator_conn)
+            migrator.initialize()
+
+            assert migrator.tracking_table_exists() is True
+            assert sorted(find_ledger_relations(conn, "tb_confiture")) == [
+                f"{hidden}.tb_confiture",
+                f"{session}.tb_confiture",
+            ]
+        finally:
+            migrator_conn.rollback()
+            _drop_schemas(conn, hidden, session)
+
+
+class TestAutoBaselineGuardCondition:
+    """The refusal's precondition, against a real PostgreSQL.
+
+    ``tests/unit/cli/test_auto_baseline_guard.py`` proves the CLI refuses when
+    the sweep returns something. This proves the sweep really does return
+    something in the state that now reads absent — so the guard is reachable
+    rather than dead code protecting a scenario PostgreSQL never produces.
+    """
+
+    def test_an_off_search_path_ledger_is_absent_but_findable(
+        self, conn: psycopg.Connection, migrator_conn: psycopg.Connection, tag: str
+    ) -> None:
+        from confiture.core.migrator import Migrator
+
+        hidden, session = f"guardoff_{tag}", f"guardsess_{tag}"
+        _make_ledger(conn, hidden)
+        conn.execute(f'CREATE SCHEMA "{session}"')
+        try:
+            migrator_conn.execute(f'SET search_path TO "{session}"')
+
+            # Both halves of the guard's condition, from one real database.
+            assert Migrator(connection=migrator_conn).tracking_table_exists() is False
+            assert find_ledger_relations(migrator_conn, "tb_confiture") == [
+                f"{hidden}.tb_confiture"
+            ]
+        finally:
+            migrator_conn.rollback()
+            _drop_schemas(conn, hidden, session)
+
+    def test_a_reachable_ledger_never_reaches_the_guard(
+        self, conn: psycopg.Connection, migrator_conn: psycopg.Connection, tag: str
+    ) -> None:
+        """Auto-baseline is skipped entirely when the ledger resolves."""
+        from confiture.core.migrator import Migrator
+
+        schema = f"guardon_{tag}"
+        _make_ledger(conn, schema)
+        try:
+            migrator_conn.execute(f'SET search_path TO "{schema}"')
+
+            assert Migrator(connection=migrator_conn).tracking_table_exists() is True
+        finally:
+            migrator_conn.rollback()
+            _drop_schemas(conn, schema)
