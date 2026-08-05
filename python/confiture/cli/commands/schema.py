@@ -19,6 +19,7 @@ from confiture.core.error_handler import handle_cli_error, print_error_to_consol
 from confiture.core.introspector import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import LintConfig as LinterConfig
+from confiture.core.linting.schema_linter import LintReport as LinterReport
 from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
 from confiture.core.seed_applier import SeedApplier
 from confiture.exceptions import ConfigurationError, SchemaError, SeedError
@@ -721,11 +722,31 @@ def lint(
         "--fail-on-warning",
         help="Exit with code 1 if warnings found (default: off, stricter)",
     ),
+    select: list[str] = typer.Option(
+        None,
+        "--select",
+        help="Rules or families to run, comma-separated (#150). `default` means "
+        "the rules a plain lint runs, so `--select default,replica` is the "
+        "defaults plus one family. Omit to run the defaults. "
+        "See `--list-rules`.",
+    ),
+    ignore: list[str] = typer.Option(
+        None,
+        "--ignore",
+        help="Rules or families to skip, comma-separated. Applied after --select, "
+        "so --ignore always wins.",
+    ),
+    list_rules: bool = typer.Option(
+        False,
+        "--list-rules",
+        help="Print the rule catalogue (code, family, severity, default/opt-in) "
+        "and exit 0. Honours --format json.",
+    ),
     replica_safe: bool = typer.Option(
         False,
         "--replica-safe",
-        help="Also run the replica-aware forward-compatibility lint over the "
-        "migrations tree (#139).",
+        help="Deprecated alias for `--select default,replica` (#139). Still "
+        "supported; new rules register instead of adding a flag.",
     ),
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -735,13 +756,14 @@ def lint(
     check_tenant_isolation: bool = typer.Option(
         False,
         "--check-tenant-isolation",
-        help="Enable the multi-tenant isolation rule (tenant_001): flag function "
-        "INSERTs missing the FK column a tenant-scoped view requires (default: off).",
+        help="Deprecated alias for `--select default,tenant` (tenant_001): flag "
+        "function INSERTs missing the FK column a tenant-scoped view requires.",
     ),
     check_security_definer: bool = typer.Option(
         False,
         "--check-security-definer",
-        help="Also run sec_002 over the env's schema DDL: flag SECURITY DEFINER "
+        help="Deprecated alias for `--select default,security-definer`. Runs "
+        "sec_002 over the env's schema DDL: flag SECURITY DEFINER "
         "functions/procedures that do not pin search_path (CVE-2018-1058). "
         "No-op when the config has no `security_lint:` block or "
         "`security_lint.enabled` is false. Default severity is advisory "
@@ -754,25 +776,40 @@ def lint(
     """Validate schema against best practices.
 
     PROCESS:
-      Checks schema against 5 default rules (naming conventions, primary keys,
-      documentation, FK indexes, security) plus two opt-in rules: ACL coverage
-      (acl_001) and multi-tenant isolation (tenant_001). Results in table or
-      JSON format.
+      Runs the default rule set — naming_001, naming_002, pk_001, doc_001,
+      sec_001 — plus whatever `--select` adds. `--list-rules` prints the full
+      catalogue with codes and families. Results in table, JSON or CSV.
 
     RULES:
-      naming, primary keys, documentation, FK indexes, security — always on
-      (toggle via LintConfig fields).
+      Select by code or family: `--select pk,naming`, `--select naming_001`,
+      `--ignore doc`. `default` means every rule that is on by default, so
+      `--select default,replica` is the usual lint plus one opt-in family.
+      `--ignore` wins over `--select`; an unknown selector exits 5.
+
+      naming_001, naming_002, pk_001, doc_001, sec_001 — on by default.
+      (LintConfig also carries check_indexes / check_constraints; neither has a
+      rule behind it, so neither is listed or selectable.)
 
       ACL coverage (acl_001) — opt-in. Set ``acls.lint_enabled: true`` in
       the environment YAML to enable.  Merely defining ``acls:`` no longer
       auto-fires the rule (changed in 0.12.0).  See ``docs/guides/acl-coverage.md``.
 
-      Multi-tenant isolation (tenant_001) — opt-in via ``--check-tenant-isolation``.
-      Detects function INSERTs that omit the FK column a tenant-scoped view needs.
+      Multi-tenant isolation (tenant_001) — opt-in via ``--select default,tenant``
+      (or the ``--check-tenant-isolation`` alias). Detects function INSERTs that
+      omit the FK column a tenant-scoped view needs.
 
     EXAMPLES:
       confiture lint
         ↳ Lint local environment, display results as table
+
+      confiture lint --list-rules
+        ↳ Print every rule with its code, family and default state
+
+      confiture lint --select pk,naming
+        ↳ Run only the primary-key and naming families
+
+      confiture lint --ignore doc
+        ↳ The default rules, minus doc_001
 
       confiture lint --env production
         ↳ Lint production environment
@@ -807,18 +844,44 @@ def lint(
                 output_file=output,
             )
 
+        if list_rules:
+            _emit_rule_catalogue(format_type, output)
+            return
+
+        # One selection, resolved once (#150). The three per-rule flags are
+        # aliases over it rather than branches further down: each adds its
+        # family to the defaults, which is exactly what it always did.
+        selected = _resolve_lint_rules(
+            select=select,
+            ignore=ignore,
+            replica_safe=replica_safe,
+            check_tenant_isolation=check_tenant_isolation,
+            check_security_definer=check_security_definer,
+        )
+
         # Create linter configuration (use LinterConfig for the linter)
         config = LinterConfig(
             enabled=True,
             fail_on_error=fail_on_error,
             fail_on_warning=fail_on_warning,
-            check_tenant_isolation=check_tenant_isolation,
+            check_naming="naming_001" in selected or "naming_002" in selected,
+            check_primary_keys="pk_001" in selected,
+            check_documentation="doc_001" in selected,
+            check_security="sec_001" in selected,
+            check_tenant_isolation="tenant_001" in selected,
+            check_acl_coverage="acl_001" in selected,
         )
 
         # Create linter and run linting
         console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
         linter = SchemaLinter(env=env, config=config)
         linter_report = linter.lint()
+
+        # LintConfig's switches are coarser than the rule codes — `check_naming`
+        # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
+        # second pass over the findings. Cheap, and it means every rule is
+        # selectable individually without reshaping LintConfig.
+        _keep_selected_rules(linter_report, selected)
 
         # Convert to model LintReport for formatting
         report = _convert_linter_report(linter_report, schema_name=env)
@@ -849,7 +912,7 @@ def lint(
 
         # #139: replica-aware forward-compatibility lint over the migrations tree
         # (a migration-tree check, distinct from the schema lint above).
-        if replica_safe:
+        if "replica_001" in selected:
             from confiture.core.linting.libraries.replica import Replica001ForwardCompat
             from confiture.core.linting.schema_linter import RuleSeverity
 
@@ -890,7 +953,7 @@ def lint(
         # Note: sec_002 findings print to the console here; they are NOT
         # folded into the JSON report produced above.  For machine-readable
         # output use `migrate validate --check-security-definer --format json`.
-        if check_security_definer:
+        if "sec_002" in selected:
             from confiture.core.builder import SchemaBuilder
             from confiture.core.linting.libraries.security_definer import (
                 Sec002SecurityDefinerSearchPath,
@@ -948,7 +1011,7 @@ def lint(
                     or (_sd_errors and fail_on_error)
                     or (_sd_warnings and fail_on_warning)
                 )
-            elif check_security_definer and _sec_cfg is not None:
+            elif _sec_cfg is not None:
                 console.print("\n[green]🔒 Security-definer search_path lint: no issues[/green]")
 
         if should_fail:
@@ -963,6 +1026,103 @@ def lint(
     except Exception as e:
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e
+
+
+def _keep_selected_rules(linter_report: LinterReport, selected: frozenset[str]) -> None:
+    """Drop findings whose rule was deselected (#150), in place.
+
+    Only rules the registry knows are filtered. A violation carrying an
+    unregistered code — a rule added to the linter without registering it, or a
+    consumer's own — is passed through rather than silently swallowed: it could
+    not have been selected, and dropping it would turn "I forgot to register my
+    rule" into "my rule stopped reporting".
+    """
+    from confiture.core.linting.rule_registry import LINT_RULES
+
+    known = {rule.code for rule in LINT_RULES}
+    for bucket in (linter_report.errors, linter_report.warnings, linter_report.info):
+        bucket[:] = [v for v in bucket if v.rule_id in selected or v.rule_id not in known]
+
+
+def _resolve_lint_rules(
+    *,
+    select: list[str] | None,
+    ignore: list[str] | None,
+    replica_safe: bool,
+    check_tenant_isolation: bool,
+    check_security_definer: bool,
+) -> frozenset[str]:
+    """The rule codes this invocation applies, legacy flags folded in.
+
+    Each legacy flag means "the defaults *plus* this family", which is what it
+    did when it was a branch of its own. Expressing them as selectors keeps one
+    dispatch path — the point of #150 — and makes them exactly equivalent to the
+    ``--select`` form they are documented as aliasing.
+
+    Raises:
+        ConfigurationError: An unknown code or family was named.
+    """
+    from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, resolve_selection
+
+    aliases = [
+        rule_family
+        for enabled, rule_family in (
+            (replica_safe, "replica"),
+            (check_tenant_isolation, "tenant"),
+            (check_security_definer, "security-definer"),
+        )
+        if enabled
+    ]
+    effective = list(select or [])
+    if aliases:
+        # A bare legacy flag keeps the default rules; combined with --select it
+        # extends whatever that selected, rather than re-adding the defaults.
+        effective = (effective or [DEFAULT_SELECTOR]) + aliases
+    return resolve_selection(effective or None, ignore or ())
+
+
+def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
+    """Print the rule registry: `confiture lint --list-rules`.
+
+    A report mode — it never consults the schema and always exits 0, so it works
+    in a project that does not lint cleanly (or at all).
+    """
+    from confiture.core.linting.rule_registry import LINT_RULES
+
+    if is_json(format_type):
+        _output_json(
+            {
+                "version": "1",
+                "status": "ok",
+                "rules": [rule.to_dict() for rule in LINT_RULES],
+                "hints": [],
+            },
+            output,
+            console,
+        )
+        return
+
+    from rich.table import Table
+
+    table = Table(title="confiture lint rules", show_lines=False)
+    table.add_column("Code", style="cyan")
+    table.add_column("Family", style="magenta")
+    table.add_column("Severity")
+    table.add_column("Default")
+    table.add_column("Description")
+    for rule in LINT_RULES:
+        table.add_row(
+            rule.code,
+            rule.family,
+            rule.severity,
+            "on" if rule.default_on else "opt-in",
+            rule.title + (f" (needs {rule.requires_config})" if rule.requires_config else ""),
+        )
+    console.print(table)
+    console.print(
+        "\n[dim]Select with --select <family|code>[,…]; skip with --ignore. "
+        "`default` selects every rule marked on.[/dim]"
+    )
 
 
 def lint_unified(

@@ -657,6 +657,16 @@ uv run ruff check .
 uv run ty check python/confiture/
 ```
 
+### Adding a `confiture lint` rule
+
+Register it in `python/confiture/core/linting/rule_registry.py` — **do not add a
+per-rule CLI flag.** `--select` / `--ignore` / `--list-rules` are driven by that
+registry (#150), and the three flags that predate it (`--replica-safe`,
+`--check-tenant-isolation`, `--check-security-definer`) survive only as aliases.
+A rule that emits violations without a registry entry still reports (unregistered
+codes are never filtered out), but it is invisible to `--list-rules` and cannot
+be selected or ignored.
+
 Confiture runs a **deliberately focused ruff ruleset** (`E, W, F, I, B, C4, UP,
 ARG, SIM`), not the full prescribed superset. The heavier families (`PL, PERF,
 FURB, ERA, PTH, TCH, RUF`) are intentionally off for now; `[tool.ruff.lint]` in

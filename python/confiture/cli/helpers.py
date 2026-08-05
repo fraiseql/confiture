@@ -120,6 +120,7 @@ def _convert_linter_report(linter_report: LinterReport, schema_name: str = "sche
     for violation in linter_report.errors:
         violations.append(
             Violation(
+                rule_id=violation.rule_id,
                 rule_name=violation.rule_name,
                 severity=severity_map[violation.severity],
                 message=violation.message,
@@ -130,6 +131,7 @@ def _convert_linter_report(linter_report: LinterReport, schema_name: str = "sche
     for violation in linter_report.warnings:
         violations.append(
             Violation(
+                rule_id=violation.rule_id,
                 rule_name=violation.rule_name,
                 severity=severity_map[violation.severity],
                 message=violation.message,
@@ -140,6 +142,7 @@ def _convert_linter_report(linter_report: LinterReport, schema_name: str = "sche
     for violation in linter_report.info:
         violations.append(
             Violation(
+                rule_id=violation.rule_id,
                 rule_name=violation.rule_name,
                 severity=severity_map[violation.severity],
                 message=violation.message,

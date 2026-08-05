@@ -115,6 +115,73 @@ Exit code: 1 (failed)
 
 ---
 
+## Selecting rules — `--list-rules` / `--select` / `--ignore`
+
+*New in 0.42.0 (#150).*
+
+Every rule has a **code** (`naming_001`) and belongs to a **family** (`naming`).
+Start from the catalogue:
+
+```bash
+confiture lint --list-rules              # table: code, family, severity, default/opt-in
+confiture lint --list-rules --format json
+```
+
+| Rule | Family | Default | Notes |
+|------|--------|---------|-------|
+| `naming_001` | `naming` | on | Table names snake_case |
+| `naming_002` | `naming` | on | Column names snake_case |
+| `pk_001` | `pk` | on | Table has a primary key |
+| `doc_001` | `doc` | on | Table has a COMMENT |
+| `sec_001` | `security` | on | Secret-looking columns |
+| `acl_001` | `acl` | opt-in | Needs `acls.lint_enabled: true` |
+| `tenant_001` | `tenant` | opt-in | Multi-tenant FK isolation |
+| `replica_001` | `replica` | opt-in | Replica forward-compatibility |
+| `sec_002` | `security-definer` | opt-in | Needs `security_lint.enabled: true` |
+
+`sec_001` and `sec_002` share a code prefix but are different rules in different
+families — the flag that shipped `sec_002` named `security-definer`, and that is
+the selector.
+
+Select and skip by code or family:
+
+```bash
+confiture lint --select pk,naming          # only those families
+confiture lint --select naming_001         # one rule
+confiture lint --ignore doc                # the defaults, minus doc_001
+confiture lint --select default,replica    # the defaults plus a family
+```
+
+- **No `--select`** runs the default set — unchanged from earlier releases.
+- **`default`** is a selector meaning "every rule marked on", so opt-in families
+  can be *added* rather than replacing the defaults.
+- **`--ignore` wins over `--select`.** `--select naming --ignore naming_001` runs
+  `naming_002` only.
+- An unknown code or family **fails** with exit 5 and lists the valid set, rather
+  than quietly selecting nothing.
+- Selecting a rule is necessary but not always sufficient: `acl_001` and
+  `sec_002` also need their configuration block (see the table).
+
+### The three per-rule flags are now aliases
+
+`--replica-safe`, `--check-tenant-isolation` and `--check-security-definer` still
+work and mean exactly what they always did — the defaults plus that one family:
+
+| Flag | Equivalent |
+|------|-----------|
+| `--replica-safe` | `--select default,replica` |
+| `--check-tenant-isolation` | `--select default,tenant` |
+| `--check-security-definer` | `--select default,security-definer` |
+
+They are deprecated in the help text with no removal scheduled. New rules
+register in `confiture/core/linting/rule_registry.py` instead of adding a flag.
+
+Violation output now carries the code: the text table gained a **Code** column
+and JSON violations a `rule_id` field, so a finding maps back to the selector
+that turns it off.
+
+---
+
 ## Configuring Rules
 
 ### Option 1: YAML Configuration

@@ -370,6 +370,19 @@ Live-database drift report against expected DDL.
 
 Shape is identical to plain `drift` — items of type `missing_grant` / `extra_grant` may appear in `drift_items`.
 
+### `confiture lint --list-rules --format json`
+
+[lint-list-rules.schema.json](./json-schemas/lint-list-rules.schema.json)
+
+The rule catalogue: one entry per rule `confiture lint` can apply, carrying the
+`code` that `--select` / `--ignore` accept, its `family`, default severity,
+whether it runs by default, the deprecated per-rule flag it replaces (or
+`null`), and any configuration it additionally requires (#150). Report mode —
+always exits 0, never reads a schema.
+
+`code` matches the `rule_id` field on lint violations, so a finding can be
+mapped back to the selector that turns it off.
+
 ---
 
 ## Field-name traps (issue #123)
