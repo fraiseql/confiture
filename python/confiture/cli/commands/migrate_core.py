@@ -299,10 +299,10 @@ def migrate_status(
                 result["warning"] = f"Could not connect to database: {db_error}"
             elif tracking_table_absent:
                 result["warning"] = (
-                    "tb_confiture not found in this database. All migrations shown as "
-                    "'pending'. Run `confiture migrate up` to apply all migrations, or "
-                    "`confiture migrate baseline --through <version>` if the schema is "
-                    "already applied."
+                    f"{status_tracking_table or 'The migration ledger'} not found in this "
+                    "database. All migrations shown as 'pending'. Run `confiture migrate up` "
+                    "to apply all migrations, or `confiture migrate baseline --through "
+                    "<version>` if the schema is already applied."
                 )
             if orphaned_sql_files:
                 result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
@@ -366,8 +366,8 @@ def migrate_status(
 
             if tracking_table_absent:
                 console.print(
-                    "\n[yellow]⚠️  tb_confiture not found in this database. "
-                    "Migrations shown as 'pending'.[/yellow]"
+                    f"\n[yellow]⚠️  {status_tracking_table or 'The migration ledger'} not "
+                    "found in this database. Migrations shown as 'pending'.[/yellow]"
                 )
                 console.print(
                     "[yellow]   Run `confiture migrate up` to apply all migrations, or[/yellow]"
@@ -928,7 +928,8 @@ def migrate_up(
 
                 _detector = BaselineDetector(_resolved_snapshots_dir)
                 console.print(
-                    "[cyan]🔍 tb_confiture missing — attempting auto-detect baseline...[/cyan]"
+                    f"[cyan]🔍 {_get_tracking_table(config_data)} missing — attempting "
+                    "auto-detect baseline...[/cyan]"
                 )
                 _live_sql = _detector.introspect_live_schema(conn)
                 _detected_version = _detector.find_matching_snapshot(_live_sql)

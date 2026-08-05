@@ -477,8 +477,12 @@ def migrate_reinit(
                 console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
 
             if not yes and not dry_run:
+                # The resolved name, not the default (#190). This is a
+                # destructive confirmation: naming the wrong table here is the
+                # one place a wrong name could get an operator to approve the
+                # wrong action.
                 confirmed = typer.confirm(
-                    f"Will delete {current_count} entries from tb_confiture "
+                    f"Will delete {current_count} entries from {migrator.migration_table} "
                     f"and re-mark {len(migrations_to_mark)} migrations. Continue?"
                 )
                 if not confirmed:
@@ -644,10 +648,13 @@ def migrate_rebuild(
         with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
             # Backup tracking table before rebuild if requested
             tracking_backup_data = None
+            tracking_backup_table = "tb_confiture"
             if backup_tracking and not dry_run:
                 migrator = m._migrator
                 assert migrator is not None
                 tracking_backup_data = migrator._backup_tracking_table()
+                # Captured here, where the resolved name is in hand (#190).
+                tracking_backup_table = migrator.migration_table
 
             # Confirmation prompt
             if not yes and not dry_run:
@@ -673,7 +680,12 @@ def migrate_rebuild(
             # Write tracking backup to file
             if tracking_backup_data is not None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_path = Path(f"tb_confiture_backup_{timestamp}.json")
+                # Name the backup after the table it holds (#190): a file called
+                # tb_confiture_backup_*.json containing audit.tb_migrations rows
+                # is actively misleading during a restore. "." is not portable
+                # in a filename component, so a qualified name is flattened.
+                _ledger_name = tracking_backup_table.replace(".", "_")
+                backup_path = Path(f"{_ledger_name}_backup_{timestamp}.json")
                 backup_path.write_text(
                     json_module.dumps(tracking_backup_data, indent=2, default=str)
                 )

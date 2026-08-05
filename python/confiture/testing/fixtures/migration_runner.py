@@ -4,11 +4,13 @@ Wraps confiture migrations to provide structured test results and execution
 tracking for PrintOptim's migration test suite.
 """
 
+import contextlib
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
+from psycopg import sql as pgsql
 
 
 @dataclass
@@ -33,14 +35,23 @@ class MigrationRunner:
     - Tracking rollbacks
     """
 
-    def __init__(self, connection: psycopg.Connection, migrations_dir: Path | None = None):
+    def __init__(
+        self,
+        connection: psycopg.Connection,
+        migrations_dir: Path | None = None,
+        tracking_table: str = "tb_confiture",
+    ):
         """Initialize migration runner.
 
         Args:
             connection: PostgreSQL connection for migration execution
             migrations_dir: Path to migrations directory (default: db/migrations)
+            tracking_table: Migration ledger name, bare or schema-qualified.
+                Defaults to ``tb_confiture``; pass the project's configured
+                ``tracking_table`` when it differs (#190).
         """
         self.connection = connection
+        self.tracking_table = tracking_table
         self.migrations_dir = migrations_dir or (
             Path(__file__).parent.parent.parent.parent.parent / "db" / "migrations"
         )
@@ -126,23 +137,31 @@ class MigrationRunner:
         return self.run(f"{migration_name}_rollback")
 
     def get_applied_migrations(self) -> list[str]:
-        """Get list of applied migrations from confiture tracking table.
+        """Get list of applied migrations from the configured tracking table.
 
         Returns:
-            List of migration slugs that have been applied
+            List of migration slugs that have been applied. Empty when the
+            ledger does not exist yet — a database built from schema files has
+            no ledger, which is a legitimate state.
+
+        Raises:
+            psycopg.Error: For any failure that is *not* an absent ledger —
+                a dropped connection, a permission error, a malformed query.
+                These used to be swallowed into ``[]``, which made this test
+                fixture report "nothing applied" for a broken database and
+                turned assertions against it silently vacuous (#190).
         """
+        schema, _, base = self.tracking_table.partition(".")
+        ident = pgsql.Identifier(schema, base) if base else pgsql.Identifier(schema)
+
         try:
             with self.connection.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT slug
-                    FROM tb_confiture
-                    ORDER BY applied_at ASC
-                    """
-                )
+                cur.execute(pgsql.SQL("SELECT slug FROM {} ORDER BY applied_at ASC").format(ident))
                 return [row[0] for row in cur.fetchall()]
-        except Exception:
-            # Table doesn't exist yet or other error - return empty list
+        except psycopg.errors.UndefinedTable:
+            # The one genuinely-empty case: no ledger yet.
+            with contextlib.suppress(psycopg.Error):
+                self.connection.rollback()
             return []
 
     def get_pending_migrations(self) -> list[str]:

@@ -70,6 +70,20 @@ change without a top-level version bump.
 
 [migrate-verify.schema.json](./json-schemas/migrate-verify.schema.json) — `{verified_count, failed_count, skipped_count, total_applied, results[]}` for `.verify.sql` runtime-correctness checks. The fraisier adapter treats the run as ok ⇔ `failed_count == 0`, and reads each `results[].{version, name, status, error}`. Migrations with no sidecar are `status: "no_file"` (counted in `skipped_count`).
 
+### `confiture migrate introspect --format json`
+
+[migrate-introspect.schema.json](./json-schemas/migrate-introspect.schema.json) — `{ledger_present, tb_confiture_present, detected_version, …}` for recovering which migration level a database is at by matching its live schema against `db/schema_history/`.
+
+⚠️ **`tb_confiture_present` is deprecated as of 0.39.0 and removed in 0.40.0.** It hardcodes the default table name, which is wrong for any project that configured `tracking_table` (#186). Both keys are emitted with the same value during the deprecation window; migrate to **`ledger_present`**, the table-name-agnostic spelling `migrate verify` adopted in 0.37.0.
+
+### `confiture verify-checksums --format json`
+
+[verify-checksums.schema.json](./json-schemas/verify-checksums.schema.json) — `{ok, ledger_present, summary{checked, mismatched, tracking_table}, issues[]}` for **file-integrity** verification: the SHA-256 of each migration file against the checksum stored when it was applied. Distinct from `migrate verify`, which checks runtime state via `.verify.sql` sidecars. Added in 0.39.0 (#189).
+
+`ok ⇔ summary.mismatched == 0`. Exit 1 on mismatches is a *success-signal* — the gate tripped — so it still carries this shape; a real error (config/DB failure, or an absent ledger without `--allow-uninitialized`) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead. `issues[]` uses the shared [issue object](./json-schemas/issue-object.schema.json) with code `CHECKSUM_MISMATCH`.
+
+`summary.tracking_table` reports the ledger actually queried — the configured `tracking_table`, not necessarily the `tb_confiture` default (#190). Not part of the fraisier adapter contract.
+
 ### `confiture migrate down-to <revision> --format json`
 
 [migrate-down-to.schema.json](./json-schemas/migrate-down-to.schema.json) — `{from, to, rolled_back, skipped, errors}` for an absolute rollback. An invalid plan (unknown/forward target, or a missing `.down.sql`) emits the [error envelope](./json-schemas/error-envelope.schema.json) and applies nothing.

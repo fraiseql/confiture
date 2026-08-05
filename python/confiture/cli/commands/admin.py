@@ -39,6 +39,58 @@ ALLOW_UNINITIALIZED_HELP = (
 )
 
 
+def _checksum_payload(
+    *,
+    ledger_present: bool,
+    checked: int,
+    mismatches: list,
+    tracking_table: str,
+    fixed: int | None = None,
+) -> dict:
+    """Build ``verify-checksums --format json`` output (#189).
+
+    One builder for every exit path — clean, mismatched, and ledger-less — so
+    text and JSON cannot describe different outcomes. Reuses the shared issue
+    object (``issue-object.schema.json``) rather than inventing a mismatch
+    shape, matching the house envelope `migrate verify` established.
+    """
+    payload: dict = {
+        "ok": not mismatches,
+        "ledger_present": ledger_present,
+        "summary": {
+            "checked": checked,
+            "mismatched": len(mismatches),
+            "tracking_table": tracking_table,
+        },
+        "issues": [
+            {
+                "severity": "error",
+                "code": "CHECKSUM_MISMATCH",
+                "message": (
+                    f"{m.version}_{m.name} no longer matches the checksum stored "
+                    "when it was applied"
+                ),
+                "actionable": (
+                    "Restore the file to its applied content, or re-record the "
+                    "current content with `confiture verify-checksums --fix` "
+                    "(dangerous — it accepts whatever is on disk now)."
+                ),
+                "details": {
+                    "expected": m.expected,
+                    "actual": m.actual,
+                },
+                "migration": m.version,
+                "file": str(m.file_path) if m.file_path else None,
+                "line": None,
+            }
+            for m in mismatches
+        ],
+    }
+    if fixed is not None:
+        payload["fixed"] = fixed
+    return payload
+
+
 def install_helpers(
     config: Path = typer.Option(
         None,
@@ -208,6 +260,12 @@ def verify_checksums(
         "--allow-uninitialized",
         help=ALLOW_UNINITIALIZED_HELP,
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
 ) -> None:
     """Verify migration file integrity against stored checksums.
 
@@ -233,6 +291,14 @@ def verify_checksums(
 
         # Fix checksums (update stored to match current files)
         confiture verify-checksums --fix
+
+        # Structured output for a CI gate
+        confiture verify-checksums --format json
+
+    JSON output: {ok, ledger_present, summary{checked,mismatched,tracking_table},
+    issues[]} — see docs/reference/json-schemas/verify-checksums.schema.json.
+    Exit 1 on mismatches is a success-signal (the gate tripped), so it still
+    carries this shape; a real error emits the error envelope instead.
     """
     from confiture.core.checksum import (
         ChecksumConfig,
@@ -241,6 +307,16 @@ def verify_checksums(
     )
     from confiture.core.connection import create_connection, load_config
     from confiture.core.ledger import ledger_exists
+
+    if output_format not in ("text", "json"):
+        fail(
+            ConfigurationError(
+                f"Invalid format '{output_format}'. Use 'text' or 'json'.",
+                resolution_hint="Pass --format text or --format json.",
+            ),
+            json_mode=False,
+        )
+    json_mode = is_json(output_format)
 
     try:
         # Load config and connect
@@ -254,6 +330,21 @@ def verify_checksums(
         if not ledger_exists(conn, tracking_table):
             conn.close()
             if allow_uninitialized:
+                if json_mode:
+                    # 0.37.0 turned this crash into a graceful exit but left it
+                    # returning after a Rich print, so --format json produced
+                    # no JSON at all on the one path most likely to be scripted.
+                    _output_json(
+                        _checksum_payload(
+                            ledger_present=False,
+                            checked=0,
+                            mismatches=[],
+                            tracking_table=tracking_table,
+                        ),
+                        None,
+                        console,
+                    )
+                    return
                 console.print(
                     f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
                     "present in this database) — 0 migrations recorded, nothing to "
@@ -275,43 +366,68 @@ def verify_checksums(
             migration_table=tracking_table,
         )
         mismatches = verifier.verify_all(migrations_dir)
+        checked = verifier.count_applied()
 
         if not mismatches:
-            console.print("[green]✅ All migration checksums verified![/green]")
+            if json_mode:
+                _output_json(
+                    _checksum_payload(
+                        ledger_present=True,
+                        checked=checked,
+                        mismatches=[],
+                        tracking_table=tracking_table,
+                    ),
+                    None,
+                    console,
+                )
+            else:
+                console.print("[green]✅ All migration checksums verified![/green]")
             conn.close()
             return
 
-        # Display mismatches
-        console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
-
-        for m in mismatches:
-            console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-            console.print(f"    File: {m.file_path}")
-            expected_preview = m.expected[:16] if m.expected else "(none)"
-            console.print(f"    Expected: {expected_preview}...")
-            console.print(f"    Actual:   {m.actual[:16]}...")
-            console.print()
-
+        updated: int | None = None
         if fix:
-            # Update checksums in database
-            console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
             updated = verifier.update_all_checksums(migrations_dir)
-            console.print(f"[green]✅ Updated {updated} checksum(s)[/green]")
-        else:
-            console.print(
-                "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
+
+        if json_mode:
+            _output_json(
+                _checksum_payload(
+                    ledger_present=True,
+                    checked=checked,
+                    mismatches=mismatches,
+                    tracking_table=tracking_table,
+                    fixed=updated,
+                ),
+                None,
+                console,
             )
-            conn.close()
+        else:
+            console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
+            for m in mismatches:
+                console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+                console.print(f"    File: {m.file_path}")
+                expected_preview = m.expected[:16] if m.expected else "(none)"
+                console.print(f"    Expected: {expected_preview}...")
+                console.print(f"    Actual:   {m.actual[:16]}...")
+                console.print()
+            if fix:
+                console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
+                console.print(f"[green]✅ Updated {updated} checksum(s)[/green]")
+            else:
+                console.print(
+                    "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
+                )
+
+        conn.close()
+        if not fix:
             # success-signal: verification ran and found mismatches (the CI gate
             # this command exists to trip) — not a confiture-domain error.
             raise typer.Exit(1)
 
-        conn.close()
-
     except typer.Exit:
         raise
     except Exception as e:
-        fail(e, json_mode=False)
+        fail(e, json_mode=json_mode)
 
 
 def verify_deprecated(
@@ -336,6 +452,12 @@ def verify_deprecated(
         "--allow-uninitialized",
         help=ALLOW_UNINITIALIZED_HELP,
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json (default: text)",
+    ),
 ) -> None:
     """[DEPRECATED] Alias for `confiture verify-checksums`.
 
@@ -349,11 +471,15 @@ def verify_deprecated(
         "future major release. Use 'confiture verify-checksums' for checksum "
         "integrity (or 'confiture migrate verify' for runtime correctness).[/yellow]"
     )
+    # Every argument forwarded explicitly: an omitted one arrives as Typer's
+    # OptionInfo sentinel rather than its default, which the format validation
+    # would reject as an invalid format (exit 5).
     verify_checksums(
         migrations_dir=migrations_dir,
         config=config,
         fix=fix,
         allow_uninitialized=allow_uninitialized,
+        output_format=output_format,
     )
 
 

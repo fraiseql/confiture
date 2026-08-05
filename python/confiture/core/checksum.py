@@ -239,6 +239,16 @@ class MigrationChecksumVerifier:
 
         return mismatches
 
+    def count_applied(self) -> int:
+        """Return the number of applied migrations carrying a checksum row.
+
+        This is the denominator ``verify_all`` works against — what
+        ``verify-checksums --format json`` reports as ``summary.checked``
+        (#189). Public so the CLI does not have to reach into
+        ``_get_stored_checksums``.
+        """
+        return len(self._get_stored_checksums())
+
     def verify_single(self, migration_file: Path, expected_checksum: str) -> bool:
         """Verify a single migration file against expected checksum.
 
