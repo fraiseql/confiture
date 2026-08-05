@@ -55,19 +55,20 @@ What this means in practice:
 - **Order is unchanged.** Checks run in the order the old dispatch listed them,
   so single-flag output is byte-for-byte what 0.39.0 produced.
 
-Two combinations are rejected loudly instead of composed:
+One combination is rejected loudly instead of composed:
 
 | Combination | Exit | Why |
 |---|---|---|
 | `--list-patterns` or `--list-unmigrated-bodies` with anything else | 5 | Report modes. Both always exit 0, so there is no result to compose into a gate decision. |
-| `--idempotent` with `--check-drift` / `--require-migration` / `--require-migration-bodies` / `--require-grant-migration` | 5 | Retained from 0.37.0 for one more release. **Retires in 0.41.0.** |
 
-That last row is a deliberate inconsistency, not an oversight. The guard is
-currently the only loud-failure net over exactly the flag combinations #181
-fixed. Removing it in the same release as a 940-line dispatch refactor would
-convert a loud error straight back into a silent skip if the refactor has a bug
-— the regression #181 exists to prevent. It comes off in 0.41.0, after a
-release of production exposure.
+`--idempotent` composes with the git checks **from 0.41.0**. It was rejected
+alongside `--check-drift` / `--require-migration` / `--require-migration-bodies`
+/ `--require-grant-migration` in 0.37.0 through 0.40.0: the pre-composition
+dispatch ran the git branch and silently skipped idempotency, so a loud error
+was the only honest answer (#181). Composition landed in 0.40.0 and the guard
+was held one release past it so the refactor got production exposure before its
+safety net came off. Both checks now run and the exit code is the worse of the
+two.
 
 ## `--idempotent`
 

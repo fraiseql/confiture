@@ -7,16 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned for 0.41.0
+### Changed
 
-- **Retire the `--idempotent` conflict guard.** `migrate validate --idempotent`
-  still refuses `--check-drift` / `--require-migration` /
-  `--require-migration-bodies` / `--require-grant-migration` (exit 5), even
-  though 0.40.0's composition refactor makes the combination work. The guard is
-  held one release deliberately: it is the only loud-failure net over exactly
-  the flags #181 fixed, and removing it in the same release as a 940-line
-  dispatch refactor would turn a loud error back into a silent skip if the
-  refactor has a bug. Ships with phase 05 (#188).
+- **The `--idempotent` conflict guard is retired.** `migrate validate
+  --idempotent` now composes with `--check-drift`, `--require-migration`,
+  `--require-migration-bodies` and `--require-grant-migration` instead of
+  rejecting them with exit 5. The guard dates to 0.37.0, when the dispatch ran
+  the git branch and silently skipped idempotency (#181) — a loud error was the
+  right answer then. 0.40.0's composition refactor made the combination work,
+  and the guard was held one release past it so the refactor got production
+  exposure before its safety net came off. Both checks now run; the exit code is
+  the worse of the two. Scripts that split the flags across two invocations to
+  work around the rejection can merge them, and save a config parse.
 
 ## [0.40.0] - 2026-08-05
 

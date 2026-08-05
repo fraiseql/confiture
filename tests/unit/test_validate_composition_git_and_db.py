@@ -312,3 +312,78 @@ def test_emit_remediation_fires_exactly_once_when_composed(
     assert "passed import check" in result.output
     assert len(calls) == 1, f"emit_remediation ran {len(calls)} times"
     assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# The 0.37.0 --idempotent conflict guard is RETIRED (0.41.0)
+# ---------------------------------------------------------------------------
+#
+# 0.37.0 rejected `--idempotent` alongside the four git flags because the
+# pre-composition dispatch ran the git branch and *silently skipped*
+# idempotency — the #181 defect. 0.40.0 made every requested check run but kept
+# the guard one release, so the composition refactor got production exposure
+# before its safety net came off. It is off now, and these tests are what
+# replaces it: the combination has to run *both* checks, not merely be accepted.
+
+
+@pytest.mark.parametrize(
+    ("git_flag", "subcheck"),
+    [
+        ("--check-drift", "drift"),
+        ("--require-migration", "accompaniment"),
+        ("--require-migration-bodies", "accompaniment"),
+        ("--require-grant-migration", "grant"),
+    ],
+)
+def test_idempotent_composes_with_each_previously_rejected_git_flag(
+    git_project: Path,
+    git_doubles: dict[str, Any],
+    git_flag: str,
+    subcheck: str,
+) -> None:
+    """Each of the four formerly-rejected combinations runs both checks."""
+    (git_project / "db" / "migrations" / "20260101120000_t.up.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS public.foo (id int);\n"
+    )
+
+    result = _invoke("--idempotent", git_flag)
+
+    assert result.exit_code == 0, result.output
+    assert git_doubles["ran"] == [subcheck], f"{git_flag} did not run: {result.output!r}"
+    assert "All migrations are idempotent" in result.output
+
+
+def test_failing_git_check_does_not_mask_the_idempotency_check(
+    git_project: Path,
+    git_doubles: dict[str, Any],
+) -> None:
+    """The composed run reports the git failure *and* still runs idempotency."""
+    git_doubles["drift_passes"] = False
+    (git_project / "db" / "migrations" / "20260101120000_t.up.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS public.foo (id int);\n"
+    )
+
+    result = _invoke("--idempotent", "--check-drift")
+
+    assert git_doubles["ran"] == ["drift"]
+    assert "All migrations are idempotent" in result.output
+    assert result.exit_code == 1, result.output
+
+
+def test_failing_idempotency_is_not_masked_by_a_passing_git_check(
+    git_project: Path,
+    git_doubles: dict[str, Any],
+) -> None:
+    """The exact regression #181 filed: a green git check hiding a bad migration.
+
+    ``CREATE TABLE`` with no ``IF NOT EXISTS`` is a blocking idempotency
+    violation. Before 0.40.0 this invocation exited 0.
+    """
+    (git_project / "db" / "migrations" / "20260101120000_t.up.sql").write_text(
+        "CREATE TABLE public.foo (id int);\n"
+    )
+
+    result = _invoke("--idempotent", "--check-drift")
+
+    assert git_doubles["ran"] == ["drift"], "the git check must still run"
+    assert result.exit_code == 1, result.output
