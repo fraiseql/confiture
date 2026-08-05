@@ -139,6 +139,24 @@ rollback), so a non-transactional `CREATE INDEX CONCURRENTLY` — the canonical
 online-migration op — is window-safe. Genuine apply failures are caught at the
 migrate step, before any traffic moves.
 
+> ⚠️ **Correctness advisory — false `window_safe: true` on pglast 8.x before 0.39.0.**
+> The replica classifier compared `AlterTableType` against hardcoded ordinals.
+> PostgreSQL 18 inserted a member, so pglast 8 (uploaded 2026-07-09) renumbered
+> everything at index ≥ 13 and every comparison past that point missed. The
+> `elif` chain fell through, so `ALTER TABLE … DROP COLUMN` classified to `[]` —
+> **no `PFLIGHT_REPLICA_*` finding was emitted, and `window_safe` came back
+> `true` for a replica-unsafe migration.**
+>
+> Affected: installs of the `[ast]` extra resolving pglast ≥ 8.0 between
+> 2026-07-09 and 0.37.0's `pglast<8` cap. Installs on pglast 7.x, and any
+> install using the regex fallback, were never affected.
+>
+> Fixed in **0.39.0** (#192): the members are resolved by name, a required CI
+> leg runs the classifier suites on both ends of the supported pglast range, and
+> a partially-resolvable enum surface now degrades to the regex backend instead
+> of under-reporting. Consumers relying on `window_safe` as an authoritative
+> allow should be on **≥ 0.39.0**.
+
 So `true` means "every pending op is forward-compatible"; `false` means "unsafe
 or uninspectable". The fraisier gate consumes it as
 `PreflightReport.window_safe: Option<bool>`: `Some(true)` → allowed

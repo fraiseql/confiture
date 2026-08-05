@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-08-05
+
+Reproducible CI, pglast 8 support, and tracking-table honesty (#191, #192, #190, #186, #189).
+
+### Security-adjacent
+
+- **A false `window_safe: true` was possible on pglast 8.x.** The replica
+  classifier compared `AlterTableType` against hardcoded ordinals. PostgreSQL 18
+  inserted a member, so pglast 8 renumbered everything at index ≥ 13 down by one
+  (`AT_DropColumn` 14 → 13, `AT_AddConstraint` 17 → 16, `AT_DropConstraint`
+  23 → 22, `AT_AlterColumnType` 25 → 24, `AT_ChangeOwner` 27 → 26). Every
+  comparison past that point missed and the `elif` chains fell through, so the
+  operation was **silently dropped** rather than misclassified —
+  `ALTER TABLE t DROP COLUMN c` classified to `[]`. Because `window_safe` is
+  computed from the *presence* of `PFLIGHT_REPLICA_*` findings, a replica-unsafe
+  migration could be certified safe.
+
+  **Affected**: installs of the `[ast]` extra that resolved pglast ≥ 8.0 between
+  2026-07-09 (8.0's upload) and 0.37.0's `pglast<8` cap. Installs on pglast 7.x,
+  and any install using the regex fallback, were never affected. Consumers
+  relying on `window_safe` as an authoritative allow should upgrade to 0.39.0.
+
+### Added
+
+- **`verify-checksums --format json`** (#189) — `{ok, ledger_present,
+  summary{checked, mismatched, tracking_table}, issues[]}`, reusing the shared
+  issue object. All four paths emit it, including `--allow-uninitialized`, which
+  previously returned after a Rich print and produced no JSON at all. New
+  schema: `docs/reference/json-schemas/verify-checksums.schema.json`.
+- **`migrate introspect` emits `ledger_present`** (#186) — the forward-correct,
+  table-name-agnostic spelling `migrate verify` adopted in 0.37.0. New schema:
+  `docs/reference/json-schemas/migrate-introspect.schema.json`.
+- **`MigrationChecksumVerifier.count_applied()`** — public accessor for the
+  number of applied migrations carrying a checksum row.
+- **`MigrationRunner(tracking_table=…)`** — the test fixture accepts a
+  configured ledger name.
+- **Scheduled `lockfile-bump` workflow** — weekly `uv lock --upgrade` +
+  `cargo update` on its own labelled PR, so an upstream break is triaged in
+  isolation instead of ambushing an unrelated feature branch.
+- **Required `pglast-matrix` CI leg** — runs the AST-backed suites against both
+  ends of the supported range (`>=6,<7` and `>=8`).
+
+### Changed
+
+- **`pglast` is uncapped again: `>=6.0`** (#192). Enum members are resolved
+  **by name** at import through the new `core/_pglast_enums.py`, so an upstream
+  renumbering can no longer reach the visitors. The `>=6.0` floor is measured,
+  not inherited — the full suite is verified green on 6.16, 7.18 and 8.4. If
+  pglast ever drops a member confiture walks, `enums_are_usable()` goes false
+  and the consumers degrade to the regex backend rather than under-reporting.
+- **`uv.lock` and `Cargo.lock` are now tracked**, and every CI workflow syncs
+  with `--locked` (#191). `--locked`, not `--frozen`: the latter exits 0 on a
+  lockfile that has drifted from `pyproject.toml`. `confiture-core` is a
+  `cdylib` — a final artefact bundled into the wheel, not a crate others depend
+  on — so Cargo's own guidance is to commit its lock.
+- `ci/local_ci.py` mounts the tracked lockfile instead of excluding it. The
+  exclusion was correct while CI had no lock and is now backwards.
+
+### Fixed
+
+- **`migrate preflight --against` queried the literal `tb_confiture`** (#190),
+  raising `UndefinedTable` against any database whose ledger was renamed. It now
+  resolves the configured name once and threads it through the session override,
+  the probe and the hint. Presence delegates to `core.ledger.ledger_exists`, and
+  the probe reports `(exists, is_empty)` separately, so the hint distinguishes a
+  ledger that is *missing* from one that is *empty*.
+- **`migrate reinit`'s confirmation prompt named the wrong table** (#190) — a
+  destructive command, and the one place a wrong name could get an operator to
+  approve the wrong action.
+- Also naming the configured table now: `migrate status`'s ledger-absent warning
+  (text *and* JSON — two independent literals), `migrate up
+  --auto-detect-baseline`, `migrate introspect`'s text output, and `migrate
+  rebuild`'s backup filename.
+- **`testing/fixtures/migration_runner.py` swallowed every exception into `[]`**
+  (#190), so a dropped connection, a permission error, or a malformed query was
+  indistinguishable from an un-initialised database — silently turning
+  assertions against this fixture vacuous. Only an absent ledger now yields
+  `[]`; everything else raises.
+- `apply_as.py` re-implemented the tracking-table resolver locally, missing
+  `_get_tracking_table`'s non-string guard (#152).
+- The deprecated `confiture verify` alias gained `--format`, which it must
+  forward — an omitted argument arrives as Typer's `OptionInfo` sentinel rather
+  than its default.
+
+### Deprecated
+
+- **`migrate introspect --format json`'s `tb_confiture_present` key** (#186).
+  It hardcodes the default table name and is wrong for any project that
+  configured `tracking_table`. Both it and the replacement `ledger_present` are
+  emitted with the same value during the window. **Removed in 0.40.0** —
+  migrate consumers to `ledger_present`.
+
 ## [0.38.1] - 2026-07-29
 
 `migrate validate` git checks: honor `--env`, and never go blind on seed data (#194, PR #195).
