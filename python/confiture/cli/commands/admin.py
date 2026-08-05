@@ -127,6 +127,11 @@ def install_helpers(
     Creates the `confiture` schema with `save_and_drop_dependent_views()`
     and `recreate_saved_views()` PL/pgSQL functions for use in migrations
     that need to ALTER COLUMN TYPE on tables with dependent views.
+
+    NOTE: if the role you connect as is *itself* named `confiture`, PostgreSQL's
+    default `search_path` (`"$user", public`) puts this new schema ahead of
+    public for that role — so unqualified CREATE statements start landing in it.
+    Schema-qualify your DDL, or pin `search_path` on that role.
     """
     try:
         from confiture.core.connection import load_config

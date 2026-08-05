@@ -272,7 +272,7 @@ class TestMigrateDiffCommand:
 class TestMigrateUpCommand:
     """Test 'confiture migrate up' command (Milestone 1.13)."""
 
-    def test_up_applies_pending_migrations(self, tmp_path, test_db_connection):
+    def test_up_applies_pending_migrations(self, tmp_path, test_db_connection, test_db_url):
         """Should apply all pending migrations."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -297,14 +297,13 @@ class CreateTestTable(Migration):
         config_dir = tmp_path / "environments"
         config_dir.mkdir()
         config_file = config_dir / "test.yaml"
+        # database_url, not a decomposed `database:` block: psycopg's
+        # ConnectionInfo never exposes the password, so rebuilding the DSN field
+        # by field silently drops it and the CLI exits 3 against any server that
+        # is not trust/peer-authenticated — which is every CI service container.
         config_file.write_text(f"""
 name: test
-database:
-  host: {test_db_connection.info.host}
-  port: {test_db_connection.info.port}
-  database: {test_db_connection.info.dbname}
-  user: {test_db_connection.info.user}
-  password: ""
+database_url: {test_db_url}
 """)
 
         result = runner.invoke(
@@ -341,7 +340,7 @@ database:
             cursor.execute("DELETE FROM tb_confiture WHERE version = '001'")
         test_db_connection.commit()
 
-    def test_up_with_no_pending_migrations(self, tmp_path, test_db_connection):
+    def test_up_with_no_pending_migrations(self, tmp_path, test_db_connection, test_db_url):
         """Should report when no migrations need to be applied."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -349,14 +348,13 @@ database:
         config_dir = tmp_path / "environments"
         config_dir.mkdir()
         config_file = config_dir / "test.yaml"
+        # database_url, not a decomposed `database:` block: psycopg's
+        # ConnectionInfo never exposes the password, so rebuilding the DSN field
+        # by field silently drops it and the CLI exits 3 against any server that
+        # is not trust/peer-authenticated — which is every CI service container.
         config_file.write_text(f"""
 name: test
-database:
-  host: {test_db_connection.info.host}
-  port: {test_db_connection.info.port}
-  database: {test_db_connection.info.dbname}
-  user: {test_db_connection.info.user}
-  password: ""
+database_url: {test_db_url}
 """)
 
         result = runner.invoke(
@@ -378,7 +376,7 @@ database:
 class TestMigrateDownCommand:
     """Test 'confiture migrate down' command (Milestone 1.13)."""
 
-    def test_down_rolls_back_last_migration(self, tmp_path, test_db_connection):
+    def test_down_rolls_back_last_migration(self, tmp_path, test_db_connection, test_db_url):
         """Should rollback the last applied migration."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -402,14 +400,13 @@ class CreateRollbackTest(Migration):
         config_dir = tmp_path / "environments"
         config_dir.mkdir()
         config_file = config_dir / "test.yaml"
+        # database_url, not a decomposed `database:` block: psycopg's
+        # ConnectionInfo never exposes the password, so rebuilding the DSN field
+        # by field silently drops it and the CLI exits 3 against any server that
+        # is not trust/peer-authenticated — which is every CI service container.
         config_file.write_text(f"""
 name: test
-database:
-  host: {test_db_connection.info.host}
-  port: {test_db_connection.info.port}
-  database: {test_db_connection.info.dbname}
-  user: {test_db_connection.info.user}
-  password: ""
+database_url: {test_db_url}
 """)
 
         # Apply migration first

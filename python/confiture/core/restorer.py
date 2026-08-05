@@ -21,6 +21,7 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core.url_redaction import libpq_env
 from confiture.exceptions import RestoreError
 
 _log = logging.getLogger(__name__)
@@ -81,6 +82,11 @@ class RestoreOptions:
         host: PostgreSQL host or socket directory path.
         port: PostgreSQL port.
         username: PostgreSQL role to connect as. None uses the OS default.
+        password: Password for ``username``, required by any server that is not
+            trust/peer-authenticated. Passed to the ``pg_restore`` / ``psql``
+            children via ``PGPASSWORD``, never on argv (``ps aux`` is world-
+            readable). None leaves the ambient environment untouched, so an
+            operator-set ``PGPASSWORD`` or ``~/.pgpass`` still works.
         jobs: Number of parallel workers for the data phase.
         no_owner: Skip restoration of object ownership (--no-owner).
         no_acl: Skip restoration of access privileges (--no-acl).
@@ -102,6 +108,7 @@ class RestoreOptions:
     host: str = "/var/run/postgresql"
     port: int = 5432
     username: str | None = None
+    password: str | None = None
     jobs: int = 4
     no_owner: bool = False
     no_acl: bool = False
@@ -616,6 +623,7 @@ class DatabaseRestorer:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=libpq_env(options.password),
             ) as proc:
                 try:
                     assert proc.stderr is not None
@@ -759,6 +767,7 @@ class DatabaseRestorer:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=libpq_env(options.password),
             ) as proc:
                 try:
                     assert proc.stderr is not None
@@ -821,6 +830,7 @@ class DatabaseRestorer:
                     port=options.port,
                     dbname=options.target_db,
                     user=options.username or None,
+                    password=options.password,
                 ) as conn,
                 conn.cursor() as cur,
             ):

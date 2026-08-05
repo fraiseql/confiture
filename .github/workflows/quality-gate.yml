@@ -78,6 +78,11 @@ jobs:
         uv run pytest --version
         rustc --version
         pg_isready -h localhost -p 5432 -U confiture && echo '✅ PostgreSQL Ready' || echo '❌ PostgreSQL Not Ready'
+        # Client version, on the record: pg_dump refuses to dump a server newer
+        # than itself, and pg_dump 17+ emits `SET transaction_timeout` which a
+        # 15 server rejects. Both directions of that skew break the restore
+        # round-trip tests, and neither is visible without this line.
+        pg_dump --version
         uv run python -c "import psycopg; conn = psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test'); print('✅ DB connection successful'); conn.close()" || echo "❌ DB connection failed"
         echo "=== Rust Extension Verification ==="
         uv run python -c "from confiture.core.builder import HAS_RUST; print(f'✅ Rust extension loaded: {HAS_RUST}')" || echo "❌ Builder import failed"
@@ -90,6 +95,18 @@ jobs:
 
     - name: Run core tests with coverage
       env:
+        # CONFITURE_TEST_DB_URL is the name tests/conftest.py's `test_db_url`
+        # fixture actually reads, and it was never set here: the service
+        # container above ran for nothing, ~460 DB-backed tests skipped on every
+        # PR (6780 passed / 461 skipped in CI vs 9792 / 79 locally), and any
+        # "integration tests cover this" claim gated nothing. DATABASE_URL is
+        # kept because tests/migration_testing/conftest.py reads that one, and
+        # both SOURCE/TARGET spellings are set because the syncer fixtures read
+        # the CONFITURE_-prefixed pair while the migration suites read the bare
+        # pair. Keep the whole block in sync when adding a database.
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+        CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
+        CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
         DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
         SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
         TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test

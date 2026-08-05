@@ -14,6 +14,12 @@ def vm_db(clean_test_db: psycopg.Connection) -> psycopg.Connection:
 
     # Also drop extra schemas and materialized views from previous tests
     with conn.cursor() as cur:
+        # Pin the search_path first. install_helpers() creates a schema named
+        # `confiture`, and PostgreSQL's default search_path is `"$user", public`
+        # — so when the connecting role is *itself* named confiture (CI's is),
+        # every unqualified CREATE VIEW in these tests lands in the helpers
+        # schema instead of public, and a sweep of ARRAY['public'] finds nothing.
+        cur.execute("SET search_path = public")
         cur.execute("DROP SCHEMA IF EXISTS confiture CASCADE")
         cur.execute("DROP SCHEMA IF EXISTS catalog CASCADE")
         # Drop materialized views separately (clean_test_db only drops regular views)

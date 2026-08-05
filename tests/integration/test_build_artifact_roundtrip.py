@@ -82,7 +82,11 @@ def _restored_tables(server_url: str, target_db: str) -> set[str]:
 
 @pytest.mark.parametrize("dump_format", ["custom", "directory"])
 def test_artifact_round_trips_through_restore(
-    server_url: str, fresh_target: str, tmp_path: Path, dump_format: str
+    server_url: str,
+    fresh_target: str,
+    tmp_path: Path,
+    dump_format: str,
+    restore_connection_kwargs: dict,
 ) -> None:
     ext = "pgdump" if dump_format == "custom" else "pgdir"
     artifact = tmp_path / f"schema_test.full.deadbeefcafe.{ext}"
@@ -98,13 +102,11 @@ def test_artifact_round_trips_through_restore(
     assert result.skipped is False
     assert artifact.exists()
 
-    host = "localhost"
     restore = DatabaseRestorer().restore(
         RestoreOptions(
             backup_path=artifact,
             target_db=fresh_target,
-            host=host,
-            port=5432,
+            **restore_connection_kwargs,
             jobs=2,
             parallel_restore=True,
             no_owner=True,
@@ -133,7 +135,7 @@ def _row_count(server_url: str, target_db: str, table: str) -> int:
 
 
 def test_copy_bearing_schema_and_seed_round_trip(
-    server_url: str, fresh_target: str, tmp_path: Path
+    server_url: str, fresh_target: str, tmp_path: Path, restore_connection_kwargs: dict
 ) -> None:
     """#159 end-to-end: build --dump applies a COPY-bearing schema *and* a
     COPY-bearing seed file via psql, then the artifact restores with rows intact."""
@@ -164,8 +166,7 @@ def test_copy_bearing_schema_and_seed_round_trip(
         RestoreOptions(
             backup_path=artifact,
             target_db=fresh_target,
-            host="localhost",
-            port=5432,
+            **restore_connection_kwargs,
             jobs=2,
             parallel_restore=True,
             no_owner=True,

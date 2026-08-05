@@ -23,7 +23,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import psycopg
 import psycopg.errors
@@ -339,6 +339,9 @@ class TestDbProvisioner:
         self._host = parsed.hostname or "/var/run/postgresql"
         self._port = parsed.port or 5432
         self._user = parsed.username
+        # Percent-decoded, because PGPASSWORD is used verbatim by libpq while a
+        # password inside a URI is decoded first (same rule as split_password).
+        self._password = unquote(parsed.password) if parsed.password else None
 
     # -- connection helpers ------------------------------------------------
 
@@ -646,6 +649,7 @@ class TestDbProvisioner:
                 host=self._host,
                 port=self._port,
                 username=self._user,
+                password=self._password,
                 jobs=4,
                 parallel_restore=True,
                 no_owner=True,

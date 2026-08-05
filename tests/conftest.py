@@ -191,8 +191,17 @@ def clean_test_db(test_db_connection: psycopg.Connection) -> psycopg.Connection:
     conn = test_db_connection
 
     def cleanup():
-        """Drop all objects in public schema"""
+        """Drop all objects in public schema, plus confiture's own helper schema"""
         with conn.cursor() as cur:
+            # `migrate up` auto-installs the view helpers into a schema literally
+            # named `confiture` (migration.view_helpers: auto), and nothing here
+            # used to drop it. In a shared test database that leak is inert only
+            # while the connecting role is named something else: PostgreSQL's
+            # default search_path is `"$user", public`, so under a role *named*
+            # confiture — which is exactly what CI connects as — the leaked schema
+            # silently becomes the target of every later unqualified CREATE TABLE.
+            cur.execute("DROP SCHEMA IF EXISTS confiture CASCADE")
+
             # Drop all views
             cur.execute("""
                 SELECT viewname FROM pg_views

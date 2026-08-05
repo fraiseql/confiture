@@ -25,6 +25,7 @@ import os
 import pwd
 import shutil
 from collections.abc import Iterator
+from urllib.parse import unquote, urlparse
 
 import psycopg
 import psycopg.errors
@@ -215,3 +216,22 @@ def ram_setup_env() -> Iterator[tuple[TestDbProvisioner, str, str, str]]:
         yield provisioner, _RAMSETUP_TABLESPACE, _RAMSETUP_LOCATION, owner
     finally:
         _teardown_tmpfs_tablespace(url, _RAMSETUP_TABLESPACE, _RAMSETUP_LOCATION)
+
+
+@pytest.fixture
+def restore_connection_kwargs(test_db_url: str) -> dict[str, object]:
+    """``host``/``port``/``username``/``password`` for :class:`RestoreOptions`.
+
+    ``pg_restore`` is a subprocess: it inherits none of psycopg's connection
+    state, so every connection parameter has to be handed to it explicitly.
+    Tests used to hardcode ``localhost:5432`` with no credentials, which quietly
+    restores into whatever server owns that port and cannot authenticate at all
+    against a CI service container.
+    """
+    parsed = urlparse(test_db_url)
+    return {
+        "host": parsed.hostname or "/var/run/postgresql",
+        "port": parsed.port or 5432,
+        "username": parsed.username,
+        "password": unquote(parsed.password) if parsed.password else None,
+    }
