@@ -67,6 +67,30 @@ uv run confiture --version
 uv run pytest --cov=confiture
 ```
 
+### Changed a dependency? Commit the regenerated lockfile
+
+`uv.lock` and `Cargo.lock` are **tracked**, and CI syncs with `--locked`. That
+makes a CI run a function of the commit alone — an upstream release can no
+longer turn an unrelated PR red, which is exactly what pglast 8.2 did to PR #183
+(issue #191).
+
+The rule that follows: **editing `pyproject.toml` or `Cargo.toml` dependencies
+means committing the regenerated lock in the same commit.**
+
+```bash
+uv lock            # after any pyproject.toml dependency edit
+cargo generate-lockfile   # after any Cargo.toml dependency edit
+git add uv.lock Cargo.lock
+```
+
+If you skip this, CI fails with `The lockfile at 'uv.lock' needs to be updated,
+but '--locked' was provided` — that message is the fix, not a mystery. Do not
+"fix" it by dropping `--locked`.
+
+Dependency *upgrades* are not your job to bundle into a feature PR: a scheduled
+[Lockfile Bump](.github/workflows/lockfile-bump.yml) workflow proposes them
+weekly on their own PR, so an upstream break is triaged in isolation.
+
 ### Project Structure
 
 ```

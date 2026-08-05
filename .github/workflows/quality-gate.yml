@@ -59,10 +59,13 @@ jobs:
         # Create virtual environment with uv
         uv venv
 
-        # Install all dependencies, including the [notifications] and [ast]
-        # extras — tests/unit/hooks/notifications/ requires jinja2, and the
-        # SQL parsers depend on pglast for the primary path.
-        uv pip install ".[dev,notifications,ast]"
+        # Sync from the COMMITTED uv.lock so this run is a function of the
+        # commit alone (#191). --locked fails loudly when the lock has drifted
+        # from pyproject.toml; the fix is `uv lock` + commit, never a silent
+        # re-resolve. The [notifications] and [ast] extras are required —
+        # tests/unit/hooks/notifications/ requires jinja2, and the SQL parsers
+        # depend on pglast for the primary path.
+        uv sync --locked --extra dev --extra notifications --extra ast
 
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv
@@ -168,7 +171,7 @@ jobs:
         # WITHOUT building the project (--no-install-project), so no Rust toolchain
         # is needed here — ty skips the `_core` import via TYPE_CHECKING.
         uv venv
-        uv sync --no-install-project --all-extras
+        uv sync --locked --no-install-project --all-extras
         # Pinned: ty is pre-1.0 and adds default rules frequently, so an unpinned
         # install can turn CI red on an unrelated PR. Keep in lockstep with the ty
         # pre-commit hook / dev extra, deliberately.
@@ -193,7 +196,9 @@ jobs:
       run: cargo fmt --check
 
     - name: Run cargo clippy
-      run: cargo clippy -- -D warnings
+      # --locked: resolve from the committed Cargo.lock (#191), so an upstream
+      # crate release cannot turn an unrelated PR red.
+      run: cargo clippy --locked -- -D warnings
 
   security:
     name: Security

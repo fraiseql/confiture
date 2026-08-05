@@ -28,7 +28,9 @@ env/
 
 # uv
 .uv/
-uv.lock
+# uv.lock is deliberately TRACKED (#191): CI syncs with --locked, so a run is a
+# function of the commit alone. Changing a dependency means committing the
+# regenerated lock — see CONTRIBUTING.md.
 
 # Testing
 .pytest_cache/
@@ -58,7 +60,12 @@ db/schema_history/*.sql
 
 # Rust
 target/
-Cargo.lock
+# Cargo.lock is deliberately TRACKED (#191). The convention "libraries ignore
+# their lock" applies to crates other Rust crates depend on; confiture-core is
+# `crate-type = ["cdylib"]` — a final artefact bundled into the published wheel
+# — so Cargo's own guidance is to commit it. `cargo clippy -- -D warnings` is
+# otherwise the same trap as the Python tree: a new upstream crate release can
+# turn an unrelated PR red.
 
 # Documentation
 docs/_build/

@@ -61,7 +61,9 @@ jobs:
         uv venv
 
         # Install all dependencies including testing extras
-        uv pip install ".[dev,testing]"
+        # Sync from the committed uv.lock (#191) so the run is a function of
+        # the commit alone. Regenerate with `uv lock` and commit it.
+        uv sync --locked --extra dev --extra testing
 
     - name: Verify PostgreSQL Connection
       env:

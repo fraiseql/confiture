@@ -73,7 +73,9 @@ jobs:
         echo "=== Installing Confiture dependencies ==="
         # Include [notifications] (jinja2) and [ast] (pglast) so the full
         # test suite has its optional dependencies satisfied.
-        uv pip install ".[dev,notifications,ast]"
+        # Sync from the committed uv.lock (#191). uv resolves universally, so
+        # one lock serves every Python in the matrix.
+        uv sync --locked --extra dev --extra notifications --extra ast
 
         echo "=== Building Rust extension with maturin ==="
         uv run maturin develop --uv

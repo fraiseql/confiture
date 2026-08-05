@@ -79,7 +79,9 @@ fraiseql = [
 # was deleted (ECO-rec2). This OPT-IN extra pulls in the canonical definition for
 # projects that want structured-pattern validation, and lets the convention-seam
 # guard test (tests/unit/test_uuid_convention_seam.py) assert alignment when present.
-# Not installed by CI (no workflow uses --all-extras); core install never requires it.
+# Core install never requires it. It IS present in the type-check leg, which syncs
+# --all-extras; the test legs sync only dev/notifications/ast, so the seam test's
+# alignment half stays skipped there.
 seed-uuid = [
     "fraiseql-uuid>=0.1.3",
 ]

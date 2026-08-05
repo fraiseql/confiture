@@ -1,0 +1,88 @@
+name: Lockfile Bump
+
+# Committing uv.lock (#191) makes CI reproducible, but a pinned lock that is
+# never refreshed just trades red-on-an-unrelated-PR for silently rotting
+# dependencies. This job proposes the upgrade on ITS OWN pull request, so an
+# upstream break is triaged where it belongs instead of ambushing whoever opens
+# the next feature PR — which is exactly what pglast 8.2 did to #183.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — early in the week, so a red bump PR has working days
+    # left in it rather than landing on a Friday.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: lockfile-bump
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    name: Propose dependency upgrades
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Upgrade lockfiles
+        id: upgrade
+        run: |
+          uv lock --upgrade
+          cargo update
+          if git diff --quiet -- uv.lock Cargo.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dependency updates available."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo 'summary<<EOF'
+              git diff --stat -- uv.lock Cargo.lock
+              echo EOF
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pull request
+        if: steps.upgrade.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/lockfile-bump
+          base: main
+          title: 'chore(deps): refresh uv.lock and Cargo.lock'
+          # The label is the triage handle: these PRs are expected to go red
+          # sometimes, and that is the whole point of them existing.
+          labels: dependencies
+          commit-message: |
+            chore(deps): refresh uv.lock and Cargo.lock
+
+            Scheduled `uv lock --upgrade` + `cargo update`. The full quality
+            gate runs on this PR, so an upstream break surfaces here rather
+            than on an unrelated change (#191).
+          body: |
+            Scheduled dependency refresh — `uv lock --upgrade` and `cargo update`.
+
+            ```
+            ${{ steps.upgrade.outputs.summary }}
+            ```
+
+            **If the quality gate is red on this PR, that is the mechanism
+            working.** An upstream release broke something; triage it here.
+            Do not merge a red bump, and do not work around it on an unrelated
+            branch — that is the failure mode #191 exists to prevent.
+
+            Reviewing: skim the diff for major-version jumps, confirm the gate
+            is green, merge.
