@@ -10,6 +10,7 @@ patch them on this module.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,7 @@ from confiture.exceptions import ConfigurationError
 if TYPE_CHECKING:
     from confiture.core.function_body_drift import FunctionBodyDriftReport
     from confiture.core.function_signature_drift import FunctionSignatureDriftReport
+    from confiture.core.validation.context import ValidationContext
 
 
 @dataclass
@@ -107,6 +109,7 @@ def check_signature_drift(
     schemas: str,
     check_body: bool,
     ssh_via: str | None,
+    ctx: ValidationContext | None = None,
 ) -> SignatureDriftResult:
     """Detect signature (and optional body) drift against the live database.
 
@@ -116,6 +119,10 @@ def check_signature_drift(
         schemas: Comma-separated DB schema names to scan (e.g. ``"public,auth"``).
         check_body: Also compare function bodies (heavier).
         ssh_via: Optional ``user@host`` SSH tunnel target overriding the config.
+        ctx: Shared per-run resources. When given, the config and the live
+            connection come from there, so several checks in one
+            ``migrate validate`` run connect once between them. When ``None``
+            this function is fully standalone, exactly as before 0.40.0.
 
     Raises:
         ConfigurationError: config missing, auto-build failed, or connection failed.
@@ -127,7 +134,7 @@ def check_signature_drift(
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     schema_list = [s.strip() for s in schemas.split(",") if s.strip()]
 
     source_sql, auto_built = _resolve_source_sql(config_data, schema_file)
@@ -137,7 +144,10 @@ def check_signature_drift(
     if ssh_via:
         effective_config = _ssh_override(config_data, ssh_via)
 
-    with open_connection(effective_config) as conn:
+    conn_cm = (
+        nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
+    )
+    with conn_cm as conn:
         live_catalog = LiveFunctionCatalog(conn)
         live_sigs = live_catalog.get_signatures(schemas=schema_list)
         drift_report = FunctionSignatureDriftDetector().compare(

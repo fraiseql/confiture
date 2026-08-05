@@ -7,13 +7,27 @@ the configured global grant-sweep directory.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.exceptions import ConfigurationError
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-def check_acl_coverage(migrations_dir: Path, config_path: Path):  # noqa: ANN201
+    from confiture.core.validation.context import ValidationContext
+
+
+def check_acl_coverage(  # noqa: ANN201
+    migrations_dir: Path,
+    config_path: Path,
+    ctx: ValidationContext | None = None,
+):
     """Lint *migrations_dir* for ACL coverage against the config's ``acls:`` block.
+
+    Args:
+        migrations_dir: Directory of migration files to lint.
+        config_path: Config file carrying the optional ``acls:`` block.
+        ctx: Shared per-run resources; supplies the already-parsed config.
 
     Returns:
         The :class:`~confiture.models.lint.LintReport` from the schema linter.
@@ -30,7 +44,7 @@ def check_acl_coverage(migrations_dir: Path, config_path: Path):  # noqa: ANN201
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     # No-op when the project hasn't adopted the `acls:` block yet.
     expectations = load_acl_expectations(config_data, config_path, require=False)
 

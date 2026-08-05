@@ -788,8 +788,7 @@ def _report_empty_scope(
     migrations_dir: Path,
     meta: dict[str, Any],
     format_output: str,
-    output_file: Path | None,
-) -> None:
+) -> dict[str, Any] | None:
     """Report "nothing in scope changed" — a real success, distinct from "no files".
 
     Deliberately *not* the empty-directory message: the remedies differ. An
@@ -813,36 +812,30 @@ def _report_empty_scope(
     _emit_hint(message, hints_list=hints, format_=format_output)
 
     if format_output == "json":
-        _output_json(
-            {
-                "status": "ok",
-                "message": message,
-                "violations": [],
-                "meta": meta,
-                "hints": hints,
-            },
-            output_file,
-            console,
-        )
-    else:
-        console.print(f"[green]✅ {message}[/green]")
+        return {
+            "status": "ok",
+            "message": message,
+            "violations": [],
+            "meta": meta,
+            "hints": hints,
+        }
+    console.print(f"[green]✅ {message}[/green]")
+    return None
 
 
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
-    output_file: Path | None,
     *,
     strict_cor: bool = False,
     base_ref: str | None = None,
     staged: bool = False,
-) -> None:
+) -> tuple[bool, dict[str, Any] | None]:
     """Validate idempotency of SQL and Python migration files.
 
     Args:
         migrations_dir: Directory containing migration files
         format_output: Output format (text or json)
-        output_file: Optional file to save output to
         strict_cor: If True, info-severity CREATE OR REPLACE findings flip
             the exit code to 1 (default False — info findings render but
             don't fail the gate).
@@ -853,9 +846,12 @@ def _validate_idempotency(
             otherwise scope every run (#181).
         staged: Scope to staged migrations, reading the index blob rather than
             the working tree. Takes precedence over ``base_ref``.
-    """
-    import typer
 
+    Returns:
+        ``(passed, payload)``. Text-mode output is printed here; the JSON
+        payload is returned rather than written, because ``migrate validate``
+        composes checks and emits one document for the whole run (#187).
+    """
     from confiture.core.idempotency import IdempotencyValidator
 
     validator = IdempotencyValidator()
@@ -883,8 +879,7 @@ def _validate_idempotency(
             staged_content = _read_staged_content(selected)
 
         if not sql_files and not py_files:
-            _report_empty_scope(scope_meta, migrations_dir, meta, format_output, output_file)
-            return
+            return True, _report_empty_scope(scope_meta, migrations_dir, meta, format_output)
 
         if format_output == "text":
             where = (
@@ -917,10 +912,9 @@ def _validate_idempotency(
                 "meta": meta,
                 "hints": zero_files_hints,
             }
-            _output_json(result, output_file, console)
-        else:
-            console.print("[green]✅ No migration files found to validate[/green]")
-        return
+            return True, result
+        console.print("[green]✅ No migration files found to validate[/green]")
+        return True, None
 
     combined_report = _collect_idempotency_report(
         sql_files, py_files, validator, staged_content=staged_content
@@ -932,10 +926,7 @@ def _validate_idempotency(
         result["status"] = "issues_found" if fail else "ok"
         result["meta"] = meta
         result["hints"] = []
-        _output_json(result, output_file, console)
-        if fail:
-            raise typer.Exit(1)
-        return
+        return not fail, result
 
     blocking = [v for v in combined_report.violations if v.severity == "error"]
     info = [v for v in combined_report.violations if v.severity == "info"]
@@ -944,7 +935,7 @@ def _validate_idempotency(
         console.print("[green]✅ All migrations are idempotent[/green]")
         console.print(f"   Scanned {combined_report.files_scanned} file(s)")
         _render_extractor_warnings(combined_report)
-        return
+        return True, None
 
     if blocking:
         console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]\n")
@@ -971,8 +962,7 @@ def _validate_idempotency(
         )
         console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
-    if fail:
-        raise typer.Exit(1)
+    return not fail, None
 
 
 def _render_violations_by_file(violations: list[Any]) -> None:

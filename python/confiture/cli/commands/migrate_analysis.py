@@ -7,6 +7,11 @@ from typing import Any
 
 import typer
 
+from confiture.cli.commands.validate_checks import (
+    ValidateOptions,
+    build_registry,
+    validate_flag_dependencies,
+)
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
@@ -16,7 +21,6 @@ from confiture.cli.helpers import (
     _fix_ownership,
     _output_json,
     _resolve_config,
-    _validate_idempotency,
     console,
     error_console,
     is_json,
@@ -27,7 +31,14 @@ from confiture.core.connection import create_connection, load_config, open_conne
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import Migrator
-from confiture.exceptions import ConfigurationError, ConfiturError, GitError
+from confiture.core.validation.context import ValidationContext
+from confiture.core.validation.registry import (
+    ValidationCheck,
+    aggregate_exit_code,
+    compose_payload,
+    run_checks,
+)
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 
 def migrate_diff(
@@ -153,32 +164,28 @@ def migrate_diff(
         raise typer.Exit(1) from e
 
 
-def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
+def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:  # noqa: ANN401
     """Render the idempotency pattern catalog.
 
     Read-only: no DB, no config, no migrations directory.
 
     Args:
-        format_output: ``"text"`` for a Rich table, ``"json"`` for the
-            machine-readable catalog envelope.
-        output_file: Optional path to write JSON output; ignored for text.
+        opts: The parsed ``migrate validate`` options; only ``json_mode`` is read.
+
+    Returns:
+        The JSON catalog envelope, or ``None`` after printing the text table.
     """
     from confiture.core.idempotency.patterns import list_patterns
 
     entries = list_patterns()
 
-    if format_output == "json":
+    if opts.json_mode:
         # `hints` is pre-allocated per the documented JSON-schema contract
         # (docs/reference/json-schemas/migrate-validate-list-patterns.schema.json).
         # `--list-patterns` is a read-only catalog query with no ambiguous
         # success state, so the list is always empty; the key still
         # appears so consumers can code against a stable shape.
-        _output_json(
-            {"version": "1", "patterns": entries, "hints": []},
-            output_file,
-            console,
-        )
-        return
+        return {"version": "1", "patterns": entries, "hints": []}
 
     # Text mode: compact table for human eyes.
     from rich.table import Table
@@ -198,6 +205,7 @@ def _emit_pattern_catalog(format_output: str, output_file: Path | None) -> None:
             entry["description"],
         )
     console.print(table)
+    return None
 
 
 def migrate_validate(
@@ -589,21 +597,14 @@ def migrate_validate(
                 f"Invalid format: {format_output}. Use 'text', 'json', or 'csv'."
             )
 
-        # --list-patterns is a read-only catalog query. Short-circuit before
-        # touching config / migrations directory / DB. Must run before
-        # _resolve_config so projects without a confiture.yaml can still
-        # introspect the pattern catalog.
-        if list_patterns:
-            if idempotent:
-                raise ConfigurationError("--list-patterns is mutually exclusive with --idempotent")
-            _emit_pattern_catalog(format_output, output_file)
-            return
-
-        # Every branch below ends in a bare `return` and they are evaluated in
-        # source order, so a git-accompaniment flag combined with --idempotent
-        # would run only the former and silently skip idempotency. #181 fixed
-        # the --staged case by dispatch; fail loud on the rest rather than
-        # leave another silently-lying combination behind.
+        # #187/D2: the 0.37.0 conflict guard is RETAINED for 0.40.0 and retires
+        # in 0.41.0, one release after the composition refactor. Composition
+        # makes the combination safe in principle, but this guard is the only
+        # loud-failure net over exactly the flags #181 fixed; dropping it in the
+        # same release as the refactor would convert a loud error straight back
+        # into a silent skip if the refactor has a bug. Recorded here and in the
+        # 0.41.0 CHANGELOG so the temporary inconsistency does not become
+        # permanent by inattention.
         if idempotent:
             _conflicting = [
                 name
@@ -626,510 +627,85 @@ def migrate_validate(
                     ),
                 )
 
-        # Resolve --env / --config to a single config path (raises
-        # ConfigurationError, funneled through the fail() boundary below).
-        config = _resolve_config(config, env)
+        # --list-patterns is a read-only catalog query with no config or
+        # migrations directory behind it, so its options are assembled without
+        # resolving either — projects with no confiture.yaml can still
+        # introspect the pattern catalog.
+        if not list_patterns:
+            config = _resolve_config(config, env)
 
         # The git checks build the expected schema via GitSchemaBuilder(env),
         # so --env must reach them: on projects whose `local` env includes
         # seed data, pointing at a DDL-only env is the difference between a
         # working gate and a silent no-op (#194). --config-only callers keep
         # the historical "local" default.
-        git_env = env or "local"
-
-        # Handle git validation flags
-        # Report-only backlog listing (#178) — never fails, exits 0.
-        if list_unmigrated_bodies:
-            from confiture.cli.git_validation import report_unmigrated_bodies
-
-            body_result = report_unmigrated_bodies(
-                env=git_env,
-                base_ref=since or base_ref,
-                target_ref="HEAD",
-                console=console,
-                format_output=format_output,
-            )
-            if json_mode:
-                _output_json({"check": "unmigrated_bodies", **body_result}, output_file, console)
-            return
-
-        if (
-            check_drift
-            or require_migration
-            or require_migration_bodies
-            or require_grant_migration
-            # #181/D4: --staged used to enter this block and return, so
-            # `--idempotent --staged` silently never ran idempotency. When
-            # --idempotent is set and no git-accompaniment check was asked
-            # for, fall through to the idempotency branch, which now scopes
-            # to the staging index itself.
-            or (staged and not idempotent)
-        ):
-            from confiture.cli.git_validation import (
-                validate_git_drift,
-                validate_git_flags_in_repo,
-                validate_grant_accompaniment,
-                validate_migration_accompaniment,
-            )
-
-            # Override base_ref with since if provided
-            effective_base_ref = since or base_ref
-
-            # Validate we're in a git repo. NotAGitRepositoryError (GIT_002 →
-            # exit 7) propagates to the fail() boundary below.
-            validate_git_flags_in_repo()
-
-            # ARCH-L1: --staged is only meaningful for the grant-accompaniment
-            # check (staged_only=staged, below). Drift and migration
-            # accompaniment compare committed refs (base_ref → HEAD); diffing the
-            # staged index for them is not implemented, so target_ref is the
-            # constant "HEAD" rather than a dead `"HEAD" if not staged else "HEAD"`
-            # ternary. See tests/.../test_validate_staged_routing.
-            target_ref = "HEAD"
-
-            # Run git drift check
-            drift_passed = True
-            if check_drift:
-                try:
-                    drift_result = validate_git_drift(
-                        env=git_env,
-                        base_ref=effective_base_ref,
-                        target_ref=target_ref,
-                        console=console,
-                        format_output=format_output,
-                    )
-                except Exception as e:
-                    raise GitError(f"Drift check failed: {e}") from e
-                if not drift_result.get("passed"):
-                    drift_passed = False
-                    if json_mode:
-                        _output_json(
-                            {"status": "failed", "check": "drift", **drift_result},
-                            output_file,
-                            console,
-                        )
-                        raise typer.Exit(1)  # success-signal: drift found
-
-            # Run migration accompaniment check (--require-migration-bodies implies it)
-            accompaniment_passed = True
-            if require_migration or require_migration_bodies:
-                try:
-                    acc_result = validate_migration_accompaniment(
-                        env=git_env,
-                        base_ref=effective_base_ref,
-                        target_ref=target_ref,
-                        console=console,
-                        format_output=format_output,
-                        check_bodies=require_migration_bodies,
-                    )
-                except Exception as e:
-                    raise GitError(f"Accompaniment check failed: {e}") from e
-                if not acc_result.get("is_valid"):
-                    accompaniment_passed = False
-                    if json_mode:
-                        _output_json(
-                            {"status": "failed", "check": "accompaniment", **acc_result},
-                            output_file,
-                            console,
-                        )
-                        raise typer.Exit(1)  # success-signal: accompaniment missing
-
-            # Run grant accompaniment check
-            grant_passed = True
-            if require_grant_migration and not allow_grant_only:
-                # Honor a non-default grant directory from the config — a
-                # "broad coverage" gate that ignored it would be a trap.
-                grant_dir = "db/7_grant"
-                if config and Path(config).exists():
-                    try:
-                        cfg_data = load_config(Path(config))
-                        configured = (
-                            cfg_data.get("migration", {}).get("grant_dir")
-                            if isinstance(cfg_data, dict)
-                            else None
-                        )
-                        if configured:
-                            grant_dir = configured
-                    except Exception:  # noqa: BLE001 — fall back to the default
-                        pass
-                try:
-                    grant_result = validate_grant_accompaniment(
-                        base_ref=effective_base_ref,
-                        target_ref="HEAD",
-                        staged_only=staged,
-                        console=console,
-                        format_output=format_output,
-                        grant_dir=grant_dir,
-                        migrations_dir=str(migrations_dir),
-                    )
-                except Exception as e:
-                    raise GitError(f"Grant accompaniment check failed: {e}") from e
-                if not grant_result.get("is_valid"):
-                    grant_passed = False
-                    if json_mode:
-                        _output_json(
-                            {
-                                "status": "failed",
-                                "check": "grant_accompaniment",
-                                **grant_result,
-                            },
-                            output_file,
-                            console,
-                        )
-                        raise typer.Exit(1)  # success-signal: grant migration missing
-
-            # Check if all checks passed (for text output)
-            if drift_passed and accompaniment_passed and grant_passed:
-                if format_output == "json":
-                    result = {
-                        "status": "passed",
-                        "checks": [
-                            c
-                            for c, flag in [
-                                ("drift", check_drift),
-                                ("accompaniment", require_migration or require_migration_bodies),
-                                ("grant_accompaniment", require_grant_migration),
-                            ]
-                            if flag
-                        ],
-                    }
-                    _output_json(result, output_file, console)
-                else:
-                    console.print("[green]✅ All git validation checks passed[/green]")
-                return
-            else:
-                # At least one check failed in text mode
-                raise typer.Exit(1)
-
-        # Guard: --check-body requires --check-signatures
-        if check_body and not check_signatures:
-            raise ConfigurationError("--check-body requires --check-signatures")
-
-        # Guard: --show-diff requires one of the body-drift checks
-        if show_diff and not (check_body or check_body_views or check_body_replay):
-            raise ConfigurationError(
-                "--show-diff requires --check-body, --check-body-views, or --check-body-replay"
-            )
-
-        # Run ACL coverage check on migration files (static, no DB).
-        if check_acls:
-            from confiture.cli.formatters.validate_formatter import render_acl_coverage
-            from confiture.core.validation.acl_coverage import check_acl_coverage
-
-            acl_report = check_acl_coverage(migrations_dir, config)
-            render_acl_coverage(acl_report, json_mode=json_mode, output_file=output_file)
-            if acl_report.has_errors:
-                raise typer.Exit(1)  # success-signal: violations found
-            return
-
-        # Run ownership coverage check on migration files (static, no DB).
-        if check_ownership_coverage:
-            from confiture.cli.formatters.validate_formatter import (
-                render_ownership_coverage,
-            )
-            from confiture.core.validation.ownership_coverage import (
-                check_ownership_coverage,
-            )
-
-            ownership_report = check_ownership_coverage(migrations_dir, config)
-            render_ownership_coverage(
-                ownership_report, json_mode=json_mode, output_file=output_file
-            )
-            if ownership_report.has_errors:
-                raise typer.Exit(1)  # success-signal: ERROR-severity violations found
-            return
-
-        # Run function-uniqueness check on DDL files (static, no DB).
-        if check_function_uniqueness:
-            from confiture.cli.formatters.validate_formatter import (
-                render_function_uniqueness,
-            )
-            from confiture.core.validation.function_uniqueness import (
-                check_function_uniqueness,
-            )
-
-            scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
-            func_report = check_function_uniqueness(scan_paths, config)
-            render_function_uniqueness(func_report, json_mode=json_mode, output_file=output_file)
-            if func_report.has_violations:
-                raise typer.Exit(1)  # success-signal: duplicate signatures found
-            return
-
-        # Run security-definer lint — static (DDL) or live (pg_proc).
-        if check_security_definer:
-            from confiture.cli.formatters.validate_formatter import (
-                render_security_definer,
-            )
-
-            if secdef_against_db:
-                from confiture.core.validation.security_definer import (
-                    check_security_definer_live,
-                )
-
-                sd_report = check_security_definer_live(
-                    config_path=config,
-                    schemas=check_signature_schemas,
-                    ssh_via=ssh_via,
-                )
-            else:
-                from confiture.core.validation.security_definer import (
-                    check_security_definer,
-                )
-
-                scan_paths = list(ddl_dir) if ddl_dir else [Path("db/schema")]
-                sd_report = check_security_definer(scan_paths, config)
-
-            render_security_definer(sd_report, json_mode=json_mode, output_file=output_file)
-            if emit_remediation is not None and sd_report.has_violations:
-                from confiture.core.validation.security_definer import emit_remediation as _emit
-
-                count = _emit(sd_report, emit_remediation)
-                console.print(
-                    f"[dim]Remediation script ({count} statement(s)) written to "
-                    f"{emit_remediation}[/dim]"
-                )
-            if sd_report.has_errors:
-                raise typer.Exit(1)  # success-signal: ERROR-severity violations found
-            return
-
-        # Run import check on Python migration modules
-        if check_imports:
-            from confiture.cli.formatters.validate_formatter import render_import_check
-            from confiture.core.import_checker import ImportChecker
-
-            import_result = ImportChecker(migrations_dir).check()
-            render_import_check(import_result, json_mode=json_mode, output_file=output_file)
-            if not import_result.success:
-                raise typer.Exit(1)  # success-signal: import failures found
-            return
-
-        # Run live drift check
-        if check_live_drift:
-            from confiture.cli.formatters.validate_formatter import render_live_drift
-            from confiture.core.validation.live_drift import check_live_drift as run_live_drift
-
-            drift_report = run_live_drift(config, schema_file)
-            render_live_drift(drift_report, json_mode=json_mode, output_file=output_file)
-            if drift_report.has_critical_drift:
-                raise typer.Exit(1)  # success-signal: critical drift found
-            return
-
-        # Run live function signature drift check
-        if check_signatures:
-            from confiture.cli.formatters.validate_formatter import render_signature_drift
-            from confiture.core.validation.signature_drift import check_signature_drift
-
-            sig_result = check_signature_drift(
-                config_path=config,
-                schema_file=schema_file,
-                schemas=check_signature_schemas,
-                check_body=check_body,
-                ssh_via=ssh_via,
-            )
-            if not json_mode:
-                if sig_result.auto_built:
-                    console.print("[dim]  (schema auto-built from DDL files)[/dim]")
-                if sig_result.ssh_target:
-                    console.print(
-                        f"[dim]  (connecting via SSH tunnel to {sig_result.ssh_target})[/dim]"
-                    )
-            render_signature_drift(
-                sig_result.drift_report,
-                sig_result.body_report,
-                json_mode=json_mode,
-                output_file=output_file,
-                show_diff=show_diff,
-            )
-            if sig_result.has_any_drift:
-                raise typer.Exit(1)  # success-signal: drift found
-            return
-
-        # Run live view / materialized-view body-drift check
-        if check_body_views:
-            from confiture.cli.formatters.validate_formatter import render_view_drift
-            from confiture.core.validation.view_drift import check_view_drift
-
-            view_result = check_view_drift(
-                config_path=config,
-                schema_file=schema_file,
-                schemas=check_signature_schemas,
-                ssh_via=ssh_via,
-                scratch_url=scratch_url,
-            )
-            if not json_mode:
-                if view_result.auto_built:
-                    console.print("[dim]  (schema auto-built from DDL files)[/dim]")
-                if view_result.ssh_target:
-                    console.print(
-                        f"[dim]  (connecting via SSH tunnel to {view_result.ssh_target})[/dim]"
-                    )
-            render_view_drift(
-                view_result.view_report,
-                json_mode=json_mode,
-                output_file=output_file,
-                show_diff=show_diff,
-            )
-            if view_result.has_drift:
-                raise typer.Exit(1)  # success-signal: view drift found
-            return
-
-        # Run replay-based function-body drift check (clean hot-patch signal)
-        if check_body_replay:
-            from confiture.cli.formatters.validate_formatter import render_replay_drift
-            from confiture.core.validation.replay_drift import check_replay_drift
-
-            replay_result = check_replay_drift(
-                config_path=config,
-                migrations_dir=migrations_dir,
-                schemas=check_signature_schemas,
-                ssh_via=ssh_via,
-                scratch_url=scratch_url,
-            )
-            if not json_mode and replay_result.ssh_target:
-                console.print(
-                    f"[dim]  (connecting via SSH tunnel to {replay_result.ssh_target})[/dim]"
-                )
-            render_replay_drift(
-                replay_result.body_report,
-                json_mode=json_mode,
-                output_file=output_file,
-                show_diff=show_diff,
-            )
-            if replay_result.has_drift:
-                raise typer.Exit(1)  # success-signal: hot-patch drift found
-            return
-
-        if not migrations_dir.exists():
-            raise ConfigurationError(
-                f"Migrations directory not found: {migrations_dir.absolute()}",
-                error_code="CONFIG_004",
-            )
-
-        # Handle idempotency validation
-        if idempotent:
+        opts = ValidateOptions(
+            format_output=format_output,
+            json_mode=json_mode,
+            migrations_dir=migrations_dir,
+            config=config,
+            git_env=env or "local",
+            schema_file=schema_file,
+            scratch_url=scratch_url,
+            schemas=check_signature_schemas,
+            ssh_via=ssh_via,
+            ddl_dir=list(ddl_dir) if ddl_dir else [],
+            list_patterns=list_patterns,
+            list_unmigrated_bodies=list_unmigrated_bodies,
+            check_drift=check_drift,
+            require_migration=require_migration,
+            require_migration_bodies=require_migration_bodies,
+            require_grant_migration=require_grant_migration,
+            check_acls=check_acls,
+            check_ownership_coverage=check_ownership_coverage,
+            check_function_uniqueness=check_function_uniqueness,
+            check_security_definer=check_security_definer,
+            check_imports=check_imports,
+            check_live_drift=check_live_drift,
+            check_signatures=check_signatures,
+            check_body_views=check_body_views,
+            check_body_replay=check_body_replay,
+            idempotent=idempotent,
+            allow_grant_only=allow_grant_only,
+            staged=staged,
+            check_body=check_body,
+            show_diff=show_diff,
+            strict_cor=strict_cor,
+            secdef_against_db=secdef_against_db,
+            emit_remediation=emit_remediation,
+            fix_naming=fix_naming,
+            dry_run=dry_run,
             # #181: --base-ref carries a truthy default ("origin/main"), so the
             # value alone cannot say whether the operator asked for scoping.
             # Gate on the parameter source; without this every unscoped run
             # would silently scope, and a plain --idempotent in a non-git tree
             # would exit 7.
-            scoping_requested = staged or param_is_explicit(ctx, "base_ref", "since")
-            _validate_idempotency(
-                migrations_dir,
-                format_output,
-                output_file,
-                strict_cor=strict_cor,
-                base_ref=(since or base_ref) if scoping_requested and not staged else None,
-                staged=staged,
-            )
-            return
+            idempotent_base_ref=(
+                (since or base_ref)
+                if (param_is_explicit(ctx, "base_ref", "since") and not staged)
+                else None
+            ),
+        )
 
-        # Use Migrator to find orphaned files (needs instance for method)
-        from unittest.mock import Mock
+        validate_flag_dependencies(opts)
+        checks = build_registry(opts)
+        _reject_exclusive_composition(checks)
 
-        from confiture.core.migrator import Migrator, find_duplicate_migration_versions
+        with ValidationContext(
+            config_path=config,
+            ssh_via=ssh_via,
+            effective_base_ref=since or base_ref,
+            staged=staged,
+        ) as run_ctx:
+            outcomes = run_checks(checks, run_ctx)
 
-        mock_conn = Mock()
-        migrator = Migrator(connection=mock_conn)
+        payload = compose_payload(outcomes)
+        if payload is not None:
+            _output_json(payload, output_file, console)
 
-        # Check for duplicate migration versions (hard error)
-        duplicate_versions = find_duplicate_migration_versions(migrations_dir)
-
-        # Find orphaned files
-        orphaned_files = migrator.find_orphaned_sql_files(migrations_dir)
-
-        if duplicate_versions:
-            if format_output == "json":
-                result: dict[str, Any] = {
-                    "status": "issues_found",
-                    "duplicate_versions": {
-                        v: [f.name for f in files] for v, files in duplicate_versions.items()
-                    },
-                }
-                if orphaned_files:
-                    result["orphaned_files"] = [f.name for f in orphaned_files]
-                _output_json(result, output_file, console)
-            else:
-                console.print("[red]❌ Duplicate migration versions detected[/red]")
-                console.print(
-                    "[red]Multiple migration files share the same version number:[/red]\n"
-                )
-                for version, files in sorted(duplicate_versions.items()):
-                    console.print(f"  Version {version}:")
-                    for f in files:
-                        console.print(f"    • {f.name}")
-                console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-                console.print(
-                    "[yellow]   Use 'confiture migrate generate' to auto-assign the next version.[/yellow]"
-                )
-            raise typer.Exit(1)
-
-        if not orphaned_files:
-            if format_output == "json":
-                result = {
-                    "status": "ok",
-                    "message": "No orphaned migration files found",
-                    "fixed": [],
-                    "errors": [],
-                }
-                _output_json(result, output_file, console)
-            else:
-                console.print("[green]✅ No orphaned migration files found[/green]")
-            return
-
-        # If fix_naming is requested, fix the files
-        if fix_naming:
-            # --dry-run takes precedence
-            is_dry_run = dry_run
-            result = migrator.fix_orphaned_sql_files(migrations_dir, dry_run=is_dry_run)
-
-            if format_output == "json":
-                output_dict: dict[str, Any] = {
-                    "status": "fixed" if not is_dry_run else "preview",
-                    "fixed": result.get("renamed", []),
-                    "errors": result.get("errors", []),
-                }
-                _output_json(output_dict, output_file, console)
-            else:
-                # Text output
-                if is_dry_run:
-                    console.print(
-                        "[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]"
-                    )
-                else:
-                    console.print("[green]✅ Fixed orphaned migration files:[/green]")
-
-                for old_name, new_name in result.get("renamed", []):
-                    console.print(f"  • {old_name} → {new_name}")
-
-                if result.get("errors"):
-                    console.print("[red]Errors:[/red]")
-                    for filename, error_msg in result.get("errors", []):
-                        console.print(f"  ❌ {filename}: {error_msg}")
-
-        else:
-            # Just report the orphaned files (don't fix)
-            if format_output == "json":
-                output_dict = {
-                    "status": "issues_found",
-                    "orphaned_files": [f.name for f in orphaned_files],
-                }
-                _output_json(output_dict, output_file, console)
-            else:
-                console.print("[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
-                console.print(
-                    "[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]"
-                )
-
-                for orphaned_file in orphaned_files:
-                    suggested_name = f"{orphaned_file.stem}.up.sql"
-                    console.print(f"  • {orphaned_file.name} → rename to: {suggested_name}")
-
-                console.print()
-                console.print("[cyan]To automatically fix these files, run:[/cyan]")
-                console.print("[cyan]  confiture migrate validate --fix-naming[/cyan]")
-                console.print()
-                console.print("[cyan]Or preview the changes first with:[/cyan]")
-                console.print("[cyan]  confiture migrate validate --fix-naming --dry-run[/cyan]")
+        exit_code = aggregate_exit_code(outcomes)
+        if exit_code:
+            raise typer.Exit(exit_code)  # success-signal: a check found something
 
     except typer.Exit:
         raise
@@ -1140,6 +716,32 @@ def migrate_validate(
         # exit 1), preserving the legacy catch-all exit code while emitting the
         # #145 envelope in JSON mode.
         fail(e, json_mode=json_mode, output_file=output_file)
+
+
+def _reject_exclusive_composition(checks: list[ValidationCheck]) -> None:
+    """Reject report modes combined with anything else.
+
+    ``--list-patterns`` and ``--list-unmigrated-bodies`` are *report* modes, not
+    validation modes: they dump a catalog or size a backlog and always exit 0,
+    so there is no exit code for them to compose into. Silently running one and
+    dropping the other is the very defect #187 is about, so this fails loudly
+    and names both flags.
+
+    Raises:
+        ConfigurationError: an exclusive check was requested alongside another.
+    """
+    on = [c for c in checks if c.enabled]
+    if len(on) < 2:
+        return
+    for check in on:
+        if not check.exclusive:
+            continue
+        others = ", ".join(c.flag for c in on if c is not check)
+        raise ConfigurationError(
+            f"{check.flag} cannot be combined with {others}: it is a report mode, "
+            "not a validation check, so there is no result to combine.",
+            resolution_hint=f"Run `{check.flag}` on its own, then run the other checks.",
+        )
 
 
 def migrate_fix(
