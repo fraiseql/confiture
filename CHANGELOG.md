@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-08-06
+
+`--staged` becomes a real scope for every git-aware check (#184), SQL loaded
+through `Path(...).read_text()` is analyzed instead of skipped (#185),
+`confiture lint` gains ruff-style rule selection (#150) — and CI runs the
+database-backed test suite it has been provisioning and skipping since the
+suite existed.
+
+### ⚠️ Behaviour change
+
+- **`migrate validate --staged` now scopes `--check-drift`,
+  `--require-migration` and `--require-migration-bodies` to the staging index**
+  (#184). Only `--require-grant-migration` honoured the flag before; the others
+  compared `--base-ref` against `HEAD` regardless, so a pre-commit hook ignored
+  exactly the change being committed — while
+  `docs/guides/git-aware-validation.md` documented the combination as the
+  pre-commit recipe.
+
+  **What changes for you.** A hook running `--check-drift --staged` or
+  `--require-migration --staged` starts reporting findings it previously could
+  not see. That is the fix, not a regression: those runs were passing on a
+  comparison of the last commit with itself. Committed-ref runs (no `--staged`)
+  are unchanged.
+
+  Mechanically, staged mode materialises the index as a tree (`git write-tree`)
+  and uses it as the target ref, comparing from the merge base. Content comes
+  from the index blob, so a file staged and then edited further contributes its
+  staged content. A migration written but not `git add`-ed does not count as
+  accompanying a staged DDL change. In a shallow clone with no `origin/main`,
+  staged mode fails with `GIT_003` (exit 7) and the remedy rather than
+  reporting an empty scope.
+
+### Added
+
+- **`self.execute(Path("file.sql").read_text())` is resolved and analyzed**
+  (#185). The idempotency analyzer reported this shape as unanalyzable dynamic
+  SQL, so `migrate validate --idempotent` passed migrations whose statements it
+  had never read. Only a **literal** path resolves — `Path(target)` and
+  `(SQL_DIR / name)` are reported as a new `dynamic_read_text` warning whose
+  message names `execute_file(...)`, which resolves computed paths. Resolution
+  goes through `execute_file`'s own project-root confinement, so a path escaping
+  the project is refused rather than read, and reports the same
+  `execute_file_escaped` / `execute_file_missing` signals. Matching is pure
+  Python-AST, hence identical under `CONFITURE_IDEMPOTENCY_FORCE_REGEX=1`.
+
+- **`confiture lint --select` / `--ignore` / `--list-rules`** (#150), backed by
+  a rule registry (`core/linting/rule_registry.py`). Select by family
+  (`--select pk,naming`) or by code (`--select naming_001`); `--ignore` is
+  applied afterwards and always wins. `default` is a selector meaning "every
+  rule that is on by default", so `--select default,replica` is the usual lint
+  plus one opt-in family. An unknown code or family exits 5 listing the valid
+  set instead of silently selecting nothing. `--list-rules` prints the
+  catalogue as a table or as JSON (new schema: `lint-list-rules.schema.json`).
+
+- **Lint violations carry their rule code.** The text table gained a `Code`
+  column and JSON violations a `rule_id` field, so a finding maps back to the
+  selector that turns it off.
+
+- **`RestoreOptions.password`**, passed to `pg_restore` and the post-restore
+  `psql` ANALYZE via `PGPASSWORD` (never argv) and to the `--min-tables`
+  connection. `TestDbProvisioner` now forwards the password from its server
+  URL. Without it, `confiture restore` and `test-db provision --from-artifact`
+  — including the per-worker xdist fixtures — could not reach any server that
+  is not trust/peer-authenticated.
+
+### Deprecated
+
+- `confiture lint --replica-safe`, `--check-tenant-isolation` and
+  `--check-security-definer` are documented aliases for
+  `--select default,replica` / `default,tenant` / `default,security-definer`.
+  They keep working with identical output — pinned by test — and no removal is
+  scheduled. New lint rules register instead of adding a flag.
+
+### Fixed
+
+- **CI runs the DB-backed tests.** The quality gate started a PostgreSQL
+  service and exported `DATABASE_URL`, but the fixture every integration test
+  resolves through reads `CONFITURE_TEST_DB_URL`, so ~460 tests skipped on
+  every pull request (6780 passed / 461 skipped in CI vs 9792 / 79 locally).
+  All three pytest workflows now export the variables the fixtures actually
+  read. Turning them on surfaced 49 failures, fixed here: tests that rebuilt a
+  DSN field-by-field from psycopg's `ConnectionInfo` (which redacts the
+  password), tests that hardcoded `localhost:5432` for `pg_restore`, and one
+  `--force` walkthrough that two early `return`s had turned into a no-op.
+- **The shared test database no longer leaks confiture's helper schema.**
+  `migrate up` auto-installs the view helpers into a schema named `confiture`;
+  nothing dropped it, and under a role *also* named `confiture` — which is what
+  CI connects as — PostgreSQL's default `search_path` (`"$user", public`) then
+  silently redirected every later unqualified `CREATE TABLE` into it.
+  `install-helpers` now documents that interaction.
+- `confiture lint`'s help no longer claims an FK-index rule. `LintConfig`
+  carries `check_indexes` (computes a map, then discards it) and
+  `check_constraints` (no implementation); neither is listed by `--list-rules`
+  nor selectable, and both are left in place for library compatibility.
+
 ## [0.41.0] - 2026-08-05
 
 The migration-ledger probe answers the question its callers are actually asking
