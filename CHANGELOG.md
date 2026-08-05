@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned for 0.41.0
+
+- **Retire the `--idempotent` conflict guard.** `migrate validate --idempotent`
+  still refuses `--check-drift` / `--require-migration` /
+  `--require-migration-bodies` / `--require-grant-migration` (exit 5), even
+  though 0.40.0's composition refactor makes the combination work. The guard is
+  held one release deliberately: it is the only loud-failure net over exactly
+  the flags #181 fixed, and removing it in the same release as a 940-line
+  dispatch refactor would turn a loud error back into a silent skip if the
+  refactor has a bug. Ships with phase 05 (#188).
+
+## [0.40.0] - 2026-08-05
+
+`migrate validate` composes: every check you ask for runs (#187). Ships alone —
+it is the riskiest change in the open backlog, and coupling it to anything means
+a rollback takes the other work with it.
+
+### ⚠️ BREAKING
+
+- **`migrate validate` runs every requested check instead of the first one**
+  (#187). The command was a flat chain of `if <flag>: … return` blocks evaluated
+  in source order, so `--check-acls --check-imports` ran **only** the ACL check
+  and exited 0 — a green gate for a check that never ran. In a pre-commit hook
+  or a CI gate that is a silent false pass, the same failure class as 0.39.0's
+  `window_safe: true`. Ten-plus flag pairs were affected; 0.37.0's `--idempotent`
+  guard had closed four of them by rejecting, which was the right stopgap and
+  the wrong destination.
+
+  **What changes for you:** a script that ran two invocations to work around
+  this now gets both checks from one, and **the exit code is the worst outcome
+  across the checks that ran** — a passing check can no longer mask a failing
+  one. Exit-code handling that assumed single-check semantics is the thing to
+  re-read. Single-flag invocations are unchanged, deliberately: the registry
+  preserves the historical execution order so their text and JSON output is
+  byte-for-byte what 0.39.0 produced.
+
+- **`--format json` emits one document per run.** One check still emits its own
+  documented payload verbatim — every existing `migrate-validate-*.schema.json`
+  holds. Two or more are wrapped in the new
+  `migrate-validate-composed.schema.json`, keyed by check name, with each value
+  the payload that check would have emitted alone.
+
+- **`--list-patterns` and `--list-unmigrated-bodies` reject composition**
+  (exit 5, naming both flags). They are report modes that always exit 0, so
+  they have no gate result to compose. Previously they silently swallowed
+  whatever else you asked for.
+
+- **`migrate introspect --format json` no longer emits `tb_confiture_present`**
+  (#186). Added in 0.39.0 as a one-release deprecated alias and removed here on
+  schedule. It hardcoded the default table name, so it reported the wrong thing
+  for any project that configured `tracking_table`. Read `ledger_present`.
+
+### Fixed
+
+- **JSON mode short-circuited the git-accompaniment group.** Text mode
+  aggregated `drift` / `accompaniment` / `grant` and returned once; JSON mode
+  raised on the first failure, so a failing drift check meant accompaniment and
+  grant never ran. Both modes now run all three and report once. This block was
+  the closest thing the codebase had to a model for composition, and it did not
+  compose in the mode machine consumers use.
+- **`--check-live-drift` now honours `--ssh`.** Its help text has always
+  advertised the tunnel, but the check used `create_connection`, which has no
+  tunnel support. It now takes the run's shared connection, which does.
+- **`--check-body` / `--show-diff` dependency guards fire before any check
+  runs.** They sat halfway down the dispatch, so a git flag returned before they
+  were evaluated and an illegal combination passed silently.
+
+### Changed
+
+- **One config parse and at most one database connection per run.** Five
+  `core/validation` handlers each called `load_config` and opened their own
+  connection; over `--ssh` that meant a tunnel subprocess each. A new
+  `ValidationContext` owns both, lazily — a run of purely static checks still
+  never touches the database. The scratch databases used by `--check-body-views`
+  and `--check-body-replay` are necessarily their own connections.
+- **Internal:** the 940-line dispatch is now a registry of check descriptors
+  (`core/validation/registry.py`, `core/validation/context.py`,
+  `cli/commands/validate_checks.py`). `validate_formatter.render_*` return their
+  JSON payload instead of writing it, and `_validate_idempotency` returns
+  `(passed, payload)` instead of exiting from inside a renderer. The Typer
+  signature of `migrate validate` is untouched.
+- The nine `core/validation` handlers take an optional `ctx`. Called without
+  one they behave exactly as before, so the library API is additive.
+
+### Adapter contract
+
+**No minimum-version bump.** The fraisier adapter surface is `migrate current` /
+`up` / `down-to` / `verify` / `preflight` / `--version`; neither
+`migrate validate` nor `migrate introspect` is in it, so nothing the adapter
+reads changed. (Checked rather than assumed — the release checklist's standing
+floor-bump item was wrong for 0.39.0 too.)
+
 ## [0.39.0] - 2026-08-05
 
 Reproducible CI, pglast 8 support, and tracking-table honesty (#191, #192, #190, #186, #189).

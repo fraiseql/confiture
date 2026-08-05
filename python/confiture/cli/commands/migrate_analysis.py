@@ -635,8 +635,10 @@ def migrate_validate(
             ]
             if _conflicting:
                 raise ConfigurationError(
-                    f"--idempotent cannot be combined with {', '.join(_conflicting)}: "
-                    "only one check would run.",
+                    f"--idempotent cannot be combined with {', '.join(_conflicting)} "
+                    "in 0.40.0. This combination is held back one release while the "
+                    "check-composition refactor gets production exposure; it is "
+                    "allowed from 0.41.0.",
                     resolution_hint=(
                         "Run the checks as separate invocations, e.g. "
                         "`confiture migrate validate --idempotent` then "
