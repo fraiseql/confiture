@@ -151,6 +151,11 @@ def find_ledger_relations(connection: Any, table: str) -> list[str]:
     building a second ledger.  A qualified *table* is swept by its base name,
     since the whole point is to find copies outside the named schema.
 
+    The name is split exactly as :func:`probe_ledger` splits it — on the *first*
+    dot.  The two have to agree: this function's answer is only meaningful as a
+    follow-up to that one, and a sweep for a different relation than the one
+    probed would report look-alikes that are not look-alikes at all.
+
     Args:
         connection: An open DB-API connection (psycopg3).
         table: Bare or schema-qualified table name.
@@ -159,7 +164,8 @@ def find_ledger_relations(connection: Any, table: str) -> list[str]:
         ``["archive.tb_confiture", "staging.tb_confiture"]``-style names, empty
         when the name is unused.
     """
-    base = table.rpartition(".")[2]
+    schema, _, qualified_base = table.partition(".")
+    base = qualified_base or schema
     with connection.cursor() as cursor:
         cursor.execute(_ANYWHERE_SQL, (base,))
         return [f"{row[0]}.{base}" for row in cursor.fetchall()]

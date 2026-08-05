@@ -211,6 +211,18 @@ class TestFindLedgerRelations:
         assert find_ledger_relations(conn, "public.tb_confiture") == []
         assert cursor.execute.call_args[0][1] == ("tb_confiture",)
 
+    def test_the_name_is_split_the_same_way_the_probe_splits_it(self):
+        """Both split on the first dot, so the sweep follows up on what was probed.
+
+        A sweep for a different relation than the one probed would report
+        look-alikes that are not look-alikes.
+        """
+        conn, cursor = self._conn_returning_rows([])
+
+        find_ledger_relations(conn, "my_schema.weird.name")
+
+        assert cursor.execute.call_args[0][1] == ("weird.name",)
+
     def test_system_schemas_are_excluded(self):
         conn, cursor = self._conn_returning_rows([])
 
