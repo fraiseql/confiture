@@ -148,6 +148,38 @@ The two backends:
 In `SchemaDiffer`, both paths share the same regex pass for `CREATE INDEX`,
 `CREATE TYPE AS ENUM`, `CREATE SEQUENCE`, and `ALTER TABLE ADD CONSTRAINT`.
 
+#### pglast version matrix (since 0.39.0, #192)
+
+The `[ast]` extra accepts **`pglast>=6.0`, uncapped**. Verified green on 6.16,
+7.18 and 8.4; `uv.lock` pins the current major, and a required
+`pglast-matrix` CI leg runs the AST-backed suites against both ends of the
+range (`>=6,<7` and `>=8`).
+
+**Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18
+inserted a member into `AlterTableType`, so pglast 8 renumbered everything at
+index ≥ 13 down by one — `_AT_DROP_COLUMN = 14` silently stopped matching and
+the `elif` chains fell through, *dropping* the operation. Because `window_safe`
+is computed from the presence of `PFLIGHT_REPLICA_*` findings, that turned
+replica-unsafe migrations into `window_safe: true`.
+
+Resolve by name through the single shared module instead:
+
+```python
+from confiture.core._pglast_enums import member as _pg_member
+
+_AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
+```
+
+Add the member to `REQUIRED_MEMBERS` in that module — the guard test
+(`tests/unit/test_pglast_enum_binding.py`) enumerates from it, so a new constant
+joins the guard automatically. If pglast ever drops a member confiture walks,
+`enums_are_usable()` goes False and the consumers degrade to the regex backend
+rather than under-reporting silently.
+
+Note that a literal can hide *inline* (`if sub_int == 17:`), not just in a
+constant block — that form is how `core/idempotency/_captures.py` survived the
+first sweep. The guard checks both shapes.
+
 ### Rust Extension (Optional Performance)
 
 Confiture includes an optional Rust extension for improved performance:

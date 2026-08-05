@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
+from confiture.core._pglast_enums import enums_are_usable
 from confiture.core.idempotency.ast_detector import _detect_via_ast, is_pglast_available
 from confiture.core.idempotency.models import IdempotencyPattern
 
@@ -745,7 +746,10 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
         >>> matches[0].pattern
         <IdempotencyPattern.CREATE_TABLE: 'CREATE_TABLE'>
     """
-    if is_pglast_available() and not _force_regex():
+    # enums_are_usable(): an upstream pglast release that removed a member the
+    # visitors walk would make the AST path drop those statements silently
+    # (#192). Degrading to regex under-reports loudly instead of lying quietly.
+    if is_pglast_available() and enums_are_usable() and not _force_regex():
         try:
             return _detect_via_ast(sql)
         except Exception:  # noqa: BLE001 — pglast.parser.ParseError + defensive fallback

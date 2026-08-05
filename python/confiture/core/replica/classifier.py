@@ -12,6 +12,8 @@ import os
 import re
 from dataclasses import dataclass
 
+from confiture.core._pglast_enums import enums_are_usable
+from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency.ast_detector import is_pglast_available
 
 # pglast availability, resolved at import (tests monkeypatch this to force the
@@ -20,18 +22,24 @@ from confiture.core.idempotency.ast_detector import is_pglast_available
 _HAS_PGLAST = is_pglast_available()
 _FORCE_REGEX_ENV = "CONFITURE_REPLICA_FORCE_REGEX"
 
-# AlterTableType subtype values (pglast.enums.parsenodes.AlterTableType).
-_AT_ADD_COLUMN = 0
-_AT_DROP_COLUMN = 14
-_AT_ALTER_COLUMN_TYPE = 25
-_AT_ADD_CONSTRAINT = 17
+# Resolved BY NAME, never by literal ordinal (#192): PG18 renumbered
+# AlterTableType, so pglast 8 shifted every member at index >= 13 down by one
+# and the hardcoded comparisons below started missing silently.
+_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
+_AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
+_AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
+_AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 
-# ConstrType values (pglast.enums.parsenodes.ConstrType).
-_CONSTR_NOTNULL = 1
-_CONSTR_DEFAULT = 2
-_CONSTR_KIND = {5: "check", 6: "primary_key", 7: "unique", 9: "foreign_key"}
+_CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
+_CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
+_CONSTR_KIND = {
+    _pg_member("ConstrType", "CONSTR_CHECK"): "check",
+    _pg_member("ConstrType", "CONSTR_PRIMARY"): "primary_key",
+    _pg_member("ConstrType", "CONSTR_UNIQUE"): "unique",
+    _pg_member("ConstrType", "CONSTR_FOREIGN"): "foreign_key",
+}
 
-_RENAME_COLUMN = 6  # ObjectType.OBJECT_COLUMN
+_RENAME_COLUMN = _pg_member("ObjectType", "OBJECT_COLUMN")
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +105,10 @@ class Other(DdlOperation):
 def _use_ast() -> bool:
     if os.environ.get(_FORCE_REGEX_ENV, "").lower() in {"1", "true", "yes"}:
         return False
-    return _HAS_PGLAST
+    # A half-resolvable enum surface (upstream removed a member we walk) means
+    # the elif chains below would silently drop operations — the #192 failure
+    # mode. Degrade to regex rather than emit a false window_safe verdict.
+    return _HAS_PGLAST and enums_are_usable()
 
 
 class OperationClassifier:

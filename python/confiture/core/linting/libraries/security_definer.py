@@ -310,7 +310,11 @@ class Sec002SecurityDefinerSearchPath:
             if line in allow_lines:
                 continue
 
-            schema, name = _split_funcname(stmt.funcname)
+            # getattr, not attribute access: the CreateFunctionStmt narrowing
+            # above is a runtime `type(...).__name__` check ty cannot follow, and
+            # pglast 8's stubs type `raw.stmt` as a bare `Node` union. This is the
+            # same accessor pattern the other AST walkers use (#192).
+            schema, name = _split_funcname(getattr(stmt, "funcname", ()))
             record = _FunctionDefRecord(
                 schema=schema,
                 name=name,
@@ -327,8 +331,8 @@ class Sec002SecurityDefinerSearchPath:
             if not self._in_scope(record):
                 continue
 
-            kind = "procedure" if stmt.is_procedure else "function"
-            param_list = _render_param_list(stmt.parameters)
+            kind = "procedure" if getattr(stmt, "is_procedure", False) else "function"
+            param_list = _render_param_list(getattr(stmt, "parameters", None))
             fix_sql = _make_alter_sql(record.schema, record.name, param_list)
             violations.append(
                 LintViolation(

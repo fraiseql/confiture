@@ -16,7 +16,14 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency.models import IdempotencyPattern
+
+# Resolved by name, never by literal ordinal (#192). These two comparisons were
+# written inline as `sub_int == 17`, so they survived the sweep of the
+# module-level constant blocks — and a grep for `_NAME = <int>` cannot see them.
+_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
+_AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 
 
 @dataclass(frozen=True)
@@ -372,7 +379,7 @@ def _captures_ast_alter_add_column(node: Any) -> Captures:
             sub_int = int(sub_val) if sub_val is not None else None
         except (TypeError, ValueError):
             sub_int = None
-        if sub_int == 0:  # AT_ADD_COLUMN
+        if sub_int == _AT_ADD_COLUMN:
             col_def = getattr(cmd, "def_", None)
             colname = getattr(col_def, "colname", None) if col_def is not None else None
             if colname:
@@ -391,7 +398,7 @@ def _captures_ast_alter_add_constraint(node: Any) -> Captures:
             sub_int = int(sub_val) if sub_val is not None else None
         except (TypeError, ValueError):
             sub_int = None
-        if sub_int == 17:  # AT_ADD_CONSTRAINT
+        if sub_int == _AT_ADD_CONSTRAINT:
             constraint_def = getattr(cmd, "def_", None)
             conname = (
                 getattr(constraint_def, "conname", None) if constraint_def is not None else None
