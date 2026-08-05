@@ -37,7 +37,11 @@
         },
         "tracking_table": {
           "type": "string",
-          "description": "The resolved ledger name actually queried — the configured tracking_table, not necessarily the tb_confiture default."
+          "description": "The ledger name as configured — the project's tracking_table, not necessarily the tb_confiture default. May be bare or schema-qualified; see resolved_table for what it actually resolved to."
+        },
+        "resolved_table": {
+          "type": ["string", "null"],
+          "description": "The schema-qualified relation the ledger name resolved to for this session, e.g. \"public.tb_confiture\" (0.41.0, #188). A bare tracking_table resolves through search_path, so this is how a consumer learns which of several same-named tables was actually read. Null when the ledger did not resolve — only emitted so under --allow-uninitialized, since otherwise an absent ledger raises PRECON_1001."
         }
       }
     },

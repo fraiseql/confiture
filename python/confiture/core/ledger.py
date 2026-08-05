@@ -165,6 +165,27 @@ def find_ledger_relations(connection: Any, table: str) -> list[str]:
         return [f"{row[0]}.{base}" for row in cursor.fetchall()]
 
 
+def notable_resolution(configured: str, resolved: str | None) -> str | None:
+    """The resolved name, but only when it is worth telling the operator.
+
+    Two resolutions carry no information: the one that matches what they
+    configured, and a bare name landing in ``public``, which is the documented
+    default. Printing either on every run would bury the case that *does*
+    matter — a bare name resolving somewhere unexpected — in noise.
+
+    Args:
+        configured: The ``tracking_table`` value as written in config.
+        resolved: :attr:`LedgerProbe.resolved_name`, or None.
+
+    Returns:
+        The resolved name when it is neither the configured name nor its
+        ``public`` default, else None.
+    """
+    if resolved is None or resolved in (configured, f"public.{configured}"):
+        return None
+    return resolved
+
+
 def _probe_qualified(connection: Any, schema: str, base: str) -> LedgerProbe:
     with connection.cursor() as cursor:
         cursor.execute(_QUALIFIED_SQL, (schema, base))
