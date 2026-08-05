@@ -13,6 +13,7 @@ so the source-resolution and SSH-tunnel behaviour matches ``--check-signatures``
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,7 @@ from confiture.exceptions import ConfigurationError
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from confiture.core.validation.context import ValidationContext
     from confiture.core.view_body_drift import ViewBodyDriftReport
 
 
@@ -58,6 +60,7 @@ def check_view_drift(
     schemas: str,
     ssh_via: str | None,
     scratch_url: str | None = None,
+    ctx: ValidationContext | None = None,
 ) -> ViewDriftResult:
     """Detect view definition drift against the live database.
 
@@ -73,6 +76,8 @@ def check_view_drift(
         scratch_url: Writable server on which to build the expected scratch DB.
             Required when ``ssh_via`` is set (the scratch DB cannot be built on a
             remote read-only live server through the tunnel).
+        ctx: Shared per-run resources supplying the config and the *live*
+            connection. The scratch database is necessarily its own connection.
 
     Raises:
         ConfigurationError: config missing, auto-build failed, or ``--ssh`` was
@@ -85,7 +90,7 @@ def check_view_drift(
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     schema_list = [s.strip() for s in schemas.split(",") if s.strip()]
 
     source_sql, auto_built = _resolve_source_sql(config_data, schema_file)
@@ -108,7 +113,10 @@ def check_view_drift(
             resolution_hint="Set database_url in the config or pass --scratch-url.",
         )
 
-    with open_connection(effective_config) as live_conn:
+    conn_cm = (
+        nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
+    )
+    with conn_cm as live_conn:
         live_defs = LiveViewCatalog(live_conn).get_view_definitions(schema_list)
         with ExpectedSchemaDB(scratch).from_source(schema_sql=source_sql) as scratch_conn:
             src_defs = LiveViewCatalog(scratch_conn).get_view_definitions(schema_list)

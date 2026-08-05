@@ -9,10 +9,15 @@ shadowed by ``confiture build``, so func_001 catches the duplicate first.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.core.linting.schema_linter import LintViolation
 from confiture.exceptions import ConfigurationError
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from confiture.core.validation.context import ValidationContext
 
 
 @dataclass(frozen=True)
@@ -27,9 +32,16 @@ class FunctionUniquenessReport:
 
 
 def check_function_uniqueness(
-    scan_paths: list[Path], config_path: Path
+    scan_paths: list[Path],
+    config_path: Path,
+    ctx: ValidationContext | None = None,
 ) -> FunctionUniquenessReport:
     """Run func_001 across *scan_paths*.
+
+    Args:
+        scan_paths: DDL directories to scan.
+        config_path: Config file carrying the optional ``function_coverage:`` block.
+        ctx: Shared per-run resources; supplies the already-parsed config.
 
     Returns:
         A :class:`FunctionUniquenessReport`. No-op (empty) when the config has no
@@ -46,7 +58,7 @@ def check_function_uniqueness(
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     coverage = load_function_coverage(config_data, config_path, require=False)
 
     violations: list[LintViolation] = []

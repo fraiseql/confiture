@@ -349,12 +349,17 @@ class TestMigrateValidateCheckLiveDrift:
     """Tests for --check-live-drift flag on migrate validate."""
 
     @patch("confiture.core.validation.live_drift.SchemaDriftDetector")
-    @patch("confiture.core.validation.live_drift.create_connection")
-    @patch("confiture.core.validation.live_drift.load_config")
+    @patch("confiture.core.validation.context.open_connection")
+    @patch("confiture.core.validation.context.load_config")
     def test_validate_check_live_drift_flag(
-        self, mock_load_config, mock_create_connection, mock_detector_class, tmp_path
+        self, mock_load_config, mock_open_connection, mock_detector_class, tmp_path
     ):
-        """SchemaDriftDetector should be called when --check-live-drift is used."""
+        """SchemaDriftDetector should be called when --check-live-drift is used.
+
+        Patched on ``core.validation.context`` since 0.40.0: the CLI opens one
+        connection per run there and hands it to every database-backed check,
+        instead of each handler calling its own ``create_connection``.
+        """
         config_file = tmp_path / "confiture.yaml"
         config_file.write_text("database_url: postgresql://localhost/test\n")
         schema_file = tmp_path / "schema.sql"
@@ -362,7 +367,8 @@ class TestMigrateValidateCheckLiveDrift:
 
         mock_load_config.return_value = MagicMock()
         mock_conn = MagicMock()
-        mock_create_connection.return_value = mock_conn
+        mock_open_connection.return_value.__enter__.return_value = mock_conn
+        mock_open_connection.return_value.__exit__.return_value = False
 
         from confiture.core.drift import DriftReport
 

@@ -18,9 +18,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.exceptions import ConfigurationError
+
+if TYPE_CHECKING:
+    from confiture.core.validation.context import ValidationContext
 
 
 @dataclass(frozen=True)
@@ -42,8 +46,17 @@ class SecurityDefinerReport:
         return any(v.severity == RuleSeverity.ERROR for v in self.violations)
 
 
-def check_security_definer(scan_paths: list[Path], config_path: Path) -> SecurityDefinerReport:
+def check_security_definer(
+    scan_paths: list[Path],
+    config_path: Path,
+    ctx: ValidationContext | None = None,
+) -> SecurityDefinerReport:
     """Run sec_002 across *scan_paths*.
+
+    Args:
+        scan_paths: DDL directories to scan.
+        config_path: Config file carrying the optional ``security_lint:`` block.
+        ctx: Shared per-run resources; supplies the already-parsed config.
 
     Returns:
         A :class:`SecurityDefinerReport`. No-op (empty) when the config has
@@ -62,7 +75,7 @@ def check_security_definer(scan_paths: list[Path], config_path: Path) -> Securit
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     sec_lint = load_security_lint(config_data, config_path, require=False)
 
     if sec_lint is None or not sec_lint.enabled:
@@ -83,6 +96,7 @@ def check_security_definer_live(
     schemas: str,
     ssh_via: str | None,
     exclude_extensions: bool = True,
+    ctx: ValidationContext | None = None,
 ) -> SecurityDefinerReport:
     """Query ``pg_proc`` for unpinned SECURITY DEFINER callables.
 
@@ -94,6 +108,8 @@ def check_security_definer_live(
         schemas: Comma-separated schema names to scan (e.g. ``"public,auth"``).
         ssh_via: Optional ``user@host`` SSH tunnel target overriding the config.
         exclude_extensions: Skip extension-owned functions (default ``True``).
+        ctx: Shared per-run resources supplying the config and the live
+            connection, so this check does not open a second one.
 
     Returns:
         A :class:`SecurityDefinerReport`. No-op (empty) when the config has
@@ -103,6 +119,8 @@ def check_security_definer_live(
         ConfigurationError: config missing, connection failed, or
             ``security_lint:`` malformed.
     """
+    from contextlib import nullcontext
+
     from confiture.core.connection import load_config, open_connection
     from confiture.core.linting.libraries.security_definer import (
         Sec002SecurityDefinerSearchPath,
@@ -113,7 +131,7 @@ def check_security_definer_live(
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     sec_lint = load_security_lint(config_data, config_path, require=False)
 
     if sec_lint is None or not sec_lint.enabled:
@@ -128,7 +146,10 @@ def check_security_definer_live(
     schema_list = [s.strip() for s in schemas.split(",") if s.strip()]
 
     effective_config = _ssh_override(config_data, ssh_via) if ssh_via else config_data
-    with open_connection(effective_config) as conn:
+    conn_cm = (
+        nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
+    )
+    with conn_cm as conn:
         violations = rule.check_live(
             conn,
             schemas=schema_list,

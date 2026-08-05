@@ -55,10 +55,11 @@ _ALLOWLIST: dict[str, int] = {
     # MigrateDiffResult domain formatter), migrate fix-signatures, and migrate
     # preflight (already mostly fail()-routed via computed Exit(exit_code)).
     # TODO(follow-up): finish diff / fix-signatures / preflight contract sweep.
-    # +2 (29): --check-body-views (28) and --check-body-replay (29) drift gates —
-    # both Exit(1) success-signals (CI drift signals, same kind as the
-    # --check-signatures gate), not failure paths.
-    "commands/migrate_analysis.py": 29,
+    # 0.40.0 (#187): the validate dispatch became a check registry, so its
+    # eleven per-check `Exit(1)` success-signals collapsed into the single
+    # aggregated `Exit(aggregate_exit_code(...))` — a computed value, not a
+    # literal, so it no longer appears here at all. 29 → 15.
+    "commands/migrate_analysis.py": 15,
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.
@@ -89,7 +90,9 @@ _ALLOWLIST: dict[str, int] = {
     # (Phase 03) and now raise ConfigurationError instead of typer.Exit(2) — the
     # ValidationError seam they shared with migrate_validate is reseamed through
     # the callers' fail() boundaries (drift/bootstrap/migrate validate).
-    "helpers.py": 2,  # success-signal: idempotency gate → Exit(1) on findings
+    # helpers.py: fully converted (0.40.0) — _validate_idempotency returns
+    # (passed, payload) so the caller aggregates the gate with the other checks
+    # instead of exiting from inside a renderer.
     # commands/mcp.py: fully converted (Cycle 1) — connection → CONFIG_006,
     # missing-extra → generic ConfiturError, both via fail().
     "test_db.py": 1,  # success-signal: test-db status → Exit(1) on stale/absent template (CI gate)

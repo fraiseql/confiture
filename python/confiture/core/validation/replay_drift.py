@@ -15,6 +15,7 @@ signature pairing is exact — this sidesteps the text-parse asymmetry class of 
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from confiture.core.function_body_drift import FunctionBodyDriftReport
+    from confiture.core.validation.context import ValidationContext
 
 
 @dataclass
@@ -52,6 +54,7 @@ def check_replay_drift(
     schemas: str,
     ssh_via: str | None,
     scratch_url: str | None = None,
+    ctx: ValidationContext | None = None,
 ) -> ReplayDriftResult:
     """Detect function-body drift between live and a fresh migration replay.
 
@@ -66,6 +69,8 @@ def check_replay_drift(
         ssh_via: Optional ``user@host`` SSH tunnel for the *live* connection.
         scratch_url: Writable server on which to replay the migrations. Required
             when ``ssh_via`` is set.
+        ctx: Shared per-run resources supplying the config and the *live*
+            connection. The scratch database is necessarily its own connection.
 
     Raises:
         ConfigurationError: config missing, or ``--ssh`` without ``--scratch-url``.
@@ -79,7 +84,7 @@ def check_replay_drift(
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     schema_list = [s.strip() for s in schemas.split(",") if s.strip()]
 
     effective_config: Any = config_data
@@ -100,7 +105,10 @@ def check_replay_drift(
             resolution_hint="Set database_url in the config or pass --scratch-url.",
         )
 
-    with open_connection(effective_config) as live_conn:
+    conn_cm = (
+        nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
+    )
+    with conn_cm as live_conn:
         live_bodies = LiveFunctionCatalog(live_conn).get_bodies(schemas=schema_list)
         with ExpectedSchemaDB(
             scratch, migrations_dir=migrations_dir

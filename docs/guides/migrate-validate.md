@@ -24,9 +24,50 @@ confiture migrate fix --idempotent
 
 # Verify changed grants are carried by an accompanying migration
 confiture migrate validate --require-grant-migration --staged
+
+# Compose: every check you pass runs, and all of them report
+confiture migrate validate --check-acls --check-imports --check-ownership-coverage
 ```
 
 JSON output is available with `--format json` for every variant.
+
+## Checks compose (0.40.0)
+
+Pass as many checks as you like — **all of them run** and the exit code is the
+worst outcome across them.
+
+Until 0.40.0 this was not true. The command was a flat chain of
+`if <flag>: … return` blocks evaluated in source order, so
+`--check-acls --check-imports` ran only the ACL check and exited 0. In a
+pre-commit hook or a CI gate that is a silent false pass: a green result for a
+check that never executed. #187 replaced the chain with a registry of check
+descriptors that the runner executes in full.
+
+What this means in practice:
+
+- **One invocation, one connection.** Checks that need a database share it (and
+  share one SSH tunnel), and the config is parsed once. Splitting a gate across
+  two invocations to work around the old behaviour is no longer necessary — and
+  costs you a second connection.
+- **One JSON document.** A single check emits exactly the payload it always did.
+  Two or more are wrapped in a small envelope keyed by check name — see
+  [migrate-validate-composed.schema.json](../reference/json-schemas/migrate-validate-composed.schema.json).
+- **Order is unchanged.** Checks run in the order the old dispatch listed them,
+  so single-flag output is byte-for-byte what 0.39.0 produced.
+
+Two combinations are rejected loudly instead of composed:
+
+| Combination | Exit | Why |
+|---|---|---|
+| `--list-patterns` or `--list-unmigrated-bodies` with anything else | 5 | Report modes. Both always exit 0, so there is no result to compose into a gate decision. |
+| `--idempotent` with `--check-drift` / `--require-migration` / `--require-migration-bodies` / `--require-grant-migration` | 5 | Retained from 0.37.0 for one more release. **Retires in 0.41.0.** |
+
+That last row is a deliberate inconsistency, not an oversight. The guard is
+currently the only loud-failure net over exactly the flag combinations #181
+fixed. Removing it in the same release as a 940-line dispatch refactor would
+convert a loud error straight back into a silent skip if the refactor has a bug
+— the regression #181 exists to prevent. It comes off in 0.41.0, after a
+release of production exposure.
 
 ## `--idempotent`
 

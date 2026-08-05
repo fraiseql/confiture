@@ -8,10 +8,15 @@ TO`` on objects the migration didn't create (own_002).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.exceptions import ConfigurationError
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from confiture.core.validation.context import ValidationContext
 
 
 @dataclass(frozen=True)
@@ -29,8 +34,17 @@ class OwnershipCoverageReport:
         return any(v.severity == RuleSeverity.ERROR for v in self.violations)
 
 
-def check_ownership_coverage(migrations_dir: Path, config_path: Path) -> OwnershipCoverageReport:
+def check_ownership_coverage(
+    migrations_dir: Path,
+    config_path: Path,
+    ctx: ValidationContext | None = None,
+) -> OwnershipCoverageReport:
     """Run own_001 + own_002 against *migrations_dir*.
+
+    Args:
+        migrations_dir: Directory of migration files to lint.
+        config_path: Config file carrying the optional ``ownership:`` block.
+        ctx: Shared per-run resources; supplies the already-parsed config.
 
     Returns:
         An :class:`OwnershipCoverageReport`. No-op (empty) when the config has no
@@ -50,7 +64,7 @@ def check_ownership_coverage(migrations_dir: Path, config_path: Path) -> Ownersh
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else load_config(config_path)
     # No-op when the project hasn't adopted the `ownership:` block yet.
     ownership_exp = load_ownership_expectation(config_data, config_path, require=False)
 

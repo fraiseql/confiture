@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-composed.schema.json",
+  "title": "confiture migrate validate --format json (two or more checks)",
+  "description": "Wrapper emitted when one `migrate validate` invocation runs more than one check (0.40.0, #187). A single-check invocation keeps emitting that check's own documented payload verbatim and never matches this schema — the wrapper exists precisely so the single-check shapes stay byte-for-byte stable. Each value under `checks` is the payload the same check would have emitted on its own, keyed by the check's stable machine name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "status", "checks", "hints"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1",
+      "description": "Envelope version. Bumped only if the wrapper's own shape changes; the nested per-check payloads carry their own contracts."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed"],
+      "description": "`failed` when any check that ran reported a finding. The process exit code is 1 in that case, 0 otherwise."
+    },
+    "checks": {
+      "type": "object",
+      "description": "One entry per check that produced output, keyed by stable check name. Keys are exactly the names below; the set present depends on which flags were passed.",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "propertyNames": {
+        "enum": [
+          "list_patterns",
+          "unmigrated_bodies",
+          "git_accompaniment",
+          "acl_coverage",
+          "ownership_coverage",
+          "function_uniqueness",
+          "security_definer",
+          "imports",
+          "live_drift",
+          "function_signature_drift",
+          "view_body_drift",
+          "replay_body_drift",
+          "idempotent",
+          "naming"
+        ]
+      },
+      "patternProperties": {
+        "^[a-z_]+$": {
+          "type": "object",
+          "description": "The check's single-check payload, unchanged. See the per-check schema files for the documented ones (migrate-validate-check-acl-coverage, -check-function-uniqueness, -idempotent, -grant, -list-patterns)."
+        }
+      }
+    },
+    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+  }
+}

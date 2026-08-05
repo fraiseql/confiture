@@ -4,16 +4,12 @@
   "title": "confiture migrate introspect --format json",
   "description": "Detects which migration level a database is at by matching its live schema against the stored snapshots in db/schema_history/. Used to recover a baseline for a database whose ledger was lost. Three payload variants share this shape, distinguished by `confidence`: \"exact\" (a snapshot matched), \"none\" (no match; `closest_version`/`closest_similarity` describe the nearest miss), or absent with `error` set (the snapshots directory does not exist). additionalProperties is false, so a new key is a schema edit. A crash emits the error envelope (error-envelope.schema.json) instead.",
   "type": "object",
-  "required": ["ledger_present", "tb_confiture_present", "detected_version"],
+  "required": ["ledger_present", "detected_version"],
   "additionalProperties": false,
   "properties": {
     "ledger_present": {
       "type": "boolean",
-      "description": "Whether the configured migration ledger (tracking_table) exists. Added in 0.39.0 (#186) as the forward-correct, table-name-agnostic spelling — matching the key `migrate verify` adopted in 0.37.0. Prefer this key."
-    },
-    "tb_confiture_present": {
-      "type": "boolean",
-      "description": "DEPRECATED — identical value to `ledger_present`. Hardcodes the default table name and is misleading for any project that configured `tracking_table`. Retained for one release so existing consumers have an upgrade path; REMOVED IN 0.40.0. Migrate to `ledger_present`."
+      "description": "Whether the configured migration ledger (tracking_table) exists. Added in 0.39.0 (#186) as the forward-correct, table-name-agnostic spelling — matching the key `migrate verify` adopted in 0.37.0. It replaced `tb_confiture_present`, which hardcoded the default table name and was removed in 0.40.0 after its one-release deprecation window."
     },
     "detected_version": {
       "type": ["string", "null"],
