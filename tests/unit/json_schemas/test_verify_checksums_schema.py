@@ -26,6 +26,7 @@ from referencing.jsonschema import DRAFT202012
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.ledger import LedgerProbe
 
 runner = CliRunner()
 
@@ -96,16 +97,25 @@ def _mismatch(version: str, name: str) -> MagicMock:
 
 
 @patch("confiture.core.connection.create_connection")
-@patch("confiture.core.ledger.ledger_exists", return_value=True)
+@patch(
+    "confiture.core.ledger.probe_ledger",
+    return_value=LedgerProbe(exists=True, resolved_name="audit.tb_migrations"),
+)
 @patch("confiture.core.checksum.MigrationChecksumVerifier")
 def test_clean_run_matches_schema(
-    verifier_cls, _exists, _conn, cfg: Path, migrations_dir: Path
+    verifier_cls, probe, _conn, cfg: Path, migrations_dir: Path
 ) -> None:
     verifier_cls.return_value.verify_all.return_value = []
     verifier_cls.return_value.count_applied.return_value = 3
 
     result = _invoke(cfg, migrations_dir)
 
+    # Naming the seam, not just asserting the shape. When 0.41.0 moved this
+    # command from `ledger_exists` to `probe_ledger`, the stale patch bound to
+    # nothing and the real probe ran against the MagicMock connection — whose
+    # row is truthy, so it read as *present* and this test kept passing while
+    # testing nothing at all.
+    assert probe.called, "ledger probe double unused — patch target is stale"
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     _validator("verify-checksums.schema.json").validate(payload)
@@ -113,13 +123,17 @@ def test_clean_run_matches_schema(
     assert payload["ledger_present"] is True
     assert payload["issues"] == []
     assert payload["summary"]["mismatched"] == 0
+    assert payload["summary"]["resolved_table"] == "audit.tb_migrations"
 
 
 @patch("confiture.core.connection.create_connection")
-@patch("confiture.core.ledger.ledger_exists", return_value=True)
+@patch(
+    "confiture.core.ledger.probe_ledger",
+    return_value=LedgerProbe(exists=True, resolved_name="audit.tb_migrations"),
+)
 @patch("confiture.core.checksum.MigrationChecksumVerifier")
 def test_mismatch_run_matches_schema(
-    verifier_cls, _exists, _conn, cfg: Path, migrations_dir: Path
+    verifier_cls, probe, _conn, cfg: Path, migrations_dir: Path
 ) -> None:
     verifier_cls.return_value.verify_all.return_value = [
         _mismatch("20260101000000", "init"),
@@ -142,28 +156,34 @@ def test_mismatch_run_matches_schema(
 
 
 @patch("confiture.core.connection.create_connection")
-@patch("confiture.core.ledger.ledger_exists", return_value=False)
+@patch("confiture.core.ledger.find_ledger_relations", return_value=[])
+@patch("confiture.core.ledger.probe_ledger", return_value=LedgerProbe(exists=False))
 def test_no_ledger_with_allow_uninitialized_matches_schema(
-    _exists, _conn, cfg: Path, migrations_dir: Path
+    probe, _elsewhere, _conn, cfg: Path, migrations_dir: Path
 ) -> None:
     """The degraded path must emit JSON, not `return` after a Rich print."""
     result = _invoke(cfg, migrations_dir, "--allow-uninitialized")
 
+    assert probe.called, "ledger probe double unused — patch target is stale"
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     _validator("verify-checksums.schema.json").validate(payload)
     assert payload["ok"] is True
     assert payload["ledger_present"] is False
     assert payload["summary"]["checked"] == 0
+    # Nothing resolved, so nothing to name — the key is declared, not omitted.
+    assert payload["summary"]["resolved_table"] is None
 
 
 @patch("confiture.core.connection.create_connection")
-@patch("confiture.core.ledger.ledger_exists", return_value=False)
+@patch("confiture.core.ledger.find_ledger_relations", return_value=[])
+@patch("confiture.core.ledger.probe_ledger", return_value=LedgerProbe(exists=False))
 def test_no_ledger_without_flag_emits_error_envelope(
-    _exists, _conn, cfg: Path, migrations_dir: Path
+    probe, _elsewhere, _conn, cfg: Path, migrations_dir: Path
 ) -> None:
     result = _invoke(cfg, migrations_dir)
 
+    assert probe.called, "ledger probe double unused — patch target is stale"
     assert result.exit_code == 2, result.output
     payload = json.loads(result.stdout)
     _validator("error-envelope.schema.json").validate(payload)

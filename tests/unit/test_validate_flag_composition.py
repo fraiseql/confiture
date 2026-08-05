@@ -220,19 +220,30 @@ def test_report_modes_reject_composition(project: Path, report_flag: str) -> Non
 
 
 # ---------------------------------------------------------------------------
-# The 0.37.0 --idempotent conflict guard is RETAINED this release (D2)
+# The 0.37.0 --idempotent conflict guard is RETIRED (0.41.0)
 # ---------------------------------------------------------------------------
 
 
-def test_idempotent_git_conflict_guard_is_retained(project: Path) -> None:  # noqa: ARG001
-    """Deliberately still rejecting: retired in 0.41.0, not here.
+@pytest.mark.parametrize(
+    "git_flag",
+    [
+        "--check-drift",
+        "--require-migration",
+        "--require-migration-bodies",
+        "--require-grant-migration",
+    ],
+)
+def test_idempotent_no_longer_rejects_the_git_flags(project: Path, git_flag: str) -> None:  # noqa: ARG001
+    """No usage error for a combination that composed since 0.40.0.
 
-    Composition makes this combination safe in principle, but the guard is the
-    only loud-failure net over the flags #181 fixed. Removing it in the same
-    release as the refactor would trade a known-good behaviour for an unproven
-    one — so it stays one release longer, on purpose.
+    This project is not a git repo, so the git group fails on its own terms
+    (GIT_002 → exit 7). That is the point: the run gets far enough to *reach*
+    the git check instead of being turned away at the door with exit 5.
+
+    That both checks actually execute is proven in
+    ``test_validate_composition_git_and_db.py``, which has a real working tree.
     """
-    result = _invoke("--idempotent", "--check-drift")
+    result = _invoke("--idempotent", git_flag)
 
-    assert result.exit_code == 5, result.output
-    assert "--idempotent cannot be combined with --check-drift" in result.output
+    assert result.exit_code != 5, result.output
+    assert "cannot be combined with" not in result.output

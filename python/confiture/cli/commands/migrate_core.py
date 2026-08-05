@@ -177,6 +177,10 @@ def migrate_status(
         db_error: str | None = None
         tracking_table_absent: bool = False
         status_tracking_table: str | None = None
+        # What the configured name actually resolved to for this session, and
+        # (when it did not) where a relation of that name does live (#188).
+        status_resolved_table: str | None = None
+        ledger_elsewhere: list[str] = []
         # status connects only on an *intentional* source: a --database-url
         # flag, --no-config, an explicit --config, or the canonical
         # CONFITURE_DATABASE_URL. A merely-ambient DATABASE_URL must NOT force a
@@ -206,10 +210,29 @@ def migrate_status(
 
                 config_data = _status_config_data
                 status_tracking_table = _get_tracking_table(config_data)
+                from confiture.core.ledger import find_ledger_relations, probe_ledger
+                from confiture.exceptions import ConfiturError
+
                 conn = create_connection(config_data)
                 migrator = Migrator(connection=conn, migration_table=status_tracking_table)
                 tracking_table_was_present = migrator.tracking_table_exists()
+                if not tracking_table_was_present:
+                    # A bare name resolves through search_path since 0.41.0, so
+                    # "absent" no longer implies "nowhere in this database".
+                    # Reporting only the first half sends the operator looking
+                    # for a table that is sitting right there (#188).
+                    ledger_elsewhere = find_ledger_relations(conn, status_tracking_table)
                 migrator.initialize()
+                # After initialize, so this names the ledger the run will read
+                # rather than the one it found (or did not) a moment earlier.
+                # Reporting metadata only: a probe refused for lack of
+                # privilege must not turn a working status into "could not
+                # connect to database". Narrow on purpose — a NameError in the
+                # probe still surfaces rather than degrading to None.
+                try:
+                    status_resolved_table = probe_ledger(conn, status_tracking_table).resolved_name
+                except ConfiturError:
+                    status_resolved_table = None
                 applied_versions = set(migrator.get_applied_versions())
                 for row in migrator.get_applied_migrations_with_timestamps():
                     applied_at_by_version[row["version"]] = row["applied_at"]
@@ -280,9 +303,22 @@ def migrate_status(
                 hints_list=status_hints,
                 format_=output_format,
             )
+            if ledger_elsewhere:
+                # The likeliest cause of a surprising "all pending", and one an
+                # operator cannot diagnose from the ledger name alone.
+                _emit_hint(
+                    f"`{status_tracking_table}` does not resolve on this "
+                    f"connection's search_path, but a relation of that name "
+                    f"exists in {', '.join(ledger_elsewhere)}. Qualify "
+                    "`migration.tracking_table` or adjust search_path if that "
+                    "is the ledger you meant.",
+                    hints_list=status_hints,
+                    format_=output_format,
+                )
         if output_format == "json":
             result: dict[str, Any] = {
                 "tracking_table": status_tracking_table,
+                "resolved_table": status_resolved_table,
                 "applied": applied_list,
                 "pending": pending_list,
                 "current": current_version,
@@ -898,6 +934,36 @@ def migrate_up(
 
         # Auto-detect baseline pre-flight (before initialize so we can check absence)
         if auto_detect_baseline and not migrator.tracking_table_exists():
+            # #188: "absent" got stricter. It used to mean "no table of this
+            # name in any schema"; it now means "this session cannot resolve
+            # one", which is the right precondition for reading the ledger and
+            # the wrong trigger for rebuilding it. A ledger parked in a schema
+            # off `search_path` reads absent here, and auto-baseline would
+            # answer by creating a second one and marking every migration
+            # applied in it. This is the only path in the command that can
+            # rewrite migration history unprompted, so it refuses rather than
+            # guesses. `LedgerProbe.resolved_name` cannot answer this — it is
+            # None exactly when the probe says absent.
+            from confiture.core.ledger import find_ledger_relations
+
+            _elsewhere = find_ledger_relations(conn, _get_tracking_table(config_data))
+            if _elsewhere:
+                from confiture.exceptions import ConfigurationError
+
+                conn.close()
+                raise ConfigurationError(
+                    f"--auto-detect-baseline: {_get_tracking_table(config_data)!r} does not "
+                    f"resolve for this session, but a relation of that name exists in "
+                    f"{', '.join(_elsewhere)}. Refusing to auto-baseline: doing so would "
+                    f"create a second ledger and mark every migration applied in it.",
+                    resolution_hint=(
+                        "Point at the existing ledger — set `migration.tracking_table` to "
+                        f"{_elsewhere[0]!r}, or put its schema on the connection's "
+                        "search_path — then re-run. If the ledger really is meant to be "
+                        "new, drop or rename the other relation first."
+                    ),
+                )
+
             _resolved_snapshots_dir = snapshots_dir_up or Path("db/schema_history")
             if not _resolved_snapshots_dir.exists():
                 error_console.print(

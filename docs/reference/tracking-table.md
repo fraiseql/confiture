@@ -51,6 +51,51 @@ migration:
 
 If the name is schema-qualified, Confiture creates the table in that schema. Otherwise, it creates it in the connection's default `search_path`.
 
+### How Confiture decides the ledger exists (0.41.0)
+
+The answer depends on whether the configured name is schema-qualified, and the
+two paths ask deliberately different questions (#188):
+
+| Configured name | Question asked | Answers "yes" for |
+|---|---|---|
+| bare — `tb_confiture` | `to_regclass('tb_confiture')` — resolves through `search_path` | the one relation this session would actually read |
+| qualified — `audit.tb_confiture` | `information_schema.tables` filtered on schema **and** name | that exact table |
+
+Before 0.41.0 the bare form matched the name in *any* schema. A ledger in
+`staging` therefore reported present to a session whose `search_path` did not
+include `staging` — and the very next statement failed with
+`relation "tb_confiture" does not exist`. The bare probe now agrees with the
+queries it is a precondition for.
+
+Two consequences worth knowing:
+
+- **Presence is not readability.** A role that can see the table but cannot
+  `SELECT` from it still gets "present". Deriving readability was considered
+  and dropped: `has_table_privilege` *raises* on the missing-`USAGE` case that
+  motivates the question, so it would have traded a wrong answer for a crash.
+- **Relation kind matters.** A table, partitioned table, view or foreign table
+  counts — the kinds `information_schema.tables` reported. A sequence or index
+  that happens to share the name does not.
+
+### `--auto-detect-baseline` refuses a ledger it cannot see
+
+Because "absent" got stricter, `migrate up --auto-detect-baseline` gained a
+guard. If the configured name does not resolve for this session **but a
+relation of that name exists in some other schema**, the command refuses with
+exit 5 and names both:
+
+```text
+--auto-detect-baseline: 'tb_confiture' does not resolve for this session, but a
+relation of that name exists in staging.tb_confiture. Refusing to auto-baseline:
+doing so would create a second ledger and mark every migration applied in it.
+```
+
+This is the only path in `migrate up` that rewrites migration history without
+being asked to, so it stops rather than guesses. Resolve it by pointing at the
+ledger you meant — set `migration.tracking_table` to the qualified name, or put
+its schema on the connection's `search_path` — and re-run. If the other relation
+is unrelated, drop or rename it first.
+
 ### If you renamed the table before 0.39.0
 
 A set of messages and one query hardcoded the `tb_confiture` default rather than resolving the configured name (#190). If you configured `tracking_table` and are upgrading from an earlier release, note what changed:

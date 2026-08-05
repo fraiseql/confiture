@@ -45,6 +45,7 @@ def _checksum_payload(
     checked: int,
     mismatches: list,
     tracking_table: str,
+    resolved_table: str | None = None,
     fixed: int | None = None,
 ) -> dict:
     """Build ``verify-checksums --format json`` output (#189).
@@ -53,6 +54,11 @@ def _checksum_payload(
     text and JSON cannot describe different outcomes. Reuses the shared issue
     object (``issue-object.schema.json``) rather than inventing a mismatch
     shape, matching the house envelope `migrate verify` established.
+
+    ``tracking_table`` is what the operator configured; ``resolved_table`` is
+    what that name resolved to for this session (#188). They differ whenever a
+    bare name is involved, so both are always emitted rather than one
+    conditionally — a consumer should not have to guess which it is holding.
     """
     payload: dict = {
         "ok": not mismatches,
@@ -61,6 +67,7 @@ def _checksum_payload(
             "checked": checked,
             "mismatched": len(mismatches),
             "tracking_table": tracking_table,
+            "resolved_table": resolved_table,
         },
         "issues": [
             {
@@ -306,7 +313,7 @@ def verify_checksums(
         MigrationChecksumVerifier,
     )
     from confiture.core.connection import create_connection, load_config
-    from confiture.core.ledger import ledger_exists
+    from confiture.core.ledger import find_ledger_relations, notable_resolution, probe_ledger
 
     if output_format not in ("text", "json"):
         fail(
@@ -327,7 +334,19 @@ def verify_checksums(
         # "no table", that would be indistinguishable from "no mismatches" —
         # the absent-vs-empty conflation this guard exists to prevent.
         tracking_table = _get_tracking_table(config_data)
-        if not ledger_exists(conn, tracking_table):
+        ledger = probe_ledger(conn, tracking_table)
+        if not ledger.exists:
+            # Since 0.41.0 a bare name is resolved through search_path, so
+            # "absent" can mean "present, but not where this session looks".
+            # Saying which is the difference between an actionable message and
+            # a puzzle (#188).
+            _elsewhere = find_ledger_relations(conn, tracking_table)
+            _note = (
+                f" A relation of that name does exist in {', '.join(_elsewhere)}, but this "
+                "connection's search_path does not reach it."
+                if _elsewhere
+                else ""
+            )
             conn.close()
             if allow_uninitialized:
                 if json_mode:
@@ -340,6 +359,7 @@ def verify_checksums(
                             checked=0,
                             mismatches=[],
                             tracking_table=tracking_table,
+                            resolved_table=None,
                         ),
                         None,
                         console,
@@ -347,12 +367,13 @@ def verify_checksums(
                     return
                 console.print(
                     f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
-                    "present in this database) — 0 migrations recorded, nothing to "
+                    f"present in this database){_note} — 0 migrations recorded, nothing to "
                     "verify.[/yellow]"
                 )
                 return
             raise DatabaseNotInitializedError(
-                f"No migration ledger found: `{tracking_table}` is not present in this database",
+                f"No migration ledger found: `{tracking_table}` is not present in "
+                f"this database.{_note}",
                 resolution_hint=_NO_LEDGER_HINT,
             )
 
@@ -376,12 +397,15 @@ def verify_checksums(
                         checked=checked,
                         mismatches=[],
                         tracking_table=tracking_table,
+                        resolved_table=ledger.resolved_name,
                     ),
                     None,
                     console,
                 )
             else:
-                console.print("[green]✅ All migration checksums verified![/green]")
+                _read = notable_resolution(tracking_table, ledger.resolved_name)
+                _suffix = f" (read `{_read}`)" if _read else ""
+                console.print(f"[green]✅ All migration checksums verified!{_suffix}[/green]")
             conn.close()
             return
 
@@ -396,6 +420,7 @@ def verify_checksums(
                     checked=checked,
                     mismatches=mismatches,
                     tracking_table=tracking_table,
+                    resolved_table=ledger.resolved_name,
                     fixed=updated,
                 ),
                 None,

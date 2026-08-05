@@ -19,6 +19,7 @@ import yaml
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.ledger import LedgerProbe
 
 runner = CliRunner()
 
@@ -49,21 +50,41 @@ def migrations_dir(tmp_path: Path) -> Path:
 
 
 def _invoke(
-    cfg: Path, migrations_dir: Path, *extra: str, ledger: bool, argv0: str = "verify-checksums"
+    cfg: Path,
+    migrations_dir: Path,
+    *extra: str,
+    ledger: bool,
+    elsewhere: list[str] | None = None,
+    argv0: str = "verify-checksums",
 ):
     """Invoke the command with the ledger probe forced to `ledger`.
 
-    `verify_checksums` imports both names inside the function body, so the
-    patch targets are the source modules, not `commands.admin`.
+    `verify_checksums` imports the names inside the function body, so the patch
+    targets are the source modules, not `commands.admin`.
+
+    ``probe_ledger``, not ``ledger_exists``: 0.41.0 moved the command onto the
+    richer probe. Left on the old name the patch binds to nothing, the real
+    probe runs against the MagicMock connection, and a mock row reads as
+    *present* — so the ledger=True cases would have gone on passing while
+    testing nothing. The `assert probe.called` below is what makes that
+    impossible to repeat.
     """
+    probe = MagicMock(
+        return_value=LedgerProbe(
+            exists=ledger, resolved_name="public.tb_confiture" if ledger else None
+        )
+    )
     with (
         patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-        patch("confiture.core.ledger.ledger_exists", return_value=ledger),
+        patch("confiture.core.ledger.probe_ledger", probe),
+        patch("confiture.core.ledger.find_ledger_relations", return_value=elsewhere or []),
     ):
-        return runner.invoke(
+        result = runner.invoke(
             app,
             [argv0, "-c", str(cfg), "--migrations-dir", str(migrations_dir), *extra],
         )
+    assert probe.called, "the ledger probe double was never used — patch target is stale"
+    return result
 
 
 class TestAbsentLedger:
@@ -139,3 +160,42 @@ class TestDeprecatedAliasParity:
 
         assert result.exit_code == 0
         assert "no migration ledger" in result.output.lower()
+
+
+class TestAbsentButPresentElsewhere:
+    """0.41.0 made "absent" mean "does not resolve *here*" (#188).
+
+    A bare `tracking_table` is now resolved through `search_path`, so a ledger
+    parked in another schema reports absent where it used to report present.
+    "Not present in this database" would then be a lie the operator has no way
+    to see through, so the message says where it actually is.
+    """
+
+    def test_the_message_names_the_schema_that_holds_it(
+        self, cfg: Path, migrations_dir: Path
+    ) -> None:
+        result = _invoke(cfg, migrations_dir, ledger=False, elsewhere=["staging.tb_confiture"])
+
+        assert result.exit_code == 2
+        assert "staging.tb_confiture" in result.output
+        assert "search_path" in result.output
+
+    def test_allow_uninitialized_says_it_too(self, cfg: Path, migrations_dir: Path) -> None:
+        result = _invoke(
+            cfg,
+            migrations_dir,
+            "--allow-uninitialized",
+            ledger=False,
+            elsewhere=["staging.tb_confiture"],
+        )
+
+        assert result.exit_code == 0
+        assert "staging.tb_confiture" in result.output
+
+    def test_a_genuinely_empty_database_gains_no_extra_noise(
+        self, cfg: Path, migrations_dir: Path
+    ) -> None:
+        """Nothing found elsewhere means nothing extra said."""
+        result = _invoke(cfg, migrations_dir, ledger=False, elsewhere=[])
+
+        assert "search_path" not in result.output

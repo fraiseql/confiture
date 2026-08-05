@@ -51,6 +51,26 @@ confiture migrate <subcommand> [<args>] --no-config --format json --output <file
 | `preflight`        | `migrate preflight`                        | [migrate-preflight](json-schemas/migrate-preflight.schema.json) |
 | `describe`         | `confiture --version` (synthesised)        | — (last whitespace token is the version) |
 
+> ℹ️ **Behaviour advisory — ledger-existence probe, 0.41.0 (#188).** Every
+> command above that distinguishes "no ledger" from "empty ledger" — `current`,
+> `up`, `verify`, `preflight` — goes through one probe, and that probe changed.
+> A **bare** `tracking_table` (the `tb_confiture` default) is now resolved
+> through `search_path` instead of matching the name in any schema; a
+> schema-qualified one is unchanged.
+>
+> **No minimum-version bump, and the adapter needs no change.** The answer moves
+> in exactly one configuration: a bare name whose ledger sits in a schema *off*
+> the connection's `search_path`. That configuration never worked — the probe
+> reported present and the next statement failed with `relation "tb_confiture"
+> does not exist` (measured on PostgreSQL 17.8). For every configuration that
+> functioned before, the probe returns what it always did. `migrate up` gained a
+> refusal on this state, but only under `--auto-detect-baseline`, which the
+> adapter does not pass.
+>
+> The adapter-consumed fields and exit codes are untouched. `migrate status` and
+> `verify-checksums` gained a `resolved_table` key naming the relation actually
+> read; neither command is on this surface.
+
 The adapter-consumed fields per command:
 
 - **current** — `revision` (the head, `null` when none applied).

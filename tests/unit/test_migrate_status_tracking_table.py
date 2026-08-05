@@ -530,3 +530,80 @@ class TestSemanticExitCodes:
         assert result.exit_code == 2
         data = json.loads(result.output)
         assert "warning" in data
+
+
+class TestMigrateStatusReportsTheResolvedLedger:
+    """`migrate status` says which ledger it read, not just which was configured (#188).
+
+    Since 0.41.0 a bare `tracking_table` is resolved through `search_path`, so
+    the configured name no longer identifies a relation on its own. The
+    configured and resolved names are both emitted rather than one
+    conditionally: a consumer should not have to work out which it is holding.
+    """
+
+    def _invoke_json(self, tmp_path, *, probe, elsewhere=None, exists=True):
+        from confiture.core.ledger import LedgerProbe
+
+        config_file = _write_config(tmp_path)
+        migrations_dir = tmp_path / "db" / "migrations"
+        _write_migrations(migrations_dir, count=2)
+        mock_migrator = _make_migrator_mock(tracking_table_exists=exists, applied_versions=[])
+
+        with (
+            patch("confiture.core.connection.load_config", return_value=_make_env()),
+            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch(
+                "confiture.core.ledger.probe_ledger",
+                return_value=LedgerProbe(exists=exists, resolved_name=probe),
+            ) as probe_double,
+            patch(
+                "confiture.core.ledger.find_ledger_relations",
+                return_value=elsewhere or [],
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "status",
+                    "--config",
+                    str(config_file),
+                    "--migrations-dir",
+                    str(migrations_dir),
+                    "--format",
+                    "json",
+                ],
+            )
+        assert probe_double.called, "ledger probe double unused — patch target is stale"
+        return result
+
+    def test_json_carries_both_names(self, tmp_path):
+        result = self._invoke_json(tmp_path, probe="staging.tb_confiture")
+
+        payload = json.loads(result.stdout)
+        assert payload["tracking_table"] == "tb_confiture"
+        assert payload["resolved_table"] == "staging.tb_confiture"
+
+    def test_an_absent_ledger_found_elsewhere_is_named_in_hints(self, tmp_path):
+        """The likeliest cause of a surprising all-pending report.
+
+        Without this the operator sees every migration 'pending' and a ledger
+        that "does not exist", while it sits in the next schema over.
+        """
+        result = self._invoke_json(
+            tmp_path, probe=None, exists=False, elsewhere=["staging.tb_confiture"]
+        )
+
+        payload = json.loads(result.stdout)
+        assert payload["resolved_table"] is None
+        assert any("staging.tb_confiture" in h for h in payload["hints"])
+        assert any("search_path" in h for h in payload["hints"])
+
+    def test_an_empty_database_gains_no_extra_hint(self, tmp_path):
+        """Nothing found elsewhere means the ordinary absent-ledger hint alone."""
+        result = self._invoke_json(tmp_path, probe=None, exists=False, elsewhere=[])
+
+        payload = json.loads(result.stdout)
+        assert not any("search_path" in h for h in payload["hints"])
+        assert any("baseline" in h for h in payload["hints"])

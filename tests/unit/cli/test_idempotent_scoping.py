@@ -576,21 +576,66 @@ class TestOutsideRepo:
         assert result.exit_code == 7
 
 
-class TestFlagCombinationGuard:
-    def test_idempotent_with_require_migration_fails_loud(self, bare_dir: Path) -> None:
-        """Previously ran only --require-migration and silently skipped idempotency."""
-        result = runner.invoke(
-            app,
-            [
-                "migrate",
-                "validate",
-                "--idempotent",
-                "--require-migration",
-                "--migrations-dir",
-                str(bare_dir),
-            ],
-        )
+class TestFlagCombinationComposes:
+    """`--idempotent --require-migration` runs both checks (0.41.0).
 
-        assert result.exit_code != 0
-        # Short fragment: Rich soft-wraps mid-sentence at console width.
-        assert "cannot be combined with" in result.output
+    0.37.0 rejected this combination outright, because the dispatch of the day
+    ran the git branch and silently skipped idempotency — #181's own defect. A
+    loud error was the right answer while that was true. Composition landed in
+    0.40.0 and the guard came off one release later, so what has to be pinned
+    now is not the rejection but the thing the rejection stood in for: the
+    idempotency scan really runs, over a positive selection, next to the git
+    check.
+    """
+
+    @pytest.fixture
+    def git_double(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        """Stand in for the accompaniment check, recording that it ran.
+
+        Patched on ``confiture.cli.git_validation`` because the git group
+        imports the sub-checks lazily from there. Without the double the check
+        would build an expected schema from real refs, which is
+        ``test_cli_git_validation.py``'s job, not this file's.
+        """
+        ran: list[str] = []
+
+        def fake_accompaniment(**_: object) -> dict[str, object]:
+            ran.append("accompaniment")
+            return {"is_valid": True, "violations": []}
+
+        monkeypatch.setattr(
+            "confiture.cli.git_validation.validate_migration_accompaniment",
+            fake_accompaniment,
+        )
+        return ran
+
+    def test_both_checks_run(self, repo: Path, git_double: list[str]) -> None:
+        exit_code, payload = _run_json(repo / "db" / "migrations", "--require-migration", cwd=repo)
+
+        assert git_double == ["accompaniment"], "the git check did not run"
+        assert payload["checks"]["git_accompaniment"] == {
+            "status": "passed",
+            "checks": ["accompaniment"],
+        }
+        idempotent = payload["checks"]["idempotent"]
+        assert idempotent["files_scanned"] == 3
+        assert _basenames(idempotent) == {
+            "20260101000000_alpha.up.sql",
+            "20260102000000_beta.up.sql",
+            "20260103000000_gamma.up.sql",
+        }
+        assert exit_code == 0
+
+    def test_a_passing_git_check_does_not_mask_a_violation(
+        self, repo: Path, git_double: list[str]
+    ) -> None:
+        """The failure mode the guard existed to prevent, now prevented by composing."""
+        _migration(repo, "20260104000000", "delta", idempotent=False)
+
+        exit_code, payload = _run_json(repo / "db" / "migrations", "--require-migration", cwd=repo)
+
+        assert git_double == ["accompaniment"]
+        assert payload["status"] == "failed"
+        assert payload["checks"]["idempotent"]["violation_count"] >= 1
+        assert "20260104000000_delta.up.sql" in _basenames(payload["checks"]["idempotent"])
+        assert exit_code == 1

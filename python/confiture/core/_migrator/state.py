@@ -14,7 +14,7 @@ from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext
 from confiture.core.ledger import ledger_exists
-from confiture.exceptions import MigrationError, SQLError
+from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
     from confiture.core._migrator.engine import Migrator
@@ -29,6 +29,13 @@ def _qualified_table(migrator: Migrator) -> str:
     ``Migrator`` splits the configured ``tracking_table`` into
     ``_table_schema`` / ``_table_base``; :func:`ledger_exists` takes the
     combined form.
+
+    Note:
+        The name is qualified only when the *configuration* was. With the
+        default ``tb_confiture`` this returns a bare name, so the probe takes
+        :mod:`confiture.core.ledger`'s ``search_path``-resolving path — the
+        same resolution ``migrator._table_ident`` gets, which is what keeps the
+        existence check and the DDL that follows it talking about one table.
     """
     if migrator._table_schema is not None:
         return f"{migrator._table_schema}.{migrator._table_base}"
@@ -99,16 +106,10 @@ def initialize(migrator: Migrator) -> None:
         migrator.connection.commit()
     except Exception as e:
         migrator.connection.rollback()
-        if isinstance(e, SQLError):
-            raise MigrationError(
-                f"Failed to initialize migrations table: {e}",
-                resolution_hint="Check database permissions to CREATE TABLE in the target schema",
-            ) from e
-        else:
-            raise MigrationError(
-                f"Failed to initialize migrations table: {e}",
-                resolution_hint="Check database permissions to CREATE TABLE in the target schema",
-            ) from e
+        raise MigrationError(
+            f"Failed to initialize migrations table: {e}",
+            resolution_hint="Check database permissions to CREATE TABLE in the target schema",
+        ) from e
 
 
 def is_applied(migrator: Migrator, version: str) -> bool:

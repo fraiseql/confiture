@@ -41,6 +41,10 @@
           "type": ["string", "null"],
           "description": "Configured tracking table name. NULL when no --config was supplied."
         },
+        "resolved_table": {
+          "type": ["string", "null"],
+          "description": "The schema-qualified relation the configured name resolved to for this session, e.g. \"public.tb_confiture\" (0.41.0, #188). A bare tracking_table resolves through search_path, so this is how a consumer learns which of several same-named tables was read. NULL when no --config was supplied, when the database was unreachable, or when the name resolves to nothing. When the ledger was absent, hints[] additionally names any schema that does hold a relation of that name."
+        },
         "applied": {
           "type": "array",
           "items": { "type": "string" },

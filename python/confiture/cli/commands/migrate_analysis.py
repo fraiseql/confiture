@@ -584,14 +584,16 @@ def migrate_validate(
         appear in the same invocation.
 
       Checks compose: pass as many as you like and all of them run, sharing one
-      config parse and one database connection. Two exceptions, both loud:
+      config parse and one database connection. The exit code is the worst
+      outcome across them. One exception, and it is loud:
         --list-patterns / --list-unmigrated-bodies  report modes; they always exit
                             0, so there is no result to compose. Combining either
                             with anything else is rejected (exit 5).
-        --idempotent        still refuses --check-drift / --require-migration /
-                            --require-migration-bodies / --require-grant-migration.
-                            Deliberate for 0.40.0 only; the guard retires in 0.41.0
-                            once the composition refactor has production exposure.
+
+      --idempotent composes with the git checks from 0.41.0. It was rejected
+      alongside --check-drift / --require-migration / --require-migration-bodies /
+      --require-grant-migration in 0.37.0–0.40.0, because the pre-composition
+      dispatch ran the git branch and silently skipped idempotency (#181).
 
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:
@@ -613,38 +615,6 @@ def migrate_validate(
             raise ConfigurationError(
                 f"Invalid format: {format_output}. Use 'text', 'json', or 'csv'."
             )
-
-        # #187/D2: the 0.37.0 conflict guard is RETAINED for 0.40.0 and retires
-        # in 0.41.0, one release after the composition refactor. Composition
-        # makes the combination safe in principle, but this guard is the only
-        # loud-failure net over exactly the flags #181 fixed; dropping it in the
-        # same release as the refactor would convert a loud error straight back
-        # into a silent skip if the refactor has a bug. Recorded here and in the
-        # 0.41.0 CHANGELOG so the temporary inconsistency does not become
-        # permanent by inattention.
-        if idempotent:
-            _conflicting = [
-                name
-                for name, on in (
-                    ("--check-drift", check_drift),
-                    ("--require-migration", require_migration),
-                    ("--require-migration-bodies", require_migration_bodies),
-                    ("--require-grant-migration", require_grant_migration),
-                )
-                if on
-            ]
-            if _conflicting:
-                raise ConfigurationError(
-                    f"--idempotent cannot be combined with {', '.join(_conflicting)} "
-                    "in 0.40.0. This combination is held back one release while the "
-                    "check-composition refactor gets production exposure; it is "
-                    "allowed from 0.41.0.",
-                    resolution_hint=(
-                        "Run the checks as separate invocations, e.g. "
-                        "`confiture migrate validate --idempotent` then "
-                        f"`confiture migrate validate {_conflicting[0]}`."
-                    ),
-                )
 
         # --list-patterns is a read-only catalog query with no config or
         # migrations directory behind it, so its options are assembled without

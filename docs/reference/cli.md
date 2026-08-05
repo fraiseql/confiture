@@ -1241,12 +1241,16 @@ gate for a check that never ran (#187).
   [`migrate-validate-composed.schema.json`](./json-schemas/migrate-validate-composed.schema.json),
   keyed by check name.
 
-Two combinations are rejected loudly rather than composed:
+One combination is rejected loudly rather than composed:
 
 | Combination | Exit | Why |
 |---|---|---|
 | `--list-patterns` or `--list-unmigrated-bodies` with anything else | 5 | Report modes: they always exit 0, so there is no result to compose. |
-| `--idempotent` with `--check-drift` / `--require-migration` / `--require-migration-bodies` / `--require-grant-migration` | 5 | Retained from 0.37.0 (#181) for one release; **retires in 0.41.0**, once composition has had production exposure. |
+
+`--idempotent` was also rejected alongside `--check-drift` /
+`--require-migration` / `--require-migration-bodies` /
+`--require-grant-migration` in 0.37.0 through 0.40.0 (#181). That guard is
+**retired in 0.41.0**: the combination composes like any other.
 
 #### Recognized Migration File Patterns
 
@@ -1687,9 +1691,10 @@ migrations the run succeeds with a `message` explaining that nothing changed
 since the base ref — deliberately distinct from the "directory contains no
 files" message, since the remedies differ.
 
-⚠️ `--idempotent` cannot be combined with `--check-drift`,
-`--require-migration`, `--require-migration-bodies`, or
-`--require-grant-migration`: only one check would run. Invoke them separately.
+Since 0.41.0 `--idempotent` composes with `--check-drift`,
+`--require-migration`, `--require-migration-bodies` and
+`--require-grant-migration`. Earlier versions rejected those combinations with
+exit 5, because only one of the two checks would have run.
 
 #### Examples
 
