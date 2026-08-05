@@ -65,7 +65,7 @@ A set of messages and one query hardcoded the `tb_confiture` default rather than
 | `migrate rebuild` backup file | `tb_confiture_backup_<ts>.json` | named after the configured table |
 | `MigrationRunner` test fixture | queried the literal, and swallowed *every* error into `[]` | takes `tracking_table=`; only an absent ledger yields `[]`, everything else raises |
 
-**`migrate introspect --format json` key deprecation.** `tb_confiture_present` is deprecated and **removed in 0.40.0**. Both it and the replacement `ledger_present` are emitted with the same value during the window — switch consumers to `ledger_present`, which does not assume a table name (#186).
+**`migrate introspect --format json` key deprecation — completed.** `tb_confiture_present` was deprecated in 0.39.0 and **removed in 0.40.0**. Consumers read `ledger_present`, which does not assume a table name (#186).
 
 The advisory-lock namespace in `core/locking.py` is deliberately *not* affected: it is derived from `SHA256("tb_confiture")` and frozen, because changing it would change the lock key and break coordination with older clients.
 

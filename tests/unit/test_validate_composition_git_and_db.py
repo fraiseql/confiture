@@ -250,3 +250,61 @@ def test_db_backed_checks_open_one_connection(
 
     assert result.exit_code == 0, result.output
     assert len(opened) == 1, f"opened {len(opened)} connections: {opened}"
+
+
+def test_emit_remediation_fires_exactly_once_when_composed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--emit-remediation`` is a file-writing side effect; composition must not
+    run it twice, and must not skip it because another check ran first."""
+    (tmp_path / "db" / "migrations").mkdir(parents=True)
+    ddl = tmp_path / "db" / "schema"
+    ddl.mkdir(parents=True)
+    (ddl / "10_fn.sql").write_text(
+        "CREATE FUNCTION public.f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER;\n"
+    )
+    config = tmp_path / "confiture.yaml"
+    config.write_text(
+        textwrap.dedent(
+            """\
+            name: test
+            database_url: postgresql://localhost/test
+            include_dirs:
+              - path: db/schema
+            security_lint:
+              enabled: true
+            """
+        )
+    )
+    monkeypatch.chdir(tmp_path)
+
+    calls: list[Path] = []
+    real_emit = __import__(
+        "confiture.core.validation.security_definer", fromlist=["emit_remediation"]
+    ).emit_remediation
+
+    def spy(report: Any, output_path: Path) -> int:
+        calls.append(output_path)
+        return real_emit(report, output_path)
+
+    monkeypatch.setattr("confiture.core.validation.security_definer.emit_remediation", spy)
+
+    out = tmp_path / "fix.sql"
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "validate",
+            "--check-security-definer",
+            "--check-imports",
+            "-c",
+            str(config),
+            "--emit-remediation",
+            str(out),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "passed import check" in result.output
+    assert len(calls) == 1, f"emit_remediation ran {len(calls)} times"
+    assert out.exists()

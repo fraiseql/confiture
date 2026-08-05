@@ -72,9 +72,9 @@ change without a top-level version bump.
 
 ### `confiture migrate introspect --format json`
 
-[migrate-introspect.schema.json](./json-schemas/migrate-introspect.schema.json) — `{ledger_present, tb_confiture_present, detected_version, …}` for recovering which migration level a database is at by matching its live schema against `db/schema_history/`.
+[migrate-introspect.schema.json](./json-schemas/migrate-introspect.schema.json) — `{ledger_present, detected_version, …}` for recovering which migration level a database is at by matching its live schema against `db/schema_history/`.
 
-⚠️ **`tb_confiture_present` is deprecated as of 0.39.0 and removed in 0.40.0.** It hardcodes the default table name, which is wrong for any project that configured `tracking_table` (#186). Both keys are emitted with the same value during the deprecation window; migrate to **`ledger_present`**, the table-name-agnostic spelling `migrate verify` adopted in 0.37.0.
+⚠️ **`tb_confiture_present` was removed in 0.40.0**, after the one-release deprecation window opened in 0.39.0. It hardcoded the default table name, which is wrong for any project that configured `tracking_table` (#186). Use **`ledger_present`**, the table-name-agnostic spelling `migrate verify` adopted in 0.37.0.
 
 ### `confiture verify-checksums --format json`
 
@@ -223,6 +223,54 @@ Static check that every `CREATE FUNCTION` / `CREATE PROCEDURE` across the config
   ]
 }
 ```
+
+### `confiture migrate validate` with two or more checks — the composed envelope
+
+[migrate-validate-composed.schema.json](./json-schemas/migrate-validate-composed.schema.json)
+
+Since 0.40.0 (#187), `migrate validate` runs **every** check the invocation asks
+for instead of whichever appeared first in the source. One invocation therefore
+produces several payloads, and they go out as one document.
+
+**A single check is unaffected**: it still emits its own payload verbatim — every
+schema above holds byte-for-byte. The wrapper appears only for two or more, keyed
+by the check's stable machine name, with each value exactly the payload that check
+would have emitted alone.
+
+```json
+{
+  "version": "1",
+  "status": "failed",
+  "checks": {
+    "acl_coverage": { "check": "acl_coverage", "violations": [], "hints": [] },
+    "ownership_coverage": {
+      "check": "ownership_coverage",
+      "violations": [
+        {
+          "rule_id": "own_001",
+          "severity": "error",
+          "object_name": "public.orders",
+          "message": "…",
+          "file_path": "db/migrations/20260527000000_init.up.sql",
+          "line_number": 1
+        }
+      ]
+    }
+  },
+  "hints": []
+}
+```
+
+`status` is `failed` when any check that ran reported a finding, and the process
+exits 1 — the worst outcome across the checks that ran, so a passing check can no
+longer mask a failing one. Check names: `list_patterns`, `unmigrated_bodies`,
+`git_accompaniment`, `acl_coverage`, `ownership_coverage`, `function_uniqueness`,
+`security_definer`, `imports`, `live_drift`, `function_signature_drift`,
+`view_body_drift`, `replay_body_drift`, `idempotent`, `naming`.
+
+`--list-patterns` and `--list-unmigrated-bodies` are report modes and refuse to
+compose (exit 5, both flags named) — they always exit 0, so they have no result
+to combine.
 
 ### `confiture migrate status --format json`
 

@@ -230,7 +230,8 @@ def migrate_validate(
         "--list-patterns",
         help=(
             "Print machine-readable catalog of detection patterns "
-            "(read-only, no DB needed). Use with `--format json` for tooling."
+            "(read-only, no DB needed). Use with `--format json` for tooling. "
+            "Report mode: cannot be combined with any other check."
         ),
     ),
     strict_cor: bool = typer.Option(
@@ -273,7 +274,8 @@ def migrate_validate(
         help=(
             "Report-only: list function body changes (between --base-ref and HEAD) not "
             "carried by a migration, WITHOUT failing (exit 0). Use to size and drain the "
-            "backlog before enabling --require-migration-bodies."
+            "backlog before enabling --require-migration-bodies. Report mode: cannot be "
+            "combined with any other check."
         ),
     ),
     base_ref: str = typer.Option(
@@ -535,6 +537,9 @@ def migrate_validate(
       optionally verifies idempotency, checks for schema drift, and ensures DDL
       changes have corresponding migration files.
 
+      Every check you ask for runs (0.40.0). The exit code is the worst outcome
+      across them, so a passing check cannot mask a failing one.
+
     EXAMPLES:
       confiture migrate validate
         ↳ Check for orphaned files not matching naming pattern
@@ -578,11 +583,23 @@ def migrate_validate(
         They're different things — file path vs. DB schema names — and both flags can
         appear in the same invocation.
 
+      Checks compose: pass as many as you like and all of them run, sharing one
+      config parse and one database connection. Two exceptions, both loud:
+        --list-patterns / --list-unmigrated-bodies  report modes; they always exit
+                            0, so there is no result to compose. Combining either
+                            with anything else is rejected (exit 5).
+        --idempotent        still refuses --check-drift / --require-migration /
+                            --require-migration-bodies / --require-grant-migration.
+                            Deliberate for 0.40.0 only; the guard retires in 0.41.0
+                            once the composition refactor has production exposure.
+
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:
         - --idempotent: migrate-validate-idempotent.schema.json
         - --list-patterns: migrate-validate-list-patterns.schema.json
         - --check-acls: migrate-validate-check-acl-coverage.schema.json
+        - two or more checks: migrate-validate-composed.schema.json (a wrapper
+          keyed by check name; one check still emits its own payload verbatim)
 
     RELATED:
       confiture migrate generate - Create new migration file
@@ -1654,18 +1671,15 @@ def _preflight_version_from_filename(filename: str) -> str:
 def _introspect_payload(ledger_present: bool, **extra: Any) -> dict[str, Any]:
     """Build ``migrate introspect``'s JSON payload (#186).
 
-    Emits **both** spellings during the deprecation window:
+    ``ledger_present`` is the table-name-agnostic spelling ``migrate verify``
+    adopted in 0.37.0. The 0.39.0 deprecated alias ``tb_confiture_present`` —
+    which hardcoded the default table name and was therefore wrong for any
+    project that configured ``tracking_table`` — was removed in 0.40.0 as
+    announced.
 
-    * ``ledger_present`` — forward-correct and table-name-agnostic, the
-      spelling ``migrate verify`` adopted in 0.37.0;
-    * ``tb_confiture_present`` — **deprecated**, hardcodes the default table
-      name and is wrong for any project that configured ``tracking_table``.
-
-    One builder for all three emit sites, because the point of a deprecation
-    window is that the two keys agree throughout it. ``tb_confiture_present``
-    is removed in 0.40.0.
+    One builder for all three emit sites, so the shape cannot drift between them.
     """
-    return {"ledger_present": ledger_present, "tb_confiture_present": ledger_present, **extra}
+    return {"ledger_present": ledger_present, **extra}
 
 
 def _preflight_tracking_table(config: Path | None) -> str:

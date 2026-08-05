@@ -120,6 +120,30 @@ Note that "no ledger" and "ledger present but empty" stay distinct: a database
 with an empty `tb_confiture` is initialized, so it succeeds normally and
 reports `ledger_present: true` with `total_applied: 0`.
 
+### `migrate validate` with several checks — the exit code aggregates (0.40.0)
+
+Since 0.40.0 (#187) `migrate validate` runs **every** check the invocation asks
+for. Its exit code is the worst outcome across the checks that ran:
+
+- **0** — every check passed.
+- **1** — at least one check reported a finding. Every validation check signals
+  1 for findings, so this is the only non-zero *finding* code today. A check
+  introducing a second distinct code must revisit
+  `confiture.core.validation.registry.aggregate_exit_code`, which resolves ties
+  by execution order rather than by an invented severity ladder — 3
+  (`db_unreachable`) and 7 (`git_error`) are siblings, not degrees.
+- **anything else** — a genuine failure (bad config → 5, unreachable database →
+  3, missing git ref → 7). These are *not* aggregated: they propagate
+  immediately through the `fail()` boundary and produce the error envelope
+  alone, exactly as before composition existed. An infrastructure failure is
+  not a finding, and emitting an error envelope beside unrelated check output
+  would give consumers two documents on one stdout.
+
+This is the behaviour change to check wrapper scripts against. A script that
+ran two invocations because composition did not work will now get both checks
+in one — generally what it wanted, but its exit-code handling may have assumed
+single-check semantics.
+
 ## How the convention was decided (issue #146)
 
 Confiture 0.18.0 shipped **three incompatible** exit-code conventions: the CLI's

@@ -1219,7 +1219,34 @@ confiture migrate validate --fix-naming --format json
 
 # Verify changed grants are carried by an accompanying migration (pre-commit)
 confiture migrate validate --require-grant-migration --staged
+
+# Compose checks: both run, one config parse, one DB connection
+confiture migrate validate --check-acls --check-imports
+confiture migrate validate --check-signatures --check-live-drift --env production
 ```
+
+#### Composing checks (0.40.0)
+
+Pass as many checks as you like: **all of them run**. Before 0.40.0 the command
+evaluated a chain of `if <flag>: … return` blocks in source order, so
+`--check-acls --check-imports` ran only the ACL check and exited 0 — a green
+gate for a check that never ran (#187).
+
+- The exit code is the worst outcome across the checks that ran, so a passing
+  check cannot mask a failing one.
+- Checks needing a database share one connection (and one SSH tunnel), and the
+  config is parsed once for the whole run.
+- `--format json` emits **one** document. A single check keeps its own
+  documented payload byte-for-byte; two or more are wrapped in
+  [`migrate-validate-composed.schema.json`](./json-schemas/migrate-validate-composed.schema.json),
+  keyed by check name.
+
+Two combinations are rejected loudly rather than composed:
+
+| Combination | Exit | Why |
+|---|---|---|
+| `--list-patterns` or `--list-unmigrated-bodies` with anything else | 5 | Report modes: they always exit 0, so there is no result to compose. |
+| `--idempotent` with `--check-drift` / `--require-migration` / `--require-migration-bodies` / `--require-grant-migration` | 5 | Retained from 0.37.0 (#181) for one release; **retires in 0.41.0**, once composition has had production exposure. |
 
 #### Recognized Migration File Patterns
 
