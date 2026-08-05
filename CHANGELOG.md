@@ -7,7 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-08-05
+
+The migration-ledger probe answers the question its callers are actually asking
+(#188), and the `--idempotent` conflict guard that 0.40.0 held back one release
+comes off.
+
+### ⚠️ Behaviour change
+
+- **A bare `tracking_table` is resolved through `search_path`** instead of
+  matching the name in any schema (#188). `core/ledger.py`'s probe ran
+  `information_schema.tables WHERE table_name = %s`, which is schema-blind: a
+  ledger in `staging` reported *present* to a session that would go on to read
+  `public`. The probe now runs `to_regclass`, which resolves exactly as the
+  query it is a precondition for. A **schema-qualified** `tracking_table` is
+  deliberately unchanged — see *Why the paths differ* below.
+
+  **What changes for you.** In one configuration, and only one: a bare
+  `tracking_table` whose ledger lives in a schema off the connection's
+  `search_path` now reports **absent** where it reported present. That
+  configuration never worked — the probe said present, `initialize()` skipped
+  the `CREATE TABLE`, and the very next statement failed with
+  `relation "tb_confiture" does not exist`. Every configuration that functioned
+  before gets the same answer it always did.
+
+  Consequences worth knowing:
+
+  - **Presence is not readability.** A role that can see the ledger but cannot
+    `SELECT` from it still reports present. Readability was considered and
+    dropped: `has_table_privilege` *raises* on the missing-`USAGE` case that
+    motivates the question, which would trade a wrong answer for a crash.
+  - **Relation kind is filtered.** Tables, partitioned tables, views and
+    foreign tables count — the kinds `information_schema.tables` reported.
+    `to_regclass` resolves every kind, so a sequence or index sharing the name
+    would otherwise have started reading as a ledger.
+  - **A privilege refusal on the bare path raises a typed `SQLError`**
+    (`SQL_001`), never a raw psycopg exception — the crash class #182 closed.
+
+- **`migrate up --auto-detect-baseline` refuses a ledger it cannot see.** Since
+  "absent" got stricter, the flag's trigger got a guard: if the configured name
+  does not resolve **but a relation of that name exists in another schema**, the
+  command exits 5 naming both, instead of building a second ledger and marking
+  every migration applied in it. It is the only path in `migrate up` that
+  rewrites migration history unprompted. Unaffected when the name is genuinely
+  unused, which is the state the flag exists for.
+
 ### Changed
+
+- **`migrate status` and `verify-checksums` report the ledger they read.**
+  `migrate status --format json` gains a top-level `resolved_table`;
+  `verify-checksums --format json` gains `summary.resolved_table`. Both name the
+  schema-qualified relation the session resolved to, beside the configured
+  `tracking_table` — which no longer identifies a relation on its own. Both
+  schemas set `additionalProperties: false`, so consumers pinned to the previous
+  schema must update to accept the new key. Text output stays quiet unless the
+  resolution is worth remarking on: the configured name, and a bare name landing
+  in `public`, say nothing new.
+
+- **An absent ledger says where it actually is.** `migrate status` (via
+  `hints[]`) and `verify-checksums` now sweep for the same name in other schemas
+  and name what they find. "Not present in this database" became a half-truth the
+  moment the probe got stricter.
 
 - **The `--idempotent` conflict guard is retired.** `migrate validate
   --idempotent` now composes with `--check-drift`, `--require-migration`,
@@ -19,6 +79,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exposure before its safety net came off. Both checks now run; the exit code is
   the worse of the two. Scripts that split the flags across two invocations to
   work around the rejection can merge them, and save a config parse.
+
+### Why the paths differ
+
+Converting the schema-qualified probe too would be tidier and is wrong.
+`to_regclass('hidden.tb_secret')` **raises** `permission denied for schema
+hidden` for a role without `USAGE`, where the `information_schema` query returns
+cleanly — measured both ways on PostgreSQL 17.8. A qualified name already
+filters on schema correctly, so the conversion would buy nothing and would put
+an unhandled psycopg exception on the ledger path that `_migrator/state.py` uses
+whenever `tracking_table` is qualified. Two queries, deliberately.
+
+### Contract
+
+No fraisier adapter minimum-version bump. `migrate up` is on the adapter's
+subcommand surface, but the new refusal fires only under
+`--auto-detect-baseline`, which the adapter does not pass, and the probe change
+is a no-op for every configuration that worked before. Recorded as a behaviour
+advisory in
+[the adapter contract](docs/reference/fraisier-adapter-contract.md#subcommand-surface).
 
 ## [0.40.0] - 2026-08-05
 
