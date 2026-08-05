@@ -1,4 +1,11 @@
-"""Unit tests for migrate validate --check-signatures and --check-body CLI flags."""
+"""Unit tests for migrate validate --check-signatures and --check-body CLI flags.
+
+``load_config`` / ``open_connection`` are patched on
+``confiture.core.validation.context`` since 0.40.0: the CLI opens one connection
+per run there and hands it to every database-backed check, instead of each
+handler calling its own. ``check_signature_drift`` still opens its own when
+called without a context, so the handler-level symbols remain real.
+"""
 
 import re
 from unittest.mock import MagicMock, patch
@@ -154,14 +161,10 @@ class TestCheckSignaturesFlag:
         schema = tmp_path / "schema.sql"
         schema.write_text("-- no functions")
 
+        open_conn = self._make_open_conn_mock()
         with (
-            patch(
-                "confiture.core.validation.signature_drift.load_config", return_value=MagicMock()
-            ),
-            patch(
-                "confiture.core.validation.signature_drift.open_connection",
-                self._make_open_conn_mock(),
-            ),
+            patch("confiture.core.validation.context.load_config", return_value=MagicMock()),
+            patch("confiture.core.validation.context.open_connection", open_conn),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
         ):
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
@@ -183,6 +186,10 @@ class TestCheckSignaturesFlag:
                     ],
                 )
         assert result.exit_code == 0
+        # The double must actually be the thing that ran. Without this, a stale
+        # patch target passes on any box with Postgres on localhost and fails
+        # only in CI — how these tests first went red in 0.40.0.
+        assert open_conn.called, "the patched connection factory was never used"
 
     def test_check_signatures_exits_1_on_drift(self, tmp_path):
         config = tmp_path / "confiture.yaml"
@@ -191,11 +198,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
+            patch("confiture.core.validation.context.load_config", return_value=MagicMock()),
             patch(
-                "confiture.core.validation.signature_drift.load_config", return_value=MagicMock()
-            ),
-            patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -227,11 +232,9 @@ class TestCheckSignaturesFlag:
         schema.write_text("-- no functions")
 
         with (
+            patch("confiture.core.validation.context.load_config", return_value=MagicMock()),
             patch(
-                "confiture.core.validation.signature_drift.load_config", return_value=MagicMock()
-            ),
-            patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -301,11 +304,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.core.validation.signature_drift.load_config",
+                "confiture.core.validation.context.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -344,11 +347,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.core.validation.signature_drift.load_config",
+                "confiture.core.validation.context.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -396,11 +399,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.core.validation.signature_drift.load_config",
+                "confiture.core.validation.context.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -466,11 +469,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.core.validation.signature_drift.load_config",
+                "confiture.core.validation.context.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
@@ -512,11 +515,11 @@ class TestCheckBodyFlag:
 
         with (
             patch(
-                "confiture.core.validation.signature_drift.load_config",
+                "confiture.core.validation.context.load_config",
                 return_value=MagicMock(),
             ),
             patch(
-                "confiture.core.validation.signature_drift.open_connection",
+                "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,

@@ -249,7 +249,11 @@ def test_db_backed_checks_open_one_connection(
     )
 
     assert result.exit_code == 0, result.output
-    assert len(opened) == 1, f"opened {len(opened)} connections: {opened}"
+    # Naming the seam, not just counting: an empty list would mean the doubles
+    # were bypassed and a *real* connection was made — which passes on a
+    # developer box with Postgres on localhost and fails in CI. That exact
+    # asymmetry is how the 0.40.0 patch-target move first reached CI red.
+    assert opened == ["context"], f"connections opened: {opened}"
 
 
 def test_emit_remediation_fires_exactly_once_when_composed(
