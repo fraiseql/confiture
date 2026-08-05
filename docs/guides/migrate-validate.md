@@ -267,6 +267,10 @@ without importing or executing the migration. The extractor handles:
 - f-strings with only literal parts: `self.execute(f"CREATE TABLE foo;")`
 - Constant string concatenation: `self.execute("CREATE " + "TABLE foo;")`
 - File references: `self.execute_file("db/schema/foo.sql")`
+- Literal file reads *(new in 0.42.0, #185)*:
+  `self.execute(Path("db/schema/foo.sql").read_text())`, with or without an
+  `encoding=` keyword, and `pathlib.Path(...)` spelled out. Only a string
+  **literal** is resolved — see below.
 - Keyword form: `self.execute(sql="…")`
 
 Calls whose argument can't be statically resolved produce a structured
@@ -280,6 +284,16 @@ top-level `warnings` array in JSON. Examples:
 - `self.execute_file("../../../outside/file.sql")` resolving outside the
   project root → `execute_file_escaped` (the file is **not** read)
 - `self.execute_file("db/schema/missing.sql")` → `execute_file_missing`
+- `self.execute(Path(target).read_text())`, or any other non-literal path
+  including `(SQL_DIR / "foo.sql").read_text()` → `dynamic_read_text`, whose
+  message names `execute_file(...)` as the supported alternative
+
+Resolved `read_text()` paths go through the **same** project-root confinement as
+`execute_file`, and report the same `execute_file_escaped` /
+`execute_file_missing` signals: a path escaping the project root is refused, not
+read. Resolution is pure AST matching — no variable, constant or expression is
+ever evaluated — and it is independent of the SQL backend, so
+`CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` changes nothing here.
 
 Warnings do not fail the gate. Violations do. Combine the two
 appropriately for your CI policy: if you require zero dynamic SQL,
@@ -409,6 +423,11 @@ and pass. `--staged` reads the **staging index** instead:
 It analyzes the index blob, not the working tree — the two differ when a file is
 staged and then edited further, and the hook must judge what is about to be
 committed. When both `--staged` and `--base-ref` are passed, `--staged` wins.
+
+*Since 0.42.0* the same flag scopes `--check-drift`, `--require-migration` and
+`--require-migration-bodies` as well (#184); before that it reached only
+`--require-grant-migration`, and the others silently compared committed refs.
+See [git-aware validation](./git-aware-validation.md#what---staged-compares-0420).
 
 #### Scoping requires an explicit flag
 
@@ -741,8 +760,10 @@ confiture migrate validate --require-grant-migration --allow-grant-only --staged
   surface.
 - **SQL built by `str.format` / `%`-format.** Treated as dynamic. The
   template is not extracted even if the placeholders are not used.
-- **`Path(...).read_text()` outside of `execute_file()`.** Loaded SQL that
-  doesn't go through the official helper is invisible to the extractor.
+- **Non-literal `Path(...).read_text()`.** A literal path is resolved and
+  analyzed since 0.42.0; a computed one (`Path(target)`, `SQL_DIR / name`) is
+  reported as `dynamic_read_text`. Use `execute_file(<path>)`, which resolves
+  computed paths.
 
 These cases produce **warnings**, never silent passes — so a Python-only
 migrations directory full of dynamic SQL still exits 0 but tells you

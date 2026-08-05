@@ -49,7 +49,12 @@ class MigrationAccompanimentChecker:
         self.differ = GitSchemaDiffer(env, self.repo_path)
 
     def check_accompaniment(
-        self, base_ref: str, target_ref: str = "HEAD", *, check_bodies: bool = False
+        self,
+        base_ref: str,
+        target_ref: str = "HEAD",
+        *,
+        check_bodies: bool = False,
+        two_dot: bool = False,
     ) -> MigrationAccompanimentReport:
         """Check if DDL changes are accompanied by migrations.
 
@@ -64,6 +69,12 @@ class MigrationAccompanimentChecker:
             check_bodies: Also flag function *body* changes not carried by a
                 migration (#178). Off by default — opt-in via
                 ``--require-migration-bodies``.
+            two_dot: Diff ``base..target`` instead of ``base...target``. Required
+                when *target_ref* is a tree rather than a commit — the staged
+                index (#184) — because a symmetric difference has to compute a
+                merge base and git rejects a tree there. Callers passing this
+                are expected to have resolved *base_ref* to the merge base
+                themselves, which is what makes the two forms equivalent.
 
         Returns:
             MigrationAccompanimentReport with validation results
@@ -80,7 +91,7 @@ class MigrationAccompanimentChecker:
             >>> print(f"Valid: {report.is_valid}")
         """
         # Get new migration files regardless of whether schema parsing succeeds
-        new_migrations = self._get_new_migrations(base_ref, target_ref)
+        new_migrations = self._get_new_migrations(base_ref, target_ref, two_dot=two_dot)
 
         try:
             diff = self.differ.compare_refs(base_ref, target_ref)
@@ -99,12 +110,12 @@ class MigrationAccompanimentChecker:
 
         # Check function signature violations (param type changes need DROP FUNCTION)
         signature_violations = self._check_signature_violations(
-            new_migrations, base_ref, target_ref
+            new_migrations, base_ref, target_ref, two_dot=two_dot
         )
 
         # Check function body violations (body edits need a re-defining migration)
         body_violations = (
-            self._check_body_violations(new_migrations, base_ref, target_ref)
+            self._check_body_violations(new_migrations, base_ref, target_ref, two_dot=two_dot)
             if check_bodies
             else []
         )
@@ -125,10 +136,12 @@ class MigrationAccompanimentChecker:
         new_migrations: list[Path],
         base_ref: str,
         target_ref: str,
+        *,
+        two_dot: bool = False,
     ) -> list:
         """Return function signature violations for changed function files."""
         try:
-            function_files = self._get_changed_function_files(base_ref, target_ref)
+            function_files = self._get_changed_function_files(base_ref, target_ref, two_dot=two_dot)
             if not function_files:
                 return []
 
@@ -152,10 +165,12 @@ class MigrationAccompanimentChecker:
         new_migrations: list[Path],
         base_ref: str,
         target_ref: str,
+        *,
+        two_dot: bool = False,
     ) -> list:
         """Return function body violations for changed function files (#178)."""
         try:
-            function_files = self._get_changed_function_files(base_ref, target_ref)
+            function_files = self._get_changed_function_files(base_ref, target_ref, two_dot=two_dot)
             if not function_files:
                 return []
 
@@ -174,9 +189,11 @@ class MigrationAccompanimentChecker:
             # Body check is best-effort — never block CI on unexpected errors.
             return []
 
-    def _get_changed_function_files(self, base_ref: str, target_ref: str) -> list[Path]:
+    def _get_changed_function_files(
+        self, base_ref: str, target_ref: str, *, two_dot: bool = False
+    ) -> list[Path]:
         """Return SQL files that changed between refs and contain function definitions."""
-        changed_files = self.git_repo.get_changed_files(base_ref, target_ref)
+        changed_files = self._changed_files(base_ref, target_ref, two_dot=two_dot)
         result = []
         for f in changed_files:
             if not f.name.endswith(".sql"):
@@ -189,7 +206,15 @@ class MigrationAccompanimentChecker:
                 result.append(f)
         return result
 
-    def _get_new_migrations(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
+    def _changed_files(self, base_ref: str, target_ref: str, *, two_dot: bool) -> list[Path]:
+        """Files changed between the refs, two-dot when the target is a tree."""
+        if two_dot:
+            return self.git_repo.get_changed_files_two_dot(base_ref, target_ref)
+        return self.git_repo.get_changed_files(base_ref, target_ref)
+
+    def _get_new_migrations(
+        self, base_ref: str, target_ref: str = "HEAD", *, two_dot: bool = False
+    ) -> list[Path]:
         """Get list of new migration files between refs.
 
         Searches for migration files (*.up.sql) that are new or modified
@@ -208,7 +233,7 @@ class MigrationAccompanimentChecker:
             GitError: If git operations fail
         """
         # Get all changed files between refs
-        changed_files = self.git_repo.get_changed_files(base_ref, target_ref)
+        changed_files = self._changed_files(base_ref, target_ref, two_dot=two_dot)
 
         # Filter to migration files in db/migrations/ directory.
         # Accepts both .up.sql files and .py migration files (generated by

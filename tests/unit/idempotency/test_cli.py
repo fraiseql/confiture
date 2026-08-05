@@ -1041,3 +1041,71 @@ class TestPhase04SeverityCLI:
         assert payload["violations"][0]["severity"] == "info"
         assert payload["violations"][0]["source_line"] is not None
         assert result.exit_code == 0
+
+
+class TestReadTextMigrationsAreAnalyzed:
+    """End to end for #185: SQL behind ``Path(...).read_text()`` reaches the gate.
+
+    The extractor-level tests pin the AST match; this pins the wiring — that a
+    non-idempotent statement living in a referenced .sql file actually fails
+    `migrate validate --idempotent`, and shows up in the JSON document.
+    """
+
+    def _project(self, tmp_path: Path, expression: str) -> Path:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        schema_dir = tmp_path / "db" / "schema"
+        schema_dir.mkdir(parents=True)
+        (schema_dir / "fn.sql").write_text("CREATE TABLE audit (id INT);\n")
+        (migrations_dir / "20260101000030_reads.py").write_text(
+            "from pathlib import Path\n"
+            "\n"
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            "class Reads(Migration):\n"
+            '    version = "20260101000030"\n'
+            '    name = "reads"\n'
+            "    def up(self) -> None:\n"
+            f"        self.execute({expression})\n"
+            "    def down(self) -> None:\n"
+            "        pass\n"
+        )
+        return migrations_dir
+
+    def test_non_idempotent_statement_in_the_referenced_file_is_flagged(
+        self, tmp_path: Path, monkeypatch
+    ):
+        migrations_dir = self._project(tmp_path, 'Path("db/schema/fn.sql").read_text()')
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            app,
+            ["migrate", "validate", "--idempotent", "--migrations-dir", str(migrations_dir)],
+        )
+
+        assert result.exit_code == 1, result.output
+        assert "CREATE TABLE" in result.output
+
+    def test_unresolvable_shape_is_reported_as_a_warning_in_json(self, tmp_path: Path, monkeypatch):
+        import json
+
+        migrations_dir = self._project(tmp_path, "Path(target).read_text()")
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "validate",
+                "--idempotent",
+                "--migrations-dir",
+                str(migrations_dir),
+                "--format",
+                "json",
+            ],
+        )
+
+        payload = json.loads(result.stdout)
+        kinds = [w["kind"] for w in payload["warnings"]]
+        assert kinds == ["dynamic_read_text"]
+        assert "execute_file" in payload["warnings"][0]["message"]

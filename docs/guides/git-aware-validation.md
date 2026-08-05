@@ -55,6 +55,28 @@ repos:
         stages: [commit]
 ```
 
+#### What `--staged` compares (0.42.0)
+
+`--staged` scopes the checks to the **staging index**: the content that `git
+commit` is about to record. Concretely, confiture writes the index out as a tree
+(`git write-tree`) and compares `merge-base(--base-ref, HEAD)` against that tree.
+
+Two consequences worth knowing:
+
+- A file that is staged and then edited further contributes its **staged**
+  content. The hook judges the commit, not the working tree.
+- A migration you wrote but did not `git add` does not count as accompanying a
+  staged DDL change — which is the point: it would not be in the commit either.
+
+Before 0.42.0 only `--require-grant-migration` honoured the flag; `--check-drift`
+and `--require-migration` compared `--base-ref` against `HEAD` even with
+`--staged` passed, so a pre-commit hook silently ignored the very change being
+committed (#184). If you relied on that hook passing, expect it to start
+reporting.
+
+In a shallow clone with no `origin/main`, staged mode fails with `GIT_003`
+(exit 7) naming the remedy rather than reporting an empty scope.
+
 **Setup:**
 ```bash
 # Install pre-commit
@@ -152,7 +174,7 @@ echo "✅ Schema validation passed"
 | `--require-migration` | - | Boolean | False | Ensure DDL changes have migration files |
 | `--base-ref` | - | String | `origin/main` | Reference point for comparison |
 | `--since` | - | String | None | Alias for `--base-ref` |
-| `--staged` | - | Boolean | False | Only validate staged files (pre-commit mode) |
+| `--staged` | - | Boolean | False | Compare the staging index instead of `HEAD` (pre-commit mode) |
 | `--format` | `-f` | String | `text` | Output format: `text` or `json` |
 | `--output` | `-o` | Path | None | Save output to file |
 
