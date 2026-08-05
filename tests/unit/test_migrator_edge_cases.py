@@ -39,9 +39,11 @@ class TestMigratorInitializeEdgeCases:
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
-        # Simulate table already exists with new structure
+        # Simulate table already exists with new structure. The default
+        # tracking table is bare, so the first row is the `to_regclass` probe's
+        # (schema, relname) shape rather than an EXISTS boolean (#188).
         mock_cursor.fetchone.side_effect = [
-            (True,),  # Table exists
+            ("public", "tb_confiture"),  # Table exists
             (True,),  # Has new structure (pk_migration)
         ]
 
@@ -206,8 +208,11 @@ class TestExecuteSqlComposable:
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
-        # Table exists check succeeds, table doesn't exist
-        mock_cursor.fetchone.return_value = (False,)
+        # Table exists check succeeds, table doesn't exist. The bare-name probe
+        # signals absence by returning no row at all (#188) — an EXISTS-style
+        # `(False,)` is a *present* answer to the `to_regclass` query, which
+        # would send this test down the wrong branch.
+        mock_cursor.fetchone.return_value = None
         # CREATE TABLE fails with a permissions error
         call_count = 0
 

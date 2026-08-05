@@ -81,18 +81,25 @@ class TestMigratorMigrationTableInit:
 
 
 class TestTrackingTableExistsCustomTable:
-    def _make_migrator(self, table_name: str) -> Migrator:
+    def _make_migrator(self, table_name: str, row: tuple) -> Migrator:
+        """A migrator whose ledger probe returns ``row``.
+
+        The two probe paths return different shapes and the double has to match
+        the one this table name selects (#188): a bare name resolves through
+        ``to_regclass`` and yields ``(schema, relname)``, a qualified name keeps
+        the ``information_schema`` ``EXISTS`` query and yields ``(bool,)``.
+        """
         conn = MagicMock()
         cursor = MagicMock()
         cursor.__enter__ = MagicMock(return_value=cursor)
         cursor.__exit__ = MagicMock(return_value=False)
-        cursor.fetchone.return_value = (True,)
+        cursor.fetchone.return_value = row
         conn.cursor.return_value = cursor
         return Migrator(connection=conn, migration_table=table_name)
 
     def test_tracking_table_exists_unqualified(self):
         """tracking_table_exists() checks correct table name (unqualified)."""
-        m = self._make_migrator("my_migrations")
+        m = self._make_migrator("my_migrations", ("public", "my_migrations"))
         result = m.tracking_table_exists()
         assert result is True
         cursor = m.connection.cursor.return_value.__enter__.return_value
@@ -101,7 +108,7 @@ class TestTrackingTableExistsCustomTable:
 
     def test_tracking_table_exists_schema_qualified(self):
         """tracking_table_exists() checks correct schema+table (qualified)."""
-        m = self._make_migrator("public.tb_confiture")
+        m = self._make_migrator("public.tb_confiture", (True,))
         result = m.tracking_table_exists()
         assert result is True
         cursor = m.connection.cursor.return_value.__enter__.return_value
