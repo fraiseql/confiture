@@ -168,9 +168,13 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     # HEAD, which is the whole point of a pre-commit flag. Grant accompaniment
     # keeps its own `staged_only` path: it diffs grant *files* through the index
     # directly and never built a schema from a ref.
-    base_ref = ctx.git_base_ref
-    target_ref = ctx.git_target_ref
-
+    #
+    # Read `ctx.git_base_ref` / `ctx.git_target_ref` only inside the branches
+    # that use them. Staged resolution runs real git (`rev-parse --verify`,
+    # `merge-base`, `write-tree`) and can legitimately fail with GIT_003 in a
+    # shallow clone, so resolving it up front would make
+    # `--require-grant-migration --staged` — which needs neither ref — start
+    # failing in exactly the CI checkout where it used to work.
     requested: list[str] = []
     results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
@@ -180,8 +184,8 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
         try:
             drift_result = validate_git_drift(
                 env=opts.git_env,
-                base_ref=base_ref,
-                target_ref=target_ref,
+                base_ref=ctx.git_base_ref,
+                target_ref=ctx.git_target_ref,
                 console=console,
                 format_output=opts.format_output,
             )
@@ -196,8 +200,8 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
         try:
             acc_result = validate_migration_accompaniment(
                 env=opts.git_env,
-                base_ref=base_ref,
-                target_ref=target_ref,
+                base_ref=ctx.git_base_ref,
+                target_ref=ctx.git_target_ref,
                 console=console,
                 format_output=opts.format_output,
                 check_bodies=opts.require_migration_bodies,

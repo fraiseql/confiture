@@ -130,3 +130,32 @@ def test_non_staged_grant_accompaniment_is_not_staged(
     )
     assert result.exit_code == 0, result.output
     assert captured_git_calls["grant"]["staged_only"] is False
+
+
+def test_grant_only_staged_never_resolves_a_git_scope(
+    captured_git_calls: dict[str, dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--require-grant-migration --staged` must not touch the git scope at all.
+
+    Grant accompaniment reads the index itself (`staged_only`) and ignores both
+    refs. Resolving the scope anyway runs `rev-parse --verify` / `merge-base` /
+    `write-tree`, which legitimately fails with GIT_003 in a shallow clone — so
+    an eager resolution turns a working pre-commit gate into exit 7 on exactly
+    the CI checkout where it used to pass. Caught in CI, not locally: a full
+    clone resolves `origin/main` and hides it.
+    """
+    from confiture.core.validation.context import ValidationContext
+
+    def _explode(self: ValidationContext) -> tuple[str, str]:
+        raise AssertionError("git scope resolved for a check that does not use it")
+
+    monkeypatch.setattr(ValidationContext, "_resolve_git_scope", _explode)
+
+    result = runner.invoke(
+        app,
+        ["migrate", "validate", "--require-grant-migration", "--staged"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured_git_calls["grant"]["staged_only"] is True
