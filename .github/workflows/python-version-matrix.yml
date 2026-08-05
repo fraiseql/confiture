@@ -109,6 +109,12 @@ jobs:
 
     - name: Run tests with pytest
       env:
+        # See quality-gate.yml: CONFITURE_TEST_DB_URL is the variable the
+        # test fixtures read; without it the service container is unused and the
+        # DB-backed suite silently skips.
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+        CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
+        CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
         DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
         SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
         TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test

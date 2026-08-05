@@ -17,7 +17,7 @@ runner = CliRunner()
 class TestForceMigrationWorkflow:
     """Test the complete force migration workflow."""
 
-    def test_force_workflow_issue_4_scenario(self, test_db_connection, test_db_url):
+    def test_force_workflow_issue_4_scenario(self, clean_test_db, test_db_url):
         """Test the exact scenario from issue #4: DROP SCHEMA CASCADE then force migrate."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
@@ -71,8 +71,10 @@ CREATE TABLE test_force_table (
 
             # Create config file
             config_file = config_dir / "test.yaml"
-            # Use the same URL that the connection fixture uses
-            db_url = test_db_connection.info.dsn
+            # test_db_url, not info.dsn: psycopg redacts the password out of
+            # ConnectionInfo.dsn, so the config it produced could only ever
+            # reach a trust/peer-authenticated server.
+            db_url = test_db_url
             config_file.write_text(f"""
 name: test
 include_dirs:
@@ -92,10 +94,7 @@ database_url: {db_url}
                     str(project_dir),
                 ],
             )
-            print(f"Build result: exit_code={result.exit_code}, output={result.output}")
-            if result.exit_code != 0:
-                return  # Skip rest of test if build fails
-            assert result.exit_code == 0
+            assert result.exit_code == 0, result.output
 
             # Step 2: Migrate up (should succeed)
             result = runner.invoke(
@@ -109,14 +108,11 @@ database_url: {db_url}
                     str(config_file),
                 ],
             )
-            print(f"Migrate up result: exit_code={result.exit_code}, output={result.output}")
-            if result.exit_code != 0:
-                return  # Skip rest of test if migrate fails
-            assert result.exit_code == 0
+            assert result.exit_code == 0, result.output
             assert "applied" in result.stdout.lower() or "success" in result.stdout.lower()
 
             # Verify migration was tracked
-            with test_db_connection.cursor() as cursor:
+            with clean_test_db.cursor() as cursor:
                 cursor.execute("""
                     SELECT COUNT(*) FROM tb_confiture
                     WHERE version = '001'
@@ -124,20 +120,28 @@ database_url: {db_url}
                 count = cursor.fetchone()[0]
                 assert count == 1
 
-            # Step 3: Simulate DROP SCHEMA CASCADE (manual schema drop)
-            with test_db_connection.cursor() as cursor:
-                cursor.execute("DROP SCHEMA public CASCADE")
-                cursor.execute("CREATE SCHEMA public")
-            test_db_connection.commit()
+            # Step 3: the objects vanish, the ledger does not — issue #4's actual
+            # shape. This used to `DROP SCHEMA public CASCADE`, which with the
+            # default (unqualified) tracking table takes tb_confiture with it, so
+            # the "tracking still exists" check below could not hold. Nobody
+            # noticed because the two early `return`s above turned the whole test
+            # into a no-op whenever a step failed.
+            with clean_test_db.cursor() as cursor:
+                cursor.execute("DROP TABLE IF EXISTS test_force_table CASCADE")
+            clean_test_db.commit()
 
-            # Verify migration tracking still exists (DROP SCHEMA doesn't remove it)
-            with test_db_connection.cursor() as cursor:
+            # Verify migration tracking still exists (dropping the table doesn't)
+            with clean_test_db.cursor() as cursor:
                 cursor.execute("""
                     SELECT COUNT(*) FROM tb_confiture
                     WHERE version = '001'
                 """)
                 count = cursor.fetchone()[0]
                 assert count == 1
+            # End the read transaction before handing control to the CLI: the
+            # steps below take their own locks on tb_confiture, and an
+            # idle-in-transaction reader here blocks them until the test times out.
+            clean_test_db.commit()
 
             # Step 4: Try migrate up without force (should report up to date)
             result = runner.invoke(
@@ -172,7 +176,7 @@ database_url: {db_url}
             assert "Force mode enabled" in result.stdout
 
             # Verify table was recreated
-            with test_db_connection.cursor() as cursor:
+            with clean_test_db.cursor() as cursor:
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT FROM pg_tables
@@ -182,7 +186,7 @@ database_url: {db_url}
                 exists = cursor.fetchone()[0]
                 assert exists is True
 
-    def test_force_mode_updates_migration_tracking(self, clean_test_db):
+    def test_force_mode_updates_migration_tracking(self, clean_test_db, test_db_url):
         """Test that force mode properly updates migration tracking state."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
@@ -211,8 +215,10 @@ class TrackingTest(Migration):
 
             # Create config file
             config_file = config_dir / "test.yaml"
-            # Use the same URL that the connection fixture uses
-            db_url = clean_test_db.info.dsn
+            # test_db_url, not info.dsn: psycopg redacts the password out of
+            # ConnectionInfo.dsn, so the config it produced could only ever
+            # reach a trust/peer-authenticated server.
+            db_url = test_db_url
             config_file.write_text(f"""
 name: test
 include_dirs:
@@ -295,7 +301,7 @@ database_url: {db_url}
                 exists = cursor.fetchone()[0]
                 assert exists is True
 
-    def test_multiple_force_applications(self, clean_test_db):
+    def test_multiple_force_applications(self, clean_test_db, test_db_url):
         """Test that multiple force applications work correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
@@ -330,7 +336,7 @@ name: test
 include_dirs:
   - db/schema/00_common
 exclude_dirs: []
-database_url: postgresql://{clean_test_db.info.user}:@{clean_test_db.info.host}:{clean_test_db.info.port}/{clean_test_db.info.dbname}
+database_url: {test_db_url}
 """)
 
             # Apply all migrations with force
@@ -391,7 +397,7 @@ database_url: postgresql://{clean_test_db.info.user}:@{clean_test_db.info.host}:
                     exists = cursor.fetchone()[0]
                     assert exists is True
 
-    def test_force_mode_with_empty_migrations_dir(self, clean_test_db):
+    def test_force_mode_with_empty_migrations_dir(self, clean_test_db, test_db_url):
         """Test force mode with empty migrations directory."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
@@ -404,8 +410,10 @@ database_url: postgresql://{clean_test_db.info.user}:@{clean_test_db.info.host}:
 
             # Create config file
             config_file = config_dir / "test.yaml"
-            # Use the same URL that the connection fixture uses
-            db_url = clean_test_db.info.dsn
+            # test_db_url, not info.dsn: psycopg redacts the password out of
+            # ConnectionInfo.dsn, so the config it produced could only ever
+            # reach a trust/peer-authenticated server.
+            db_url = test_db_url
             config_file.write_text(f"""
 name: test
 include_dirs:

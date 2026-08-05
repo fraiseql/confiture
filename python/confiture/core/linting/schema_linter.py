@@ -100,6 +100,7 @@ class LintConfig:
         check_constraints: bool = True,
         check_security: bool = True,
         check_tenant_isolation: bool = False,
+        check_acl_coverage: bool = True,
     ):
         """Initialize linting configuration.
 
@@ -115,6 +116,10 @@ class LintConfig:
             check_security: Check for security issues (passwords, tokens)
             check_tenant_isolation: Detect INSERTs missing tenant FK columns
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
+            check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
+                Default True, i.e. unchanged: the rule additionally requires
+                ``acls.lint_enabled: true`` in the environment YAML. Set False to
+                suppress it (``confiture lint --ignore acl``).
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -126,6 +131,7 @@ class LintConfig:
         self.check_constraints = check_constraints
         self.check_security = check_security
         self.check_tenant_isolation = check_tenant_isolation
+        self.check_acl_coverage = check_acl_coverage
 
 
 class SchemaLinter:
@@ -229,7 +235,11 @@ class SchemaLinter:
         # used to auto-fire this rule, but that surprised users who set
         # ``acls:`` only for ``confiture drift --check-acls``.  Explicit
         # opt-in keeps the two surfaces independently controllable.
-        if self.environment.acls_lint_enabled and self.environment.acls:
+        if (
+            self.config.check_acl_coverage
+            and self.environment.acls_lint_enabled
+            and self.environment.acls
+        ):
             migrations_dir = self.project_dir / "db" / "migrations"
             if migrations_dir.exists():
                 grant_dir_str = self.environment.migration.grant_dir

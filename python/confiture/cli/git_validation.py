@@ -95,6 +95,7 @@ def validate_migration_accompaniment(
     format_output: str = "text",
     *,
     check_bodies: bool = False,
+    two_dot: bool = False,
 ) -> dict:
     """Validate that DDL changes have migration files.
 
@@ -106,6 +107,8 @@ def validate_migration_accompaniment(
         format_output: Output format (text or json)
         check_bodies: Also require function *body* changes to be carried by a
             migration (#178).
+        two_dot: Diff two-dot rather than three-dot; set when *target_ref* is a
+            tree (the staged index, #184) instead of a commit.
 
     Returns:
         Dictionary with validation results
@@ -118,7 +121,9 @@ def validate_migration_accompaniment(
         validate_git_flags_in_repo()
 
         checker = MigrationAccompanimentChecker(env)
-        report = checker.check_accompaniment(base_ref, target_ref, check_bodies=check_bodies)
+        report = checker.check_accompaniment(
+            base_ref, target_ref, check_bodies=check_bodies, two_dot=two_dot
+        )
 
         if format_output == "text":
             if report.migration_error:

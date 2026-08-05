@@ -31,7 +31,10 @@ class Violation:
     """A single schema quality violation.
 
     Attributes:
-        rule_name: Name of the rule that detected this violation
+        rule_name: Human-readable name of the rule that detected this violation
+        rule_id: Stable rule code (``naming_001``…), the identifier
+            ``confiture lint --select`` / ``--ignore`` take. Empty for
+            violations produced by code that predates the registry (#150).
         severity: Severity level (ERROR, WARNING, INFO)
         message: Human-readable description of the issue
         location: Where the violation occurred (table name, column, etc.)
@@ -43,6 +46,7 @@ class Violation:
     message: str
     location: str
     suggested_fix: str | None = None
+    rule_id: str = ""
 
     def __str__(self) -> str:
         """Format violation for human consumption."""

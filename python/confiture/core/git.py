@@ -358,6 +358,51 @@ class GitRepository:
 
         return result.stdout
 
+    def staged_tree_oid(self) -> str:
+        """Materialise the staging index as a tree object and return its OID.
+
+        This is what makes ``--staged`` a real scope for the git-aware checks
+        (#184): the resulting OID is a tree-ish, so ``git ls-tree`` and ``git
+        show <oid>:<path>`` read it exactly like a commit — the schema builder
+        and the file readers need no staged-specific code path. Reading the
+        index this way (rather than the working tree) is the point: a file that
+        is staged and then edited further contributes its **staged** content,
+        which is what the commit will contain.
+
+        ``git write-tree`` is index-global regardless of the directory it runs
+        in, but it runs from the repository root anyway so this behaves like
+        every other path here (#181's cwd-is-not-the-root trap).
+
+        Returns:
+            The tree OID. An empty index yields git's empty-tree OID, which is
+            a valid tree and compares as "nothing staged" rather than failing.
+
+        Raises:
+            NotAGitRepositoryError: If not in a git repository.
+            GitError: If the index cannot be written — notably during an
+                unresolved merge conflict, where no single tree exists.
+        """
+        root = self.get_repo_root()
+
+        try:
+            result = subprocess.run(
+                ["git", "write-tree"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError("Git command timed out writing the staged index to a tree") from e
+
+        if result.returncode != 0 or not result.stdout.strip():
+            raise GitError(
+                "Cannot read the staged index: "
+                + (result.stderr.strip() or "git write-tree failed")
+            )
+
+        return result.stdout.strip()
+
     def get_merge_base(self, base_ref: str, target_ref: str) -> str | None:
         """Return the merge-base commit of two refs (``git merge-base``).
 

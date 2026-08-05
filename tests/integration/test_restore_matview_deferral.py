@@ -103,12 +103,11 @@ def _build_matview_artifact(server_url: str, tmp_path: Path) -> Path:
     return artifact
 
 
-def _restore_options(artifact: Path, target: str, **kwargs) -> RestoreOptions:
+def _restore_options(artifact: Path, target: str, conn_kwargs: dict, **kwargs) -> RestoreOptions:
     return RestoreOptions(
         backup_path=artifact,
         target_db=target,
-        host="localhost",
-        port=5432,
+        **conn_kwargs,
         jobs=2,
         parallel_restore=True,
         no_owner=True,
@@ -118,11 +117,13 @@ def _restore_options(artifact: Path, target: str, **kwargs) -> RestoreOptions:
 
 
 def test_default_restore_refreshes_matview_after_analyze(
-    server_url: str, fresh_target: str, tmp_path: Path
+    server_url: str, fresh_target: str, tmp_path: Path, restore_connection_kwargs: dict
 ) -> None:
     artifact = _build_matview_artifact(server_url, tmp_path)
 
-    result = DatabaseRestorer().restore(_restore_options(artifact, fresh_target))
+    result = DatabaseRestorer().restore(
+        _restore_options(artifact, fresh_target, restore_connection_kwargs)
+    )
 
     assert result.success, result.errors
     # The matview refresh was deferred out of the data phase and run after ANALYZE.
@@ -136,12 +137,14 @@ def test_default_restore_refreshes_matview_after_analyze(
 
 
 def test_no_refresh_matviews_leaves_matview_unpopulated(
-    server_url: str, fresh_target: str, tmp_path: Path
+    server_url: str, fresh_target: str, tmp_path: Path, restore_connection_kwargs: dict
 ) -> None:
     artifact = _build_matview_artifact(server_url, tmp_path)
 
     result = DatabaseRestorer().restore(
-        _restore_options(artifact, fresh_target, no_refresh_matviews=True)
+        _restore_options(
+            artifact, fresh_target, restore_connection_kwargs, no_refresh_matviews=True
+        )
     )
 
     assert result.success, result.errors

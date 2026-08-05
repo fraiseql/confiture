@@ -7,6 +7,7 @@ testable without a database. DB-touching behaviour is integration-tested.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -660,3 +661,29 @@ class TestSetupRamTablespace:
         monkeypatch.setattr(prov, "_maintenance_conn", lambda: fake)
         with pytest.raises(SchemaError, match="not usable"):
             prov.setup_ram_tablespace("ram_ts", "/dev/shm/ram_ts", owner="postgres")
+
+
+class TestArtifactRestoreCarriesTheCredential:
+    """`test-db provision --from-artifact` must reach a password-authed server.
+
+    The provisioner parses host/port/user out of the server URL and hands them to
+    :class:`~confiture.core.restorer.RestoreOptions`; the password was dropped on
+    the floor, so every artifact restore against a non-trust server died with
+    ``fe_sendauth: no password supplied`` — including the per-worker xdist
+    fixtures, whose whole point is unattended CI provisioning.
+    """
+
+    def test_password_from_the_server_url_reaches_restore_options(self) -> None:
+        from unittest.mock import MagicMock
+
+        from confiture.core.restorer import RestoreResult
+
+        provisioner = TestDbProvisioner("postgresql://migrator:s3cret@db.internal:5433/app")
+        restorer = MagicMock()
+        restorer.restore.return_value = RestoreResult(success=True, phases_completed=["pre-data"])
+
+        provisioner._restore_into("tmpl", Path("artifact.pgdump"), restorer)
+
+        options = restorer.restore.call_args.args[0]
+        assert (options.host, options.port, options.username) == ("db.internal", 5433, "migrator")
+        assert options.password == "s3cret"

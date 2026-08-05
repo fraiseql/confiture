@@ -1082,3 +1082,62 @@ class TestDeferredMatviewOrchestration:
         assert "TABLE DATA public tb_order" in tables_txt
         assert "MATERIALIZED VIEW DATA public mv_maintenance_price" in matviews_txt
         assert "TABLE DATA" not in matviews_txt
+
+
+# ---------------------------------------------------------------------------
+# Password handling: a password-authenticated server
+# ---------------------------------------------------------------------------
+
+
+class TestPasswordReachesTheSubprocess:
+    """A password-authenticated server is reachable, and the password stays off argv.
+
+    Every restore phase — pg_restore per section and the psql ANALYZE — runs as a
+    subprocess, so a password held only by the caller never reaches libpq unless
+    it is put in the child's environment. Without this, `confiture restore` and
+    `confiture test-db provision --from-artifact` fail with `fe_sendauth: no
+    password supplied` against any server that is not trust/peer-authenticated.
+    """
+
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {
+            "backup_path": Path("d.pgdump"),
+            "target_db": "db",
+            "host": "db.internal",
+            "username": "migrator",
+            "password": "s3cret",
+        }
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def test_pg_restore_gets_pgpassword_in_env(self):
+        mock_proc = _make_proc([], 0)
+        with patch("subprocess.Popen", return_value=mock_proc) as popen:
+            DatabaseRestorer()._run_section("pre-data", self._opts(), parallel=False)
+        assert popen.call_args.kwargs["env"]["PGPASSWORD"] == "s3cret"
+
+    def test_password_never_appears_on_argv(self):
+        mock_proc = _make_proc([], 0)
+        with patch("subprocess.Popen", return_value=mock_proc) as popen:
+            DatabaseRestorer()._run_section("pre-data", self._opts(), parallel=False)
+        assert "s3cret" not in " ".join(popen.call_args.args[0])
+
+    def test_analyze_gets_pgpassword_in_env(self):
+        mock_proc = _make_proc([], 0)
+        with patch("subprocess.Popen", return_value=mock_proc) as popen:
+            DatabaseRestorer()._run_analyze(self._opts())
+        assert popen.call_args.kwargs["env"]["PGPASSWORD"] == "s3cret"
+
+    def test_no_password_leaves_env_alone(self):
+        """Without a password the child inherits the ambient env, PG* vars included."""
+        mock_proc = _make_proc([], 0)
+        with patch("subprocess.Popen", return_value=mock_proc) as popen:
+            DatabaseRestorer()._run_section("pre-data", self._opts(password=None), parallel=False)
+        assert "PGPASSWORD" not in popen.call_args.kwargs["env"]
+
+    def test_table_count_validation_connects_with_the_password(self):
+        """--min-tables opens its own psycopg connection; it needs the credential too."""
+        mock_conn, _ = _make_db_mock((7,))
+        with patch("psycopg.connect", return_value=mock_conn) as connect:
+            DatabaseRestorer()._validate_table_count(self._opts(min_tables=1))
+        assert connect.call_args.kwargs["password"] == "s3cret"

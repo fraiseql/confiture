@@ -1,6 +1,5 @@
 # tests/e2e/test_cli_error_reporting.py
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -11,7 +10,7 @@ from confiture.cli.main import app
 runner = CliRunner()
 
 
-def test_migrate_up_shows_detailed_error_on_sql_failure():
+def test_migrate_up_shows_detailed_error_on_sql_failure(test_db_url):
     """CLI should show detailed error message when migration SQL fails"""
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -39,20 +38,13 @@ class FailingMigration(Migration):
         self.execute("DROP TABLE IF EXISTS users")
 """)
 
-        # Create test config using environment variables for credentials
+        # One source of truth for where the test database is: the same URL every
+        # other test uses. The POSTGRES_* reconstruction this replaced hardcoded
+        # localhost:5432, so it pointed at whatever server happened to be there.
         config_file = project_dir / "db" / "environments" / "local.yaml"
-        db_user = os.environ.get("POSTGRES_USER", "postgres")
-        db_password = os.environ.get("POSTGRES_PASSWORD", "postgres")
-        db_name = os.environ.get("POSTGRES_DB", "confiture_test")
-
         config_file.write_text(f"""
 name: local
-database:
-  host: localhost
-  port: 5432
-  database: {db_name}
-  user: {db_user}
-  password: {db_password}
+database_url: {test_db_url}
 include_dirs:
   - db/schema
 exclude_dirs: []
@@ -91,7 +83,7 @@ exclude_dirs: []
         ), f"Should show error details. Output: {output}"
 
 
-def test_migrate_up_shows_progress_and_stops_on_error(clean_test_db):
+def test_migrate_up_shows_progress_and_stops_on_error(clean_test_db, test_db_url):
     """CLI should show which migrations succeeded before stopping"""
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,14 +94,13 @@ def test_migrate_up_shows_progress_and_stops_on_error(clean_test_db):
 
         # Update config to use test database
         config_file = project_dir / "db" / "environments" / "local.yaml"
+        # database_url, not a decomposed `database:` block: psycopg's
+        # ConnectionInfo never exposes the password, so rebuilding the DSN field
+        # by field drops it and the CLI cannot reach a password-authenticated
+        # server.
         config_file.write_text(f"""
 name: local
-database:
-  host: {clean_test_db.info.host}
-  port: {clean_test_db.info.port}
-  database: {clean_test_db.info.dbname}
-  user: {clean_test_db.info.user}
-  password: ""
+database_url: {test_db_url}
 include_dirs:
   - db/schema/00_common
   - db/schema/10_tables
@@ -188,7 +179,7 @@ class Failure(Migration):
         assert result.exit_code == 3, "Should return exit code 3 (migration execution error)"
 
 
-def test_error_message_includes_troubleshooting_hints(clean_test_db):
+def test_error_message_includes_troubleshooting_hints(clean_test_db, test_db_url):
     """Error messages should include helpful troubleshooting guidance"""
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -197,14 +188,13 @@ def test_error_message_includes_troubleshooting_hints(clean_test_db):
 
         # Update config to use test database
         config_file = project_dir / "db" / "environments" / "local.yaml"
+        # database_url, not a decomposed `database:` block: psycopg's
+        # ConnectionInfo never exposes the password, so rebuilding the DSN field
+        # by field drops it and the CLI cannot reach a password-authenticated
+        # server.
         config_file.write_text(f"""
 name: local
-database:
-  host: {clean_test_db.info.host}
-  port: {clean_test_db.info.port}
-  database: {clean_test_db.info.dbname}
-  user: {clean_test_db.info.user}
-  password: ""
+database_url: {test_db_url}
 include_dirs:
   - db/schema/00_common
   - db/schema/10_tables

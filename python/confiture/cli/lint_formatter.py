@@ -76,6 +76,8 @@ def format_table(report: LintReport, console: Console) -> None:
     # Violations table
     table = Table(title="Violations")
     table.add_column("Severity", style="bold")
+    # The code, not just the prose name: it is what --select / --ignore take.
+    table.add_column("Code", style="cyan")
     table.add_column("Rule", style="cyan")
     table.add_column("Location", style="yellow")
     table.add_column("Message", style="white")
@@ -90,6 +92,7 @@ def format_table(report: LintReport, console: Console) -> None:
     ):
         table.add_row(
             _severity_string(violation.severity),
+            violation.rule_id,
             violation.rule_name,
             violation.location,
             violation.message,
@@ -133,6 +136,7 @@ def format_json(report: LintReport) -> str:
             "items": [
                 {
                     "rule": v.rule_name,
+                    "rule_id": v.rule_id,
                     "severity": v.severity.value,
                     "location": v.location,
                     "message": v.message,

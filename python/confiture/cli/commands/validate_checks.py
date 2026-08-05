@@ -161,11 +161,20 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     # NotAGitRepositoryError (GIT_002 → exit 7) propagates to fail().
     validate_git_flags_in_repo()
 
-    # ARCH-L1: --staged is only meaningful for the grant-accompaniment check.
-    # Drift and migration accompaniment compare committed refs (base_ref →
-    # HEAD); diffing the staged index for them is not implemented.
-    target_ref = "HEAD"
-
+    # ARCH-L1, revised in 0.42.0 (#184): --staged now reaches every check here,
+    # not just grant accompaniment. The context resolves one (base, target) pair
+    # for the group — in staged mode the target is the index materialised as a
+    # tree, so what gets judged is what is about to be committed rather than
+    # HEAD, which is the whole point of a pre-commit flag. Grant accompaniment
+    # keeps its own `staged_only` path: it diffs grant *files* through the index
+    # directly and never built a schema from a ref.
+    #
+    # Read `ctx.git_base_ref` / `ctx.git_target_ref` only inside the branches
+    # that use them. Staged resolution runs real git (`rev-parse --verify`,
+    # `merge-base`, `write-tree`) and can legitimately fail with GIT_003 in a
+    # shallow clone, so resolving it up front would make
+    # `--require-grant-migration --staged` — which needs neither ref — start
+    # failing in exactly the CI checkout where it used to work.
     requested: list[str] = []
     results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
@@ -175,8 +184,8 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
         try:
             drift_result = validate_git_drift(
                 env=opts.git_env,
-                base_ref=ctx.effective_base_ref,
-                target_ref=target_ref,
+                base_ref=ctx.git_base_ref,
+                target_ref=ctx.git_target_ref,
                 console=console,
                 format_output=opts.format_output,
             )
@@ -191,11 +200,12 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
         try:
             acc_result = validate_migration_accompaniment(
                 env=opts.git_env,
-                base_ref=ctx.effective_base_ref,
-                target_ref=target_ref,
+                base_ref=ctx.git_base_ref,
+                target_ref=ctx.git_target_ref,
                 console=console,
                 format_output=opts.format_output,
                 check_bodies=opts.require_migration_bodies,
+                two_dot=opts.staged,
             )
         except Exception as e:
             raise GitError(f"Accompaniment check failed: {e}") from e
@@ -213,7 +223,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
             try:
                 grant_result = validate_grant_accompaniment(
                     base_ref=ctx.effective_base_ref,
-                    target_ref=target_ref,
+                    target_ref="HEAD",
                     staged_only=opts.staged,
                     console=console,
                     format_output=opts.format_output,
