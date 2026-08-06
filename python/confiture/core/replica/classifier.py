@@ -17,6 +17,7 @@ from confiture.core._pglast_enums import enums_are_usable
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency.ast_detector import is_pglast_available
 from confiture.core.sql_statements import split_statements
+from confiture.core.type_lattice import canonical_type
 
 # pglast availability, resolved at import (tests monkeypatch this to force the
 # regex backend, mirroring the idempotency CONFITURE_IDEMPOTENCY_FORCE_REGEX
@@ -168,6 +169,15 @@ class RenameColumn(DdlOperation):
 @dataclass(frozen=True)
 class ChangeColumnType(DdlOperation):
     column: str | None = None
+
+    new_type: str | None = None
+    """The target type, as written in the statement."""
+
+    old_type: str | None = None
+    """The current type. **Never present from SQL** — ``ALTER TABLE … ALTER COLUMN
+    … TYPE`` states only the target — so it is filled in from the differ or a live
+    database, and stays ``None`` otherwise. Without it the direction is unknown,
+    which is why the risk tier for a type change is absent by default."""
 
 
 @dataclass(frozen=True)
@@ -367,7 +377,13 @@ class OperationClassifier:
             elif subtype == _AT_DROP_COLUMN:
                 ops.append(DropColumn(table=table, column=cmd.name))
             elif subtype == _AT_ALTER_COLUMN_TYPE:
-                ops.append(ChangeColumnType(table=table, column=cmd.name))
+                ops.append(
+                    ChangeColumnType(
+                        table=table,
+                        column=cmd.name,
+                        new_type=canonical_type(_type_name(getattr(cmd.def_, "typeName", None))),
+                    )
+                )
             elif subtype == _AT_ADD_CONSTRAINT:
                 constraint = cmd.def_
                 kind = _CONSTR_KIND.get(_enum_int(getattr(constraint, "contype", None)) or -1)
@@ -492,7 +508,11 @@ class OperationClassifier:
             )
         m = _RE_ALTER_TYPE.match(s)
         if m:
-            return ChangeColumnType(table=_norm(m.group("table")), column=_norm(m.group("col")))
+            return ChangeColumnType(
+                table=_norm(m.group("table")),
+                column=_norm(m.group("col")),
+                new_type=canonical_type(_clean_type(m.group("newtype"))),
+            )
         m = _RE_ADD_CONSTRAINT.match(s)
         if m:
             return AddConstraint(
@@ -555,6 +575,39 @@ def _name_parts(raw: Any) -> str | None:
     """Join a pglast list of ``String`` name parts into a dotted identifier."""
     parts = [str(getattr(part, "sval", part)) for part in raw or ()]
     return ".".join(part.lower() for part in parts if part) or None
+
+
+def _clean_type(raw: str | None) -> str | None:
+    """Trim a type captured from SQL, dropping a trailing `USING`/`NOT NULL` tail."""
+    if not raw:
+        return None
+    text = re.sub(r"\s+", " ", raw).strip().rstrip(",;")
+    text = re.split(r"\b(?:USING|COLLATE|NOT|NULL|DEFAULT)\b", text, flags=re.IGNORECASE)[0]
+    return text.strip() or None
+
+
+def _type_name(type_node: Any) -> str | None:
+    """Render a pglast ``TypeName`` back to ``varchar(50)`` / ``numeric(10,2)``.
+
+    The ``pg_catalog`` qualifier the parser adds is dropped; the internal spelling
+    (``int8``) is left alone, since :mod:`confiture.core.type_lattice` aliases it.
+    """
+    if type_node is None:
+        return None
+    parts = [str(getattr(part, "sval", part)) for part in getattr(type_node, "names", None) or ()]
+    names = [part for part in parts if part and part != "pg_catalog"]
+    if not names:
+        return None
+    name = ".".join(names)
+    mods = [
+        str(ival)
+        for ival in (
+            getattr(getattr(mod, "val", None), "ival", None)
+            for mod in getattr(type_node, "typmods", None) or ()
+        )
+        if ival is not None
+    ]
+    return f"{name}({', '.join(mods)})" if mods else name
 
 
 def _first_relname(objects: Any) -> str | None:
@@ -678,7 +731,7 @@ _RE_ALTER_TYPE = re.compile(
     + _IDENT.format(name="table")
     + r"\s+ALTER\s+COLUMN\s+"
     + _IDENT.format(name="col")
-    + r"\s+(?:SET\s+DATA\s+)?TYPE\s+",
+    + r"\s+(?:SET\s+DATA\s+)?TYPE\s+(?P<newtype>[\w ]+(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)",
     re.IGNORECASE,
 )
 _RE_ADD_CONSTRAINT = re.compile(

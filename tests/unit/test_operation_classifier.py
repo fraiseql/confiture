@@ -26,7 +26,12 @@ _COLUMN_CASES = [
     ),
     ("ALTER TABLE t DROP COLUMN c;", DropColumn(table="t", column="c")),
     ("ALTER TABLE t RENAME COLUMN a TO b;", RenameColumn(table="t", old="a", new="b")),
-    ("ALTER TABLE t ALTER COLUMN c TYPE bigint;", ChangeColumnType(table="t", column="c")),
+    (
+        "ALTER TABLE t ALTER COLUMN c TYPE bigint;",
+        # `new_type` is canonicalised so pglast's `int8` and the regex backend's
+        # `bigint` compare equal (#199); `old_type` is never in the SQL.
+        ChangeColumnType(table="t", column="c", new_type="bigint"),
+    ),
 ]
 
 _OTHER_CASES = [
