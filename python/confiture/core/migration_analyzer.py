@@ -113,7 +113,10 @@ class MigrationAnalyzer:
             elif node_type == "DropStmt" and getattr(stmt, "concurrent", False):
                 results.append("DROP INDEX CONCURRENTLY")
 
-            # ALTER TYPE ... ADD VALUE (non-transactional in PG < 16)
+            # ALTER TYPE ... ADD VALUE — could not run inside a transaction block
+            # before PostgreSQL 12. From 12 it can, provided the new value is not
+            # *used* until the transaction commits, so it is still reported: the
+            # restriction moved, it did not disappear.
             elif node_type == "AlterEnumStmt":
                 type_name = getattr(stmt, "typeName", None)
                 if type_name:

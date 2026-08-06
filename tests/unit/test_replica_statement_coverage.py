@@ -155,6 +155,31 @@ def test_window_safe_end_to_end(name: str, tmp_path) -> None:
     assert payload["window_safe"] is (safety == "safe"), name
 
 
+def test_add_enum_value_is_window_safe_and_non_transactional(tmp_path) -> None:
+    """#199's `ADD VALUE` criterion, as three properties that must hold together.
+
+    Adding an enum value is online-safe, so it must not gate a window — but it
+    cannot run inside a transaction block below PostgreSQL 12, so preflight has
+    to keep saying so. Reporting only one of the two would be misleading in
+    either direction.
+    """
+    migrations = tmp_path / "enum"
+    migrations.mkdir()
+    (migrations / "20260806120000_v.up.sql").write_text("ALTER TYPE mood ADD VALUE 'ok';")
+    (migrations / "20260806120000_v.down.sql").write_text("SELECT 1;")
+
+    result = CliRunner().invoke(
+        app,
+        ["migrate", "preflight", "--migrations-dir", str(migrations), "--format", "json"],
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["window_safe"] is True
+    assert not [i for i in payload["issues"] if i["code"].startswith("PFLIGHT_REPLICA_")]
+    assert [i for i in payload["issues"] if i["code"] == "PFLIGHT_NON_TRANSACTIONAL"]
+    assert [c for c in payload["change_set"]["changes"] if c["tier"] == "additive"]
+
+
 def test_drop_table_is_not_window_safe(tmp_path) -> None:
     """#206's headline reproduction, pinned."""
     migrations = tmp_path / "drop"
