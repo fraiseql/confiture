@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-08-06
+
+`migrate preflight` now says **what kind of risk** each pending change carries,
+not just whether the migration set is window-safe. The tier crosses the
+migration-adapter seam as typed data under a contract ratified with
+[fraisier-core#44](https://github.com/fraiseql/fraisier-core/issues/44) (#197).
+
+### Added
+
+- **`change_set` in `migrate preflight --format json`** (#197), in both the
+  default and `--against` payloads:
+
+  ```json
+  "change_set": {
+    "contract_version": 1,
+    "changes": [
+      {
+        "kind": "drop_column",
+        "object": "public.tb_user.legacy_flag",
+        "migration": "20260804120100",
+        "tier": "irreversible",
+        "detail": "DROP COLUMN legacy_flag"
+      }
+    ]
+  }
+  ```
+
+  Five tiers, `snake_case`, ordered least- to most-severe: `additive` <
+  `reversible` < `lock_risky` < `destructive` < `irreversible`. That order picks
+  the worst tier in a set and sorts a plan render; it is **not** how policy
+  decisions are made — consumers map each tier to an action independently.
+
+  The **object wrapper is load-bearing**. `{"changes": []}` means "confiture
+  classified the set and there is nothing to change"; an **absent** `change_set`
+  means "confiture did not classify", which a consumer treats as unclassified
+  and denies. A bare array cannot express the difference, and the conflation
+  resolves the dangerous way.
+
+- **Honest non-answers.** A change confiture cannot tier truthfully carries **no
+  `tier` key** rather than a guess — a non-SQL `.py` migration
+  (`kind: "python_migration"`), an `ALTER COLUMN … TYPE` (reversible when
+  widening, irreversible when narrowing: preflight has no connection and cannot
+  tell), or any statement outside the taxonomy (`kind: "unclassified"`). No
+  statement is ever dropped from the set: a shorter list of fully-classified
+  changes would read as a *cleaner* plan than the truth.
+
+- **Text mode** leads with the worst tier, lists the non-additive changes, and
+  says how many could not be classified.
+
+- `confiture.core.risk_tier` (`RiskTier`, `worst_tier`) and
+  `confiture.core.change_set` (`ChangeEntry`, `ChangeSet`, `build_change_set`,
+  `classify_statements`) are importable for library use.
+
+### Unchanged, deliberately
+
+- **`window_safe` is byte-identical to 0.42.0.** It answers a different question
+  — can N-1 and N share this database for a cutover window? — and the two
+  verdicts are independent by design: `RENAME COLUMN` is replica-*unsafe* and
+  risk-tier `reversible`. Re-proven end-to-end over the replica corpus, which
+  now pins both verdicts per row so a change moving one without the other shows
+  up.
+
+- **The fraisier adapter's minimum stays at Confiture ≥ 0.20.0.** `change_set`
+  is new on a command the adapter calls, but its absence is *meaningful* rather
+  than an error, so raising the floor would delete the fail-safe path instead of
+  protecting it. The adapter advertises the `risk_tier` capability on a detected
+  version ≥ 0.43.0 — recorded in the contract's new capability table.
+
+### Notes
+
+- The change set does **not** reuse `core/replica/classifier.py`. That
+  classifier feeds the pinned `window_safe` verdict and reports only the
+  operations in its safety matrix; an operation outside it degrades to
+  `depends`, which would flip `window_safe` to false. Widening it would have
+  moved a cross-repo contract as a side effect, so `core/change_set.py` walks
+  the statements itself — one extra parse per migration file, filesystem-bound.
+  See ARCHITECTURE.md Decision 9.
+- Both parser backends are implemented and parity-tested entry for entry, so an
+  install without the `[ast]` extra classifies identically. The regex fallback
+  gained a dollar-quote-aware statement splitter, so a `;` inside a
+  `CREATE FUNCTION` body no longer shreds the statement.
+- `detail` is synthesised from the parsed statement rather than echoed from the
+  source, so it can never carry a credential from a statement such as
+  `CREATE USER … PASSWORD …`.
+- fraisier-core's eight golden preflight fixtures are vendored under
+  `tests/fixtures/preflight-contract/`; confiture's CI cannot see the sibling
+  repository, so producer drift had nowhere to fail before.
+
 ## [0.42.0] - 2026-08-06
 
 `--staged` becomes a real scope for every git-aware check (#184), SQL loaded
