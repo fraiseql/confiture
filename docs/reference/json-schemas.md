@@ -323,6 +323,15 @@ Rewrites non-idempotent SQL files in place (or previews with `--dry-run`). Pytho
 
 Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issues[]` element is the shared [issue object](./json-schemas/issue-object.schema.json) (`PFLIGHT_*` codes). Covers reversibility, transactionality, duplicate version prefixes, and checksum mismatches. No DB required. Errors → exit 7; warnings are non-fatal unless `--strict`. A preflight that *crashes* (config/DB error) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
 
+> **New in 0.43.0 (#197).** The payload also carries `change_set` — per-change
+> risk tiers (`additive` / `reversible` / `lock_risky` / `destructive` /
+> `irreversible`). The **object wrapper is load-bearing**: `{"changes": []}`
+> means "classified, nothing to change", while an *absent* `change_set` means
+> "did not classify". A change confiture cannot tier honestly carries **no
+> `tier` key** rather than a guess, and is never dropped from the set. It is
+> declared but not required, so older payloads stay valid. See the
+> [fraisier adapter contract](./fraisier-adapter-contract.md#per-change-risk-tier-change_set).
+
 ### `confiture migrate preflight --against <url> --format json`
 
 [migrate-preflight-against.schema.json](./json-schemas/migrate-preflight-against.schema.json)
@@ -430,6 +439,11 @@ The `_common.schema.json` file holds shared `$defs`:
 The `_preflight_defs.schema.json` file holds preflight-specific
 sub-schemas:
 
+* `ChangeSet` / `SchemaChange` — the #197 risk-tier change set, referenced by
+  both `migrate-preflight.schema.json` and `migrate-preflight-against.schema.json`.
+  A cross-repo contract with fraisier-core#44; the five tier values and the
+  `contract_version` rule are pinned by `tests/contract/` against the shared
+  fixtures in `tests/fixtures/preflight-contract/`
 * `DependentAnalysis` — the optional dependent-objects analysis, referenced by
   both `migrate-preflight.schema.json` and `migrate-preflight-against.schema.json`
 * `StaticPreflight` — the legacy `PreflightResult.to_dict()` shape. **Unused
