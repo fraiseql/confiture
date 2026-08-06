@@ -55,11 +55,20 @@ from confiture.core.replica.classifier import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-__all__ = ["Duration", "LockLevel", "LockProfile", "lock_profile", "worst_profile"]
+__all__ = [
+    "FAST_DEFAULT_SINCE",
+    "NOT_NULL_FROM_CHECK_SINCE",
+    "Duration",
+    "LockLevel",
+    "LockProfile",
+    "lock_profile",
+    "profile_for_kind",
+    "worst_profile",
+]
 
 # The PostgreSQL release each version-dependent row changed in.
-_FAST_DEFAULT_SINCE = 11
-_NOT_NULL_FROM_CHECK_SINCE = 12
+FAST_DEFAULT_SINCE = 11
+NOT_NULL_FROM_CHECK_SINCE = 12
 
 
 class LockLevel(Enum):
@@ -170,28 +179,38 @@ _NO_LOCK = LockProfile(
 )
 
 
-def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> LockProfile:
-    """The lock and rewrite cost of ``op``.
+def profile_for_kind(
+    kind: str | None,
+    *,
+    has_default: bool = False,
+    nullable: bool = True,
+    concurrently: bool = False,
+    not_valid: bool = False,
+    rewrites: bool | None = None,
+    server_version: int | None = None,
+) -> LockProfile:
+    """The lock and rewrite cost of a change of ``kind``.
+
+    ``kind`` is the vocabulary ``core/change_set.py`` emits, which is also what
+    crosses the adapter seam. :func:`lock_profile` is the twin keyed on a typed
+    :class:`~confiture.core.replica.classifier.DdlOperation`; both read this one
+    table, so the two surfaces cannot disagree about what an operation costs.
 
     ``server_version`` is the PostgreSQL **major** (``16``, not ``160004``). When
     it is ``None`` — the filesystem-only default — every version-dependent row
-    answers with its pre-improvement reading.
+    answers with its pre-improvement reading. ``rewrites`` overrides the heap
+    verdict for ``alter_column_type``, where only the type lattice knows.
     """
-    if isinstance(op, AddColumn):
-        return _add_column(op, server_version)
-    if isinstance(op, SetNotNull):
-        return _set_not_null(server_version)
-    if isinstance(op, ChangeColumnType):
-        return LockProfile(
-            lock=LockLevel.ACCESS_EXCLUSIVE,
-            rewrites_table=True,
-            blocks_reads=True,
-            blocks_writes=True,
-            duration=Duration.MINUTES_PLUS,
-            note="rewrites the heap and every index on the column",
+    if kind == "add_column":
+        return _add_column(
+            has_default=has_default, nullable=nullable, server_version=server_version
         )
-    if isinstance(op, AddConstraint):
-        if op.not_valid:
+    if kind == "set_not_null":
+        return _set_not_null(server_version)
+    if kind == "alter_column_type":
+        return _alter_column_type(rewrites)
+    if kind == "add_constraint":
+        if not_valid:
             return _METADATA_ALTER
         return LockProfile(
             lock=LockLevel.ACCESS_EXCLUSIVE,
@@ -201,8 +220,8 @@ def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> Lock
             duration=Duration.MINUTES_PLUS,
             note="validates against every existing row; ADD … NOT VALID defers the scan",
         )
-    if isinstance(op, CreateIndex):
-        if op.concurrently:
+    if kind == "create_index":
+        if concurrently:
             return LockProfile(
                 lock=LockLevel.SHARE_UPDATE_EXCLUSIVE,
                 rewrites_table=False,
@@ -219,30 +238,24 @@ def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> Lock
             duration=Duration.MINUTES_PLUS,
             note="blocks writes for the whole build; use CONCURRENTLY on a hot table",
         )
-    if isinstance(op, (DropColumn, RenameColumn, RenameObject, DropTable, Truncate)):
-        # All catalog-only. DROP COLUMN marks the attribute dropped rather than
-        # rewriting; TRUNCATE swaps in a new heap file.
-        return _METADATA_ALTER
-    if isinstance(op, (CreateTable, AddEnumValue, Revoke, DropObject, ReplaceObject)):
+    profile = _PROFILE_BY_KIND.get(kind or "")
+    if profile is not None:
+        return profile
+    if kind and kind.startswith("create_"):
         return _NO_LOCK
-    if isinstance(op, Benign):
-        return _BENIGN_PROFILES.get(op.kind or "", _NO_LOCK)
     return _UNKNOWN
 
 
-def _add_column(op: AddColumn, server_version: int | None) -> LockProfile:
-    """`ADD COLUMN` is metadata-only, except for a pre-PG-11 non-null default."""
-    if not op.has_default:
-        return _METADATA_ALTER
-    if server_version is not None and server_version >= _FAST_DEFAULT_SINCE:
+def _alter_column_type(rewrites: bool | None) -> LockProfile:
+    """A type change rewrites unless the lattice proves the coercion is binary."""
+    if rewrites is False:
         return LockProfile(
             lock=LockLevel.ACCESS_EXCLUSIVE,
             rewrites_table=False,
             blocks_reads=True,
             blocks_writes=True,
             duration=Duration.METADATA,
-            since_version=_FAST_DEFAULT_SINCE,
-            note="PostgreSQL 11+ stores the default in the catalog instead of rewriting",
+            note="binary-coercible: PostgreSQL updates the catalog without a rewrite",
         )
     return LockProfile(
         lock=LockLevel.ACCESS_EXCLUSIVE,
@@ -250,53 +263,49 @@ def _add_column(op: AddColumn, server_version: int | None) -> LockProfile:
         blocks_reads=True,
         blocks_writes=True,
         duration=Duration.MINUTES_PLUS,
-        since_version=_FAST_DEFAULT_SINCE,
-        note=(
-            "rewrites the whole table below PostgreSQL 11; the server version is "
-            "unknown here, so the older reading stands"
-            if server_version is None
-            else "rewrites the whole table below PostgreSQL 11"
-        ),
+        note="rewrites the heap and every index on the column",
     )
 
 
-def _set_not_null(server_version: int | None) -> LockProfile:
-    """`SET NOT NULL` scans, unless PG 12+ can prove it from a valid CHECK."""
-    if server_version is not None and server_version >= _NOT_NULL_FROM_CHECK_SINCE:
-        return LockProfile(
-            lock=LockLevel.ACCESS_EXCLUSIVE,
-            rewrites_table=False,
-            blocks_reads=True,
-            blocks_writes=True,
-            duration=Duration.SECONDS,
-            since_version=_NOT_NULL_FROM_CHECK_SINCE,
-            note=(
-                "PostgreSQL 12+ skips the scan when a valid CHECK (col IS NOT NULL) "
-                "already exists; without one it still scans"
-            ),
-        )
-    return LockProfile(
-        lock=LockLevel.ACCESS_EXCLUSIVE,
-        rewrites_table=False,
-        blocks_reads=True,
-        blocks_writes=True,
-        duration=Duration.MINUTES_PLUS,
-        since_version=_NOT_NULL_FROM_CHECK_SINCE,
-        note="scans every row to prove no NULL is present",
-    )
-
-
-# `Benign` carries a kind rather than a class, so its costs live in one table.
-_BENIGN_PROFILES: dict[str, LockProfile] = {
+# Kinds whose cost depends on nothing but the kind itself.
+_PROFILE_BY_KIND: dict[str, LockProfile] = {
+    # Catalog-only ALTER TABLE forms. DROP COLUMN marks the attribute dropped
+    # rather than rewriting; TRUNCATE swaps in a new heap file.
+    "drop_column": _METADATA_ALTER,
+    "rename_column": _METADATA_ALTER,
+    "rename_object": _METADATA_ALTER,
+    "drop_table": _METADATA_ALTER,
+    "truncate": _METADATA_ALTER,
+    "drop_constraint": _METADATA_ALTER,
+    "set_column_default": _METADATA_ALTER,
+    "drop_column_default": _METADATA_ALTER,
+    "column_default": _METADATA_ALTER,
+    "drop_not_null": _METADATA_ALTER,
+    "change_owner": _METADATA_ALTER,
     "drop_index": _METADATA_ALTER,
     "drop_trigger": _METADATA_ALTER,
     "drop_policy": _METADATA_ALTER,
     "drop_rule": _METADATA_ALTER,
-    "drop_constraint": _METADATA_ALTER,
-    "drop_not_null": _METADATA_ALTER,
-    "column_default": _METADATA_ALTER,
-    "change_owner": _METADATA_ALTER,
-    "create_table": _NO_LOCK,
+    # Objects whose removal or replacement touches no heap.
+    "drop_view": _NO_LOCK,
+    "drop_materialized_view": _NO_LOCK,
+    "drop_sequence": _NO_LOCK,
+    "drop_schema": _NO_LOCK,
+    "drop_type": _NO_LOCK,
+    "drop_domain": _NO_LOCK,
+    "drop_function": _NO_LOCK,
+    "drop_procedure": _NO_LOCK,
+    "drop_extension": _NO_LOCK,
+    "replace_view": _NO_LOCK,
+    "replace_function": _NO_LOCK,
+    "replace_procedure": _NO_LOCK,
+    "grant": _NO_LOCK,
+    "revoke": _NO_LOCK,
+    "comment": _NO_LOCK,
+    "select": _NO_LOCK,
+    "alter_type": _NO_LOCK,
+    "alter_sequence": _NO_LOCK,
+    "alter_default_privileges": _NO_LOCK,
     "cluster": LockProfile(
         lock=LockLevel.ACCESS_EXCLUSIVE,
         rewrites_table=True,
@@ -345,6 +354,100 @@ _BENIGN_PROFILES: dict[str, LockProfile] = {
         note="row locks scale with the number of rows matched",
     ),
 }
+
+# DdlOperation class → the kind naming the same change. The typed classifier and
+# the change-set vocabulary meet here and nowhere else.
+_KIND_BY_OP: dict[type[DdlOperation], str] = {
+    AddColumn: "add_column",
+    DropColumn: "drop_column",
+    RenameColumn: "rename_column",
+    RenameObject: "rename_object",
+    ChangeColumnType: "alter_column_type",
+    AddConstraint: "add_constraint",
+    CreateIndex: "create_index",
+    CreateTable: "create_table",
+    DropTable: "drop_table",
+    Truncate: "truncate",
+    Revoke: "revoke",
+    SetNotNull: "set_not_null",
+    AddEnumValue: "alter_type",
+}
+
+
+def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> LockProfile:
+    """The lock and rewrite cost of a typed operation. See :func:`profile_for_kind`."""
+    if isinstance(op, Benign):
+        return profile_for_kind(op.kind, server_version=server_version)
+    if isinstance(op, (DropObject, ReplaceObject)):
+        return _NO_LOCK
+    kind = _KIND_BY_OP.get(type(op))
+    if kind is None:
+        return _UNKNOWN
+    return profile_for_kind(
+        kind,
+        has_default=getattr(op, "has_default", False),
+        nullable=getattr(op, "nullable", True),
+        concurrently=getattr(op, "concurrently", False),
+        not_valid=getattr(op, "not_valid", False),
+        server_version=server_version,
+    )
+
+
+def _add_column(*, has_default: bool, nullable: bool, server_version: int | None) -> LockProfile:
+    """`ADD COLUMN` is metadata-only, except for a pre-PG-11 non-null default."""
+    del nullable  # named for the call sites; both NOT NULL forms cost the same
+    if not has_default:
+        return _METADATA_ALTER
+    if server_version is not None and server_version >= FAST_DEFAULT_SINCE:
+        return LockProfile(
+            lock=LockLevel.ACCESS_EXCLUSIVE,
+            rewrites_table=False,
+            blocks_reads=True,
+            blocks_writes=True,
+            duration=Duration.METADATA,
+            since_version=FAST_DEFAULT_SINCE,
+            note="PostgreSQL 11+ stores the default in the catalog instead of rewriting",
+        )
+    return LockProfile(
+        lock=LockLevel.ACCESS_EXCLUSIVE,
+        rewrites_table=True,
+        blocks_reads=True,
+        blocks_writes=True,
+        duration=Duration.MINUTES_PLUS,
+        since_version=FAST_DEFAULT_SINCE,
+        note=(
+            "rewrites the whole table below PostgreSQL 11; the server version is "
+            "unknown here, so the older reading stands"
+            if server_version is None
+            else "rewrites the whole table below PostgreSQL 11"
+        ),
+    )
+
+
+def _set_not_null(server_version: int | None) -> LockProfile:
+    """`SET NOT NULL` scans, unless PG 12+ can prove it from a valid CHECK."""
+    if server_version is not None and server_version >= NOT_NULL_FROM_CHECK_SINCE:
+        return LockProfile(
+            lock=LockLevel.ACCESS_EXCLUSIVE,
+            rewrites_table=False,
+            blocks_reads=True,
+            blocks_writes=True,
+            duration=Duration.SECONDS,
+            since_version=NOT_NULL_FROM_CHECK_SINCE,
+            note=(
+                "PostgreSQL 12+ skips the scan when a valid CHECK (col IS NOT NULL) "
+                "already exists; without one it still scans"
+            ),
+        )
+    return LockProfile(
+        lock=LockLevel.ACCESS_EXCLUSIVE,
+        rewrites_table=False,
+        blocks_reads=True,
+        blocks_writes=True,
+        duration=Duration.MINUTES_PLUS,
+        since_version=NOT_NULL_FROM_CHECK_SINCE,
+        note="scans every row to prove no NULL is present",
+    )
 
 
 def worst_profile(profiles: Iterable[LockProfile]) -> LockProfile | None:
