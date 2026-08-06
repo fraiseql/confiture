@@ -426,6 +426,37 @@ touches it. This ops-path-only coupling is the intended end state.
 > Rust reshape and omits fraisier + SpecQL; `fraise-stack/ROADMAP.md` (2026-05-31)
 > is the current source of truth and supersedes it.
 
+### Decision 9: Risk classification lives on the preflight seam, not in a scoring engine
+
+**Choice**: `core/risk_tier.py` (a pure five-value taxonomy) and
+`core/change_set.py` (a statement-level classifier) emit a per-change risk tier
+in `migrate preflight --format json`, wired into the adapter seam from the first
+commit.
+
+**Rationale**: Confiture previously had a risk engine — `core/risk/`, a
+`DowntimePredictor` with numeric scoring — deleted at `2bf38f1` (−2043 lines) as
+a never-wired parallel implementation with zero production importers. That
+deletion was correct and this decision does not reverse it. Two things are
+different:
+
+- **It is consumed.** The tier crosses the migration-adapter seam as typed data
+  under a ratified cross-repo contract (#197 / fraisier-core#44), tested from
+  both sides against the same golden fixtures. The deleted engine answered a
+  question nobody asked.
+- **It is a taxonomy, not a score.** Five named tiers with documented boundaries,
+  derived from the parsed statement by a pure function. A predicted downtime in
+  seconds cannot be validated against reality; "this `DROP COLUMN` is
+  irreversible" can. Resist reconstituting a score.
+
+**Why a second parser**: the change set does *not* reuse
+`core/replica/classifier.py`. That classifier feeds the pinned `window_safe`
+verdict (#154) and reports only the operations in its safety matrix — anything
+outside it degrades to `depends`, which flips `window_safe` to false. Widening it
+to the change-set vocabulary would move a cross-repo contract as a side effect,
+so `change_set.py` walks the statements itself and the two verdicts stay
+independent. The cost is one extra parse per migration file, filesystem-bound and
+measured in milliseconds; the alternative was a false verdict on a safety gate.
+
 ---
 
 ## Testing Architecture

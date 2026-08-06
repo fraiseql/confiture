@@ -11,7 +11,9 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 from typer.testing import CliRunner
@@ -195,3 +197,76 @@ def test_preflight_against_replay_failure_validates(tmp_path, schemas_dir):
     assert replay["severity"] == "error"
     assert replay["migration"] == "20260527000000"
     assert replay["details"]["error"] == 'relation "x" already exists'
+
+
+# ---------------------------------------------------------------------------
+# change_set (#197) — the schema must constrain, not merely accept
+# ---------------------------------------------------------------------------
+
+
+def _validator(schemas_dir):
+    return Draft202012Validator(
+        _load(schemas_dir, PREFLIGHT_SCHEMA), registry=_build_registry(schemas_dir)
+    )
+
+
+def _payload_with(change_set) -> dict:
+    return {
+        "ok": True,
+        "window_safe": True,
+        "summary": {"errors": 0, "warnings": 0, "info": 0, "migrations_checked": 1},
+        "issues": [],
+        "change_set": change_set,
+    }
+
+
+def test_a_real_change_set_validates(tmp_path, schemas_dir):
+    """The emitted payload, straight from the CLI."""
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260804120100_drop.up.sql").write_text("ALTER TABLE tb_user DROP COLUMN legacy;\n")
+
+    result = CliRunner().invoke(
+        app, ["migrate", "preflight", "--migrations-dir", str(migs), "--format", "json"]
+    )
+    payload = json.loads(result.stdout)
+    _validator(schemas_dir).validate(payload)
+    assert payload["change_set"]["changes"][0]["tier"] == "irreversible"
+
+
+def test_an_absent_change_set_still_validates(schemas_dir):
+    """A payload from confiture < 0.43.0 must stay valid — absence is meaningful."""
+    payload = _payload_with(None)
+    del payload["change_set"]
+    _validator(schemas_dir).validate(payload)
+
+
+@pytest.mark.parametrize(
+    "change_set",
+    [
+        pytest.param([], id="bare array instead of the object wrapper"),
+        pytest.param("additive", id="a string, per the malformed.json fixture"),
+        pytest.param({"changes": []}, id="no contract_version"),
+        pytest.param(
+            {"contract_version": 1, "changes": [{"kind": "drop_column"}]},
+            id="entry without an object",
+        ),
+        pytest.param(
+            {
+                "contract_version": 1,
+                "changes": [{"kind": "entangle", "object": "public.t.c", "tier": "quantum"}],
+            },
+            id="a tier outside the five",
+        ),
+        pytest.param(
+            {
+                "contract_version": 1,
+                "changes": [{"kind": "drop_column", "object": "public.t.c", "risk": "high"}],
+            },
+            id="an undeclared entry field",
+        ),
+    ],
+)
+def test_the_schema_rejects_shapes_confiture_must_never_emit(change_set, schemas_dir):
+    with pytest.raises(ValidationError):
+        _validator(schemas_dir).validate(_payload_with(change_set))

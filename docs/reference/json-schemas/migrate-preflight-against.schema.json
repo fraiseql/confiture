@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-preflight-against.schema.json",
   "title": "confiture migrate preflight --against <url> --format json",
-  "description": "Structured preflight report (issue #151): the SAME {ok, summary, issues[]} envelope as `migrate preflight` without --against. Static findings (reversibility, transactionality, duplicate versions, checksums) and replica-forward-compat lints are joined by per-migration execution-replay results: each migration that fails to replay against the --against database appears as a `PFLIGHT_REPLAY_FAILED` issue (the database error is in `details.error`). Run-level metadata that is not a finding — `db_consumed` — rides in `summary`. A preflight that *crashed* (config/DB/connection error, e.g. an unreachable --against URL → CONFIG_006/exit 3) emits the #145 error envelope instead — branch on `issues` vs `error`.\n\nNote: `summary.migrations_checked` is the number of migrations *replayed* (the pending set), which may be smaller than the directory-wide set the static findings are drawn from.",
+  "description": "Structured preflight report (issue #151): the SAME {ok, summary, issues[]} envelope as `migrate preflight` without --against. Static findings (reversibility, transactionality, duplicate versions, checksums) and replica-forward-compat lints are joined by per-migration execution-replay results: each migration that fails to replay against the --against database appears as a `PFLIGHT_REPLAY_FAILED` issue (the database error is in `details.error`). Run-level metadata that is not a finding — `db_consumed` — rides in `summary`. A preflight that *crashed* (config/DB/connection error, e.g. an unreachable --against URL → CONFIG_006/exit 3) emits the #145 error envelope instead — branch on `issues` vs `error`.\n\nNote: `summary.migrations_checked` is the number of migrations *replayed* (the pending set), which may be smaller than the directory-wide set the static findings are drawn from. Since 0.43.0 the payload also carries `change_set` (#197): the per-change risk tiers for the pending set. It is declared but not required — an absent `change_set` is the honest signal that the producer did not classify, which a consumer treats as unclassified and denies.",
   "type": "object",
   "required": ["ok", "window_safe", "summary", "issues"],
   "properties": {
@@ -43,6 +43,9 @@
     "issues": {
       "type": "array",
       "items": { "$ref": "issue-object.schema.json#" }
+    },
+    "change_set": {
+      "$ref": "_preflight_defs.schema.json#/$defs/ChangeSet"
     },
     "dependent_analysis": {
       "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"

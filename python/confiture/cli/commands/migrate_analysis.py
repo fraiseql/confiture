@@ -1793,6 +1793,48 @@ def _resolve_preflight_pending(
     return all_files
 
 
+_CHANGE_SET_TIER_COLOR = {
+    "additive": "green",
+    "reversible": "green",
+    "lock_risky": "yellow",
+    "destructive": "red",
+    "irreversible": "red",
+}
+
+
+def _display_change_set(change_set: Any, cons: Any) -> None:
+    """Render the #197 risk tiers: the worst tier, then the changes that are not additive.
+
+    Text mode is for a human deciding whether to look closer, so it leads with
+    the verdict. The full per-change set is the JSON payload's job.
+    """
+    if not change_set.changes:
+        return
+
+    total = len(change_set.changes)
+    unclassified = sum(1 for c in change_set.changes if c.tier is None)
+
+    worst = change_set.worst_tier
+    if worst is not None:
+        color = _CHANGE_SET_TIER_COLOR.get(worst.value, "yellow")
+        # "classified" counts only what carries a tier — saying it of the whole
+        # set would be the confident-wrong phrasing this feature exists to avoid.
+        cons.print(
+            f"Risk: [{color}]{worst.value}[/{color}] "
+            f"(worst of {total - unclassified} classified change(s) of {total})"
+        )
+    if unclassified:
+        cons.print(
+            f"  [yellow]⚠️  {unclassified} change(s) could not be classified — "
+            "a consumer gating on risk will refuse them[/yellow]"
+        )
+    for change in change_set.changes:
+        if change.tier is None or change.tier.severity == 0:
+            continue  # additive changes are the floor; they do not need a line
+        color = _CHANGE_SET_TIER_COLOR.get(change.tier.value, "yellow")
+        cons.print(f"  [{color}]{change.tier.value}[/{color}] {change.kind} {change.object}")
+
+
 def _display_against_result(
     result: Any,
     format_type: str,
@@ -2093,6 +2135,7 @@ def migrate_preflight(
     """
     from rich.table import Table
 
+    from confiture.core.change_set import build_change_set
     from confiture.core.linting.libraries.replica import replica_preflight_issues
     from confiture.core.preflight import (
         is_window_safe,
@@ -2134,6 +2177,7 @@ def migrate_preflight(
             "migrations_checked": len(result.migrations),
         }
         exit_code = preflight_exit_code(summary, strict=strict)
+        change_set = build_change_set(migrations_dir)
 
         if format_type == "json":
             payload = {
@@ -2144,6 +2188,10 @@ def migrate_preflight(
                 "window_safe": is_window_safe(all_issues),
                 "summary": summary,
                 "issues": [i.to_dict() for i in all_issues],
+                # #197: per-change risk tiers. The object wrapper is load-bearing —
+                # an empty `changes` means "classified, nothing to change", while an
+                # absent `change_set` means "did not classify" and denies.
+                "change_set": change_set.to_dict(),
             }
             if dependent_skip_payload is not None:
                 payload["dependent_analysis"] = dependent_skip_payload
@@ -2171,6 +2219,7 @@ def migrate_preflight(
             f"\nSummary: {summary['migrations_checked']} migration(s) checked, "
             f"{summary['errors']} error(s), {summary['warnings']} warning(s)"
         )
+        _display_change_set(change_set, console)
 
         issues = all_issues
         if not issues:
@@ -2319,6 +2368,8 @@ def migrate_preflight(
     }
     exit_code = preflight_exit_code(summary, strict=strict)
 
+    change_set = build_change_set(migrations_dir)
+
     if format_type == "json":
         payload: dict[str, Any] = {
             "ok": exit_code == 0,
@@ -2326,12 +2377,16 @@ def migrate_preflight(
             "window_safe": is_window_safe(all_issues),
             "summary": summary,
             "issues": [i.to_dict() for i in all_issues],
+            # #197: same change set as the no-`--against` path — it is static
+            # analysis, so replaying against a database does not change it.
+            "change_set": change_set.to_dict(),
         }
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
         _output_json(payload, output_file, console)
     else:
         _display_against_result(against_result, format_type, console)
+        _display_change_set(change_set, console)
         if dependent_report is not None:
             _display_dependent_analysis(dependent_report, console)
 

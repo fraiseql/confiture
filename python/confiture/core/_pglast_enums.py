@@ -44,6 +44,9 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "AT_AddConstraint",
         "AT_DropConstraint",
         "AT_ChangeOwner",
+        "AT_ColumnDefault",
+        "AT_SetNotNull",
+        "AT_DropNotNull",
     ),
     "ConstrType": (
         "CONSTR_NOTNULL",
@@ -64,6 +67,10 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_SCHEMA",
         "OBJECT_SEQUENCE",
         "OBJECT_COLUMN",
+        "OBJECT_TRIGGER",
+        "OBJECT_POLICY",
+        "OBJECT_EXTENSION",
+        "OBJECT_DOMAIN",
     ),
 }
 

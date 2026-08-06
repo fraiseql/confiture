@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-preflight.schema.json",
   "title": "confiture migrate preflight --format json (no --against)",
-  "description": "Structured preflight report (issue #148/#154): {ok, window_safe, summary, issues[]}. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, checksum mismatches, and replica forward-compatibility as a uniform issues[] of the shared issue object. No database connection required. A preflight that *crashed* (config/DB error) emits the #145 error envelope instead — branch on `issues` vs `error`.",
+  "description": "Structured preflight report (issue #148/#154): {ok, window_safe, summary, issues[]}. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, checksum mismatches, and replica forward-compatibility as a uniform issues[] of the shared issue object. No database connection required. A preflight that *crashed* (config/DB error) emits the #145 error envelope instead — branch on `issues` vs `error`. Since 0.43.0 the payload also carries `change_set` (#197): the per-change risk tiers for the pending set. It is declared but not required — an absent `change_set` is the honest signal that the producer did not classify, which a consumer treats as unclassified and denies.",
   "type": "object",
   "required": ["ok", "window_safe", "summary", "issues"],
   "properties": {
@@ -29,6 +29,9 @@
     "issues": {
       "type": "array",
       "items": { "$ref": "issue-object.schema.json#" }
+    },
+    "change_set": {
+      "$ref": "_preflight_defs.schema.json#/$defs/ChangeSet"
     },
     "dependent_analysis": {
       "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"

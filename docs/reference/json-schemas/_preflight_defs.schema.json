@@ -4,6 +4,55 @@
   "title": "Confiture preflight $defs",
   "description": "Sub-schemas shared by migrate-preflight.schema.json and migrate-preflight-against.schema.json.",
   "$defs": {
+    "ChangeSet": {
+      "type": "object",
+      "description": "Per-change risk classification for the pending migration set (#197, contract version 1). The OBJECT WRAPPER IS LOAD-BEARING: `{\"changes\": []}` means \"confiture classified the set and there is nothing to change\" (safe), while an ABSENT `change_set` key means \"confiture did not classify\" — unknown, and unknown is not safe. A bare array cannot express that difference and the conflation resolves the dangerous way. The key is declared but NOT required, so payloads from confiture < 0.43.0 stay valid and correctly read as \"did not classify\".",
+      "required": ["contract_version", "changes"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The revision of this contract the payload is written to. Adding a field to a change entry does NOT bump it; removing or renaming a field, or changing what a tier means, does. A consumer reading a version newer than it understands must treat the whole change set as ABSENT and name both versions in its refusal — never a best-effort parse.",
+          "$comment": "STABILITY: cross-repo contract with fraisier-core#44. Confiture emits 1."
+        },
+        "changes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SchemaChange" }
+        }
+      }
+    },
+    "SchemaChange": {
+      "type": "object",
+      "description": "One classified change. Order is migration order; the consumer picks the worst tier independently of it.",
+      "required": ["kind", "object"],
+      "additionalProperties": false,
+      "$comment": "additionalProperties is false because this schema describes what confiture EMITS. The contract still requires consumers to ignore keys they do not recognise, so a later additive field is a schema edit here, not a breaking change there.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Stable machine code, snake_case (add_column, drop_column, create_index, …). Rendered verbatim; never parsed for meaning, and never a substitute for `tier`."
+        },
+        "object": {
+          "type": "string",
+          "description": "Fully-qualified target: schema.table, schema.table.column, schema.table.index. Rendered to the operator, so it identifies the object without further lookup. The schema defaults to `public` when the DDL omits one — preflight has no connection with which to resolve search_path. For a statement whose target cannot be determined, this is the migration filename."
+        },
+        "migration": {
+          "type": ["string", "null"],
+          "description": "The migration VERSION PREFIX (\"20260804120100\"), not the filename — matching `issues[].migration`, so the two never disagree on format."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["additive", "reversible", "lock_risky", "destructive", "irreversible"],
+          "description": "What kind of risk the change carries. ABSENT means confiture could not classify it honestly (a non-SQL .py migration, an ALTER COLUMN TYPE whose direction needs the source and target types, a statement outside the taxonomy) — a consumer treats that as unclassified and denies, never as safe. Severity order for picking the worst of a set: additive < reversible < lock_risky < destructive < irreversible; that order is NOT how policy decisions are made.",
+          "$comment": "STABILITY: these five values are a cross-repo contract (#197 / fraisier-core#44). A sixth value is a contract_version conversation, not a silent addition — consumers parse an unrecognised string to unclassified, never to a nearest match."
+        },
+        "detail": {
+          "type": ["string", "null"],
+          "description": "One human-readable line for the plan render. Never parsed. Synthesised from the parsed statement rather than echoed from the source, so it can never carry a DSN or a credential."
+        }
+      }
+    },
     "StaticPreflight": {
       "type": "object",
       "description": "Static analysis output (PreflightResult.to_dict). Reports per-migration reversibility and transactionality.",
