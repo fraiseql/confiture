@@ -151,9 +151,7 @@ def test_text_mode_renders_the_worst_tier(runner, tmp_path):
             )
         },
     )
-    result = runner.invoke(
-        runner_app(), ["migrate", "preflight", "--migrations-dir", str(migs)]
-    )
+    result = runner.invoke(runner_app(), ["migrate", "preflight", "--migrations-dir", str(migs)])
     assert "irreversible" in result.output.lower()
 
 
