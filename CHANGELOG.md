@@ -34,6 +34,17 @@ starts saying what a change costs in locks and whether it rewrites the table
   > the advisory in
   > [`docs/reference/fraisier-adapter-contract.md`](docs/reference/fraisier-adapter-contract.md);
   > the `window_safe` capability floor moves to 0.44.0.
+  >
+  > **The highest-volume change in practice is `CREATE OR REPLACE`** of a view,
+  > function or procedure. It now reports `depends` — a warning, never an error,
+  > but enough to make `window_safe` false. Confiture cannot tell whether a
+  > replacement body stays compatible with readers on the old version: a changed
+  > view column list or function return shape breaks them, an identical body does
+  > not, and the statement says which only by being read. That is the contract's
+  > "unsafe **or uninspectable**" case, and claiming otherwise would recreate the
+  > bug class this release fixes. Projects that replace functions on every
+  > migration should expect this and gate on the tier or the issue codes rather
+  > than treating `window_safe` as a build-breaker.
 
   Unlike the pglast-8 defect of the same shape (#192, fixed in 0.39.0), this one
   was **not conditional** — every release from 0.23.0 to 0.43.0 was affected, on
