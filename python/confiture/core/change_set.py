@@ -37,6 +37,7 @@ from confiture.core._pglast_enums import enums_are_usable
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency.ast_detector import is_pglast_available
 from confiture.core.risk_tier import RiskTier, worst_tier
+from confiture.core.sql_statements import split_statements
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -1324,64 +1325,5 @@ def _split_object_list(raw: str) -> list[str]:
 
 
 def _split_statements(sql: str) -> list[str]:
-    """Split on top-level ``;``, respecting dollar-quoted bodies, literals and comments.
-
-    The naive ``sql.split(";")`` the replica classifier uses is fine for the
-    single-statement DDL its matrix covers, but it shreds a ``CREATE FUNCTION``
-    body — which this module has to classify as one statement.
-    """
-    statements: list[str] = []
-    buf: list[str] = []
-    index = 0
-    length = len(sql)
-    tag: str | None = None
-
-    while index < length:
-        char = sql[index]
-        if tag is not None:
-            if sql.startswith(tag, index):
-                buf.append(tag)
-                index += len(tag)
-                tag = None
-            else:
-                buf.append(char)
-                index += 1
-            continue
-        if char == "$":
-            opener = _DOLLAR_TAG.match(sql, index)
-            if opener:
-                tag = opener.group(0)
-                buf.append(tag)
-                index += len(tag)
-                continue
-        if char == "'":
-            end = index + 1
-            while end < length:
-                if sql[end] == "'":
-                    if end + 1 < length and sql[end + 1] == "'":
-                        end += 2
-                        continue
-                    end += 1
-                    break
-                end += 1
-            buf.append(sql[index:end])
-            index = end
-            continue
-        if sql.startswith("--", index):
-            newline = sql.find("\n", index)
-            index = length if newline == -1 else newline
-            continue
-        if sql.startswith("/*", index):
-            close = sql.find("*/", index)
-            index = length if close == -1 else close + 2
-            continue
-        if char == ";":
-            statements.append("".join(buf))
-            buf = []
-            index += 1
-            continue
-        buf.append(char)
-        index += 1
-
-    statements.append("".join(buf))
-    return [stripped for stripped in (s.strip() for s in statements) if stripped]
+    """Top-level split, shared with ``core/replica/classifier.py``."""
+    return split_statements(sql)

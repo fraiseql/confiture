@@ -83,6 +83,17 @@ EXPECTED_REPLICA_CODES = frozenset(
         "PFLIGHT_REPLICA_DROP_COLUMN",
         "PFLIGHT_REPLICA_RENAME_COLUMN",
         "PFLIGHT_REPLICA_UNCLASSIFIED",
+        # Added in 0.44.0 (#206), when the classifier stopped silently dropping
+        # statements outside its original seven-operation matrix. Additive, so
+        # no major bump: fraisier gates on the presence of any code in the
+        # namespace, and every one of these means the same thing to it.
+        "PFLIGHT_REPLICA_DROP_OBJECT",
+        "PFLIGHT_REPLICA_DROP_TABLE",
+        "PFLIGHT_REPLICA_RENAME_OBJECT",
+        "PFLIGHT_REPLICA_REPLACE_OBJECT",
+        "PFLIGHT_REPLICA_REVOKE",
+        "PFLIGHT_REPLICA_SET_NOT_NULL",
+        "PFLIGHT_REPLICA_TRUNCATE",
     }
 )
 
