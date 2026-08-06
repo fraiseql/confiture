@@ -1811,15 +1811,19 @@ def _display_change_set(change_set: Any, cons: Any) -> None:
     if not change_set.changes:
         return
 
+    total = len(change_set.changes)
+    unclassified = sum(1 for c in change_set.changes if c.tier is None)
+
     worst = change_set.worst_tier
     if worst is not None:
         color = _CHANGE_SET_TIER_COLOR.get(worst.value, "yellow")
+        # "classified" counts only what carries a tier — saying it of the whole
+        # set would be the confident-wrong phrasing this feature exists to avoid.
         cons.print(
             f"Risk: [{color}]{worst.value}[/{color}] "
-            f"({len(change_set.changes)} change(s) classified)"
+            f"(worst of {total - unclassified} classified change(s) of {total})"
         )
-    if change_set.has_unclassified:
-        unclassified = sum(1 for c in change_set.changes if c.tier is None)
+    if unclassified:
         cons.print(
             f"  [yellow]⚠️  {unclassified} change(s) could not be classified — "
             "a consumer gating on risk will refuse them[/yellow]"

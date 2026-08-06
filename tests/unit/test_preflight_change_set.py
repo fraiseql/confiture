@@ -152,7 +152,26 @@ def test_text_mode_renders_the_worst_tier(runner, tmp_path):
         },
     )
     result = runner.invoke(runner_app(), ["migrate", "preflight", "--migrations-dir", str(migs)])
+    assert "risk:" in result.output.lower()
     assert "irreversible" in result.output.lower()
+
+
+def test_text_mode_counts_classified_changes_honestly(runner, tmp_path):
+    """Two of three changes carry a tier — saying "3 classified" would be the lie."""
+    migs = _migrations(
+        tmp_path,
+        {
+            "20260804120000_a.up.sql": (
+                "CREATE TABLE tb_new (id int);\n"
+                "ALTER TABLE tb_user DROP COLUMN legacy_flag;\n"
+                "ALTER TABLE tb_order ALTER COLUMN total TYPE bigint;\n"
+            )
+        },
+    )
+    result = runner.invoke(runner_app(), ["migrate", "preflight", "--migrations-dir", str(migs)])
+    output = " ".join(result.output.split())
+    assert "worst of 2 classified change(s) of 3" in output
+    assert "1 change(s) could not be classified" in output
 
 
 def test_the_against_payload_carries_the_change_set_too(runner, tmp_path):
