@@ -31,6 +31,7 @@ from confiture.core.connection import create_connection, load_config, open_conne
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import Migrator
+from confiture.core.schema_facts import SchemaFacts
 from confiture.core.validation.context import ValidationContext
 from confiture.core.validation.registry import (
     ValidationCheck,
@@ -1722,6 +1723,35 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
         return (False, True)
 
 
+def _collect_preflight_facts(session: MigratorSession) -> SchemaFacts:
+    """Read the target's column types and server version (#199). Best-effort.
+
+    The ``--against`` database is seeded from the production schema, which makes
+    it the honest source for the *current* type of a column a migration is about
+    to alter — the one fact ``ALTER TABLE … ALTER COLUMN … TYPE`` never states.
+    Read before the replay, so it describes the schema being migrated *from*.
+
+    Any failure yields empty facts and every consumer falls back to the static
+    answer. Losing the refinement is acceptable; failing a preflight over it is
+    not.
+    """
+    import contextlib
+
+    from confiture.core.schema_facts import collect_schema_facts  # noqa: PLC0415
+
+    conn = getattr(session, "_conn", None)
+    if conn is None:
+        return SchemaFacts()
+    try:
+        facts = collect_schema_facts(conn)
+    except Exception:  # noqa: BLE001 — best-effort; never fail preflight for a refinement
+        facts = SchemaFacts()
+    # Leave no aborted transaction behind for run_against.
+    with contextlib.suppress(Exception):
+        conn.rollback()
+    return facts
+
+
 def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tuple[bool, bool]:
     """Best-effort (has_replicas, bypass) for the replica lint, never connects.
 
@@ -1828,11 +1858,36 @@ def _display_change_set(change_set: Any, cons: Any) -> None:
             f"  [yellow]⚠️  {unclassified} change(s) could not be classified — "
             "a consumer gating on risk will refuse them[/yellow]"
         )
+    # #199: a full-table rewrite is the thing that turns a deploy into an
+    # outage, and it is not recoverable from the tier — an `additive`
+    # `ADD COLUMN … DEFAULT` rewrites below PG 11, a `destructive` `DROP INDEX`
+    # does not. Called out separately for that reason.
+    rewrites = [c for c in change_set.changes if c.lock is not None and c.lock.rewrites_table]
+    if rewrites:
+        cons.print(
+            f"  [yellow]⏳ {len(rewrites)} change(s) rewrite the table[/yellow] — "
+            "plan for a maintenance window proportional to its size"
+        )
+
     for change in change_set.changes:
         if change.tier is None or change.tier.severity == 0:
             continue  # additive changes are the floor; they do not need a line
         color = _CHANGE_SET_TIER_COLOR.get(change.tier.value, "yellow")
-        cons.print(f"  [{color}]{change.tier.value}[/{color}] {change.kind} {change.object}")
+        cost = _lock_annotation(change.lock)
+        cons.print(f"  [{color}]{change.tier.value}[/{color}] {change.kind} {change.object}{cost}")
+
+
+def _lock_annotation(lock: Any) -> str:
+    """`  [rewrite, minutes+]` — what the change costs, or nothing if unknown (#199)."""
+    if lock is None:
+        return ""
+    parts = ["rewrite"] if lock.rewrites_table else []
+    if lock.blocks_writes and not lock.blocks_reads:
+        parts.append("blocks writes")
+    elif lock.blocks_reads:
+        parts.append("blocks reads+writes")
+    parts.append(lock.duration.value)
+    return f"  [dim]({', '.join(parts)})[/dim]"
 
 
 def _display_against_result(
@@ -2293,6 +2348,8 @@ def migrate_preflight(
 
     target_tracking_empty = False
     target_tracking_exists = True
+    # Empty unless the --against connection yields facts (#199).
+    schema_facts = SchemaFacts()
     # Resolved once and threaded through the override, the probe and the hint
     # (#190) — three sites that previously each spelled the default by hand.
     target_tracking_table = _preflight_tracking_table(config)
@@ -2311,6 +2368,11 @@ def migrate_preflight(
             target_tracking_exists, target_tracking_empty = _target_tracking_table_state(
                 session, target_tracking_table
             )
+            # #199: read the current column types and server version BEFORE the
+            # replay, so `ALTER COLUMN … TYPE` can be reasoned about as widening
+            # or narrowing. Strictly additive — failure leaves `schema_facts`
+            # empty and every answer falls back to the static one.
+            schema_facts = _collect_preflight_facts(session)
             against_result = session.run_against(
                 pending_files,
                 against_url=against,
@@ -2368,7 +2430,7 @@ def migrate_preflight(
     }
     exit_code = preflight_exit_code(summary, strict=strict)
 
-    change_set = build_change_set(migrations_dir)
+    change_set = build_change_set(migrations_dir, facts=schema_facts)
 
     if format_type == "json":
         payload: dict[str, Any] = {
@@ -2377,8 +2439,10 @@ def migrate_preflight(
             "window_safe": is_window_safe(all_issues),
             "summary": summary,
             "issues": [i.to_dict() for i in all_issues],
-            # #197: same change set as the no-`--against` path — it is static
-            # analysis, so replaying against a database does not change it.
+            # #197: the same change set as the no-`--against` path, plus the
+            # #199 refinements the target database made possible (current column
+            # types, server version). Absent those, byte-identical to the static
+            # path.
             "change_set": change_set.to_dict(),
         }
         if dependent_report is not None:

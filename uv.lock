@@ -338,7 +338,7 @@ wheels = [
 
 [[package]]
 name = "fraiseql-confiture"
-version = "0.43.0"
+version = "0.44.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

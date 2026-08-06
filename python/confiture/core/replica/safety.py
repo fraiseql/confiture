@@ -13,13 +13,22 @@ from dataclasses import dataclass
 from confiture.core.replica.classifier import (
     AddColumn,
     AddConstraint,
+    AddEnumValue,
+    Benign,
     ChangeColumnType,
     CreateIndex,
     CreateTable,
     DdlOperation,
     DropColumn,
+    DropObject,
+    DropTable,
     Other,
     RenameColumn,
+    RenameObject,
+    ReplaceObject,
+    Revoke,
+    SetNotNull,
+    Truncate,
 )
 
 # Severity policy threshold: replicas declared → unsafe ops are errors.
@@ -86,6 +95,55 @@ def classify_replica_safety(op: DdlOperation) -> ReplicaVerdict:
             multi_step="use CREATE INDEX CONCURRENTLY in its own non-transactional migration",
         )
     if isinstance(op, CreateTable):
+        return ReplicaVerdict("safe")
+    if isinstance(op, DropTable):
+        return ReplicaVerdict(
+            "unsafe",
+            reason="readers on the old version still SELECT from the table",
+            multi_step="stop reading the table → wait one release → drop it",
+        )
+    if isinstance(op, DropObject):
+        return ReplicaVerdict(
+            "unsafe",
+            reason=f"readers on the old version still reference the {op.kind or 'object'}",
+            multi_step=f"stop using the {op.kind or 'object'} → wait one release → drop it",
+        )
+    if isinstance(op, Truncate):
+        return ReplicaVerdict(
+            "unsafe",
+            reason="the rows readers on the old version expect are removed",
+            multi_step="stop reading the table → wait one release → truncate it",
+        )
+    if isinstance(op, Revoke):
+        return ReplicaVerdict(
+            "unsafe",
+            reason="a privilege readers on the old version still rely on may be withdrawn",
+            multi_step="migrate readers off the privilege → wait one release → revoke it",
+        )
+    if isinstance(op, SetNotNull):
+        return ReplicaVerdict(
+            "unsafe",
+            reason="writers on the old version still insert NULL into the column",
+            multi_step="backfill → migrate writers → SET NOT NULL in a later release",
+        )
+    if isinstance(op, RenameObject):
+        return ReplicaVerdict(
+            "unsafe",
+            reason=f"readers reference the old {op.kind or 'object'} name during the lag window",
+            multi_step="add the new name → migrate readers → retire the old name",
+        )
+    if isinstance(op, ReplaceObject):
+        # A replacement body can be identical, additive, or a signature change;
+        # nothing in the statement says which, so this is `depends` (a warning)
+        # rather than a guess in either direction.
+        return ReplicaVerdict(
+            "depends",
+            reason=(
+                f"CREATE OR REPLACE {op.kind or 'object'}: confiture cannot tell whether the "
+                "new definition stays compatible with readers on the old version; review manually"
+            ),
+        )
+    if isinstance(op, (AddEnumValue, Benign)):
         return ReplicaVerdict("safe")
     if isinstance(op, Other):
         return ReplicaVerdict(

@@ -36,7 +36,20 @@ from typing import TYPE_CHECKING, Any, Final
 from confiture.core._pglast_enums import enums_are_usable
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency.ast_detector import is_pglast_available
+from confiture.core.lock_profile import (
+    FAST_DEFAULT_SINCE,
+    LockProfile,
+    profile_for_kind,
+)
 from confiture.core.risk_tier import RiskTier, worst_tier
+from confiture.core.schema_facts import SchemaFacts
+from confiture.core.sql_statements import split_statements
+from confiture.core.type_lattice import (
+    TypeChange,
+    canonical_type,
+    changes_rewrite_table,
+    compare_types,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -82,6 +95,17 @@ class ChangeEntry:
 
     detail: str | None = None
     """One human-readable line for the plan render. Never parsed, never a credential."""
+
+    lock: LockProfile | None = None
+    """What the change costs in locking terms (#199), or ``None`` when confiture
+    has no statement to cost — a ``.py`` migration.
+
+    **Deliberately not on the wire.** The change-set entry shape is the ratified
+    fraisier-core#44 pact, pinned byte-for-byte by golden fixtures in both
+    repositories; adding a key there is a co-ordinated change with a
+    ``contract_version`` decision, not a free addition. Until that is agreed, the
+    lock facts reach an operator through :attr:`detail`, which the contract
+    defines as free-form, and reach a library caller through this field."""
 
     def to_dict(self) -> dict[str, Any]:
         """Wire form. Absent optional fields are omitted, not emitted as ``null``."""
@@ -214,17 +238,37 @@ _ALTER_COLUMN_TYPE_DETAIL: Final = (
 )
 
 
-def tier_for_add_column(*, nullable: bool, has_default: bool) -> RiskTier:
+# A narrowing loses data with no down path; a lateral move reinterprets every
+# stored value, which is the same loss wearing a different hat. A widening is
+# safe for the data but still pays for the rewrite when there is one.
+_TIER_BY_DIRECTION: Final[dict[TypeChange, RiskTier]] = {
+    TypeChange.NARROWING: RiskTier.IRREVERSIBLE,
+    TypeChange.LATERAL: RiskTier.IRREVERSIBLE,
+    TypeChange.WIDENING: RiskTier.REVERSIBLE,
+    TypeChange.IDENTICAL: RiskTier.REVERSIBLE,
+}
+
+
+def tier_for_add_column(
+    *, nullable: bool, has_default: bool, server_version: int | None = None
+) -> RiskTier:
     """`ADD COLUMN`: additive when nullable, otherwise a lock risk.
 
-    ``NOT NULL DEFAULT`` rewrites the table on PostgreSQL below 11 and takes an
-    ACCESS EXCLUSIVE lock on every version; ``NOT NULL`` without a default aborts
-    outright on a non-empty table. Neither destroys data, and preflight has no
-    connection with which to check the server version, so both take the more
-    severe of the two readings available to it.
+    ``NOT NULL DEFAULT`` rewrites the table on PostgreSQL below 11; ``NOT NULL``
+    without a default aborts outright on a non-empty table. Neither destroys
+    data.
+
+    With no ``server_version`` — the filesystem-only default — both NOT NULL
+    forms take the more severe of the two readings available. When a database has
+    said it is PostgreSQL 11 or newer, the ``DEFAULT`` form is a catalog write
+    (#199) and drops to additive; the no-default form is a hard failure rather
+    than a lock risk on every version, so it does not move.
     """
-    del has_default  # both NOT NULL forms are lock-risky; named for the call sites
-    return RiskTier.ADDITIVE if nullable else RiskTier.LOCK_RISKY
+    if nullable:
+        return RiskTier.ADDITIVE
+    if has_default and server_version is not None and server_version >= FAST_DEFAULT_SINCE:
+        return RiskTier.ADDITIVE
+    return RiskTier.LOCK_RISKY
 
 
 def tier_for_create_index(*, concurrently: bool) -> RiskTier:
@@ -249,6 +293,13 @@ class _Context:
     migration: str | None = None
     source: str | None = None
     default_schema: str = _DEFAULT_SCHEMA
+    facts: SchemaFacts | None = None
+    """What a live database told us, when one was reachable (#199). Absent on the
+    filesystem-only path, where every refinement falls back to its static answer."""
+
+    @property
+    def server_version(self) -> int | None:
+        return self.facts.server_version if self.facts else None
 
     def entry(
         self,
@@ -257,14 +308,21 @@ class _Context:
         *,
         detail: str | None = None,
         tier: RiskTier | None = None,
+        **lock_attrs: bool,
     ) -> ChangeEntry:
-        """Build an entry, defaulting the tier from :data:`_TIER_BY_KIND`."""
+        """Build an entry, defaulting the tier from :data:`_TIER_BY_KIND`.
+
+        ``lock_attrs`` are the statement attributes the lock table needs for the
+        kinds whose cost is not decided by the kind alone (``concurrently``,
+        ``not_valid``, ``has_default``).
+        """
         return ChangeEntry(
             kind=kind,
             object=obj or self.source or "unknown",
             migration=self.migration,
             tier=tier if tier is not None else _TIER_BY_KIND.get(kind),
             detail=detail,
+            lock=profile_for_kind(kind, server_version=self.server_version, **lock_attrs),
         )
 
     def unclassified(self, kind: str, obj: str | None, detail: str) -> ChangeEntry:
@@ -275,6 +333,58 @@ class _Context:
             migration=self.migration,
             tier=None,
             detail=detail,
+            lock=profile_for_kind(kind, server_version=self.server_version),
+        )
+
+    def alter_column_type(
+        self, target: str | None, column: str | None, new_type: str | None
+    ) -> ChangeEntry:
+        """`ALTER COLUMN … TYPE`, tiered only when the *current* type is known.
+
+        SQL states the target and never the source, so the direction is knowable
+        only from a live database (or a differ). Without it the entry stays
+        tier-less, exactly as it was before #199 — an honest absence rather than a
+        confident guess in either direction.
+        """
+        old_type = self.facts.column_type(target) if self.facts else None
+        direction = compare_types(old_type, new_type)
+        rewrites = changes_rewrite_table(old_type, new_type) if old_type else None
+        lock = profile_for_kind(
+            "alter_column_type", rewrites=rewrites, server_version=self.server_version
+        )
+        label = f"ALTER COLUMN {_ident(column)} TYPE"
+
+        if direction in (TypeChange.UNKNOWN, TypeChange.IDENTICAL) and old_type is None:
+            return ChangeEntry(
+                kind="alter_column_type",
+                object=target or self.source or "unknown",
+                migration=self.migration,
+                tier=None,
+                detail=f"{label} — {_ALTER_COLUMN_TYPE_DETAIL}",
+                lock=lock,
+            )
+        if direction is TypeChange.UNKNOWN:
+            return ChangeEntry(
+                kind="alter_column_type",
+                object=target or self.source or "unknown",
+                migration=self.migration,
+                tier=None,
+                detail=f"{label} {old_type} → {new_type} — confiture does not model one of "
+                "these types, so the direction is unknown",
+                lock=lock,
+            )
+        rewrite_note = "rewrites the table" if lock.rewrites_table else "no rewrite"
+        tier = _TIER_BY_DIRECTION[direction]
+        if tier is RiskTier.REVERSIBLE and lock.rewrites_table:
+            # Safe for the data, but an ACCESS EXCLUSIVE heap rewrite all the same.
+            tier = RiskTier.LOCK_RISKY
+        return ChangeEntry(
+            kind="alter_column_type",
+            object=target or self.source or "unknown",
+            migration=self.migration,
+            tier=tier,
+            detail=f"{label} {old_type} → {new_type} — {direction.value}, {rewrite_note}",
+            lock=lock,
         )
 
     def qualified(self, schema: str | None, name: str | None, child: str | None = None) -> str:
@@ -359,6 +469,7 @@ def build_change_set(
     *,
     versions: list[str] | None = None,
     default_schema: str = _DEFAULT_SCHEMA,
+    facts: SchemaFacts | None = None,
 ) -> ChangeSet:
     """Classify every change in ``migrations_dir``.
 
@@ -384,6 +495,7 @@ def build_change_set(
                 migration=version,
                 source=up_file.name,
                 default_schema=default_schema,
+                facts=facts,
             )
         )
 
@@ -413,6 +525,7 @@ def classify_statements(
     migration: str | None = None,
     source: str | None = None,
     default_schema: str = _DEFAULT_SCHEMA,
+    facts: SchemaFacts | None = None,
 ) -> list[ChangeEntry]:
     """Classify every statement in ``sql``.
 
@@ -421,7 +534,7 @@ def classify_statements(
     rather than an empty list, so a broken migration denies instead of reading as
     "nothing changes".
     """
-    ctx = _Context(migration=migration, source=source, default_schema=default_schema)
+    ctx = _Context(migration=migration, source=source, default_schema=default_schema, facts=facts)
     if _use_ast():
         try:
             return _ast_entries(sql, ctx)
@@ -579,7 +692,11 @@ def _rel(relation: object) -> tuple[str | None, str | None]:
 def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
     # `core/replica/classifier.py` owns the column-attribute helpers; reusing
     # them keeps the two surfaces agreeing on what "nullable" means.
-    from confiture.core.replica.classifier import _column_has_default, _column_is_not_null
+    from confiture.core.replica.classifier import (
+        _column_has_default,
+        _column_is_not_null,
+        _type_name,
+    )
 
     schema, table = _rel(getattr(node, "relation", None))
     target = ctx.qualified(schema, table)
@@ -597,8 +714,14 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
                 ctx.entry(
                     "add_column",
                     ctx.qualified(schema, table, column),
-                    tier=tier_for_add_column(nullable=nullable, has_default=has_default),
+                    tier=tier_for_add_column(
+                        nullable=nullable,
+                        has_default=has_default,
+                        server_version=ctx.server_version,
+                    ),
                     detail=_add_column_detail(column, nullable=nullable, has_default=has_default),
+                    has_default=has_default,
+                    nullable=nullable,
                 )
             )
         elif subtype == _AT_DROP_COLUMN:
@@ -611,10 +734,10 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
             )
         elif subtype == _AT_ALTER_COLUMN_TYPE:
             entries.append(
-                ctx.unclassified(
-                    "alter_column_type",
+                ctx.alter_column_type(
                     ctx.qualified(schema, table, name),
-                    f"ALTER COLUMN {_ident(name)} TYPE — {_ALTER_COLUMN_TYPE_DETAIL}",
+                    name,
+                    canonical_type(_type_name(getattr(cmd.def_, "typeName", None))),
                 )
             )
         elif subtype == _AT_ADD_CONSTRAINT:
@@ -627,6 +750,7 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
                     ctx.qualified(schema, table, conname),
                     tier=tier_for_add_constraint(not_valid=not_valid),
                     detail="ADD CONSTRAINT" + (" NOT VALID" if not_valid else ""),
+                    not_valid=not_valid,
                 )
             )
         elif subtype == _AT_DROP_CONSTRAINT:
@@ -718,6 +842,7 @@ def _ast_index(node: object, ctx: _Context) -> list[ChangeEntry]:
             ctx.qualified(schema, table, idxname),
             tier=tier_for_create_index(concurrently=concurrently),
             detail="CREATE INDEX" + (" CONCURRENTLY" if concurrently else " — blocks writes"),
+            concurrently=concurrently,
         )
     ]
 
@@ -1112,6 +1237,7 @@ def _regex_one(statement: str, ctx: _Context) -> list[ChangeEntry]:
                 ctx.dotted(index.group("table"), index.group("idx")),
                 tier=tier_for_create_index(concurrently=concurrently),
                 detail="CREATE INDEX" + (" CONCURRENTLY" if concurrently else " — blocks writes"),
+                concurrently=concurrently,
             )
         ]
 
@@ -1211,6 +1337,7 @@ def _regex_alter_table(match: re.Match[str], ctx: _Context) -> list[ChangeEntry]
                 ctx.dotted(table, add_constraint.group("name")),
                 tier=tier_for_add_constraint(not_valid=not_valid),
                 detail="ADD CONSTRAINT" + (" NOT VALID" if not_valid else ""),
+                not_valid=not_valid,
             )
         ]
 
@@ -1247,8 +1374,12 @@ def _regex_add_column(match: re.Match[str], table: str, ctx: _Context) -> Change
     return ctx.entry(
         "add_column",
         ctx.dotted(table, column),
-        tier=tier_for_add_column(nullable=nullable, has_default=has_default),
+        tier=tier_for_add_column(
+            nullable=nullable, has_default=has_default, server_version=ctx.server_version
+        ),
         detail=_add_column_detail(column, nullable=nullable, has_default=has_default),
+        has_default=has_default,
+        nullable=nullable,
     )
 
 
@@ -1257,11 +1388,10 @@ def _regex_alter_column(match: re.Match[str], table: str, ctx: _Context) -> Chan
     action = match.group("action").strip().lower()
     target = ctx.dotted(table, column)
     if re.match(r"^(?:set\s+data\s+)?type\b", action):
-        return ctx.unclassified(
-            "alter_column_type",
-            target,
-            f"ALTER COLUMN {_ident(column)} TYPE — {_ALTER_COLUMN_TYPE_DETAIL}",
+        raw_type = re.sub(
+            r"^(?:set\s+data\s+)?type\s+", "", match.group("action").strip(), flags=re.IGNORECASE
         )
+        return ctx.alter_column_type(target, column, canonical_type(_first_type_token(raw_type)))
     if action.startswith("set default"):
         return ctx.entry(
             "set_column_default", target, detail=f"ALTER COLUMN {_ident(column)} SET DEFAULT"
@@ -1281,6 +1411,15 @@ def _regex_alter_column(match: re.Match[str], table: str, ctx: _Context) -> Chan
             "drop_not_null", target, detail=f"ALTER COLUMN {_ident(column)} DROP NOT NULL"
         )
     return None
+
+
+def _first_type_token(raw: str) -> str | None:
+    """The type at the head of an `ALTER COLUMN … TYPE <type> [USING …]` tail."""
+    text = re.split(r"\b(?:USING|COLLATE|NOT|NULL|DEFAULT)\b", raw, flags=re.IGNORECASE)[0]
+    match = re.match(r"\s*([A-Za-z_][\w ]*?)\s*(\(\s*\d+\s*(?:,\s*\d+\s*)?\))?\s*$", text)
+    if not match:
+        return text.strip() or None
+    return f"{match.group(1).strip()}{match.group(2) or ''}"
 
 
 def _regex_drop(match: re.Match[str], ctx: _Context) -> list[ChangeEntry]:
@@ -1324,64 +1463,5 @@ def _split_object_list(raw: str) -> list[str]:
 
 
 def _split_statements(sql: str) -> list[str]:
-    """Split on top-level ``;``, respecting dollar-quoted bodies, literals and comments.
-
-    The naive ``sql.split(";")`` the replica classifier uses is fine for the
-    single-statement DDL its matrix covers, but it shreds a ``CREATE FUNCTION``
-    body — which this module has to classify as one statement.
-    """
-    statements: list[str] = []
-    buf: list[str] = []
-    index = 0
-    length = len(sql)
-    tag: str | None = None
-
-    while index < length:
-        char = sql[index]
-        if tag is not None:
-            if sql.startswith(tag, index):
-                buf.append(tag)
-                index += len(tag)
-                tag = None
-            else:
-                buf.append(char)
-                index += 1
-            continue
-        if char == "$":
-            opener = _DOLLAR_TAG.match(sql, index)
-            if opener:
-                tag = opener.group(0)
-                buf.append(tag)
-                index += len(tag)
-                continue
-        if char == "'":
-            end = index + 1
-            while end < length:
-                if sql[end] == "'":
-                    if end + 1 < length and sql[end + 1] == "'":
-                        end += 2
-                        continue
-                    end += 1
-                    break
-                end += 1
-            buf.append(sql[index:end])
-            index = end
-            continue
-        if sql.startswith("--", index):
-            newline = sql.find("\n", index)
-            index = length if newline == -1 else newline
-            continue
-        if sql.startswith("/*", index):
-            close = sql.find("*/", index)
-            index = length if close == -1 else close + 2
-            continue
-        if char == ";":
-            statements.append("".join(buf))
-            buf = []
-            index += 1
-            continue
-        buf.append(char)
-        index += 1
-
-    statements.append("".join(buf))
-    return [stripped for stripped in (s.strip() for s in statements) if stripped]
+    """Top-level split, shared with ``core/replica/classifier.py``."""
+    return split_statements(sql)

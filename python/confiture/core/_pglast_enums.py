@@ -71,6 +71,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_POLICY",
         "OBJECT_EXTENSION",
         "OBJECT_DOMAIN",
+        "OBJECT_RULE",
     ),
 }
 
