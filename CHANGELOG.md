@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-08-06
+
+`migrate preflight` stops certifying migrations it never actually read, and
+starts saying what a change costs in locks and whether it rewrites the table
+(#206, #199).
+
+### Fixed
+
+- ⚠️ **`window_safe` returned `true` for `DROP TABLE`** (#206). The replica
+  classifier mapped four AST node types and returned *nothing* for anything
+  else; the regex backend mirrored it. Because `window_safe` is computed from
+  the *presence* of `PFLIGHT_REPLICA_*` findings, "nothing classified" and
+  "nothing unsafe" were indistinguishable, so `DROP TABLE`, `TRUNCATE`,
+  `DROP VIEW`, `REVOKE`, `SET NOT NULL`, `RENAME TO` and every other statement
+  outside the matrix certified as window-safe.
+
+  An unrecognised statement now falls back to `Other`, which routes to
+  `PFLIGHT_REPLICA_UNCLASSIFIED` — a warning, so opacity denies without
+  hard-blocking — and the matrix was widened in lockstep with the verdict table
+  so the fix does not trade a false-safe for a wave of false-unsafes.
+
+  > **This is a behaviour change to a pinned cross-repo field.** Migrations that
+  > previously reported `window_safe: true` will start reporting `false` if they
+  > contain any of the statement classes above. They were never window-safe. See
+  > the advisory in
+  > [`docs/reference/fraisier-adapter-contract.md`](docs/reference/fraisier-adapter-contract.md);
+  > the `window_safe` capability floor moves to 0.44.0.
+
+  Unlike the pglast-8 defect of the same shape (#192, fixed in 0.39.0), this one
+  was **not conditional** — every release from 0.23.0 to 0.43.0 was affected, on
+  both parser backends.
+
+- The replica classifier's statement splitter was a bare `split(";")` that
+  shredded dollar-quoted function bodies. Harmless while fragments were dropped;
+  once they became `Other` it would have raised a spurious finding per fragment.
+  Both statement walkers now share the dollar-quote-aware splitter in
+  `core/sql_statements.py`.
+
+- `ALTER TYPE … ADD VALUE` is documented as becoming transaction-block-safe in
+  PostgreSQL **12**, not 16.
+
+### Added
+
+- **Seven `PFLIGHT_REPLICA_*` codes** for the newly-classified statements:
+  `DROP_TABLE`, `DROP_OBJECT`, `TRUNCATE`, `REVOKE`, `SET_NOT_NULL`,
+  `RENAME_OBJECT`, `REPLACE_OBJECT`. Additions only — the namespace policy
+  (#154) allows them, and a consumer gating on the prefix needs no change.
+
+- **Lock and rewrite modelling** (#199), `core/lock_profile.py`: each change
+  carries its lock level, whether it rewrites the heap, what it blocks, and a
+  coarse duration class (`metadata` / `seconds` / `minutes+`) — never a
+  predicted number. `migrate preflight`'s text render calls out how many changes
+  rewrite the table and annotates each risky change with its cost.
+
+  The two version-dependent rows are explicit: `ADD COLUMN … DEFAULT` stopped
+  rewriting in PG 11, and PG 12 can prove `SET NOT NULL` from a valid `CHECK`
+  instead of scanning. An unknown server version takes the older reading.
+
+- **Narrowing-vs-widening analysis** (#199), `core/type_lattice.py`: integer and
+  float widths, `varchar`/`char` lengths with `text` at the top, `numeric(p,s)`
+  precision *and* scale, and the temporal ladder. `timestamp` ↔ `timestamptz` is
+  lateral, not a width move. Semantic direction and heap rewrite are answered
+  separately because they disagree — `varchar(50)` → `text` is widening *and*
+  rewrite-free.
+
+- **DB-refined preflight** (#199), `core/schema_facts.py`: `migrate preflight
+  --against` now reads the target's current column types and server version
+  before replaying. That supplies the one fact `ALTER TABLE … ALTER COLUMN …
+  TYPE` never states — the *source* type — so a type change finally gets a tier:
+  narrowing and lateral are `irreversible`, widening is `lock_risky` when it
+  rewrites and `reversible` when it does not. `ADD COLUMN … NOT NULL DEFAULT`
+  drops to `additive` on a known PostgreSQL 11+.
+
+  Strictly additive: collection never raises, and without a reachable target
+  every answer is byte-identical to the filesystem-only path.
+
+### Unchanged
+
+- The `change_set` **wire shape** is untouched. The lock profile is deliberately
+  *not* a new key: the entry shape is the ratified fraisier-core#44 pact, pinned
+  byte-for-byte by golden fixtures in both repositories, and adding a field there
+  is a co-ordinated change with a `contract_version` decision. The lock facts
+  reach an operator through `detail` (free-form by specification) and a library
+  caller through `ChangeEntry.lock`.
+- `contract_version` stays at `1`.
+
 ## [0.43.0] - 2026-08-06
 
 `migrate preflight` now says **what kind of risk** each pending change carries,

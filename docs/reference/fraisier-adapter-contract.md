@@ -27,8 +27,14 @@ a capability the installed binary cannot fulfil turns every deploy into a denial
 
 | Capability | From | Field | Absent means |
 |------------|------|-------|--------------|
-| `window_safe` | 0.23.0 (#154) | top-level `window_safe` on `preflight` | cannot certify → blocked |
-| `risk_tier` | **0.43.0** (#197) | `change_set` on `preflight` | did not classify → denied |
+| `window_safe` | **0.44.0** (#206) | top-level `window_safe` on `preflight` | cannot certify → blocked |
+| `risk_tier` | 0.43.0 (#197) | `change_set` on `preflight` | did not classify → denied |
+
+> The `window_safe` **field** has existed since 0.23.0 (#154) and its shape has
+> not moved. The floor is 0.44.0 because before that release the verdict could be
+> `true` for a migration that is not window-safe — see the advisory under
+> [Typed verdict](#typed-verdict-top-level-window_safe). An older confiture is not
+> *less capable* here, it is *misread*, which is the case a floor exists for.
 
 ## Invocation shape
 
@@ -126,7 +132,18 @@ The complete namespace the lint can emit:
 | `PFLIGHT_REPLICA_CHANGE_TYPE` | `ALTER COLUMN ... TYPE` |
 | `PFLIGHT_REPLICA_ADD_CONSTRAINT` | immediate `ADD CONSTRAINT` |
 | `PFLIGHT_REPLICA_CREATE_INDEX` | non-concurrent `CREATE INDEX` |
+| `PFLIGHT_REPLICA_DROP_TABLE` | `DROP TABLE` (0.44.0) |
+| `PFLIGHT_REPLICA_DROP_OBJECT` | `DROP` of a view, sequence, function, type, schema, extension (0.44.0) |
+| `PFLIGHT_REPLICA_TRUNCATE` | `TRUNCATE` (0.44.0) |
+| `PFLIGHT_REPLICA_REVOKE` | `REVOKE` (0.44.0) |
+| `PFLIGHT_REPLICA_SET_NOT_NULL` | `ALTER COLUMN … SET NOT NULL` (0.44.0) |
+| `PFLIGHT_REPLICA_RENAME_OBJECT` | `RENAME TO` / `ALTER TYPE … RENAME VALUE` (0.44.0) |
+| `PFLIGHT_REPLICA_REPLACE_OBJECT` | `CREATE OR REPLACE` view/function/procedure — always a warning (0.44.0) |
 | `PFLIGHT_REPLICA_UNCLASSIFIED` | dynamic / unparseable DDL (always a warning) |
+
+The seven codes marked 0.44.0 were **added**, which the namespace policy allows;
+nothing was renamed or removed. A consumer gating on the `PFLIGHT_REPLICA_`
+prefix — as fraisier does — needs no change to consume them.
 
 This set is a **stability commitment**: existing codes are **never renamed or
 removed** (that is a breaking change requiring a major version bump and a
@@ -187,8 +204,30 @@ migrate step, before any traffic moves.
 > Fixed in **0.39.0** (#192): the members are resolved by name, a required CI
 > leg runs the classifier suites on both ends of the supported pglast range, and
 > a partially-resolvable enum surface now degrades to the regex backend instead
-> of under-reporting. Consumers relying on `window_safe` as an authoritative
-> allow should be on **≥ 0.39.0**.
+> of under-reporting.
+
+> ⚠️ **Correctness advisory — false `window_safe: true` for whole statement
+> classes before 0.44.0.** The replica classifier mapped four AST node types and
+> returned *nothing* for anything else; the regex backend mirrored it. So
+> `DROP TABLE`, `TRUNCATE`, `DROP VIEW`, `REVOKE`, `SET NOT NULL`, `RENAME TO`
+> and every other statement outside a seven-operation matrix classified to `[]` —
+> **no `PFLIGHT_REPLICA_*` finding was emitted, and `window_safe` came back
+> `true`.**
+>
+> This is the same failure shape as the advisory above, reached a different way,
+> and unlike that one it is **not conditional**: every release from 0.23.0 to
+> 0.43.0 is affected, on both parser backends, on every PostgreSQL version.
+>
+> Fixed in **0.44.0** (#206): an unrecognised statement now falls back to
+> `Other`, which routes to `PFLIGHT_REPLICA_UNCLASSIFIED` and denies. The matrix
+> was widened at the same time so the fix does not trade a false-safe for a wave
+> of false-unsafes — additive statements (`CREATE …`, `GRANT`, `COMMENT`,
+> `ALTER TYPE … ADD VALUE`, DML, `DROP INDEX`) classify as safe and emit nothing.
+>
+> **Expect previously-green migrations to start reporting `window_safe: false`.**
+> That is the correction, not a regression: those migrations were never
+> window-safe. Consumers relying on `window_safe` as an authoritative allow must
+> be on **≥ 0.44.0**.
 
 So `true` means "every pending op is forward-compatible"; `false` means "unsafe
 or uninspectable". The fraisier gate consumes it as
