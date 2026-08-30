@@ -187,6 +187,22 @@ codes in `migrate preflight`'s `issues[]`, so the set is pinned by the
 [fraisier-adapter contract](fraisier-adapter-contract.md#replica-forward-compatibility-namespace-window-safety-seam)
 (renames are breaking, additions are allowed).
 
+## Library consumers: `str(exc)` carries the `actionable` hint
+
+The envelope's `actionable` field is the exception's `resolution_hint`. Outside
+`--format json` — a pytest fixture, orchestration code, a log line — nothing
+renders it for you, so it is part of `str(exc)`:
+
+```
+<message>
+Hint: <resolution_hint>
+```
+
+`exc.message` is the message alone and `exc.resolution_hint` the hint alone; use
+those (not `str(exc)`) if you render the hint yourself or keyword-match the
+message. The envelope's `message` is always hint-free. See
+[the library API notes](../api/migrator.md#error-handling).
+
 ## Stability contract
 
 Symbolic error codes are **public API**:

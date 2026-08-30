@@ -292,6 +292,18 @@ def _managed_kind(comment: str | None) -> str | None:
     return None
 
 
+def _unmanaged_evidence(comment: str | None) -> str:
+    """Describe *why* a database did not look confiture-managed (#211).
+
+    "Not confiture-managed" is a verdict; on its own it cannot separate a
+    genuinely foreign database from confiture's own that lost its marker to an
+    out-of-band recreate. Reporting what was actually on the database does.
+    """
+    if not comment:
+        return "it carries no database COMMENT"
+    return f"its database COMMENT is {comment!r}"
+
+
 def _classify_template(
     comment: str | None, current_hash: str | None, exists: bool
 ) -> TemplateStatus:
@@ -491,7 +503,9 @@ class TestDbProvisioner:
             if unmanaged and not force:
                 raise ConfigurationError(
                     f"Tablespace {name!r} holds non-confiture-managed database(s): "
-                    f"{', '.join(unmanaged)}. Refusing to drop them.",
+                    f"{', '.join(unmanaged)}. Refusing to drop them — none carries a "
+                    f"database COMMENT starting with {_MANAGED_PREFIX!r}, so confiture "
+                    "cannot tell them apart from databases it does not own.",
                     error_code="CONFIG_010",
                     resolution_hint="Move or drop them yourself, or pass --force to "
                     "drop everything living in the tablespace.",
@@ -578,9 +592,16 @@ class TestDbProvisioner:
             if exists and not force and _managed_kind(comment) is None:
                 raise ConfigurationError(
                     f"Refusing to replace database {template!r}: it exists and is not "
-                    "confiture-managed.",
+                    f"confiture-managed — {_unmanaged_evidence(comment)}, and a template "
+                    f"is recognised only by a COMMENT starting with {_TEMPLATE_PREFIX!r}.",
                     error_code="CONFIG_010",
-                    resolution_hint="Choose a different --template name, or pass --force.",
+                    resolution_hint=(
+                        "If it is a foreign database, choose a different --template name. "
+                        "If it is confiture's own template that lost its comment to an "
+                        "out-of-band recreate, let confiture rebuild it: "
+                        f'DROP DATABASE "{template}" (or pass --force, which drops and '
+                        "re-provisions it for you)."
+                    ),
                 )
             force_drop_database(conn, template)
             conn.execute(_create_db_sql(template))
@@ -883,9 +904,15 @@ class TestDbProvisioner:
                 return False
             if not force and _managed_kind(comment) is None:
                 raise ConfigurationError(
-                    f"Refusing to drop {target!r}: not a confiture-managed template/clone.",
+                    f"Refusing to drop {target!r}: not a confiture-managed template/clone — "
+                    f"{_unmanaged_evidence(comment)}, and confiture recognises one only by a "
+                    f"COMMENT starting with {_TEMPLATE_PREFIX!r} or {_CLONE_PREFIX!r}.",
                     error_code="CONFIG_010",
-                    resolution_hint="Pass --force to override (use with care).",
+                    resolution_hint=(
+                        "If confiture created it and the comment was lost out-of-band, "
+                        "--force is safe. Otherwise this is someone else's database: drop "
+                        "it yourself if you really mean to."
+                    ),
                 )
             force_drop_database(conn, target)
         return True
