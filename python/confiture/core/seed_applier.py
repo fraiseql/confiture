@@ -16,7 +16,7 @@ from rich.console import Console
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed_executor import SeedExecutor
-from confiture.exceptions import SchemaError
+from confiture.exceptions import SchemaError, base_message
 
 if TYPE_CHECKING:
     from confiture.config.environment import SeedProfile
@@ -74,8 +74,10 @@ def apply_seed_files(connection_url: str, seed_files: list[Path]) -> int:
         try:
             apply_sql_via_psql(connection_url, sql_file=seed_file)
         except SchemaError as exc:
+            # base_message: the inner hint is carried forward on its own
+            # field below, so quoting str(exc) would render it twice (#211).
             raise SchemaError(
-                f"Failed to apply seed file {seed_file.name}: {exc}",
+                f"Failed to apply seed file {seed_file.name}: {base_message(exc)}",
                 resolution_hint=exc.resolution_hint,
             ) from exc
     return len(seed_files)

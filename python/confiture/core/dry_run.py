@@ -9,7 +9,7 @@ from typing import Any
 
 import psycopg
 
-from confiture.exceptions import ConfiturError
+from confiture.exceptions import ConfiturError, base_message
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,12 @@ class DryRunError(ConfiturError):
         """
         self.migration_name = migration_name
         self.original_error = error
-        super().__init__(f"Dry-run failed for migration {migration_name}: {str(error)}")
+        # base_message keeps the wrapped error's hint out of the middle of this
+        # message; it is lifted onto our own resolution_hint instead (#211).
+        super().__init__(
+            f"Dry-run failed for migration {migration_name}: {base_message(error)}",
+            resolution_hint=getattr(error, "resolution_hint", None),
+        )
 
 
 @dataclass(frozen=True)

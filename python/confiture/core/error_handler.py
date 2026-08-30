@@ -9,7 +9,7 @@ from typing import Any
 from rich.console import Console
 
 from confiture.core.error_context import format_error_with_context
-from confiture.exceptions import ConfiturError
+from confiture.exceptions import ConfiturError, base_message
 
 console = Console()
 
@@ -49,7 +49,10 @@ def _detect_error_context(error: Exception) -> str | None:
         SeedError,
     )
 
-    error_msg = str(error).lower()
+    # #211: match on the base message. ``str(error)`` now carries the
+    # resolution_hint, and hint text is written to guide, not to classify — a
+    # hint mentioning "database" or "permission" must not re-route the template.
+    error_msg = base_message(error).lower()
 
     # #152: DSN-precedence routing errors are NOT connectivity problems — their
     # own resolution_hint is the right guidance ("drop one source" / "set a
@@ -158,8 +161,9 @@ def format_error_for_cli(error: ConfiturError) -> str:
     else:
         lines.append("[red]❌ Error[/red]")
 
-    # Add message
-    lines.append(str(error))
+    # Add message. The hint has its own 💡 line below, so take the base
+    # message rather than str(error), which appends it too (#211).
+    lines.append(error.message)
 
     # Add context if present
     if error.context:
@@ -235,7 +239,7 @@ def print_error_to_console(error: Exception, error_console: Console | None = Non
     # Try to detect and use enhanced error context
     error_context = _detect_error_context(error)
     if error_context:
-        formatted = format_error_with_context(error_context, str(error))
+        formatted = format_error_with_context(error_context, base_message(error))
         out_console.print(formatted)
         return
 

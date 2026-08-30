@@ -46,7 +46,18 @@ class ConfiturError(Exception):
 
         resolution_hint: Human-readable suggestion for resolving the error.
                         Example: "Check database permissions for schema 'public'"
+                        Rendered by ``__str__`` so it survives every consumer,
+                        including library callers that only ever see the string
+                        form of the exception (issue #211).
+
+        message: The base message, without the resolution hint. Renderers and
+                 keyword classifiers read this; ``str(self)`` is for humans.
     """
+
+    #: Separator introducing the hint in ``__str__``. Deliberately plain ASCII —
+    #: exception strings land in log files and tracebacks whose encoding we do
+    #: not control. The CLI renders its own ``💡`` from ``resolution_hint``.
+    _HINT_PREFIX = "Hint: "
 
     def __init__(
         self,
@@ -72,6 +83,42 @@ class ConfiturError(Exception):
         self.context = context or {}
         self.resolution_hint = resolution_hint
 
+    @property
+    def message(self) -> str:
+        """The base message, without the ``resolution_hint`` suffix.
+
+        ``str(self)`` appends the hint (#211), which is right for a human
+        reading a traceback and wrong for anything that re-renders the hint
+        separately or keyword-matches the message. Those read this instead.
+        """
+        return str(self.args[0]) if self.args else ""
+
+    def _render_message(self) -> str:
+        """The human-readable body, before the hint.
+
+        Subclasses that enrich the rendered text (rather than the stored
+        message) override this instead of ``__str__``, so the hint stays last.
+        """
+        return super().__str__()
+
+    def __str__(self) -> str:
+        """Render message + resolution hint.
+
+        The hint is the whole point of computing it: without this, it reaches a
+        human only through the CLI's Rich renderer or the JSON envelope, and
+        every library consumer — pytest fixtures, orchestration code, plain
+        logging — drops it (#211).
+
+        Example:
+            >>> print(ConfiturError("Boom.", resolution_hint="Try --force."))
+            Boom.
+            Hint: Try --force.
+        """
+        base = self._render_message()
+        if self.resolution_hint:
+            return f"{base}\n{self._HINT_PREFIX}{self.resolution_hint}"
+        return base
+
     def to_dict(self) -> dict[str, Any]:
         """Get machine-readable representation of the error.
 
@@ -86,7 +133,7 @@ class ConfiturError(Exception):
         return {
             "error_code": self.error_code,
             "severity": self.severity.value,
-            "message": str(self),
+            "message": self.message,
             "context": self.context,
             "resolution_hint": self.resolution_hint,
         }
@@ -107,6 +154,19 @@ class ConfiturError(Exception):
             definition = ERROR_CODE_REGISTRY.get(self.error_code)
             return definition.exit_code
         return 1
+
+
+def base_message(error: BaseException) -> str:
+    """The hint-free message of *error*.
+
+    ``str()`` on a :class:`ConfiturError` appends its ``resolution_hint`` (#211).
+    Renderers that already print the hint on their own line, and classifiers that
+    keyword-match the message, want the body alone. Anything else is returned by
+    ``str()`` unchanged.
+    """
+    if isinstance(error, ConfiturError):
+        return error.message
+    return str(error)
 
 
 class ConfigurationError(ConfiturError):

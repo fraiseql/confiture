@@ -234,7 +234,9 @@ class ConfigValidator:
                 ConfigIssue(
                     severity="error",
                     code=e.error_code or "CONFIG_001",
-                    message=str(e),
+                    # base message: the hint has its own `actionable` field,
+                    # and str(e) appends it too (#211).
+                    message=e.message,
                     file=str(self._config_path) if self._config_path else None,
                     actionable=e.resolution_hint,
                 )
