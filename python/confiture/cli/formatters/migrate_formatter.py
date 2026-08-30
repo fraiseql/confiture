@@ -342,14 +342,15 @@ def show_migration_error_details(
         applied_count: Number of migrations that succeeded before this one
         console: Rich Console to print to
     """
-    from confiture.exceptions import MigrationError
+    from confiture.exceptions import MigrationError, base_message
 
     console.print("\n[red]Failed Migration Details:[/red]")
     console.print(f"  Version: {failed_migration.version}")
     console.print(f"  Name: {failed_migration.name}")
     console.print(f"  File: db/migrations/{failed_migration.version}_{failed_migration.name}.py")
 
-    error_message = str(exception)
+    # #211: classify on the base message — hint text is guidance, not signal.
+    error_message = base_message(exception)
 
     if "SQL execution failed" in error_message:
         console.print("  Error Type: SQL Execution Error")
@@ -405,7 +406,7 @@ def show_migration_error_details(
         console.print("  Error Type: Migration Framework Error")
         console.print(f"  Message: {exception}")
 
-        error_msg = str(exception).lower()
+        error_msg = base_message(exception).lower()
         if "already been applied" in error_msg:
             console.print("\n[yellow]🔍 Migration Already Applied:[/yellow]")
             console.print("  • Check migration status: confiture migrate status")

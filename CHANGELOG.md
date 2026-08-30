@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-08-30
+
+The `resolution_hint` computed at 232 raise sites now reaches every consumer,
+not just the CLI's own two renderers (#211).
+
+### Changed
+
+- ⚠️ **`str(exc)` on a `ConfiturError` now appends the resolution hint** (#211):
+
+  ```
+  <message>
+  Hint: <resolution_hint>
+  ```
+
+  Confiture raise sites take the trouble to compute actionable guidance, and
+  then only the CLI's Rich renderer and the `--format json` envelope ever read
+  it. Everything that renders the exception by its string form — a pytest
+  fixture, orchestration code, `logging.error("%s", exc)`, an uncaught
+  traceback — dropped it. The reporter hit this through a refused test-template
+  provision: under `xdist` the same setup error repeated once per collected
+  test, a wall of identical verdicts with the remediation nowhere in the run.
+
+  The separator is plain ASCII, not the CLI's `💡` — exception strings land in
+  log files whose encoding confiture does not control.
+
+  **CLI text and the JSON envelope are unchanged.** The envelope's `message`
+  stays hint-free and the hint stays in `actionable`; the CLI still prints one
+  `💡` line. Every in-tree renderer and keyword classifier was moved onto the
+  new hint-free accessors first, so nothing renders the hint twice and no
+  classifier can be re-routed by hint prose.
+
+  If you assert on an exception's exact string, or feed it to your own matcher,
+  read `exc.message` instead. `pytest.raises(match=...)` is unaffected unless
+  the pattern is `$`-anchored.
+
+- The "not confiture-managed" refusals in `TestDbProvisioner` now name the
+  marker they looked for and report what they found instead (#211). "Not
+  confiture-managed" was a verdict without its evidence, and the two cases a
+  reader has to separate looked identical: a genuinely foreign database, and
+  confiture's own template that lost its `COMMENT` to an out-of-band recreate.
+  `provision_template`'s hint also covers the fix its old wording missed —
+  dropping the stale template and letting confiture re-provision, which is
+  neither renaming nor `--force`.
+
+  The refusals themselves are unchanged: declining to drop a database confiture
+  does not own is the correct behaviour.
+
+### Added
+
+- `ConfiturError.message` — the base message without the hint — and
+  `confiture.exceptions.base_message(exc)`, which returns it for any exception.
+  Use these over `str(exc)` when you render the hint separately or match on
+  message text.
+- `ConfiturError._render_message()`, an override point for subclasses that
+  enrich the rendered body, so an inherited hint still renders last.
+
 ## [0.44.0] - 2026-08-06
 
 `migrate preflight` stops certifying migrations it never actually read, and

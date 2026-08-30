@@ -86,8 +86,10 @@ class PgGitMergeConflictError(PgGitError):
         super().__init__(message)
         self.conflicts = conflicts or []
 
-    def __str__(self) -> str:
-        base = super().__str__()
+    def _render_message(self) -> str:
+        # Overrides the body, not __str__, so an inherited resolution_hint
+        # still renders last (#211).
+        base = super()._render_message()
         if self.conflicts:
             conflict_summary = ", ".join(
                 f"{c.get('object_type', 'UNKNOWN')}:{c.get('object_name', 'unknown')}"

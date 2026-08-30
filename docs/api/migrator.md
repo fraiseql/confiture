@@ -283,6 +283,38 @@ except MigrationError as exc:
 All confiture exceptions inherit `confiture.exceptions.ConfiturError`, which
 carries an `error_code` and maps to a semantic process exit code at the CLI.
 
+### The resolution hint rides on `str(exc)`
+
+Most raise sites also compute a `resolution_hint` — the actionable half of the
+error. It is part of the string form, so a bare `print(exc)`, an f-string, a
+`logging.error("%s", exc)` or an uncaught traceback all carry it:
+
+```python
+>>> print(exc)
+Refusing to replace database 'proj_test_template': it exists and is not
+confiture-managed — it carries no database COMMENT, and a template is
+recognised only by a COMMENT starting with 'confiture:template:'.
+Hint: If it is a foreign database, choose a different --template name. If it
+is confiture's own template that lost its comment to an out-of-band recreate,
+let confiture rebuild it: DROP DATABASE "proj_test_template" (or pass --force,
+which drops and re-provisions it for you).
+```
+
+That matters most where confiture is embedded and nothing renders the error but
+Python itself — a pytest fixture, orchestration code, a log line (#211).
+
+Three attributes give you the pieces separately when you render your own:
+
+| Attribute | Contents |
+|-----------|----------|
+| `exc.message` | The message alone, without the hint |
+| `exc.resolution_hint` | The hint alone (`None` if the site set none) |
+| `exc.error_code` | The symbolic code, e.g. `CONFIG_010` |
+
+Use `exc.message`, not `str(exc)`, when you print the hint yourself or match on
+the message text — `str(exc)` would render the hint a second time, or feed hint
+prose to your matcher. `exc.to_dict()` already splits them.
+
 ---
 
 ## Migration Tracking

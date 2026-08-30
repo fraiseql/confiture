@@ -16,7 +16,7 @@ import psycopg.sql
 
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.url_redaction import libpq_env, split_password
-from confiture.exceptions import SchemaError
+from confiture.exceptions import SchemaError, base_message
 
 
 def _rebuild_with_path(server_url: str, path: str) -> str:
@@ -193,10 +193,13 @@ class TempDatabase:
         try:
             apply_sql_via_psql(temp_db_url, schema_sql)
         except SchemaError as exc:
-            err_str = str(exc).lower()
+            # Base message: this branch replaces the inner hint with a more
+            # specific one, so neither classify on nor quote it (#211).
+            inner = base_message(exc)
+            err_str = inner.lower()
             if "extension" in err_str and "does not exist" in err_str:
                 raise SchemaError(
-                    f"Schema application failed in temporary database: {exc}",
+                    f"Schema application failed in temporary database: {inner}",
                     resolution_hint=(
                         "A CREATE EXTENSION statement failed. Ensure the required "
                         "extension is installed on the PostgreSQL server "
