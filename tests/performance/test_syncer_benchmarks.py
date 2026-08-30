@@ -352,47 +352,86 @@ def test_memory_usage_estimate(benchmark_databases):
             assert rows_synced == 10000
 
 
+#: A checkpoint is one ``json.dump`` of a small dict. However slow the disk,
+#: it does not cost a quarter of a second — that would mean a per-row or
+#: per-batch flush, which is the regression this test exists to catch.
+_MAX_CHECKPOINT_OVERHEAD_S = 0.25
+
+#: Below this, a *ratio* of two sync durations measures scheduler jitter, not
+#: checkpoint I/O: the whole sync is faster than the noise floor of the host.
+_RATIO_NOISE_FLOOR_S = 0.025
+
+
 @pytest.mark.benchmark
 def test_checkpoint_overhead(benchmark_databases, tmp_path):
-    """Measure checkpoint save/load overhead.
+    """Measure checkpoint save overhead.
 
     This ensures resume functionality doesn't significantly impact performance.
+
+    Timed like :func:`test_performance_consistency`, and for the same reason.
+    Comparing *one* checkpointed sync against *one* plain sync measures which
+    of the two ran first: the leader pays the cold page cache, uncached plans
+    and whatever WAL the previous test file left postgres flushing. That
+    difference is tens of milliseconds either way on a sync that itself takes
+    tens of milliseconds, so the "overhead" swings from -50% to +150% run to
+    run — it was reported *negative* about as often as positive, which is the
+    tell that it was never measuring checkpoint I/O at all.
+
+    Instead: warm up, then interleave the two configurations within each round
+    so both meet the same host conditions, and compare medians. The assertion
+    is on the absolute cost, because a JSON file write has an absolute budget;
+    the ratio is only checked when the baseline clears the noise floor.
     """
+    import statistics
+
     source_config, target_config = benchmark_databases
     checkpoint_file = tmp_path / "sync_checkpoint.json"
 
+    # resume is False, so each run overwrites the checkpoint rather than
+    # resuming from it — repeated rounds stay equivalent.
     config = SyncConfig(
         tables=TableSelection(include=["products"]),
         checkpoint_file=checkpoint_file,
     )
+    config_no_checkpoint = SyncConfig(tables=TableSelection(include=["products"]))
 
-    # Sync with checkpoint
-    with ProductionSyncer(source_config, target_config) as syncer:
-        start = time.perf_counter()
-        syncer.sync(config)
-        duration_with_checkpoint = time.perf_counter() - start
+    def _timed_sync(cfg: SyncConfig) -> float:
+        with ProductionSyncer(source_config, target_config) as syncer:
+            start = time.perf_counter()
+            syncer.sync(cfg)
+            return time.perf_counter() - start
 
-    # Sync without checkpoint
-    config_no_checkpoint = SyncConfig(
-        tables=TableSelection(include=["products"]),
+    warmup_rounds = 2
+    measured_rounds = 5
+    with_checkpoint: list[float] = []
+    without_checkpoint: list[float] = []
+
+    for i in range(warmup_rounds + measured_rounds):
+        d_with = _timed_sync(config)
+        d_without = _timed_sync(config_no_checkpoint)
+        if i < warmup_rounds:
+            continue
+        with_checkpoint.append(d_with)
+        without_checkpoint.append(d_without)
+
+    median_with = statistics.median(with_checkpoint)
+    median_without = statistics.median(without_checkpoint)
+    overhead = median_with - median_without
+
+    print(f"\n📊 Checkpoint Overhead ({measured_rounds} rounds, {warmup_rounds} warmup):")
+    print(f"  With checkpoint (median):    {median_with:.3f}s")
+    print(f"  Without checkpoint (median): {median_without:.3f}s")
+    print(f"  Overhead: {overhead:.3f}s")
+
+    assert overhead < _MAX_CHECKPOINT_OVERHEAD_S, (
+        f"Checkpoint overhead too high: {overhead * 1000:.0f}ms "
+        f"(budget {_MAX_CHECKPOINT_OVERHEAD_S * 1000:.0f}ms)"
     )
 
-    with ProductionSyncer(source_config, target_config) as syncer:
-        start = time.perf_counter()
-        syncer.sync(config_no_checkpoint)
-        duration_no_checkpoint = time.perf_counter() - start
-
-    overhead = duration_with_checkpoint - duration_no_checkpoint
-    overhead_pct = (overhead / duration_no_checkpoint) * 100
-
-    print("\n📊 Checkpoint Overhead:")
-    print(f"  With checkpoint: {duration_with_checkpoint:.3f}s")
-    print(f"  Without checkpoint: {duration_no_checkpoint:.3f}s")
-    print(f"  Overhead: {overhead:.3f}s ({overhead_pct:.1f}%)")
-
-    # Overhead can vary significantly due to I/O variance
-    # Accept up to 100% overhead (checkpoint file I/O is acceptable cost)
-    assert overhead_pct < 100, f"Checkpoint overhead too high: {overhead_pct:.1f}%"
+    if median_without >= _RATIO_NOISE_FLOOR_S:
+        overhead_pct = (overhead / median_without) * 100
+        print(f"  Overhead: {overhead_pct:.1f}% of baseline")
+        assert overhead_pct < 100, f"Checkpoint overhead too high: {overhead_pct:.1f}%"
 
     # Verify checkpoint file created
     assert checkpoint_file.exists()
