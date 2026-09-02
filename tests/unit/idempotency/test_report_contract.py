@@ -25,6 +25,9 @@ _REQUIRED_REPORT_KEYS = {
     "has_warnings",
     # Added in 0.13.0:
     "has_blocking_violations",
+    # Added in 0.46.0:
+    "analysis_complete",
+    "unanalyzed_count",
 }
 
 # Existing-key type signatures pinned to their 0.12.0 shapes (any newer key
@@ -38,6 +41,8 @@ _REPORT_KEY_TYPES = {
     "warnings": list,
     "has_warnings": bool,
     "has_blocking_violations": bool,
+    "analysis_complete": bool,
+    "unanalyzed_count": int,
 }
 
 _REQUIRED_VIOLATION_KEYS = {

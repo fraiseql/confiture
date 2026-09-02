@@ -241,3 +241,68 @@ class TestSeverityField:
 
         d = IdempotencyReport().to_dict()
         assert d["has_blocking_violations"] is False
+
+
+class TestIdempotencyReportCompleteness:
+    """A report knows whether it read everything it was asked to (#213).
+
+    ``has_warnings`` says a skip happened; these two say what that means for
+    the verdict, in the vocabulary the CLI and JSON use.
+    """
+
+    @staticmethod
+    def _warning(line: int = 9):
+        from pathlib import Path
+
+        from confiture.core.idempotency.python_migration_extractor import (
+            ExtractionWarning,
+            WarningKind,
+        )
+
+        return ExtractionWarning(
+            kind=WarningKind.DYNAMIC_EXECUTE,
+            source_file=Path("20260101000000_x.py"),
+            source_line=line,
+            message="self.execute() called with a non-literal argument; SQL was not scanned",
+        )
+
+    def test_empty_report_is_complete(self):
+        report = IdempotencyReport()
+
+        assert report.analysis_complete is True
+        assert report.unanalyzed_count == 0
+
+    def test_a_warning_makes_the_analysis_incomplete(self):
+        report = IdempotencyReport()
+        report.warnings.append(self._warning())
+
+        assert report.analysis_complete is False
+        assert report.unanalyzed_count == 1
+
+    def test_unanalyzed_count_is_the_number_of_calls_not_read(self):
+        report = IdempotencyReport()
+        report.warnings.extend([self._warning(9), self._warning(14)])
+
+        assert report.unanalyzed_count == 2
+
+    def test_to_dict_carries_completeness(self):
+        report = IdempotencyReport()
+        report.warnings.append(self._warning())
+
+        payload = report.to_dict()
+
+        assert payload["analysis_complete"] is False
+        assert payload["unanalyzed_count"] == 1
+
+    def test_str_names_the_unverified_count(self):
+        report = IdempotencyReport()
+        report.add_file_scanned("20260101000000_x.py")
+        report.warnings.append(self._warning())
+
+        assert "1 call(s) unverified" in str(report)
+
+    def test_str_is_unchanged_when_everything_was_read(self):
+        report = IdempotencyReport()
+        report.add_file_scanned("20260101000000_x.py")
+
+        assert str(report) == "Idempotency Report: 1 files scanned, 0 violations found"

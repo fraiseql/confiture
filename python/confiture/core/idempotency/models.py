@@ -236,6 +236,28 @@ class IdempotencyReport:
         return len(self.warnings) > 0
 
     @property
+    def unanalyzed_count(self) -> int:
+        """Number of ``execute``/``execute_file`` calls whose SQL was never read.
+
+        Counts *calls*, not statements: a skipped call may carry any number of
+        statements and the extractor cannot know how many. Every extractor
+        warning is one such call, including a refused or missing file — from
+        the verdict's point of view they are the same fact (#213).
+        """
+        return len(self.warnings)
+
+    @property
+    def analysis_complete(self) -> bool:
+        """True when every call the validator was asked about was actually read.
+
+        A report with violations and no warnings is complete (it found things);
+        a report with no violations and one warning is not — "could not check"
+        is a different answer from "checked and clean", and this is the property
+        the CLI consults before it says *idempotent* (#213).
+        """
+        return not self.warnings
+
+    @property
     def violation_count(self) -> int:
         """Get total number of violations."""
         return len(self.violations)
@@ -279,7 +301,8 @@ class IdempotencyReport:
         Returns:
             Dictionary representation suitable for JSON serialization
 
-        ``warnings`` and ``has_warnings`` were added in 0.12.1; existing keys
+        ``warnings`` and ``has_warnings`` were added in 0.12.1,
+        ``analysis_complete`` and ``unanalyzed_count`` in 0.46.0; existing keys
         keep their names and types (additive-only contract).
         """
         return {
@@ -299,6 +322,8 @@ class IdempotencyReport:
                 for w in self.warnings
             ],
             "has_warnings": self.has_warnings,
+            "analysis_complete": self.analysis_complete,
+            "unanalyzed_count": self.unanalyzed_count,
         }
 
     def __str__(self) -> str:
@@ -307,6 +332,11 @@ class IdempotencyReport:
             f"Idempotency Report: {self.files_scanned} files scanned, "
             f"{self.violation_count} violations found"
         ]
+        if not self.analysis_complete:
+            lines.append(
+                f"  {self.unanalyzed_count} call(s) unverified — "
+                "idempotency not established for them"
+            )
         if self.has_violations:
             for file_path, file_violations in self.violations_by_file().items():
                 lines.append(f"\n{file_path}:")
