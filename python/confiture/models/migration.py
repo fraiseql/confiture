@@ -1,5 +1,6 @@
 """Migration base class for database migrations."""
 
+import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -9,6 +10,21 @@ import psycopg
 if TYPE_CHECKING:
     from confiture.core.hooks import Hook
     from confiture.core.preconditions import Precondition
+
+
+def _source_file_of(cls: type) -> Path | None:
+    """The file a migration class was loaded from, or ``None`` when it has none.
+
+    ``load_migration_class`` imports migrations from their path, so the module
+    carries ``__file__``. A class built in memory (a test, an ``exec``) has
+    none, and ``inspect`` says so by raising rather than returning.
+    """
+    try:
+        source = inspect.getfile(cls)
+    except (TypeError, OSError):
+        return None
+    candidate = Path(source)
+    return candidate if candidate.is_file() else None
 
 
 class Migration(ABC):
@@ -215,15 +231,26 @@ class Migration(ABC):
     def execute_file(self, path: str | Path) -> None:
         """Execute SQL read from a file.
 
-        Reads the file contents and delegates to :meth:`execute`. Paths are
-        resolved relative to the current working directory, consistent with
-        how the CLI resolves ``db/schema/`` and ``db/migrations/`` paths.
+        Resolves ``path`` the way every other part of confiture does
+        (:func:`confiture.core.sql_path.resolve_sql_file`): an absolute path
+        as-is; a relative one against the **project root**, then this
+        migration's own directory, then the working directory. So
+        ``execute_file("db/schema/fn.sql")`` names the same file whether
+        ``confiture migrate up`` runs from the repository root or from a
+        deployment wrapper's directory — and the same file the idempotency
+        analyzer verified before the deploy.
+
+        The project root is the nearest ancestor of this migration's source
+        file carrying ``pyproject.toml``, ``.git`` or ``db/``. A migration
+        class with no source file (built in memory) resolves from the working
+        directory only, which is what every migration did before 0.46.0.
 
         Args:
-            path: Path to a ``.sql`` file (absolute or relative to CWD).
+            path: Path to a ``.sql`` file (absolute, or relative as above).
 
         Raises:
-            FileNotFoundError: If the file does not exist.
+            FileNotFoundError: If no candidate is a file; the message lists
+                every path tried.
             ValueError: If the file is empty or contains only whitespace.
             SQLError: If the SQL execution fails.
 
@@ -238,12 +265,21 @@ class Migration(ABC):
             ...     def down(self):
             ...         pass
         """
-        resolved = Path(path)
-        if not resolved.is_file():
-            raise FileNotFoundError(f"SQL file not found: {resolved}")
-        sql = resolved.read_text(encoding="utf-8")
+        from confiture.core.sql_path import find_project_root, resolve_sql_file
+
+        source = _source_file_of(type(self))
+        resolution = resolve_sql_file(
+            path,
+            migration_file=source,
+            project_root=find_project_root(source) if source is not None else None,
+            confine=False,
+        )
+        if resolution.path is None:
+            tried = ", ".join(str(candidate) for candidate in resolution.tried)
+            raise FileNotFoundError(f"SQL file not found: {path} (tried: {tried})")
+        sql = resolution.path.read_text(encoding="utf-8")
         if not sql.strip():
-            raise ValueError(f"SQL file is empty: {resolved}")
+            raise ValueError(f"SQL file is empty: {resolution.path}")
         self.execute(sql)
 
     def execute(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
