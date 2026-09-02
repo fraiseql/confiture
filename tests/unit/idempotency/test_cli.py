@@ -1327,3 +1327,39 @@ class TestFailOnUnanalyzable:
         assert payload["status"] == "failed"
         assert set(payload["checks"]) == {"imports", "idempotent"}
         assert payload["checks"]["idempotent"]["meta"]["fail_on_unanalyzable"] is True
+
+
+class TestIssue213Repro:
+    """The issue's migration, verbatim: exit 1, and the finding names the call line."""
+
+    REPRO = '''\
+"""Every visible statement is idempotent. The only non-idempotent DDL is in a constant."""
+
+from confiture.models.migration import Migration
+
+# Not idempotent: no IF NOT EXISTS. The identical text as a literal IS flagged.
+DDL = "CREATE TABLE public.tb_gadget (id int)"
+
+
+class HiddenNonIdempotent(Migration):
+    version = "20260101000000"
+    name = "hidden_nonidempotent"
+
+    def up(self) -> None:
+        self.execute(DDL)
+
+    def down(self) -> None:
+        self.execute("DROP TABLE IF EXISTS public.tb_gadget")
+'''
+
+    def test_hidden_constant_is_found(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "20260101000000_hidden_nonidempotent.py").write_text(self.REPRO)
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 1, result.stdout
+        assert "❌ Found 1 idempotency violation(s)" in result.stdout
+        assert "Line 14 (SQL line 1): CREATE_TABLE" in result.stdout
+        assert "could not be statically analyzed" not in result.stdout

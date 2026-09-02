@@ -603,13 +603,15 @@ def _collect_idempotency_report(
     ``staged_content`` maps a path to its **staging-index** blob. When a path
     is present there, that content is analyzed instead of the working tree —
     the two differ when a file is staged and then edited further, and a
-    pre-commit gate must judge what is about to be committed (#181, D4).
+    pre-commit gate must judge what is about to be committed (#181, D4). The
+    blob is analyzed *as the file at that path*: ``Path(__file__)`` and
+    migration-relative reads resolve where the migration lives, not in a
+    temp directory (0.46.0, D10).
     """
-    import tempfile
-
     from confiture.core.idempotency.models import IdempotencyReport
     from confiture.core.idempotency.python_migration_extractor import (
         extract_sql_from_python_migration,
+        extract_sql_from_python_source,
     )
 
     combined = IdempotencyReport()
@@ -629,16 +631,11 @@ def _collect_idempotency_report(
 
     for py_path in sorted(py_files):
         if py_path in staged_content:
-            # The extractor only reads from disk, so materialize the index
-            # blob. project_root is passed explicitly, since auto-detection
-            # from a temp directory would find the wrong boundary.
-            with tempfile.TemporaryDirectory() as td:
-                staged_py = Path(td) / py_path.name
-                staged_py.write_text(staged_content[py_path], encoding="utf-8")
-                extraction = extract_sql_from_python_migration(
-                    staged_py,
-                    project_root=project_root or _repo_root_for(py_path),
-                )
+            extraction = extract_sql_from_python_source(
+                staged_content[py_path],
+                path=py_path,
+                project_root=project_root or _repo_root_for(py_path),
+            )
         else:
             extraction = extract_sql_from_python_migration(py_path, project_root=project_root)
         combined.add_file_scanned(str(py_path))

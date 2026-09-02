@@ -526,3 +526,51 @@ class TestSemanticGrantMatching:
         report = checker.check_accompaniment(staged_only=True)
         assert report.is_valid is False
         assert any("GRANT OPTION" in n for n in report.unverifiable_notes)
+
+
+class TestStagedPythonMigrationReadsRelativeToItself:
+    """A staged blob is analyzed as the file it will be (0.46.0, D10).
+
+    Before, the blob was written to a temp directory and analyzed there, so a
+    ``Path(__file__)``-relative read of the grant file went missing and the
+    migration covered nothing — a false "not accompanied" on a correct commit.
+    """
+
+    def test_grant_read_from_a_file_next_to_the_migration_is_covered(self, tmp_path: Path) -> None:
+        project = tmp_path / "project"
+        (project / "db" / "migrations").mkdir(parents=True)
+        (project / "db" / "grants").mkdir(parents=True)
+        (project / "pyproject.toml").write_text("")
+        (project / "db" / "grants" / "reporter.sql").write_text("GRANT SELECT ON s.t TO reporter;")
+        grant_file = Path("db/7_grant/71_grant.sql")
+        migration = Path("db/migrations/20260613130000_x.py")
+        blob = (
+            "from pathlib import Path\n"
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            '_GRANTS = Path(__file__).resolve().parent.parent / "grants"\n'
+            "\n"
+            "class M(Migration):\n"
+            '    version = "20260613130000"\n'
+            '    name = "x"\n'
+            "    def up(self) -> None:\n"
+            '        self.execute((_GRANTS / "reporter.sql").read_text())\n'
+            "    def down(self) -> None:\n"
+            "        pass\n"
+        )
+        checker = GrantAccompanimentChecker(repo_path=project)
+        git = MagicMock()
+        git.get_staged_files.return_value = [grant_file, migration]
+        target = {
+            grant_file.as_posix(): "GRANT SELECT ON s.t TO reporter;",
+            migration.as_posix(): blob,
+        }
+        git.get_staged_file_content.side_effect = lambda p: target.get(p.as_posix())
+        git.get_file_at_ref.side_effect = lambda p, ref: None
+        git.get_merge_base.return_value = "HEAD"
+        checker.git_repo = git
+
+        report = checker.check_accompaniment(staged_only=True)
+
+        assert report.is_valid is True, report
+        assert report.unmatched_grants == []
