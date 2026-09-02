@@ -576,9 +576,9 @@ def _repo_root_for(path: Path) -> Path:
     migration analyzed from a temp file gets the same ``execute_file``
     boundary it would have had on disk.
     """
-    from confiture.core.idempotency.python_migration_extractor import _resolve_project_root
+    from confiture.core.sql_path import find_project_root
 
-    return _resolve_project_root(path)
+    return find_project_root(path)
 
 
 def _collect_idempotency_report(

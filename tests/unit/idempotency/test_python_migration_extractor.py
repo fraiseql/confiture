@@ -614,7 +614,11 @@ class TestExecuteReadTextBoundary:
         secret = outside / "secret.sql"
         secret.write_text("SECRET CONTENTS", encoding="utf-8")
 
-        migration = _migration_reading(project, 'Path("../../outside/secret.sql").read_text()')
+        # Three levels up from db/migrations/ is tmp_path, where `outside/`
+        # lives. (Two levels named a file that exists nowhere, which the
+        # pre-0.46.0 resolver still called an escape because it tested the
+        # boundary before existence; the shared resolver calls that `missing`.)
+        migration = _migration_reading(project, 'Path("../../../outside/secret.sql").read_text()')
 
         original_read_text = Path.read_text
 
@@ -764,3 +768,104 @@ class TestExecuteReadTextUnsupportedShapes:
         result = extract_sql_from_python_migration(migration, project_root=tmp_path)
 
         assert [w.kind for w in result.warnings] == [WarningKind.DYNAMIC_EXECUTE]
+
+
+class TestExecuteFileResolvesFromTheProjectRoot:
+    """``execute_file("db/schema/fn.sql")`` names the same file from any cwd.
+
+    Before 0.46.0 the extractor tried cwd and then the migration's directory,
+    never the project root, so from any directory but the root the in-root
+    file was reported as ``execute_file_escaped`` — a security refusal about a
+    file inside the boundary — and the gate exited 0 over SQL it never read.
+    """
+
+    @staticmethod
+    def _project(tmp_path: Path, *, call: str) -> tuple[Path, Path]:
+        root = tmp_path / "project"
+        (root / "db" / "schema").mkdir(parents=True)
+        (root / "db" / "migrations").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("")
+        (root / "db" / "schema" / "fn.sql").write_text("CREATE TABLE gadget (id int);")
+        migration = _write(
+            root / "db" / "migrations",
+            "20260101000030_root.py",
+            "from pathlib import Path\n"
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            "class M(Migration):\n"
+            '    version = "20260101000030"\n'
+            '    name = "root"\n'
+            "    def up(self) -> None:\n"
+            f"        {call}\n"
+            "    def down(self) -> None:\n"
+            "        pass\n",
+        )
+        return root, migration
+
+    def test_execute_file_is_read_from_a_foreign_cwd(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        root, migration = self._project(tmp_path, call='self.execute_file("db/schema/fn.sql")')
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+
+        result = extract_sql_from_python_migration(migration)
+
+        assert result.warnings == []
+        assert [s.sql for s in result.snippets] == ["CREATE TABLE gadget (id int);"]
+        assert result.snippets[0].kind == ExtractionKind.FILE
+
+    def test_read_text_is_read_from_a_foreign_cwd(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        root, migration = self._project(
+            tmp_path, call='self.execute(Path("db/schema/fn.sql").read_text())'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        result = extract_sql_from_python_migration(migration)
+
+        assert result.warnings == []
+        assert [s.sql for s in result.snippets] == ["CREATE TABLE gadget (id int);"]
+
+    def test_missing_file_names_every_base_without_naming_the_cwd(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        root, migration = self._project(tmp_path, call='self.execute_file("db/schema/nope.sql")')
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+
+        result = extract_sql_from_python_migration(migration)
+
+        assert [w.kind for w in result.warnings] == [WarningKind.EXECUTE_FILE_MISSING]
+        message = result.warnings[0].message
+        assert str(root) in message
+        assert "next to the migration" in message
+        assert "working directory" in message
+        assert str(elsewhere) not in message
+
+    def test_same_result_from_three_working_directories(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        root, migration = self._project(tmp_path, call='self.execute_file("db/schema/fn.sql")')
+        (root / "db" / "migrations" / "20260101000031_missing.py").write_text(
+            (root / "db" / "migrations" / "20260101000030_root.py")
+            .read_text()
+            .replace("fn.sql", "nope.sql")
+            .replace("20260101000030", "20260101000031")
+        )
+        results = []
+        for cwd in (root, tmp_path, Path("/tmp")):
+            monkeypatch.chdir(cwd)
+            results.append(
+                tuple(
+                    (
+                        [(s.sql, s.kind, s.sql_file) for s in r.snippets],
+                        [(w.kind, w.message) for w in r.warnings],
+                    )
+                    for r in (
+                        extract_sql_from_python_migration(migration),
+                        extract_sql_from_python_migration(
+                            root / "db" / "migrations" / "20260101000031_missing.py"
+                        ),
+                    )
+                )
+            )
+
+        assert results[0] == results[1] == results[2]

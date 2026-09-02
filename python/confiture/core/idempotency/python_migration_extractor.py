@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from confiture.core.sql_path import find_project_root, resolve_sql_file
+
 _RECEIVER_NAMES = frozenset({"self", "cls"})
 
 
@@ -137,19 +139,6 @@ def _first_sql_argument(call: ast.Call, *, kwarg_name: str) -> ast.expr | None:
     return None
 
 
-_PROJECT_ROOT_ANCHORS = ("pyproject.toml", ".git", "db")
-
-
-def _resolve_project_root(migration_path: Path) -> Path:
-    """Walk up from the migration file to find a project root anchor."""
-    start = migration_path.parent.resolve()
-    for ancestor in (start, *start.parents):
-        for anchor in _PROJECT_ROOT_ANCHORS:
-            if (ancestor / anchor).exists():
-                return ancestor
-    return start
-
-
 def _resolve_sql_path(
     raw: str,
     migration_path: Path,
@@ -165,11 +154,16 @@ def _resolve_sql_path(
     path-traversal regression against the v0.8.4 hardening, so the read_text
     shape routes here rather than reading the file itself.
 
+    Resolution itself is :func:`confiture.core.sql_path.resolve_sql_file`,
+    shared with the runtime's ``execute_file`` and the import checker, so the
+    analyzer reads the file the deploy will execute. This adapter only turns
+    its outcome into the extractor's warning vocabulary.
+
     Args:
         raw: The literal path as written in the migration.
         migration_path: The migration being analyzed (warning provenance, and
-            the fallback resolution base).
-        project_root: Confinement boundary; anything resolving outside is refused.
+            the second resolution base).
+        project_root: Confinement boundary and first resolution base.
         source_line: Line of the call, for the warning.
         call_desc: How to name the call in warnings. Defaults to the
             ``execute_file(...)`` wording.
@@ -178,30 +172,31 @@ def _resolve_sql_path(
         ``(resolved_path, None)`` or ``(None, warning)``.
     """
     described = call_desc or f"execute_file({raw!r})"
-    raw_path = Path(raw)
-    candidate = raw_path if raw_path.is_absolute() else Path.cwd() / raw_path
-    if not candidate.exists():
-        # Fall back to resolution relative to the migration file's parent.
-        fallback = migration_path.parent / raw_path
-        if fallback.exists():
-            candidate = fallback
-    resolved = candidate.resolve()
+    resolution = resolve_sql_file(
+        raw, migration_file=migration_path, project_root=project_root, confine=True
+    )
     root = project_root.resolve()
-    if not resolved.is_relative_to(root):
+    if resolution.outcome == "escaped":
         return None, ExtractionWarning(
             kind=WarningKind.EXECUTE_FILE_ESCAPED,
             source_file=migration_path,
             source_line=source_line,
             message=(f"{described} resolves outside project_root ({root}); refusing to read"),
         )
-    if not resolved.is_file():
+    if resolution.outcome == "missing":
+        # Name the bases, not the candidates: the cwd candidate would make
+        # this message differ between two runs of the same gate.
         return None, ExtractionWarning(
             kind=WarningKind.EXECUTE_FILE_MISSING,
             source_file=migration_path,
             source_line=source_line,
-            message=f"{described} not found on disk (looked at {resolved})",
+            message=(
+                f"{described} not found on disk (looked in the project root {root}, "
+                "next to the migration, and the working directory)"
+            ),
         )
-    return resolved, None
+    assert resolution.path is not None
+    return resolution.path, None
 
 
 def _read_text_literal_path(node: ast.expr) -> tuple[str | None, bool]:
@@ -331,7 +326,7 @@ def extract_sql_from_python_migration(
     """
     snippets: list[ExtractedSQL] = []
     warnings: list[ExtractionWarning] = []
-    effective_root = project_root if project_root is not None else _resolve_project_root(path)
+    effective_root = project_root if project_root is not None else find_project_root(path)
 
     text = path.read_text(encoding="utf-8")
     try:
