@@ -692,3 +692,46 @@ class TestExecuteFileRefValidation:
         # IMP011 is a warning — doesn't cause failure
         assert result.success
         assert any(v.rule == "IMP011" for v in result.violations)
+
+
+class TestExecuteFileRefsResolveFromTheProjectRoot:
+    """IMP010 shares the analyzer's resolver (0.46.0, #213 sizing).
+
+    ``Path(arg).is_file()`` against the cwd reported every in-root
+    ``db/schema/…`` target as missing whenever ``--check-imports`` ran from
+    anywhere but the project root.
+    """
+
+    def test_in_root_target_is_found_from_a_foreign_cwd(
+        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        func_dir = tmp_path / "db" / "schema" / "functions"
+        func_dir.mkdir(parents=True)
+        (func_dir / "my_func.sql").write_text("CREATE FUNCTION my_func();")
+        _write_migration(tmp_path, "20260426140001_ref.py", EXECUTE_FILE_VALID_REF)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+
+        result = ImportChecker(tmp_path).check()
+
+        assert [v for v in result.violations if v.rule == "IMP010"] == []
+
+    def test_target_outside_the_project_root_is_reported(
+        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        project = tmp_path / "project"
+        (project / "db").mkdir(parents=True)
+        (tmp_path / "outside.sql").write_text("SELECT 1;")
+        _write_migration(
+            project,
+            "20260426140004_escape.py",
+            EXECUTE_FILE_VALID_REF.replace("db/schema/functions/my_func.sql", "../outside.sql"),
+        )
+        monkeypatch.chdir(project)
+
+        result = ImportChecker(project).check()
+
+        imp010 = [v for v in result.violations if v.rule == "IMP010"]
+        assert len(imp010) == 1
+        assert "outside the project root" in imp010[0].message

@@ -352,11 +352,18 @@ class ImportChecker:
         violations: list[ImportCheckViolation],
     ) -> None:
         """Check that self.execute_file() string arguments reference existing files."""
+        from confiture.core.sql_path import find_project_root, resolve_sql_file
+
         try:
             source = py_file.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=str(py_file))
         except SyntaxError:
             return
+
+        # The same resolver the runtime and the idempotency analyzer use, so
+        # "this file exists" means the same thing in all three places and does
+        # not depend on the working directory.
+        project_root = find_project_root(py_file)
 
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
@@ -380,9 +387,23 @@ class ImportChecker:
 
                     arg = call_node.args[0]
                     if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        # String literal — validate file exists
-                        ref_path = Path(arg.value)
-                        if not ref_path.is_file():
+                        resolution = resolve_sql_file(
+                            arg.value,
+                            migration_file=py_file,
+                            project_root=project_root,
+                            confine=True,
+                        )
+                        if resolution.outcome == "missing":
+                            problem = (
+                                "references a file that does not exist (looked in the "
+                                f"project root {project_root}, next to the migration, and "
+                                "the working directory)"
+                            )
+                        elif resolution.outcome == "escaped":
+                            problem = f"references a file outside the project root ({project_root})"
+                        else:
+                            problem = None
+                        if problem is not None:
                             violations.append(
                                 ImportCheckViolation(
                                     file_path=file_str,
@@ -390,7 +411,7 @@ class ImportChecker:
                                     rule="IMP010",
                                     message=(
                                         f'self.execute_file("{arg.value}") in {method_name}() '
-                                        f"(line {call_node.lineno}) references a file that does not exist"
+                                        f"(line {call_node.lineno}) {problem}"
                                     ),
                                 )
                             )
