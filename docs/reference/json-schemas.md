@@ -120,6 +120,17 @@ Minimal example:
 
 Scans every migration file (`.up.sql` and embedded SQL in Python migrations) for non-idempotent patterns. Exit code 1 when blocking violations exist.
 
+`status` has three values (since 0.46.0, #213): `issues_found` when any violation
+exists, `unverified` when nothing was found **but** at least one
+`execute`/`execute_file` call could not be statically read, and `ok` only when
+every call was read and nothing was found. `analysis_complete` and
+`unanalyzed_count` carry the same fact as data; `unanalyzed_count` counts calls,
+not statements, and equals `len(warnings)`. Exit code is unchanged by
+`unverified` unless `--fail-on-unanalyzable` is passed; `meta.fail_on_unanalyzable`
+records whether it was. Each entry of `warnings[]` carries `reason_code` (the
+evaluator's refusal category) and `remedy` (the rewrite that makes the call
+readable) in addition to `kind`, `source_file`, `source_line` and `message`.
+
 ```json
 {
   "status": "issues_found",
@@ -142,6 +153,9 @@ Scans every migration file (`.up.sql` and embedded SQL in Python migrations) for
   "has_blocking_violations": true,
   "warnings": [],
   "has_warnings": false,
+  "analysis_complete": true,
+  "unanalyzed_count": 0,
+  "meta": {"backend": "ast"},
   "hints": []
 }
 ```

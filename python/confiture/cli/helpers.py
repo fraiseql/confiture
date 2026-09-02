@@ -4,6 +4,7 @@ import difflib
 import json
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -576,9 +577,9 @@ def _repo_root_for(path: Path) -> Path:
     migration analyzed from a temp file gets the same ``execute_file``
     boundary it would have had on disk.
     """
-    from confiture.core.idempotency.python_migration_extractor import _resolve_project_root
+    from confiture.core.sql_path import find_project_root
 
-    return _resolve_project_root(path)
+    return find_project_root(path)
 
 
 def _collect_idempotency_report(
@@ -602,13 +603,15 @@ def _collect_idempotency_report(
     ``staged_content`` maps a path to its **staging-index** blob. When a path
     is present there, that content is analyzed instead of the working tree —
     the two differ when a file is staged and then edited further, and a
-    pre-commit gate must judge what is about to be committed (#181, D4).
+    pre-commit gate must judge what is about to be committed (#181). The
+    blob is analyzed *as the file at that path*: ``Path(__file__)`` and
+    migration-relative reads resolve where the migration lives, not in a
+    temp directory (0.46.0).
     """
-    import tempfile
-
     from confiture.core.idempotency.models import IdempotencyReport
     from confiture.core.idempotency.python_migration_extractor import (
         extract_sql_from_python_migration,
+        extract_sql_from_python_source,
     )
 
     combined = IdempotencyReport()
@@ -628,16 +631,11 @@ def _collect_idempotency_report(
 
     for py_path in sorted(py_files):
         if py_path in staged_content:
-            # The extractor only reads from disk, so materialize the index
-            # blob. project_root is passed explicitly, since auto-detection
-            # from a temp directory would find the wrong boundary.
-            with tempfile.TemporaryDirectory() as td:
-                staged_py = Path(td) / py_path.name
-                staged_py.write_text(staged_content[py_path], encoding="utf-8")
-                extraction = extract_sql_from_python_migration(
-                    staged_py,
-                    project_root=project_root or _repo_root_for(py_path),
-                )
+            extraction = extract_sql_from_python_source(
+                staged_content[py_path],
+                path=py_path,
+                project_root=project_root or _repo_root_for(py_path),
+            )
         else:
             extraction = extract_sql_from_python_migration(py_path, project_root=project_root)
         combined.add_file_scanned(str(py_path))
@@ -819,6 +817,8 @@ def _report_empty_scope(
             "status": "ok",
             "message": message,
             "violations": [],
+            "analysis_complete": True,
+            "unanalyzed_count": 0,
             "meta": meta,
             "hints": hints,
         }
@@ -826,14 +826,44 @@ def _report_empty_scope(
     return None
 
 
+UNANALYZABLE_EXIT_CODE = 1
+"""Exit code for a run that failed only because it could not read a call.
+
+Under ``--fail-on-unanalyzable`` an unverified call fails the gate. It signals
+the existing findings class (1) rather than a new integer: the documented exit
+table is frozen at 0–8 and shared with the fraisier adapters, so a distinct
+"completed, N unverified" code is a contract change on both sides. It is
+parked, not refused (#213) — and when it lands, this constant and the
+schema note are the only two places that change.
+"""
+
+
+@dataclass(frozen=True)
+class IdempotencyOutcome:
+    """What one ``--idempotent`` run decided, for the check registry to compose.
+
+    Attributes:
+        passed: False when the gate should fail — a blocking violation, an
+            info finding under ``--strict-cor``, or an unverified call under
+            ``--fail-on-unanalyzable``.
+        payload: The JSON document in JSON mode, else ``None``.
+        exit_code: The code this run signals when it does not pass.
+    """
+
+    passed: bool
+    payload: dict[str, Any] | None
+    exit_code: int = 1
+
+
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
     *,
     strict_cor: bool = False,
+    fail_on_unanalyzable: bool = False,
     base_ref: str | None = None,
     staged: bool = False,
-) -> tuple[bool, dict[str, Any] | None]:
+) -> IdempotencyOutcome:
     """Validate idempotency of SQL and Python migration files.
 
     Args:
@@ -842,6 +872,10 @@ def _validate_idempotency(
         strict_cor: If True, info-severity CREATE OR REPLACE findings flip
             the exit code to 1 (default False — info findings render but
             don't fail the gate).
+        fail_on_unanalyzable: If True, a run that could not read every
+            ``execute``/``execute_file`` call fails with
+            :data:`UNANALYZABLE_EXIT_CODE` (default False — the verdict says
+            *unverified* but the exit code stays 0, #213).
         base_ref: Scope to migrations changed since this git ref. ``None``
             means scan everything — the caller must pass ``None`` unless the
             operator set ``--base-ref``/``--since`` *explicitly*, since the
@@ -851,17 +885,21 @@ def _validate_idempotency(
             the working tree. Takes precedence over ``base_ref``.
 
     Returns:
-        ``(passed, payload)``. Text-mode output is printed here; the JSON
-        payload is returned rather than written, because ``migrate validate``
-        composes checks and emits one document for the whole run (#187).
+        An :class:`IdempotencyOutcome`. Text-mode output is printed here; the
+        JSON payload is returned rather than written, because ``migrate
+        validate`` composes checks and emits one document for the whole run
+        (#187).
     """
     from confiture.core.idempotency import IdempotencyValidator
 
     validator = IdempotencyValidator()
 
     # Backend banner (text) + meta accumulator (json) — printed before
-    # file enumeration so users see which detector is running.
+    # file enumeration so users see which detector is running. The flag is
+    # recorded on every shape so a consumer can tell "unverified, exit 1"
+    # from "unverified, exit 0" without knowing the command line.
     meta = _idempotent_backend_banner(format_output)
+    meta["fail_on_unanalyzable"] = fail_on_unanalyzable
 
     sql_files = sorted(migrations_dir.glob("*.up.sql"))
     py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
@@ -882,7 +920,9 @@ def _validate_idempotency(
             staged_content = _read_staged_content(selected)
 
         if not sql_files and not py_files:
-            return True, _report_empty_scope(scope_meta, migrations_dir, meta, format_output)
+            return IdempotencyOutcome(
+                True, _report_empty_scope(scope_meta, migrations_dir, meta, format_output)
+            )
 
         if format_output == "text":
             where = (
@@ -912,46 +952,53 @@ def _validate_idempotency(
                 "status": "ok",
                 "message": "No migration files found",
                 "violations": [],
+                "analysis_complete": True,
+                "unanalyzed_count": 0,
                 "meta": meta,
                 "hints": zero_files_hints,
             }
-            return True, result
+            return IdempotencyOutcome(True, result)
         console.print("[green]✅ No migration files found to validate[/green]")
-        return True, None
+        return IdempotencyOutcome(True, None)
 
     combined_report = _collect_idempotency_report(
         sql_files, py_files, validator, staged_content=staged_content
     )
-    fail = combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
+    violation_fail = (
+        combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
+    )
+    unverified_fail = fail_on_unanalyzable and not combined_report.analysis_complete
+    fail = violation_fail or unverified_fail
+    exit_code = UNANALYZABLE_EXIT_CODE if unverified_fail and not violation_fail else 1
 
     if format_output == "json":
         result = combined_report.to_dict()
-        result["status"] = "issues_found" if fail else "ok"
+        # Violations win; then "could not check" is its own answer, distinct
+        # from "checked and clean" (#213). The flag changes the exit code,
+        # never the status — the status says what was found.
+        if combined_report.has_violations:
+            result["status"] = "issues_found"
+        elif combined_report.analysis_complete:
+            result["status"] = "ok"
+        else:
+            result["status"] = "unverified"
         result["meta"] = meta
         result["hints"] = []
-        return not fail, result
+        return IdempotencyOutcome(not fail, result, exit_code)
 
     blocking = [v for v in combined_report.violations if v.severity == "error"]
     info = [v for v in combined_report.violations if v.severity == "info"]
 
-    if not blocking and not info:
-        console.print("[green]✅ All migrations are idempotent[/green]")
-        console.print(f"   Scanned {combined_report.files_scanned} file(s)")
-        _render_extractor_warnings(combined_report)
-        return True, None
+    _render_idempotency_headline(combined_report, fail=fail, strict_cor=strict_cor)
 
     if blocking:
-        console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]\n")
         _render_violations_by_file(blocking)
 
     if info:
-        if not blocking:
-            console.print("[green]✅ All migrations are idempotent[/green]")
-            console.print(f"   Scanned {combined_report.files_scanned} file(s)")
-        console.print(
-            f"\n[yellow]ℹ️  {len(info)} heuristic note(s) "
-            "(informational, do not fail the gate)[/yellow]\n"
+        qualifier = (
+            "blocking under --strict-cor" if strict_cor else "informational, do not fail the gate"
         )
+        console.print(f"\n[yellow]ℹ️  {len(info)} heuristic note(s) ({qualifier})[/yellow]\n")
         _render_violations_by_file(info)
         if not strict_cor:
             console.print("[dim]Pass --strict-cor to treat these as blocking.[/dim]\n")
@@ -965,7 +1012,58 @@ def _validate_idempotency(
         )
         console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
-    return not fail, None
+    return IdempotencyOutcome(not fail, None, exit_code)
+
+
+def _unverified_summary(report: Any) -> str:
+    """The one sentence every renderer uses for calls the analyzer did not read."""
+    return f"{report.unanalyzed_count} call(s) unverified — idempotency not established"
+
+
+def _render_idempotency_headline(report: Any, *, fail: bool, strict_cor: bool) -> None:
+    """Print the verdict line for an idempotency run — the only place that decides it.
+
+    Precedence: blocking violations, then info findings promoted by
+    ``--strict-cor``, then calls the analyzer could not read, then the green
+    line. The green line is printed only when every call was read and nothing
+    was found: "checked and clean" is a different answer from "could not
+    check", and the two used to print the same headline (#213).
+
+    Two sites rendered this independently before 0.46.0, which is how the
+    info-only branch kept the contradiction after the clean branch was noticed.
+
+    Args:
+        report: The merged :class:`IdempotencyReport`.
+        fail: What the caller decided the exit code is — computed once from
+            severity, ``strict_cor`` and (from 0.46.0) ``--fail-on-unanalyzable``.
+            The renderer never re-derives it.
+        strict_cor: Whether info findings are blocking this run.
+    """
+    blocking = [v for v in report.violations if v.severity == "error"]
+    info = [v for v in report.violations if v.severity == "info"]
+    unverified = _unverified_summary(report)
+
+    if blocking:
+        console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]")
+        if not report.analysis_complete:
+            console.print(f"[yellow]   {unverified}[/yellow]")
+        console.print()
+        return
+
+    if info and strict_cor:
+        console.print(
+            f"[red]❌ Found {len(info)} heuristic note(s) — blocking under --strict-cor[/red]"
+        )
+    elif not report.analysis_complete:
+        style, icon = ("red", "❌") if fail else ("yellow", "⚠️ ")
+        console.print(f"[{style}]{icon} {unverified}[/{style}]")
+    else:
+        console.print("[green]✅ All migrations are idempotent[/green]")
+
+    scanned = f"   Scanned {report.files_scanned} file(s)"
+    if info and strict_cor and not report.analysis_complete:
+        scanned += f" · {unverified}"
+    console.print(scanned)
 
 
 def _render_violations_by_file(violations: list[Any]) -> None:
@@ -1004,6 +1102,8 @@ def _render_extractor_warnings(report: Any) -> None:
         source = Path(str(warn.source_file)).name
         console.print(f"  {source}:{warn.source_line} — {warn.kind.value}")
         console.print(f"    [dim]{warn.message}[/dim]")
+        if getattr(warn, "remedy", ""):
+            console.print(f"    [dim]→ {warn.remedy}[/dim]")
     console.print("    [dim]These calls were skipped. Idempotency cannot be guaranteed.[/dim]")
     console.print()
 
@@ -1101,7 +1201,10 @@ def _fix_idempotency(
         return
 
     if not files_changed and not manual_fix_required:
-        console.print("[green]✅ All migrations are already idempotent[/green]")
+        if manual_report.analysis_complete:
+            console.print("[green]✅ All migrations are already idempotent[/green]")
+        else:
+            console.print(f"[yellow]⚠️  {_unverified_summary(manual_report)}[/yellow]")
         _render_extractor_warnings(manual_report)
         return
 

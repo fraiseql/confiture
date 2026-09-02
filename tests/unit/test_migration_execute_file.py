@@ -173,3 +173,84 @@ class TestExecuteFilePathResolution:
         m2.execute_file(Path(str(sql_file)))
 
         assert m1.execute.call_args == m2.execute.call_args
+
+
+class TestExecuteFileResolvesFromTheProjectRoot:
+    """0.46.0 (#213 sizing): the runtime reads the file the analyzer verified.
+
+    ``execute_file("db/schema/fn.sql")`` used to be resolved against the
+    working directory only, so the same migration raised ``FileNotFoundError``
+    from any cwd but the project root. It now shares the analyzer's resolver:
+    project root, then the migration's directory, then cwd.
+    """
+
+    @staticmethod
+    def _project(tmp_path: Path) -> Path:
+        root = tmp_path / "project"
+        (root / "db" / "schema").mkdir(parents=True)
+        (root / "db" / "migrations").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("")
+        (root / "db" / "schema" / "fn.sql").write_text("CREATE TABLE gadget (id int);")
+        (root / "db" / "migrations" / "20260101000000_root.py").write_text(
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            "class RootRelative(Migration):\n"
+            '    version = "20260101000000"\n'
+            '    name = "root_relative"\n'
+            "    def up(self) -> None:\n"
+            '        self.execute_file("db/schema/fn.sql")\n'
+            "    def down(self) -> None:\n"
+            "        pass\n"
+        )
+        return root
+
+    def test_root_relative_path_is_found_from_a_foreign_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from confiture.core.connection import load_migration_class
+
+        root = self._project(tmp_path)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        cls = load_migration_class(root / "db" / "migrations" / "20260101000000_root.py")
+        migration = cls(connection=MagicMock(spec=psycopg.Connection))
+        migration.execute = MagicMock()  # type: ignore[method-assign]
+
+        migration.up()
+
+        migration.execute.assert_called_once_with("CREATE TABLE gadget (id int);")
+
+    def test_not_found_names_every_base_tried(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        migration = _make_migration(tmp_path)
+
+        with pytest.raises(FileNotFoundError, match="SQL file not found") as excinfo:
+            migration.execute_file("nonexistent.sql")
+
+        assert str(tmp_path / "nonexistent.sql") in str(excinfo.value)
+
+    def test_a_class_without_a_source_file_still_resolves_from_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A migration built in memory has no file; today's cwd behaviour stays."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "here.sql").write_text("SELECT 1;")
+        namespace: dict[str, object] = {}
+        exec(  # noqa: S102 — building a class with no source file is the point
+            "from confiture.models.migration import Migration\n"
+            "class InMemory(Migration):\n"
+            "    version = '20260101000001'\n"
+            "    name = 'in_memory'\n"
+            "    def up(self): pass\n"
+            "    def down(self): pass\n",
+            namespace,
+        )
+        migration = namespace["InMemory"](connection=MagicMock(spec=psycopg.Connection))  # type: ignore[operator]
+        migration.execute = MagicMock()
+
+        migration.execute_file("here.sql")
+
+        migration.execute.assert_called_once_with("SELECT 1;")

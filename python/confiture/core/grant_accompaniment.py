@@ -19,14 +19,13 @@ a note. It never silently passes an unaccompanied grant.
 from __future__ import annotations
 
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from confiture.core.git import GitRepository
 from confiture.core.idempotency.python_migration_extractor import (
     ExtractionKind,
-    extract_sql_from_python_migration,
+    extract_sql_from_python_source,
 )
 from confiture.core.migration_grant_extractor import (
     GrantStatement,
@@ -257,14 +256,17 @@ class GrantAccompanimentChecker:
         if not isinstance(content, str):
             return covered, notes
 
-        # python_migration_extractor reads from disk, so materialize the blob
-        # at the target ref to a temp file (D11). execute_file() targets still
-        # resolve against the working tree — pass the real repo root and note it.
+        # The blob at the target ref is analyzed as the file it will be
+        # (D11, and 0.46.0): `Path(__file__)` and migration-relative
+        # reads resolve where the migration lives. execute_file() targets
+        # still come from the working tree — pass the repo root and note it.
+        located = (
+            migration_file if migration_file.is_absolute() else self.repo_path / migration_file
+        )
         try:
-            with tempfile.TemporaryDirectory() as td:
-                tmp = Path(td) / migration_file.name
-                tmp.write_text(content, encoding="utf-8")
-                result = extract_sql_from_python_migration(tmp, project_root=self.repo_path)
+            result = extract_sql_from_python_source(
+                content, path=located, project_root=self.repo_path
+            )
         except Exception:  # noqa: BLE001 — never let a migration crash the gate
             notes.append(f"{migration_file.as_posix()}: could not statically extract SQL")
             return covered, notes

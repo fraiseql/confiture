@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.45.0
-**Last Updated**: 2026-08-30
+**Version**: 0.46.0
+**Last Updated**: 2026-09-02
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -147,6 +147,35 @@ The two backends:
 
 In `SchemaDiffer`, both paths share the same regex pass for `CREATE INDEX`,
 `CREATE TYPE AS ENUM`, `CREATE SEQUENCE`, and `ALTER TABLE ADD CONSTRAINT`.
+
+#### Python migrations: the static evaluator (since 0.46.0, #213)
+
+The SQL a `.py` migration hands to `self.execute(...)` / `self.execute_file(...)`
+is resolved by `core/idempotency/static_eval.py`, not by pattern-matching the
+call's argument. It evaluates every form that is a pure function of the file's
+own text — literals, names bound exactly once in the scope that reads them
+(module constants, single-assignment locals, `self.<attr>` class attributes),
+`Path(__file__)` arithmetic, file reads, pure `str` methods by whitelist, and
+one-line reader helpers — and refuses everything else with a `Refusal` code, a
+reason and a `remedy`. Scoping comes from the stdlib `symtable` (the compiler's
+own analysis), never from an enumerated list of binding forms. **It never
+imports, executes, `eval`s or `compile`s** — a guard test pins that.
+
+Two invariants to keep:
+
+- **Reach is a pinned table.** `tests/fixtures/idempotency_shapes/` holds one
+  migration per argument shape and `test_extractor_coverage.py` pins what each
+  resolves to. Widening the grammar is an edit to that table; narrowing it, by
+  any refactor, fails the row that regressed. `CONFITURE_CORPUS_DIR=<dir of
+  real .py migrations>` enables a floor test on a real corpus.
+- **Test fixtures for "dynamic SQL" use a loop variable or a parameter.**
+  `sql = "…"; self.execute(sql)` resolves now; a test built on it proves nothing.
+
+Every file-naming shape (`execute_file`, `read_text`, the runtime's
+`Migration.execute_file`, the import checker's IMP010) resolves through
+`core/sql_path.py`: project root → the migration's directory → cwd, first
+existing file wins; static analyzers additionally confine the winner to the
+project root. Do not add a fourth resolver.
 
 #### pglast version matrix (since 0.39.0, #192)
 
@@ -968,8 +997,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: 2026-08-30
-**Version**: 0.45.0
+**Last Updated**: 2026-09-02
+**Version**: 0.46.0
 
 ---
 

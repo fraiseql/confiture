@@ -351,63 +351,86 @@ class ImportChecker:
         file_str: str,
         violations: list[ImportCheckViolation],
     ) -> None:
-        """Check that self.execute_file() string arguments reference existing files."""
+        """Check that ``self.execute_file()`` arguments name files that exist.
+
+        The argument is evaluated by the same static evaluator the idempotency
+        gate uses, so a path built from ``Path(__file__)``, a module constant
+        or a single-assignment local is checked like a literal (IMP010 when
+        it resolves to a missing file, or to one outside the project root),
+        and only a genuinely dynamic path is IMP011 — with the reason.
+        """
+        from confiture.core.idempotency.static_eval import ModuleModel, PathV, Str, Unknown
+        from confiture.core.sql_path import find_project_root, resolve_sql_file
+
+        project_root = find_project_root(py_file)
         try:
-            source = py_file.read_text(encoding="utf-8")
-            tree = ast.parse(source, filename=str(py_file))
+            model = ModuleModel(
+                py_file.read_text(encoding="utf-8"), path=py_file, project_root=project_root
+            )
         except SyntaxError:
             return
 
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ClassDef):
+        for call_node, scope in model.execute_calls():
+            assert isinstance(call_node.func, ast.Attribute)  # execute_calls() filtered on it
+            if call_node.func.attr != "execute_file" or not call_node.args:
                 continue
-            for method_name in ("up", "down"):
-                method_node = _find_method(node, method_name)
-                if method_node is None:
-                    continue
-                for call_node in ast.walk(method_node):
-                    if not isinstance(call_node, ast.Call):
-                        continue
-                    if not (
-                        isinstance(call_node.func, ast.Attribute)
-                        and isinstance(call_node.func.value, ast.Name)
-                        and call_node.func.value.id == "self"
-                        and call_node.func.attr == "execute_file"
-                    ):
-                        continue
-                    if not call_node.args:
-                        continue
+            method_name = model.enclosing_function(scope)
+            if method_name not in ("up", "down"):
+                continue
+            where = f"in {method_name}() (line {call_node.lineno})"
+            arg = call_node.args[0]
+            value, _ = model.evaluate(arg, scope)
 
-                    arg = call_node.args[0]
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        # String literal — validate file exists
-                        ref_path = Path(arg.value)
-                        if not ref_path.is_file():
-                            violations.append(
-                                ImportCheckViolation(
-                                    file_path=file_str,
-                                    level=3,
-                                    rule="IMP010",
-                                    message=(
-                                        f'self.execute_file("{arg.value}") in {method_name}() '
-                                        f"(line {call_node.lineno}) references a file that does not exist"
-                                    ),
-                                )
-                            )
-                    else:
-                        # Dynamic path — can't validate, warn
-                        violations.append(
-                            ImportCheckViolation(
-                                file_path=file_str,
-                                level=3,
-                                rule="IMP011",
-                                message=(
-                                    f"self.execute_file() in {method_name}() "
-                                    f"(line {call_node.lineno}) uses a dynamic path — cannot validate"
-                                ),
-                                severity="warning",
-                            )
-                        )
+            if isinstance(value, Unknown):
+                violations.append(
+                    ImportCheckViolation(
+                        file_path=file_str,
+                        level=3,
+                        rule="IMP011",
+                        message=(
+                            f"self.execute_file() {where} uses a path that could not be "
+                            f"resolved statically — {value.reason}; cannot validate"
+                        ),
+                        severity="warning",
+                    )
+                )
+                continue
+            if not isinstance(value, (Str, PathV)):
+                violations.append(
+                    ImportCheckViolation(
+                        file_path=file_str,
+                        level=3,
+                        rule="IMP011",
+                        message=(
+                            f"self.execute_file() {where} is given a "
+                            f"{type(value).__name__.lower()}, not a path; cannot validate"
+                        ),
+                        severity="warning",
+                    )
+                )
+                continue
+
+            raw = value.path if isinstance(value, PathV) else Path(value.text)
+            resolution = resolve_sql_file(
+                raw, migration_file=py_file, project_root=project_root, confine=True
+            )
+            if resolution.outcome == "missing":
+                problem = (
+                    "references a file that does not exist (looked in the project root "
+                    f"{project_root}, next to the migration, and the working directory)"
+                )
+            elif resolution.outcome == "escaped":
+                problem = f"references a file outside the project root ({project_root})"
+            else:
+                continue
+            violations.append(
+                ImportCheckViolation(
+                    file_path=file_str,
+                    level=3,
+                    rule="IMP010",
+                    message=f"self.execute_file({ast.unparse(arg)}) {where} {problem}",
+                )
+            )
 
 
 def _build_migration_whitelist() -> set[str]:

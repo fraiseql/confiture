@@ -244,6 +244,15 @@ def migrate_validate(
             "rendered but don't fail the gate."
         ),
     ),
+    fail_on_unanalyzable: bool = typer.Option(
+        False,
+        "--fail-on-unanalyzable",
+        help=(
+            "Treat statements the analyzer could not read as a failure (exit 1). "
+            "Off by default. Pair with --base-ref so an existing backlog of "
+            "dynamic SQL does not fail every run. Requires --idempotent."
+        ),
+    ),
     check_drift: bool = typer.Option(
         False,
         "--check-drift",
@@ -661,6 +670,7 @@ def migrate_validate(
             check_body=check_body,
             show_diff=show_diff,
             strict_cor=strict_cor,
+            fail_on_unanalyzable=fail_on_unanalyzable,
             secdef_against_db=secdef_against_db,
             emit_remediation=emit_remediation,
             fix_naming=fix_naming,

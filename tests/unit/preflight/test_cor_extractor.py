@@ -97,6 +97,28 @@ class TestCorTargetsInPythonMigration:
         assert t.source_file == migration
         assert t.source_line == 7
 
+    def test_py_migration_with_cor_body_in_a_constant(self, tmp_path: Path) -> None:
+        """A body hoisted into a module constant is a target too (0.46.0)."""
+        migration = tmp_path / "20260101000002_cor_const.py"
+        migration.write_text(
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            '_VIEW = "CREATE OR REPLACE VIEW v_users AS SELECT 1;"\n'
+            "\n"
+            "class M(Migration):\n"
+            '    version = "20260101000002"\n'
+            '    name = "cor_const"\n'
+            "    def up(self) -> None:\n"
+            "        self.execute(_VIEW)\n"
+            "    def down(self) -> None:\n"
+            "        pass\n",
+            encoding="utf-8",
+        )
+
+        targets = find_cor_targets_in_file(migration, project_root=tmp_path)
+
+        assert [(t.kind, t.name, t.source_line) for t in targets] == [("view", "v_users", 9)]
+
     def test_py_migration_with_no_cor(self, tmp_path: Path) -> None:
         migration = tmp_path / "20260101000001_plain.py"
         migration.write_text(

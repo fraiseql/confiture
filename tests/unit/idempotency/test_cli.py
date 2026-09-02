@@ -521,7 +521,9 @@ class TestIdempotencyValidatePythonMigrations:
             migrations_dir,
             version="20260101000003",
             name="dyn",
-            body_lines=['sql = "CREATE TABLE foo (id int);"', "self.execute(sql)"],
+            # A single-assignment local resolves since 0.46.0; a loop variable
+            # is the shape that stays unreadable.
+            body_lines=_DYNAMIC_BODY,
         )
 
         result = runner.invoke(
@@ -548,7 +550,9 @@ class TestIdempotencyValidatePythonMigrations:
             migrations_dir,
             version="20260101000004",
             name="dynjson",
-            body_lines=['sql = "x"', "self.execute(sql)"],
+            # A single-assignment local resolves since 0.46.0; a loop variable
+            # is the shape that stays unreadable.
+            body_lines=_DYNAMIC_BODY,
         )
 
         result = runner.invoke(
@@ -570,7 +574,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert payload["has_warnings"] is True
         assert len(payload["warnings"]) == 1
         w = payload["warnings"][0]
-        assert w["kind"] == "dynamic_execute"
+        assert w["kind"] == "unresolved_fstring"  # the D8 loop-variable f-string
         assert "20260101000004_dynjson.py" in w["source_file"]
         assert isinstance(w["source_line"], int)
         assert isinstance(w["message"], str)
@@ -589,7 +593,9 @@ class TestIdempotencyValidatePythonMigrations:
             migrations_dir,
             version="20260101000006",
             name="dyn",
-            body_lines=['sql = "x"', "self.execute(sql)"],
+            # A single-assignment local resolves since 0.46.0; a loop variable
+            # is the shape that stays unreadable.
+            body_lines=_DYNAMIC_BODY,
         )
 
         result = runner.invoke(
@@ -1109,3 +1115,280 @@ class TestReadTextMigrationsAreAnalyzed:
         kinds = [w["kind"] for w in payload["warnings"]]
         assert kinds == ["dynamic_read_text"]
         assert "execute_file" in payload["warnings"][0]["message"]
+
+
+# A call the analyzer cannot read, by construction: the SQL depends on a loop
+# variable. Every visible statement is idempotent, so the only signal is the
+# skip — exactly #213's shape. This stays unresolvable under the static
+# evaluator (a loop target is not a single assignment), unlike the
+# `sql = "…"; self.execute(sql)` shape older tests used.
+_DYNAMIC_BODY = [
+    'for table in ("a", "b"):',
+    '    self.execute(f"CREATE TABLE IF NOT EXISTS {table} (id int)")',
+]
+
+
+def _validate(migrations_dir: Path, *extra: str):
+    return runner.invoke(
+        app,
+        ["migrate", "validate", "--idempotent", "--migrations-dir", str(migrations_dir), *extra],
+    )
+
+
+class TestUnverifiedVerdict:
+    """The verdict never claims what the run did not check (#213)."""
+
+    GREEN = "All migrations are idempotent"
+    UNVERIFIED = "call(s) unverified"
+
+    def test_clean_run_with_skips_does_not_claim_idempotent(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000010", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0, result.stdout
+        assert self.GREEN not in result.stdout
+        assert f"⚠️  1 {self.UNVERIFIED}" in result.stdout
+        assert "Scanned 1 file(s)" in result.stdout
+
+    def test_clean_run_without_skips_still_says_idempotent(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "001_ok.up.sql").write_text("CREATE TABLE IF NOT EXISTS foo (id int);\n")
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0
+        assert self.GREEN in result.stdout
+        assert "Scanned 1 file(s)" in result.stdout
+        assert self.UNVERIFIED not in result.stdout
+
+    def test_info_only_run_with_skips_obeys_the_same_rule(self, tmp_path: Path) -> None:
+        """The second headline site (info-only branch) must not keep the bug."""
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000011", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+        (migrations_dir / "001_cor.up.sql").write_text("CREATE OR REPLACE VIEW v_x AS SELECT 1;\n")
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0, result.stdout
+        assert self.GREEN not in result.stdout
+        assert f"1 {self.UNVERIFIED}" in result.stdout
+        assert "ℹ️" in result.stdout
+
+    def test_blocking_run_with_skips_states_the_count_in_the_summary(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000012", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+        (migrations_dir / "001_bad.up.sql").write_text("CREATE TABLE foo (id int);\n")
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 1
+        assert "❌ Found 1 idempotency violation(s)" in result.stdout
+        # Stated up top, next to the verdict — not only three paragraphs down.
+        summary_at = result.stdout.index(self.UNVERIFIED)
+        block_at = result.stdout.index("could not be statically analyzed")
+        assert summary_at < block_at
+
+    def test_strict_cor_failure_is_not_announced_as_idempotent(self, tmp_path: Path) -> None:
+        """Exit 1 under --strict-cor used to print the green line first."""
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "001_cor.up.sql").write_text("CREATE OR REPLACE VIEW v_x AS SELECT 1;\n")
+
+        result = _validate(migrations_dir, "--strict-cor")
+
+        assert result.exit_code == 1
+        assert self.GREEN not in result.stdout
+        assert "❌" in result.stdout
+        assert "blocking under --strict-cor" in result.stdout
+        assert "do not fail the gate" not in result.stdout
+
+    def test_fix_with_skips_and_nothing_to_fix_does_not_claim_idempotent(
+        self, tmp_path: Path
+    ) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000013", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = runner.invoke(
+            app, ["migrate", "fix", "--idempotent", "--migrations-dir", str(migrations_dir)]
+        )
+
+        assert result.exit_code == 0, result.stdout
+        assert "already idempotent" not in result.stdout
+        assert f"1 {self.UNVERIFIED}" in result.stdout
+
+
+class TestFailOnUnanalyzable:
+    """`--fail-on-unanalyzable`: a gate can opt into the skip (#213)."""
+
+    def test_flag_makes_a_skip_fatal(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000020", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir, "--fail-on-unanalyzable")
+
+        assert result.exit_code == 1, result.stdout
+        assert "❌ 1 call(s) unverified" in result.stdout
+        assert "All migrations are idempotent" not in result.stdout
+
+    def test_without_the_flag_the_same_run_exits_0(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000021", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0, result.stdout
+        assert "⚠️  1 call(s) unverified" in result.stdout
+
+    def test_flag_on_a_complete_clean_run_exits_0(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "001_ok.up.sql").write_text("CREATE TABLE IF NOT EXISTS foo (id int);\n")
+
+        result = _validate(migrations_dir, "--fail-on-unanalyzable")
+
+        assert result.exit_code == 0, result.stdout
+        assert "All migrations are idempotent" in result.stdout
+
+    def test_flag_without_idempotent_is_a_configuration_error(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "validate",
+                "--fail-on-unanalyzable",
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
+        )
+
+        assert result.exit_code == 5, result.output
+
+    def test_json_records_that_the_flag_was_on(self, tmp_path: Path) -> None:
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000022", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        flagged = _validate(migrations_dir, "--format", "json", "--fail-on-unanalyzable")
+        plain = _validate(migrations_dir, "--format", "json")
+
+        assert flagged.exit_code == 1
+        assert plain.exit_code == 0
+        flagged_payload = json.loads(flagged.stdout)
+        plain_payload = json.loads(plain.stdout)
+        assert flagged_payload["status"] == "unverified"
+        assert flagged_payload["meta"]["fail_on_unanalyzable"] is True
+        assert plain_payload["status"] == "unverified"
+        assert plain_payload["meta"]["fail_on_unanalyzable"] is False
+
+    def test_composes_with_another_check(self, tmp_path: Path) -> None:
+        """Both checks run; the composed wrapper reads `failed`; exit aggregates to 1."""
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000023", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(
+            migrations_dir, "--check-imports", "--format", "json", "--fail-on-unanalyzable"
+        )
+
+        assert result.exit_code == 1, result.output
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "failed"
+        assert set(payload["checks"]) == {"imports", "idempotent"}
+        assert payload["checks"]["idempotent"]["meta"]["fail_on_unanalyzable"] is True
+
+
+class TestIssue213Repro:
+    """The issue's migration, verbatim: exit 1, and the finding names the call line."""
+
+    REPRO = '''\
+"""Every visible statement is idempotent. The only non-idempotent DDL is in a constant."""
+
+from confiture.models.migration import Migration
+
+# Not idempotent: no IF NOT EXISTS. The identical text as a literal IS flagged.
+DDL = "CREATE TABLE public.tb_gadget (id int)"
+
+
+class HiddenNonIdempotent(Migration):
+    version = "20260101000000"
+    name = "hidden_nonidempotent"
+
+    def up(self) -> None:
+        self.execute(DDL)
+
+    def down(self) -> None:
+        self.execute("DROP TABLE IF EXISTS public.tb_gadget")
+'''
+
+    def test_hidden_constant_is_found(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "20260101000000_hidden_nonidempotent.py").write_text(self.REPRO)
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 1, result.stdout
+        assert "❌ Found 1 idempotency violation(s)" in result.stdout
+        assert "Line 14 (SQL line 1): CREATE_TABLE" in result.stdout
+        assert "could not be statically analyzed" not in result.stdout
+
+
+class TestWarningBlockShowsTheRemedy:
+    def test_text_output_renders_the_remedy_under_each_warning(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000070", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir)
+
+        assert "unresolved_fstring" in result.stdout
+        assert "→ " in result.stdout
+
+    def test_json_warning_carries_reason_code_and_remedy(self, tmp_path: Path) -> None:
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000071", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        payload = json.loads(_validate(migrations_dir, "--format", "json").stdout)
+
+        warning = payload["warnings"][0]
+        assert warning["reason_code"] == "fstring_dynamic"
+        assert warning["remedy"]

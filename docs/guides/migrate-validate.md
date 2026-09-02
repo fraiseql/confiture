@@ -145,10 +145,12 @@ The report uses three distinct words. Keep them straight:
   `CREATE OR REPLACE VIEW/FUNCTION/PROCEDURE` not preceded by a matching
   `DROP … IF EXISTS`. Does *not* fail the gate by default. Render-only.
   Promote to a gate failure with `--strict-cor`.
-- **Warning** — an *extractor*-level signal that we couldn't statically
-  analyze part of a `.py` file (dynamic `execute(var)`, f-strings with
-  interpolation). Never fails the gate; tells you which calls were
-  skipped.
+- **Warning** — an *extractor*-level signal that a `.py` file's
+  `execute`/`execute_file` call could not be statically read (an f-string
+  over a loop variable, a parameter, a missing file). Each one states the
+  reason and a remedy. The verdict counts them (`⚠️ N call(s) unverified`,
+  `status: "unverified"`); the gate fails on them only with
+  `--fail-on-unanalyzable`.
 
 ### `--strict-cor`
 
@@ -177,6 +179,28 @@ confiture migrate validate --idempotent --strict-cor
 Adding a preceding `DROP <KIND> IF EXISTS <name>` for the same object
 silences the note — that's the explicit "I've thought about this"
 signal.
+
+### `--fail-on-unanalyzable`
+
+*New in 0.46.0 (#213).* A call the analyzer could not read is not a pass, and
+the verdict says so (`⚠️ … unverified`, `status: "unverified"`), but by
+default it does not change the exit code — a green CI that holds dynamic SQL
+stays green. A gate that wants "could not check" to be fatal opts in:
+
+```bash
+# Pre-merge gate: new migrations must be readable AND idempotent
+confiture migrate validate --idempotent --base-ref origin/main --fail-on-unanalyzable
+```
+
+With the flag, a run with an unverified call exits **1** (the existing
+findings class; a distinct exit code is parked, not refused) and the headline
+is `❌`. `meta.fail_on_unanalyzable` in the JSON payload records that the flag
+was on, so a reader can tell "unverified, exit 1" from "unverified, exit 0"
+without the command line. Pair it with `--base-ref` or `--staged`: an
+existing backlog of genuinely dynamic migrations would otherwise fail every
+run. An empty scope is still a pass — the flag fails on files it could not
+read, not on having none to read. It requires `--idempotent`; alone it is a
+configuration error (exit 5).
 
 ### Closing the transitive-dependent gap with `migrate preflight --check-dependents`
 
@@ -260,69 +284,114 @@ Confiture naming convention.
 
 ### Python-migration support
 
-Confiture statically extracts SQL strings from `up()` and `down()`
-without importing or executing the migration. The extractor handles:
+Confiture statically evaluates what each `self.execute(...)` and
+`self.execute_file(...)` call receives, without importing or executing the
+migration. *Since 0.46.0* (#213) the evaluator reads every form that is a
+pure function of the migration file's own text:
 
-- String constants: `self.execute("CREATE TABLE foo (id int);")`
-- f-strings with only literal parts: `self.execute(f"CREATE TABLE foo;")`
-- Constant string concatenation: `self.execute("CREATE " + "TABLE foo;")`
-- File references: `self.execute_file("db/schema/foo.sql")`
-- Literal file reads *(new in 0.42.0, #185)*:
-  `self.execute(Path("db/schema/foo.sql").read_text())`, with or without an
-  `encoding=` keyword, and `pathlib.Path(...)` spelled out. Only a string
-  **literal** is resolved — see below.
-- Keyword form: `self.execute(sql="…")`
+- **Literals**, static f-strings, and `+` concatenation:
+  `self.execute("CREATE TABLE IF NOT EXISTS foo (id int);")`
+- **Names bound once** in the scope that reads them, by a plain top-level
+  assignment — a module constant (`DDL = "…"`; annotated `DDL: Final = "…"`;
+  defined above or below the class), a single-assignment local inside `up()`,
+  or a class attribute read through `self.NAME`. Constants may be built from
+  other constants.
+- **Path arithmetic from `__file__`**: `Path(__file__).resolve().parent.parent
+  / "schema" / "fn.sql"`, `pathlib.Path(...)`, `.parents[N]`, `.joinpath(...)`,
+  `.resolve()` / `.absolute()`.
+- **File reads**: `self.execute_file(<path>)` and `self.execute(<path>.read_text())`
+  for any path expression above. Relative paths resolve against the **project
+  root**, then the migration's own directory, then the working directory — the
+  same order the runtime's `execute_file` uses, so the gate reads the file the
+  deploy will run, from any cwd. A path that resolves outside the project root
+  is refused, never read (`execute_file_escaped`).
+- **Pure string operations** on static inputs: `.replace()`, `.strip()` /
+  `.lstrip()` / `.rstrip()`, `.upper()` / `.lower()`, `.format()` with static
+  arguments, `sep.join(<static sequence>)`, `dedent()` / `textwrap.dedent()`.
+- **One-line reader helpers**: a module-level `def _read_sql(*parts): return
+  (_SCHEMA / Path(*parts)).read_text()`, or a method reached through
+  `self._read(...)`, whose body is an optional docstring plus one `return`,
+  undecorated. Arguments bind from the call site; defaults are honoured.
+- **Keyword form**: `self.execute(sql="…")`.
 
-Calls whose argument can't be statically resolved produce a structured
-**warning** in the report (rather than silently passing the file).
-Warnings appear under their own `⚠️` section in text output and as a
-top-level `warnings` array in JSON. Examples:
+Scoping is decided by the interpreter's own analysis (`symtable`), so a name
+resolves only when Python would read that binding there. Everything that
+cannot be read is a **warning** that states the reason and the remedy —
+never a silent pass. What refuses, and why:
 
-- `self.execute(sql)` where `sql` is a variable → `dynamic_execute`
-- `self.execute(f"CREATE TABLE {table};")` → `unresolved_fstring`
-- `self.execute_file(computed_path)` → `dynamic_execute_file`
-- `self.execute_file("../../../outside/file.sql")` resolving outside the
-  project root → `execute_file_escaped` (the file is **not** read)
-- `self.execute_file("db/schema/missing.sql")` → `execute_file_missing`
-- `self.execute(Path(target).read_text())`, or any other non-literal path
-  including `(SQL_DIR / "foo.sql").read_text()` → `dynamic_read_text`, whose
-  message names `execute_file(...)` as the supported alternative
+| Shape | Warning kind | Reason it is refused |
+|---|---|---|
+| `f"… {table} …"` over a loop variable or parameter | `unresolved_fstring` | the value is not fixed by the file's text |
+| `{x!r}` / `{x:>10}` | `unresolved_fstring` | conversion or format spec |
+| `self.execute(sql)` where `sql` is a parameter, a loop/`with`/`except` target, a comprehension or walrus target, an import, a nested `def` | `dynamic_execute` | bound by something other than a plain assignment |
+| a name assigned twice, augmented (`+=`), or reassigned through `global` | `dynamic_execute` | not a single binding |
+| a name assigned inside `if`/`for`/`try`/`with` | `dynamic_execute` | conditional |
+| `self.X` when anything assigns `self.X` anywhere in the file | `dynamic_execute` | the class attribute is not its only binding |
+| `"…" % args`, `.title()`, any call outside the list above | `dynamic_execute` | outside the grammar |
+| a helper with two statements, a decorator, or `**kwargs` | `dynamic_execute` | not a single `return <expression>` |
+| `<expr>.read_text()` whose path depends on a runtime value | `dynamic_read_text` | the path is not static |
+| `self.execute_file(<runtime value>)` | `dynamic_execute_file` | the path is not static |
+| a path naming no file at any base | `execute_file_missing` | the message lists every base tried |
+| a path resolving outside the project root | `execute_file_escaped` | refused, never read |
+| a file that does not parse | `syntax_error` | nothing in it was read |
 
-Resolved `read_text()` paths go through the **same** project-root confinement as
-`execute_file`, and report the same `execute_file_escaped` /
-`execute_file_missing` signals: a path escaping the project root is refused, not
-read. Resolution is pure AST matching — no variable, constant or expression is
-ever evaluated — and it is independent of the SQL backend, so
-`CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` changes nothing here.
-
-Warnings do not fail the gate. Violations do. Combine the two
-appropriately for your CI policy: if you require zero dynamic SQL,
-grep for `has_warnings: true` in the JSON output.
+Every warning appears under its own `⚠️` section in text output — with the
+reason, and a `→` line naming the rewrite — and as a top-level `warnings[]`
+array in JSON, each entry carrying `kind`, `message`, `reason_code` and
+`remedy`. The verdict is honest about them: a run that could not read a call
+prints `⚠️  N call(s) unverified — idempotency not established` instead of the
+green line, and reports `status: "unverified"` in JSON. The exit code stays 0
+unless you opt in with [`--fail-on-unanalyzable`](#--fail-on-unanalyzable).
 
 ### Sample output
 
 ```
 $ confiture migrate validate --idempotent
+✓ AST backend (pglast)
 ❌ Found 2 idempotency violation(s)
-
-20260101000000_add_users.py
-  Line 9 (SQL line 1): CREATE_TABLE
-    CREATE TABLE users (id int);
-    💡 Use CREATE TABLE IF NOT EXISTS
+   1 call(s) unverified — idempotency not established
 
 001_add_orders.up.sql
-  Line 3: CREATE_INDEX
+  Line 1: CREATE_INDEX
     CREATE INDEX idx_orders_user ON orders (user_id);
-    💡 Use CREATE INDEX IF NOT EXISTS
+    💡 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders ( ... );
+
+20260101000000_add_users.py
+  Line 11 (SQL line 1): CREATE_TABLE
+    CREATE TABLE users (id int);
+    💡 CREATE TABLE IF NOT EXISTS users ( ... );
 
 ⚠️  1 dynamic SQL call(s) could not be statically analyzed:
-  20260101000001_legacy_load.py:14 — dynamic_execute
-    self.execute() called with a non-literal argument; SQL was not scanned
+  20260101000001_legacy_load.py:10 — unresolved_fstring
+    self.execute() f-string was not resolved statically — f-string interpolates `table`, which is not static: `table` is bound by a `for` target at line 9, not by a plain assignment; SQL was not scanned
+    → Parameterise at the DDL level, or hoist the static parts into module constants and execute one constant per statement.
     These calls were skipped. Idempotency cannot be guaranteed.
 
 To auto-fix .sql files, run:
   confiture migrate fix --idempotent --migrations-dir db/migrations
 For .py migrations, edit them manually.
+```
+
+The `CREATE TABLE` in `add_users.py` sits in a module constant (`DDL = …`,
+`self.execute(DDL)`); before 0.46.0 it was reported as unreadable and the run
+was green. The same directory with only the unreadable migration:
+
+```
+$ confiture migrate validate --idempotent; echo "exit=$?"
+✓ AST backend (pglast)
+⚠️  1 call(s) unverified — idempotency not established
+   Scanned 1 file(s)
+⚠️  1 dynamic SQL call(s) could not be statically analyzed:
+  20260101000001_legacy_load.py:10 — unresolved_fstring
+    …
+exit=0
+
+$ confiture migrate validate --idempotent --fail-on-unanalyzable; echo "exit=$?"
+✓ AST backend (pglast)
+❌ 1 call(s) unverified — idempotency not established
+   Scanned 1 file(s)
+   …
+exit=1
 ```
 
 For Python-origin violations, the line shown is the source line of the
@@ -389,6 +458,13 @@ schedule:
 ```bash
 confiture migrate validate --idempotent --base-ref origin/main
 ```
+
+⚠️ *0.46.0 widens what is read.* SQL held in module constants, computed file
+paths and reader helpers is now analyzed (#213), so an **unscoped** run on an
+existing repository can newly fail on migrations the gate silently skipped
+before — on the project that reported the issue, 49 blocking findings across
+14 migrations. Scoped runs judge only what the branch touched and are not
+affected retroactively; scoping is how you drain that backlog.
 
 **In CI, `fetch-depth: 0` is required.** `actions/checkout` defaults to a
 shallow clone with no `origin/main` and no merge base:
@@ -758,13 +834,16 @@ confiture migrate validate --require-grant-migration --allow-grant-only --staged
   that wraps `execute`. The call is ignored. Workaround: use `execute()`
   directly for migration SQL, or split helpers into a separate non-call
   surface.
-- **SQL built by `str.format` / `%`-format.** Treated as dynamic. The
-  template is not extracted even if the placeholders are not used.
-- **Non-literal `Path(...).read_text()`.** A literal path is resolved and
-  analyzed since 0.42.0; a computed one (`Path(target)`, `SQL_DIR / name`) is
-  reported as `dynamic_read_text`. Use `execute_file(<path>)`, which resolves
-  computed paths.
+- **SQL that depends on a runtime value.** An f-string over a loop variable
+  or a parameter, `%`-formatting, a path built from a parameter, a helper
+  with more than one statement: these are refused with the reason and the
+  remedy (see the table under *Python-migration support*). Static
+  `.format()` and `.replace()` are read; `%` is not.
+- **Only this file is read.** A constant imported from another module, or a
+  helper defined elsewhere, is not followed — the evaluator never imports.
 
-These cases produce **warnings**, never silent passes — so a Python-only
-migrations directory full of dynamic SQL still exits 0 but tells you
-clearly which files were not scanned. Tighten your CI gate accordingly.
+These cases produce **warnings with a remedy**, never silent passes. A
+Python-only migrations directory full of dynamic SQL reports
+`⚠️ N call(s) unverified` (`status: "unverified"`) and, by default, still exits
+0 so an existing pipeline keeps working; pass `--fail-on-unanalyzable` to make
+that a failure, and pair it with `--base-ref` to ratchet.
