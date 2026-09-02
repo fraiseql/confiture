@@ -18,67 +18,140 @@
         "warnings",
         "has_warnings",
         "meta",
-        "hints"
+        "hints",
+        "analysis_complete",
+        "unanalyzed_count"
       ],
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["ok", "issues_found"]
+          "enum": [
+            "ok",
+            "issues_found",
+            "unverified"
+          ],
+          "description": "`issues_found` when any violation exists (exit 1 for blocking ones); `unverified` when no violation exists but at least one execute/execute_file call could not be statically read (exit 0, or 1 under --fail-on-unanalyzable); `ok` only when every call was read and nothing was found. Added `unverified` in 0.46.0 (#213)."
         },
         "violations": {
           "type": "array",
-          "items": { "$ref": "_common.schema.json#/$defs/Violation" }
+          "items": {
+            "$ref": "_common.schema.json#/$defs/Violation"
+          }
         },
-        "violation_count": { "type": "integer", "minimum": 0 },
-        "files_scanned": { "type": "integer", "minimum": 0 },
+        "violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
         "scanned_files": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "has_violations": { "type": "boolean" },
+        "has_violations": {
+          "type": "boolean"
+        },
         "has_blocking_violations": {
           "type": "boolean",
           "description": "True when any violation has severity=error. info-only findings keep this false unless --strict-cor is passed."
         },
         "warnings": {
           "type": "array",
-          "items": { "$ref": "_common.schema.json#/$defs/ExtractorWarning" }
+          "items": {
+            "$ref": "_common.schema.json#/$defs/ExtractorWarning"
+          }
         },
-        "has_warnings": { "type": "boolean" },
+        "has_warnings": {
+          "type": "boolean"
+        },
         "meta": {
           "type": "object",
-          "required": ["backend"],
+          "required": [
+            "backend"
+          ],
           "properties": {
             "backend": {
               "type": "string",
-              "enum": ["ast", "regex"],
+              "enum": [
+                "ast",
+                "regex"
+              ],
               "description": "Which detection backend ran. `ast` = pglast-backed AST (preferred); `regex` = fallback when pglast is missing or CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 is set."
             }
           }
         },
-        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+        "hints": {
+          "$ref": "_common.schema.json#/$defs/HintsArray"
+        },
+        "analysis_complete": {
+          "type": "boolean",
+          "description": "True when every execute/execute_file call the run was asked about was actually read. False whenever `warnings` is non-empty. Added in 0.46.0 (#213)."
+        },
+        "unanalyzed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read — equals len(warnings). Added in 0.46.0 (#213)."
+        }
       }
     },
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "message", "violations", "meta", "hints"],
-      "description": "Empty-input shape: no migration files found.",
+      "required": [
+        "status",
+        "message",
+        "violations",
+        "meta",
+        "hints",
+        "analysis_complete",
+        "unanalyzed_count"
+      ],
+      "description": "Empty-input shape: no migration files found, or a git scope that selected none. Vacuously complete (D4).",
       "properties": {
-        "status": { "type": "string", "const": "ok" },
-        "message": { "type": "string" },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "message": {
+          "type": "string"
+        },
         "violations": {
           "type": "array",
           "maxItems": 0
         },
         "meta": {
           "type": "object",
-          "required": ["backend"],
+          "required": [
+            "backend"
+          ],
           "properties": {
-            "backend": { "type": "string", "enum": ["ast", "regex"] }
+            "backend": {
+              "type": "string",
+              "enum": [
+                "ast",
+                "regex"
+              ]
+            }
           }
         },
-        "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+        "hints": {
+          "$ref": "_common.schema.json#/$defs/HintsArray"
+        },
+        "analysis_complete": {
+          "type": "boolean",
+          "description": "True when every execute/execute_file call the run was asked about was actually read. False whenever `warnings` is non-empty. Added in 0.46.0 (#213).",
+          "const": true
+        },
+        "unanalyzed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read — equals len(warnings). Added in 0.46.0 (#213).",
+          "const": 0
+        }
       }
     }
   ]

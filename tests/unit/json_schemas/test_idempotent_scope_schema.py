@@ -146,3 +146,19 @@ def test_unscoped_report_still_validates_and_has_no_scope(repo: Path) -> None:
     _validator().validate(payload)
     assert exit_code == 0
     assert "scope" not in payload["meta"]
+
+
+def test_zero_scope_report_is_vacuously_complete(repo: Path) -> None:
+    """D4 (#213): an empty scope is a pass, and says it read everything (of nothing)."""
+    base = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(repo, "checkout", "-b", "feature")
+    (repo / "README.md").write_text("docs\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "docs")
+
+    exit_code, payload = _run(repo, "--base-ref", base)
+
+    _validator().validate(payload)
+    assert exit_code == 0
+    assert payload["analysis_complete"] is True
+    assert payload["unanalyzed_count"] == 0

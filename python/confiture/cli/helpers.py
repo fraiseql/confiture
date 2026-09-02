@@ -819,6 +819,8 @@ def _report_empty_scope(
             "status": "ok",
             "message": message,
             "violations": [],
+            "analysis_complete": True,
+            "unanalyzed_count": 0,
             "meta": meta,
             "hints": hints,
         }
@@ -912,6 +914,8 @@ def _validate_idempotency(
                 "status": "ok",
                 "message": "No migration files found",
                 "violations": [],
+                "analysis_complete": True,
+                "unanalyzed_count": 0,
                 "meta": meta,
                 "hints": zero_files_hints,
             }
@@ -926,7 +930,14 @@ def _validate_idempotency(
 
     if format_output == "json":
         result = combined_report.to_dict()
-        result["status"] = "issues_found" if fail else "ok"
+        # Violations win; then "could not check" is its own answer, distinct
+        # from "checked and clean" (#213, D3).
+        if fail or combined_report.has_violations:
+            result["status"] = "issues_found"
+        elif combined_report.analysis_complete:
+            result["status"] = "ok"
+        else:
+            result["status"] = "unverified"
         result["meta"] = meta
         result["hints"] = []
         return not fail, result

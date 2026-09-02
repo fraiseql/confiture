@@ -128,3 +128,88 @@ def test_hints_field_is_required_and_array(tmp_path, schemas_dir, schema_registr
     )
     payload = json.loads(result.stdout)
     assert isinstance(payload["hints"], list)
+
+
+_DYNAMIC_MIGRATION = """\
+from confiture.models.migration import Migration
+
+
+class Dyn(Migration):
+    version = "20260101000010"
+    name = "dyn"
+
+    def up(self) -> None:
+        for table in ("a", "b"):
+            self.execute(f"CREATE TABLE IF NOT EXISTS {table} (id int)")
+
+    def down(self) -> None:
+        pass
+"""
+
+
+def _run(migs: Path):
+    return CliRunner().invoke(
+        app,
+        ["migrate", "validate", "--idempotent", "--migrations-dir", str(migs), "--format", "json"],
+    )
+
+
+def test_unverified_run_validates(tmp_path, schemas_dir, schema_registry):
+    """A clean run that could not read a call is `unverified`, not `ok` (#213, D3)."""
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260101000010_dyn.py").write_text(_DYNAMIC_MIGRATION)
+
+    result = _run(migs)
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["status"] == "unverified"
+    assert payload["analysis_complete"] is False
+    assert payload["unanalyzed_count"] == 1
+    assert payload["has_violations"] is False
+
+
+def test_violations_win_over_unverified(tmp_path, schemas_dir, schema_registry):
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260101000010_dyn.py").write_text(_DYNAMIC_MIGRATION)
+    (migs / "20260527000001_bad.up.sql").write_text("CREATE TABLE users (id INT PRIMARY KEY);\n")
+
+    result = _run(migs)
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["status"] == "issues_found"
+    assert payload["analysis_complete"] is False
+    assert payload["unanalyzed_count"] == 1
+
+
+def test_complete_run_says_so(tmp_path, schemas_dir, schema_registry):
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260527000000_init.up.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY);\n"
+    )
+
+    payload = json.loads(_run(migs).stdout)
+
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["status"] == "ok"
+    assert payload["analysis_complete"] is True
+    assert payload["unanalyzed_count"] == 0
+
+
+def test_empty_directory_is_vacuously_complete(tmp_path, schemas_dir, schema_registry):
+    """D4: nothing to read is not the same as could not read."""
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+
+    payload = json.loads(_run(migs).stdout)
+
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["status"] == "ok"
+    assert payload["analysis_complete"] is True
+    assert payload["unanalyzed_count"] == 0
