@@ -1224,3 +1224,100 @@ class TestUnverifiedVerdict:
         assert result.exit_code == 0, result.stdout
         assert "already idempotent" not in result.stdout
         assert f"1 {self.UNVERIFIED}" in result.stdout
+
+
+class TestFailOnUnanalyzable:
+    """`--fail-on-unanalyzable`: a gate can opt into the skip (#213, D1, Phase 03)."""
+
+    def test_flag_makes_a_skip_fatal(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000020", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir, "--fail-on-unanalyzable")
+
+        assert result.exit_code == 1, result.stdout
+        assert "❌ 1 call(s) unverified" in result.stdout
+        assert "All migrations are idempotent" not in result.stdout
+
+    def test_without_the_flag_the_same_run_exits_0(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000021", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0, result.stdout
+        assert "⚠️  1 call(s) unverified" in result.stdout
+
+    def test_flag_on_a_complete_clean_run_exits_0(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "001_ok.up.sql").write_text("CREATE TABLE IF NOT EXISTS foo (id int);\n")
+
+        result = _validate(migrations_dir, "--fail-on-unanalyzable")
+
+        assert result.exit_code == 0, result.stdout
+        assert "All migrations are idempotent" in result.stdout
+
+    def test_flag_without_idempotent_is_a_configuration_error(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "validate",
+                "--fail-on-unanalyzable",
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
+        )
+
+        assert result.exit_code == 5, result.output
+
+    def test_json_records_that_the_flag_was_on(self, tmp_path: Path) -> None:
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000022", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        flagged = _validate(migrations_dir, "--format", "json", "--fail-on-unanalyzable")
+        plain = _validate(migrations_dir, "--format", "json")
+
+        assert flagged.exit_code == 1
+        assert plain.exit_code == 0
+        flagged_payload = json.loads(flagged.stdout)
+        plain_payload = json.loads(plain.stdout)
+        assert flagged_payload["status"] == "unverified"
+        assert flagged_payload["meta"]["fail_on_unanalyzable"] is True
+        assert plain_payload["status"] == "unverified"
+        assert plain_payload["meta"]["fail_on_unanalyzable"] is False
+
+    def test_composes_with_another_check(self, tmp_path: Path) -> None:
+        """Both checks run; the composed wrapper reads `failed`; exit aggregates to 1."""
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000023", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(
+            migrations_dir, "--check-imports", "--format", "json", "--fail-on-unanalyzable"
+        )
+
+        assert result.exit_code == 1, result.output
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "failed"
+        assert set(payload["checks"]) == {"imports", "idempotent"}
+        assert payload["checks"]["idempotent"]["meta"]["fail_on_unanalyzable"] is True

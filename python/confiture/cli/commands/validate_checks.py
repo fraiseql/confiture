@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 _FLAG_DEPENDENCIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("--check-body", ("--check-signatures",)),
     ("--show-diff", ("--check-body", "--check-body-views", "--check-body-replay")),
+    ("--fail-on-unanalyzable", ("--idempotent",)),
 )
 
 
@@ -85,6 +86,7 @@ class ValidateOptions:
     check_body: bool = False
     show_diff: bool = False
     strict_cor: bool = False
+    fail_on_unanalyzable: bool = False
     secdef_against_db: bool = False
     emit_remediation: Path | None = None
     fix_naming: bool = False
@@ -125,6 +127,8 @@ def validate_flag_dependencies(opts: ValidateOptions) -> None:
         "--check-body-views": opts.check_body_views,
         "--check-body-replay": opts.check_body_replay,
         "--show-diff": opts.show_diff,
+        "--fail-on-unanalyzable": opts.fail_on_unanalyzable,
+        "--idempotent": opts.idempotent,
     }
     for modifier, required in _FLAG_DEPENDENCIES:
         if not on[modifier]:
@@ -471,14 +475,17 @@ def _require_migrations_dir(opts: ValidateOptions) -> None:
 
 def _run_idempotent(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
     _require_migrations_dir(opts)
-    passed, payload = _validate_idempotency(
+    outcome = _validate_idempotency(
         opts.migrations_dir,
         opts.format_output,
         strict_cor=opts.strict_cor,
+        fail_on_unanalyzable=opts.fail_on_unanalyzable,
         base_ref=opts.idempotent_base_ref,
         staged=opts.staged,
     )
-    return CheckOutcome("idempotent", passed=passed, payload=payload)
+    return CheckOutcome(
+        "idempotent", passed=outcome.passed, exit_code=outcome.exit_code, payload=outcome.payload
+    )
 
 
 def _run_naming(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:

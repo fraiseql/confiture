@@ -162,3 +162,51 @@ def test_zero_scope_report_is_vacuously_complete(repo: Path) -> None:
     assert exit_code == 0
     assert payload["analysis_complete"] is True
     assert payload["unanalyzed_count"] == 0
+
+
+_DYNAMIC_PY = """\
+from confiture.models.migration import Migration
+
+
+class Dyn(Migration):
+    version = "20260102000000"
+    name = "dyn"
+
+    def up(self) -> None:
+        for table in ("a", "b"):
+            self.execute(f"CREATE TABLE IF NOT EXISTS {table} (id int)")
+
+    def down(self) -> None:
+        pass
+"""
+
+
+def test_scoped_flag_judges_only_the_selected_files(repo: Path) -> None:
+    """One unanalyzable file on the branch + the flag → 1; the base's files are not judged."""
+    base = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(repo, "checkout", "-b", "feature")
+    (repo / "db" / "migrations" / "20260102000000_dyn.py").write_text(_DYNAMIC_PY)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "dyn")
+
+    exit_code, payload = _run(repo, "--base-ref", base, "--fail-on-unanalyzable")
+
+    _validator().validate(payload)
+    assert exit_code == 1
+    assert payload["status"] == "unverified"
+    assert payload["files_scanned"] == 1
+
+
+def test_empty_scope_with_the_flag_stays_a_pass(repo: Path) -> None:
+    """D4: the flag fails on files it could not read, not on having none to read."""
+    base = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(repo, "checkout", "-b", "feature")
+    (repo / "README.md").write_text("docs\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "docs")
+
+    exit_code, payload = _run(repo, "--base-ref", base, "--fail-on-unanalyzable")
+
+    _validator().validate(payload)
+    assert exit_code == 0
+    assert payload["status"] == "ok"

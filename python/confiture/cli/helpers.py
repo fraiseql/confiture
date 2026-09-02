@@ -4,6 +4,7 @@ import difflib
 import json
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -828,14 +829,44 @@ def _report_empty_scope(
     return None
 
 
+UNANALYZABLE_EXIT_CODE = 1
+"""Exit code for a run that failed only because it could not read a call.
+
+Under ``--fail-on-unanalyzable`` an unverified call fails the gate. It signals
+the existing findings class (1) rather than a new integer: the documented exit
+table is frozen at 0–8 and shared with the fraisier adapters, so a distinct
+"completed, N unverified" code is a contract change on both sides. It is
+parked, not refused (#213, D1) — and when it lands, this constant and the
+schema note are the only two places that change.
+"""
+
+
+@dataclass(frozen=True)
+class IdempotencyOutcome:
+    """What one ``--idempotent`` run decided, for the check registry to compose.
+
+    Attributes:
+        passed: False when the gate should fail — a blocking violation, an
+            info finding under ``--strict-cor``, or an unverified call under
+            ``--fail-on-unanalyzable``.
+        payload: The JSON document in JSON mode, else ``None``.
+        exit_code: The code this run signals when it does not pass.
+    """
+
+    passed: bool
+    payload: dict[str, Any] | None
+    exit_code: int = 1
+
+
 def _validate_idempotency(
     migrations_dir: Path,
     format_output: str,
     *,
     strict_cor: bool = False,
+    fail_on_unanalyzable: bool = False,
     base_ref: str | None = None,
     staged: bool = False,
-) -> tuple[bool, dict[str, Any] | None]:
+) -> IdempotencyOutcome:
     """Validate idempotency of SQL and Python migration files.
 
     Args:
@@ -844,6 +875,10 @@ def _validate_idempotency(
         strict_cor: If True, info-severity CREATE OR REPLACE findings flip
             the exit code to 1 (default False — info findings render but
             don't fail the gate).
+        fail_on_unanalyzable: If True, a run that could not read every
+            ``execute``/``execute_file`` call fails with
+            :data:`UNANALYZABLE_EXIT_CODE` (default False — the verdict says
+            *unverified* but the exit code stays 0, #213 D1).
         base_ref: Scope to migrations changed since this git ref. ``None``
             means scan everything — the caller must pass ``None`` unless the
             operator set ``--base-ref``/``--since`` *explicitly*, since the
@@ -853,17 +888,21 @@ def _validate_idempotency(
             the working tree. Takes precedence over ``base_ref``.
 
     Returns:
-        ``(passed, payload)``. Text-mode output is printed here; the JSON
-        payload is returned rather than written, because ``migrate validate``
-        composes checks and emits one document for the whole run (#187).
+        An :class:`IdempotencyOutcome`. Text-mode output is printed here; the
+        JSON payload is returned rather than written, because ``migrate
+        validate`` composes checks and emits one document for the whole run
+        (#187).
     """
     from confiture.core.idempotency import IdempotencyValidator
 
     validator = IdempotencyValidator()
 
     # Backend banner (text) + meta accumulator (json) — printed before
-    # file enumeration so users see which detector is running.
+    # file enumeration so users see which detector is running. The flag is
+    # recorded on every shape so a consumer can tell "unverified, exit 1"
+    # from "unverified, exit 0" without knowing the command line.
     meta = _idempotent_backend_banner(format_output)
+    meta["fail_on_unanalyzable"] = fail_on_unanalyzable
 
     sql_files = sorted(migrations_dir.glob("*.up.sql"))
     py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
@@ -884,7 +923,9 @@ def _validate_idempotency(
             staged_content = _read_staged_content(selected)
 
         if not sql_files and not py_files:
-            return True, _report_empty_scope(scope_meta, migrations_dir, meta, format_output)
+            return IdempotencyOutcome(
+                True, _report_empty_scope(scope_meta, migrations_dir, meta, format_output)
+            )
 
         if format_output == "text":
             where = (
@@ -919,20 +960,26 @@ def _validate_idempotency(
                 "meta": meta,
                 "hints": zero_files_hints,
             }
-            return True, result
+            return IdempotencyOutcome(True, result)
         console.print("[green]✅ No migration files found to validate[/green]")
-        return True, None
+        return IdempotencyOutcome(True, None)
 
     combined_report = _collect_idempotency_report(
         sql_files, py_files, validator, staged_content=staged_content
     )
-    fail = combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
+    violation_fail = (
+        combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
+    )
+    unverified_fail = fail_on_unanalyzable and not combined_report.analysis_complete
+    fail = violation_fail or unverified_fail
+    exit_code = UNANALYZABLE_EXIT_CODE if unverified_fail and not violation_fail else 1
 
     if format_output == "json":
         result = combined_report.to_dict()
         # Violations win; then "could not check" is its own answer, distinct
-        # from "checked and clean" (#213, D3).
-        if fail or combined_report.has_violations:
+        # from "checked and clean" (#213, D3). The flag changes the exit code,
+        # never the status — the status says what was found.
+        if combined_report.has_violations:
             result["status"] = "issues_found"
         elif combined_report.analysis_complete:
             result["status"] = "ok"
@@ -940,7 +987,7 @@ def _validate_idempotency(
             result["status"] = "unverified"
         result["meta"] = meta
         result["hints"] = []
-        return not fail, result
+        return IdempotencyOutcome(not fail, result, exit_code)
 
     blocking = [v for v in combined_report.violations if v.severity == "error"]
     info = [v for v in combined_report.violations if v.severity == "info"]
@@ -968,7 +1015,7 @@ def _validate_idempotency(
         )
         console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
-    return not fail, None
+    return IdempotencyOutcome(not fail, None, exit_code)
 
 
 def _unverified_summary(report: Any) -> str:

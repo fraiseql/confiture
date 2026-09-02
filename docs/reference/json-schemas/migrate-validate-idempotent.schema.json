@@ -71,7 +71,8 @@
         "meta": {
           "type": "object",
           "required": [
-            "backend"
+            "backend",
+            "fail_on_unanalyzable"
           ],
           "properties": {
             "backend": {
@@ -81,6 +82,10 @@
                 "regex"
               ],
               "description": "Which detection backend ran. `ast` = pglast-backed AST (preferred); `regex` = fallback when pglast is missing or CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 is set."
+            },
+            "fail_on_unanalyzable": {
+              "type": "boolean",
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213, D1)."
             }
           }
         },
@@ -126,7 +131,8 @@
         "meta": {
           "type": "object",
           "required": [
-            "backend"
+            "backend",
+            "fail_on_unanalyzable"
           ],
           "properties": {
             "backend": {
@@ -135,6 +141,10 @@
                 "ast",
                 "regex"
               ]
+            },
+            "fail_on_unanalyzable": {
+              "type": "boolean",
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213, D1)."
             }
           }
         },

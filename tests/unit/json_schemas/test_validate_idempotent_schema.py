@@ -213,3 +213,43 @@ def test_empty_directory_is_vacuously_complete(tmp_path, schemas_dir, schema_reg
     assert payload["status"] == "ok"
     assert payload["analysis_complete"] is True
     assert payload["unanalyzed_count"] == 0
+
+
+def test_flagged_unverified_run_validates(tmp_path, schemas_dir, schema_registry):
+    """`--fail-on-unanalyzable`: exit 1, and the payload says the flag was on."""
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260101000010_dyn.py").write_text(_DYNAMIC_MIGRATION)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "migrate",
+            "validate",
+            "--idempotent",
+            "--fail-on-unanalyzable",
+            "--migrations-dir",
+            str(migs),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["status"] == "unverified"
+    assert payload["meta"]["fail_on_unanalyzable"] is True
+
+
+def test_meta_records_the_flag_off_by_default(tmp_path, schemas_dir, schema_registry):
+    migs = tmp_path / "db" / "migrations"
+    migs.mkdir(parents=True)
+    (migs / "20260527000000_init.up.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY);\n"
+    )
+
+    payload = json.loads(_run(migs).stdout)
+
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["meta"]["fail_on_unanalyzable"] is False
