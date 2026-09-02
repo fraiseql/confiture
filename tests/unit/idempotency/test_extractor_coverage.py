@@ -93,9 +93,10 @@ def test_every_fixture_has_a_row_and_every_row_a_fixture() -> None:
 
 
 # Resolved calls ÷ every execute/execute_file call, over the reporter's real
-# corpus (250 migrations). Measured 2026-09-02 after the shared path resolver
-# landed: 901 of 1361. Raise it when the extractor's reach grows; never lower it.
-CORPUS_FLOOR = 0.66
+# corpus (251 migrations). Measured 2026-09-02: 901 of 1361 after the shared
+# path resolver, 1294 of 1361 once the static evaluator landed. Raise it when
+# the extractor's reach grows; never lower it.
+CORPUS_FLOOR = 0.95
 
 
 def test_real_corpus_reach_never_drops() -> None:
