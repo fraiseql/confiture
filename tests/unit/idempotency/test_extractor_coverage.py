@@ -118,3 +118,25 @@ def test_real_corpus_reach_never_drops() -> None:
         f"extractor reach dropped to {ratio:.4f} ({resolved}/{resolved + unresolved}); "
         f"floor is {CORPUS_FLOOR}"
     )
+
+
+def test_library_api_sees_what_the_cli_sees(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`IdempotencyValidator.validate_directory` and the CLI's collector agree on the fixtures."""
+    from confiture.cli.helpers import _collect_idempotency_report
+    from confiture.core.idempotency import IdempotencyValidator
+
+    monkeypatch.chdir(tmp_path)
+    migrations = sorted(p for p in MIGRATIONS.glob("*.py") if is_migration_file(p))
+
+    library = IdempotencyValidator().validate_directory(MIGRATIONS, pattern="*.up.sql")
+    cli = _collect_idempotency_report([], migrations, IdempotencyValidator())
+
+    assert (
+        library.unanalyzed_count
+        == cli.unanalyzed_count
+        == sum(sum(kinds.values()) for _, kinds in EXPECTED.values())
+    )
+    assert library.files_scanned == cli.files_scanned == len(EXPECTED)
+    assert [v.pattern for v in library.violations] == [v.pattern for v in cli.violations]

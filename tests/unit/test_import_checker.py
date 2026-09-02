@@ -604,6 +604,39 @@ class ValidRef(Migration):
         pass
 """
 
+# A single-assignment local resolves since 0.46.0 (the static evaluator), so
+# these two are validated like literals; the loop-variable twins below are the
+# shapes that stay dynamic.
+EXECUTE_FILE_LOCAL_PATH = """\
+from confiture.models.migration import Migration
+
+class LocalPath(Migration):
+    version = "20260426140002"
+    name = "local_path"
+
+    def up(self):
+        path = "db/schema/functions/my_func.sql"
+        self.execute_file(path)
+
+    def down(self):
+        pass
+"""
+
+EXECUTE_FILE_LOCAL_FSTRING = """\
+from confiture.models.migration import Migration
+
+class LocalFString(Migration):
+    version = "20260426140003"
+    name = "local_fstring"
+
+    def up(self):
+        name = "my_func"
+        self.execute_file(f"db/schema/functions/{name}.sql")
+
+    def down(self):
+        pass
+"""
+
 EXECUTE_FILE_DYNAMIC_PATH = """\
 from confiture.models.migration import Migration
 
@@ -612,8 +645,8 @@ class DynamicPath(Migration):
     name = "dynamic_path"
 
     def up(self):
-        path = "db/schema/func.sql"
-        self.execute_file(path)
+        for path in ("db/schema/func.sql",):
+            self.execute_file(path)
 
     def down(self):
         pass
@@ -627,8 +660,8 @@ class FStringPath(Migration):
     name = "fstring_path"
 
     def up(self):
-        name = "my_func"
-        self.execute_file(f"db/schema/{name}.sql")
+        for name in ("my_func",):
+            self.execute_file(f"db/schema/{name}.sql")
 
     def down(self):
         pass
@@ -670,6 +703,8 @@ class TestExecuteFileRefValidation:
 
         imp011 = [v for v in result.violations if v.rule == "IMP011"]
         assert len(imp011) == 1
+        assert "`path`" in imp011[0].message  # the reason names the loop variable
+        assert "for" in imp011[0].message
 
     def test_fstring_path_imp011(self, tmp_path: Path) -> None:
         _write_migration(tmp_path, "20260426140003_fstr.py", EXECUTE_FILE_FSTRING)
@@ -678,6 +713,27 @@ class TestExecuteFileRefValidation:
 
         imp011 = [v for v in result.violations if v.rule == "IMP011"]
         assert len(imp011) == 1
+        assert "`name`" in imp011[0].message
+
+    def test_local_path_resolves_and_is_validated(
+        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
+        """A path built from a single-assignment local is checked like a literal (0.46.0)."""
+        monkeypatch.chdir(tmp_path)
+        _write_migration(tmp_path, "20260426140002_local.py", EXECUTE_FILE_LOCAL_PATH)
+        _write_migration(tmp_path, "20260426140003_localf.py", EXECUTE_FILE_LOCAL_FSTRING)
+
+        missing = ImportChecker(tmp_path).check()
+        assert [v.rule for v in missing.violations if v.rule in {"IMP010", "IMP011"}] == [
+            "IMP010",
+            "IMP010",
+        ]
+
+        func_dir = tmp_path / "db" / "schema" / "functions"
+        func_dir.mkdir(parents=True)
+        (func_dir / "my_func.sql").write_text("CREATE FUNCTION my_func();")
+        present = ImportChecker(tmp_path).check()
+        assert [v for v in present.violations if v.rule in {"IMP010", "IMP011"}] == []
 
     def test_imp010_is_error_imp011_is_warning(
         self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"

@@ -567,3 +567,39 @@ def test_owner_only_in_realistic_migration(tmp_path: Path) -> None:
     rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
     flagged = {v.object_name for v in rule.check(tmp_path)}
     assert flagged == {"public.one", "public.three", "public.five"}
+
+
+def test_python_migration_grant_held_in_a_constant_is_covered(tmp_path: Path) -> None:
+    """The lint reads what the static evaluator resolves (0.46.0)."""
+    _write_migration(
+        tmp_path,
+        "20260613130000_add_foo.py",
+        "from confiture import Migration\n"
+        "_GRANT = 'GRANT SELECT, INSERT ON foo TO my_app;'\n"
+        "class M(Migration):\n"
+        "    def up(self):\n"
+        "        self.execute('CREATE TABLE foo (id int);')\n"
+        "        self.execute(_GRANT)\n",
+    )
+    rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
+    assert rule.check(tmp_path) == []
+
+
+def test_python_migration_grant_read_through_a_helper_is_covered(tmp_path: Path) -> None:
+    (tmp_path / "grants").mkdir()
+    (tmp_path / "grants" / "foo.sql").write_text("GRANT SELECT, INSERT ON foo TO my_app;")
+    _write_migration(
+        tmp_path,
+        "20260613130000_add_foo.py",
+        "from pathlib import Path\n"
+        "from confiture import Migration\n"
+        "_GRANTS = Path(__file__).resolve().parent / 'grants'\n"
+        "def _read(name):\n"
+        "    return (_GRANTS / name).read_text()\n"
+        "class M(Migration):\n"
+        "    def up(self):\n"
+        "        self.execute('CREATE TABLE foo (id int);')\n"
+        "        self.execute(_read('foo.sql'))\n",
+    )
+    rule = Acl001GrantCoverage(expectations=_make_expectations(), grant_dir=None)
+    assert rule.check(tmp_path) == []

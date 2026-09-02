@@ -668,6 +668,18 @@ class ModuleModel:
             ):
                 yield call, scope
 
+    @staticmethod
+    def enclosing_function(scope: _Scope) -> str | None:
+        """The name of the nearest enclosing ``def`` of ``scope``, or ``None`` at module/class level."""
+        current: _Scope | None = scope
+        while current is not None:
+            if current.kind == "function" and isinstance(
+                current.node, (ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                return current.node.name
+            current = current.parent
+        return None
+
     def evaluate(self, expr: ast.expr, scope: _Scope) -> tuple[Value, Trace]:
         """Evaluate ``expr`` as read from ``scope``. Never raises."""
         ctx = _Context()

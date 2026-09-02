@@ -574,3 +574,72 @@ class TestStagedPythonMigrationReadsRelativeToItself:
 
         assert report.is_valid is True, report
         assert report.unmatched_grants == []
+
+
+class TestGrantHeldInAConstantIsVerifiedSemantically:
+    """#162's semantic check reaches a GRANT hoisted into a module constant (0.46.0)."""
+
+    GRANT = Path("db/7_grant/71_grant.sql")
+    MIG_PY = Path("db/migrations/20260613130000_x.py")
+
+    def _checker(self, target_contents):
+        checker = GrantAccompanimentChecker()
+        git = MagicMock()
+        git.get_staged_files.return_value = list(target_contents)
+        target = {p.as_posix(): c for p, c in target_contents.items()}
+        git.get_staged_file_content.side_effect = lambda p: target.get(p.as_posix())
+        git.get_file_at_ref.side_effect = lambda p, ref: None
+        git.get_merge_base.return_value = "HEAD"
+        checker.git_repo = git
+        return checker
+
+    def test_constant_grant_matches_and_leaves_no_degradation_note(self):
+        checker = self._checker(
+            {
+                self.GRANT: "GRANT SELECT ON s.t TO reporter;",
+                self.MIG_PY: (
+                    "from confiture.models.migration import Migration\n"
+                    "\n"
+                    '_GRANTS = "GRANT SELECT ON s.t TO reporter;"\n'
+                    "\n"
+                    "class M(Migration):\n"
+                    '    version = "20260613130000"\n'
+                    '    name = "x"\n'
+                    "    def up(self) -> None:\n"
+                    "        self.execute(_GRANTS)\n"
+                    "    def down(self) -> None:\n"
+                    "        pass\n"
+                ),
+            }
+        )
+
+        report = checker.check_accompaniment(staged_only=True)
+
+        assert report.is_valid is True, report
+        assert report.unmatched_grants == []
+        assert report.unverifiable_notes == []
+
+    def test_constant_grant_that_does_not_match_still_fails(self):
+        checker = self._checker(
+            {
+                self.GRANT: "GRANT SELECT ON s.t TO reporter;",
+                self.MIG_PY: (
+                    "from confiture.models.migration import Migration\n"
+                    "\n"
+                    '_GRANTS = "GRANT SELECT ON other.tbl TO someone;"\n'
+                    "\n"
+                    "class M(Migration):\n"
+                    '    version = "20260613130000"\n'
+                    '    name = "x"\n'
+                    "    def up(self) -> None:\n"
+                    "        self.execute(_GRANTS)\n"
+                    "    def down(self) -> None:\n"
+                    "        pass\n"
+                ),
+            }
+        )
+
+        report = checker.check_accompaniment(staged_only=True)
+
+        assert report.is_valid is False
+        assert len(report.unmatched_grants) == 1
