@@ -186,6 +186,9 @@ exclude_lines = [
 line-length = 100
 target-version = "py311"
 src = ["python"]
+# One extractor-coverage fixture is deliberately unparsable (it pins the
+# `syntax_error` warning); ruff cannot lint what it cannot parse.
+extend-exclude = ["tests/fixtures/idempotency_shapes/db/migrations/20260101000030_syntax_error.py"]
 
 [tool.ruff.lint]
 # Deliberate, focused ruleset (see ARCH-M3). Confiture runs a curated core
@@ -221,6 +224,9 @@ ignore = [
 "tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
 "python/tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
 "python/confiture/cli/*" = ["ARG001"]  # Allow unused args in CLI callbacks
+# Extractor-coverage fixtures pin argument *shapes*, some of them deliberately
+# wrong: an unbound name (F821) and %-formatting (UP031) are the shapes.
+"tests/fixtures/idempotency_shapes/*" = ["F821", "UP031"]
 
 [tool.ty.src]
 # Astral's ultra-fast type checker configuration
