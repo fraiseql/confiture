@@ -934,24 +934,16 @@ def _validate_idempotency(
     blocking = [v for v in combined_report.violations if v.severity == "error"]
     info = [v for v in combined_report.violations if v.severity == "info"]
 
-    if not blocking and not info:
-        console.print("[green]✅ All migrations are idempotent[/green]")
-        console.print(f"   Scanned {combined_report.files_scanned} file(s)")
-        _render_extractor_warnings(combined_report)
-        return True, None
+    _render_idempotency_headline(combined_report, fail=fail, strict_cor=strict_cor)
 
     if blocking:
-        console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]\n")
         _render_violations_by_file(blocking)
 
     if info:
-        if not blocking:
-            console.print("[green]✅ All migrations are idempotent[/green]")
-            console.print(f"   Scanned {combined_report.files_scanned} file(s)")
-        console.print(
-            f"\n[yellow]ℹ️  {len(info)} heuristic note(s) "
-            "(informational, do not fail the gate)[/yellow]\n"
+        qualifier = (
+            "blocking under --strict-cor" if strict_cor else "informational, do not fail the gate"
         )
+        console.print(f"\n[yellow]ℹ️  {len(info)} heuristic note(s) ({qualifier})[/yellow]\n")
         _render_violations_by_file(info)
         if not strict_cor:
             console.print("[dim]Pass --strict-cor to treat these as blocking.[/dim]\n")
@@ -966,6 +958,57 @@ def _validate_idempotency(
         console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
     return not fail, None
+
+
+def _unverified_summary(report: Any) -> str:
+    """The one sentence every renderer uses for calls the analyzer did not read."""
+    return f"{report.unanalyzed_count} call(s) unverified — idempotency not established"
+
+
+def _render_idempotency_headline(report: Any, *, fail: bool, strict_cor: bool) -> None:
+    """Print the verdict line for an idempotency run — the only place that decides it.
+
+    Precedence: blocking violations, then info findings promoted by
+    ``--strict-cor``, then calls the analyzer could not read, then the green
+    line. The green line is printed only when every call was read and nothing
+    was found: "checked and clean" is a different answer from "could not
+    check", and the two used to print the same headline (#213).
+
+    Two sites rendered this independently before 0.46.0, which is how the
+    info-only branch kept the contradiction after the clean branch was noticed.
+
+    Args:
+        report: The merged :class:`IdempotencyReport`.
+        fail: What the caller decided the exit code is — computed once from
+            severity, ``strict_cor`` and (from 0.46.0) ``--fail-on-unanalyzable``.
+            The renderer never re-derives it.
+        strict_cor: Whether info findings are blocking this run.
+    """
+    blocking = [v for v in report.violations if v.severity == "error"]
+    info = [v for v in report.violations if v.severity == "info"]
+    unverified = _unverified_summary(report)
+
+    if blocking:
+        console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]")
+        if not report.analysis_complete:
+            console.print(f"[yellow]   {unverified}[/yellow]")
+        console.print()
+        return
+
+    if info and strict_cor:
+        console.print(
+            f"[red]❌ Found {len(info)} heuristic note(s) — blocking under --strict-cor[/red]"
+        )
+    elif not report.analysis_complete:
+        style, icon = ("red", "❌") if fail else ("yellow", "⚠️ ")
+        console.print(f"[{style}]{icon} {unverified}[/{style}]")
+    else:
+        console.print("[green]✅ All migrations are idempotent[/green]")
+
+    scanned = f"   Scanned {report.files_scanned} file(s)"
+    if info and strict_cor and not report.analysis_complete:
+        scanned += f" · {unverified}"
+    console.print(scanned)
 
 
 def _render_violations_by_file(violations: list[Any]) -> None:
@@ -1101,7 +1144,10 @@ def _fix_idempotency(
         return
 
     if not files_changed and not manual_fix_required:
-        console.print("[green]✅ All migrations are already idempotent[/green]")
+        if manual_report.analysis_complete:
+            console.print("[green]✅ All migrations are already idempotent[/green]")
+        else:
+            console.print(f"[yellow]⚠️  {_unverified_summary(manual_report)}[/yellow]")
         _render_extractor_warnings(manual_report)
         return
 

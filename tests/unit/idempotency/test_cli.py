@@ -1109,3 +1109,118 @@ class TestReadTextMigrationsAreAnalyzed:
         kinds = [w["kind"] for w in payload["warnings"]]
         assert kinds == ["dynamic_read_text"]
         assert "execute_file" in payload["warnings"][0]["message"]
+
+
+# A call the analyzer cannot read, by construction: the SQL depends on a loop
+# variable. Every visible statement is idempotent, so the only signal is the
+# skip — exactly #213's shape. This stays unresolvable under the static
+# evaluator (a loop target is not a single assignment), unlike the
+# `sql = "…"; self.execute(sql)` shape older tests used.
+_DYNAMIC_BODY = [
+    'for table in ("a", "b"):',
+    '    self.execute(f"CREATE TABLE IF NOT EXISTS {table} (id int)")',
+]
+
+
+def _validate(migrations_dir: Path, *extra: str):
+    return runner.invoke(
+        app,
+        ["migrate", "validate", "--idempotent", "--migrations-dir", str(migrations_dir), *extra],
+    )
+
+
+class TestUnverifiedVerdict:
+    """The verdict never claims what the run did not check (#213, Phase 01)."""
+
+    GREEN = "All migrations are idempotent"
+    UNVERIFIED = "call(s) unverified"
+
+    def test_clean_run_with_skips_does_not_claim_idempotent(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000010", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0, result.stdout
+        assert self.GREEN not in result.stdout
+        assert f"⚠️  1 {self.UNVERIFIED}" in result.stdout
+        assert "Scanned 1 file(s)" in result.stdout
+
+    def test_clean_run_without_skips_still_says_idempotent(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "001_ok.up.sql").write_text("CREATE TABLE IF NOT EXISTS foo (id int);\n")
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0
+        assert self.GREEN in result.stdout
+        assert "Scanned 1 file(s)" in result.stdout
+        assert self.UNVERIFIED not in result.stdout
+
+    def test_info_only_run_with_skips_obeys_the_same_rule(self, tmp_path: Path) -> None:
+        """The second headline site (info-only branch) must not keep the bug."""
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000011", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+        (migrations_dir / "001_cor.up.sql").write_text("CREATE OR REPLACE VIEW v_x AS SELECT 1;\n")
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 0, result.stdout
+        assert self.GREEN not in result.stdout
+        assert f"1 {self.UNVERIFIED}" in result.stdout
+        assert "ℹ️" in result.stdout
+
+    def test_blocking_run_with_skips_states_the_count_in_the_summary(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000012", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+        (migrations_dir / "001_bad.up.sql").write_text("CREATE TABLE foo (id int);\n")
+
+        result = _validate(migrations_dir)
+
+        assert result.exit_code == 1
+        assert "❌ Found 1 idempotency violation(s)" in result.stdout
+        # Stated up top, next to the verdict — not only three paragraphs down.
+        summary_at = result.stdout.index(self.UNVERIFIED)
+        block_at = result.stdout.index("could not be statically analyzed")
+        assert summary_at < block_at
+
+    def test_strict_cor_failure_is_not_announced_as_idempotent(self, tmp_path: Path) -> None:
+        """Exit 1 under --strict-cor used to print the green line first."""
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "001_cor.up.sql").write_text("CREATE OR REPLACE VIEW v_x AS SELECT 1;\n")
+
+        result = _validate(migrations_dir, "--strict-cor")
+
+        assert result.exit_code == 1
+        assert self.GREEN not in result.stdout
+        assert "❌" in result.stdout
+        assert "blocking under --strict-cor" in result.stdout
+        assert "do not fail the gate" not in result.stdout
+
+    def test_fix_with_skips_and_nothing_to_fix_does_not_claim_idempotent(
+        self, tmp_path: Path
+    ) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000013", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = runner.invoke(
+            app, ["migrate", "fix", "--idempotent", "--migrations-dir", str(migrations_dir)]
+        )
+
+        assert result.exit_code == 0, result.stdout
+        assert "already idempotent" not in result.stdout
+        assert f"1 {self.UNVERIFIED}" in result.stdout
