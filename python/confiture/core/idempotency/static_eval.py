@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import ast
 import symtable
+import textwrap
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
@@ -86,6 +87,11 @@ MAX_DEPTH = 8
 _RECEIVER_NAMES = frozenset({"self", "cls"})
 _PATH_CTORS = frozenset({"Path"})
 _PATH_MODULES = frozenset({"pathlib"})
+_PURE_STR_METHODS = frozenset(
+    {"replace", "strip", "lstrip", "rstrip", "upper", "lower", "format", "join"}
+)
+"""``str`` methods that are total functions of static inputs (D9). A whitelist,
+not a blacklist: anything else on a string is refused by name."""
 
 
 class Refusal(str, Enum):
@@ -843,9 +849,22 @@ class ModuleModel:
             if isinstance(inner, Str):
                 return inner
             return Unknown(Refusal.UNSUPPORTED, "`str()` of something that is not a string or path")
+        if _is_dedent(func):
+            if len(node.args) != 1 or node.keywords:
+                return Unknown(Refusal.UNSUPPORTED_CALL, "`dedent()` takes exactly one argument")
+            inner = self._eval(node.args[0], scope, ctx)
+            if isinstance(inner, Unknown):
+                return inner
+            if not isinstance(inner, Str):
+                return Unknown(
+                    Refusal.UNSUPPORTED_CALL, "`dedent()` of something that is not a string"
+                )
+            return Str(textwrap.dedent(inner.text), inner.from_file, inner.is_fstring)
         if isinstance(func, ast.Attribute):
             if func.attr == "read_text":
                 return self._eval_read_text(node, func, scope, ctx)
+            if func.attr in _PURE_STR_METHODS:
+                return self._eval_str_method(node, func, scope, ctx)
             if func.attr in {"resolve", "absolute"} and not node.args and not node.keywords:
                 base = self._eval(func.value, scope, ctx)
                 if isinstance(base, Unknown):
@@ -908,6 +927,107 @@ class ModuleModel:
                 hint="read_text",
             )
         return self.read_file(receiver, described=f"execute({ast.unparse(node)})")
+
+    def _eval_str_method(
+        self, node: ast.Call, func: ast.Attribute, scope: _Scope, ctx: _Context
+    ) -> Value:
+        """A whitelisted ``str`` method with static arguments (D9)."""
+        method = func.attr
+        receiver = self._eval(func.value, scope, ctx)
+        if isinstance(receiver, Unknown):
+            return receiver
+        if not isinstance(receiver, Str):
+            return Unknown(
+                Refusal.UNSUPPORTED_CALL, f"`.{method}()` on something that is not a string"
+            )
+        count: int | None = None
+        positional = list(node.args)
+        if method == "replace" and len(positional) == 3:
+            third = positional.pop()
+            if not (isinstance(third, ast.Constant) and isinstance(third.value, int)):
+                return Unknown(Refusal.UNSUPPORTED_CALL, "`.replace()` count is not an int literal")
+            count = third.value
+        args: list[Value] = []
+        for arg in positional:
+            if isinstance(arg, ast.Starred):
+                inner = self._eval(arg.value, scope, ctx)
+                if isinstance(inner, Unknown):
+                    return inner
+                if not isinstance(inner, Seq):
+                    return Unknown(Refusal.UNSUPPORTED, "`*` on something that is not a sequence")
+                args.extend(inner.items)
+                continue
+            value = self._eval(arg, scope, ctx)
+            if isinstance(value, Unknown):
+                return value
+            args.append(value)
+        kwargs: dict[str, str] = {}
+        for keyword in node.keywords:
+            if keyword.arg is None:
+                return Unknown(Refusal.UNSUPPORTED_CALL, f"`.{method}(**...)` is not static")
+            value = self._eval(keyword.value, scope, ctx)
+            if isinstance(value, Unknown):
+                return value
+            if not isinstance(value, Str):
+                return Unknown(
+                    Refusal.UNSUPPORTED_CALL,
+                    f"`.{method}()` keyword `{keyword.arg}` is not a string",
+                )
+            kwargs[keyword.arg] = value.text
+
+        text = receiver.text
+        fstring = receiver.is_fstring
+        try:
+            if method == "join":
+                if len(args) != 1 or kwargs or not isinstance(args[0], Seq):
+                    return Unknown(
+                        Refusal.UNSUPPORTED_CALL, "`.join()` needs one static sequence of strings"
+                    )
+                parts: list[str] = []
+                for item in args[0].items:
+                    if not isinstance(item, Str):
+                        return Unknown(
+                            Refusal.UNSUPPORTED_CALL, "`.join()` sequence holds a non-string"
+                        )
+                    parts.append(item.text)
+                    fstring = fstring or item.is_fstring
+                result = text.join(parts)
+            else:
+                texts: list[str] = []
+                for value in args:
+                    if not isinstance(value, Str):
+                        return Unknown(
+                            Refusal.UNSUPPORTED_CALL, f"`.{method}()` argument is not a string"
+                        )
+                    texts.append(value.text)
+                    fstring = fstring or value.is_fstring
+                if method == "replace":
+                    if len(texts) != 2:
+                        return Unknown(Refusal.UNSUPPORTED_CALL, "`.replace()` takes two strings")
+                    result = (
+                        text.replace(texts[0], texts[1])
+                        if count is None
+                        else text.replace(texts[0], texts[1], count)
+                    )
+                elif method in {"strip", "lstrip", "rstrip"}:
+                    if len(texts) > 1 or kwargs:
+                        return Unknown(
+                            Refusal.UNSUPPORTED_CALL, f"`.{method}()` takes at most one string"
+                        )
+                    result = getattr(text, method)(*texts)
+                elif method in {"upper", "lower"}:
+                    if texts or kwargs:
+                        return Unknown(
+                            Refusal.UNSUPPORTED_CALL, f"`.{method}()` takes no arguments"
+                        )
+                    result = getattr(text, method)()
+                else:  # format
+                    result = text.format(*texts, **kwargs)
+        except (IndexError, KeyError, ValueError) as exc:
+            return Unknown(
+                Refusal.UNSUPPORTED_CALL, f"`.{method}()` arguments do not fit the template: {exc}"
+            )
+        return Str(result, receiver.from_file, fstring)
 
     def _eval_args(self, node: ast.Call, scope: _Scope, ctx: _Context) -> list[Value] | Unknown:
         """Positional arguments, with ``*seq`` splatted. Keywords are the caller's business."""
@@ -1089,6 +1209,17 @@ def _expected_table_name(node: ast.AST) -> str:
     if isinstance(node, ast.GeneratorExp):
         return "genexpr"
     raise _ScopeMismatch(type(node).__name__)
+
+
+def _is_dedent(func: ast.expr) -> bool:
+    if isinstance(func, ast.Name):
+        return func.id == "dedent"
+    return (
+        isinstance(func, ast.Attribute)
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "textwrap"
+        and func.attr == "dedent"
+    )
 
 
 def _is_path_constructor(func: ast.expr) -> bool:

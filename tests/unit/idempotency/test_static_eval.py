@@ -373,3 +373,75 @@ class TestFileReads:
         )
         _refused(value, Refusal.UNSUPPORTED_CALL, "read_text")
         assert value.hint == "read_text"
+
+
+# --------------------------------------------------------------------------- #
+# Cycle 4: pure string operations on static inputs (D9)                        #
+# --------------------------------------------------------------------------- #
+
+
+class TestPureStringOperations:
+    def test_replace_chain_on_a_constant(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            '_T = "CREATE TABLE __T__ (id int)"\n'
+            'DDL = _T.replace("__T__", "a").replace("TABLE", "TABLE IF NOT EXISTS")',
+            "self.execute(DDL)",
+        )
+        assert value == Str("CREATE TABLE IF NOT EXISTS a (id int)")
+
+    def test_replace_with_a_count(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute("a a a".replace("a", "b", 2))')
+        assert value == Str("b b a")
+
+    def test_format_with_static_arguments(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "", 'self.execute("DROP TABLE IF EXISTS {}.{name}".format("s", name="t"))'
+        )
+        assert value == Str("DROP TABLE IF EXISTS s.t")
+
+    def test_format_with_a_runtime_argument_carries_the_inner_reason(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "", 'for t in ():\n    self.execute("DROP TABLE {}".format(t))'
+        )
+        _refused(value, Refusal.OTHER_BINDING, "`t`")
+
+    def test_format_with_mismatched_placeholders(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute("DROP TABLE {} {}".format("a"))')
+        _refused(value, Refusal.UNSUPPORTED_CALL, "format")
+
+    def test_join_over_a_static_sequence(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, 'STMTS = ("SELECT 1", "SELECT 2")', 'self.execute(";\\n".join(STMTS))'
+        )
+        assert value == Str("SELECT 1;\nSELECT 2")
+
+    def test_dedent_and_strip(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            "from textwrap import dedent",
+            'self.execute(dedent("""\n    SELECT 1\n    """).strip())',
+        )
+        assert value == Str("SELECT 1")
+
+    def test_textwrap_dedent_spelled_out(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "import textwrap", 'self.execute(textwrap.dedent("  SELECT 1").upper())'
+        )
+        assert value == Str("SELECT 1")
+
+    def test_a_string_operation_keeps_file_provenance(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        value, _ = _evaluate(
+            tmp_path, "", 'self.execute(Path("db/schema/fn.sql").read_text().strip())'
+        )
+        assert isinstance(value, Str)
+        assert value.from_file is not None
+
+    def test_a_method_outside_the_whitelist_is_refused(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute("select 1".title())')
+        _refused(value, Refusal.UNSUPPORTED_CALL, "title")
+
+    def test_a_string_method_on_a_path_is_refused(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute(Path("x").replace("a", "b"))')
+        _refused(value, Refusal.UNSUPPORTED_CALL, "replace")

@@ -49,7 +49,7 @@ EXPECTED: dict[str, tuple[int, dict[str, int]]] = {
     "20260101000013_file_relative_path.py": (1, {}),
     "20260101000014_reader_helper_function.py": (0, {"dynamic_execute": 1}),
     "20260101000015_reader_helper_method.py": (0, {"dynamic_execute": 1}),
-    "20260101000016_string_ops_on_constant.py": (0, {"dynamic_execute": 3}),
+    "20260101000016_string_ops_on_constant.py": (3, {}),
     "20260101000017_fstring_over_static_local.py": (1, {}),
     "20260101000018_loop_variable_fstring.py": (0, {"unresolved_fstring": 1}),
     "20260101000019_parameter.py": (0, {"dynamic_execute": 1}),
