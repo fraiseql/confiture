@@ -7,6 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-09-02
+
+`migrate validate --idempotent` now reads the SQL a Python migration actually
+hands to `execute`, and never calls a run it could not read "idempotent" (#213).
+
+### Changed
+
+- ⚠️ **The idempotency gate reads far more of a Python migration.** Before,
+  only a literal, a static f-string or a literal concatenation at the call site
+  was analyzed; a `CREATE TABLE` hoisted into a module constant was reported as
+  unreadable and the run stayed green. A static evaluator
+  (`core/idempotency/static_eval.py`) now resolves every form that is a pure
+  function of the file's own text: names bound once in the scope that reads
+  them (module constants, single-assignment locals, `self.<attr>` class
+  attributes), `Path(__file__)` arithmetic, `execute_file` / `read_text` on any
+  such path, `.replace` / `.strip` / `.format` / `.join` / `dedent` on static
+  inputs, and one-line reader helpers. Scoping is decided by the stdlib
+  `symtable`, the compiler's own analysis. Nothing is imported or executed.
+
+  **Measured on the project that reported the issue** (251 Python migrations,
+  1361 `execute` calls): calls the gate can read went from 66% to 95%; files
+  with an unreadable call from 133 to 19. The newly read SQL carries **49
+  blocking findings across 14 migrations** (35 `CREATE INDEX` and 10
+  `CREATE TABLE` without `IF NOT EXISTS`, among others) that were silently
+  skipped before. So an **unscoped** `--idempotent` run on an existing
+  repository may newly fail. Scoped runs (`--base-ref`, `--staged`) judge only
+  what the branch touched and are not affected retroactively; scoping is how
+  you drain the backlog (see the guide's ratchet section).
+
+- ⚠️ **The verdict is honest about what it did not read.** A run with an
+  unreadable call no longer prints `✅ All migrations are idempotent`: the
+  headline is `⚠️  N call(s) unverified — idempotency not established`, the
+  JSON `status` is the new value `"unverified"`, and both JSON shapes carry
+  `analysis_complete` and `unanalyzed_count`. Violations still win
+  (`issues_found`); `ok` means every call was read and nothing was found.
+  **Default exit codes did not change**: an unverified run still exits 0
+  unless you opt in (below). `--strict-cor` with info-only findings no longer
+  exits 1 under a green headline. `migrate fix --idempotent` obeys the same
+  rule.
+
+### Added
+
+- **`migrate validate --idempotent --fail-on-unanalyzable`**: a call the
+  analyzer could not read fails the run with exit 1 (the existing findings
+  class; a distinct exit code is parked, not refused). The headline is `❌`,
+  and `meta.fail_on_unanalyzable` in the JSON payload records that the flag
+  was on. Requires `--idempotent` (exit 5 alone); composes with every other
+  check; an empty git scope stays a pass. Pair it with `--base-ref` or
+  `--staged`.
+- **Every warning states its reason and names its remedy.** Warning messages
+  say which rule refused the call and where (`` `DDL` is bound 2 times in
+  module scope (lines 5, 12) ``); each carries `reason_code` and `remedy` in
+  JSON, and the text block prints `→ <remedy>`.
+- `ExtractedSQL.resolved_via` and `.definition_line` (library API): the names
+  walked to reach the SQL and where the first is bound. `source_line` stays the
+  call line.
+- `extract_sql_from_python_source(text, path=…)` (library API): analyze a blob
+  as the file it will be. The CLI's `--staged` path and the grant-accompaniment
+  check use it instead of writing a temp file, so `Path(__file__)`-relative
+  reads in a staged migration resolve correctly.
+- A coverage guard: `tests/fixtures/idempotency_shapes/` holds one migration per
+  argument shape and a test pins what each resolves to; `CONFITURE_CORPUS_DIR`
+  enables a reach floor on a real corpus.
+
+### Fixed
+
+- **`execute_file("db/schema/fn.sql")` resolved against the working directory,
+  never the project root** — so the identical migration exited 1 from the repo
+  root and 0 from anywhere else, reporting `execute_file_escaped` ("resolves
+  outside project_root; refusing to read") about a file inside the root. The
+  runtime's `Migration.execute_file` (cwd only) and the import checker's IMP010
+  (cwd only, literals only) had the same defect, so the gate could verify a
+  different file than the deploy executed. One resolver now serves all three
+  (`core/sql_path.py`): project root → the migration's own directory → cwd,
+  first existing file wins; static analyzers confine the winner to the project
+  root, and report `execute_file_escaped` only when no candidate lies inside.
+  The runtime change is observable only as a migration that used to raise
+  `FileNotFoundError` from a foreign cwd now finding its file. (#214, found
+  while sizing #213; 23 of the reporting project's skips were this.)
+
+  ```console
+  $ cd <project> && confiture migrate validate --idempotent     # 0.45.0: exit 1
+  $ cd /elsewhere && confiture migrate validate --idempotent --migrations-dir <project>/db/migrations
+  ⚠️  1 dynamic SQL call(s) could not be statically analyzed:
+      execute_file('db/schema/fn.sql') resolves outside project_root … refusing to read
+  EXIT=0                                                         # 0.45.0: wrong
+  ```
+
+- `--check-imports` IMP011 ("dynamic path — cannot validate") is now reserved
+  for a genuinely dynamic path and says why; a path built from a constant or
+  a local is validated like a literal.
+
+### Upgrading
+
+- If you assert on the exact text of an extractor warning, the messages now
+  carry the reason. Kinds (`dynamic_execute`, `unresolved_fstring`, …) and the
+  JSON keys are unchanged; `reason_code` and `remedy` are additive.
+- `migrate-validate-idempotent.schema.json`: `status` gains `"unverified"`;
+  `analysis_complete`, `unanalyzed_count` and `meta.fail_on_unanalyzable` are
+  new required keys on both shapes.
+- fraisier ≤ 0.65.1 pins `fraiseql-confiture<0.46`; lift the cap to install
+  this release alongside it.
+
 ## [0.45.0] - 2026-08-30
 
 The `resolution_hint` computed at 232 raise sites now reaches every consumer,
