@@ -521,7 +521,9 @@ class TestIdempotencyValidatePythonMigrations:
             migrations_dir,
             version="20260101000003",
             name="dyn",
-            body_lines=['sql = "CREATE TABLE foo (id int);"', "self.execute(sql)"],
+            # A single-assignment local resolves since 0.46.0; a loop variable
+            # is the shape that stays unreadable (D8).
+            body_lines=_DYNAMIC_BODY,
         )
 
         result = runner.invoke(
@@ -548,7 +550,9 @@ class TestIdempotencyValidatePythonMigrations:
             migrations_dir,
             version="20260101000004",
             name="dynjson",
-            body_lines=['sql = "x"', "self.execute(sql)"],
+            # A single-assignment local resolves since 0.46.0; a loop variable
+            # is the shape that stays unreadable (D8).
+            body_lines=_DYNAMIC_BODY,
         )
 
         result = runner.invoke(
@@ -570,7 +574,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert payload["has_warnings"] is True
         assert len(payload["warnings"]) == 1
         w = payload["warnings"][0]
-        assert w["kind"] == "dynamic_execute"
+        assert w["kind"] == "unresolved_fstring"  # the D8 loop-variable f-string
         assert "20260101000004_dynjson.py" in w["source_file"]
         assert isinstance(w["source_line"], int)
         assert isinstance(w["message"], str)
@@ -589,7 +593,9 @@ class TestIdempotencyValidatePythonMigrations:
             migrations_dir,
             version="20260101000006",
             name="dyn",
-            body_lines=['sql = "x"', "self.execute(sql)"],
+            # A single-assignment local resolves since 0.46.0; a loop variable
+            # is the shape that stays unreadable (D8).
+            body_lines=_DYNAMIC_BODY,
         )
 
         result = runner.invoke(

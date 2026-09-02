@@ -30,7 +30,9 @@ FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "idempotency_s
 MIGRATIONS = FIXTURE_ROOT / "db" / "migrations"
 
 # (resolved calls, {warning kind: count}) per fixture — what the extractor
-# does today, recorded from a run, not what anyone wishes it did.
+# does today, recorded from a run, not what anyone wishes it did. Rows moved
+# in 0.46.0 when the static evaluator landed (names, paths, string
+# operations, reader helpers); each move was a reviewed edit here.
 EXPECTED: dict[str, tuple[int, dict[str, int]]] = {
     "20260101000001_literal.py": (1, {}),
     "20260101000002_static_fstring.py": (1, {}),
@@ -38,17 +40,17 @@ EXPECTED: dict[str, tuple[int, dict[str, int]]] = {
     "20260101000004_keyword_sql.py": (1, {}),
     "20260101000005_execute_file_literal.py": (1, {}),
     "20260101000006_read_text_literal.py": (1, {}),
-    "20260101000007_module_constant.py": (0, {"dynamic_execute": 1}),
-    "20260101000008_module_constant_concat.py": (0, {"dynamic_execute": 2}),
-    "20260101000009_annotated_constant.py": (0, {"dynamic_execute": 1}),
-    "20260101000010_constant_below_class.py": (0, {"dynamic_execute": 1}),
-    "20260101000011_class_attribute.py": (0, {"dynamic_execute": 1}),
-    "20260101000012_local_single_assignment.py": (0, {"dynamic_execute": 1}),
-    "20260101000013_file_relative_path.py": (0, {"dynamic_read_text": 1}),
+    "20260101000007_module_constant.py": (1, {}),
+    "20260101000008_module_constant_concat.py": (2, {}),
+    "20260101000009_annotated_constant.py": (1, {}),
+    "20260101000010_constant_below_class.py": (1, {}),
+    "20260101000011_class_attribute.py": (1, {}),
+    "20260101000012_local_single_assignment.py": (1, {}),
+    "20260101000013_file_relative_path.py": (1, {}),
     "20260101000014_reader_helper_function.py": (0, {"dynamic_execute": 1}),
     "20260101000015_reader_helper_method.py": (0, {"dynamic_execute": 1}),
     "20260101000016_string_ops_on_constant.py": (0, {"dynamic_execute": 3}),
-    "20260101000017_fstring_over_static_local.py": (0, {"unresolved_fstring": 1}),
+    "20260101000017_fstring_over_static_local.py": (1, {}),
     "20260101000018_loop_variable_fstring.py": (0, {"unresolved_fstring": 1}),
     "20260101000019_parameter.py": (0, {"dynamic_execute": 1}),
     "20260101000020_rebound_module_name.py": (0, {"dynamic_execute": 1}),
@@ -58,15 +60,15 @@ EXPECTED: dict[str, tuple[int, dict[str, int]]] = {
     "20260101000024_subscript_non_literal_key.py": (0, {"dynamic_execute": 1}),
     "20260101000025_unbound_name.py": (0, {"dynamic_execute": 1}),
     "20260101000026_percent_format.py": (0, {"dynamic_execute": 1}),
-    "20260101000027_execute_file_computed.py": (0, {"dynamic_execute_file": 1}),
+    "20260101000027_execute_file_computed.py": (1, {}),
     "20260101000028_execute_file_missing.py": (0, {"execute_file_missing": 1}),
     "20260101000029_execute_file_escaped.py": (0, {"execute_file_escaped": 1}),
     "20260101000030_syntax_error.py": (0, {"syntax_error": 1}),
     "20260101000031_multi_statement_helper.py": (0, {"dynamic_execute": 1}),
     "20260101000032_fstring_conversion.py": (0, {"unresolved_fstring": 1}),
     "20260101000033_guard_helper_fstring.py": (0, {"dynamic_execute": 1}),
-    "20260101000034_class_attribute_path.py": (0, {"dynamic_read_text": 1}),
-    "20260101000035_pathlib_variants.py": (0, {"dynamic_read_text": 1}),
+    "20260101000034_class_attribute_path.py": (1, {}),
+    "20260101000035_pathlib_variants.py": (1, {}),
 }
 
 

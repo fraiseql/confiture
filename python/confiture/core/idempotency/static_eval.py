@@ -834,7 +834,18 @@ class ModuleModel:
                 joined = segment if joined is None else joined / segment
             assert joined is not None
             return PathV(joined)
+        if isinstance(func, ast.Name) and func.id == "str" and len(node.args) == 1:
+            inner = self._eval(node.args[0], scope, ctx)
+            if isinstance(inner, Unknown):
+                return inner
+            if isinstance(inner, PathV):
+                return Str(str(inner.path))
+            if isinstance(inner, Str):
+                return inner
+            return Unknown(Refusal.UNSUPPORTED, "`str()` of something that is not a string or path")
         if isinstance(func, ast.Attribute):
+            if func.attr == "read_text":
+                return self._eval_read_text(node, func, scope, ctx)
             if func.attr in {"resolve", "absolute"} and not node.args and not node.keywords:
                 base = self._eval(func.value, scope, ctx)
                 if isinstance(base, Unknown):
@@ -870,6 +881,33 @@ class ModuleModel:
             Refusal.UNSUPPORTED_CALL,
             f"`{ast.unparse(func)}(...)` is not in the static grammar",
         )
+
+    def _eval_read_text(
+        self, node: ast.Call, func: ast.Attribute, scope: _Scope, ctx: _Context
+    ) -> Value:
+        """``<path>.read_text(**kw)`` — the one grammar rule that touches the disk."""
+        if node.args:
+            return Unknown(
+                Refusal.UNSUPPORTED_CALL,
+                "`.read_text()` with positional arguments is not in the static grammar "
+                "(only encoding=/errors= keywords)",
+                hint="read_text",
+            )
+        receiver = self._eval(func.value, scope, ctx)
+        if isinstance(receiver, Unknown):
+            return Unknown(
+                Refusal.READ_TEXT_RECEIVER,
+                f"`.read_text()` receiver `{ast.unparse(func.value)}` is not a static path: "
+                f"{receiver.reason}",
+                hint="read_text",
+            )
+        if not isinstance(receiver, PathV):
+            return Unknown(
+                Refusal.UNSUPPORTED_CALL,
+                f"`.read_text()` on `{ast.unparse(func.value)}`, which is not a path",
+                hint="read_text",
+            )
+        return self.read_file(receiver, described=f"execute({ast.unparse(node)})")
 
     def _eval_args(self, node: ast.Call, scope: _Scope, ctx: _Context) -> list[Value] | Unknown:
         """Positional arguments, with ``*seq`` splatted. Keywords are the caller's business."""

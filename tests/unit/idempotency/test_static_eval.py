@@ -289,3 +289,87 @@ class TestPathValues:
         value, _ = _evaluate(tmp_path, "", "self.execute(Path(__file__))")
         assert isinstance(value, PathV)
         assert value.path.name == "20260101000000_m.py"
+
+
+# --------------------------------------------------------------------------- #
+# Cycle 3: file reads through the shared, confined resolver                    #
+# --------------------------------------------------------------------------- #
+
+
+class TestFileReads:
+    def test_literal_path_read_from_a_foreign_cwd(self, tmp_path, monkeypatch):
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+
+        value, _ = _evaluate(tmp_path, "", 'self.execute(Path("db/schema/fn.sql").read_text())')
+
+        assert isinstance(value, Str)
+        assert value.text == "CREATE TABLE IF NOT EXISTS from_file (id int);"
+        assert value.from_file == (tmp_path / "project" / "db" / "schema" / "fn.sql").resolve()
+
+    def test_module_constant_path_arithmetic(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        value, trace = _evaluate(
+            tmp_path,
+            '_SCHEMA = Path(__file__).resolve().parent.parent / "schema"',
+            'self.execute((_SCHEMA / "fn.sql").read_text())',
+        )
+        assert isinstance(value, Str)
+        assert value.from_file is not None
+        assert trace.names == ("_SCHEMA",)
+
+    def test_pathlib_variants(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        value, _ = _evaluate(
+            tmp_path,
+            "import pathlib\n_ROOT = pathlib.Path(__file__).parents[2]",
+            'self.execute(_ROOT.joinpath("db", "schema", "fn.sql").resolve().read_text(encoding="utf-8"))',
+        )
+        assert isinstance(value, Str)
+        assert value.from_file is not None
+
+    def test_str_of_a_path_is_a_string(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute(str(Path("db") / "x.sql"))')
+        assert value == Str("db/x.sql")
+
+    def test_missing_file_names_the_bases(self, tmp_path, monkeypatch):
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+
+        value, _ = _evaluate(tmp_path, "", 'self.execute(Path("db/schema/nope.sql").read_text())')
+
+        _refused(value, Refusal.FILE_MISSING, str(tmp_path / "project"), "next to the migration")
+        assert value.hint == "file_missing"
+        assert str(elsewhere) not in value.reason
+
+    def test_escape_is_refused_and_never_read(self, tmp_path, monkeypatch):
+        secret = tmp_path / "outside.sql"
+        secret.write_text("SECRET")
+        original = Path.read_text
+
+        def _guarded(self_path: Path, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if self_path.resolve() == secret.resolve():
+                raise AssertionError(f"read forbidden file {self_path!r}")
+            return original(self_path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _guarded)
+        monkeypatch.chdir(tmp_path / "project") if (tmp_path / "project").exists() else None
+
+        value, _ = _evaluate(tmp_path, "", 'self.execute(Path("../outside.sql").read_text())')
+
+        _refused(value, Refusal.FILE_ESCAPED, "read_text", "outside project_root")
+        assert value.hint == "file_escaped"
+
+    def test_read_text_on_an_unresolved_receiver_carries_the_inner_reason(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", "for p in ():\n    self.execute(Path(p).read_text())")
+        _refused(value, Refusal.READ_TEXT_RECEIVER, "`p`", "for")
+        assert value.hint == "read_text"
+
+    def test_read_text_with_positional_arguments_is_refused(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "", 'self.execute(Path("db/schema/fn.sql").read_text("utf-8"))'
+        )
+        _refused(value, Refusal.UNSUPPORTED_CALL, "read_text")
+        assert value.hint == "read_text"

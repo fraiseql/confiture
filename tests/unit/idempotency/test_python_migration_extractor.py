@@ -134,8 +134,8 @@ class TestDynamicFStringWarning:
             '    version = "20260101000004"\n'
             '    name = "dyn_fstring"\n'
             "    def up(self) -> None:\n"
-            '        table = "foo"\n'
-            '        self.execute(f"CREATE TABLE {table} (id int);")\n'
+            '        for table in ("foo",):\n'  # a loop target: unreadable by design (D8)
+            '            self.execute(f"CREATE TABLE {table} (id int);")\n'
             "    def down(self) -> None:\n"
             "        pass\n",
         )
@@ -208,8 +208,8 @@ class TestConstantConcatenation:
             '    version = "20260101000007"\n'
             '    name = "dyn_concat"\n'
             "    def up(self) -> None:\n"
-            '        suffix = " (id int);"\n'
-            '        self.execute("CREATE TABLE foo" + suffix)\n'
+            '        for suffix in (" (id int);",):\n'  # a loop target: unreadable (D8)
+            '            self.execute("CREATE TABLE foo" + suffix)\n'
             "    def down(self) -> None:\n"
             "        pass\n",
         )
@@ -639,8 +639,8 @@ class TestExecuteReadTextBoundary:
     def test_both_shapes_resolve_through_one_implementation(
         self, tmp_path: Path, monkeypatch
     ) -> None:  # type: ignore[no-untyped-def]
-        """Patch the boundary check: neither shape may bypass it."""
-        from confiture.core.idempotency import python_migration_extractor as extractor
+        """Spy on the shared resolver: neither shape may bypass it."""
+        from confiture.core.idempotency import static_eval
 
         (tmp_path / "db" / "migrations").mkdir(parents=True)
         (tmp_path / "db" / "schema").mkdir(parents=True)
@@ -664,13 +664,13 @@ class TestExecuteReadTextBoundary:
         monkeypatch.chdir(tmp_path)
 
         calls: list[str] = []
-        original = extractor._resolve_sql_path
+        original = static_eval.resolve_sql_file
 
-        def _spy(raw: str, *args, **kwargs):  # type: ignore[no-untyped-def]
-            calls.append(raw)
-            return original(raw, *args, **kwargs)
+        def _spy(raw, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(str(raw))
+            return original(raw, **kwargs)
 
-        monkeypatch.setattr(extractor, "_resolve_sql_path", _spy)
+        monkeypatch.setattr(static_eval, "resolve_sql_file", _spy)
 
         result = extract_sql_from_python_migration(migration, project_root=tmp_path)
 
@@ -681,17 +681,17 @@ class TestExecuteReadTextBoundary:
 class TestExecuteReadTextUnsupportedShapes:
     """Anything but a literal is refused — with a signal that names the fix."""
 
-    def test_variable_path_emits_an_actionable_signal(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def test_single_assignment_local_path_resolves(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """A local bound once is in the grammar since 0.46.0 (D2): the file is read."""
         (tmp_path / "db" / "migrations").mkdir(parents=True)
+        (tmp_path / "db" / "schema").mkdir(parents=True)
+        (tmp_path / "db" / "schema" / "fn.sql").write_text("SELECT 4;\n", encoding="utf-8")
         migration = _write(
             tmp_path / "db" / "migrations",
             "20260101000022_var.py",
             "from pathlib import Path\n"
             "\n"
             "from confiture.models.migration import Migration\n"
-            "\n"
-            "SQL_DIR = Path"
-            '("db/schema")\n'
             "\n"
             "class Var(Migration):\n"
             '    version = "20260101000022"\n'
@@ -706,13 +706,47 @@ class TestExecuteReadTextUnsupportedShapes:
 
         result = extract_sql_from_python_migration(migration, project_root=tmp_path)
 
+        assert result.warnings == []
+        assert [s.sql for s in result.snippets] == ["SELECT 4;\n"]
+        assert result.snippets[0].kind == ExtractionKind.FILE
+        assert result.snippets[0].resolved_via == ("target",)
+
+    def test_loop_variable_path_emits_an_actionable_signal(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        """A path that depends on a loop variable is what stays unreadable."""
+        (tmp_path / "db" / "migrations").mkdir(parents=True)
+        migration = _write(
+            tmp_path / "db" / "migrations",
+            "20260101000022_loop.py",
+            "from pathlib import Path\n"
+            "\n"
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            "class Loop(Migration):\n"
+            '    version = "20260101000022"\n'
+            '    name = "loop"\n'
+            "    def up(self) -> None:\n"
+            "        for target in ('db/schema/fn.sql',):\n"
+            "            self.execute(Path(target).read_text())\n"
+            "    def down(self) -> None:\n"
+            "        pass\n",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        result = extract_sql_from_python_migration(migration, project_root=tmp_path)
+
         assert result.snippets == []
         assert [w.kind for w in result.warnings] == [WarningKind.DYNAMIC_READ_TEXT]
+        assert "`target`" in result.warnings[0].message
+        assert "for" in result.warnings[0].message
         assert "execute_file" in result.warnings[0].message
 
-    def test_joined_path_expression_is_refused(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        """``(SQL_DIR / "x.sql").read_text()`` is deliberately out of scope."""
+    def test_joined_path_expression_resolves(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """``(SQL_DIR / "x.sql").read_text()`` — the corpus's dominant file-read shape."""
         (tmp_path / "db" / "migrations").mkdir(parents=True)
+        (tmp_path / "db" / "schema").mkdir(parents=True)
+        (tmp_path / "db" / "schema" / "fn.sql").write_text("SELECT 5;\n", encoding="utf-8")
         migration = _write(
             tmp_path / "db" / "migrations",
             "20260101000023_join.py",
@@ -734,9 +768,9 @@ class TestExecuteReadTextUnsupportedShapes:
 
         result = extract_sql_from_python_migration(migration, project_root=tmp_path)
 
-        assert result.snippets == []
-        assert [w.kind for w in result.warnings] == [WarningKind.DYNAMIC_READ_TEXT]
-        assert "execute_file" in result.warnings[0].message
+        assert result.warnings == []
+        assert [s.sql for s in result.snippets] == ["SELECT 5;\n"]
+        assert result.snippets[0].resolved_via == ("SQL_DIR",)
 
     def test_any_read_text_receiver_gets_the_read_text_signal(
         self,
@@ -869,3 +903,93 @@ class TestExecuteFileResolvesFromTheProjectRoot:
             )
 
         assert results[0] == results[1] == results[2]
+
+
+class TestEvaluatorEndToEnd:
+    """The #213 shapes through the public extractor, with provenance."""
+
+    @staticmethod
+    def _project(tmp_path: Path, module_level: str, call: str) -> tuple[Path, Path]:
+        root = tmp_path / "project"
+        (root / "db" / "schema").mkdir(parents=True)
+        (root / "db" / "migrations").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("")
+        (root / "db" / "schema" / "fn.sql").write_text("CREATE TABLE gadget (id int);")
+        migration = _write(
+            root / "db" / "migrations",
+            "20260101000040_e2e.py",
+            "from pathlib import Path\n"
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            f"{module_level}\n"
+            "\n"
+            "class M(Migration):\n"
+            '    version = "20260101000040"\n'
+            '    name = "e2e"\n'
+            "    def up(self) -> None:\n"
+            f"        {call}\n"
+            "    def down(self) -> None:\n"
+            "        pass\n",
+        )
+        return root, migration
+
+    def test_the_issue_repro_resolves_with_provenance(self, tmp_path: Path) -> None:
+        root, migration = self._project(
+            tmp_path, 'DDL = "CREATE TABLE public.tb_gadget (id int)"', "self.execute(DDL)"
+        )
+
+        result = extract_sql_from_python_migration(migration, project_root=root)
+
+        assert result.warnings == []
+        snippet = result.snippets[0]
+        assert snippet.sql == "CREATE TABLE public.tb_gadget (id int)"
+        assert snippet.kind == ExtractionKind.INLINE
+        assert snippet.source_line == 10  # the call, not the constant
+        assert snippet.resolved_via == ("DDL",)
+        assert snippet.definition_line == 4
+
+    def test_execute_file_with_a_computed_path(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.chdir(tmp_path)
+        root, migration = self._project(
+            tmp_path,
+            '_SCHEMA = Path(__file__).resolve().parent.parent / "schema"',
+            'self.execute_file(_SCHEMA / "fn.sql")',
+        )
+
+        result = extract_sql_from_python_migration(migration, project_root=root)
+
+        assert result.warnings == []
+        snippet = result.snippets[0]
+        assert snippet.kind == ExtractionKind.FILE
+        assert snippet.sql_file == (root / "db" / "schema" / "fn.sql").resolve()
+        assert snippet.resolved_via == ("_SCHEMA",)
+
+    def test_execute_file_with_a_computed_path_that_is_missing(self, tmp_path: Path) -> None:
+        root, migration = self._project(
+            tmp_path,
+            '_SCHEMA = Path(__file__).resolve().parent.parent / "schema"',
+            'self.execute_file(_SCHEMA / "nope.sql")',
+        )
+
+        result = extract_sql_from_python_migration(migration, project_root=root)
+
+        assert [w.kind for w in result.warnings] == [WarningKind.EXECUTE_FILE_MISSING]
+        assert "nope.sql" in result.warnings[0].message
+
+    def test_a_refused_constant_says_why(self, tmp_path: Path) -> None:
+        root, migration = self._project(tmp_path, 'DDL = "a"\nDDL = "b"', "self.execute(DDL)")
+
+        result = extract_sql_from_python_migration(migration, project_root=root)
+
+        warning = result.warnings[0]
+        assert warning.kind == WarningKind.DYNAMIC_EXECUTE
+        assert "`DDL` is bound 2 times" in warning.message
+        assert warning.reason_code == "multiple_bindings"
+
+    def test_a_path_handed_to_execute_without_a_read_is_refused(self, tmp_path: Path) -> None:
+        root, migration = self._project(tmp_path, "", 'self.execute(Path("db/schema/fn.sql"))')
+
+        result = extract_sql_from_python_migration(migration, project_root=root)
+
+        assert [w.kind for w in result.warnings] == [WarningKind.DYNAMIC_EXECUTE]
+        assert "not SQL text" in result.warnings[0].message
