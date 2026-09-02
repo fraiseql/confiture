@@ -445,3 +445,127 @@ class TestPureStringOperations:
     def test_a_string_method_on_a_path_is_refused(self, tmp_path):
         value, _ = _evaluate(tmp_path, "", 'self.execute(Path("x").replace("a", "b"))')
         _refused(value, Refusal.UNSUPPORTED_CALL, "replace")
+
+
+# --------------------------------------------------------------------------- #
+# Cycle 5: one-line reader helpers                                             #
+# --------------------------------------------------------------------------- #
+
+_SCHEMA_CONST = '_SCHEMA = Path(__file__).resolve().parent.parent / "schema"'
+
+
+class TestReaderHelpers:
+    def test_module_function_with_star_parts(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        value, trace = _evaluate(
+            tmp_path,
+            f"{_SCHEMA_CONST}\n\n\ndef _read_sql(*parts: str) -> str:\n"
+            '    """Read a schema file."""\n'
+            "    return (_SCHEMA / Path(*parts)).read_text()",
+            'self.execute(_read_sql("fn.sql"))',
+        )
+        assert isinstance(value, Str)
+        assert value.from_file is not None
+        assert trace.names == ("_read_sql", "_SCHEMA")
+
+    def test_module_function_with_a_named_parameter(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        value, _ = _evaluate(
+            tmp_path,
+            f"{_SCHEMA_CONST}\n\n\ndef _sql(name: str) -> str:\n    return (_SCHEMA / name).read_text()",
+            'self.execute(_sql(name="fn.sql"))',
+        )
+        assert isinstance(value, Str)
+        assert value.from_file is not None
+
+    def test_method_helper_reading_a_class_attribute_directory(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        value, trace = _evaluate(
+            tmp_path,
+            _SCHEMA_CONST,
+            'self.execute(self._read("fn.sql"))',
+            class_body="_DIR = _SCHEMA\n\ndef _read(self, rel: str) -> str:\n    return (self._DIR / rel).read_text()",
+        )
+        assert isinstance(value, Str)
+        assert value.from_file is not None
+        assert trace.names == ("_read", "_DIR", "_SCHEMA")
+
+    def test_fstring_wrapper_helper(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            'DDL = "CREATE TABLE IF NOT EXISTS a (id int)"\n\n\n'
+            "def _guard(sql: str) -> str:\n"
+            '    return f"DO $$ BEGIN {sql}; END $$"',
+            "self.execute(_guard(DDL))",
+        )
+        assert value == Str(
+            "DO $$ BEGIN CREATE TABLE IF NOT EXISTS a (id int); END $$", is_fstring=True
+        )
+
+    def test_default_parameter_value(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            'def _stmt(name: str, ext: str = ".sql") -> str:\n    return "-- " + name + ext',
+            'self.execute(_stmt("fn"))',
+        )
+        assert value == Str("-- fn.sql")
+
+    def test_parameter_shadows_a_module_constant_inside_the_helper(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            'DDL = "module"\n\n\ndef _same(DDL: str) -> str:\n    return DDL',
+            'self.execute(_same("call"))',
+        )
+        assert value == Str("call")
+
+    def test_two_statement_helper_is_refused(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            f"{_SCHEMA_CONST}\n\n\ndef _read(name: str) -> str:\n"
+            "    text = (_SCHEMA / name).read_text()\n"
+            "    return text.strip()",
+            'self.execute(_read("fn.sql"))',
+        )
+        _refused(value, Refusal.HELPER_SHAPE, "_read", "single `return")
+
+    def test_decorated_helper_is_refused(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            "import functools\n\n\n@functools.cache\ndef _read(name: str) -> str:\n    return name",
+            'self.execute(_read("x"))',
+        )
+        _refused(value, Refusal.HELPER_SHAPE, "_read", "decorat")
+
+    def test_wrong_arity_is_refused(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "def _one(a: str) -> str:\n    return a", 'self.execute(_one("x", "y"))'
+        )
+        _refused(value, Refusal.HELPER_ARGUMENTS, "_one")
+
+    def test_missing_argument_is_refused(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "def _one(a: str) -> str:\n    return a", "self.execute(_one())"
+        )
+        _refused(value, Refusal.HELPER_ARGUMENTS, "_one", "`a`")
+
+    def test_mutual_recursion_is_a_cycle(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            "def _a() -> str:\n    return _b()\n\n\ndef _b() -> str:\n    return _a()",
+            "self.execute(_a())",
+        )
+        _refused(value, Refusal.CYCLE, "_a")
+
+    def test_helpers_deeper_than_the_cap(self, tmp_path):
+        chain = "\n\n\n".join(f"def _h{i}() -> str:\n    return _h{i + 1}()" for i in range(12))
+        chain += '\n\n\ndef _h12() -> str:\n    return "x"'
+        value, _ = _evaluate(tmp_path, chain, "self.execute(_h0())")
+        _refused(value, Refusal.DEPTH)
+
+    def test_a_call_to_something_that_is_not_a_helper_in_this_file(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "from helpers import _read", 'self.execute(_read("x"))')
+        _refused(value, Refusal.UNSUPPORTED_CALL, "_read", "not a helper defined in this file")
+
+    def test_a_method_that_is_not_defined_in_the_class(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute(self._read("x"))')
+        _refused(value, Refusal.UNSUPPORTED_CALL, "_read")

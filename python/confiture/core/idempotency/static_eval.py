@@ -202,6 +202,7 @@ class _Binding:
     value: ast.expr | None
     simple: bool
     top_level: bool
+    node: ast.AST | None = None  # the def/class statement, for helper lookup
 
 
 _FORM_TEXT = {
@@ -328,9 +329,17 @@ class _BindingCollector:
         value: ast.expr | None = None,
         simple: bool = False,
         top_level: bool,
+        node: ast.AST | None = None,
     ) -> None:
         self.bindings.setdefault(name, []).append(
-            _Binding(form=form, lineno=lineno, value=value, simple=simple, top_level=top_level)
+            _Binding(
+                form=form,
+                lineno=lineno,
+                value=value,
+                simple=simple,
+                top_level=top_level,
+                node=node,
+            )
         )
 
     def statements(self, stmts: list[ast.stmt], *, top_level: bool) -> None:
@@ -414,9 +423,9 @@ class _BindingCollector:
                     top_level=top_level,
                 )
         elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            self.add(stmt.name, "def", stmt.lineno, top_level=top_level)
+            self.add(stmt.name, "def", stmt.lineno, top_level=top_level, node=stmt)
         elif isinstance(stmt, ast.ClassDef):
-            self.add(stmt.name, "class", stmt.lineno, top_level=top_level)
+            self.add(stmt.name, "class", stmt.lineno, top_level=top_level, node=stmt)
         elif isinstance(stmt, ast.Global):
             for name in stmt.names:
                 self.add(name, "global", stmt.lineno, top_level=top_level)
@@ -896,10 +905,173 @@ class ModuleModel:
                             Refusal.UNSUPPORTED, "`.joinpath()` argument is not a string or path"
                         )
                 return PathV(joined)
+        if isinstance(func, ast.Name) or (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id in _RECEIVER_NAMES
+        ):
+            return self._eval_helper_call(node, func, scope, ctx)
         return Unknown(
             Refusal.UNSUPPORTED_CALL,
             f"`{ast.unparse(func)}(...)` is not in the static grammar",
         )
+
+    # -- reader helpers -------------------------------------------------------
+
+    def _eval_helper_call(
+        self, node: ast.Call, func: ast.Name | ast.Attribute, scope: _Scope, ctx: _Context
+    ) -> Value:
+        """``f(...)`` for a module-level def, or ``self.m(...)`` for a method.
+
+        The helper must be an optional docstring plus one ``return <expr>``,
+        undecorated, without ``**kwargs``. Its parameters are bound from the
+        call site; defaults evaluate in the helper's own enclosing scope; the
+        body evaluates in the helper's scope with those bindings.
+        """
+        if isinstance(func, ast.Name):
+            name = func.id
+            definition = self._top_level_def(self.module, name)
+            is_method = False
+            not_found = f"`{name}(...)` is not a helper defined in this file"
+        else:
+            name = func.attr
+            owner = scope.enclosing_class()
+            definition = self._top_level_def(owner, name) if owner is not None else None
+            is_method = True
+            not_found = f"`self.{name}(...)` is not a method defined once in the class body"
+        if definition is None:
+            return Unknown(Refusal.UNSUPPORTED_CALL, not_found)
+        if isinstance(definition, ast.AsyncFunctionDef):
+            return Unknown(Refusal.HELPER_SHAPE, f"helper `{name}()` is async")
+        if definition.decorator_list:
+            return Unknown(Refusal.HELPER_SHAPE, f"helper `{name}()` is decorated")
+        if definition.args.kwarg is not None:
+            return Unknown(Refusal.HELPER_SHAPE, f"helper `{name}()` takes **kwargs")
+        body = list(definition.body)
+        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            body = body[1:]  # docstring
+        if len(body) != 1 or not isinstance(body[0], ast.Return) or body[0].value is None:
+            return Unknown(
+                Refusal.HELPER_SHAPE,
+                f"helper `{name}()` is not a single `return <expression>` (line "
+                f"{definition.lineno})",
+            )
+        if id(definition) in ctx.helpers:
+            return Unknown(Refusal.CYCLE, f"`{name}()` is called recursively")
+        if ctx.depth >= MAX_DEPTH:
+            return Unknown(
+                Refusal.DEPTH, f"`{name}()` is more than {MAX_DEPTH} names or helpers deep"
+            )
+        template = self._scope_of.get(id(definition))
+        if template is None:
+            return Unknown(
+                Refusal.SCOPE_UNAVAILABLE,
+                f"`{name}()` could not be resolved: scope analysis is unavailable",
+            )
+        env = self._bind_arguments(
+            definition,
+            node,
+            scope,
+            ctx,
+            is_method=is_method,
+            name=name,
+            enclosing=template.parent or self.module,
+        )
+        if isinstance(env, Unknown):
+            return env
+        helper_scope = _Scope(
+            "function", definition, template.table, template.parent, template.bindings, env
+        )
+        ctx.names.append(name)
+        if ctx.definition_line is None:
+            ctx.definition_line = definition.lineno
+        ctx.helpers.add(id(definition))
+        ctx.depth += 1
+        try:
+            return self._eval(body[0].value, helper_scope, ctx)
+        finally:
+            ctx.depth -= 1
+            ctx.helpers.discard(id(definition))
+
+    @staticmethod
+    def _top_level_def(
+        scope: _Scope | None, name: str
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+        if scope is None:
+            return None
+        bindings = scope.bindings.get(name) or []
+        if len(bindings) != 1 or bindings[0].form != "def" or not bindings[0].top_level:
+            return None
+        node = bindings[0].node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return node
+        return None
+
+    def _bind_arguments(
+        self,
+        definition: ast.FunctionDef | ast.AsyncFunctionDef,
+        call: ast.Call,
+        scope: _Scope,
+        ctx: _Context,
+        *,
+        is_method: bool,
+        name: str,
+        enclosing: _Scope,
+    ) -> dict[str, Value] | Unknown:
+        args = definition.args
+        params = [a.arg for a in (*args.posonlyargs, *args.args)]
+        if is_method:
+            if not params:
+                return Unknown(Refusal.HELPER_SHAPE, f"method `{name}()` has no self parameter")
+            params = params[1:]
+        kwonly = [a.arg for a in args.kwonlyargs]
+        defaults: dict[str, ast.expr] = {}
+        if args.defaults:
+            defaults.update(
+                zip(params[len(params) - len(args.defaults) :], args.defaults, strict=True)
+            )
+        for arg, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+            if default is not None:
+                defaults[arg.arg] = default
+
+        positional = self._eval_args(call, scope, ctx)
+        if isinstance(positional, Unknown):
+            return positional
+        env: dict[str, Value] = dict(zip(params, positional, strict=False))
+        extra = positional[len(params) :]
+        if args.vararg is not None:
+            env[args.vararg.arg] = Seq(tuple(extra))
+        elif extra:
+            return Unknown(
+                Refusal.HELPER_ARGUMENTS,
+                f"`{name}()` takes {len(params)} positional argument(s) but {len(positional)} "
+                "were given",
+            )
+        for keyword in call.keywords:
+            if keyword.arg is None:
+                return Unknown(Refusal.HELPER_ARGUMENTS, f"`{name}(**...)` is not static")
+            if keyword.arg in env or keyword.arg not in (*params, *kwonly):
+                return Unknown(
+                    Refusal.HELPER_ARGUMENTS,
+                    f"`{name}()` got an unexpected keyword `{keyword.arg}`",
+                )
+            value = self._eval(keyword.value, scope, ctx)
+            if isinstance(value, Unknown):
+                return value
+            env[keyword.arg] = value
+        for param in (*params, *kwonly):
+            if param in env:
+                continue
+            default = defaults.get(param)
+            if default is None:
+                return Unknown(
+                    Refusal.HELPER_ARGUMENTS, f"`{name}()` is missing argument `{param}`"
+                )
+            value = self._eval(default, enclosing, ctx)
+            if isinstance(value, Unknown):
+                return value
+            env[param] = value
+        return env
 
     def _eval_read_text(
         self, node: ast.Call, func: ast.Attribute, scope: _Scope, ctx: _Context
