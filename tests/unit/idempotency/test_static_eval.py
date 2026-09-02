@@ -1,0 +1,291 @@
+"""The static evaluator: what ``self.execute(<expr>)`` is worth without running it.
+
+Every test builds a small project, evaluates the argument of the first
+``self.execute`` call, and asserts either the value or the refusal *reason*.
+The reason matters as much as the refusal: Phase 07 keys remedies on it, and a
+gate under ``--fail-on-unanalyzable`` shows it to the person who has to fix
+the migration.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+from confiture.core.idempotency.static_eval import (
+    ModuleModel,
+    PathV,
+    Refusal,
+    Str,
+    Unknown,
+)
+
+HEADER = "from pathlib import Path\nfrom confiture.models.migration import Migration\n"
+
+
+def _project(tmp_path: Path) -> Path:
+    root = tmp_path / "project"
+    (root / "db" / "schema").mkdir(parents=True)
+    (root / "db" / "migrations").mkdir(parents=True)
+    (root / "pyproject.toml").write_text("")
+    (root / "db" / "schema" / "fn.sql").write_text("CREATE TABLE IF NOT EXISTS from_file (id int);")
+    return root
+
+
+def _migration(module_level: str, up_body: str, *, class_body: str = "") -> str:
+    body = "\n".join("        " + line for line in up_body.splitlines())
+    extra = (
+        ("\n".join("    " + line for line in class_body.splitlines()) + "\n") if class_body else ""
+    )
+    return (
+        f"{HEADER}\n{module_level}\n\n"
+        "class M(Migration):\n"
+        '    version = "20260101000000"\n'
+        '    name = "m"\n'
+        f"{extra}"
+        "    def up(self) -> None:\n"
+        f"{body}\n"
+        "    def down(self) -> None:\n"
+        "        pass\n"
+    )
+
+
+def _evaluate(tmp_path: Path, module_level: str, up_body: str, *, class_body: str = ""):
+    """(value, trace) of the first self.execute(...) argument in the built migration."""
+    root = _project(tmp_path)
+    path = root / "db" / "migrations" / "20260101000000_m.py"
+    text = _migration(module_level, up_body, class_body=class_body)
+    path.write_text(text)
+    model = ModuleModel(text, path=path, project_root=root)
+    for call, scope in model.execute_calls():
+        if isinstance(call.func, ast.Attribute) and call.func.attr == "execute":
+            return model.evaluate(call.args[0], scope)
+    raise AssertionError("no self.execute call in fixture")
+
+
+def _refused(value, code: Refusal, *fragments: str) -> None:
+    assert isinstance(value, Unknown), value
+    assert value.code is code, (value.code, value.reason)
+    for fragment in fragments:
+        assert fragment in value.reason, value.reason
+
+
+# --------------------------------------------------------------------------- #
+# Cycle 1: literals — parity with the pre-0.46.0 resolver                       #
+# --------------------------------------------------------------------------- #
+
+
+class TestLiterals:
+    def test_string_literal(self, tmp_path):
+        value, trace = _evaluate(tmp_path, "", 'self.execute("SELECT 1")')
+        assert value == Str("SELECT 1")
+        assert trace.names == ()
+
+    def test_static_fstring_is_a_string_that_remembers_it_was_an_fstring(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute(f"SELECT 1")')
+        assert value == Str("SELECT 1", is_fstring=True)
+
+    def test_concatenation(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute("SELECT " + "1")')
+        assert value == Str("SELECT 1")
+
+    def test_non_string_constant_is_refused(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", "self.execute(42)")
+        _refused(value, Refusal.NON_STRING, "int")
+
+    def test_fstring_over_a_loop_variable_is_refused_with_the_name(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "", 'for t in ("a",):\n    self.execute(f"DROP TABLE IF EXISTS {t}")'
+        )
+        _refused(value, Refusal.FSTRING_DYNAMIC, "`t`", "for")
+        assert value.hint == "fstring"
+
+    def test_fstring_conversion_is_refused(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 't = "a"\nself.execute(f"DROP TABLE {t!r}")')
+        _refused(value, Refusal.FSTRING_FORMAT, "!r")
+
+    def test_percent_format_is_outside_the_grammar(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute("DROP TABLE %s" % "a")')
+        _refused(value, Refusal.UNSUPPORTED, "%")
+
+
+# --------------------------------------------------------------------------- #
+# Cycle 2: names — one rule at every scope (D2)                                #
+# --------------------------------------------------------------------------- #
+
+
+class TestNamesThatResolve:
+    def test_module_constant(self, tmp_path):
+        value, trace = _evaluate(tmp_path, 'DDL = "CREATE TABLE t (id int)"', "self.execute(DDL)")
+        assert value == Str("CREATE TABLE t (id int)")
+        assert trace.names == ("DDL",)
+        assert trace.definition_line == 4
+
+    def test_annotated_module_constant(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, 'from typing import Final\nDDL: Final[str] = "SELECT 1"', "self.execute(DDL)"
+        )
+        assert value == Str("SELECT 1")
+
+    def test_constant_defined_below_the_class(self, tmp_path):
+        root = _project(tmp_path)
+        path = root / "db" / "migrations" / "20260101000000_m.py"
+        text = _migration("", "self.execute(DDL)") + '\nDDL = "SELECT 1"\n'
+        path.write_text(text)
+        model = ModuleModel(text, path=path, project_root=root)
+        call, scope = next(iter(model.execute_calls()))
+
+        value, _ = model.evaluate(call.args[0], scope)
+
+        assert value == Str("SELECT 1")
+
+    def test_constants_built_from_constants(self, tmp_path):
+        value, trace = _evaluate(
+            tmp_path, '_A = "SELECT "\n_B = "1"\nDDL = _A + _B', 'self.execute(DDL + "; SELECT 2")'
+        )
+        assert value == Str("SELECT 1; SELECT 2")
+        assert trace.names == ("DDL", "_A", "_B")
+
+    def test_function_local_bound_once(self, tmp_path):
+        value, trace = _evaluate(tmp_path, "", 'sql = "SELECT 1"\nself.execute(sql)')
+        assert value == Str("SELECT 1")
+        assert trace.names == ("sql",)
+
+    def test_class_attribute_through_self(self, tmp_path):
+        value, trace = _evaluate(
+            tmp_path, "", "self.execute(self._SQL)", class_body='_SQL = "SELECT 1"'
+        )
+        assert value == Str("SELECT 1")
+        assert trace.names == ("_SQL",)
+
+    def test_class_attribute_may_read_a_module_constant(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            '_BASE = "SELECT "',
+            "self.execute(self._SQL)",
+            class_body='_SQL = _BASE + "1"',
+        )
+        assert value == Str("SELECT 1")
+
+    def test_a_class_attribute_of_the_same_name_does_not_shadow_the_module_constant(self, tmp_path):
+        """Class scope is invisible inside methods; Python reads the module name here."""
+        value, _ = _evaluate(
+            tmp_path, 'DDL = "module"', "self.execute(DDL)", class_body='DDL = "class"'
+        )
+        assert value == Str("module")
+
+    def test_fstring_over_a_static_local(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, "", 'table = "t"\nself.execute(f"DROP TABLE IF EXISTS {table}")'
+        )
+        assert value == Str("DROP TABLE IF EXISTS t", is_fstring=True)
+
+
+class TestNamesThatAreRefused:
+    def test_module_name_bound_twice(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'DDL = "a"\nDDL = "b"', "self.execute(DDL)")
+        _refused(value, Refusal.MULTIPLE_BINDINGS, "`DDL`", "2 times", "module scope")
+
+    def test_augmented_assignment_is_a_second_binding(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'DDL = "a"\nDDL += "b"', "self.execute(DDL)")
+        _refused(value, Refusal.MULTIPLE_BINDINGS, "`DDL`", "2 times")
+
+    def test_global_declared_and_assigned_in_a_method(self, tmp_path):
+        text_body = "self.execute(DDL)"
+        value, _ = _evaluate(
+            tmp_path,
+            'DDL = "a"',
+            text_body,
+            class_body='def reset(self) -> None:\n    global DDL\n    DDL = "b"',
+        )
+        _refused(value, Refusal.GLOBAL_REBIND, "`DDL`", "global", "reset")
+
+    def test_loop_target_shadowing_a_module_constant(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'DDL = "a"', 'for DDL in ("b",):\n    self.execute(DDL)')
+        _refused(value, Refusal.OTHER_BINDING, "`DDL`", "for")
+
+    def test_parameter(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            'DDL = "module"',
+            'self._apply("x")',
+            class_body="def _apply(self, DDL: str) -> None:\n    self.execute(DDL)",
+        )
+        _refused(value, Refusal.PARAMETER, "`DDL`", "_apply")
+
+    def test_comprehension_target(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'DDL = "a"', '[self.execute(DDL) for DDL in ("b",)]')
+        _refused(value, Refusal.OTHER_BINDING, "`DDL`")
+
+    def test_walrus(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'if (sql := "a"):\n    self.execute(sql)')
+        _refused(value, Refusal.OTHER_BINDING, "`sql`", ":=")
+
+    def test_tuple_unpack(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'sql, other = "a", "b"\nself.execute(sql)')
+        _refused(value, Refusal.OTHER_BINDING, "`sql`", "unpack")
+
+    def test_import_alias(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "from os import sep as DDL", "self.execute(DDL)")
+        _refused(value, Refusal.OTHER_BINDING, "`DDL`", "import")
+
+    def test_nested_def_of_the_same_name(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'DDL = "a"', "def DDL():\n    pass\nself.execute(DDL)")
+        _refused(value, Refusal.OTHER_BINDING, "`DDL`", "def")
+
+    def test_binding_inside_a_block_is_conditional(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'if True:\n    DDL = "a"', "self.execute(DDL)")
+        _refused(value, Refusal.CONDITIONAL_BINDING, "`DDL`", "block")
+
+    def test_unbound_name(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", "self.execute(sql)")
+        _refused(value, Refusal.UNBOUND, "`sql`", "not defined")
+
+    def test_self_reference_is_a_cycle(self, tmp_path):
+        value, _ = _evaluate(tmp_path, 'DDL = DDL + "x"', "self.execute(DDL)")
+        _refused(value, Refusal.CYCLE, "`DDL`")
+
+    def test_mutual_reference_is_a_cycle(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "A = B\nB = A", "self.execute(A)")
+        _refused(value, Refusal.CYCLE)
+
+    def test_chain_deeper_than_the_cap(self, tmp_path):
+        chain = "\n".join(f"N{i} = N{i + 1}" for i in range(12)) + '\nN12 = "x"'
+        value, _ = _evaluate(tmp_path, chain, "self.execute(N0)")
+        _refused(value, Refusal.DEPTH)
+
+    def test_non_string_module_constant(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "TIMEOUT = 30", "self.execute(TIMEOUT)")
+        _refused(value, Refusal.NON_STRING, "int")
+
+    def test_class_attribute_assigned_through_self_anywhere(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path,
+            "",
+            "self.execute(self._SQL)",
+            class_body='_SQL = "a"\n\ndef reset(self) -> None:\n    self._SQL = "b"',
+        )
+        _refused(value, Refusal.ATTRIBUTE_STORE, "`self._SQL`", "assigned")
+
+    def test_class_attribute_that_is_not_bound_in_the_class(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", "self.execute(self._SQL)")
+        _refused(value, Refusal.NOT_CLASS_ATTRIBUTE, "`self._SQL`")
+
+    def test_subscript_with_a_non_literal_key(self, tmp_path):
+        value, _ = _evaluate(
+            tmp_path, 'SQL = {"a": "x"}', "for k in SQL:\n    self.execute(SQL[k])"
+        )
+        _refused(value, Refusal.SUBSCRIPT)
+
+    def test_unsupported_expression_names_its_kind(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", 'self.execute("a" if True else "b")')
+        _refused(value, Refusal.UNSUPPORTED, "IfExp")
+
+
+class TestPathValues:
+    """Cycle 3 lands the file reads; the value arithmetic is pinned here."""
+
+    def test_dunder_file_is_the_migration_path(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", "self.execute(Path(__file__))")
+        assert isinstance(value, PathV)
+        assert value.path.name == "20260101000000_m.py"
