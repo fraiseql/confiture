@@ -155,7 +155,7 @@ def _run(migs: Path):
 
 
 def test_unverified_run_validates(tmp_path, schemas_dir, schema_registry):
-    """A clean run that could not read a call is `unverified`, not `ok` (#213, D3)."""
+    """A clean run that could not read a call is `unverified`, not `ok` (#213)."""
     migs = tmp_path / "db" / "migrations"
     migs.mkdir(parents=True)
     (migs / "20260101000010_dyn.py").write_text(_DYNAMIC_MIGRATION)
@@ -203,7 +203,7 @@ def test_complete_run_says_so(tmp_path, schemas_dir, schema_registry):
 
 
 def test_empty_directory_is_vacuously_complete(tmp_path, schemas_dir, schema_registry):
-    """D4: nothing to read is not the same as could not read."""
+    """Nothing to read is not the same as could not read."""
     migs = tmp_path / "db" / "migrations"
     migs.mkdir(parents=True)
 

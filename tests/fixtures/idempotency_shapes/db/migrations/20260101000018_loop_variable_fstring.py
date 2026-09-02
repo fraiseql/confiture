@@ -1,4 +1,4 @@
-"""An f-string over a loop variable: genuinely dynamic, never resolved (D8)."""
+"""An f-string over a loop variable: genuinely dynamic, never resolved."""
 
 from confiture.models.migration import Migration
 

@@ -1,4 +1,4 @@
-"""Percent formatting is outside the grammar (D9): refused."""
+"""Percent formatting is outside the grammar: refused."""
 
 from confiture.models.migration import Migration
 

@@ -529,7 +529,7 @@ class TestSemanticGrantMatching:
 
 
 class TestStagedPythonMigrationReadsRelativeToItself:
-    """A staged blob is analyzed as the file it will be (0.46.0, D10).
+    """A staged blob is analyzed as the file it will be (0.46.0).
 
     Before, the blob was written to a temp directory and analyzed there, so a
     ``Path(__file__)``-relative read of the grant file went missing and the

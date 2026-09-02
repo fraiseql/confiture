@@ -90,7 +90,7 @@ _PATH_MODULES = frozenset({"pathlib"})
 _PURE_STR_METHODS = frozenset(
     {"replace", "strip", "lstrip", "rstrip", "upper", "lower", "format", "join"}
 )
-"""``str`` methods that are total functions of static inputs (D9). A whitelist,
+"""``str`` methods that are total functions of static inputs. A whitelist,
 not a blacklist: anything else on a string is refused by name."""
 
 
@@ -304,7 +304,7 @@ _FORM_TEXT = {
 class _Scope:
     kind: str  # "module" | "class" | "function"
     node: ast.AST | None
-    table: symtable.SymbolTable
+    table: symtable.SymbolTable | None  # None once scope pairing has failed
     parent: _Scope | None
     bindings: dict[str, list[_Binding]] = field(default_factory=dict)
     env: dict[str, Value] = field(default_factory=dict)
@@ -313,14 +313,13 @@ class _Scope:
     def display(self) -> str:
         if self.kind == "module":
             return "module scope"
-        if self.kind == "class":
-            return f"class {self.table.get_name()}"
-        name = self.table.get_name()
-        if name in {"listcomp", "setcomp", "dictcomp", "genexpr"}:
-            return "a comprehension"
-        if name == "lambda":
+        if isinstance(self.node, ast.ClassDef):
+            return f"class {self.node.name}"
+        if isinstance(self.node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return f"{self.node.name}()"
+        if isinstance(self.node, ast.Lambda):
             return "a lambda"
-        return f"{name}()"
+        return "a comprehension"
 
     def enclosing_class(self) -> _Scope | None:
         scope: _Scope | None = self
@@ -332,7 +331,7 @@ class _Scope:
 
 
 class _ScopeMismatch(Exception):
-    """The AST's nested scopes and symtable's children did not line up."""
+    """A scope-creating node this module does not know how to name."""
 
 
 def _store_names(target: ast.expr) -> list[ast.Name]:
@@ -597,19 +596,19 @@ class ModuleModel:
         self._global_rebinders: set[str] = set()
         self._nonlocal_rebinders: set[str] = set()
         self.scopes_ok = True
+        top: symtable.SymbolTable | None
         try:
             top = symtable.symtable(text, str(path), "exec")
         except SyntaxError:
             # ast.parse accepted it, so this is a symtable-only complaint
-            # (e.g. `nonlocal` at module level). Evaluate without scopes.
+            # (e.g. `nonlocal` at module level). Every name lookup will
+            # refuse; every call is still found.
             self.scopes_ok = False
-            top = symtable.symtable("", str(path), "exec")
+            top = None
         self.module = _Scope("module", self.tree, top, None)
-        try:
-            self._build(self.module)
-        except _ScopeMismatch:
-            self.scopes_ok = False
-        self._collect_rebinders(top)
+        self._build(self.module)
+        if top is not None:
+            self._collect_rebinders(top)
 
     # -- construction -------------------------------------------------------
 
@@ -652,15 +651,24 @@ class ModuleModel:
         for child in body:
             self._walk(child, scope, nested)
 
-        children = scope.table.get_children()
-        if len(children) != len(nested):
-            raise _ScopeMismatch(f"{scope.display}: {len(nested)} scopes vs {len(children)} tables")
-        for child_node, table in zip(nested, children, strict=True):
-            expected = _expected_table_name(child_node)
-            if table.get_name() != expected or table.get_lineno() != child_node.lineno:
-                raise _ScopeMismatch(
-                    f"{expected}@{child_node.lineno} vs {table.get_name()}@{table.get_lineno()}"
-                )
+        children = (
+            list(scope.table.get_children()) if self.scopes_ok and scope.table is not None else []
+        )
+        if self.scopes_ok and len(children) != len(nested):
+            self.scopes_ok = False
+        for index, child_node in enumerate(nested):
+            table: symtable.SymbolTable | None = scope.table
+            if self.scopes_ok:
+                candidate = children[index]
+                expected = _expected_table_name(child_node)
+                if candidate.get_name() == expected and candidate.get_lineno() == child_node.lineno:
+                    table = candidate
+                else:
+                    # Pairing failed: from here on every name lookup refuses
+                    # (SCOPE_UNAVAILABLE), but the walk continues so that every
+                    # call is still found — an unpaired file must never become
+                    # a silent pass.
+                    self.scopes_ok = False
             kind = "class" if isinstance(child_node, ast.ClassDef) else "function"
             child_scope = _Scope(kind, child_node, table, scope)
             self._scope_of[id(child_node)] = child_scope
@@ -1187,7 +1195,7 @@ class ModuleModel:
     def _eval_str_method(
         self, node: ast.Call, func: ast.Attribute, scope: _Scope, ctx: _Context
     ) -> Value:
-        """A whitelisted ``str`` method with static arguments (D9)."""
+        """A whitelisted ``str`` method with static arguments."""
         method = func.attr
         receiver = self._eval(func.value, scope, ctx)
         if isinstance(receiver, Unknown):
@@ -1320,6 +1328,7 @@ class ModuleModel:
         if scope.kind == "class":
             local = self._single_binding(name, scope, ctx)
             return local if local is not None else self._module_binding(name, ctx)
+        assert scope.table is not None  # scopes_ok guarantees a paired table
         try:
             symbol = scope.table.lookup(name)
         except KeyError:
@@ -1334,7 +1343,7 @@ class ModuleModel:
         if symbol.is_free():
             enclosing = scope.parent
             while enclosing is not None:
-                if enclosing.kind == "function":
+                if enclosing.kind == "function" and enclosing.table is not None:
                     try:
                         enclosing_symbol = enclosing.table.lookup(name)
                     except KeyError:

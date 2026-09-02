@@ -603,10 +603,10 @@ def _collect_idempotency_report(
     ``staged_content`` maps a path to its **staging-index** blob. When a path
     is present there, that content is analyzed instead of the working tree —
     the two differ when a file is staged and then edited further, and a
-    pre-commit gate must judge what is about to be committed (#181, D4). The
+    pre-commit gate must judge what is about to be committed (#181). The
     blob is analyzed *as the file at that path*: ``Path(__file__)`` and
     migration-relative reads resolve where the migration lives, not in a
-    temp directory (0.46.0, D10).
+    temp directory (0.46.0).
     """
     from confiture.core.idempotency.models import IdempotencyReport
     from confiture.core.idempotency.python_migration_extractor import (
@@ -833,7 +833,7 @@ Under ``--fail-on-unanalyzable`` an unverified call fails the gate. It signals
 the existing findings class (1) rather than a new integer: the documented exit
 table is frozen at 0–8 and shared with the fraisier adapters, so a distinct
 "completed, N unverified" code is a contract change on both sides. It is
-parked, not refused (#213, D1) — and when it lands, this constant and the
+parked, not refused (#213) — and when it lands, this constant and the
 schema note are the only two places that change.
 """
 
@@ -875,7 +875,7 @@ def _validate_idempotency(
         fail_on_unanalyzable: If True, a run that could not read every
             ``execute``/``execute_file`` call fails with
             :data:`UNANALYZABLE_EXIT_CODE` (default False — the verdict says
-            *unverified* but the exit code stays 0, #213 D1).
+            *unverified* but the exit code stays 0, #213).
         base_ref: Scope to migrations changed since this git ref. ``None``
             means scan everything — the caller must pass ``None`` unless the
             operator set ``--base-ref``/``--since`` *explicitly*, since the
@@ -974,7 +974,7 @@ def _validate_idempotency(
     if format_output == "json":
         result = combined_report.to_dict()
         # Violations win; then "could not check" is its own answer, distinct
-        # from "checked and clean" (#213, D3). The flag changes the exit code,
+        # from "checked and clean" (#213). The flag changes the exit code,
         # never the status — the status says what was found.
         if combined_report.has_violations:
             result["status"] = "issues_found"

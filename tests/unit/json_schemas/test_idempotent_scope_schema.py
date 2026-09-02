@@ -149,7 +149,7 @@ def test_unscoped_report_still_validates_and_has_no_scope(repo: Path) -> None:
 
 
 def test_zero_scope_report_is_vacuously_complete(repo: Path) -> None:
-    """D4 (#213): an empty scope is a pass, and says it read everything (of nothing)."""
+    """An empty scope is a pass, and says it read everything (of nothing) (#213)."""
     base = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     _git(repo, "checkout", "-b", "feature")
     (repo / "README.md").write_text("docs\n")

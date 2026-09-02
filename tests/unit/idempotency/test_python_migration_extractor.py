@@ -134,7 +134,7 @@ class TestDynamicFStringWarning:
             '    version = "20260101000004"\n'
             '    name = "dyn_fstring"\n'
             "    def up(self) -> None:\n"
-            '        for table in ("foo",):\n'  # a loop target: unreadable by design (D8)
+            '        for table in ("foo",):\n'  # a loop target: unreadable by design
             '            self.execute(f"CREATE TABLE {table} (id int);")\n'
             "    def down(self) -> None:\n"
             "        pass\n",
@@ -208,7 +208,7 @@ class TestConstantConcatenation:
             '    version = "20260101000007"\n'
             '    name = "dyn_concat"\n'
             "    def up(self) -> None:\n"
-            '        for suffix in (" (id int);",):\n'  # a loop target: unreadable (D8)
+            '        for suffix in (" (id int);",):\n'  # a loop target: unreadable
             '            self.execute("CREATE TABLE foo" + suffix)\n'
             "    def down(self) -> None:\n"
             "        pass\n",
@@ -682,7 +682,7 @@ class TestExecuteReadTextUnsupportedShapes:
     """Anything but a literal is refused — with a signal that names the fix."""
 
     def test_single_assignment_local_path_resolves(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        """A local bound once is in the grammar since 0.46.0 (D2): the file is read."""
+        """A local bound once is in the grammar since 0.46.0: the file is read."""
         (tmp_path / "db" / "migrations").mkdir(parents=True)
         (tmp_path / "db" / "schema").mkdir(parents=True)
         (tmp_path / "db" / "schema" / "fn.sql").write_text("SELECT 4;\n", encoding="utf-8")
@@ -996,7 +996,7 @@ class TestEvaluatorEndToEnd:
 
 
 class TestEveryWarningNamesItsRemedy:
-    """Phase 07 (#213): a warning the gate can fail on says what rewrite makes the call readable."""
+    """A warning the gate can fail on says what rewrite makes the call readable (#213)."""
 
     @staticmethod
     def _one_warning(tmp_path: Path, body: str):

@@ -257,7 +257,7 @@ class GrantAccompanimentChecker:
             return covered, notes
 
         # The blob at the target ref is analyzed as the file it will be
-        # (D11, and 0.46.0's D10): `Path(__file__)` and migration-relative
+        # (D11, and 0.46.0): `Path(__file__)` and migration-relative
         # reads resolve where the migration lives. execute_file() targets
         # still come from the working tree — pass the repo root and note it.
         located = (

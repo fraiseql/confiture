@@ -522,7 +522,7 @@ class TestIdempotencyValidatePythonMigrations:
             version="20260101000003",
             name="dyn",
             # A single-assignment local resolves since 0.46.0; a loop variable
-            # is the shape that stays unreadable (D8).
+            # is the shape that stays unreadable.
             body_lines=_DYNAMIC_BODY,
         )
 
@@ -551,7 +551,7 @@ class TestIdempotencyValidatePythonMigrations:
             version="20260101000004",
             name="dynjson",
             # A single-assignment local resolves since 0.46.0; a loop variable
-            # is the shape that stays unreadable (D8).
+            # is the shape that stays unreadable.
             body_lines=_DYNAMIC_BODY,
         )
 
@@ -594,7 +594,7 @@ class TestIdempotencyValidatePythonMigrations:
             version="20260101000006",
             name="dyn",
             # A single-assignment local resolves since 0.46.0; a loop variable
-            # is the shape that stays unreadable (D8).
+            # is the shape that stays unreadable.
             body_lines=_DYNAMIC_BODY,
         )
 
@@ -1136,7 +1136,7 @@ def _validate(migrations_dir: Path, *extra: str):
 
 
 class TestUnverifiedVerdict:
-    """The verdict never claims what the run did not check (#213, Phase 01)."""
+    """The verdict never claims what the run did not check (#213)."""
 
     GREEN = "All migrations are idempotent"
     UNVERIFIED = "call(s) unverified"
@@ -1233,7 +1233,7 @@ class TestUnverifiedVerdict:
 
 
 class TestFailOnUnanalyzable:
-    """`--fail-on-unanalyzable`: a gate can opt into the skip (#213, D1, Phase 03)."""
+    """`--fail-on-unanalyzable`: a gate can opt into the skip (#213)."""
 
     def test_flag_makes_a_skip_fatal(self, tmp_path: Path) -> None:
         migrations_dir = tmp_path / "db" / "migrations"

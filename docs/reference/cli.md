@@ -1195,6 +1195,9 @@ confiture migrate validate [OPTIONS]
 |--------|-------|------|---------|-------------|
 | `--migrations-dir` | - | Path | `db/migrations` | Directory containing migration files |
 | `--fix-naming` | - | Flag | `False` | Automatically rename orphaned migration files to match naming convention |
+| `--idempotent` | - | Flag | `False` | Validate that every migration (`.up.sql` and the SQL a `.py` migration hands to `execute`/`execute_file`) is safe to re-run. Exit 1 on a blocking violation. A call the analyzer could not read is reported as *unverified* (`status: "unverified"`), never as a pass. See the [migrate validate guide](../guides/migrate-validate.md#--idempotent). |
+| `--strict-cor` | - | Flag | `False` | With `--idempotent`: treat info-severity `CREATE OR REPLACE` shape-risk notes as blocking (exit 1). |
+| `--fail-on-unanalyzable` | - | Flag | `False` | With `--idempotent`: a call the analyzer could not read fails the run (exit 1). Off by default. Pair with `--base-ref`/`--staged` so an existing backlog of dynamic SQL does not fail every run. Requires `--idempotent` (exit 5 alone). Added in 0.46.0 (#213). |
 | `--require-grant-migration` | - | Flag | `False` | Verify each changed `GRANT`/`REVOKE` in the grant directory is carried by an accompanying migration (`.up.sql` or `.py`). Semantic match across table/schema/sequence/function objects; unverifiable grants degrade to a file-presence check with a surfaced note. See the [migrate validate guide](../guides/migrate-validate.md#--require-grant-migration). |
 | `--allow-grant-only` | - | Flag | `False` | Suppress `--require-grant-migration` for build-only branches |
 | `--dry-run` | - | Flag | `False` | Preview changes without actually renaming files |

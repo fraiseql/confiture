@@ -85,7 +85,7 @@
             },
             "fail_on_unanalyzable": {
               "type": "boolean",
-              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213, D1)."
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213)."
             }
           }
         },
@@ -115,7 +115,7 @@
         "analysis_complete",
         "unanalyzed_count"
       ],
-      "description": "Empty-input shape: no migration files found, or a git scope that selected none. Vacuously complete (D4).",
+      "description": "Empty-input shape: no migration files found, or a git scope that selected none. Vacuously complete.",
       "properties": {
         "status": {
           "type": "string",
@@ -144,7 +144,7 @@
             },
             "fail_on_unanalyzable": {
               "type": "boolean",
-              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213, D1)."
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213)."
             }
           }
         },

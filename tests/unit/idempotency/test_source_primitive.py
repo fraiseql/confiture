@@ -1,4 +1,4 @@
-"""``extract_sql_from_python_source``: analyze text as the file it will be (D10).
+"""``extract_sql_from_python_source``: analyze text as the file it will be.
 
 Staged mode and the grant check hand the extractor a blob that is not on
 disk. Before 0.46.0 both wrote it to a temp file and analyzed that, so

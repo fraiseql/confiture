@@ -176,7 +176,7 @@ class TestExecuteFilePathResolution:
 
 
 class TestExecuteFileResolvesFromTheProjectRoot:
-    """Cycle 3 (0.46.0, #213 sizing): the runtime reads the file the analyzer verified.
+    """0.46.0 (#213 sizing): the runtime reads the file the analyzer verified.
 
     ``execute_file("db/schema/fn.sql")`` used to be resolved against the
     working directory only, so the same migration raised ``FileNotFoundError``

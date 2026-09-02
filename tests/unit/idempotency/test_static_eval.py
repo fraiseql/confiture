@@ -2,7 +2,7 @@
 
 Every test builds a small project, evaluates the argument of the first
 ``self.execute`` call, and asserts either the value or the refusal *reason*.
-The reason matters as much as the refusal: Phase 07 keys remedies on it, and a
+The reason matters as much as the refusal: remedies key on it, and a
 gate under ``--fail-on-unanalyzable`` shows it to the person who has to fix
 the migration.
 """
@@ -71,7 +71,7 @@ def _refused(value, code: Refusal, *fragments: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Cycle 1: literals — parity with the pre-0.46.0 resolver                       #
+# Literals — parity with the pre-0.46.0 resolver                                #
 # --------------------------------------------------------------------------- #
 
 
@@ -110,7 +110,7 @@ class TestLiterals:
 
 
 # --------------------------------------------------------------------------- #
-# Cycle 2: names — one rule at every scope (D2)                                #
+# Names — one rule at every scope                                               #
 # --------------------------------------------------------------------------- #
 
 
@@ -283,7 +283,7 @@ class TestNamesThatAreRefused:
 
 
 class TestPathValues:
-    """Cycle 3 lands the file reads; the value arithmetic is pinned here."""
+    """Path arithmetic, before any file is read."""
 
     def test_dunder_file_is_the_migration_path(self, tmp_path):
         value, _ = _evaluate(tmp_path, "", "self.execute(Path(__file__))")
@@ -292,7 +292,7 @@ class TestPathValues:
 
 
 # --------------------------------------------------------------------------- #
-# Cycle 3: file reads through the shared, confined resolver                    #
+# File reads through the shared, confined resolver                              #
 # --------------------------------------------------------------------------- #
 
 
@@ -376,7 +376,7 @@ class TestFileReads:
 
 
 # --------------------------------------------------------------------------- #
-# Cycle 4: pure string operations on static inputs (D9)                        #
+# Pure string operations on static inputs                                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -448,7 +448,7 @@ class TestPureStringOperations:
 
 
 # --------------------------------------------------------------------------- #
-# Cycle 5: one-line reader helpers                                             #
+# One-line reader helpers                                                       #
 # --------------------------------------------------------------------------- #
 
 _SCHEMA_CONST = '_SCHEMA = Path(__file__).resolve().parent.parent / "schema"'
@@ -569,3 +569,68 @@ class TestReaderHelpers:
     def test_a_method_that_is_not_defined_in_the_class(self, tmp_path):
         value, _ = _evaluate(tmp_path, "", 'self.execute(self._read("x"))')
         _refused(value, Refusal.UNSUPPORTED_CALL, "_read")
+
+
+class TestWhenScopeAnalysisIsUnavailable:
+    """If symtable and the AST cannot be paired, names refuse — but calls are still found.
+
+    A file whose scopes cannot be paired must not become a silent pass: every
+    execute call inside a method still yields a snippet (literal) or a
+    warning (anything needing a name), never nothing.
+    """
+
+    def test_calls_inside_methods_are_still_reported(self, tmp_path, monkeypatch):
+        import symtable as symtable_module
+
+        def _broken(*args, **kwargs):
+            raise SyntaxError("simulated symtable failure")
+
+        monkeypatch.setattr(symtable_module, "symtable", _broken)
+        root = _project(tmp_path)
+        path = root / "db" / "migrations" / "20260101000000_m.py"
+        text = _migration('DDL = "SELECT 1"', 'self.execute("SELECT 0")\nself.execute(DDL)')
+        path.write_text(text)
+
+        model = ModuleModel(text, path=path, project_root=root)
+        calls = list(model.execute_calls())
+
+        assert model.scopes_ok is False
+        assert len(calls) == 2
+        literal, _ = model.evaluate(calls[0][0].args[0], calls[0][1])
+        named, _ = model.evaluate(calls[1][0].args[0], calls[1][1])
+        assert literal == Str("SELECT 0")
+        _refused(named, Refusal.SCOPE_UNAVAILABLE, "`DDL`")
+
+
+class TestBoundaryThroughPathArithmetic:
+    """The v0.8.4 confinement holds for every grammar path, not just literals."""
+
+    def test_parents_past_the_root_is_refused(self, tmp_path):
+        value, _ = _evaluate(tmp_path, "", "self.execute(Path(__file__).parents[40].read_text())")
+        _refused(value, Refusal.READ_TEXT_RECEIVER, "parents[40]", "past the root")
+
+    def test_dunder_file_arithmetic_escaping_the_project_is_refused(self, tmp_path, monkeypatch):
+        secret = tmp_path / "secret.sql"
+        secret.write_text("SECRET")
+        original = Path.read_text
+
+        def _guarded(self_path: Path, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if self_path.resolve() == secret.resolve():
+                raise AssertionError("read forbidden file")
+            return original(self_path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _guarded)
+
+        value, _ = _evaluate(
+            tmp_path, "", 'self.execute((Path(__file__).parents[3] / "secret.sql").read_text())'
+        )
+
+        _refused(value, Refusal.FILE_ESCAPED, "outside project_root")
+
+    def test_absolute_literal_outside_the_project_is_refused(self, tmp_path):
+        secret = tmp_path / "secret.sql"
+        secret.write_text("SECRET")
+
+        value, _ = _evaluate(tmp_path, "", f'self.execute(Path("{secret}").read_text())')
+
+        _refused(value, Refusal.FILE_ESCAPED)

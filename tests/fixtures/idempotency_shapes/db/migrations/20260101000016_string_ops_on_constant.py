@@ -1,4 +1,4 @@
-"""Pure string operations on static inputs: replace, format, dedent, strip (D9)."""
+"""Pure string operations on static inputs: replace, format, dedent, strip."""
 
 from textwrap import dedent
 
