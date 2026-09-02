@@ -306,3 +306,32 @@ class TestIdempotencyReportCompleteness:
         report.add_file_scanned("20260101000000_x.py")
 
         assert str(report) == "Idempotency Report: 1 files scanned, 0 violations found"
+
+
+class TestWarningSerializationCarriesReasonAndRemedy:
+    """`to_dict()` gains `reason_code` and `remedy` on each warning (0.46.0, additive)."""
+
+    def test_warning_dict_has_reason_code_and_remedy(self):
+        from pathlib import Path
+
+        from confiture.core.idempotency.python_migration_extractor import (
+            ExtractionWarning,
+            WarningKind,
+        )
+
+        report = IdempotencyReport()
+        report.warnings.append(
+            ExtractionWarning(
+                kind=WarningKind.DYNAMIC_EXECUTE,
+                source_file=Path("x.py"),
+                source_line=3,
+                message="m",
+                reason_code="parameter",
+                remedy="hoist it",
+            )
+        )
+
+        payload = report.to_dict()["warnings"][0]
+
+        assert payload["reason_code"] == "parameter"
+        assert payload["remedy"] == "hoist it"

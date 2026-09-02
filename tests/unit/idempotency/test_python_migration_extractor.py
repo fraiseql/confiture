@@ -993,3 +993,56 @@ class TestEvaluatorEndToEnd:
 
         assert [w.kind for w in result.warnings] == [WarningKind.DYNAMIC_EXECUTE]
         assert "not SQL text" in result.warnings[0].message
+
+
+class TestEveryWarningNamesItsRemedy:
+    """Phase 07 (#213): a warning the gate can fail on says what rewrite makes the call readable."""
+
+    @staticmethod
+    def _one_warning(tmp_path: Path, body: str):
+        migration = _write(
+            tmp_path,
+            "20260101000060_remedy.py",
+            "from confiture.models.migration import Migration\n"
+            "\n"
+            "class M(Migration):\n"
+            '    version = "20260101000060"\n'
+            '    name = "remedy"\n'
+            "    def up(self) -> None:\n"
+            f"{body}"
+            "    def down(self) -> None:\n"
+            "        pass\n",
+        )
+        result = extract_sql_from_python_migration(migration, project_root=tmp_path)
+        assert len(result.warnings) == 1, result
+        return result.warnings[0]
+
+    def test_a_dynamic_fstring_warning_carries_a_remedy(self, tmp_path: Path) -> None:
+        warning = self._one_warning(
+            tmp_path,
+            '        for t in ("a",):\n            self.execute(f"DROP TABLE IF EXISTS {t}")\n',
+        )
+
+        assert warning.kind == WarningKind.UNRESOLVED_FSTRING
+        assert warning.reason_code == "fstring_dynamic"
+        assert "constant" in warning.remedy.lower()
+
+    def test_a_missing_file_warning_carries_a_remedy(self, tmp_path: Path) -> None:
+        warning = self._one_warning(tmp_path, '        self.execute_file("db/schema/nope.sql")\n')
+
+        assert warning.kind == WarningKind.EXECUTE_FILE_MISSING
+        assert warning.remedy
+
+    def test_a_syntax_error_warning_carries_a_remedy(self, tmp_path: Path) -> None:
+        migration = _write(tmp_path, "20260101000061_broken.py", "class M(Migration)\n")
+
+        result = extract_sql_from_python_migration(migration, project_root=tmp_path)
+
+        assert result.warnings[0].kind == WarningKind.SYNTAX_ERROR
+        assert result.warnings[0].remedy
+
+    def test_every_refusal_code_has_a_remedy(self) -> None:
+        from confiture.core.idempotency.static_eval import REMEDIES, Refusal
+
+        assert set(REMEDIES) == set(Refusal)
+        assert all(text.strip() for text in REMEDIES.values())

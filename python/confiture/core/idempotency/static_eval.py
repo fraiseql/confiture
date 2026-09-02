@@ -121,6 +121,78 @@ class Refusal(str, Enum):
     SCOPE_UNAVAILABLE = "scope_unavailable"
 
 
+REMEDIES: dict[Refusal, str] = {
+    Refusal.PARAMETER: (
+        "Give each SQL text the parameter can carry its own module constant, or read it "
+        "with self.execute_file(<path>)."
+    ),
+    Refusal.OTHER_BINDING: (
+        'Bind the SQL once with a plain assignment (NAME = "…") at module scope, or read '
+        "it with self.execute_file(<path>)."
+    ),
+    Refusal.MULTIPLE_BINDINGS: (
+        "Bind the SQL once: give each value its own constant instead of reassigning the name."
+    ),
+    Refusal.CONDITIONAL_BINDING: (
+        "Move the assignment out of the block so the value is unconditional, or give each "
+        "branch its own constant."
+    ),
+    Refusal.GLOBAL_REBIND: (
+        "Drop the `global` reassignment; a constant the gate can read is never reassigned."
+    ),
+    Refusal.UNBOUND: "Define the name in this file as a module constant; only this file is read.",
+    Refusal.ATTRIBUTE_STORE: (
+        "Keep the SQL in the class body and never assign self.<name>, or hoist it to a "
+        "module constant."
+    ),
+    Refusal.NOT_CLASS_ATTRIBUTE: (
+        "Bind the attribute once in the class body, or hoist the SQL to a module constant."
+    ),
+    Refusal.NON_STRING: "Pass a string; the analyzer reads SQL text, not other literals.",
+    Refusal.FSTRING_DYNAMIC: (
+        "Parameterise at the DDL level, or hoist the static parts into module constants "
+        "and execute one constant per statement."
+    ),
+    Refusal.FSTRING_FORMAT: (
+        "Drop the conversion or format spec; a plain {name} over a static string resolves."
+    ),
+    Refusal.UNSUPPORTED_CALL: (
+        "Only Path(...), .read_text(), dedent() and the str methods replace/strip/upper/"
+        "lower/format/join are resolved; move the SQL into a constant or a file read."
+    ),
+    Refusal.UNSUPPORTED: (
+        "Build the SQL from literals, constants, +, f-strings and Path arithmetic; "
+        "anything else is not read."
+    ),
+    Refusal.HELPER_SHAPE: (
+        "Reduce the helper to a single `return <expression>` with no decorators, or read "
+        "the file with self.execute_file(<path>) at the call site."
+    ),
+    Refusal.HELPER_ARGUMENTS: "Call the helper with exactly the arguments its signature declares.",
+    Refusal.DEPTH: (
+        f"Flatten the chain: fewer than {MAX_DEPTH} names or helpers between the call and the text."
+    ),
+    Refusal.CYCLE: "Break the self-reference; a constant cannot be defined in terms of itself.",
+    Refusal.SUBSCRIPT: "Index with a literal, or give each entry its own constant.",
+    Refusal.READ_TEXT_RECEIVER: (
+        "Build the path from Path(__file__) and module constants, or use self.execute_file(<path>)."
+    ),
+    Refusal.FILE_MISSING: "Create the file or fix the path; the message lists every base tried.",
+    Refusal.FILE_ESCAPED: "Keep SQL files inside the project root.",
+    Refusal.SCOPE_UNAVAILABLE: (
+        "The file uses a construct the scope analysis could not pair with the AST; move the "
+        "SQL into a module constant."
+    ),
+}
+"""What rewrite makes a refused call readable, per :class:`Refusal`.
+
+Lives next to the codes so a new code cannot ship without one — the guard
+test enumerates the enum and asserts a remedy for every member. Under
+``--fail-on-unanalyzable`` these lines are what the person fixing the
+migration sees.
+"""
+
+
 # --------------------------------------------------------------------------- #
 # Values                                                                        #
 # --------------------------------------------------------------------------- #

@@ -1102,6 +1102,8 @@ def _render_extractor_warnings(report: Any) -> None:
         source = Path(str(warn.source_file)).name
         console.print(f"  {source}:{warn.source_line} — {warn.kind.value}")
         console.print(f"    [dim]{warn.message}[/dim]")
+        if getattr(warn, "remedy", ""):
+            console.print(f"    [dim]→ {warn.remedy}[/dim]")
     console.print("    [dim]These calls were skipped. Idempotency cannot be guaranteed.[/dim]")
     console.print()
 

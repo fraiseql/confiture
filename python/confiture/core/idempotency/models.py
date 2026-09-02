@@ -301,9 +301,10 @@ class IdempotencyReport:
         Returns:
             Dictionary representation suitable for JSON serialization
 
-        ``warnings`` and ``has_warnings`` were added in 0.12.1,
-        ``analysis_complete`` and ``unanalyzed_count`` in 0.46.0; existing keys
-        keep their names and types (additive-only contract).
+        ``warnings`` and ``has_warnings`` were added in 0.12.1;
+        ``analysis_complete``, ``unanalyzed_count`` and each warning's
+        ``reason_code`` / ``remedy`` in 0.46.0. Existing keys keep their names
+        and types (additive-only contract).
         """
         return {
             "violations": [v.to_dict() for v in self.violations],
@@ -318,6 +319,8 @@ class IdempotencyReport:
                     "source_file": str(w.source_file),
                     "source_line": w.source_line,
                     "message": w.message,
+                    "reason_code": w.reason_code,
+                    "remedy": w.remedy,
                 }
                 for w in self.warnings
             ],

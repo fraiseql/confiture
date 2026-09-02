@@ -1363,3 +1363,32 @@ class HiddenNonIdempotent(Migration):
         assert "❌ Found 1 idempotency violation(s)" in result.stdout
         assert "Line 14 (SQL line 1): CREATE_TABLE" in result.stdout
         assert "could not be statically analyzed" not in result.stdout
+
+
+class TestWarningBlockShowsTheRemedy:
+    def test_text_output_renders_the_remedy_under_each_warning(self, tmp_path: Path) -> None:
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000070", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        result = _validate(migrations_dir)
+
+        assert "unresolved_fstring" in result.stdout
+        assert "→ " in result.stdout
+
+    def test_json_warning_carries_reason_code_and_remedy(self, tmp_path: Path) -> None:
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _write_py_migration(
+            migrations_dir, version="20260101000071", name="dyn", body_lines=_DYNAMIC_BODY
+        )
+
+        payload = json.loads(_validate(migrations_dir, "--format", "json").stdout)
+
+        warning = payload["warnings"][0]
+        assert warning["reason_code"] == "fstring_dynamic"
+        assert warning["remedy"]

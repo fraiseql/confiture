@@ -21,7 +21,14 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from confiture.core.idempotency.static_eval import ModuleModel, PathV, Refusal, Str, Unknown
+from confiture.core.idempotency.static_eval import (
+    REMEDIES,
+    ModuleModel,
+    PathV,
+    Refusal,
+    Str,
+    Unknown,
+)
 from confiture.core.sql_path import find_project_root
 
 _RECEIVER_NAMES = frozenset({"self", "cls"})
@@ -101,6 +108,7 @@ class ExtractionWarning:
         message: What was refused and why, naming the construct and line.
         reason_code: The evaluator's :class:`~static_eval.Refusal` value, or
             ``""`` for a syntax error. Added in 0.46.0; remedies key on it.
+        remedy: The rewrite that makes the call readable. Added in 0.46.0.
     """
 
     kind: WarningKind
@@ -108,6 +116,7 @@ class ExtractionWarning:
     source_line: int
     message: str
     reason_code: str = ""
+    remedy: str = ""
 
 
 @dataclass(frozen=True)
@@ -194,6 +203,7 @@ def _warning(
         source_line=call.lineno,
         message=message,
         reason_code=refusal.code.value,
+        remedy=REMEDIES[refusal.code],
     )
 
 
@@ -237,6 +247,7 @@ def extract_sql_from_python_source(
                 source_file=path,
                 source_line=exc.lineno or 0,
                 message=f"Could not parse migration: {exc.msg}",
+                remedy="Fix the Python; nothing in this file was read.",
             )
         )
         return ExtractionResult(snippets=snippets, warnings=warnings)
