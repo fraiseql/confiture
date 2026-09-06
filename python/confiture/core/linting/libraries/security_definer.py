@@ -286,7 +286,7 @@ class Sec002SecurityDefinerSearchPath:
     # ------------------------------------------------------------------ #
 
     def _extract_violations(self, sql: str, file_path: Path) -> list[LintViolation]:
-        import pglast  # noqa: PLC0415
+        import pglast
 
         tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 

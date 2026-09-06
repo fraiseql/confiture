@@ -29,7 +29,7 @@ from confiture.core.validation.registry import (
 from confiture.exceptions import ConfigurationError
 
 
-def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:  # noqa: ANN401
+def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:
     """Render the idempotency pattern catalog.
 
     Read-only: no DB, no config, no migrations directory.

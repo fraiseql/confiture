@@ -78,7 +78,7 @@ class TestDiffResult:
             assert key in summary
 
     def test_diff_result_from_confiture_public_api(self):
-        from confiture import DiffResult as PublicDiffResult  # noqa: PLC0415
+        from confiture import DiffResult as PublicDiffResult
 
         assert PublicDiffResult is DiffResult
 
@@ -146,7 +146,7 @@ class TestDiffResultNullFields:
     """Gap G — DiffResult.to_dict() with None fields on changes."""
 
     def test_diff_result_to_dict_null_fields(self):
-        from confiture.models.schema import SchemaChange, SchemaDiff  # noqa: PLC0415
+        from confiture.models.schema import SchemaChange, SchemaDiff
 
         diff = SchemaDiff(
             changes=[
@@ -207,7 +207,7 @@ class TestDiffCommandParseError:
     """diff command parse-error path → DIFFER_400 (exit 5), never the reserved 2."""
 
     def test_diff_command_parse_error_exits_differ_400(self):
-        from unittest.mock import patch  # noqa: PLC0415
+        from unittest.mock import patch
 
         old = _write_sql("CREATE TABLE t (id INT);")
         new = _write_sql("CREATE TABLE t (id INT);")
@@ -220,7 +220,7 @@ class TestDiffCommandParseError:
         assert result.exit_code == 5
 
     def test_diff_command_parse_error_json_envelope(self):
-        from unittest.mock import patch  # noqa: PLC0415
+        from unittest.mock import patch
 
         old = _write_sql("CREATE TABLE t (id INT);")
         new = _write_sql("CREATE TABLE t (id INT);")
@@ -258,13 +258,13 @@ class TestDiffTextRenameOutput:
         assert "1 change detected" in result.output
 
     def test_diff_text_rename_column_change_renders(self):
-        import io  # noqa: PLC0415
+        import io
 
-        from rich.console import Console  # noqa: PLC0415
+        from rich.console import Console
 
-        from confiture.cli.formatters.diff_formatter import print_diff_text  # noqa: PLC0415
-        from confiture.models.results import DiffResult  # noqa: PLC0415
-        from confiture.models.schema import SchemaChange, SchemaDiff  # noqa: PLC0415
+        from confiture.cli.formatters.diff_formatter import print_diff_text
+        from confiture.models.results import DiffResult
+        from confiture.models.schema import SchemaChange, SchemaDiff
 
         diff = SchemaDiff(
             changes=[

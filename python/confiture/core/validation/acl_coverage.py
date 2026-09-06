@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from confiture.core.validation.context import ValidationContext
 
 
-def check_acl_coverage(  # noqa: ANN201
+def check_acl_coverage(
     migrations_dir: Path,
     config_path: Path,
     ctx: ValidationContext | None = None,

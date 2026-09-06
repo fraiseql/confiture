@@ -390,7 +390,7 @@ class TestConcurrentSessionUp:
             try:
                 with MigratorSession(None, migrations, database_url_override=test_db_url) as s:
                     results.append(s.up(lock_timeout=10000))
-            except Exception as exc:  # noqa: BLE001 — collected for the assertion
+            except Exception as exc:
                 errors.append(repr(exc))
 
         threads = [threading.Thread(target=deployer) for _ in range(2)]

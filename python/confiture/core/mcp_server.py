@@ -325,4 +325,4 @@ class MCPServer:
                 continue
             response = self.handle_message(msg)
             if response:
-                print(json.dumps(response), flush=True)  # noqa: T201
+                print(json.dumps(response), flush=True)

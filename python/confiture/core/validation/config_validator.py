@@ -22,6 +22,7 @@ from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
+from confiture.exceptions import ConfigurationError
 from confiture.url_redaction import redact_url
 
 
@@ -220,7 +221,6 @@ class ConfigValidator:
         from pydantic import ValidationError
 
         from confiture.config.environment import Environment
-        from confiture.exceptions import ConfigurationError
 
         # Best-effort env-var expansion so ${VAR} placeholders that are set
         # validate; a missing var stays literal and surfaces as a config issue

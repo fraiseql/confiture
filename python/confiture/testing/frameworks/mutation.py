@@ -14,6 +14,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -589,7 +590,6 @@ class MutationRunner:
 
     def generate_report(self) -> MutationReport:
         """Generate comprehensive mutation report."""
-        from datetime import datetime
 
         # Calculate metrics
         total = len(self.registry.list_all())

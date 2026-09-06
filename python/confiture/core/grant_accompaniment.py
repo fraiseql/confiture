@@ -267,7 +267,7 @@ class GrantAccompanimentChecker:
             result = extract_sql_from_python_source(
                 content, path=located, project_root=self.repo_path
             )
-        except Exception:  # noqa: BLE001 — never let a migration crash the gate
+        except Exception:
             notes.append(f"{migration_file.as_posix()}: could not statically extract SQL")
             return covered, notes
 

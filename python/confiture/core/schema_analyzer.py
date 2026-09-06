@@ -6,6 +6,7 @@ issues before execution.
 
 import logging
 import re
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -317,7 +318,6 @@ class SchemaAnalyzer:
         Returns:
             ValidationResult with any issues found
         """
-        import time
 
         start_time = time.perf_counter()
 

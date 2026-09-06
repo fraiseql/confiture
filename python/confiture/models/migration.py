@@ -12,6 +12,7 @@ from confiture.core.sql_lexer import split_statements
 if TYPE_CHECKING:
     from confiture.core.hooks import Hook
     from confiture.core.preconditions import Precondition
+from confiture.exceptions import SQLError
 
 
 def _source_file_of(cls: type) -> Path | None:
@@ -311,7 +312,6 @@ class Migration(ABC):
             >>> self.execute("CREATE TABLE users (id INT)")
             >>> self.execute("INSERT INTO users (name) VALUES (%s)", ("Alice",))
         """
-        from confiture.exceptions import SQLError
 
         try:
             with self.connection.cursor() as cursor:

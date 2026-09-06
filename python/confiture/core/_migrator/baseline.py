@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from confiture.config.environment import Environment
     from confiture.core._migrator.engine import Migrator
     from confiture.models.results import MigrateRebuildResult, MigrateReinitResult
+from confiture.exceptions import RebuildError
+from confiture.models.results import MigrationApplied
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +337,6 @@ def rebuild(
 
     See :meth:`Migrator.rebuild` for the full contract.
     """
-    from confiture.exceptions import RebuildError
     from confiture.models.results import MigrateRebuildResult
 
     start_time = time.time()
@@ -380,7 +381,6 @@ def rebuild(
 
         # Count migrations that would be marked
         all_migrations = migrator.find_migration_files(migrations_dir)
-        from confiture.models.results import MigrationApplied
 
         marked = []
         for mf in all_migrations:

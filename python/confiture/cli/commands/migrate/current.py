@@ -26,6 +26,8 @@ from confiture.cli.helpers import (
 )
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
+from confiture.exceptions import DatabaseNotInitializedError
+from confiture.models.results import CurrentRevision
 
 
 @cli_boundary
@@ -77,8 +79,6 @@ def migrate_current(
     """
     from confiture.core.connection import load_config
     from confiture.core.migrator import Migrator
-    from confiture.exceptions import DatabaseNotInitializedError
-    from confiture.models.results import CurrentRevision
 
     try:
         override = resolve_database_url(

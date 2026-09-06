@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from confiture.exceptions import MigrationError
+from confiture.models.migration import Migration
+
 
 @dataclass
 class ImportCheckViolation:
@@ -141,7 +144,6 @@ class ImportChecker:
     ) -> Any:
         """Try to import the module. Returns module or None on failure."""
         from confiture.core.connection import load_migration_module
-        from confiture.exceptions import MigrationError
 
         try:
             return load_migration_module(py_file)
@@ -435,7 +437,6 @@ class ImportChecker:
 
 def _build_migration_whitelist() -> set[str]:
     """Build the set of allowed self.* names from the Migration base class."""
-    from confiture.models.migration import Migration
 
     allowed: set[str] = set()
     for name in dir(Migration):

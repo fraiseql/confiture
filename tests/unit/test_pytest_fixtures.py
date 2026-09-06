@@ -28,7 +28,7 @@ class _StubProvisioner:
     def __init__(self, url: str) -> None:
         self.url = url
 
-    def drop(self, target: str) -> bool:  # noqa: ARG002 - signature parity
+    def drop(self, target: str) -> bool:
         return False
 
     def tablespace_usable(self, name: str) -> bool:

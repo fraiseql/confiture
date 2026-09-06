@@ -25,6 +25,7 @@ from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from confiture.core.validation.context import ValidationContext
+from contextlib import nullcontext
 
 
 @dataclass(frozen=True)
@@ -119,7 +120,6 @@ def check_security_definer_live(
         ConfigurationError: config missing, connection failed, or
             ``security_lint:`` malformed.
     """
-    from contextlib import nullcontext
 
     from confiture.core.connection import load_config, open_connection
     from confiture.core.linting.libraries.security_definer import (

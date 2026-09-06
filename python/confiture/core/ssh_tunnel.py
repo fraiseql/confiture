@@ -124,7 +124,7 @@ def ssh_tunnel(
     local_port = config.local_port if config.local_port > 0 else _find_free_port()
     cmd = _build_ssh_cmd(config, local_port)
 
-    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)  # noqa: S603
+    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
     try:
         _wait_for_port(local_port, timeout=config.timeout_s)
         patched_url = database_url.replace("${TUNNEL_LOCAL_PORT}", str(local_port))

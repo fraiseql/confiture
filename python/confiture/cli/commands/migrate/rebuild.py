@@ -5,6 +5,8 @@ Split out of the monolithic migrate command modules (Phase 04, Cycle 8).
 
 from __future__ import annotations
 
+import json as json_module
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -92,8 +94,6 @@ def migrate_rebuild(
       confiture migrate up      - Apply migrations incrementally
       confiture migrate status  - View migration history
     """
-    import json as json_module
-    from datetime import datetime
 
     from confiture.cli.formatters.migrate_formatter import format_rebuild_result
     from confiture.core.migrator import Migrator, find_duplicate_migration_versions

@@ -24,7 +24,7 @@ class _EndlessCursor:
         self.rowcount = BATCH
         self._last = ""
 
-    def execute(self, sql, params=None):  # noqa: ANN001
+    def execute(self, sql, params=None):
         self._last = str(sql).lower()
         if "update" in self._last:
             self.updates += 1
@@ -40,7 +40,7 @@ class _EndlessCursor:
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):  # noqa: ANN002
+    def __exit__(self, *exc):
         return None
 
 

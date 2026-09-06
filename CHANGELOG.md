@@ -33,6 +33,14 @@ Phase 08 of the 2026-09-06 review: the package boundaries say what the modules d
   `confiture.core.introspection.tables`; `introspection/differ_sql.py`, a
   differ helper, becomes `confiture.core.differ_sql` beside `differ.py`. The
   old paths are thin shims until 1.0.0.
+- **Function-level imports have a reason or a shrinking budget.** 68 imports
+  of the standard library, `confiture.exceptions` and `confiture.models` —
+  modules that can never form a cycle — are hoisted to module level; the 14
+  optional-dependency guards (jinja2, fastapi, uvicorn, sqlfluff, fraiseql,
+  psutil) say so in a `# Reason:` comment; the remaining in-function imports
+  (startup-cost deferrals and cycle breakers) count against a per-file budget
+  that may only go down. `RUF100` is enforced: 202 `noqa` directives that
+  silenced nothing are gone.
 
 ## [0.52.0] - 2026-09-07
 

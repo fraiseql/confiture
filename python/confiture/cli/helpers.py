@@ -227,7 +227,7 @@ def _resolve_config(config: Path, env: str | None) -> Path:
         >>> _resolve_config(Path("custom.yaml"), None)
         PosixPath('custom.yaml')
     """
-    from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+    from confiture.exceptions import ConfigurationError
 
     if env and config != _DEFAULT_CONFIG:
         raise ConfigurationError(
@@ -431,5 +431,5 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
         with open_connection(config_data) as conn, conn.cursor() as cur:
             cur.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
             return {row[0] for row in cur.fetchall()}
-    except Exception:  # noqa: BLE001 — best-effort: no DB or no table means no guard, not a failure
+    except Exception:
         return set()

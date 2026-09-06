@@ -32,6 +32,7 @@ from confiture.cli.helpers import (
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.locking import resolve_lock_settings
+from confiture.exceptions import MigrationConflictError
 
 
 @cli_boundary
@@ -356,8 +357,6 @@ def _refuse_duplicate_versions(
     duplicates: dict[str, list[Path]], format_output: str, output_file: Path | None
 ) -> None:
     if is_json(format_output):
-        from confiture.exceptions import MigrationConflictError
-
         fail(
             MigrationConflictError(
                 "Duplicate migration versions detected: " + ", ".join(sorted(duplicates)),

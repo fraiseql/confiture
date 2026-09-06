@@ -24,6 +24,7 @@ from confiture.exceptions import ConfiturError
 
 if TYPE_CHECKING:
     from rich.console import Console
+import functools
 
 # Envelope `code` used when a non-ConfiturError escapes translation. It is not a
 # registry code (those are domain failures); it signals "unexpected internal
@@ -180,7 +181,6 @@ def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
     :func:`fail`; anything else is coerced first. JSON mode is read from the
     command's ``--format`` parameter so the envelope lands on stdout.
     """
-    import functools
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

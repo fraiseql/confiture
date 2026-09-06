@@ -108,7 +108,7 @@ def _invoke(*flags: str) -> Any:
 
 
 def test_json_mode_runs_every_git_subcheck_despite_an_early_failure(
-    git_project: Path,  # noqa: ARG001
+    git_project: Path,
     git_doubles: dict[str, Any],
 ) -> None:
     """A failing drift check must not stop accompaniment and grant from running."""
@@ -129,7 +129,7 @@ def test_json_mode_runs_every_git_subcheck_despite_an_early_failure(
 
 
 def test_text_mode_runs_every_git_subcheck_despite_an_early_failure(
-    git_project: Path,  # noqa: ARG001
+    git_project: Path,
     git_doubles: dict[str, Any],
 ) -> None:
     """Text mode already aggregated; pin it so the JSON fix keeps it that way."""
@@ -142,7 +142,7 @@ def test_text_mode_runs_every_git_subcheck_despite_an_early_failure(
 
 
 def test_git_check_composes_with_a_static_check(
-    git_project: Path,  # noqa: ARG001
+    git_project: Path,
     git_doubles: dict[str, Any],
 ) -> None:
     """``--check-drift --check-imports`` runs both, not whichever comes first."""
@@ -154,8 +154,8 @@ def test_git_check_composes_with_a_static_check(
 
 
 def test_single_git_check_json_envelope_is_unchanged(
-    git_project: Path,  # noqa: ARG001
-    git_doubles: dict[str, Any],  # noqa: ARG001
+    git_project: Path,
+    git_doubles: dict[str, Any],
 ) -> None:
     """The 0.39.0 group envelope survives verbatim for a lone git flag."""
     result = _invoke("--check-drift", "--format", "json")

@@ -56,7 +56,7 @@ def _ctx(**overrides) -> NotificationContext:
 
 
 class TestSmtpConfigPasswordRedaction:
-    SECRET = "hunter2-very-secret"  # noqa: S105
+    SECRET = "hunter2-very-secret"
 
     def test_repr_does_not_leak_password(self) -> None:
         cfg = SmtpConfig(
@@ -94,7 +94,7 @@ class TestPasswordTracebackScrubbing:
     These tests pin the scrubbing behaviour against that class.
     """
 
-    SECRET = "hunter2-very-secret"  # noqa: S105
+    SECRET = "hunter2-very-secret"
 
     def _raise_with_password_in_locals(self) -> None:
         """A fake ``smtplib.SMTP.login`` analog — keeps password in locals."""
@@ -277,7 +277,7 @@ class TestSmtpTransport:
     def test_raises_on_authentication_failure_with_scrubbed_traceback(self) -> None:
         import traceback
 
-        SECRET = "secret-pass-xyz"  # noqa: S105
+        SECRET = "secret-pass-xyz"
         fake_server = mock.MagicMock()
         fake_server.__enter__ = mock.MagicMock(return_value=fake_server)
         fake_server.__exit__ = mock.MagicMock(return_value=False)

@@ -236,7 +236,7 @@ class Func001FunctionUniqueness:
         parse yields no definitions (the build-time gate would catch
         unparseable SQL separately).
         """
-        import pglast  # noqa: PLC0415
+        import pglast
 
         tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 

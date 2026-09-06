@@ -2,7 +2,7 @@
 
 from rich.console import Console
 
-from confiture.models.results import DiffResult  # noqa: TCH001
+from confiture.models.results import DiffResult
 
 _ADD_TYPES = frozenset(
     {

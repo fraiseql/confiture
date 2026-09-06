@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from confiture.core.validation.context import ValidationContext
-
+from unittest.mock import Mock
 
 # Flags that are modifiers rather than checks, and the checks they modify. Each
 # entry is (flag, "at least one of these must also be on"). Replaces the ad-hoc
@@ -276,7 +276,7 @@ def _resolve_grant_dir(opts: ValidateOptions, ctx: ValidationContext) -> str:
         configured = (
             cfg_data.get("migration", {}).get("grant_dir") if isinstance(cfg_data, dict) else None
         )
-    except Exception:  # noqa: BLE001 — fall back to the default
+    except Exception:
         return "db/7_grant"
     return str(configured) if configured else "db/7_grant"
 
@@ -501,7 +501,6 @@ def _run_naming(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
 
     # Migrator needs a connection object for construction only — every method
     # used here reads the filesystem.
-    from unittest.mock import Mock
 
     migrator = Migrator(connection=Mock())
     duplicate_versions = find_duplicate_migration_versions(opts.migrations_dir)

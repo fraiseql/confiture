@@ -96,7 +96,7 @@ def _invoke(*flags: str) -> Any:
 
 
 def test_refuses_when_the_name_exists_in_another_schema(
-    project: Path,  # noqa: ARG001 — fixture chdirs
+    project: Path,
     doubles: dict[str, Any],
 ) -> None:
     doubles["elsewhere"] = ["staging.tb_confiture"]
@@ -115,7 +115,7 @@ def test_refuses_when_the_name_exists_in_another_schema(
 
 
 def test_names_every_schema_it_found(
-    project: Path,  # noqa: ARG001
+    project: Path,
     doubles: dict[str, Any],
 ) -> None:
     """Two copies is the case where guessing costs the most; list them all."""
@@ -129,7 +129,7 @@ def test_names_every_schema_it_found(
 
 
 def test_a_genuinely_unused_name_still_auto_baselines(
-    project: Path,  # noqa: ARG001
+    project: Path,
     doubles: dict[str, Any],
 ) -> None:
     """The guard must not become a blanket refusal.
@@ -147,7 +147,7 @@ def test_a_genuinely_unused_name_still_auto_baselines(
 
 
 def test_without_the_flag_a_ledger_elsewhere_is_not_the_command_s_business(
-    project: Path,  # noqa: ARG001
+    project: Path,
     doubles: dict[str, Any],
 ) -> None:
     """A plain `migrate up` never self-baselines, so it never needs the sweep."""

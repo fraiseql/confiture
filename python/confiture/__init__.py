@@ -13,6 +13,7 @@ Library API example::
             result = m.up()
 """
 
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 __author__ = "Lionel Hamayon"
@@ -300,7 +301,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
 
 
 def _installed_version() -> str:
-    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
 
     try:
         return version("fraiseql-confiture")

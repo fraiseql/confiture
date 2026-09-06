@@ -8,6 +8,7 @@ This module provides functionality to:
 
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 
 import pglast
@@ -701,7 +702,6 @@ class SchemaDiffer:
         detail_fn: object,
     ) -> list[SchemaChange]:
         """Generic name-based add/drop comparison for indexes/constraints."""
-        from collections.abc import Callable
 
         detail_fn_typed: Callable = detail_fn  # ty: ignore[invalid-assignment]
         changes: list[SchemaChange] = []

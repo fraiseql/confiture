@@ -6,6 +6,7 @@ across all CLI commands that support structured output.
 
 import csv
 import json
+import sys
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,6 @@ def print_json(data: dict[str, Any], console: Console) -> None:
     """
     del console  # JSON goes through print(): Rich would re-wrap and colour the payload
     # Print raw JSON without Rich formatting
-    import sys
 
     json_text = json.dumps(data, indent=2, default=str)
     print(json_text, file=sys.stdout)

@@ -145,7 +145,7 @@ def bootstrap(
 
     config_data = load_config(config)
     ownership = load_ownership_expectation(config_data, config, require=True)
-    assert ownership is not None  # noqa: S101 — require=True guarantees non-None
+    assert ownership is not None
 
     if ownership.bootstrap_connection_url is None:
         fail(

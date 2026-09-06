@@ -333,7 +333,7 @@ class TestJinjaTimeout:
         # to sleep, simulating a long render.
         from confiture.core.hooks.notifications import jinja_renderer as jr
 
-        def _slow_render(template, ctx: dict, timeout_seconds: float) -> str:  # noqa: ANN001
+        def _slow_render(template, ctx: dict, timeout_seconds: float) -> str:
             result: list = []
             done = threading.Event()
 

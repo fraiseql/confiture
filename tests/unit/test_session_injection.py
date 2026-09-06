@@ -83,7 +83,7 @@ def test_an_injected_loader_is_what_up_uses_to_load_a_migration(tmp_path: Path) 
             version = "20260907000001"
             name = "add_thing"
 
-            def __init__(self, connection):  # noqa: ANN001
+            def __init__(self, connection):
                 super().__init__(connection)
                 instances.append(MagicMock(connection=connection))
 

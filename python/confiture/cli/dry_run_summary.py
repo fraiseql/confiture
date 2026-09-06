@@ -32,7 +32,7 @@ def row_estimator(connection: Any) -> RowEstimator:
     def estimate(table: str) -> int | None:
         try:
             value = estimator.get_row_count_estimate(split_qualified_table(table)[1])
-        except Exception:  # noqa: BLE001 — statistics are advisory
+        except Exception:
             return None
         return value if value > 0 else None
 

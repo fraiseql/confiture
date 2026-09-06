@@ -12,6 +12,8 @@ import psycopg
 import yaml
 
 from confiture.exceptions import ConfigurationError, MigrationError
+from confiture.models.migration import Migration
+from confiture.models.sql_file_migration import FileSQLMigration
 
 
 def load_config(config_file: Path) -> dict[str, Any]:
@@ -141,7 +143,7 @@ def open_connection(
         with open_connection(env) as conn:
             conn.execute("SELECT version()")
     """
-    from confiture.config.environment import SshTunnelConfig  # noqa: PLC0415
+    from confiture.config.environment import SshTunnelConfig
 
     # Resolve ssh_tunnel config (supports Environment objects and raw dicts).
     # Explicitly check isinstance(SshTunnelConfig) to avoid treating MagicMock
@@ -156,7 +158,7 @@ def open_connection(
         tunnel_cfg = SshTunnelConfig(**raw) if isinstance(raw, dict) else raw
 
     if tunnel_cfg is not None:
-        from confiture.core.ssh_tunnel import ssh_tunnel  # noqa: PLC0415
+        from confiture.core.ssh_tunnel import ssh_tunnel
 
         database_url: str
         if hasattr(config, "database_url"):
@@ -240,7 +242,6 @@ def get_migration_class(module: ModuleType) -> type:
     Raises:
         MigrationError: If no Migration class found
     """
-    from confiture.models.migration import Migration
 
     # Find Migration subclass in module
     for attr_name in dir(module):
@@ -286,7 +287,6 @@ def load_migration_class(migration_file: Path) -> type:
         return get_migration_class(module)
     elif migration_file.name.endswith(".up.sql"):
         # SQL file migration
-        from confiture.models.sql_file_migration import FileSQLMigration
 
         # Find the matching .down.sql file
         base_name = migration_file.name.replace(".up.sql", "")

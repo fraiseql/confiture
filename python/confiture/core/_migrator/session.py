@@ -31,9 +31,10 @@ from confiture.core._migrator import reporting as _reporting
 from confiture.core._migrator import rollback_loop as _rollback_loop
 from confiture.core._migrator.events import UpObserver
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
+from confiture.exceptions import ConfigurationError
 
 
-def _core_connection():  # noqa: ANN202
+def _core_connection():
     """``confiture.core.connection``, imported when first needed (it imports psycopg)."""
     from confiture.core import connection
 
@@ -140,8 +141,6 @@ class MigratorSession:
             url = self._config.database_url
             migration_table = self._config.migration.tracking_table
         else:
-            from confiture.exceptions import ConfigurationError
-
             raise ConfigurationError(
                 "MigratorSession requires either a config or database_url_override",
                 resolution_hint=(

@@ -25,6 +25,9 @@ if TYPE_CHECKING:
         MigrateUpResult,
         MigrationApplied,
     )
+import time as _time
+
+from confiture.exceptions import ConfigurationError
 
 
 def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Path], list[str]]:
@@ -88,7 +91,6 @@ def _up_under_lock(
     batch: Any | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession._up_under_lock`."""
-    import time as _time
 
     from confiture.models.results import (
         MigrateUpResult,
@@ -441,7 +443,6 @@ def up(
 
     # Import through confiture.core.migrator so tests can patch
     # confiture.core.migrator.load_migration_class and confiture.core.migrator.MigrationLock.
-    from confiture.exceptions import ConfigurationError
 
     if session._migrator is None:
         raise ConfigurationError(

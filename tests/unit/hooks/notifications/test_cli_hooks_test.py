@@ -79,7 +79,7 @@ class TestDryRunDefault:
 
         called: list[bool] = []
 
-        def _fail_send(self, payload):  # noqa: ANN001, ARG001
+        def _fail_send(self, payload):
             called.append(True)
             raise AssertionError(
                 "HttpTransport.send was called in dry-run mode — the CLI "
@@ -213,7 +213,7 @@ class TestNoDryRunFlag:
 
         called: list[str] = []
 
-        def _record_send(self, payload):  # noqa: ANN001, ARG001
+        def _record_send(self, payload):
             called.append(self.url)
 
         monkeypatch.setattr(tx_module.HttpTransport, "send", _record_send)

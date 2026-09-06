@@ -38,7 +38,10 @@ def create_app(
         ImportError: If fastapi is not installed (install with [mcp-http] extra).
     """
     try:
+        # Reason: optional dependency — extra 'mcp-http'; imported where used so the core never requires it
         from fastapi import FastAPI, Request  # type: ignore[import-untyped]
+
+        # Reason: optional dependency — extra 'mcp-http'; imported where used so the core never requires it
         from fastapi.responses import JSONResponse  # type: ignore[import-untyped]
     except ImportError as e:
         msg = "HTTP mode requires 'fastapi'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
@@ -108,6 +111,7 @@ def serve(
         ImportError: If uvicorn is not installed (install with [mcp-http] extra).
     """
     try:
+        # Reason: optional dependency — extra 'mcp-http'; imported where used so the core never requires it
         import uvicorn  # type: ignore[import-untyped]
     except ImportError as e:
         msg = "HTTP mode requires 'uvicorn'. Install with: uv add 'fraiseql-confiture[mcp-http]'"

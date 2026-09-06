@@ -32,6 +32,7 @@ from confiture.models.migration import Migration
 
 if TYPE_CHECKING:
     from confiture.core._migrator.engine import Migrator
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +402,6 @@ def record_migration(
     (``baseline``, ``reinit``, ``0003_baseline_from_db``). ``applied_by``
     defaults to the connection's ``current_user``; ``applied_at`` to ``now()``.
     """
-    from datetime import datetime
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = f"{name}_{version}_{timestamp}" + (f"_{reason}" if reason else "")

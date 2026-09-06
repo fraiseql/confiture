@@ -33,7 +33,7 @@ class _Recording(Hook):
         super().__init__(hook_id="test.recording", name="recording")
         self.calls = 0
 
-    async def execute(self, context) -> HookResult:  # noqa: ANN001
+    async def execute(self, context) -> HookResult:
         self.calls += 1
         return HookResult(success=True)
 
@@ -42,7 +42,7 @@ class _Failing(Hook):
     def __init__(self) -> None:
         super().__init__(hook_id="test.failing", name="failing")
 
-    async def execute(self, context) -> HookResult:  # noqa: ANN001
+    async def execute(self, context) -> HookResult:
         raise RuntimeError("hook exploded")
 
 

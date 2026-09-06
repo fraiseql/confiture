@@ -42,7 +42,7 @@ from confiture.core.ledger import (
 )
 from confiture.core.locking import LockConfig
 from confiture.core.progress import ProgressManager
-from confiture.exceptions import SQLError
+from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ class Migrator:
             if isinstance(query, pgsql.Composable):
                 try:
                     sql_text = query.as_string(self.connection)
-                except Exception:  # noqa: BLE001 — fall through to context-free render
+                except Exception:
                     sql_text = query.as_string(None)
             else:
                 sql_text = str(query)
@@ -780,7 +780,6 @@ class Migrator:
             >>> applied = migrator.migrate_up()
         """
         from confiture.core._migrator.session import MigratorSession  # session imports engine
-        from confiture.exceptions import MigrationError
 
         lock_config = lock_config or LockConfig()
         checksum_config = checksum_config or ChecksumConfig()

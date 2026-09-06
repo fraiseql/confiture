@@ -75,7 +75,7 @@ class ValidationContext:
         self.close()
 
     @property
-    def config_data(self) -> Any:  # noqa: ANN401 — dict or Environment, per load_config
+    def config_data(self) -> Any:
         """The parsed config, read at most once per run."""
         if not self._config_loaded:
             self._config_data = load_config(self.config_path)

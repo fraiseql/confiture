@@ -85,7 +85,7 @@ _AST_SKIP: Final = frozenset(
 
 
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
-    import pglast  # noqa: PLC0415 — optional [ast] extra
+    import pglast
 
     entries: list[ChangeEntry] = []
     for raw in pglast.parse_sql(sql):

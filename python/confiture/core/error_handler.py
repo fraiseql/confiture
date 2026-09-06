@@ -9,7 +9,14 @@ from typing import Any
 from rich.console import Console
 
 from confiture.core.error_context import format_error_with_context
-from confiture.exceptions import ConfiturError, base_message
+from confiture.exceptions import (
+    ConfigurationError,
+    ConfiturError,
+    MigrationConflictError,
+    SchemaError,
+    SeedError,
+    base_message,
+)
 
 console = Console()
 
@@ -42,12 +49,6 @@ def _detect_error_context(error: Exception) -> str | None:
     Returns:
         Error context code if matched, None otherwise
     """
-    from confiture.exceptions import (
-        ConfigurationError,
-        MigrationConflictError,
-        SchemaError,
-        SeedError,
-    )
 
     # #211: match on the base message. ``str(error)`` now carries the
     # resolution_hint, and hint text is written to guide, not to classify — a

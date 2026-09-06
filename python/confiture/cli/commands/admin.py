@@ -21,6 +21,7 @@ from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
     DatabaseNotInitializedError,
+    RestoreError,
 )
 
 #: Shared by `verify-checksums` and `migrate verify` — both hit the same state
@@ -627,7 +628,6 @@ def restore(
       confiture restore prod.pgdump --database staging --no-refresh-matviews
     """
     from confiture.core.restorer import DatabaseRestorer, RestoreOptions
-    from confiture.exceptions import RestoreError
 
     if not backup_file.exists():
         fail(

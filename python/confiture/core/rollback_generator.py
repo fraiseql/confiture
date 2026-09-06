@@ -7,6 +7,7 @@ and test rollback safety.
 import contextlib
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -245,7 +246,6 @@ class RollbackTester:
         Returns:
             RollbackTestResult with test outcome
         """
-        import time
 
         start_time = time.perf_counter()
 

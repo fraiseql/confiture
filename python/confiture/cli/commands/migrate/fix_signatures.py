@@ -130,13 +130,13 @@ def migrate_fix_signatures(
         schemas = [s.strip() for s in check_signature_schemas.split(",") if s.strip()]
         source_sql = _resolve_source_sql(schema_file, config_data, format_output)
 
-        from confiture.core.function_signature_drift import (  # noqa: PLC0415
+        from confiture.core.function_signature_drift import (
             FunctionSignatureDriftDetector,
         )
-        from confiture.core.function_signature_parser import (  # noqa: PLC0415
+        from confiture.core.function_signature_parser import (
             FunctionSignatureParser,
         )
-        from confiture.core.live_function_catalog import (  # noqa: PLC0415
+        from confiture.core.live_function_catalog import (
             LiveFunctionCatalog,
         )
 
@@ -193,7 +193,7 @@ def migrate_fix_signatures(
                 schemas_checked=schemas,
             )
             if check_body and source_bodies:
-                from confiture.core.function_body_drift import (  # noqa: PLC0415
+                from confiture.core.function_body_drift import (
                     FunctionBodyDriftDetector,
                 )
 
@@ -233,7 +233,7 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
     if schema_file is not None:
         return schema_file.read_text()
     try:
-        from confiture.core.builder import SchemaBuilder  # noqa: PLC0415
+        from confiture.core.builder import SchemaBuilder
 
         env_name = (
             config_data.get("name")
@@ -260,13 +260,13 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
     """``--ssh-via [user@]host``: the connection goes through an SSH tunnel."""
     if not ssh_via:
         return config_data
-    from confiture.config.environment import SshTunnelConfig  # noqa: PLC0415
+    from confiture.config.environment import SshTunnelConfig
 
     parts = ssh_via.split("@", 1)
     ssh_host = parts[1] if len(parts) == 2 else parts[0]
     ssh_user = parts[0] if len(parts) == 2 else None
 
-    class _SshOverride:  # noqa: N801
+    class _SshOverride:
         def __init__(self, base: Any, tunnel: SshTunnelConfig) -> None:
             self._base = base
             self.ssh_tunnel = tunnel
@@ -277,7 +277,7 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
                 return self._base.database_url  # type: ignore[no-any-return]
             return self._base.get("database_url", "")
 
-        def get(self, key: str, default: Any = None) -> Any:  # noqa: ANN401
+        def get(self, key: str, default: Any = None) -> Any:
             return getattr(self._base, key, None) or (
                 self._base.get(key, default) if isinstance(self._base, dict) else default
             )
@@ -342,8 +342,8 @@ def _plan_body_fixes(
     """``--check-body``: CREATE OR REPLACE for bodies that drifted (a DROP+CREATE already covers its function)."""
     if not check_body:
         return {}, [], []
-    from confiture.core.function_body_drift import FunctionBodyDriftDetector  # noqa: PLC0415
-    from confiture.core.function_signature_parser import FunctionSignatureParser  # noqa: PLC0415
+    from confiture.core.function_body_drift import FunctionBodyDriftDetector
+    from confiture.core.function_signature_parser import FunctionSignatureParser
 
     source_bodies = {
         sig.signature_key(): body

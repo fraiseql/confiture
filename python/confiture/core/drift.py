@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         DriftConfig,
         OwnershipExpectation,
     )
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -602,7 +603,6 @@ class SchemaDriftDetector:
         Returns:
             DriftReport with differences
         """
-        from pathlib import Path
 
         path = Path(schema_file_path)
         if not path.exists():

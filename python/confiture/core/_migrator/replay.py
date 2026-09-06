@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from confiture.models.results import (
         PreflightAgainstResult,
     )
+import time as _time
+
+from confiture.exceptions import ConfigurationError
 
 
 def run_against(
@@ -26,9 +29,7 @@ def run_against(
     allow_non_transactional: bool = False,
 ) -> PreflightAgainstResult:
     """See :meth:`MigratorSession.run_against`."""
-    import time as _time
 
-    from confiture.exceptions import ConfigurationError
     from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
 
     if session._conn is None:

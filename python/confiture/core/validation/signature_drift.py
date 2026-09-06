@@ -52,7 +52,7 @@ def _ssh_override(config_data: Any, ssh_via: str) -> Any:
     ssh_host = parts[1] if len(parts) == 2 else parts[0]
     ssh_user = parts[0] if len(parts) == 2 else None
 
-    class _SshOverride:  # noqa: N801
+    class _SshOverride:
         """Thin adapter that layers an ssh_tunnel onto config_data."""
 
         def __init__(self, base: Any, tunnel: SshTunnelConfig) -> None:
@@ -65,7 +65,7 @@ def _ssh_override(config_data: Any, ssh_via: str) -> Any:
                 return self._base.database_url  # type: ignore[no-any-return]
             return self._base.get("database_url", "")
 
-        def get(self, key: str, default: Any = None) -> Any:  # noqa: ANN401
+        def get(self, key: str, default: Any = None) -> Any:
             return getattr(self._base, key, None) or (
                 self._base.get(key, default) if isinstance(self._base, dict) else default
             )

@@ -70,7 +70,7 @@ class TestEnsureTemplateSingleFlight:
         def _ensure() -> None:
             try:
                 provisioner.ensure_template(_TEMPLATE, schema_hash="h1", schema_sql=_SCHEMA)
-            except Exception as e:  # noqa: BLE001 - recorded for assertion
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=_ensure) for _ in range(5)]

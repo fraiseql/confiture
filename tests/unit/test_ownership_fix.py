@@ -15,7 +15,7 @@ from confiture.config.environment import OwnershipApplyTo, OwnershipExpectation
 
 pytest.importorskip("pglast")
 
-from confiture.core.ownership_fixer import OwnershipFixer  # noqa: E402
+from confiture.core.ownership_fixer import OwnershipFixer
 
 
 def _make_expectation(owner: str = "migrator") -> OwnershipExpectation:

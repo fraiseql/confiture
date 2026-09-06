@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
     from confiture.core._migrator.session import MigratorSession
+from confiture.exceptions import ConfigurationError
 
 
 def from_config(
@@ -43,8 +44,6 @@ def from_config(
 
         config_path = Path(config)
         if not config_path.exists():
-            from confiture.exceptions import ConfigurationError
-
             raise ConfigurationError(
                 f"Configuration file not found: {config_path}",
                 error_code="CONFIG_004",
@@ -63,8 +62,6 @@ def from_config(
             env = Environment.model_validate(raw)
         except Exception as e:
             if "ValidationError" in type(e).__name__:
-                from confiture.exceptions import ConfigurationError
-
                 raise ConfigurationError(
                     f"Invalid configuration in {config_path}: {e}",
                     error_code="CONFIG_002",

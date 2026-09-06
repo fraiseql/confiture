@@ -71,7 +71,7 @@ def from_config(
     )
 
 
-def _build_transport(cfg) -> Transport:  # noqa: ANN001
+def _build_transport(cfg) -> Transport:
     if isinstance(cfg, HttpTransportConfig):
         retry = (
             RetryPolicy(
@@ -103,7 +103,7 @@ def _build_transport(cfg) -> Transport:  # noqa: ANN001
     raise TypeError(f"Unknown transport config type: {type(cfg).__name__}")
 
 
-def _build_renderer(cfg, *, allow_templated_renderers: bool) -> Renderer:  # noqa: ANN001
+def _build_renderer(cfg, *, allow_templated_renderers: bool) -> Renderer:
     if isinstance(cfg, SlackRendererConfig):
         return SlackRenderer(channel=cfg.channel, mention_on_failure=cfg.mention_on_failure)
     if isinstance(cfg, DiscordRendererConfig):

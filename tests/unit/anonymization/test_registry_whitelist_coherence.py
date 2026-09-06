@@ -46,7 +46,7 @@ def test_every_registered_strategy_constructs_via_get() -> None:
     for name in StrategyRegistry.list_available():
         try:
             StrategyRegistry.get(name)
-        except Exception as exc:  # noqa: BLE001 — collect all, report together
+        except Exception as exc:
             broken.append(f"{name}: {type(exc).__name__}: {exc}")
     assert not broken, f"registered strategies that fail to construct: {broken}"
 

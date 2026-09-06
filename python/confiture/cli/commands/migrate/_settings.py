@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from confiture.exceptions import ConfigurationError
+
 
 @dataclass(frozen=True)
 class _MigrationSettings:
@@ -37,7 +39,6 @@ def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
 
     from confiture.config.environment import MigrationConfig
     from confiture.core.connection import dsn_from_config, load_config
-    from confiture.exceptions import ConfigurationError
 
     data = load_config(config) or {}
     if not isinstance(data, dict):
@@ -57,7 +58,7 @@ def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
         ) from e
     try:
         database_url: str | None = dsn_from_config(data)
-    except Exception:  # noqa: BLE001 — a file with no DSN at all still yields its settings
+    except Exception:
         database_url = None
     return _MigrationSettings(migration=migration, database_url=database_url)
 

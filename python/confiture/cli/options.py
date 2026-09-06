@@ -11,6 +11,8 @@ from typing import Any
 
 import typer
 
+from confiture.exceptions import ValidationError
+
 
 def format_option(*allowed: str, default: str | None = None, help: str | None = None) -> Any:
     """``--format/-f`` restricted to *allowed*; the first value is the default.
@@ -28,7 +30,6 @@ def format_option(*allowed: str, default: str | None = None, help: str | None = 
     def _validate(value: str) -> str:
         if value not in allowed:
             from confiture.cli.error_json import fail
-            from confiture.exceptions import ValidationError
 
             fail(
                 ValidationError(

@@ -7,6 +7,7 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 """
 
 import hashlib
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -757,7 +758,6 @@ class SchemaBuilder:
         Raises:
             SchemaError: If schema build fails.
         """
-        import time
 
         output_dir = Path(output_dir)
 

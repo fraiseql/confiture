@@ -65,7 +65,7 @@ def test_schema_is_valid_draft_2020_12(schemas_dir: Path) -> None:
 
 
 def test_two_checks_emit_the_composed_envelope(
-    project: Path,  # noqa: ARG001
+    project: Path,
     schemas_dir: Path,
     schema_registry: object,
 ) -> None:
@@ -82,7 +82,7 @@ def test_two_checks_emit_the_composed_envelope(
 
 
 def test_nested_payloads_still_match_their_own_schema(
-    project: Path,  # noqa: ARG001
+    project: Path,
     schemas_dir: Path,
     schema_registry: object,
 ) -> None:
@@ -100,7 +100,7 @@ def test_nested_payloads_still_match_their_own_schema(
 
 
 def test_single_check_does_not_emit_the_wrapper(
-    project: Path,  # noqa: ARG001
+    project: Path,
     schemas_dir: Path,
     schema_registry: object,
 ) -> None:

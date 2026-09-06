@@ -396,7 +396,7 @@ class MigrationGrantExtractor:
     # ------------------------------------------------------------------ #
 
     def _creates_pglast(self, sql: str) -> list[tuple[str, str]]:
-        import pglast  # noqa: PLC0415
+        import pglast
 
         out: list[tuple[str, str]] = []
         for raw in pglast.parse_sql(sql):
@@ -430,8 +430,8 @@ class MigrationGrantExtractor:
         return out
 
     def _drops_pglast(self, sql: str) -> list[tuple[str, str]]:
-        import pglast  # noqa: PLC0415
-        from pglast.enums.parsenodes import ObjectType  # noqa: PLC0415
+        import pglast
+        from pglast.enums.parsenodes import ObjectType
 
         out: list[tuple[str, str]] = []
         for raw in pglast.parse_sql(sql):
@@ -450,8 +450,8 @@ class MigrationGrantExtractor:
         return out
 
     def _grants_pglast(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
-        import pglast  # noqa: PLC0415
-        from pglast.enums.parsenodes import (  # noqa: PLC0415
+        import pglast
+        from pglast.enums.parsenodes import (
             GrantTargetType,
             ObjectType,
             RoleSpecType,
@@ -501,8 +501,8 @@ class MigrationGrantExtractor:
         unrepresentable: list[UnrepresentableGrant],
     ) -> None:
         """pglast backend for :meth:`extract_grant_statements` (issue #162)."""
-        import pglast  # noqa: PLC0415
-        from pglast.enums.parsenodes import (  # noqa: PLC0415
+        import pglast
+        from pglast.enums.parsenodes import (
             GrantTargetType,
             ObjectType,
             RoleSpecType,

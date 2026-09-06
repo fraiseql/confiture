@@ -448,7 +448,7 @@ class MigrationLock:
             # (idempotent) initialize + lock + this row is pending here. The
             # session-scoped advisory lock survives the commit.
             self.connection.commit()
-        except Exception as e:  # noqa: BLE001 — diagnostics must never block
+        except Exception as e:
             logger.warning(f"Could not write lock-holder metadata (id={lock_id}): {e}")
             with contextlib.suppress(Exception):
                 self.connection.rollback()
@@ -462,7 +462,7 @@ class MigrationLock:
                     (lock_id,),
                 )
             self.connection.commit()
-        except Exception as e:  # noqa: BLE001 — diagnostics must never block
+        except Exception as e:
             logger.debug(f"Could not clear lock-holder metadata (id={lock_id}): {e}")
             with contextlib.suppress(Exception):
                 self.connection.rollback()
@@ -471,7 +471,7 @@ class MigrationLock:
         """read_lock_holder() that never raises (used on the error path)."""
         try:
             return self.read_lock_holder()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug(f"Could not read lock-holder metadata: {e}")
             with contextlib.suppress(Exception):
                 self.connection.rollback()

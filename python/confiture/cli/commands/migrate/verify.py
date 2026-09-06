@@ -14,7 +14,8 @@ from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, NO_CONFIG_OPTION_HELP
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, console, is_json, open_connection
 from confiture.cli.options import format_option
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
+from confiture.models.results import VerifyAllResult
 
 
 @cli_boundary
@@ -99,8 +100,6 @@ def migrate_verify(
     from confiture.core.connection import load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
-    from confiture.exceptions import DatabaseNotInitializedError
-    from confiture.models.results import VerifyAllResult
 
     is_json(format_output)
     config_data: Any = None
