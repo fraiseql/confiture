@@ -59,7 +59,7 @@ class TestExamplesJob:
         script = "\n".join(
             step.get("run", "") for job in data["jobs"].values() for step in job["steps"]
         )
-        assert "examples/*/run.sh" in script or "run.sh" in script
+        assert "run.sh" in script, "the workflow must iterate the examples' run.sh scripts"
 
     def test_at_least_three_examples_are_runnable(self) -> None:
         scripts = sorted(EXAMPLES.glob("*/run.sh"))
