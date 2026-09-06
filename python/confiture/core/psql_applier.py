@@ -40,14 +40,11 @@ from pathlib import Path
 from confiture.core.url_redaction import libpq_env, redact_url, split_password
 from confiture.exceptions import SchemaError
 
-# Matches an inline ``COPY … FROM stdin`` on a logical line (after comments are
-# stripped). Server-side ``COPY … FROM '/path'`` has no ``stdin`` token and is
-# intentionally not matched.
-_COPY_FROM_STDIN_RE = re.compile(r"^\s*COPY\b.*\bFROM\s+stdin\b", re.IGNORECASE | re.MULTILINE)
-# The statement-level form of the same test, applied to the code text of one
+# An inline ``COPY … FROM stdin`` statement, tested against the code text of one
 # statement (comments, literals and quoted identifiers already blanked) when the
-# scanner reaches its terminating ``;`` — that is the moment ``psql`` switches to
-# reading COPY data from the following lines.
+# scanner reaches its terminating ``;`` — the moment ``psql`` switches to reading
+# COPY data from the following lines. Server-side ``COPY … FROM '/path'`` has no
+# ``stdin`` token and is intentionally not matched.
 _COPY_STDIN_STMT_RE = re.compile(r"^\s*COPY\b.*\bFROM\s+stdin\b", re.IGNORECASE | re.DOTALL)
 # A dollar-quote opener: ``$$`` or ``$tag$`` where the tag is an identifier.
 # ``$1`` (a positional parameter) has no closing ``$`` and does not match.
@@ -69,12 +66,13 @@ _MISSING_PSQL_COPY = (
 def contains_inline_copy(sql: str) -> bool:
     """Return True if *sql* contains an inline ``COPY … FROM stdin`` block.
 
-    Runs on the code text only — comments, string literals, quoted identifiers,
-    dollar-quoted bodies and COPY data rows are blanked by :func:`code_text` —
-    so the word ``copy``, or a whole ``COPY … FROM stdin`` line, inside a comment,
-    a function body or a string does not trigger a false positive. Server-side
-    ``COPY … FROM '/path'`` is not matched (it has no ``stdin`` token). This
-    drives a hint, so it stays a per-line heuristic.
+    Answered by the same scanner that skips COPY data for
+    :func:`find_meta_commands`, so the two agree on what a COPY block is: a
+    ``COPY … FROM stdin`` statement outside comments, string literals,
+    dollar-quoted bodies and quoted identifiers, terminated by ``;``. The word
+    ``copy`` inside a comment, a function body or a string does not count, and
+    server-side ``COPY … FROM '/path'`` is not matched (it has no ``stdin``
+    token).
 
     Args:
         sql: SQL text to inspect.
@@ -82,7 +80,7 @@ def contains_inline_copy(sql: str) -> bool:
     Returns:
         True if an inline COPY-from-stdin statement is present.
     """
-    return bool(_COPY_FROM_STDIN_RE.search(code_text(sql)))
+    return _scan(sql)[1] > 0
 
 
 @dataclass(frozen=True)
@@ -291,8 +289,14 @@ def code_text(sql: str) -> str:
     Returns:
         The blanked text.
     """
+    return _scan(sql)[0]
+
+
+def _scan(sql: str) -> tuple[str, int]:
+    """Run the lexer over *sql*: the blanked code text and the COPY-block count."""
     lexer = _Lexer()
     out: list[str] = []
+    copy_blocks = 0
     pending_copy_blocks = 0
     for raw in sql.split("\n"):
         if pending_copy_blocks:
@@ -302,8 +306,9 @@ def code_text(sql: str) -> str:
             continue
         code, copies = lexer.feed_line(raw)
         out.append(code)
+        copy_blocks += copies
         pending_copy_blocks += copies
-    return "\n".join(out)
+    return "\n".join(out), copy_blocks
 
 
 def apply_sql_via_psql(
