@@ -201,19 +201,11 @@ def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
         A ``meta`` dict the caller folds into its JSON payload. Always
         contains ``{"backend": "ast" | "regex"}``.
     """
-    from confiture.core.idempotency.patterns import _force_regex
-
-    # pglast is a dependency (D13): the regex backend runs only when forced.
-    backend = "regex" if _force_regex() else "ast"
+    # One parser (D13): the AST backend is the only backend. ``backend`` stays in
+    # ``meta`` because the payload contract carries it.
     if format_output == "text":
-        if backend == "ast":
-            console.print("[green]✓ AST backend (pglast)[/green]")
-        else:
-            console.print(
-                "[yellow]⚠ Regex backend forced (CONFITURE_IDEMPOTENCY_FORCE_REGEX) — "
-                "this escape hatch is removed with the backend[/yellow]"
-            )
-    return {"backend": backend}
+        console.print("[green]✓ AST backend (pglast)[/green]")
+    return {"backend": "ast"}
 
 
 def _read_staged_content(paths: list[Path]) -> dict[Path, str]:

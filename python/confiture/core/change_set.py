@@ -35,9 +35,22 @@ from typing import TYPE_CHECKING, Any, Final
 
 import pglast.parser
 
-from confiture.core._pglast_enums import enums_are_usable
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.idempotency.ast_detector import is_pglast_available
+from confiture.core.ddl_walk import (
+    column_has_default as _column_has_default,
+)
+from confiture.core.ddl_walk import (
+    column_is_not_null as _column_is_not_null,
+)
+from confiture.core.ddl_walk import (
+    enum_int as _enum_int,
+)
+from confiture.core.ddl_walk import (
+    relation_parts as _rel,
+)
+from confiture.core.ddl_walk import (
+    type_name as _type_name,
+)
 from confiture.core.lock_profile import (
     FAST_DEFAULT_SINCE,
     LockProfile,
@@ -45,7 +58,6 @@ from confiture.core.lock_profile import (
 )
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_facts import SchemaFacts
-from confiture.core.sql_statements import split_statements
 from confiture.core.type_lattice import (
     TypeChange,
     canonical_type,
@@ -70,8 +82,6 @@ __all__ = [
 CONTRACT_VERSION: Final = 1
 
 _DEFAULT_SCHEMA: Final = "public"
-
-_HAS_PGLAST = is_pglast_available()
 
 
 # --------------------------------------------------------------------------- #
@@ -537,20 +547,10 @@ def classify_statements(
     "nothing changes".
     """
     ctx = _Context(migration=migration, source=source, default_schema=default_schema, facts=facts)
-    if _use_ast():
-        try:
-            return _ast_entries(sql, ctx)
-        except pglast.parser.ParseError as exc:
-            return [
-                ctx.unclassified("unparseable", None, f"pglast could not parse {source}: {exc}")
-            ]
-    return _regex_entries(sql, ctx)
-
-
-def _use_ast() -> bool:
-    # A half-resolvable enum surface would mis-map operations silently — the #192
-    # failure mode. Degrade to the regex backend instead.
-    return _HAS_PGLAST and enums_are_usable()
+    try:
+        return _ast_entries(sql, ctx)
+    except pglast.parser.ParseError as exc:
+        return [ctx.unclassified("unparseable", None, f"pglast could not parse {source}: {exc}")]
 
 
 def _python_migrations(migrations_dir: Path) -> Iterator[Path]:
@@ -677,31 +677,7 @@ def _ast_source(raw: object, sql: str) -> str:
     return sql[start : start + length] if length else sql[start:]
 
 
-def _enum_int(value: object) -> int | None:
-    if value is None:
-        return None
-    inner = getattr(value, "value", value)
-    try:
-        return int(inner)
-    except (TypeError, ValueError):
-        return None
-
-
-def _rel(relation: object) -> tuple[str | None, str | None]:
-    if relation is None:
-        return (None, None)
-    return (getattr(relation, "schemaname", None), getattr(relation, "relname", None))
-
-
 def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
-    # `core/replica/classifier.py` owns the column-attribute helpers; reusing
-    # them keeps the two surfaces agreeing on what "nullable" means.
-    from confiture.core.replica.classifier import (
-        _column_has_default,
-        _column_is_not_null,
-        _type_name,
-    )
-
     schema, table = _rel(getattr(node, "relation", None))
     target = ctx.qualified(schema, table)
     entries: list[ChangeEntry] = []
@@ -1214,258 +1190,3 @@ _SIMPLE_PATTERNS: Final[tuple[tuple[re.Pattern[str], str, bool], ...]] = (
         False,
     ),
 )
-
-
-def _regex_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
-    entries: list[ChangeEntry] = []
-    for statement in _split_statements(sql):
-        entries.extend(_regex_one(statement, ctx))
-    return entries
-
-
-def _regex_one(statement: str, ctx: _Context) -> list[ChangeEntry]:
-    text = statement.strip()
-    if not text or _RE_SKIP.match(text):
-        return []
-
-    alter = _RE_ALTER_TABLE.match(text)
-    if alter:
-        return _regex_alter_table(alter, ctx)
-
-    index = _RE_CREATE_INDEX.match(text)
-    if index:
-        concurrently = index.group("conc") is not None
-        return [
-            ctx.entry(
-                "create_index",
-                ctx.dotted(index.group("table"), index.group("idx")),
-                tier=tier_for_create_index(concurrently=concurrently),
-                detail="CREATE INDEX" + (" CONCURRENTLY" if concurrently else " — blocks writes"),
-                concurrently=concurrently,
-            )
-        ]
-
-    drop = _RE_DROP.match(text)
-    if drop:
-        return _regex_drop(drop, ctx)
-
-    truncate = _RE_TRUNCATE.match(text)
-    if truncate:
-        return [
-            ctx.entry("truncate", ctx.dotted(name), detail="TRUNCATE")
-            for name in _split_object_list(truncate.group("names"))
-        ]
-
-    grant = _RE_GRANT.match(text)
-    if grant:
-        target = _RE_GRANT_TARGET.search(text)
-        kind = grant.group("verb").lower()
-        return [
-            ctx.entry(
-                kind,
-                ctx.dotted(target.group("obj")) if target else None,
-                detail=kind.upper(),
-            )
-        ]
-
-    comment = _RE_COMMENT.match(text)
-    if comment:
-        return [ctx.entry("comment", ctx.dotted(comment.group("obj")), detail="COMMENT ON")]
-
-    for pattern, kind, standalone in _SIMPLE_PATTERNS:
-        match = pattern.match(text)
-        if match:
-            raw = match.groupdict().get("name")
-            target = (ctx.bare(raw) if standalone else ctx.dotted(raw)) if raw else None
-            return [ctx.entry(kind, target, detail=_detail_for(kind))]
-
-    return [
-        ctx.unclassified(
-            "unclassified",
-            None,
-            f"{_command_prefix(text)} — confiture does not classify this statement",
-        )
-    ]
-
-
-def _regex_alter_table(match: re.Match[str], ctx: _Context) -> list[ChangeEntry]:
-    table = match.group("table")
-    rest = match.group("rest").strip()
-    target = ctx.dotted(table)
-
-    add_column = _RE_AT_ADD_COLUMN.match(rest)
-    if add_column:
-        return [_regex_add_column(add_column, table, ctx)]
-
-    drop_column = _RE_AT_DROP_COLUMN.match(rest)
-    if drop_column:
-        column = drop_column.group("col")
-        return [
-            ctx.entry(
-                "drop_column",
-                ctx.dotted(table, column),
-                detail=f"DROP COLUMN {_ident(column)}",
-            )
-        ]
-
-    rename_to = _RE_AT_RENAME_TO.match(rest)
-    if rename_to:
-        return [
-            ctx.entry("rename_object", target, detail=f"RENAME TO {_ident(rename_to.group('new'))}")
-        ]
-
-    rename = _RE_AT_RENAME_COLUMN.match(rest)
-    if rename:
-        old, new = rename.group("old"), rename.group("new")
-        return [
-            ctx.entry(
-                "rename_column",
-                ctx.dotted(table, old),
-                detail=f"RENAME COLUMN {_ident(old)} TO {_ident(new)} — "
-                "readers on the old name break until they are redeployed",
-            )
-        ]
-
-    alter_column = _RE_AT_ALTER_COLUMN.match(rest)
-    if alter_column:
-        entry = _regex_alter_column(alter_column, table, ctx)
-        if entry is not None:
-            return [entry]
-
-    add_constraint = _RE_AT_ADD_CONSTRAINT.match(rest)
-    if add_constraint:
-        not_valid = "not valid" in add_constraint.group("body").lower()
-        return [
-            ctx.entry(
-                "add_constraint",
-                ctx.dotted(table, add_constraint.group("name")),
-                tier=tier_for_add_constraint(not_valid=not_valid),
-                detail="ADD CONSTRAINT" + (" NOT VALID" if not_valid else ""),
-                not_valid=not_valid,
-            )
-        ]
-
-    drop_constraint = _RE_AT_DROP_CONSTRAINT.match(rest)
-    if drop_constraint:
-        name = drop_constraint.group("name")
-        return [
-            ctx.entry(
-                "drop_constraint",
-                ctx.dotted(table, name),
-                detail=f"DROP CONSTRAINT {_ident(name)}",
-            )
-        ]
-
-    if _RE_AT_OWNER.match(rest):
-        return [ctx.entry("change_owner", target, detail="OWNER TO")]
-
-    bare_add = _RE_AT_ADD_BARE_COLUMN.match(rest)
-    if bare_add:
-        return [_regex_add_column(bare_add, table, ctx)]
-
-    return [
-        ctx.unclassified(
-            "alter_table", target, "ALTER TABLE subcommand confiture does not classify"
-        )
-    ]
-
-
-def _regex_add_column(match: re.Match[str], table: str, ctx: _Context) -> ChangeEntry:
-    column = match.group("col")
-    tail = match.group("tail").lower()
-    nullable = "not null" not in tail
-    has_default = "default" in tail
-    return ctx.entry(
-        "add_column",
-        ctx.dotted(table, column),
-        tier=tier_for_add_column(
-            nullable=nullable, has_default=has_default, server_version=ctx.server_version
-        ),
-        detail=_add_column_detail(column, nullable=nullable, has_default=has_default),
-        has_default=has_default,
-        nullable=nullable,
-    )
-
-
-def _regex_alter_column(match: re.Match[str], table: str, ctx: _Context) -> ChangeEntry | None:
-    column = match.group("col")
-    action = match.group("action").strip().lower()
-    target = ctx.dotted(table, column)
-    if re.match(r"^(?:set\s+data\s+)?type\b", action):
-        raw_type = re.sub(
-            r"^(?:set\s+data\s+)?type\s+", "", match.group("action").strip(), flags=re.IGNORECASE
-        )
-        return ctx.alter_column_type(target, column, canonical_type(_first_type_token(raw_type)))
-    if action.startswith("set default"):
-        return ctx.entry(
-            "set_column_default", target, detail=f"ALTER COLUMN {_ident(column)} SET DEFAULT"
-        )
-    if action.startswith("drop default"):
-        return ctx.entry(
-            "drop_column_default", target, detail=f"ALTER COLUMN {_ident(column)} DROP DEFAULT"
-        )
-    if action.startswith("set not null"):
-        return ctx.entry(
-            "set_not_null",
-            target,
-            detail=f"ALTER COLUMN {_ident(column)} SET NOT NULL — scans the table",
-        )
-    if action.startswith("drop not null"):
-        return ctx.entry(
-            "drop_not_null", target, detail=f"ALTER COLUMN {_ident(column)} DROP NOT NULL"
-        )
-    return None
-
-
-def _first_type_token(raw: str) -> str | None:
-    """The type at the head of an `ALTER COLUMN … TYPE <type> [USING …]` tail."""
-    text = re.split(r"\b(?:USING|COLLATE|NOT|NULL|DEFAULT)\b", raw, flags=re.IGNORECASE)[0]
-    match = re.match(r"\s*([A-Za-z_][\w ]*?)\s*(\(\s*\d+\s*(?:,\s*\d+\s*)?\))?\s*$", text)
-    if not match:
-        return text.strip() or None
-    return f"{match.group(1).strip()}{match.group(2) or ''}"
-
-
-def _regex_drop(match: re.Match[str], ctx: _Context) -> list[ChangeEntry]:
-    word = re.sub(r"\s+", " ", match.group("what")).lower()
-    kind = _DROP_KIND_BY_WORD[word]
-    standalone = kind in _STANDALONE_DROP_KINDS
-    # `DROP TRIGGER t ON tbl` scopes the name to a table; a trailing
-    # CASCADE|RESTRICT belongs to neither.
-    head, _, tail = _partition_on_clause(match.group("names"))
-    relation = _strip_trailing_clause(tail) or None
-    return [
-        ctx.entry(
-            kind,
-            ctx.bare(name)
-            if standalone
-            else (ctx.dotted(relation, name) if relation else ctx.dotted(name)),
-            detail=_detail_for(kind),
-        )
-        for name in _split_object_list(_strip_trailing_clause(head))
-    ]
-
-
-def _partition_on_clause(raw: str) -> tuple[str, str, str]:
-    parts = re.split(r"\bON\b", raw, maxsplit=1, flags=re.IGNORECASE)
-    return (parts[0], "ON", parts[1]) if len(parts) > 1 else (parts[0], "", "")
-
-
-def _strip_trailing_clause(raw: str) -> str:
-    return re.sub(r"\b(?:CASCADE|RESTRICT)\b.*$", "", raw, flags=re.IGNORECASE | re.DOTALL).strip()
-
-
-def _split_object_list(raw: str) -> list[str]:
-    """Split `a, b.c` into names, dropping any argument list or trailing clause."""
-    names = []
-    for chunk in raw.split(","):
-        name = chunk.strip().split("(")[0].strip()
-        name = name.split()[0] if name.split() else ""
-        if name:
-            names.append(name)
-    return names
-
-
-def _split_statements(sql: str) -> list[str]:
-    """Top-level split, shared with ``core/replica/classifier.py``."""
-    return split_statements(sql)

@@ -120,16 +120,10 @@ The detector also recognizes cross-snippet DROP+CREATE pairs in
 followed by `CREATE VIEW v …` in the next is now treated as the
 idempotent DROP+CREATE pattern (pre-0.14.0 the second call was flagged).
 
-`pglast` is a dependency since 0.50.0, so every install runs the AST
-detector. The regex backend still exists as an escape hatch for one
-release: set `CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` to pin the dispatcher
-to it if you hit an AST regression. The env var is removed with the
-backend.
-
-```bash
-# Pin to regex (one-release escape hatch)
-CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 confiture migrate validate --idempotent
-```
+`pglast` is a dependency since 0.50.0 and the only detector: the regex backend
+and its `CONFITURE_IDEMPOTENCY_FORCE_REGEX` escape hatch are gone. A file pglast
+cannot parse is reported as `IDEM_UNPARSEABLE` (the verdict reads `unverified`,
+and `--fail-on-unanalyzable` fails the run).
 
 ### Three signal types
 

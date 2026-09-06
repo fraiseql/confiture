@@ -346,59 +346,6 @@ class TestSchemaDiffAlgorithm:
         assert change.new_value == "user_profiles"
 
 
-class TestUnknownTypeHandling:
-    """Phase 01: ColumnType.UNKNOWN silent diff misses."""
-
-    def test_parse_column_type_money(self):
-        differ = SchemaDiffer()
-        col_type, _ = differ._parse_column_type("MONEY")
-        assert col_type == ColumnType.MONEY
-
-    def test_parse_column_type_inet(self):
-        differ = SchemaDiffer()
-        col_type, _ = differ._parse_column_type("INET")
-        assert col_type == ColumnType.INET
-
-    def test_parse_column_type_tsvector(self):
-        differ = SchemaDiffer()
-        col_type, _ = differ._parse_column_type("TSVECTOR")
-        assert col_type == ColumnType.TSVECTOR
-
-    def test_parse_column_type_cidr(self):
-        differ = SchemaDiffer()
-        col_type, _ = differ._parse_column_type("CIDR")
-        assert col_type == ColumnType.CIDR
-
-    def test_change_between_two_unknown_types_is_detected(self):
-        differ = SchemaDiffer()
-        old_sql = "CREATE TABLE products (amount my_domain NOT NULL);"
-        new_sql = "CREATE TABLE products (amount other_domain NOT NULL);"
-        diff = differ.compare(old_sql, new_sql)
-        assert diff.has_changes()
-        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
-
-    def test_same_unknown_type_is_not_a_change(self):
-        differ = SchemaDiffer()
-        old_sql = "CREATE TABLE products (amount my_domain NOT NULL);"
-        new_sql = "CREATE TABLE products (amount my_domain NOT NULL);"
-        diff = differ.compare(old_sql, new_sql)
-        assert not diff.has_changes()
-
-    def test_array_type_change_detected(self):
-        differ = SchemaDiffer()
-        old_sql = "CREATE TABLE t (tags INT[] NOT NULL);"
-        new_sql = "CREATE TABLE t (tags TEXT[] NOT NULL);"
-        diff = differ.compare(old_sql, new_sql)
-        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
-
-    def test_money_to_numeric_change_detected(self):
-        differ = SchemaDiffer()
-        old_sql = "CREATE TABLE t (price MONEY NOT NULL);"
-        new_sql = "CREATE TABLE t (price NUMERIC NOT NULL);"
-        diff = differ.compare(old_sql, new_sql)
-        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
-
-
 class TestParseSchema:
     """Phase 02: parse_schema returns ParsedSchema with enums/sequences."""
 
@@ -691,10 +638,3 @@ class TestInlineConstraintParsing:
         result = differ.parse_schema(sql)
         assert len(result.tables[0].unique_constraints) == 1
         assert result.tables[0].unique_constraints[0].name == "uq_email"
-
-    def test_parse_inline_constraint_no_match_returns_none_triple(self):
-        differ = SchemaDiffer()
-        fk, ck, uq = differ._parse_inline_constraint("NOT A CONSTRAINT", "users")
-        assert fk is None
-        assert ck is None
-        assert uq is None

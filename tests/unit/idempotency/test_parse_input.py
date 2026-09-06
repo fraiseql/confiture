@@ -11,15 +11,8 @@ statement locations on the untouched text.
 
 from __future__ import annotations
 
-import pytest
-
-from confiture.core.idempotency import patterns
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.validator import IdempotencyValidator
-
-pytestmark = pytest.mark.ast_only(
-    reason="the raw-text contract is pglast's; the regex backend goes in Cycle 5"
-)
 
 NESTED_TAGS = """\
 CREATE OR REPLACE FUNCTION f() RETURNS void AS $body$
@@ -37,14 +30,6 @@ COMMENTED_OUT = """\
    also_commented (id int); */
 CREATE TABLE real_one (id int);
 """
-
-
-@pytest.fixture(autouse=True)
-def _regex_backend_is_not_a_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _no_regex(sql: str) -> list:
-        raise AssertionError("the regex backend was used; pglast should have parsed the raw text")
-
-    monkeypatch.setattr(patterns, "_detect_via_regex", _no_regex)
 
 
 def _patterns(sql: str) -> list[tuple[IdempotencyPattern, int]]:

@@ -43,10 +43,6 @@ import pglast.parser
 
 from confiture.config.environment import FunctionCoverage
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting._ast_required import (
-    emit_skip_notice,
-    is_pglast_available,
-)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 
@@ -153,12 +149,6 @@ class Func001FunctionUniqueness:
         """
         if not self.coverage.enabled:
             return []
-        if not is_pglast_available():
-            emit_skip_notice(
-                'func_001 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         all_definitions: list[_CallableDefinition] = []
         notices: list[LintViolation] = []
         for path in ddl_paths:

@@ -34,10 +34,6 @@ import pglast.parser
 
 from confiture.config.environment import OwnershipExpectation
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting._ast_required import (
-    emit_skip_notice,
-    is_pglast_available,
-)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 
@@ -128,12 +124,6 @@ class Own001OwnershipCoverage:
             return []
         if not migrations_dir.exists():
             return []
-        if not is_pglast_available():
-            emit_skip_notice(
-                'own_001 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         violations: list[LintViolation] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
             try:
@@ -267,7 +257,7 @@ class Own001OwnershipCoverage:
         never appear as top-level statements, so an ``EXECUTE 'ALTER …
         OWNER TO …'`` wrapped in a DO block correctly does NOT count.
         """
-        import pglast  # local import — guarded by is_pglast_available() above
+        import pglast  # noqa: PLC0415
 
         creates: list[_CreateRecord] = []
         alters: list[_AlterOwnerRecord] = []
@@ -391,12 +381,6 @@ class Own002BareAlterOwner:
     def check(self, migrations_dir: Path) -> list[LintViolation]:
         if not migrations_dir.exists():
             return []
-        if not is_pglast_available():
-            emit_skip_notice(
-                'own_002 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         violations: list[LintViolation] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
             try:

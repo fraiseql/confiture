@@ -17,7 +17,8 @@ through the ``\\.`` terminator), not statement-split.
 
 from __future__ import annotations
 
-import logging
+import pglast.parser
+import pytest
 
 from confiture.core.differ import SchemaDiffer
 
@@ -60,12 +61,10 @@ def test_copy_without_inline_data_is_untouched() -> None:
     assert {t.name for t in parsed.tables} == {"t1", "t2"}
 
 
-def test_pglast_fallback_warns_instead_of_degrading_silently(
-    caplog,
-) -> None:
-    # Genuinely unparseable SQL still falls back to sqlparse, but must say so:
-    # the silent fallback is what turned a blocking gate into a no-op.
+def test_unparseable_schema_raises_instead_of_degrading_silently() -> None:
+    # There is no fallback parser (D13): what PostgreSQL rejects is reported,
+    # never silently read by something less exact — the silent fallback is
+    # what turned a blocking gate into a no-op.
     sql = "CREATE TABLE ok (id INT);\nTHIS IS NOT SQL AT ALL;\n"
-    with caplog.at_level(logging.WARNING, logger="confiture.core.differ"):
+    with pytest.raises(pglast.parser.ParseError):
         SchemaDiffer().parse_schema(sql)
-    assert any("pglast" in rec.message and "sqlparse" in rec.message for rec in caplog.records)

@@ -35,11 +35,6 @@ def _keys(stmts: list[GrantStatement]) -> set[tuple]:
     }
 
 
-def _regex(monkeypatch: pytest.MonkeyPatch) -> MigrationGrantExtractor:
-    monkeypatch.setattr("confiture.core.migration_grant_extractor._HAS_PGLAST", False)
-    return MigrationGrantExtractor()
-
-
 # ---------------------------------------------------------------------------
 # GRANT / REVOKE on tables — both backends, full parity
 # ---------------------------------------------------------------------------
@@ -51,21 +46,8 @@ def test_grant_table_pglast() -> None:
     assert result.unrepresentable == []
 
 
-def test_grant_table_regex(monkeypatch: pytest.MonkeyPatch) -> None:
-    result = _regex(monkeypatch).extract_grant_statements("GRANT SELECT ON s.t TO r;")
-    assert _keys(result.statements) == {("GRANT", "TABLE", "OBJECT", "s", "t", "r", "SELECT")}
-    assert result.unrepresentable == []
-
-
 def test_revoke_table_pglast() -> None:
     result = MigrationGrantExtractor().extract_grant_statements("REVOKE SELECT ON foo FROM r;")
-    assert _keys(result.statements) == {
-        ("REVOKE", "TABLE", "OBJECT", "public", "foo", "r", "SELECT")
-    }
-
-
-def test_revoke_table_regex(monkeypatch: pytest.MonkeyPatch) -> None:
-    result = _regex(monkeypatch).extract_grant_statements("REVOKE SELECT ON foo FROM r;")
     assert _keys(result.statements) == {
         ("REVOKE", "TABLE", "OBJECT", "public", "foo", "r", "SELECT")
     }
@@ -212,14 +194,6 @@ def test_grantee_case_folding_unquoted_pglast() -> None:
     assert next(iter(upper.statements)).grantee == "reporter"
 
 
-def test_grantee_case_folding_unquoted_regex(monkeypatch: pytest.MonkeyPatch) -> None:
-    ext = _regex(monkeypatch)
-    upper = ext.extract_grant_statements("GRANT SELECT ON s.t TO Reporter;")
-    lower = ext.extract_grant_statements("GRANT SELECT ON s.t TO reporter;")
-    assert _keys(upper.statements) == _keys(lower.statements)
-    assert next(iter(upper.statements)).grantee == "reporter"
-
-
 def test_grantee_quoted_preserves_case() -> None:
     result = MigrationGrantExtractor().extract_grant_statements(
         'GRANT SELECT ON s.t TO "Reporter";'
@@ -231,9 +205,7 @@ def test_grantee_public_literal_both_paths(monkeypatch: pytest.MonkeyPatch) -> N
     pglast_result = MigrationGrantExtractor().extract_grant_statements(
         "GRANT SELECT ON s.t TO public;"
     )
-    regex_result = _regex(monkeypatch).extract_grant_statements("GRANT SELECT ON s.t TO PUBLIC;")
     assert next(iter(pglast_result.statements)).grantee == "PUBLIC"
-    assert next(iter(regex_result.statements)).grantee == "PUBLIC"
 
 
 # ---------------------------------------------------------------------------
@@ -274,34 +246,8 @@ def test_unmodeled_objtype_is_unrepresentable_pglast(sql: str) -> None:
     assert any(u.reason == "unmodeled_objtype" for u in result.unrepresentable)
 
 
-@pytest.mark.parametrize(
-    "sql",
-    [
-        "GRANT CONNECT ON DATABASE foo TO r;",
-        "GRANT USAGE ON LANGUAGE plpgsql TO r;",
-        "GRANT USAGE ON FOREIGN DATA WRAPPER fdw TO r;",
-    ],
-)
-def test_unmodeled_objtype_is_unrepresentable_regex(
-    sql: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    result = _regex(monkeypatch).extract_grant_statements(sql)
-    assert result.statements == []
-    assert any(u.reason == "unmodeled_objtype" for u in result.unrepresentable)
-
-
 def test_alter_default_privileges_is_unrepresentable_pglast() -> None:
     result = MigrationGrantExtractor().extract_grant_statements(
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT SELECT ON TABLES TO r;"
-    )
-    assert result.statements == []
-    assert any(u.reason == "alter_default_privileges" for u in result.unrepresentable)
-
-
-def test_alter_default_privileges_is_unrepresentable_regex(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result = _regex(monkeypatch).extract_grant_statements(
         "ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT SELECT ON TABLES TO r;"
     )
     assert result.statements == []
@@ -312,12 +258,6 @@ def test_column_level_privileges_is_unrepresentable_pglast() -> None:
     result = MigrationGrantExtractor().extract_grant_statements(
         "GRANT SELECT (col1, col2) ON s.t TO r;"
     )
-    assert result.statements == []
-    assert any(u.reason == "column_privileges" for u in result.unrepresentable)
-
-
-def test_column_level_privileges_is_unrepresentable_regex(monkeypatch: pytest.MonkeyPatch) -> None:
-    result = _regex(monkeypatch).extract_grant_statements("GRANT SELECT (col1, col2) ON s.t TO r;")
     assert result.statements == []
     assert any(u.reason == "column_privileges" for u in result.unrepresentable)
 

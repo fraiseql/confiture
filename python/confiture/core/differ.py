@@ -11,11 +11,7 @@ import re
 from typing import Any
 
 import pglast
-import sqlparse
 from pglast.enums.parsenodes import ConstrType
-from sqlparse.exceptions import SQLParseError as _SqlParseError
-from sqlparse.sql import Identifier, Parenthesis, Statement
-from sqlparse.tokens import Keyword, Name
 
 from confiture.models.schema import (
     CheckConstraint,
@@ -227,7 +223,7 @@ class SchemaDiffer:
         """Parse SQL DDL into a ParsedSchema (tables, enums, sequences).
 
         Uses pglast (PostgreSQL's own parser) when available for accurate,
-        limit-free parsing. Falls back to sqlparse when pglast is not installed.
+        limit-free parsing.
         Non-DDL statements (INSERT, COPY, GRANT, etc.) are silently ignored.
 
         Args:
@@ -296,27 +292,16 @@ class SchemaDiffer:
         """Parse CREATE TABLE statements using pglast (PostgreSQL's own parser).
 
         pglast has no token/recursion limits and handles all PostgreSQL syntax.
-        Falls back to the sqlparse path on any parse error.
+        Raises ``pglast.parser.ParseError`` on SQL PostgreSQL rejects.
 
         Args:
             sql: Full SQL text (may contain any statements)
             result: ParsedSchema to populate
             pglast: The already-imported pglast module
         """
-        try:
-            tree = pglast.parse_sql(sql)
-        except Exception as exc:
-            # pglast parse error (e.g. non-PostgreSQL syntax) — fall back to
-            # sqlparse. Never silently: sqlparse has token limits and can miss
-            # DDL, which turned a blocking accompaniment gate into a no-op (#194).
-            logger.warning(
-                "pglast failed to parse schema (%s) — falling back to sqlparse, "
-                "which may miss DDL beyond its token limits",
-                exc,
-            )
-            self._parse_create_tables_sqlparse(sql, result)
-            return
-
+        # pglast.parser.ParseError propagates: what PostgreSQL rejects is not a
+        # schema to diff, and `migrate diff` reports it as DIFFER_400 (ANA-02).
+        tree = pglast.parse_sql(sql)
         if tree is None:
             return
 
@@ -463,42 +448,6 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
     # sqlparse-based CREATE TABLE parser (fallback when pglast not installed)
     # ------------------------------------------------------------------
-
-    def _parse_create_tables_sqlparse(self, sql: str, result: ParsedSchema) -> None:
-        """Parse CREATE TABLE statements using sqlparse (fallback path).
-
-        Splits the SQL into individual statements and filters to DDL-only
-        before passing each to sqlparse, avoiding the MAX_GROUPING_TOKENS
-        crash that occurs when a large combined string is parsed at once.
-
-        Args:
-            sql: Full SQL text
-            result: ParsedSchema to populate
-        """
-        raw_statements = sqlparse.split(sql)
-        for raw_stmt in raw_statements:
-            if not raw_stmt.strip():
-                continue
-            upper = raw_stmt.lstrip().upper()
-            if not any(upper.startswith(p) for p in _DDL_PREFIXES):
-                continue
-            try:
-                parsed = sqlparse.parse(raw_stmt)
-            except _SqlParseError:
-                continue
-            if not parsed:
-                continue
-            stmt = parsed[0]
-            stmt_type: str | None = stmt.get_type()
-            if stmt_type == "CREATE" and self._statement_has_keyword(stmt, "TABLE"):
-                table = self._parse_create_table(stmt)
-                if table:
-                    result.tables.append(table)
-
-    def _statement_has_keyword(self, stmt: Statement, keyword: str) -> bool:
-        """Return True if the statement contains the given keyword token."""
-        kw_upper = keyword.upper()
-        return any(token.value.upper() == kw_upper for token in stmt.flatten())
 
     def _parse_alter_table(self, sql_text: str, result: ParsedSchema) -> None:
         """Parse ALTER TABLE ... ADD CONSTRAINT ... statements via regex."""
@@ -921,245 +870,3 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
     # SQL parsing helpers
     # ------------------------------------------------------------------
-
-    def _parse_create_table(self, stmt: Statement) -> Table | None:
-        """Parse a CREATE TABLE statement."""
-        try:
-            table_name = self._extract_table_name(stmt)
-            if not table_name:
-                return None
-
-            table = Table(name=table_name)
-            columns, inline_fks, inline_checks, inline_uniques = self._extract_columns(
-                stmt, table_name
-            )
-            table.columns = columns
-            table.foreign_keys = inline_fks
-            table.check_constraints = inline_checks
-            table.unique_constraints = inline_uniques
-
-            return table
-
-        except Exception:
-            return None
-
-    def _extract_table_name(self, stmt: Statement) -> str | None:
-        """Extract table name from CREATE TABLE statement."""
-        found_create = False
-        found_table = False
-
-        for token in stmt.tokens:
-            if token.is_whitespace:
-                continue
-
-            if token.ttype is Keyword.DDL and token.value.upper() == "CREATE":
-                found_create = True
-                continue
-
-            if found_create and token.ttype is Keyword and token.value.upper() == "TABLE":
-                found_table = True
-                continue
-
-            if found_table:
-                if isinstance(token, Identifier):
-                    return str(token.get_real_name())
-                if token.ttype is Name:
-                    return str(token.value)
-
-        return None
-
-    def _extract_columns(
-        self, stmt: Statement, table_name: str
-    ) -> tuple[list[Column], list[ForeignKey], list[CheckConstraint], list[UniqueConstraint]]:
-        """Extract column definitions and inline constraints from CREATE TABLE."""
-        columns: list[Column] = []
-        fks: list[ForeignKey] = []
-        checks: list[CheckConstraint] = []
-        uniques: list[UniqueConstraint] = []
-
-        column_def_parens = None
-        for token in stmt.tokens:
-            if isinstance(token, Parenthesis):
-                column_def_parens = token
-                break
-
-        if not column_def_parens:
-            return columns, fks, checks, uniques
-
-        column_text = str(column_def_parens.value)[1:-1]
-        column_parts = self._split_columns(column_text)
-
-        for part in column_parts:
-            stripped = part.strip()
-            upper = stripped.upper()
-
-            # Route inline constraints
-            if upper.startswith("CONSTRAINT") or "FOREIGN KEY" in upper:
-                fk, ck, uq = self._parse_inline_constraint(stripped, table_name)
-                if fk:
-                    fks.append(fk)
-                if ck:
-                    checks.append(ck)
-                if uq:
-                    uniques.append(uq)
-                continue
-
-            if upper.startswith("PRIMARY KEY") or upper.startswith("UNIQUE ("):
-                # table-level PK/UNIQUE — skip (column-level already handled)
-                continue
-
-            column = self._parse_column_definition(stripped)
-            if column:
-                columns.append(column)
-
-        return columns, fks, checks, uniques
-
-    def _parse_inline_constraint(
-        self, text: str, table_name: str
-    ) -> tuple[ForeignKey | None, CheckConstraint | None, UniqueConstraint | None]:
-        """Parse an inline CONSTRAINT clause from a CREATE TABLE body."""
-        m = _INLINE_FK_RE.search(text)
-        if m:
-            return (
-                ForeignKey(
-                    name=m.group("name"),
-                    table=table_name,
-                    columns=[c.strip() for c in m.group("cols").split(",")],
-                    ref_table=m.group("ref_table"),
-                    ref_columns=[c.strip() for c in m.group("ref_cols").split(",")],
-                    on_delete=m.group("on_delete"),
-                ),
-                None,
-                None,
-            )
-
-        m = _INLINE_CHECK_RE.search(text)
-        if m:
-            return (
-                None,
-                CheckConstraint(
-                    name=m.group("name"), table=table_name, expression=m.group("expr").strip()
-                ),
-                None,
-            )
-
-        m = _INLINE_UNIQUE_RE.search(text)
-        if m:
-            return (
-                None,
-                None,
-                UniqueConstraint(
-                    name=m.group("name"),
-                    table=table_name,
-                    columns=[c.strip() for c in m.group("cols").split(",")],
-                ),
-            )
-
-        return None, None, None
-
-    def _split_columns(self, text: str) -> list[str]:
-        """Split column definitions by comma, respecting nested parentheses."""
-        parts: list[str] = []
-        current = []
-        paren_depth = 0
-
-        for char in text:
-            if char == "(":
-                paren_depth += 1
-                current.append(char)
-            elif char == ")":
-                paren_depth -= 1
-                current.append(char)
-            elif char == "," and paren_depth == 0:
-                parts.append("".join(current))
-                current = []
-            else:
-                current.append(char)
-
-        if current:
-            parts.append("".join(current))
-
-        return parts
-
-    def _parse_column_definition(self, col_def: str) -> Column | None:
-        """Parse a single column definition string."""
-        try:
-            parts = col_def.split()
-            if len(parts) < 2:
-                return None
-
-            col_name = parts[0].strip("\"'")
-            col_type_str = parts[1].upper()
-
-            col_type, length = self._parse_column_type(col_type_str)
-            raw_sql_type = col_type_str.lower() if col_type == ColumnType.UNKNOWN else None
-
-            upper_def = col_def.upper()
-            nullable = "NOT NULL" not in upper_def
-            primary_key = "PRIMARY KEY" in upper_def
-            unique = "UNIQUE" in upper_def and not primary_key
-
-            default = self._extract_default(col_def)
-
-            return Column(
-                name=col_name,
-                type=col_type,
-                nullable=nullable,
-                default=default,
-                primary_key=primary_key,
-                unique=unique,
-                length=length,
-                raw_sql_type=raw_sql_type,
-            )
-
-        except Exception:
-            return None
-
-    def _parse_column_type(self, type_str: str) -> tuple[ColumnType, int | None]:
-        """Parse column type string into ColumnType and optional length.
-
-        Args:
-            type_str: Column type string (e.g., "VARCHAR(255)", "INT", "TIMESTAMP")
-
-        Returns:
-            Tuple of (ColumnType, length)
-        """
-        length = None
-        match = re.match(r"([A-Z_]+)\((\d+)\)", type_str)
-        if match:
-            type_str = match.group(1)
-            length = int(match.group(2))
-
-        # Handle array types: INT[], TEXT[], etc.
-        if type_str.endswith("[]"):
-            base = type_str[:-2]
-            base_type = _COLUMN_TYPE_MAP.get(base, ColumnType.UNKNOWN)
-            if base_type == ColumnType.UNKNOWN:
-                return ColumnType.UNKNOWN, length
-            # Map to UNKNOWN with raw type preserved (array types stay UNKNOWN for now)
-            return ColumnType.UNKNOWN, length
-
-        col_type = _COLUMN_TYPE_MAP.get(type_str, ColumnType.UNKNOWN)
-        return col_type, length
-
-    def _extract_default(self, col_def: str) -> str | None:
-        """Extract DEFAULT value from column definition."""
-        match = re.search(r"DEFAULT\s+([^\s,]+)", col_def, re.IGNORECASE)
-        if match:
-            default_val = match.group(1)
-            if "(" in default_val:
-                start = match.start(1)
-                text = col_def[start:]
-                paren_count = 0
-                end_idx = 0
-                for i, char in enumerate(text):
-                    if char == "(":
-                        paren_count += 1
-                    elif char == ")":
-                        paren_count -= 1
-                        if paren_count == 0:
-                            end_idx = i + 1
-                            break
-                return text[:end_idx] if end_idx > 0 else default_val
-            return default_val
-        return None

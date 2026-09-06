@@ -44,10 +44,6 @@ from typing import Any, ClassVar
 import pglast.parser
 
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting._ast_required import (
-    emit_skip_notice,
-    is_pglast_available,
-)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 
@@ -252,12 +248,6 @@ class Sec002SecurityDefinerSearchPath:
         Each path may be a directory (scanned recursively for ``*.sql``)
         or a single file.  Missing paths are silently ignored.
         """
-        if not is_pglast_available():
-            emit_skip_notice(
-                'sec_002 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         violations: list[LintViolation] = []
         for path in scan_paths:
             for sql_file in self._iter_sql_files(path):

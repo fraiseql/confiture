@@ -135,19 +135,3 @@ class MigrationAnalyzer:
                 results.append(node_type.replace("Stmt", "").upper())
 
         return results
-
-    def _analyze_regex(self, sql: str) -> list[str]:
-        """Regex-based fallback when pglast is unavailable.
-
-        Note: This path cannot distinguish statements inside dollar-quoted
-        function bodies from top-level statements. Use pglast for authoritative
-        results (install with ``pip install "fraiseql-confiture[ast]"``).
-        """
-        results: list[str] = []
-        for pattern, template in self._NON_TXN_PATTERNS:
-            for match in pattern.finditer(sql):
-                if "{0}" in template:
-                    results.append(template.format(match.group(1)))
-                else:
-                    results.append(template)
-        return results

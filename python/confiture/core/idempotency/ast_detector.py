@@ -5,10 +5,8 @@ the same ``list[PatternMatch]`` shape — but uses PostgreSQL's own parser
 (via :mod:`pglast`) to recognize statements structurally rather than via
 regex.
 
-The dispatcher in :mod:`patterns` picks this backend when pglast is
-importable and ``CONFITURE_IDEMPOTENCY_FORCE_REGEX`` is unset. Parse
-failures bubble up as :class:`pglast.parser.ParseError`; the dispatcher
-catches them and falls through to the regex backend so partial or
+This is the only backend (D13). Parse failures bubble up as
+:class:`pglast.parser.ParseError`; the validator records the file as unparseable.
 templated SQL still gets scanned.
 
 Visitor layout
@@ -54,15 +52,6 @@ from confiture.core.idempotency.suggestion_templates import suggestion_for
 
 if TYPE_CHECKING:
     from confiture.core.idempotency.patterns import PatternMatch
-
-
-def is_pglast_available() -> bool:
-    """Always True: pglast is a dependency (D13).
-
-    Kept as the dispatcher's switch until the regex backend is deleted
-    (Phase 05 Cycle 5).
-    """
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -499,4 +488,4 @@ def _detect_via_ast(sql: str) -> list[PatternMatch]:
     return matches
 
 
-__all__ = ["is_pglast_available"]
+__all__ = ["_detect_via_ast"]

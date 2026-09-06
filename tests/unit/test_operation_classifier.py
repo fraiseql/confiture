@@ -54,14 +54,6 @@ def test_classify(sql: str, expected) -> None:
     assert OperationClassifier().classify(sql) == [expected]
 
 
-@pytest.mark.parametrize("sql", [c[0] for c in _COLUMN_CASES + _OTHER_CASES])
-def test_pglast_and_regex_agree(sql: str, monkeypatch) -> None:
-    via_ast = OperationClassifier().classify(sql)
-    monkeypatch.setattr("confiture.core.replica.classifier._HAS_PGLAST", False)
-    via_regex = OperationClassifier().classify(sql)
-    assert via_ast == via_regex, sql
-
-
 def test_multi_statement_preserves_order() -> None:
     sql = "ALTER TABLE t ADD COLUMN c int; ALTER TABLE t DROP COLUMN d;"
     ops = OperationClassifier().classify(sql)

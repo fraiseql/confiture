@@ -24,7 +24,7 @@ _FUNC_RE = re.compile(
 )
 
 # Header-only variant: matches up to and including the opening '('.
-# Used in _parse_regex to then extract balanced args separately.
+# Used by parse_with_bodies to then extract balanced args separately.
 _FUNC_HEADER_RE = re.compile(
     r"""
     CREATE \s+ (?:OR \s+ REPLACE \s+)?
@@ -112,10 +112,7 @@ class FunctionSignatureParser:
         }
 
         result = []
-        try:
-            stmts = pglast.parse_sql(sql)
-        except Exception:
-            return self._parse_regex(sql)
+        stmts = pglast.parse_sql(sql)  # ParseError propagates: the caller reports it
 
         for stmt in stmts:
             try:
@@ -173,33 +170,6 @@ class FunctionSignatureParser:
                 # Skip malformed nodes gracefully
                 continue
 
-        return result
-
-    def _parse_regex(self, sql: str) -> list[FunctionSignature]:
-        """Parse using regex fallback (no optional dependencies).
-
-        Uses _FUNC_HEADER_RE to locate the opening '(' of each function, then
-        extracts the argument list with balanced-parenthesis tracking so that
-        complex DEFAULT expressions such as ``ROW(NULL, NULL)::mytype`` are
-        captured correctly rather than truncated at the first ')'.
-        """
-        result = []
-        for match in _FUNC_HEADER_RE.finditer(sql):
-            schema_raw = match.group("schema")
-            schema = schema_raw.lower().strip('"') if schema_raw else "public"
-            name = match.group("name").lower().strip('"')
-            # match.end() points to the char after '(' — the start of the args
-            args_raw = self._extract_balanced_args(sql, match.end() - 1)
-            if args_raw is None:
-                continue
-            param_types = self._parse_args_regex(args_raw.strip())
-            result.append(
-                FunctionSignature(
-                    schema=schema,
-                    name=name,
-                    param_types=tuple(param_types),
-                )
-            )
         return result
 
     @staticmethod

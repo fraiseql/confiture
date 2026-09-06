@@ -120,33 +120,32 @@ dev = [
 
 ### SQL Parsing Architecture
 
-Two modules use the same two-tier strategy — **pglast primary, regex
-fallback** — so behavior stays consistent across the codebase:
+**One parser: pglast** (PostgreSQL's own C parser via `libpg_query`), a hard
+dependency since 0.50.0 (D13). There is no regex or sqlparse fallback and no
+switch to one — `tests/unit/test_single_parser.py` fails on any `FORCE_REGEX`
+env var, `_HAS_PGLAST` flag or `is_pglast_available` probe. Every DDL question
+has one answer, and a file pglast rejects is a **finding**, never a clean result:
+`IDEM_UNPARSEABLE` (idempotency, counted as unanalyzed), `PFLIGHT_UNPARSEABLE`
+(preflight, forces `window_safe: false`), lint's `UNPARSEABLE` notice, one
+unclassified change-set entry, `DIFFER_400` from `migrate diff`.
 
-- **`SchemaDiffer`** (`python/confiture/core/differ.py`): parses `CREATE
-  TABLE` / `CREATE INDEX` / `CREATE TYPE AS ENUM` / `CREATE SEQUENCE` /
-  `ALTER TABLE ADD CONSTRAINT` for schema diffs.
-- **`detect_non_idempotent_patterns`** (`python/confiture/core/idempotency/patterns.py`,
-  AST visitors in `ast_detector.py`): recognizes non-idempotent CREATE
-  / ALTER / DROP for the `migrate validate --idempotent` gate. AST
-  cutover landed in 0.14.0 (see `docs/guides/migrate-validate.md`).
-  Set `CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` to pin to the regex
-  backend (one-release escape hatch).
+The consumers, all on `pglast.parser.parse_sql`:
 
-The two backends:
+- **`detect_non_idempotent_patterns`** (`core/idempotency/patterns.py`, visitors
+  in `ast_detector.py`) — the `migrate validate --idempotent` gate. The validator
+  hands pglast the raw file; statement locations index that exact text.
+- **`OperationClassifier`** (`core/replica/classifier.py`) and
+  **`build_change_set`** (`core/change_set.py`) — replica forward-compatibility
+  and risk tiers, sharing `core/ddl_walk.py` for what "nullable", "has a default"
+  and "the type as written" mean.
+- **`SchemaDiffer`** (`core/differ.py`) — `CREATE TABLE` through pglast; index /
+  enum / sequence / constraint passes are the Cycle 6 target.
+- **`SchemaLinter`** (`core/linting/schema_linter.py`) — the default rules read
+  `core/linting/inventory.py`, a pglast-built object inventory, so a schema
+  qualifier changes nothing (#216).
 
-1. **Primary — pglast** (a dependency since 0.50.0; the `[ast]` extra is an empty alias):
-   Uses PostgreSQL's own C parser via `libpg_query`. No token/recursion limits,
-   full PostgreSQL syntax support, handles schemas of any size including bulk seed data.
-
-2. **Fallback — sqlparse / regex**: Used when pglast is not installed.
-   `SchemaDiffer` splits SQL into individual statements before parsing
-   (avoids `MAX_GROUPING_TOKENS = 10000` crash) and filters to DDL-only.
-   The idempotency detector falls through to a regex-only implementation
-   that's frozen at pre-0.14.0 behavior.
-
-In `SchemaDiffer`, both paths share the same regex pass for `CREATE INDEX`,
-`CREATE TYPE AS ENUM`, `CREATE SEQUENCE`, and `ALTER TABLE ADD CONSTRAINT`.
+`confiture --version` names the parser on its second line and every JSON payload
+carries `parser: {"pglast": "8.4", "pg_major": 18}` (`core/parser_info.py`).
 
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 
@@ -202,8 +201,8 @@ _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 Add the member to `REQUIRED_MEMBERS` in that module — the guard test
 (`tests/unit/test_pglast_enum_binding.py`) enumerates from it, so a new constant
 joins the guard automatically. If pglast ever drops a member confiture walks,
-`enums_are_usable()` goes False and the consumers degrade to the regex backend
-rather than under-reporting silently.
+`enums_are_usable()` raises `CONFIG_011` naming the installed pglast, at first
+use, rather than under-reporting silently.
 
 Note that a literal can hide *inline* (`if sub_int == 17:`), not just in a
 constant block — that form is how `core/idempotency/_captures.py` survived the

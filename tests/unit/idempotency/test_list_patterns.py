@@ -8,16 +8,16 @@ and surfaces the same information through the
 from __future__ import annotations
 
 from confiture.core.idempotency.models import IdempotencyPattern
-from confiture.core.idempotency.patterns import PATTERNS, list_patterns
+from confiture.core.idempotency.patterns import PATTERN_CATALOG, list_patterns
 
 
 class TestListPatternsShape:
     """Shape and field contracts for the catalog."""
 
     def test_returns_one_entry_per_pattern_definition(self):
-        """Catalog has the same length as PATTERNS."""
+        """Catalog has the same length as PATTERN_CATALOG."""
         catalog = list_patterns()
-        assert len(catalog) == len(PATTERNS)
+        assert len(catalog) == len(PATTERN_CATALOG)
         assert len(catalog) > 0
 
     def test_each_entry_has_required_fields(self):
@@ -68,9 +68,9 @@ class TestSkipRegexFlag:
     def test_has_skip_regex_matches_definition(self):
         """For each pattern, has_skip_regex == (skip_regex is not None)."""
         by_id = {entry["id"]: entry for entry in list_patterns()}
-        for pdef in PATTERNS:
+        for pdef in PATTERN_CATALOG:
             entry = by_id[pdef.pattern.name]
-            assert entry["has_skip_regex"] is (pdef.skip_regex is not None)
+            assert entry["has_skip_regex"] is (pdef.has_skip_form)
 
     def test_create_table_advertises_skip_regex(self):
         """CREATE_TABLE has a skip_regex (CREATE TABLE IF NOT EXISTS)."""

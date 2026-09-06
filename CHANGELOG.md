@@ -12,6 +12,16 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- ⚠️ **One parser (D13).** The regex idempotency detector, the regex replica
+  classifier, the regex change-set walker, the differ's sqlparse `CREATE TABLE`
+  path, the signature parser's and analyzer's regex fallbacks and the grant
+  extractor's sqlparse backend are deleted, with every switch that selected
+  them: the `CONFITURE_IDEMPOTENCY_FORCE_REGEX` and `CONFITURE_REPLICA_FORCE_REGEX`
+  environment variables, the module flags, and the `[ast]`-absent skip notices.
+  A guard test keeps the count at zero. Every DDL question now has one answer,
+  and a file pglast rejects is reported (see above) instead of being read by
+  something less exact. `migrate validate --list-patterns` publishes the same
+  catalog from a data table; `meta.backend` is always `"ast"`.
 - ⚠️ **The default lint rules see schema-qualified DDL (#216).** `naming_001`,
   `naming_002`, `pk_001` and `doc_001` matched `CREATE TABLE (\w+)`, so on
   `CREATE TABLE tenant.tb_x (…)` they captured the schema, found no body and
