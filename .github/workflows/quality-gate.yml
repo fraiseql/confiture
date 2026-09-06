@@ -315,11 +315,12 @@ jobs:
       run: uv run python scripts/gen_schemas.py --check
     - name: Install the docs toolchain (project + docs extra, locked)
       run: uv sync --locked --extra docs
-    - name: Generated reference blocks are in sync (CLI, configuration, mkdocs nav)
+    - name: Generated blocks are in sync (CLI reference, configuration, mkdocs nav, CLAUDE.md tree)
       run: |
         uv run --no-sync python scripts/gen_cli_reference.py --check
         uv run --no-sync python scripts/gen_config_reference.py --check
         uv run --no-sync python scripts/gen_mkdocs_nav.py --check
+        uv run --no-sync python scripts/gen_tree.py --check
     - name: Docs build (strict — every link and nav entry resolves)
       run: uv run --no-sync mkdocs build --strict --site-dir /tmp/site
 

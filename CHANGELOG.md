@@ -44,6 +44,13 @@ and the checks that caught this review's findings run in CI.
   `docs/guides/database-setup.md`; the root files are one-line pointers. Their stale `mypy` /
   `confiture_migrations` mentions are fixed (the docs fiction guard now covers them). The mkdocs PyPI
   link pointed at the wrong package name.
+- **CLAUDE.md's project tree is generated** (`scripts/gen_tree.py --check`/`--write`, in CI): the
+  `python/confiture` package two levels deep with each module's docstring first line as its comment,
+  the top-level directories, the workflows and the root files — no hand-maintained listing, no line
+  counts (`tests/unit/docs/test_claude_md_tree.py`).
+- **README: the JSON-schema sentence names exactly the schema-backed commands.** It claimed every
+  machine-readable output had a schema; 26 schemas cover 16 of the 52 commands that offer
+  `--format json`. `tests/unit/docs/test_readme_claims.py` derives both sets and pins the sentence.
 
 ## [0.53.0] - 2026-09-07
 
