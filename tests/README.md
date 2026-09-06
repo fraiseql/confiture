@@ -9,6 +9,19 @@
 | `tests/performance` | the same server, plus the sync source/target pair; wall-clock assertions |
 | `tests/migration_testing` | a PostgreSQL server via `DATABASE_URL` (being folded into the layers above) |
 
+## Markers
+
+Every test carries exactly one **layer** marker, assigned from its directory by
+`tests/conftest.py`: `unit`, `integration`, `e2e`, `performance`, `contract`. Do not add
+them by hand; `-m integration` selects the whole layer. Two orthogonal markers exist:
+
+* `benchmark` — the test asserts an upper bound on a measured duration. Such tests pass or
+  fail with the load on the machine, so `addopts` excludes them (`-m "not benchmark"`) and
+  the performance workflow runs them (`pytest tests -m benchmark`). Every duration upper
+  bound must sit in a `benchmark`-marked test (`tests/unit/test_markers.py` checks); a
+  lower bound (`elapsed >= timeout`) is fine anywhere.
+* `slow` — long-running; informational.
+
 ## Where the database comes from
 
 Every database test reaches its server through `tests/conftest.py`; no test module
