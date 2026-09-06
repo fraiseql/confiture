@@ -90,7 +90,16 @@ def render_block(path: str, cmd: Any) -> str:
     """The generated block for one leaf command."""
     ctx = cmd.context_class(cmd, info_name=f"confiture {path}")
     usage = cmd.get_usage(ctx).replace("Usage: ", "", 1).strip()
-    lines = [BEGIN.format(name=f"confiture {path}"), "", "**Usage**", "", "```bash", usage, "```", ""]
+    lines = [
+        BEGIN.format(name=f"confiture {path}"),
+        "",
+        "**Usage**",
+        "",
+        "```bash",
+        usage,
+        "```",
+        "",
+    ]
     arguments = [p for p in cmd.params if getattr(p, "param_type_name", "") == "argument"]
     options = [
         p
@@ -98,7 +107,12 @@ def render_block(path: str, cmd: Any) -> str:
         if _is_option(p) and not getattr(p, "hidden", False) and "--help" not in p.opts
     ]
     if arguments:
-        lines += ["**Arguments**", "", "| Argument | Type | Required | Description |", "|---|---|---|---|"]
+        lines += [
+            "**Arguments**",
+            "",
+            "| Argument | Type | Required | Description |",
+            "|---|---|---|---|",
+        ]
         for p in arguments:
             lines.append(
                 f"| `{p.human_readable_name}` | {_type(p)} | {'yes' if p.required else 'no'} | "
@@ -106,13 +120,20 @@ def render_block(path: str, cmd: Any) -> str:
             )
         lines.append("")
     if options:
-        lines += ["**Options**", "", "| Option | Short | Type | Default | Description |", "|---|---|---|---|---|"]
+        lines += [
+            "**Options**",
+            "",
+            "| Option | Short | Type | Default | Description |",
+            "|---|---|---|---|---|",
+        ]
         for p in options:
             longs = [o for o in p.opts if o.startswith("--")]
             shorts = [o for o in p.opts if not o.startswith("--")]
             name = " / ".join(f"`{o}`" for o in [*longs, *p.secondary_opts])
             short = ", ".join(f"`{o}`" for o in shorts) or "-"
-            lines.append(f"| {name} | {short} | {_type(p)} | {_default(p)} | {_cell(p.help or '')} |")
+            lines.append(
+                f"| {name} | {short} | {_type(p)} | {_default(p)} | {_cell(p.help or '')} |"
+            )
         lines.append("")
     lines.append(END.format(name=f"confiture {path}"))
     return "\n".join(lines)
@@ -164,7 +185,9 @@ def _with_block(section: str, level: int, path: str, cmd: Any) -> str:
 
 
 def _new_section(path: str, cmd: Any, level: int) -> str:
-    summary = (cmd.help or cmd.short_help or "").strip().split("\n\n")[0].strip() or f"`confiture {path}`."
+    summary = (cmd.help or cmd.short_help or "").strip().split("\n\n")[
+        0
+    ].strip() or f"`confiture {path}`."
     summary = " ".join(summary.split())
     return f"{'#' * level} `confiture {path}`\n\n{summary}\n\n{render_block(path, cmd)}\n\n"
 
