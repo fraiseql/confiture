@@ -423,6 +423,21 @@ migration:
 
 ---
 
+### `drift`
+
+How `confiture drift --schema` and `migrate validate --check-live-drift` judge
+column order (#226). Both sides carry it — the expected DDL in declaration
+order, the live database by `ordinal_position` — and a table whose columns are
+the same set in a different order is one `column_order_mismatch` item.
+
+```yaml
+drift:
+  ignore_column_order: false        # true: never report column_order_mismatch
+  column_order_severity: warning    # or critical: the item fails the run
+```
+
+`--ignore-column-order` on either command wins over the file for that run.
+
 ### `acls`
 
 **Type**: Array of `AclExpectation` (optional)

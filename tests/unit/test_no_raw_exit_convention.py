@@ -84,7 +84,7 @@ _ALLOWLIST: dict[str, int] = {
     "generate.py": 1,  # success-signal: renumber → Exit(1) when dangling refs remain
     # coordinate.py: fully converted (Cycle 1) — _get_connection + inner guards
     # raise ConfiturErrors; every command's outer handler routes through fail().
-    "commands/schema.py": 2,  # success-signal: lint / lint-unified → Exit(1) on violations
+    "commands/schema.py": 0,  # lint / build gates exit through the named FINDINGS_EXIT_CODE
     "commands/bootstrap.py": 4,  # success-signal: check/dry-run/apply → Exit(0); drift → Exit(1)
     # commands/apply_as.py: fully converted (Cycle 1) — config → 5, migration-state
     # refusals → 3, connection → CONFIG_006, all via fail() with the JSON envelope.

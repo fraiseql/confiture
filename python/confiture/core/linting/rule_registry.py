@@ -100,6 +100,41 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="doc_002",
+        family="doc",
+        title="Every function and procedure should carry a COMMENT (per overload)",
+        severity="info",
+        default_on=True,
+    ),
+    LintRule(
+        code="doc_003",
+        family="doc",
+        title="Every view and materialized view should carry a COMMENT",
+        severity="info",
+        default_on=True,
+    ),
+    LintRule(
+        code="doc_004",
+        family="doc",
+        title="Every composite type, enum and domain should carry a COMMENT",
+        severity="info",
+        default_on=True,
+    ),
+    LintRule(
+        code="build_001",
+        family="build",
+        title="An object is defined more than once in one build",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
+        code="build_002",
+        family="build",
+        title="A routine's overloads are split across files",
+        severity="info",
+        default_on=True,
+    ),
+    LintRule(
         code="sec_001",
         family="security",
         title="Columns that look like secrets should not be plain text",
@@ -222,3 +257,20 @@ def resolve_selection(
     selected = _expand_all(select, option="--select") if select else default_codes()
     excluded = _expand_all(ignore, option="--ignore") if ignore else frozenset()
     return frozenset(selected - excluded)
+
+
+def render_rule_table() -> str:
+    """Render every registered rule as a Markdown table (docs/reference/lint-rules.md).
+
+    Generated from ``LINT_RULES`` so the published rule reference can never drift
+    from what ``confiture lint --list-rules`` reports; a test holds the two equal.
+    """
+    lines = [
+        "| Code | Family | Severity | Default | Rule |",
+        "|------|--------|----------|:-------:|------|",
+    ]
+    for rule in LINT_RULES:
+        default = "on" if rule.default_on else "off"
+        title = rule.title.replace("|", "\\|")
+        lines.append(f"| `{rule.code}` | {rule.family} | {rule.severity} | {default} | {title} |")
+    return "\n".join(lines)

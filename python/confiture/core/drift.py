@@ -6,22 +6,23 @@ to detect unauthorized changes or migration mishaps.
 
 import fnmatch
 import logging
-import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+import pglast
 import psycopg
 
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
-from confiture.core.sql_lexer import split_statements, strip_comments
-from confiture.exceptions import SchemaError
+from confiture.exceptions import ConfigurationError, SchemaError
 
 if TYPE_CHECKING:
     from confiture.config.environment import (
         AclExpectation,
         AclGrant,
+        DriftConfig,
         OwnershipExpectation,
     )
 
@@ -38,6 +39,7 @@ class DriftType(Enum):
     TYPE_MISMATCH = "type_mismatch"
     NULLABLE_MISMATCH = "nullable_mismatch"
     DEFAULT_MISMATCH = "default_mismatch"
+    COLUMN_ORDER_MISMATCH = "column_order_mismatch"
     MISSING_INDEX = "missing_index"
     EXTRA_INDEX = "extra_index"
     MISSING_CONSTRAINT = "missing_constraint"
@@ -65,13 +67,14 @@ class DriftItem:
     expected: Any = None
     actual: Any = None
     message: str = ""
+    details: dict[str, Any] | None = None
 
     def __str__(self) -> str:
         return f"[{self.severity.value}] {self.drift_type.value}: {self.message}"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        payload: dict[str, Any] = {
             "type": self.drift_type.value,
             "severity": self.severity.value,
             "object": self.object_name,
@@ -79,6 +82,9 @@ class DriftItem:
             "actual": str(self.actual) if self.actual is not None else None,
             "message": self.message,
         }
+        if self.details is not None:
+            payload["details"] = self.details
+        return payload
 
 
 @dataclass
@@ -136,6 +142,115 @@ class DriftReport:
         }
 
 
+DEFAULT_SCHEMA = "public"
+
+
+@dataclass
+class ExpectedSchema:
+    """What a schema file declares: its tables (keyed ``schema.table``) and its schemas."""
+
+    info: SchemaInfo
+    schemas: frozenset[str]
+
+
+def _qualify(schema: str | None, name: str, default_schema: str) -> str:
+    return f"{schema or default_schema}.{name}"
+
+
+def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> ExpectedSchema:
+    """Read the expected schema out of DDL with pglast (#227).
+
+    Every ``CREATE TABLE`` becomes ``schema.table`` — an unqualified name
+    belongs to ``default_schema`` — with its columns' type as written,
+    nullability (``NOT NULL`` or ``PRIMARY KEY``) and default text. A
+    ``PARTITION OF`` child inherits its parent's columns when the parent is in
+    the same DDL. ``CREATE SCHEMA`` declares a schema and no table; a
+    ``CREATE TABLE`` inside a function body is not a statement and is never
+    seen. Indexes are keyed by their qualified table.
+
+    Raises:
+        SchemaError: ``SCHEMA_202`` when pglast rejects the DDL — a parser
+            failure surfaced loudly rather than as an empty expectation that
+            would report every live table as spurious drift.
+    """
+    from confiture.core.linting.inventory import build_inventory
+    from confiture.core.parser_info import parse_error_line
+
+    try:
+        inventory = build_inventory(sql)
+        statements = [raw.stmt for raw in pglast.parse_sql(sql) or []]
+    except pglast.parser.ParseError as exc:
+        raise SchemaError(
+            f"The expected schema could not be parsed (line {parse_error_line(sql, exc)}): {exc}. "
+            "Comparing against it would report every live table as spurious drift.",
+            error_code="SCHEMA_202",
+            resolution_hint="Fix the SQL syntax in the schema file, or regenerate it with `confiture build`.",
+        ) from exc
+
+    info = SchemaInfo()
+    schemas: set[str] = {default_schema}
+    for table in inventory.tables:
+        key = _qualify(table.folded_schema, table.folded_name, default_schema)
+        schemas.add(table.folded_schema or default_schema)
+        info.tables[key] = {
+            column.folded: {
+                "type": column.type_text,
+                "nullable": not column.not_null,
+                "default": column.default,
+            }
+            for column in table.columns
+        }
+    for table in inventory.tables:
+        if table.parent and not table.columns:
+            parent_schema, _, parent_name = table.parent.rpartition(".")
+            parent_key = _qualify(parent_schema or None, parent_name, default_schema)
+            if parent_key in info.tables:
+                info.tables[_qualify(table.folded_schema, table.folded_name, default_schema)] = (
+                    dict(info.tables[parent_key])
+                )
+    for stmt in statements:
+        kind = type(stmt).__name__
+        schema_name = getattr(stmt, "schemaname", None)
+        relation = getattr(stmt, "relation", None)
+        if kind == "CreateSchemaStmt" and schema_name:
+            schemas.add(str(schema_name))
+        elif kind == "IndexStmt" and relation is not None:
+            key = _qualify(
+                getattr(relation, "schemaname", None), str(relation.relname), default_schema
+            )
+            info.indexes.setdefault(key, []).append(str(getattr(stmt, "idxname", "")))
+    return ExpectedSchema(info=info, schemas=frozenset(schemas))
+
+
+def drift_config_from(config_data: Any) -> "DriftConfig":
+    """The ``drift:`` block of a loaded config as a :class:`DriftConfig` (#226).
+
+    A missing block is the defaults; a block that is not a mapping or fails
+    validation is ``CONFIG_001`` — a configuration error, not a connection one.
+    """
+    from pydantic import ValidationError
+
+    from confiture.config.environment import DriftConfig
+
+    raw = config_data.get("drift") if isinstance(config_data, dict) else None
+    if raw is None:
+        return DriftConfig()
+    if not isinstance(raw, dict):
+        raise ConfigurationError(
+            f"'drift' must be a mapping, got {type(raw).__name__}",
+            error_code="CONFIG_001",
+            resolution_hint="Use `drift:\n  ignore_column_order: false\n  column_order_severity: warning`.",
+        )
+    try:
+        return DriftConfig.model_validate(raw)
+    except ValidationError as exc:
+        raise ConfigurationError(
+            f"Invalid 'drift' configuration: {exc.errors()[0].get('msg', exc)}",
+            error_code="CONFIG_001",
+            resolution_hint="Allowed keys: ignore_column_order (bool), column_order_severity (warning|critical).",
+        ) from exc
+
+
 class SchemaDriftDetector:
     """Detects schema drift between live database and expected state.
 
@@ -166,18 +281,32 @@ class SchemaDriftDetector:
         self,
         connection: psycopg.Connection,
         ignore_tables: list[str] | None = None,
+        *,
+        ignore_column_order: bool = False,
+        column_order_severity: str = "warning",
     ):
         """Initialize drift detector.
 
         Args:
             connection: Database connection
             ignore_tables: Additional tables to ignore in drift detection
+            ignore_column_order: Skip the column-order comparison (#226)
+            column_order_severity: ``"warning"`` (default) or ``"critical"`` for a
+                ``column_order_mismatch`` item
         """
         self.connection = connection
+        self.ignore_column_order = ignore_column_order
+        self.column_order_severity = (
+            DriftSeverity.CRITICAL if column_order_severity == "critical" else DriftSeverity.WARNING
+        )
         self.analyzer = SchemaAnalyzer(connection)
         self.ignore_tables = set(ignore_tables or [])
         # Always ignore Confiture's own tables
         self.ignore_tables.update(self.SYSTEM_TABLES)
+
+    def _ignored(self, table_key: str) -> bool:
+        """``ignore_tables`` takes ``schema.table`` or a bare name matched against the table part."""
+        return table_key in self.ignore_tables or table_key.rsplit(".", 1)[-1] in self.ignore_tables
 
     def compare_schemas(
         self,
@@ -201,8 +330,8 @@ class SchemaDriftDetector:
         )
 
         # Compare tables
-        expected_tables = set(expected.tables.keys()) - self.ignore_tables
-        actual_tables = set(actual.tables.keys()) - self.ignore_tables
+        expected_tables = {k for k in expected.tables if not self._ignored(k)}
+        actual_tables = {k for k in actual.tables if not self._ignored(k)}
 
         # Missing tables (in expected but not actual)
         for table in sorted(expected_tables - actual_tables):
@@ -331,6 +460,42 @@ class SchemaDriftDetector:
                     )
                 )
 
+        self._compare_column_order(table_name, expected_cols, actual_cols, report)
+
+    def _compare_column_order(
+        self,
+        table_name: str,
+        expected_cols: dict[str, dict],
+        actual_cols: dict[str, dict],
+        report: DriftReport,
+    ) -> None:
+        """One ``column_order_mismatch`` per table whose columns are the same set in another order (#226).
+
+        Both sides keep declaration order: the expected DDL as written, the live
+        side by ``ordinal_position``. A differing set is already reported column by
+        column, so only equal sets are compared.
+        """
+        if self.ignore_column_order:
+            return
+        expected_order = list(expected_cols)
+        actual_order = list(actual_cols)
+        if set(expected_order) != set(actual_order) or expected_order == actual_order:
+            return
+        report.drift_items.append(
+            DriftItem(
+                drift_type=DriftType.COLUMN_ORDER_MISMATCH,
+                severity=self.column_order_severity,
+                object_name=table_name,
+                expected=", ".join(expected_order),
+                actual=", ".join(actual_order),
+                message=(
+                    f"Columns of '{table_name}' are in a different order: expected "
+                    f"({', '.join(expected_order)}), got ({', '.join(actual_order)})"
+                ),
+                details={"expected_order": expected_order, "actual_order": actual_order},
+            )
+        )
+
     def _types_compatible(self, type1: str, type2: str) -> bool:
         """Check if two PostgreSQL types are compatible/equivalent."""
         # Normalize type names
@@ -361,7 +526,7 @@ class SchemaDriftDetector:
     ) -> None:
         """Compare indexes between schemas."""
         for table in expected.indexes:
-            if table in self.ignore_tables:
+            if self._ignored(table):
                 continue
 
             exp_indexes = set(expected.indexes.get(table, []))
@@ -395,13 +560,17 @@ class SchemaDriftDetector:
                     )
                 )
 
-    def get_live_schema(self) -> SchemaInfo:
-        """Get the current live database schema.
+    def get_live_schema(self, schemas: Iterable[str] | None = None) -> SchemaInfo:
+        """The current live schema, keyed ``schema.table`` when ``schemas`` is given.
 
-        Returns:
-            SchemaInfo with current database state
+        Args:
+            schemas: The schemas to read (#227) — normally the ones the expected
+                DDL declares. ``None`` keeps the historical shape: ``public``
+                only, bare table names.
         """
-        return self.analyzer.get_schema_info(refresh=True)
+        if schemas is None:
+            return self.analyzer.get_schema_info(refresh=True)
+        return self.analyzer.get_schema_info(refresh=True, schemas=sorted(set(schemas)))
 
     def compare_with_expected(self, expected: SchemaInfo) -> DriftReport:
         """Compare live database with expected schema.
@@ -417,13 +586,18 @@ class SchemaDriftDetector:
         report.expected_schema_source = "provided"
         return report
 
-    def compare_with_schema_file(self, schema_file_path: str) -> DriftReport:
-        """Compare live database with a schema SQL file.
+    def compare_with_schema_file(
+        self, schema_file_path: str, default_schema: str = DEFAULT_SCHEMA
+    ) -> DriftReport:
+        """Compare the live database with a schema SQL file.
 
-        This parses a SQL schema file to extract expected schema.
+        The file is parsed with pglast (#227); tables are keyed ``schema.table``,
+        an unqualified name resolves to ``default_schema``, and the live side
+        reads exactly the schemas the file declares or qualifies with.
 
         Args:
             schema_file_path: Path to schema SQL file
+            default_schema: Schema an unqualified ``CREATE TABLE`` belongs to
 
         Returns:
             DriftReport with differences
@@ -434,167 +608,15 @@ class SchemaDriftDetector:
         if not path.exists():
             raise FileNotFoundError(f"Schema file not found: {schema_file_path}")
 
-        sql_content = path.read_text()
-        expected = self._parse_schema_from_sql(sql_content)
-
-        actual = self.get_live_schema()
-        report = self.compare_schemas(expected, actual)
+        expected = parse_expected_schema(path.read_text(), default_schema=default_schema)
+        actual = self.get_live_schema(expected.schemas)
+        report = self.compare_schemas(expected.info, actual)
         report.expected_schema_source = f"file:{schema_file_path}"
         return report
 
-    # Dollar-quoted body: AS $tag$ ... $tag$ (group 1 closes the tag exactly).
-    # Stripped from the guard text so a dynamic `CREATE TABLE` inside a function
-    # body can't spuriously trip the zero-tables guard.
-    _DOLLAR_BODY_RE = re.compile(r"\$([^$]*)\$.*?\$\1\$", re.DOTALL)
-
-    def _parse_schema_from_sql(self, sql: str) -> SchemaInfo:
-        """Parse SQL DDL to extract schema information.
-
-        This is a simplified parser that extracts table and column info
-        from CREATE TABLE statements.
-
-        Comments are stripped up front: ``confiture build`` emits block-comment
-        file separators by default (and real schemas carry ``--`` line comments,
-        some non-ASCII), and a parser that keeps a leading comment attached to the
-        statement that follows it — which the position-anchored ``CREATE TABLE``
-        match then never sees, yielding zero tables and 100 % false ``extra_table``
-        drift with exit 0 (issue #175).
-
-        Args:
-            sql: SQL DDL statements
-
-        Returns:
-            SchemaInfo extracted from SQL
-
-        Raises:
-            SchemaError: If the input clearly declares tables (contains a
-                top-level ``CREATE TABLE``) but none were parsed — a parser
-                failure surfaced loudly rather than as a silent empty expectation.
-        """
-        info = SchemaInfo()
-
-        # Strip comments before parsing so leading separators/comments can't hide
-        # the statement that follows them.  Dollar-quoted bodies are preserved.
-        stripped = strip_comments(sql)
-        for stmt_str in split_statements(stripped):
-            # Anchored match (not search): after comment stripping each statement
-            # starts with its keyword, so anchoring avoids matching a dynamic
-            # `CREATE TABLE` embedded inside a function body.
-            table_match = re.match(
-                r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\")?(\w+)(?:\")?",
-                stmt_str,
-                re.IGNORECASE,
-            )
-            if table_match:
-                table_name = table_match.group(1).lower()
-                columns = self._extract_columns_from_create(stmt_str)
-                info.tables[table_name] = columns
-
-            index_match = re.match(
-                r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?"
-                r"(?:IF\s+NOT\s+EXISTS\s+)?(?:\")?(\w+)(?:\")?\s+ON\s+(?:\")?(\w+)(?:\")?",
-                stmt_str,
-                re.IGNORECASE,
-            )
-            if index_match:
-                index_name = index_match.group(1).lower()
-                table_name = index_match.group(2).lower()
-                if table_name not in info.indexes:
-                    info.indexes[table_name] = []
-                info.indexes[table_name].append(index_name)
-
-        # Guard: input declares tables but we parsed none → parser failure, not an
-        # empty expectation.  Ignore CREATE TABLE occurrences inside function
-        # bodies so a helper that does dynamic DDL doesn't false-trigger it.
-        if not info.tables:
-            guard_text = self._DOLLAR_BODY_RE.sub("", stripped)
-            if re.search(r"\bCREATE\s+TABLE\b", guard_text, re.IGNORECASE):
-                raise SchemaError(
-                    "Parsed 0 tables from a schema that contains CREATE TABLE "
-                    "statement(s) — the expected-schema parser failed. Comparing "
-                    "against this would report every live table as spurious drift.",
-                    error_code="SCHEMA_202",
-                    resolution_hint=(
-                        "This is a confiture parser bug — please report the schema "
-                        "file. As a workaround, regenerate it or simplify the DDL."
-                    ),
-                )
-
-        return info
-
-    def _extract_columns_from_create(self, create_stmt: str) -> dict[str, dict]:
-        """Extract column definitions from CREATE TABLE statement."""
-        columns: dict[str, dict] = {}
-
-        # Find the column definitions between parentheses
-        match = re.search(r"\((.*)\)", create_stmt, re.DOTALL)
-        if not match:
-            return columns
-
-        definitions = match.group(1)
-
-        # Split by comma, but be careful about nested parentheses
-        parts = self._split_column_definitions(definitions)
-
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-
-            upper_part = part.upper()
-
-            # Skip table-level constraints (start with constraint keywords)
-            # But NOT column definitions that happen to have PRIMARY KEY inline
-            constraint_starters = [
-                "PRIMARY KEY",
-                "FOREIGN KEY",
-                "UNIQUE",
-                "CHECK",
-                "CONSTRAINT",
-            ]
-            if any(upper_part.startswith(kw) for kw in constraint_starters):
-                continue
-
-            # Parse column definition
-            col_match = re.match(r"(?:\")?(\w+)(?:\")?\s+(\w+(?:\([^)]*\))?)", part)
-            if col_match:
-                col_name = col_match.group(1).lower()
-                col_type = col_match.group(2).lower()
-
-                # Check for NOT NULL (PRIMARY KEY implies NOT NULL)
-                nullable = "NOT NULL" not in upper_part and "PRIMARY KEY" not in upper_part
-
-                columns[col_name] = {
-                    "type": col_type,
-                    "nullable": nullable,
-                    "default": None,
-                }
-
-        return columns
-
-    def _split_column_definitions(self, definitions: str) -> list[str]:
-        """Split column definitions respecting parentheses."""
-        parts = []
-        current = []
-        depth = 0
-
-        for char in definitions:
-            if char == "(":
-                depth += 1
-                current.append(char)
-            elif char == ")":
-                depth -= 1
-                current.append(char)
-            elif char == "," and depth == 0:
-                parts.append("".join(current))
-                current = []
-            else:
-                current.append(char)
-
-        if current:
-            parts.append("".join(current))
-
-        return parts
+    def _parse_schema_from_sql(self, sql: str, default_schema: str = DEFAULT_SCHEMA) -> SchemaInfo:
+        """The expected :class:`SchemaInfo` for ``sql`` — see :func:`parse_expected_schema`."""
+        return parse_expected_schema(sql, default_schema=default_schema).info
 
     def _get_database_name(self) -> str:
         """Get current database name."""

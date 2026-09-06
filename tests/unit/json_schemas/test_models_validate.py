@@ -96,6 +96,23 @@ def _hints(cls: type) -> dict[str, Any]:
 # because its producers build the value from tables, not from a Literal.
 FIELD_SAMPLES: dict[tuple[str, str], Any] = {
     ("PreflightIssue", "severity"): "warning",
+    ("LintReport", "baseline"): {
+        "new": ["doc_001:table:tb_d"],
+        "fixed": ["doc_001:table:tb_c"],
+        "known": 2,
+    },
+    ("BuildResult", "duplicates"): [
+        {
+            "rule_id": "build_001",
+            "kind": "function",
+            "identity": "app.f(integer)",
+            "definitions": [
+                {"file": "db/schema/a.sql", "offset": 0, "line": 1},
+                {"file": "db/schema/b.sql", "offset": 12, "line": 2},
+            ],
+            "wins": "last",
+        }
+    ],
 }
 
 

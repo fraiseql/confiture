@@ -63,6 +63,7 @@ confiture lint
 | Category | Purpose | Examples |
 |----------|---------|----------|
 | **Naming** | Enforce conventions | Table names, column names |
+| **Documentation** | Every commentable object carries a `COMMENT` | `doc_001` tables, `doc_002` routines (per overload), `doc_003` views, `doc_004` types and domains — see [lint-rules.md](../reference/lint-rules.md) |
 | **Structure** | Best practices | Primary keys, timestamps |
 | **Security** | Prevent vulnerabilities | PII encryption, weak constraints |
 | **Performance** | Optimize queries | Missing indices, N+1 patterns |
@@ -181,6 +182,32 @@ and JSON violations a `rule_id` field, so a finding maps back to the selector
 that turns it off.
 
 ---
+
+## Adopting a rule with a baseline — `--baseline` / `--write-baseline`
+
+Turning on a rule against a schema that already trips it a hundred times is a
+flag day nobody schedules. A **baseline** records the identity of every finding
+the schema has today, and later runs fail only on findings the file does not
+know:
+
+```bash
+# Once: record what exists today (the conventional name, commit it)
+confiture lint --baseline .confiture-lint-baseline.json --write-baseline
+
+# Every run afterwards: exit 0 unless something new appears, print only the new
+confiture lint --baseline .confiture-lint-baseline.json
+```
+
+An identity is `rule_id:kind:qualified_name` (plus `@file` for file-scoped rules
+such as `build_001`) — never a line number, so moving code around changes
+nothing, while renaming an undocumented table is one identity out and one in,
+and fails. When a finding disappears the file is rewritten without it, so the
+ratchet only tightens; `--write-baseline` resets it deliberately. With a
+baseline, **any** new finding fails the run (exit 1), whatever its severity —
+that is the point of adopting a rule this way. `--format json` adds
+`baseline: {new, fixed, known}` and lists only the new findings under
+`violations.items`. A missing or malformed baseline file is `CONFIG_012`
+(exit 5).
 
 ## Configuring Rules
 

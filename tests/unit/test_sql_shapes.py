@@ -78,13 +78,13 @@ EXPECTED: dict[str, dict[str, list]] = {
         "idempotency": [("CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK", 1)],
         "replica": [("ReplaceObject", "public.make_scratch")],
         "change_set": [("replace_function", "public.make_scratch", "reversible")],
-        "lint": [],
+        "lint": [("doc_002", "public.make_scratch()")],
     },
     "nested_dollar_tags": {
         "idempotency": [("CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK", 1)],
         "replica": [("ReplaceObject", "public.run_it")],
         "change_set": [("replace_function", "public.run_it", "reversible")],
-        "lint": [],
+        "lint": [("doc_002", "public.run_it()")],
     },
     "literal_with_dashes": {
         "idempotency": [("CREATE_TABLE", 1)],

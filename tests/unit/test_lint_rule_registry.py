@@ -33,6 +33,11 @@ class TestRegistryContents:
             "naming_002",
             "pk_001",
             "doc_001",
+            "doc_002",
+            "doc_003",
+            "doc_004",
+            "build_001",
+            "build_002",
             "sec_001",
             "acl_001",
             "tenant_001",
@@ -42,7 +47,18 @@ class TestRegistryContents:
 
     def test_the_default_set_is_the_pre_0420_default_behaviour(self) -> None:
         default_on = {rule.code for rule in LINT_RULES if rule.default_on}
-        assert default_on == {"naming_001", "naming_002", "pk_001", "doc_001", "sec_001"}
+        assert default_on == {
+            "naming_001",
+            "naming_002",
+            "pk_001",
+            "doc_001",
+            "doc_002",
+            "doc_003",
+            "doc_004",
+            "build_001",
+            "build_002",
+            "sec_001",
+        }
 
     def test_each_legacy_flag_maps_to_exactly_one_family(self) -> None:
         by_flag = {rule.legacy_flag: rule.family for rule in LINT_RULES if rule.legacy_flag}
@@ -63,6 +79,7 @@ class TestRegistryContents:
             "naming",
             "pk",
             "doc",
+            "build",
             "security",
             "acl",
             "tenant",
@@ -74,7 +91,18 @@ class TestRegistryContents:
 class TestSelection:
     def test_no_selection_is_the_default_set(self) -> None:
         assert resolve_selection(None, ()) == frozenset(
-            {"naming_001", "naming_002", "pk_001", "doc_001", "sec_001"}
+            {
+                "naming_001",
+                "naming_002",
+                "pk_001",
+                "doc_001",
+                "doc_002",
+                "doc_003",
+                "doc_004",
+                "build_001",
+                "build_002",
+                "sec_001",
+            }
         )
 
     def test_a_family_selects_its_rules_and_nothing_else(self) -> None:
@@ -86,7 +114,19 @@ class TestSelection:
     def test_the_default_selector_composes_with_a_family(self) -> None:
         """This is what the legacy flags mean: the defaults *plus* one family."""
         assert resolve_selection([DEFAULT_SELECTOR, "replica"], ()) == frozenset(
-            {"naming_001", "naming_002", "pk_001", "doc_001", "sec_001", "replica_001"}
+            {
+                "naming_001",
+                "naming_002",
+                "pk_001",
+                "doc_001",
+                "doc_002",
+                "doc_003",
+                "doc_004",
+                "build_001",
+                "build_002",
+                "sec_001",
+                "replica_001",
+            }
         )
 
     def test_comma_separated_values_are_split(self) -> None:
@@ -99,7 +139,16 @@ class TestSelection:
 
     def test_ignore_accepts_a_family(self) -> None:
         assert resolve_selection([DEFAULT_SELECTOR], ["naming"]) == frozenset(
-            {"pk_001", "doc_001", "sec_001"}
+            {
+                "pk_001",
+                "doc_001",
+                "doc_002",
+                "doc_003",
+                "doc_004",
+                "build_001",
+                "build_002",
+                "sec_001",
+            }
         )
 
     def test_ignoring_everything_selects_nothing(self) -> None:

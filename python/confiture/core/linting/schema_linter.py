@@ -59,6 +59,9 @@ class LintReport:
     errors: list[LintViolation] = field(default_factory=list)
     warnings: list[LintViolation] = field(default_factory=list)
     info: list[LintViolation] = field(default_factory=list)
+    #: What the inventory read — the counts the JSON payload reports.
+    tables_checked: int = 0
+    columns_checked: int = 0
 
     @property
     def has_errors(self) -> bool:
@@ -106,6 +109,7 @@ class LintConfig:
         check_security: bool = True,
         check_tenant_isolation: bool = False,
         check_acl_coverage: bool = True,
+        check_duplicates: bool = True,
     ):
         """Initialize linting configuration.
 
@@ -122,6 +126,8 @@ class LintConfig:
             check_tenant_isolation: Detect INSERTs missing tenant FK columns
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
             check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
+            check_duplicates: Report objects defined more than once in one build
+                (``build_001`` / ``build_002``).
                 Default True, i.e. unchanged: the rule additionally requires
                 ``acls.lint_enabled: true`` in the environment YAML. Set False to
                 suppress it (``confiture lint --ignore acl``).
@@ -137,6 +143,7 @@ class LintConfig:
         self.check_security = check_security
         self.check_tenant_isolation = check_tenant_isolation
         self.check_acl_coverage = check_acl_coverage
+        self.check_duplicates = check_duplicates
 
 
 class SchemaLinter:
@@ -207,6 +214,7 @@ class SchemaLinter:
         # Use provided schema or load from files
         if schema is not None:
             self._schema_sql = schema
+            self._schema_files = []
         else:
             self._load_schema()
 
@@ -234,6 +242,9 @@ class SchemaLinter:
                 )
             )
 
+        report.tables_checked = len(self._inventory.tables)
+        report.columns_checked = sum(len(t.columns) for t in self._inventory.tables)
+
         # Run configured checks
         if self.config.check_naming:
             self._check_naming_conventions(report)
@@ -249,6 +260,9 @@ class SchemaLinter:
 
         if self.config.check_security:
             self._check_security(report)
+
+        if self.config.check_duplicates:
+            self._check_duplicates(report)
 
         # Tenant isolation (tenant_001) — opt-in multi-tenant rule. Detects
         # INSERTs in functions that omit the FK column a tenant-scoped view
@@ -285,6 +299,7 @@ class SchemaLinter:
             from confiture.core.builder import SchemaBuilder
 
             builder = SchemaBuilder(env=self.env, project_dir=self.project_dir)
+            self._schema_files = builder.find_sql_files()
             self._schema_sql = builder.build()
         except Exception as e:
             logger.error(f"Failed to load schema: {e}")
@@ -348,21 +363,31 @@ class SchemaLinter:
             )
 
     def _check_documentation(self, report: LintReport) -> None:
-        """Every table carries a COMMENT — attached by qualified name, never by bare name."""
-        for table in self._inventory.tables:
-            if table.documented:
-                continue
-            report.add_violation(
-                LintViolation(
-                    rule_id="doc_001",
-                    rule_name="Missing Documentation",
-                    severity=RuleSeverity.INFO,
-                    object_type="table",
-                    object_name=table.qualified,
-                    message=f"Table '{table.qualified}' should have a COMMENT describing its purpose",
-                    line_number=table.line,
-                )
-            )
+        """The ``doc`` family: every commentable object carries a COMMENT (#217)."""
+        from confiture.core.linting.documentation import documentation_findings
+
+        for violation in documentation_findings(self._inventory):
+            report.add_violation(violation)
+
+    def _check_duplicates(self, report: LintReport) -> None:
+        """``build_001`` / ``build_002``: an object defined more than once in one build (#218).
+
+        File-backed runs inventory each schema file on its own so a finding can
+        name the files; a run on one string reports offsets into that string.
+        """
+        from confiture.core.linting.duplicates import (
+            duplicate_violations,
+            find_duplicates,
+            inventory_files,
+        )
+
+        files = getattr(self, "_schema_files", None)
+        if files:
+            objects, _unparseable = inventory_files(files, root=self.project_dir)
+        else:
+            objects = self._inventory.objects
+        for violation in duplicate_violations(find_duplicates(objects)):
+            report.add_violation(violation)
 
     def _check_indexes(self, _report: LintReport) -> None:
         """Check for indexes on foreign keys.

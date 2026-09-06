@@ -368,15 +368,15 @@ class TestSchemaDriftDetector:
 
         info = detector._parse_schema_from_sql(sql)
 
-        assert "users" in info.tables
-        assert "orders" in info.tables
-        assert "id" in info.tables["users"]
-        assert "email" in info.tables["users"]
-        assert "users" in info.indexes
-        assert "idx_users_email" in info.indexes["users"]
+        assert "public.users" in info.tables
+        assert "public.orders" in info.tables
+        assert "id" in info.tables["public.users"]
+        assert "email" in info.tables["public.users"]
+        assert "public.users" in info.indexes
+        assert "idx_users_email" in info.indexes["public.users"]
 
-    def test_extract_columns_from_create(self, mock_connection):
-        """Test extracting columns from CREATE TABLE."""
+    def test_columns_carry_type_nullability_and_default(self, mock_connection):
+        """Columns come out of the pglast walk with type, nullability and default."""
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
@@ -386,16 +386,16 @@ class TestSchemaDriftDetector:
             email VARCHAR(255) NOT NULL,
             name TEXT,
             created_at TIMESTAMP DEFAULT NOW()
-        )
+        );
         """
 
-        columns = detector._extract_columns_from_create(create_stmt)
+        columns = detector._parse_schema_from_sql(create_stmt).tables["public.users"]
 
-        assert "id" in columns
-        assert "email" in columns
-        assert columns["email"]["nullable"] is False
-        assert "name" in columns
+        assert list(columns) == ["id", "email", "name", "created_at"]
+        assert columns["id"]["nullable"] is False
+        assert columns["email"] == {"type": "varchar(255)", "nullable": False, "default": None}
         assert columns["name"]["nullable"] is True
+        assert columns["created_at"]["default"] == "now()"
 
     def test_types_compatible(self, mock_connection):
         """Test type compatibility checking."""
@@ -432,7 +432,7 @@ class TestSchemaDriftDetector:
 
         info = detector._parse_schema_from_sql(sql)
 
-        assert set(info.tables) == {"tb_machine", "tb_part"}
+        assert set(info.tables) == {"public.tb_machine", "public.tb_part"}
 
     def test_parse_schema_with_non_ascii_line_comment(self, mock_connection):
         """A non-ASCII (em-dash) line comment before a table must not hide it."""
@@ -447,8 +447,8 @@ class TestSchemaDriftDetector:
 
         info = detector._parse_schema_from_sql(sql)
 
-        assert "tb_machine" in info.tables
-        assert "name" in info.tables["tb_machine"]
+        assert "public.tb_machine" in info.tables
+        assert "name" in info.tables["public.tb_machine"]
 
     def test_create_table_in_function_body_not_parsed_as_table(self, mock_connection):
         """A dynamic ``CREATE TABLE`` inside a function body must not be mistaken
@@ -468,22 +468,21 @@ class TestSchemaDriftDetector:
 
         info = detector._parse_schema_from_sql(sql)
 
-        assert "tb_real" in info.tables
+        assert "public.tb_real" in info.tables
+        assert "public.tmp_scratch" not in info.tables
         assert "tmp_scratch" not in info.tables
 
-    def test_zero_tables_from_nonempty_schema_raises(self, mock_connection, monkeypatch):
-        """A schema that declares tables but parses to zero must fail loudly
-        instead of silently reporting every live table as spurious drift."""
+    def test_unparseable_schema_raises_instead_of_an_empty_expectation(self, mock_connection):
+        """A schema pglast rejects must fail loudly (SCHEMA_202) instead of
+        silently reporting every live table as spurious drift."""
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        # Simulate an (unknown/future) parser breakage: no statements extracted.
-        monkeypatch.setattr("confiture.core.drift.split_statements", lambda _sql: [])
-
-        with pytest.raises(SchemaError):
+        with pytest.raises(SchemaError) as excinfo:
             detector._parse_schema_from_sql(
-                "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT);"
+                "CREATE TABEL users (id INTEGER PRIMARY KEY, email TEXT);"
             )
+        assert excinfo.value.error_code == "SCHEMA_202"
 
     def test_index_or_type_only_schema_does_not_raise(self, mock_connection):
         """A schema with no CREATE TABLE (indexes/types only) is a legitimate

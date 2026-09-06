@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from rich.console import Console
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
+    FINDINGS_EXIT_CODE,
+    USAGE_EXIT_CODE,
     _convert_linter_report,
     _output_json,
     _output_yaml,
@@ -268,6 +271,16 @@ def build(
         "--continue-on-error",
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
+    warn_duplicates: bool = typer.Option(
+        False,
+        "--warn-duplicates",
+        help="Report objects defined more than once across the build's files (build_001/build_002), then build",
+    ),
+    fail_on_duplicates: bool = typer.Option(
+        False,
+        "--fail-on-duplicates",
+        help="Report duplicate definitions and exit 1 without building",
+    ),
     format_type: str = format_option("text", "json", "csv"),
     report_output: Path = typer.Option(
         None,
@@ -384,6 +397,16 @@ def build(
 
         with ProgressManager() as progress:
             sql_files = builder.find_sql_files()
+            duplicates = _duplicate_gate(
+                sql_files,
+                project_dir=project_dir,
+                output=output,
+                warn=warn_duplicates,
+                fail=fail_on_duplicates,
+                out=out,
+                json_mode=json_mode,
+                report_output=report_output,
+            )
             if apply_sequential:
                 schema = builder.build(output_path=output, schema_only=True, progress=progress)
                 schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
@@ -440,6 +463,7 @@ def build(
             artifact_path=artifact_path_str,
             artifact_hash=artifact_hash_str,
             seed_profile=seed_profile,
+            duplicates=duplicates,
         )
         format_build_result(build_result, format_type, report_output, console)
         if format_type == "text":
@@ -464,6 +488,61 @@ def build(
         )
     except Exception as e:
         fail(e, json_mode=json_mode, output_file=report_output)
+
+
+def _duplicate_gate(
+    sql_files: list[Path],
+    *,
+    project_dir: Path,
+    output: Path,
+    warn: bool,
+    fail: bool,
+    out: Console,
+    json_mode: bool,
+    report_output: Path | None,
+) -> list[dict[str, Any]]:
+    """Scan the build's files for duplicate definitions when asked (#218).
+
+    ``--warn-duplicates`` reports and builds; ``--fail-on-duplicates`` reports
+    and exits 1 before anything is written. A plain build does not scan.
+    """
+    if not (warn or fail):
+        return []
+    from confiture.core.linting.duplicates import (
+        duplicate_violations,
+        find_duplicates,
+        inventory_files,
+    )
+
+    objects, unparseable = inventory_files(sql_files, root=project_dir)
+    for label in unparseable:
+        out.print(
+            f"[yellow]⚠️ {label}: pglast could not parse it — not checked for duplicates[/yellow]"
+        )
+    duplicates = find_duplicates(objects)
+    if not duplicates:
+        return []
+    if not json_mode:
+        out.print("[yellow]Duplicate definitions:[/yellow]")
+        for violation in duplicate_violations(duplicates):
+            out.print(f"  ⚠️ {violation.rule_id}: {violation.message}")
+    payload = [duplicate.to_dict() for duplicate in duplicates]
+    if fail:
+        from confiture.cli.formatters.build_formatter import format_build_result
+        from confiture.models.results import BuildResult
+
+        result = BuildResult(
+            success=False,
+            files_processed=len(sql_files),
+            schema_size_bytes=0,
+            output_path=str(output.absolute()),
+            hash=None,
+            duplicates=payload,
+            error=f"{len(duplicates)} duplicate definition(s); nothing was built",
+        )
+        format_build_result(result, "json" if json_mode else "text", report_output, console)
+        raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: the duplicate gate tripped
+    return payload
 
 
 _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
@@ -698,6 +777,16 @@ def lint(
         help="Rules or families to skip, comma-separated. Applied after --select, "
         "so --ignore always wins.",
     ),
+    baseline: Path | None = typer.Option(
+        None,
+        "--baseline",
+        help="Baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear",
+    ),
+    write_baseline: bool = typer.Option(
+        False,
+        "--write-baseline",
+        help="Create or reset the --baseline file from the current findings",
+    ),
     list_rules: bool = typer.Option(
         False,
         "--list-rules",
@@ -738,7 +827,7 @@ def lint(
     """Validate schema against best practices.
 
     PROCESS:
-      Runs the default rule set — naming_001, naming_002, pk_001, doc_001,
+      Runs the default rule set — naming_001, naming_002, pk_001, doc_001–doc_004,
       sec_001 — plus whatever `--select` adds. `--list-rules` prints the full
       catalogue with codes and families. Results in table, JSON or CSV.
 
@@ -748,7 +837,7 @@ def lint(
       `--select default,replica` is the usual lint plus one opt-in family.
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
-      naming_001, naming_002, pk_001, doc_001, sec_001 — on by default.
+      naming_001, naming_002, pk_001, doc_001–doc_004, sec_001 — on by default.
       (LintConfig also carries check_indexes / check_constraints; neither has a
       rule behind it, so neither is listed or selectable.)
 
@@ -798,6 +887,9 @@ def lint(
         if list_rules:
             _emit_rule_catalogue(format_type, output)
             return
+        if write_baseline and baseline is None:
+            error_console.print("[red]❌ Error: --write-baseline requires --baseline <file>[/red]")
+            raise typer.Exit(USAGE_EXIT_CODE)
         # One selection, resolved once (#150). The three per-rule flags are
         # aliases over it rather than branches further down: each adds its
         # family to the defaults, which is exactly what it always did.
@@ -814,19 +906,29 @@ def lint(
             fail_on_warning=fail_on_warning,
             check_naming="naming_001" in selected or "naming_002" in selected,
             check_primary_keys="pk_001" in selected,
-            check_documentation="doc_001" in selected,
+            check_documentation=any(code.startswith("doc_") for code in selected),
+            check_duplicates=any(code.startswith("build_") for code in selected),
             check_security="sec_001" in selected,
             check_tenant_isolation="tenant_001" in selected,
             check_acl_coverage="acl_001" in selected,
         )
-        console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
+        if format_type == "table":
+            # The banner is for humans; in json/csv mode stdout is the payload alone.
+            console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
         linter = SchemaLinter(env=env, config=config)
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
         # second pass over the findings.
         _keep_selected_rules(linter_report, selected)
-        report = _convert_linter_report(linter_report, schema_name=env)
+        baseline_diff = _apply_baseline(
+            linter_report, baseline=baseline, write=write_baseline, project_dir=project_dir
+        )
+        report = _convert_linter_report(
+            linter_report,
+            schema_name=env,
+            baseline=None if baseline_diff is None else baseline_diff.summary(),
+        )
         if format_type == "table":
             format_lint_report(report, format_type="table", console=console)
         else:
@@ -836,11 +938,16 @@ def lint(
                 save_report(report, output, format_type=fmt)
                 console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
-                console.print(formatted)
+                # print(), not console.print(): Rich wraps long lines at the
+                # terminal width, which breaks the JSON stream (see _output_json).
+                print(formatted)
 
         should_fail = (report.has_errors and fail_on_error) or (
             report.has_warnings and fail_on_warning
         )
+        if baseline_diff is not None:
+            _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
+            should_fail = should_fail or bool(baseline_diff.new)
         if "replica_001" in selected:
             should_fail = (
                 _replica_lint(
@@ -860,16 +967,16 @@ def lint(
                 or should_fail
             )
         if should_fail:
-            raise typer.Exit(1)  # success-signal: lint found violations
+            raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found violations
     except typer.Exit:
         raise
     except FileNotFoundError as e:
-        print_error_to_console(e)
-        console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
-        raise typer.Exit(handle_cli_error(e)) from e
+        if not is_json(format_type):
+            console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
+        fail(e, json_mode=is_json(format_type), output_file=output)
     except Exception as e:
-        print_error_to_console(e)
-        raise typer.Exit(handle_cli_error(e)) from e
+        # The one error boundary: an envelope in JSON mode, the Rich rendering otherwise.
+        fail(e, json_mode=is_json(format_type), output_file=output)
 
 
 def _replica_lint(
@@ -962,6 +1069,51 @@ def _security_definer_lint(
     errors = any(v.severity == _RS.ERROR for v in violations)
     warnings = any(v.severity == _RS.WARNING for v in violations)
     return (errors and fail_on_error) or (warnings and fail_on_warning)
+
+
+def _apply_baseline(
+    linter_report: LinterReport, *, baseline: Path | None, write: bool, project_dir: Path
+) -> Any:
+    """Keep only the findings the baseline does not know; write or tighten the file (#219).
+
+    Returns the ``BaselineDiff`` (``None`` without ``--baseline``). ``--write-baseline``
+    records every current finding and leaves nothing to report; otherwise findings
+    the file knows are dropped from the report, identities no longer found are
+    removed from the file (D12), and what remains is new.
+    """
+    if baseline is None:
+        return None
+    from confiture.core.linting.baseline import Baseline, BaselineDiff, identity
+
+    path = baseline if baseline.is_absolute() else project_dir / baseline
+    buckets = (linter_report.errors, linter_report.warnings, linter_report.info)
+    current = [v for bucket in buckets for v in bucket]
+    if write:
+        Baseline.from_violations(current).write(path)
+        for bucket in buckets:
+            bucket[:] = []
+        return BaselineDiff(known=len({identity(v) for v in current}))
+    known = Baseline.load(path)
+    diff = known.diff(current)
+    if diff.fixed:
+        known.without(diff.fixed).write(path)
+    new_identities = {identity(v) for v in diff.new}
+    for bucket in buckets:
+        bucket[:] = [v for v in bucket if identity(v) in new_identities]
+    return diff
+
+
+def _print_baseline_note(diff: Any, format_type: str, *, wrote: bool) -> None:
+    """One human line about the baseline — only when something happened, never in JSON/CSV."""
+    if format_type != "table":
+        return
+    if wrote:
+        console.print(f"[green]✅ Baseline written: {diff.known} finding(s) recorded[/green]")
+    elif diff.new or diff.fixed:
+        console.print(
+            f"[cyan]Baseline: {diff.known} known, {len(diff.new)} new, "
+            f"{len(diff.fixed)} fixed{' (file tightened)' if diff.fixed else ''}[/cyan]"
+        )
 
 
 def _keep_selected_rules(linter_report: LinterReport, selected: frozenset[str]) -> None:
@@ -1190,7 +1342,7 @@ def lint_unified(
                     console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
 
     if fail_on_error and unified_result.has_errors:
-        raise typer.Exit(1)  # success-signal: lint found errors
+        raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found errors
 
 
 @cli_boundary

@@ -14,7 +14,8 @@
     "execution_time_ms",
     "seed_files_applied",
     "warnings",
-    "error"
+    "error",
+    "duplicates"
   ],
   "properties": {
     "success": {
@@ -89,6 +90,75 @@
         },
         "pg_major": {
           "type": "integer"
+        }
+      }
+    },
+    "duplicates": {
+      "type": "array",
+      "description": "Objects defined more than once across the build's files (build_001) and routine overload families split across files (build_002); populated by --warn-duplicates / --fail-on-duplicates, empty otherwise.",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "kind",
+          "identity",
+          "definitions",
+          "wins"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "enum": [
+              "build_001",
+              "build_002"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "identity": {
+            "type": "string",
+            "description": "schema.name(signature) as written by the first definition."
+          },
+          "definitions": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": [
+                "file",
+                "offset",
+                "line"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "line": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "wins": {
+            "type": "string",
+            "enum": [
+              "last",
+              "first",
+              "conflict",
+              "n/a"
+            ]
+          }
         }
       }
     }
