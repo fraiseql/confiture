@@ -154,7 +154,7 @@ strategy = StrategyRegistry.get("hash", {"length": 16})
 | `is_registered(name)` | Whether a name is registered. |
 | `list_available()` | Sorted list of registered names. |
 | `get_strategy_class(name)` | The class (not an instance) for introspection. |
-| `register_from_file(path)` | Load + register a strategy from a **sandboxed** file. |
+| `register_from_file(path)` | Import-lint a strategy file, load it **in-process**, register it. |
 | `unregister(name)` / `reset()` | Remove one / clear all (mainly for tests). |
 
 ### The `@register_strategy` decorator
@@ -250,8 +250,11 @@ profile)`: a rule's own `seed` wins, else the profile's `global_seed`, else `0`.
 - **Seeds are domain separators, not keys.** Use `seed_env_var` (or
   `salt_env_var` for `salted_hashing`) in production; never commit seeds to
   version control.
-- **Custom strategy files are sandboxed.** `register_from_file` rejects files
-  with blocked imports (`os`, `subprocess`, …) before loading them.
+- **Custom strategy files run in-process.** `register_from_file` rejects files
+  with blocked imports (`os`, `subprocess`, …) and then executes the file with
+  `importlib` in the confiture process, with confiture's privileges. The import
+  check is a lint, not an isolation boundary; every load emits
+  `InProcessPluginWarning` and a WARNING log line. Load only code you trust.
 - **Anonymization is not encryption.** The hashing strategies are one-way (no
   reversal). For reversible needs, use real encryption instead.
 

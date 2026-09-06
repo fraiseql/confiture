@@ -1,21 +1,21 @@
-"""Unit tests for strategy sandbox security."""
+"""Unit tests for the custom-strategy import lint and timed execution."""
 
 from unittest.mock import patch
 
 import pytest
 
-from confiture.core.anonymization.plugins.sandbox import (
-    SandboxResult,
-    SandboxViolationError,
-    execute_sandboxed,
+from confiture.core.anonymization.plugins.import_lint import (
+    BlockedImportError,
+    TimedResult,
+    execute_timed,
     load_strategy,
 )
 from confiture.core.anonymization.strategy import AnonymizationStrategy
 from confiture.exceptions import ConfiturError
 
 
-class TestStrategySandbox:
-    """Test suite for strategy loading and execution sandbox."""
+class TestStrategyImportLint:
+    """Test suite for strategy loading (import lint) and timed execution."""
 
     def test_load_strategy_valid_file(self, tmp_path):
         """load_strategy() should successfully load a valid strategy file."""
@@ -57,8 +57,8 @@ class DangerousStrategy(AnonymizationStrategy):
         return os.path.basename(value)
 """)
 
-        # Should raise SandboxViolationError
-        with pytest.raises(SandboxViolationError) as exc_info:
+        # Should raise BlockedImportError
+        with pytest.raises(BlockedImportError) as exc_info:
             load_strategy(strategy_file)
 
         error = exc_info.value
@@ -90,20 +90,20 @@ class Strategy2(AnonymizationStrategy):
         with pytest.raises(ConfiturError):
             load_strategy(multi_file)
 
-    def test_execute_sandboxed_captures_timing(self):
-        """execute_sandboxed() should capture execution timing."""
+    def test_execute_timed_captures_timing(self):
+        """execute_timed() should capture execution timing."""
         from confiture.core.anonymization.strategies.preserve import PreserveStrategy
 
         strategy = PreserveStrategy()
-        result = execute_sandboxed(strategy, "test_value")
+        result = execute_timed(strategy, "test_value")
 
-        assert isinstance(result, SandboxResult)
+        assert isinstance(result, TimedResult)
         assert result.value == "test_value"  # Preserve returns unchanged
         assert result.duration_ms >= 0
         assert result.strategy_name == "PreserveStrategy"
 
-    def test_execute_sandboxed_logs_exceptions(self, caplog):
-        """execute_sandboxed() should log exceptions during execution."""
+    def test_execute_timed_logs_exceptions(self, caplog):
+        """execute_timed() should log exceptions during execution."""
         from confiture.core.anonymization.strategy import AnonymizationStrategy
 
         class FailingStrategy(AnonymizationStrategy):
@@ -116,14 +116,14 @@ class Strategy2(AnonymizationStrategy):
         strategy = FailingStrategy()
 
         with pytest.raises(ValueError, match="Test error"):
-            execute_sandboxed(strategy, "test")
+            execute_timed(strategy, "test")
 
         # Check that warning was logged
         assert "failed after" in caplog.text
         assert "FailingStrategy" in caplog.text
 
-    def test_execute_sandboxed_timeout_logging(self):
-        """execute_sandboxed() should log when execution exceeds timeout."""
+    def test_execute_timed_timeout_logging(self):
+        """execute_timed() should log when execution exceeds timeout."""
         from confiture.core.anonymization.strategy import AnonymizationStrategy
 
         class SlowStrategy(AnonymizationStrategy):
@@ -138,8 +138,8 @@ class Strategy2(AnonymizationStrategy):
 
         strategy = SlowStrategy()
 
-        with patch("confiture.core.anonymization.plugins.sandbox.logger") as mock_logger:
-            execute_sandboxed(strategy, "test", timeout_s=0.005)  # 5ms timeout
+        with patch("confiture.core.anonymization.plugins.import_lint.logger") as mock_logger:
+            execute_timed(strategy, "test", timeout_s=0.005)  # 5ms timeout
 
             # Should log warning about timeout
             mock_logger.warning.assert_called_once()
