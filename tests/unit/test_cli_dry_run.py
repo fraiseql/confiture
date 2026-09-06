@@ -16,9 +16,16 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A real ``db/migrations`` under a scratch cwd — the session checks the directory exists."""
+    """A real ``db/migrations`` under a scratch cwd — the session checks the directory exists.
+
+    Hermetic to the DSN environment: with no config file in the scratch cwd, an
+    ambient ``DATABASE_URL`` (the Publish workflow's Tests job sets one) would be
+    the only DSN source, which a mutating ``migrate up`` refuses (#152, exit 5).
+    """
     (tmp_path / "db" / "migrations").mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
     return tmp_path
 
 
