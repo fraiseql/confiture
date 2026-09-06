@@ -21,8 +21,6 @@ import pytest
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = TESTS_ROOT.parent
 LAYERS = frozenset({"unit", "integration", "e2e", "performance", "contract"})
-# Resolved by Phase 02 Cycle 5 (D2); until then its files are not scanned here.
-_UNSCANNED = {"migration_testing"}
 
 # Lower-case on purpose: `Duration.SECONDS` is an enum, not a measurement.
 _TIMING_NAME = re.compile(r"(elapsed|duration|took|_time\b|_time_|time_ms|seconds|_ms\b|speedup)")
@@ -30,8 +28,7 @@ _TIMING_NAME = re.compile(r"(elapsed|duration|took|_time\b|_time_|time_ms|second
 
 def layer_for(path: Path) -> str:
     """The layer a test file belongs to, from its directory under ``tests/``."""
-    top = path.relative_to(TESTS_ROOT).parts[0]
-    return "integration" if top == "migration_testing" else top
+    return path.relative_to(TESTS_ROOT).parts[0]
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +131,7 @@ def find_unmarked_wall_clock_assertions(root: Path) -> list[str]:
     findings: list[str] = []
     for path in sorted(root.rglob("test_*.py")):
         rel = path.relative_to(root)
-        if rel.parts[0] in _UNSCANNED or path.name == Path(__file__).name:
+        if path.name == Path(__file__).name:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         _unmarked_in(tree, _module_marked(tree), rel.as_posix(), findings)

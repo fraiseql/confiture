@@ -109,21 +109,12 @@ jobs:
 
     - name: Run core tests with coverage
       env:
-        # CONFITURE_TEST_DB_URL is the name tests/conftest.py's `test_db_url`
-        # fixture actually reads, and it was never set here: the service
-        # container above ran for nothing, ~460 DB-backed tests skipped on every
-        # PR (6780 passed / 461 skipped in CI vs 9792 / 79 locally), and any
-        # "integration tests cover this" claim gated nothing. DATABASE_URL is
-        # kept because tests/migration_testing/conftest.py reads that one, and
-        # both SOURCE/TARGET spellings are set because the syncer fixtures read
-        # the CONFITURE_-prefixed pair while the migration suites read the bare
-        # pair. Keep the whole block in sync when adding a database.
+        # The three CONFITURE_* variables are the only database routing the
+        # suite reads (tests/conftest.py, tests/README.md). Setting them here is
+        # what makes a failed connection a *failure* in CI rather than a skip.
         CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
         CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
         CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
-        SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
-        TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture
@@ -235,21 +226,12 @@ jobs:
 
     - name: Run database suites in parallel
       env:
-        # CONFITURE_TEST_DB_URL is the name tests/conftest.py's `test_db_url`
-        # fixture actually reads, and it was never set here: the service
-        # container above ran for nothing, ~460 DB-backed tests skipped on every
-        # PR (6780 passed / 461 skipped in CI vs 9792 / 79 locally), and any
-        # "integration tests cover this" claim gated nothing. DATABASE_URL is
-        # kept because tests/migration_testing/conftest.py reads that one, and
-        # both SOURCE/TARGET spellings are set because the syncer fixtures read
-        # the CONFITURE_-prefixed pair while the migration suites read the bare
-        # pair. Keep the whole block in sync when adding a database.
+        # The three CONFITURE_* variables are the only database routing the
+        # suite reads (tests/conftest.py, tests/README.md). Setting them here is
+        # what makes a failed connection a *failure* in CI rather than a skip.
         CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
         CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
         CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
-        SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
-        TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture

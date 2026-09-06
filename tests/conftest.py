@@ -527,8 +527,6 @@ def _layer_for(path: Path) -> str | None:
         top = path.resolve().relative_to(_TESTS_ROOT).parts[0]
     except (ValueError, IndexError):
         return None
-    if top == "migration_testing":  # database tests; folded into the layers by Cycle 5
-        return "integration"
     return top if top in _LAYER_MARKERS else None
 
 

@@ -84,3 +84,23 @@ def test_tracked_sql_files_are_all_fixtures(fixtures: list[Path], tracked_sql: s
     """The other direction: the probe sees every tracked fixture, nothing filtered by accident."""
     missing = sorted(str(p.relative_to(REPO_ROOT)) for p in tracked_sql if p not in set(fixtures))
     assert missing == [], f"tracked SQL files the parity probe skips: {missing}"
+
+
+LAYER_DIRS = frozenset({"unit", "integration", "e2e", "performance", "contract"})
+
+
+def test_every_test_directory_is_a_layer() -> None:
+    """A test lives in one of the five layers; there is no sixth directory.
+
+    ``tests/migration_testing`` was a parallel tree with its own database
+    convention (``DATABASE_URL``), its own connection handling and 114 tests of
+    PostgreSQL rather than of confiture; Phase 02 Cycle 5 folded what mattered
+    into the layers (D2).
+    """
+    tests_root = REPO_ROOT / "tests"
+    stray = sorted(
+        d.name
+        for d in tests_root.iterdir()
+        if d.is_dir() and d.name not in LAYER_DIRS and any(d.rglob("test_*.py"))
+    )
+    assert stray == [], f"test directories outside the five layers: {stray}"

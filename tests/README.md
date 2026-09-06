@@ -7,7 +7,6 @@
 | `tests/unit` | nothing — no database, no network |
 | `tests/integration`, `tests/e2e`, `tests/contract` | a PostgreSQL server (see below) |
 | `tests/performance` | the same server, plus the sync source/target pair; wall-clock assertions |
-| `tests/migration_testing` | a PostgreSQL server via `DATABASE_URL` (being folded into the layers above) |
 
 ## Markers
 

@@ -20,6 +20,64 @@ from typing import Any
 
 import psycopg
 
+# ---------------------------------------------------------------------------
+# Mutation transforms that must leave the SQL parseable.
+#
+# A mutation weakens a migration so that a *weak test suite lets it survive*.
+# One that leaves a syntax error behind is killed by the parser before any test
+# runs, and says nothing about the tests — tests/unit/test_mutation_sql_validity.py
+# holds every default mutation to that.
+# ---------------------------------------------------------------------------
+
+_FK_ACTIONS = (
+    r"(?:\s+ON\s+(?:DELETE|UPDATE)\s+(?:CASCADE|RESTRICT|NO\s+ACTION|SET\s+NULL|SET\s+DEFAULT))*"
+)
+
+
+def _remove_primary_key(sql: str) -> str:
+    """Drop ``PRIMARY KEY`` — the column-level keywords or the table-level clause."""
+    sql = re.sub(
+        r",\s*(?:CONSTRAINT\s+\w+\s+)?PRIMARY\s+KEY\s*\([^)]*\)", "", sql, flags=re.IGNORECASE
+    )
+    return re.sub(r"\s+PRIMARY\s+KEY\b(?!\s*\()", "", sql, flags=re.IGNORECASE)
+
+
+def _remove_foreign_key(sql: str) -> str:
+    """Drop a table-level ``FOREIGN KEY … REFERENCES …`` clause or an inline ``REFERENCES``."""
+    sql = re.sub(
+        r",\s*(?:CONSTRAINT\s+\w+\s+)?FOREIGN\s+KEY\s*\([^)]*\)\s*REFERENCES\s+\S+\s*\([^)]*\)"
+        + _FK_ACTIONS,
+        "",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+REFERENCES\s+\S+\s*\([^)]*\)" + _FK_ACTIONS, "", sql, flags=re.IGNORECASE)
+
+
+def _remove_default(sql: str) -> str:
+    """Drop ``DEFAULT <value>`` where the value is a literal, a word or a call."""
+    return re.sub(
+        r"\s+DEFAULT\s+(?:'[^']*'|\"[^\"]*\"|-?\d+(?:\.\d+)?|\w+(?:\([^)]*\))?)",
+        "",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+
+def _add_marker_column(sql: str) -> str:
+    """Append a column the migration never declared, to the table it creates."""
+    match = re.search(
+        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w.\"]+)", sql, flags=re.IGNORECASE
+    )
+    if not match:
+        return sql
+    return f"{sql.rstrip()}\nALTER TABLE {match.group(1)} ADD COLUMN mutation_marker BOOLEAN;"
+
+
+def _remove_coalesce(sql: str) -> str:
+    """``COALESCE(a, b)`` → ``a`` for the simple, unnested case."""
+    return re.sub(r"COALESCE\(\s*([^,()]+?)\s*,[^()]*\)", r"\1", sql, flags=re.IGNORECASE)
+
 
 class MutationSeverity(Enum):
     """Severity level of a mutation."""
@@ -159,7 +217,7 @@ class MutationRegistry:
                 description="Remove PRIMARY KEY constraint from table",
                 category=MutationCategory.SCHEMA,
                 severity=MutationSeverity.CRITICAL,
-                apply_regex=r"PRIMARY KEY\s*,?\s*" + "=>" + " ",
+                apply_fn=_remove_primary_key,
             ),
             Mutation(
                 id="schema_002",
@@ -183,9 +241,7 @@ class MutationRegistry:
                 description="Remove FOREIGN KEY constraint",
                 category=MutationCategory.SCHEMA,
                 severity=MutationSeverity.CRITICAL,
-                apply_regex=r"FOREIGN\s+KEY\s+\([^)]+\)\s+REFERENCES\s+\S+\s*\([^)]+\)"
-                + "=>"
-                + " ",
+                apply_fn=_remove_foreign_key,
             ),
             Mutation(
                 id="schema_005",
@@ -209,7 +265,7 @@ class MutationRegistry:
                 description="Remove DEFAULT value from column",
                 category=MutationCategory.SCHEMA,
                 severity=MutationSeverity.IMPORTANT,
-                apply_regex=r"\s+DEFAULT\s+['\"]?[^,)]+['\"]?" + "=>" + " ",
+                apply_fn=_remove_default,
             ),
             Mutation(
                 id="schema_008",
@@ -217,7 +273,7 @@ class MutationRegistry:
                 description="Add extra unrequired column",
                 category=MutationCategory.SCHEMA,
                 severity=MutationSeverity.MINOR,
-                apply_fn=lambda sql: sql + "\nALTER TABLE ADD COLUMN mutation_marker BOOLEAN;",
+                apply_fn=_add_marker_column,
             ),
             Mutation(
                 id="schema_009",
@@ -293,7 +349,7 @@ class MutationRegistry:
                 description="Don't use COALESCE for NULLs",
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql.replace("COALESCE(", "") if "COALESCE(" in sql else sql,
+                apply_fn=_remove_coalesce,
             ),
             Mutation(
                 id="data_007",

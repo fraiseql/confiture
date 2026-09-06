@@ -169,7 +169,7 @@ jobs:
 
     - name: Test Forward Migration + Rollback Cycle
       env:
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_rollback_test
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_rollback_test
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture
@@ -178,7 +178,7 @@ jobs:
         echo "=== Testing Forward + Rollback Cycle ==="
 
         # Test that rollback migrations complement forward migrations
-        uv run pytest tests/migration_testing/test_rollback_migrations.py::test_rollback_reverses_table_creation \
+        uv run pytest tests/integration/test_migration_transaction_rollback.py tests/integration/test_down_to.py \
           -v \
           --tb=short \
           || {
@@ -242,7 +242,7 @@ jobs:
 
     - name: Run Schema Validation Tests
       env:
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_schema_test
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_schema_test
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture
@@ -250,7 +250,7 @@ jobs:
       run: |
         echo "=== Validating Schema DDL ==="
 
-        uv run pytest tests/migration_testing/test_forward_migrations.py::test_schema_creates_valid_ddl \
+        uv run pytest tests/integration/test_build_with_validation.py \
           -v \
           --tb=short \
           || {
@@ -314,7 +314,7 @@ jobs:
 
     - name: Run Data Integrity Tests
       env:
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_integrity_test
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_integrity_test
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture
@@ -322,7 +322,7 @@ jobs:
       run: |
         echo "=== Validating Data Integrity ==="
 
-        uv run pytest tests/migration_testing/ -k "data" \
+        uv run pytest tests/integration/test_savepoint_contract.py tests/integration/test_migration_transaction_rollback.py \
           -v \
           --tb=short \
           || {
@@ -418,15 +418,6 @@ jobs:
             echo "✅ Found documentation: $file"
           fi
         done
-
-    - name: Migration Testing README Check
-      run: |
-        echo "=== Checking Migration Testing Documentation ==="
-
-        if [ -d "tests/migration_testing" ] && [ ! -f "tests/migration_testing/README.md" ]; then
-          echo "ℹ️  Recommendation: Add README.md to tests/migration_testing/"
-          echo "    This would help users understand test structure and patterns"
-        fi
 
   # Summary Gate
   deployment-gates-summary:

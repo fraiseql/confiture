@@ -12,8 +12,7 @@ on:
     branches: [ main ]
     paths:
       - 'python/confiture/testing/frameworks/performance.py'
-      - 'tests/migration_testing/test_performance.py'
-      - 'tests/migration_testing/test_load_testing.py'
+      - 'tests/performance/**'
       - '.github/workflows/migration-performance.yml'
 
 env:
@@ -97,121 +96,6 @@ jobs:
         echo "=== Running benchmark-marked tests ==="
         uv run pytest tests -m benchmark -v --tb=short --durations=15 -rs
 
-    - name: Run performance profiling tests
-      env:
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
-        POSTGRES_HOST: localhost
-        POSTGRES_PORT: 5432
-        POSTGRES_USER: confiture
-        POSTGRES_PASSWORD: confiture
-      run: |
-        echo "=== Running Performance Profiling Tests ==="
-        uv run pytest tests/migration_testing/test_performance.py \
-          -v \
-          --tb=short \
-          --durations=10 \
-          -r fEsxXw \
-          || {
-            echo "⚠️  Performance tests completed with warnings"
-            exit 0
-          }
-        echo "✅ Performance profiling tests completed"
-
-    - name: Run load testing suite
-      env:
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
-        POSTGRES_HOST: localhost
-        POSTGRES_PORT: 5432
-        POSTGRES_USER: confiture
-        POSTGRES_PASSWORD: confiture
-      run: |
-        echo "=== Running Load Testing Suite ==="
-        uv run pytest tests/migration_testing/test_load_testing.py \
-          -v \
-          --tb=short \
-          --durations=10 \
-          -r fEsxXw \
-          || {
-            echo "⚠️  Load tests completed with warnings"
-            exit 0
-          }
-        echo "✅ Load testing suite completed"
-
-    - name: Capture Performance Metrics
-      env:
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
-        POSTGRES_HOST: localhost
-        POSTGRES_PORT: 5432
-        POSTGRES_USER: confiture
-        POSTGRES_PASSWORD: confiture
-      shell: python
-      run: |
-        import subprocess
-        import json
-        import time
-        from datetime import UTC, datetime
-        from pathlib import Path
-
-        Path(".performance-metrics").mkdir(exist_ok=True)
-
-        metrics = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "run_date": datetime.now(UTC).strftime("%Y-%m-%d"),
-            "tests": [],
-        }
-
-        test_cases = [
-            ("test_forward_migrations.py::test_basic_forward_migration", "basic_forward"),
-            ("test_rollback_migrations.py::test_rollback_reverses_table_creation", "rollback_table"),
-            ("test_load_testing.py::test_bulk_insert_10k_rows", "bulk_10k"),
-            ("test_load_testing.py::test_bulk_insert_50k_rows", "bulk_50k"),
-            ("test_load_testing.py::test_index_creation_on_large_table", "index_large"),
-            ("test_advanced_scenarios.py::test_multi_table_migration_with_dependencies", "multi_table"),
-        ]
-
-        for test_path, test_name in test_cases:
-            start = time.time()
-            result = subprocess.run(
-                ["python", "-m", "pytest", f"tests/migration_testing/{test_path}", "-q"],
-                capture_output=True,
-                timeout=60,
-            )
-            duration = time.time() - start
-            metrics["tests"].append(
-                {
-                    "name": test_name,
-                    "duration_seconds": round(duration, 3),
-                    "passed": result.returncode == 0,
-                }
-            )
-            status = "✅" if result.returncode == 0 else "❌"
-            print(f"  {test_name:.<30} {duration:.3f}s {status}")
-
-        Path(".performance-metrics/latest.json").write_text(json.dumps(metrics, indent=2))
-        print("\n✅ Performance metrics captured: .performance-metrics/latest.json")
-
-    - name: Check for Performance Regressions
-      shell: python
-      run: |
-        import json
-        from pathlib import Path
-
-        metrics_path = Path(".performance-metrics/latest.json")
-        if not metrics_path.exists():
-            print("No metrics file found — skipping regression check.")
-        else:
-            print("=== Checking for Performance Regressions ===")
-            metrics = json.loads(metrics_path.read_text())
-            print(json.dumps(metrics, indent=2))
-            regressions = [t for t in metrics["tests"] if t["duration_seconds"] > 30]
-            for test in regressions:
-                print(f"⚠️  {test['name']}: {test['duration_seconds']}s (threshold: 30s)")
-            if regressions:
-                print(f"⚠️  {len(regressions)} potential performance regression(s) detected")
-                print("   Review metrics: .performance-metrics/latest.json")
-            else:
-                print("✅ No performance regressions detected")
-
     - name: Create Performance Report
       if: always()
       run: |
@@ -225,12 +109,7 @@ jobs:
         echo "  • Timeout: 30 minutes"
         echo ""
         echo "Monitored Metrics:"
-        echo "  ✅ Forward Migration Timing"
-        echo "  ✅ Rollback Migration Timing"
-        echo "  ✅ Bulk Insert Performance (10k rows)"
-        echo "  ✅ Bulk Insert Performance (50k rows)"
-        echo "  ✅ Index Creation Performance"
-        echo "  ✅ Advanced Scenario Timing"
+        echo "  ✅ every test marked benchmark (pytest tests -m benchmark)"
         echo ""
         echo "Regression Thresholds:"
         echo "  • Individual test: 30 seconds"
