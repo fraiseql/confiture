@@ -65,6 +65,15 @@ engine; what it reports is what happened.
   libpq connection string from a config (URL key, legacy `database:` block,
   `DatabaseConfig`, `Environment`); `create_connection()` uses it.
 
+### Changed
+
+- **`core/_migrator/session.py` is orchestration only.** The apply loop
+  (`apply_loop.py`), the rollback loop (`rollback_loop.py`), `run_against`
+  (`replay.py`) and the read-only views `status`/`current_revision`/`preflight`
+  (`reporting.py`) are their own modules; `MigratorSession`'s methods delegate
+  to them with unchanged signatures, docstrings and import paths. `down()` and
+  `down_to()` now read the ledger *under* the migration lock, like `up()`.
+
 ### Fixed
 
 - **Two same-named migrations in one run are both recorded.** The ledger slug

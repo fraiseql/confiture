@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateDownResult, MigrateReinitResult, MigrationApplied
+from tests.unit._doubles import connection_double
 
 
 def _make_env() -> Environment:
@@ -22,7 +23,7 @@ def _make_env() -> Environment:
 
 
 def _make_session(env: Environment, migrations_dir: Path) -> tuple[MigratorSession, MagicMock]:
-    mock_conn = MagicMock()
+    mock_conn = connection_double()
     with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
         session = MigratorSession(env, migrations_dir)
         session.__enter__()
