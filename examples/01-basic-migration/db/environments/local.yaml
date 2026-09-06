@@ -1,10 +1,5 @@
 name: local
-database:
-  host: localhost
-  port: 5432
-  database: confiture_tutorial
-  user: postgres
-  password: postgres
+database_url: postgresql://postgres:postgres@localhost:5432/confiture_tutorial
 
 # Which directories to include when building schema
 include_dirs:

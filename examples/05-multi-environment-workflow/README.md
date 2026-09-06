@@ -127,9 +127,9 @@ PRODUCTION_DB_PASSWORD
 │   │   │   ├── extensions.sql         # PostgreSQL extensions
 │   │   │   └── roles.sql              # Database roles (prod only)
 │   │   ├── 10_tables/
-│   │   │   ├── users.sql              # Users table
-│   │   │   ├── projects.sql           # Projects table
-│   │   │   └── tasks.sql              # Tasks table
+│   │   │   ├── 01_users.sql           # Users table (built first: the others reference it)
+│   │   │   ├── 02_projects.sql        # Projects table
+│   │   │   └── 03_tasks.sql           # Tasks table
 │   │   ├── 20_indexes/
 │   │   │   └── performance.sql        # Performance indexes
 │   │   ├── 30_views/
@@ -321,7 +321,7 @@ git pull origin main
 make rebuild-local
 
 # 3. Make schema changes
-vim db/schema/10_tables/users.sql
+vim db/schema/10_tables/01_users.sql
 
 # 4. Create migration for existing databases
 vim db/migrations/004_add_user_avatar.py

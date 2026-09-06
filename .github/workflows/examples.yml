@@ -1,0 +1,73 @@
+name: Examples
+
+# Every example that ships a run.sh is executed against a real database. An
+# example that does not run is documentation of something that does not exist.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: examples-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  examples:
+    name: Examples smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: confiture
+          POSTGRES_PASSWORD: confiture
+          POSTGRES_DB: confiture_examples
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Install confiture
+      run: |
+        uv venv --python 3.11
+        uv sync --locked --extra dev --extra notifications --extra ast
+
+    - name: Run every example
+      env:
+        CONFITURE_EXAMPLE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_examples
+        PGPASSWORD: confiture
+      run: |
+        set -euo pipefail
+        status=0
+        for script in examples/*/run.sh; do
+          echo "::group::${script}"
+          if uv run bash "${script}"; then
+            echo "✅ ${script}"
+          else
+            echo "❌ ${script}"
+            status=1
+          fi
+          echo "::endgroup::"
+        done
+        exit "${status}"
