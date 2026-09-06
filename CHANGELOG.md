@@ -5,7 +5,7 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.49.0] - 2026-09-06
 
 Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
 `--format` validator, stdout reserved for the payload.
@@ -34,10 +34,10 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   `is_seed_file()` are the public spellings, and filenames are parsed by the
   one `parse_migration_filename()`. `cli/helpers.py` drops from 1442 to ~400
   lines: DSN resolution lives in `cli/dsn.py`, the idempotency check and fixer
-  in `cli/idempotency.py`, the ownership fixer in `cli/ownership.py`. The
-  redundant `except Exception: fail(e)` wrappers under `@cli_boundary` are
-  gone from `migrate baseline/reinit/generate`, and the remaining broad
-  handlers in `cli/` are pinned by a per-file baseline that may only shrink.
+  in `cli/idempotency.py`, the ownership fixer in `cli/ownership.py`. Thirty-three commands
+  carried an `except Exception: fail(e)` wrapper that `@cli_boundary` already
+  provides; they are gone, and the 67 broad handlers left in `cli/` are pinned
+  by a per-file baseline that may only shrink.
 - ⚠️ **One `--format` validator, exit 5.** Fourteen commands validated
   `--format` by hand — each with its own message, stream and exit code (1, 2,
   or a swallowed `typer.Exit`) — and thirty-two did not validate at all.
