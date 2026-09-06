@@ -1,7 +1,13 @@
-"""Security sandbox for custom anonymization strategies.
+"""Custom anonymization strategies: import lint, then in-process loading.
 
-This module provides safe loading and execution of user-provided
-anonymization strategies, with import blocking and execution monitoring.
+:func:`load_strategy` rejects files that import blocked modules and then
+executes the file in this process — with confiture's privileges — warning as it
+does so. There is no isolation boundary here; see
+:mod:`confiture.core.anonymization.plugins.import_lint`.
+
+The pre-0.47 names (``SandboxViolationError``, ``SandboxResult``,
+``execute_sandboxed``) remain importable from the deprecated
+``plugins.sandbox`` module until 1.0.0.
 """
 
 from confiture.core.anonymization.plugins.import_checker import (
@@ -10,22 +16,24 @@ from confiture.core.anonymization.plugins.import_checker import (
     check_file,
     check_source,
 )
-from confiture.core.anonymization.plugins.sandbox import (
-    SandboxResult,
-    SandboxViolationError,
+from confiture.core.anonymization.plugins.import_lint import (
+    BlockedImportError,
+    InProcessPluginWarning,
     StrategyTimeoutError,
-    execute_sandboxed,
+    TimedResult,
+    execute_timed,
     load_strategy,
 )
 
 __all__ = [
-    "load_strategy",
-    "execute_sandboxed",
-    "SandboxResult",
-    "SandboxViolationError",
+    "BLOCKED_MODULES",
+    "BlockedImportError",
+    "ImportViolation",
+    "InProcessPluginWarning",
     "StrategyTimeoutError",
+    "TimedResult",
     "check_file",
     "check_source",
-    "ImportViolation",
-    "BLOCKED_MODULES",
+    "execute_timed",
+    "load_strategy",
 ]

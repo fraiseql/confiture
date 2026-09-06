@@ -56,7 +56,10 @@ class StrategyRegistry:
 
     @classmethod
     def register_from_file(cls, path: str) -> str:
-        """Load a custom strategy from file (sandboxed) and register it.
+        """Import-lint a custom strategy file, load it in-process, register it.
+
+        The file is executed in this process with confiture's privileges; the
+        load emits :class:`InProcessPluginWarning` to say so.
 
         Args:
             path: Path to Python file containing strategy class
@@ -65,7 +68,7 @@ class StrategyRegistry:
             Name of the registered strategy
 
         Raises:
-            SandboxViolationError: If file contains blocked imports
+            BlockedImportError: If file contains blocked imports
             ConfiturError: If no valid strategy class found
 
         Example:
@@ -74,7 +77,7 @@ class StrategyRegistry:
         """
         from pathlib import Path
 
-        from confiture.core.anonymization.plugins.sandbox import load_strategy
+        from confiture.core.anonymization.plugins.import_lint import load_strategy
 
         strategy_class = load_strategy(Path(path))
         name = strategy_class.__name__

@@ -36,6 +36,12 @@ COPY users (id, name, email) FROM stdin;
 \.
 ```
 
+> The `\.` terminator is the only backslash a seed file may carry outside string
+> literals, comments and dollar-quoted bodies. The ephemeral apply paths hand seed
+> files to `psql`, which executes backslash commands (`\!`, `\copy … TO PROGRAM`,
+> `\i`), so any other backslash is refused with `SCHEMA_205` — file and line
+> named — before `psql` starts.
+
 **Benefits:**
 - ✅ **2-10x faster** for large datasets
 - ✅ **Native PostgreSQL protocol** (optimized)

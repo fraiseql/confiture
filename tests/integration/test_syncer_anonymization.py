@@ -18,6 +18,12 @@ from confiture.core.syncer import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _anonymization_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keyed strategies refuse to run without the per-deployment secret (D8)."""
+    monkeypatch.setenv("ANONYMIZATION_SECRET", "integration-test-secret")
+
+
 @pytest.fixture
 def populated_source_with_pii(source_db, target_db):
     """Populate source database with PII data."""

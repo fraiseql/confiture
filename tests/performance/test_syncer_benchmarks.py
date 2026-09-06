@@ -16,6 +16,12 @@ from confiture.core.syncer import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _anonymization_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keyed strategies refuse to run without the per-deployment secret (D8)."""
+    monkeypatch.setenv("ANONYMIZATION_SECRET", "benchmark-secret")
+
+
 @pytest.fixture
 def benchmark_databases(source_db, target_db, source_config, target_config):
     """Create source and target databases for benchmarking."""

@@ -50,10 +50,10 @@ class DangerousStrategy(AnonymizationStrategy):
         return True
 """)
 
-        # Should raise SandboxViolationError
-        from confiture.core.anonymization.plugins.sandbox import SandboxViolationError
+        # Should raise BlockedImportError
+        from confiture.core.anonymization.plugins.import_lint import BlockedImportError
 
-        with pytest.raises(SandboxViolationError):
+        with pytest.raises(BlockedImportError):
             StrategyRegistry.register_from_file(str(strategy_file))
 
     def test_register_from_file_requires_valid_strategy_class(self, tmp_path):

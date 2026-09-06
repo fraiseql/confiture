@@ -45,7 +45,9 @@ class TestApplySqlViaPsql:
         ]
         assert captured["input"] == "CREATE TABLE t (id int);"
 
-    def test_sql_file_uses_dash_f_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_sql_file_uses_dash_f_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, object] = {}
 
         def fake_run(argv, **kwargs):
@@ -54,11 +56,24 @@ class TestApplySqlViaPsql:
             return MagicMock(returncode=0, stdout="", stderr="")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
+        seed = tmp_path / "seed_001.sql"
+        seed.write_text("INSERT INTO t VALUES (1);\n")
 
-        apply_sql_via_psql(_URL, sql_file=Path("/tmp/seed_001.sql"))
+        apply_sql_via_psql(_URL, sql_file=seed)
 
-        assert captured["argv"][-2:] == ["-f", "/tmp/seed_001.sql"]
+        assert captured["argv"][-2:] == ["-f", str(seed)]
         assert captured["input"] is None
+
+    def test_unreadable_sql_file_is_a_schema_error_before_psql_runs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[object] = []
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append(a))
+
+        with pytest.raises(SchemaError, match="Cannot read"):
+            apply_sql_via_psql(_URL, sql_file=tmp_path / "missing.sql")
+
+        assert calls == []
 
     def test_requires_exactly_one_source(self) -> None:
         with pytest.raises(ValueError):

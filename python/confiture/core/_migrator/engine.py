@@ -24,10 +24,6 @@ from confiture.core._migrator import discovery as discovery_impl
 from confiture.core._migrator import factory
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator import state as state_impl
-from confiture.core._migrator._constants import (
-    _POSTGRES_RESERVED_WORDS,
-    _VALID_TABLE_RE,
-)
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
@@ -38,6 +34,11 @@ from confiture.core.checksum import (
 from confiture.core.dry_run import DryRunResult
 from confiture.core.hooks import HookRegistry
 from confiture.core.hooks.context import ExecutionContext
+from confiture.core.ledger import (
+    split_qualified_table,
+    table_identifier,
+    validate_table_name,
+)
 from confiture.core.locking import LockConfig
 from confiture.core.progress import ProgressManager
 from confiture.exceptions import SQLError
@@ -79,25 +80,13 @@ class Migrator:
             ValueError: If migration_table contains characters that are not
                 safe for use as an unquoted SQL identifier.
         """
-        if not _VALID_TABLE_RE.match(migration_table):
-            raise ValueError(
-                f"Invalid migration_table name: {migration_table!r}. "
-                "Use letters, digits, and underscores only, optionally "
-                "schema-qualified (e.g. 'public.tb_confiture')."
-            )
-        table_base = migration_table.split(".")[-1].lower()
-        if table_base in _POSTGRES_RESERVED_WORDS:
-            raise ValueError(
-                f"Migration table name {migration_table!r} is a PostgreSQL reserved word. "
-                "Choose a descriptive name like 'tb_confiture' or 'schema_migrations'."
-            )
+        validate_table_name(migration_table)
         self.connection = connection
         self.migration_table = migration_table
-        # Unqualified table name — used for index names and information_schema lookups
-        self._table_base = migration_table.split(".")[-1]
-        # Schema part (None when not schema-qualified)
-        parts = migration_table.split(".", 1)
-        self._table_schema: str | None = parts[0] if len(parts) == 2 else None
+        # Schema part (None when not schema-qualified) and the unqualified table
+        # name — the latter feeds index names and information_schema lookups.
+        self._table_schema: str | None
+        self._table_schema, self._table_base = split_qualified_table(migration_table)
 
         # Hook registry for lifecycle events
         self.hook_registry = HookRegistry[ExecutionContext]()
@@ -114,9 +103,7 @@ class Migrator:
     @property
     def _table_ident(self) -> pgsql.Identifier:
         """Return a properly quoted SQL identifier for the tracking table."""
-        if self._table_schema is not None:
-            return pgsql.Identifier(self._table_schema, self._table_base)
-        return pgsql.Identifier(self._table_base)
+        return table_identifier(self.migration_table)
 
     def _execute_sql(
         self,

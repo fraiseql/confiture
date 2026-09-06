@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Security stragglers from the 2026-09-06 whole-repository review. One of them is a
+behaviour change for anyone relying on a default.
+
+### Changed
+
+- ⚠️ **The anonymization secret is mandatory.** `confiture sync --anonymize`
+  replaced PII with `sha256(value)[:n]` — a lookup key, not a pseudonym: anyone
+  holding the anonymised copy could hash a candidate email and match it — and
+  the `hash` strategy fell back to the literal key `"default-secret"` when
+  `ANONYMIZATION_SECRET` was unset, which is the same weakness. Every keyed
+  pseudonym (`email`, `phone`, `name`, `hash`) is now HMAC-SHA256 under
+  `ANONYMIZATION_SECRET`, read once by the new
+  `core/anonymization/pseudonymizer.Pseudonymizer`. An unset or blank secret is
+  `ConfigurationError` `CONFIG_009` (exit 5), raised before the first row.
+  `redact` needs no secret. Migration: export `ANONYMIZATION_SECRET` (e.g.
+  `openssl rand -hex 32`) wherever an anonymizing sync or the `hash` strategy
+  runs. Anyone who already had a real secret set sees unchanged `hash`-strategy
+  output; `sync` pseudonyms change because they were never keyed. The syncer no
+  longer touches the interpreter-wide `random` state, and an unseeded `phone`
+  rule is now deterministic.
+- **`migration.tracking_table` is validated as an identifier before any
+  connection opens.** A value that is not letters, digits and underscores in at
+  most two dot-separated parts — the rule `Migrator.__init__` has always
+  applied — is `ConfigurationError` `CONFIG_008` (exit 5) at the CLI boundary.
+  The ownership fixer's ledger read, the checksum verifier, the preflight probe
+  and the test `MigrationRunner` quote the name through one
+  `core.ledger.table_identifier`; a bare name resolves through `search_path`
+  as every other reader does, instead of a hard-coded `public`.
+- **psql meta-commands are refused.** The ephemeral apply paths hand schema and
+  seed files to `psql`, which executes backslash commands (`\!` runs a shell,
+  `\copy … TO PROGRAM` pipes into one, `\i` reads any file). Every file is
+  scanned first with a lexer that tracks string literals, quoted identifiers,
+  nested block comments, dollar-quoted bodies and `COPY … FROM stdin` data the
+  way psql does; a backslash left in code — anywhere on the line — fails the
+  apply with `SchemaError` `SCHEMA_205` (exit 4), naming the file and line.
+  The `\.` COPY terminator is the one tolerated backslash. Hard reject, no
+  warn-only mode.
+- **The custom-strategy "sandbox" is named for what it is.**
+  `core/anonymization/plugins/sandbox.py` rejected files importing `os` or
+  `subprocess` and then executed the module in-process with confiture's
+  privileges — an import lint, not isolation. It is now
+  `plugins/import_lint.py` (`BlockedImportError`, `TimedResult`,
+  `execute_timed`); every `load_strategy` / `register_from_file` emits
+  `InProcessPluginWarning` and a WARNING log line naming the file. The old
+  module and names remain importable as a deprecated alias
+  (`DeprecationWarning`) until 1.0.0.
+
+- **Names and refs are validated before they become a path or an argv.**
+  `migrate generate NAME` accepts `^[a-z0-9_]+$` only and exits 5
+  (`VALID_001`) before touching the filesystem — `../../x` used to walk out of
+  the migrations directory. An SSH `user` must start with a letter, digit or
+  underscore, and the `ssh` argv carries `--` before the destination. Every git
+  ref confiture passes to a subprocess goes through one `core.git.validate_ref`
+  (`git ls-tree` included), and squawk / `git diff` receive `--` before any
+  file list.
+
+### Added
+
+- `CONFIG_008` (invalid `tracking_table`), `CONFIG_009` (anonymization secret
+  unset), `SCHEMA_205` (psql meta-command) in the error-code registry, the
+  codebook and the exit-code reference.
+- Guard tests: an AST tripwire fails on any hand-quoted SQL identifier
+  (`f'… FROM "{x}"'` and its `%`/`.format`/concatenation spellings) anywhere
+  under `python/confiture`, with an allowlist that must stay empty.
+
+### Fixed
+
+- The three row-count preconditions and the test sandbox's `get_row_count`
+  composed `"schema"."table"` by hand; they now use `sql.Identifier`.
+
 ## [0.46.0] - 2026-09-02
 
 `migrate validate --idempotent` now reads the SQL a Python migration actually

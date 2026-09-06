@@ -827,6 +827,17 @@ deploy through migrations.
 confiture migrate validate --require-grant-migration --allow-grant-only --staged
 ```
 
+## `--check-imports`
+
+`--check-imports` **imports each Python migration module** — Level 1 of the
+check calls `load_migration_module()` on every `*.py` under the migrations
+directory, so module-level code in a migration executes in the confiture
+process, with confiture's privileges, on the host running the gate. Levels 2
+and 3 (class attributes, `self.*` access) then inspect the loaded class and
+the AST. None of the other checks import or execute a migration; only this
+flag does. Run it on code you would run anyway, the same way you would run
+the migration itself.
+
 ## Known limitations
 
 - **Subclassed helpers.** If you wrap `self.execute()` in a project-local

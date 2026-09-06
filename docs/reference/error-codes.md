@@ -49,6 +49,8 @@ resolution hint surfaced in the envelope.
 | `CONFIG_005` | 5 | error | Invalid include/exclude pattern | Check glob patterns in your configuration |
 | `CONFIG_006` | 3 | error | Database connection failed | Check database URL, host, port, and credentials |
 | `CONFIG_007` | 5 | error | Conflicting explicit DSN sources: an explicit --config/--env and CONFITURE_DATABASE_URL are both set | Pass exactly one explicit source: drop --config/--env, unset CONFITURE_DATABASE_URL, or pass --no-config to make the env var authoritative. |
+| `CONFIG_008` | 5 | error | Invalid migration.tracking_table: {value} | Use letters, digits and underscores only, optionally schema-qualified (e.g. public.tb_confiture) |
+| `CONFIG_009` | 5 | error | Anonymization secret not set ({env_var}) | Export ANONYMIZATION_SECRET to a long random string kept out of version control before running an anonymizing sync or a keyed hash strategy |
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
@@ -98,6 +100,7 @@ resolution hint surfaced in the envelope.
 | `SCHEMA_202` | 4 | error | Circular dependency detected | Break the circular dependency between schema files |
 | `SCHEMA_203` | 4 | error | Duplicate table definition: {table} | Remove the duplicate table definition |
 | `SCHEMA_204` | 4 | error | Schema hash mismatch | Schema definition has changed; rebuild the schema |
+| `SCHEMA_205` | 4 | error | psql meta-command in {file} at line {line} | Remove the backslash commands; only SQL statements and inline COPY … FROM stdin data blocks are applied |
 | `SEED_001` | 5 | error | Seed execution error | Check seed file syntax and database state |
 | `SQL_001` | 1 | error | SQL execution error | Check the SQL statement for errors |
 | `SQL_700` | 1 | error | SQL execution failed | Check the SQL statement for errors |

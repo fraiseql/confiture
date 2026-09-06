@@ -12,6 +12,8 @@ from pathlib import Path
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core.ledger import table_identifier
+
 
 @dataclass
 class MigrationResult:
@@ -151,9 +153,7 @@ class MigrationRunner:
                 fixture report "nothing applied" for a broken database and
                 turned assertions against it silently vacuous (#190).
         """
-        schema, _, base = self.tracking_table.partition(".")
-        ident = pgsql.Identifier(schema, base) if base else pgsql.Identifier(schema)
-
+        ident = table_identifier(self.tracking_table)
         try:
             with self.connection.cursor() as cur:
                 cur.execute(pgsql.SQL("SELECT slug FROM {} ORDER BY applied_at ASC").format(ident))

@@ -147,7 +147,7 @@ def _seed_source(source_db) -> None:
 
 
 def test_sync_cli_anonymizes_real_data_deterministically(
-    source_db, target_db, source_db_url, target_db_url, tmp_path
+    source_db, target_db, source_db_url, target_db_url, tmp_path, monkeypatch
 ) -> None:
     """`confiture sync --anonymize` masks PII in the target, deterministically.
 
@@ -155,6 +155,7 @@ def test_sync_cli_anonymizes_real_data_deterministically(
     ``--from``/``--to``), so the CLI → ``ProductionSyncer`` → target path is
     covered end to end — not just the plumbing around a mocked syncer.
     """
+    monkeypatch.setenv("ANONYMIZATION_SECRET", "e2e-test-secret")
     _seed_source(source_db)
     # The syncer copies *data*, not schema — the target table must pre-exist.
     with target_db.cursor() as cur:

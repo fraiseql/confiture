@@ -1,7 +1,7 @@
 """Unit tests for builtin backup hook."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 
@@ -69,15 +69,18 @@ class TestBackupHook:
         # Verify backup directory was created
         assert backup_config.backup_dir.exists()
 
-        # Verify pg_dump was called correctly
+        # Verify pg_dump was called correctly: the password leaves the argv
+        # (visible in `ps aux`) and rides in PGPASSWORD instead.
         mock_subprocess.assert_called_once_with(
             "pg_dump",
             "--no-owner",
             "--no-acl",
-            backup_config.database_url,
+            "postgresql://test@localhost/test",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=ANY,
         )
+        assert mock_subprocess.call_args.kwargs["env"]["PGPASSWORD"] == "test"
 
     @pytest.mark.asyncio
     @patch("asyncio.create_subprocess_exec")

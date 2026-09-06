@@ -26,6 +26,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from psycopg import sql as pgsql
+
 if TYPE_CHECKING:
     import psycopg
 
@@ -609,6 +611,11 @@ class SchemaNotExists(Precondition):
 # =============================================================================
 
 
+def _count_rows(schema: str, table: str) -> pgsql.Composed:
+    """``SELECT COUNT(*)`` over one relation, with both name parts quoted by the driver."""
+    return pgsql.SQL("SELECT COUNT(*) FROM {}").format(pgsql.Identifier(schema, table))
+
+
 @dataclass
 class RowCountEquals(Precondition):
     """Check that a table has exactly N rows.
@@ -623,10 +630,7 @@ class RowCountEquals(Precondition):
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
         with connection.cursor() as cursor:
-            # Use fully qualified table name to prevent SQL injection
-            cursor.execute(
-                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # nosec B608 - schema/table identifiers double-quoted, supplied by the caller via the Precondition dataclass not user input
-            )
+            cursor.execute(_count_rows(self.schema, self.table))
             result = cursor.fetchone()
             actual_count = result[0] if result else 0
             matches = actual_count == self.expected_count
@@ -654,9 +658,7 @@ class RowCountGreaterThan(Precondition):
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
         with connection.cursor() as cursor:
-            cursor.execute(
-                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # nosec B608 - schema/table identifiers double-quoted, supplied by the caller via the Precondition dataclass not user input
-            )
+            cursor.execute(_count_rows(self.schema, self.table))
             result = cursor.fetchone()
             actual_count = result[0] if result else 0
             matches = actual_count > self.min_count
@@ -683,9 +685,7 @@ class TableIsEmpty(Precondition):
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
         with connection.cursor() as cursor:
-            cursor.execute(
-                f'SELECT COUNT(*) FROM "{self.schema}"."{self.table}"'  # nosec B608 - schema/table identifiers double-quoted, supplied by the caller via the Precondition dataclass not user input
-            )
+            cursor.execute(_count_rows(self.schema, self.table))
             result = cursor.fetchone()
             count = result[0] if result else 0
             is_empty = count == 0

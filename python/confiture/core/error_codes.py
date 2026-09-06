@@ -220,6 +220,27 @@ def _create_global_registry() -> ErrorCodeRegistry:
                 "authoritative."
             ),
         ),
+        ErrorCodeDefinition(
+            code="CONFIG_008",
+            message_template="Invalid migration.tracking_table: {value}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint=(
+                "Use letters, digits and underscores only, optionally "
+                "schema-qualified (e.g. public.tb_confiture)"
+            ),
+        ),
+        ErrorCodeDefinition(
+            code="CONFIG_009",
+            message_template="Anonymization secret not set ({env_var})",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint=(
+                "Export ANONYMIZATION_SECRET to a long random string kept out of "
+                "version control before running an anonymizing sync or a keyed "
+                "hash strategy"
+            ),
+        ),
     ]
 
     for code in config_codes:
@@ -335,6 +356,16 @@ def _create_global_registry() -> ErrorCodeRegistry:
             severity=ErrorSeverity.ERROR,
             exit_code=4,
             resolution_hint="Schema definition has changed; rebuild the schema",
+        ),
+        ErrorCodeDefinition(
+            code="SCHEMA_205",
+            message_template="psql meta-command in {file} at line {line}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=4,
+            resolution_hint=(
+                "Remove the backslash commands; only SQL statements and inline "
+                "COPY … FROM stdin data blocks are applied"
+            ),
         ),
     ]
 
@@ -864,6 +895,8 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_005": 5,
     "CONFIG_006": 3,  # carve-out: DB connection failed (family is otherwise 5)
     "CONFIG_007": 5,  # conflicting explicit DSN sources (#152)
+    "CONFIG_008": 5,  # tracking_table is not a plain identifier
+    "CONFIG_009": 5,  # ANONYMIZATION_SECRET unset (D8: the secret is mandatory)
     "CONFIG_010": 5,
     # MIGR family → 3, with two success-with-signal carve-outs at 0.
     "MIGR_001": 3,
@@ -885,6 +918,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "SCHEMA_202": 4,
     "SCHEMA_203": 4,
     "SCHEMA_204": 4,
+    "SCHEMA_205": 4,  # psql meta-command refused before psql runs (SEC-03)
     # SYNC family → 5.
     "SYNC_001": 5,
     "SYNC_300": 5,

@@ -23,6 +23,12 @@ from confiture.core.anonymization.strategy import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _anonymization_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keyed strategies refuse to run without the per-deployment secret (D8)."""
+    monkeypatch.setenv("ANONYMIZATION_SECRET", "unit-test-secret")
+
+
 class TestSeedResolution:
     """Test seed resolution from environment variables and config."""
 
@@ -220,25 +226,20 @@ class TestDeterministicHashStrategy:
         assert result1 == result2  # Deterministic
         assert isinstance(result1, str)
 
-    def test_hmac_with_secret(self):
-        """HMAC uses secret key for rainbow-table resistance."""
-        os.environ["ANONYMIZATION_SECRET"] = "my-secret"
-        try:
-            config = DeterministicHashConfig(seed=12345)
-            strategy = DeterministicHashStrategy(config)
+    def test_hmac_with_secret(self, monkeypatch):
+        """HMAC uses the secret key for rainbow-table resistance.
 
-            result1 = strategy.anonymize("test")
+        A strategy reads the secret once, on first use; a different deployment
+        (a fresh strategy under a different secret) gets an unrelated hash for
+        the same seed and value.
+        """
+        monkeypatch.setenv("ANONYMIZATION_SECRET", "my-secret")
+        result1 = DeterministicHashStrategy(DeterministicHashConfig(seed=12345)).anonymize("test")
 
-            # Change secret
-            os.environ["ANONYMIZATION_SECRET"] = "different-secret"
+        monkeypatch.setenv("ANONYMIZATION_SECRET", "different-secret")
+        result2 = DeterministicHashStrategy(DeterministicHashConfig(seed=12345)).anonymize("test")
 
-            # Same seed, different secret = different hash
-            result2 = strategy.anonymize("test")
-
-            assert result1 != result2
-        finally:
-            if "ANONYMIZATION_SECRET" in os.environ:
-                del os.environ["ANONYMIZATION_SECRET"]
+        assert result1 != result2
 
     def test_strategy_name_short(self):
         """Strategy short name is correct."""

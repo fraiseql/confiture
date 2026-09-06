@@ -40,17 +40,30 @@ confiture sync --from production --to staging --tables users,posts
 confiture sync --from production --to local --exclude logs,analytics
 ```
 
+`--anonymize` needs `ANONYMIZATION_SECRET` in the environment (any long random
+string, kept out of version control — `openssl rand -hex 32` is fine). Without
+it the command exits 5 with `CONFIG_009` before reading a row; there is no
+default secret.
+
 ---
 
 ## Anonymization Strategies
 
 | Strategy | Input | Output |
 |----------|-------|--------|
-| `email` | alice@example.com | user_a1b2c3@example.com |
+| `email` | alice@example.com | user_a1b2c3d4@example.com |
 | `phone` | +1-555-1234 | +1-555-4567 |
 | `name` | Alice Johnson | User A1B2 |
 | `redact` | 123-45-6789 | [REDACTED] |
-| `hash` | secret_value | a1b2c3d4e5f6 |
+| `hash` | secret_value | a1b2c3d4e5f6a7b8 |
+
+`email`, `phone`, `name` and `hash` are **keyed pseudonyms**: HMAC-SHA256 of the
+value under `ANONYMIZATION_SECRET`. The same value maps to the same replacement
+everywhere in one sync, so foreign keys and joins survive, and nobody holding the
+anonymised copy can recover a value by hashing candidates — a different secret
+gives unrelated pseudonyms. A rule's optional `seed` is a domain separator: two
+columns with different seeds get unrelated pseudonyms for the same value.
+`redact` is not keyed and works without the secret.
 
 ### Configuration
 

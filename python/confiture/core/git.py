@@ -17,6 +17,28 @@ from confiture.exceptions import GitError, NotAGitRepositoryError
 _VALID_GIT_REF_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9/_.\-~@^{}]*$")
 
 
+def validate_ref(ref: str) -> str:
+    """Return *ref* if it is shaped like a git revision, else raise ``GitError``.
+
+    Every git argv confiture builds places a user-supplied ref where git would
+    also accept an option, so an option-shaped value (``--output=x``) must be
+    refused before the subprocess is spawned. Letters, digits, ``/ _ . - ~ @ ^ { }``,
+    never a leading ``-``.
+
+    Args:
+        ref: A branch, tag, commit or revision expression.
+
+    Returns:
+        *ref*, unchanged.
+
+    Raises:
+        GitError: The value is not a plausible revision.
+    """
+    if not _VALID_GIT_REF_RE.match(ref):
+        raise GitError(f"Invalid git reference: {ref!r}")
+    return ref
+
+
 class GitRepository:
     """Interface to git repository operations via subprocess.
 
@@ -119,8 +141,7 @@ class GitRepository:
         if not self.is_git_repo():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
-        if not _VALID_GIT_REF_RE.match(ref):
-            raise GitError(f"Invalid git reference: {ref!r}")
+        validate_ref(ref)
 
         # Convert Path to forward slashes for git show command
         file_path_str = file_path.as_posix()
@@ -178,8 +199,7 @@ class GitRepository:
         if not self.is_git_repo():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
-        if not _VALID_GIT_REF_RE.match(ref):
-            raise GitError(f"Invalid git reference: {ref!r}")
+        validate_ref(ref)
 
         try:
             result = subprocess.run(

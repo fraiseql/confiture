@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 
 from psycopg import sql as pgsql
 
+from confiture.core.ledger import table_identifier
+
 if TYPE_CHECKING:
     import psycopg
 
@@ -178,12 +180,7 @@ class MigrationChecksumVerifier:
         self.connection = connection
         self.config = config or ChecksumConfig()
         self.migration_table = migration_table
-        _parts = migration_table.split(".", 1)
-        self._table_ident = (
-            pgsql.Identifier(_parts[0], _parts[1])
-            if len(_parts) == 2
-            else pgsql.Identifier(migration_table)
-        )
+        self._table_ident = table_identifier(migration_table)
 
     def verify_all(self, migrations_dir: Path) -> list[ChecksumMismatch]:
         """Verify all applied migrations against their stored checksums.

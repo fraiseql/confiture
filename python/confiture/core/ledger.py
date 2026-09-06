@@ -31,10 +31,12 @@ The asymmetry is the point, not an oversight.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
 import psycopg
+from psycopg import sql as pgsql
 
 from confiture.exceptions import SQLError
 
@@ -224,3 +226,199 @@ def _probe_bare(connection: Any, name: str) -> LedgerProbe:
     if not row:
         return LedgerProbe(exists=False)
     return LedgerProbe(exists=True, resolved_name=f"{row[0]}.{row[1]}")
+
+
+# ---------------------------------------------------------------------------
+# The name as an identifier
+# ---------------------------------------------------------------------------
+#
+# ``tracking_table`` is configuration, and configuration is text that anyone
+# with write access to the repository controls.  Everything that turns the name
+# into SQL goes through the three functions below so the rule is stated once:
+# the name must be a plain, optionally schema-qualified identifier, and it
+# reaches the server only as a :class:`psycopg.sql.Identifier` — never spliced
+# into a query string by hand.
+
+# Allows 'table_name' or 'schema.table_name' (letters, digits, underscores only).
+VALID_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
+
+# PostgreSQL reserved words that must never be used as bare table names.
+# pgsql.Identifier quotes them correctly in SQL, but they would confuse anyone
+# writing ad-hoc queries against the tracking table.
+POSTGRES_RESERVED_WORDS = frozenset(
+    {
+        "all",
+        "analyse",
+        "analyze",
+        "and",
+        "any",
+        "array",
+        "as",
+        "asc",
+        "asymmetric",
+        "both",
+        "case",
+        "cast",
+        "check",
+        "collate",
+        "column",
+        "constraint",
+        "create",
+        "cross",
+        "current_catalog",
+        "current_date",
+        "current_role",
+        "current_schema",
+        "current_time",
+        "current_timestamp",
+        "current_user",
+        "default",
+        "deferrable",
+        "desc",
+        "distinct",
+        "do",
+        "else",
+        "end",
+        "except",
+        "false",
+        "fetch",
+        "for",
+        "foreign",
+        "from",
+        "full",
+        "grant",
+        "group",
+        "having",
+        "ilike",
+        "in",
+        "initially",
+        "inner",
+        "intersect",
+        "into",
+        "is",
+        "isnull",
+        "join",
+        "lateral",
+        "leading",
+        "left",
+        "like",
+        "limit",
+        "localtime",
+        "localtimestamp",
+        "natural",
+        "not",
+        "notnull",
+        "null",
+        "offset",
+        "on",
+        "only",
+        "or",
+        "order",
+        "outer",
+        "overlaps",
+        "placing",
+        "primary",
+        "references",
+        "returning",
+        "right",
+        "row",
+        "select",
+        "session_user",
+        "similar",
+        "some",
+        "symmetric",
+        "table",
+        "tablesample",
+        "then",
+        "to",
+        "trailing",
+        "true",
+        "union",
+        "unique",
+        "user",
+        "using",
+        "variadic",
+        "verbose",
+        "when",
+        "where",
+        "window",
+        "with",
+    }
+)
+
+
+def validate_table_name(name: str) -> str:
+    """Return *name* when it is a usable tracking-table name.
+
+    The one rule every reader of ``tracking_table`` applies — ``Migrator``,
+    the checksum verifier, the CLI.  Applying it in one place is what lets the
+    others build SQL from the name without re-checking it.
+
+    Args:
+        name: Bare (``tb_confiture``) or schema-qualified (``public.tb_confiture``).
+
+    Returns:
+        *name*, unchanged.
+
+    Raises:
+        ValueError: The name is not letters, digits and underscores in at most
+            two dot-separated parts, or its table part is a PostgreSQL reserved
+            word.
+    """
+    if not VALID_TABLE_RE.match(name):
+        raise ValueError(
+            f"Invalid migration_table name: {name!r}. "
+            "Use letters, digits, and underscores only, optionally "
+            "schema-qualified (e.g. 'public.tb_confiture')."
+        )
+    _, base = split_qualified_table(name)
+    if base.lower() in POSTGRES_RESERVED_WORDS:
+        raise ValueError(
+            f"Migration table name {name!r} is a PostgreSQL reserved word. "
+            "Choose a descriptive name like 'tb_confiture' or 'schema_migrations'."
+        )
+    return name
+
+
+def split_qualified_table(name: str) -> tuple[str | None, str]:
+    """Split ``schema.table`` into ``(schema, table)``; a bare name gives ``(None, name)``.
+
+    Splits on the *first* dot, exactly as :func:`probe_ledger` does, so every
+    reader of the name agrees on which relation it denotes.
+
+    Args:
+        name: Bare or schema-qualified table name.
+
+    Returns:
+        The schema (or ``None``) and the table part.
+
+    Example:
+        >>> split_qualified_table("public.tb_confiture")
+        ('public', 'tb_confiture')
+        >>> split_qualified_table("tb_confiture")
+        (None, 'tb_confiture')
+    """
+    schema, dot, base = name.partition(".")
+    if not dot:
+        return None, name
+    return schema, base
+
+
+def table_identifier(name: str) -> pgsql.Identifier:
+    """The tracking table as a quoted identifier for ``sql.SQL(...).format``.
+
+    A bare name becomes a single-part identifier and resolves through
+    ``search_path`` at execution time — the same resolution :func:`probe_ledger`
+    gives it, so the existence check and the query that follows it talk about
+    one table.  Nothing here defaults a bare name to ``public``.
+
+    Args:
+        name: Bare or schema-qualified table name.
+
+    Returns:
+        ``Identifier(table)`` or ``Identifier(schema, table)``.
+    """
+    schema, base = split_qualified_table(name)
+    if schema is None:
+        return pgsql.Identifier(base)
+    return pgsql.Identifier(schema, base)

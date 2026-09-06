@@ -19,28 +19,59 @@ from __future__ import annotations
 import os
 from urllib.parse import unquote, urlparse, urlunparse
 
+_PASSWORD_KEY = "password"
+
+
+def _query_parts(query: str) -> list[tuple[str, str, bool]]:
+    """Split a query string into ``(raw_part, raw_value, is_password)`` triples.
+
+    Parts are kept verbatim (still percent-encoded) so the URL that is rebuilt
+    from them stays byte-for-byte what libpq was going to read, minus the
+    password. libpq accepts ``password`` as a URI query parameter as well as in
+    the userinfo, so both spellings have to be handled.
+    """
+    if not query:
+        return []
+    parts: list[tuple[str, str, bool]] = []
+    for part in query.split("&"):
+        key, _, value = part.partition("=")
+        parts.append((part, value, unquote(key) == _PASSWORD_KEY))
+    return parts
+
+
+def _netloc(parsed, *, password: str | None) -> str:
+    """Rebuild the netloc with *password* (``None`` drops it, ``***`` masks it)."""
+    host_part = parsed.hostname or ""
+    if parsed.port:
+        host_part = f"{host_part}:{parsed.port}"
+    if parsed.username:
+        user_part = parsed.username if password is None else f"{parsed.username}:{password}"
+        host_part = f"{user_part}@{host_part}"
+    return host_part
+
 
 def redact_url(url: str) -> str:
     """Return *url* with any password replaced by ``***`` (username preserved).
 
-    Use before emitting a connection URL into JSON output, logs, or error
-    messages so DSN credentials never leak to stdout / CI artifacts.
+    Both places libpq reads a password from are masked: the userinfo
+    (``user:pw@host``) and the ``?password=`` query key. Every other part of the
+    URL is preserved verbatim. This is the only spelling of a DSN that may leave
+    the process — use it before a URL goes into JSON output, a log line or an
+    error message.
 
     Args:
         url: A connection URL that may embed a password.
 
     Returns:
-        The URL with its password redacted (unchanged if there is none).
+        The URL with its password(s) redacted (unchanged if there is none).
     """
     parsed = urlparse(url)
-    if not parsed.password:
+    parts = _query_parts(parsed.query)
+    if not parsed.password and not any(is_pw for _, _, is_pw in parts):
         return url
-    host_part = parsed.hostname or ""
-    if parsed.port:
-        host_part = f"{host_part}:{parsed.port}"
-    if parsed.username:
-        host_part = f"{parsed.username}:***@{host_part}"
-    return urlunparse(parsed._replace(netloc=host_part))
+    query = "&".join(f"{_PASSWORD_KEY}=***" if is_pw else raw for raw, _, is_pw in parts)
+    netloc = _netloc(parsed, password="***" if parsed.password else None)
+    return urlunparse(parsed._replace(netloc=netloc, query=query))
 
 
 def split_password(url: str) -> tuple[str, str | None]:
@@ -53,6 +84,9 @@ def split_password(url: str) -> tuple[str, str | None]:
     percent-decoded by libpq. The username component is preserved exactly (still
     percent-encoded) so the sanitised URL stays a valid URI.
 
+    A ``?password=`` query key is removed too; when both spellings are present
+    the query key wins, as libpq applies query parameters after the userinfo.
+
     Args:
         url: A connection URL that may embed a password.
 
@@ -60,15 +94,14 @@ def split_password(url: str) -> tuple[str, str | None]:
         ``(url_without_password, password)``; ``(url, None)`` when there is none.
     """
     parsed = urlparse(url)
-    if not parsed.password:
+    parts = _query_parts(parsed.query)
+    query_passwords = [value for _, value, is_pw in parts if is_pw]
+    if not parsed.password and not query_passwords:
         return url, None
-    password = unquote(parsed.password)
-    host_part = parsed.hostname or ""
-    if parsed.port:
-        host_part = f"{host_part}:{parsed.port}"
-    if parsed.username:
-        host_part = f"{parsed.username}@{host_part}"
-    return urlunparse(parsed._replace(netloc=host_part)), password
+    raw_password = query_passwords[-1] if query_passwords else parsed.password
+    query = "&".join(raw for raw, _, is_pw in parts if not is_pw)
+    netloc = _netloc(parsed, password=None)
+    return urlunparse(parsed._replace(netloc=netloc, query=query)), unquote(raw_password or "")
 
 
 def libpq_env(password: str | None, *, extra_options: str | None = None) -> dict[str, str]:

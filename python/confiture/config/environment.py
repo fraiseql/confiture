@@ -57,6 +57,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from confiture.config._env_vars import expand_env_vars
+from confiture.core.url_redaction import redact_url
 from confiture.exceptions import ConfigurationError
 
 # Privileges that PostgreSQL's GRANT statement allows on tables.  Sequences,
@@ -77,7 +78,9 @@ _TablePrivilege = Literal[
 
 # SSH parameter validation patterns
 _VALID_SSH_HOST_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-._]*$")
-_VALID_SSH_USER_RE = re.compile(r"^[a-zA-Z0-9_\-\.@]+$")
+# Must start with a word character: a leading `-` would make the destination an
+# option to ssh, a leading `.` or `@` is never a login name.
+_VALID_SSH_USER_RE = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_\-\.@]*$")
 
 
 class CommentValidationConfig(BaseModel):
@@ -354,7 +357,8 @@ class SshTunnelConfig(BaseModel):
         if v is not None and not _VALID_SSH_USER_RE.match(v):
             raise ValueError(
                 f"Invalid SSH username: {v!r}. "
-                "Use only letters, digits, hyphens, underscores, dots, or @."
+                "Start with a letter, digit or underscore; then letters, digits, "
+                "hyphens, underscores, dots, or @."
             )
         return v
 
@@ -408,6 +412,9 @@ class DatabaseConfig(BaseModel):
     Can be initialized from a connection URL or individual parameters.
     """
 
+    # Carries a password: pydantic must not echo rejected input back in error text.
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     host: str = "localhost"
     port: int = 5432
     database: str = "postgres"
@@ -436,7 +443,7 @@ class DatabaseConfig(BaseModel):
         match = re.match(pattern, url)
 
         if not match:
-            raise ValueError(f"Invalid PostgreSQL URL: {url}")
+            raise ValueError(f"Invalid PostgreSQL URL: {redact_url(url)}")
 
         user, password, host, port, database = match.groups()
 
@@ -717,6 +724,10 @@ class Environment(BaseModel):
         seed: Seed data application configuration
     """
 
+    # `database_url` may embed a password: pydantic must not echo rejected input
+    # back in error text; the validators quote a redacted form instead.
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     # ``name`` and ``include_dirs`` are build-only fields and are never read on
     # the migrate path (``MigratorSession`` uses only ``database_url`` and
     # ``migration.tracking_table``).  They default here so a migrate-only
@@ -798,7 +809,8 @@ class Environment(BaseModel):
         """Validate PostgreSQL connection URL format"""
         if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError(
-                f"Invalid database_url: must start with postgresql:// or postgres://, got: {v}"
+                "Invalid database_url: must start with postgresql:// or postgres://, "
+                f"got: {redact_url(v)}"
             )
         return v
 
