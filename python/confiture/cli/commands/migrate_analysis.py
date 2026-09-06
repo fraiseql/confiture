@@ -1706,7 +1706,7 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
 
     from psycopg import sql as pgsql
 
-    from confiture.core.ledger import ledger_exists  # noqa: PLC0415
+    from confiture.core.ledger import ledger_exists, table_identifier  # noqa: PLC0415
 
     conn = getattr(session, "_conn", None)
     if conn is None:
@@ -1718,10 +1718,8 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
                 conn.rollback()
             return (False, True)
 
-        schema, _, base = table.partition(".")
-        ident = pgsql.Identifier(schema, base) if base else pgsql.Identifier(schema)
         with conn.cursor() as cur:
-            cur.execute(pgsql.SQL("SELECT 1 FROM {} LIMIT 1").format(ident))
+            cur.execute(pgsql.SQL("SELECT 1 FROM {} LIMIT 1").format(table_identifier(table)))
             row = cur.fetchone()
         # Roll back any aborted transaction state so run_against starts clean.
         with contextlib.suppress(Exception):
