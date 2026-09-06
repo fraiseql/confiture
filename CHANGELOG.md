@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-09-06
+
 Phase 03 of the 2026-09-06 review: one apply loop. `MigratorSession.up()` is the
 engine; what it reports is what happened.
 
