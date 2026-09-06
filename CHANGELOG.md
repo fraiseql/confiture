@@ -24,6 +24,14 @@ and the checks that caught this review's findings run in CI.
   is hand-written. A test holds every block current, every registered flag
   documented, every example valid for its command, and every flag named
   anywhere real.
+- **`docs/reference/configuration.md` documents exactly the fields on the
+  models.** A generated field reference — one table per model with type,
+  default and the model's own description, plus a complete YAML skeleton with
+  every field at its default — is rendered from `confiture.config.environment`
+  by `scripts/gen_config_reference.py`; thirty-two fields had no description
+  anywhere and have one in their model docstring now. A test holds the block
+  current, every YAML key in the reference a real field, and every field
+  documented.
 
 ## [0.53.0] - 2026-09-07
 
