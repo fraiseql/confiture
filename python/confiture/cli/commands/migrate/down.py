@@ -11,6 +11,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.commands.migrate._dry_run_render import _render_dry_run_analysis, _row_estimator
+from confiture.cli.commands.migrate._settings import _load_environment_if_present
 from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
@@ -21,6 +22,7 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, _output_json, console, error_console, is_json
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
+from confiture.core.locking import resolve_lock_settings
 
 
 @cli_boundary
@@ -59,15 +61,15 @@ def migrate_down(
         "--dry-run",
         help="Analyze rollback without executing (default: off)",
     ),
-    lock_timeout: int = typer.Option(
-        30000,
+    lock_timeout: int | None = typer.Option(
+        None,
         "--lock-timeout",
-        help="Lock timeout in milliseconds (default: 30000ms)",
+        help="Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000)",
     ),
-    no_lock: bool = typer.Option(
-        False,
+    no_lock: bool | None = typer.Option(
+        None,
         "--no-lock",
-        help="Disable migration locking (default: off, DANGEROUS in multi-pod)",
+        help="Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod)",
     ),
     verbose: bool = typer.Option(
         False,
@@ -169,6 +171,10 @@ def migrate_down(
 
             if not is_json(format_output):
                 console.print(f"[cyan]📦 Rolling back up to {steps} migration(s)[/cyan]\n")
+            env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
+            lock_timeout, no_lock = resolve_lock_settings(
+                env_cfg.migration.locking if env_cfg else None, lock_timeout, no_lock
+            )
             result = session.down(steps=steps, lock_timeout=lock_timeout, no_lock=no_lock)
 
         format_migrate_down_result(result, format_output, output_file, console)

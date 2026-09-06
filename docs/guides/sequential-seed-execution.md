@@ -76,7 +76,7 @@ include_dirs:
 seed:
   execution_mode: sequential      # "concatenate" | "sequential"
   continue_on_error: false        # Skip failed files and continue
-  transaction_mode: savepoint     # Always use savepoint isolation
+  transaction_mode: savepoint     # or "transaction": one commit per file
 ```
 
 ## How It Works
@@ -244,7 +244,7 @@ seed:
 
   # Transaction isolation mode
   # - "savepoint": Use PostgreSQL savepoint (recommended)
-  # - "transaction": Use separate transactions (future)
+  # - "transaction": Commit after each file (files before a failure stay applied)
   transaction_mode: savepoint
 ```
 

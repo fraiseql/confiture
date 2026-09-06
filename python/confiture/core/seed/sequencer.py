@@ -25,6 +25,7 @@ def apply_seed_files(
     env: str,
     profile: SeedProfile | None = None,
     continue_on_error: bool = False,
+    transaction_mode: str = "savepoint",
     console: Any = None,
 ) -> ApplyResult:
     """Apply the seed files under *seeds_dir* sequentially against *database_url*.
@@ -53,7 +54,9 @@ def apply_seed_files(
         ) from e
     try:
         applier = SeedApplier(seeds_dir=seeds_dir, env=env, connection=connection, console=console)
-        result = applier.apply_sequential(continue_on_error=continue_on_error, profile=profile)
+        result = applier.apply_sequential(
+            continue_on_error=continue_on_error, profile=profile, transaction_mode=transaction_mode
+        )
     except (ConfigurationError, SeedError):
         raise
     except Exception as e:

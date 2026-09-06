@@ -11,7 +11,6 @@ from confiture.config.environment import (
     Environment,
     LockingConfig,
     MigrationConfig,
-    PgGitConfig,
 )
 
 __all__ = [
@@ -21,5 +20,4 @@ __all__ = [
     "Environment",
     "LockingConfig",
     "MigrationConfig",
-    "PgGitConfig",
 ]

@@ -520,6 +520,7 @@ def apply(
             except Exception as e:
                 fail(e, json_mode=is_json(format_type), output_file=report_output)
 
+        seed_settings = None
         # Get database connection
         if database_url:
             # Use provided URL directly
@@ -541,6 +542,7 @@ def apply(
                 from confiture.config.environment import Environment
 
                 env_config = Environment.load(env)
+                seed_settings = env_config.seed
 
                 connection = connect(env_config.database_url)
             except Exception as e:
@@ -569,10 +571,16 @@ def apply(
 
             # Use progress manager for seed application
             with ProgressManager() as progress:
+                continue_on_error = continue_on_error or bool(
+                    seed_settings and seed_settings.continue_on_error
+                )
                 result = applier.apply_sequential(
                     continue_on_error=continue_on_error,
                     progress=progress,
                     profile=seed_profile,
+                    transaction_mode=seed_settings.transaction_mode
+                    if seed_settings
+                    else "savepoint",
                 )
             result.seed_profile = profile
 

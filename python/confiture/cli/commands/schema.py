@@ -555,6 +555,10 @@ def _apply_seeds_sequentially(
     """``--sequential``: apply the seed files through the core sequencer; return the count."""
     from confiture.core.seed.sequencer import apply_seed_files
 
+    # The environment's `seed:` block is the default; the flag can only widen it.
+    seed_settings = getattr(builder.env_config, "seed", None)
+    continue_on_error = continue_on_error or bool(seed_settings and seed_settings.continue_on_error)
+    transaction_mode = seed_settings.transaction_mode if seed_settings else "savepoint"
     out.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
     _schema_files, seed_files = builder.categorize_sql_files()
     if not seed_files:
@@ -567,6 +571,7 @@ def _apply_seeds_sequentially(
             env=env,
             profile=profile,
             continue_on_error=continue_on_error,
+            transaction_mode=transaction_mode,
             console=console,
         )
     except ConfiturError as e:

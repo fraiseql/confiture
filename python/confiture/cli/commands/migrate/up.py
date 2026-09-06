@@ -30,6 +30,7 @@ from confiture.cli.helpers import (
 )
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
+from confiture.core.locking import resolve_lock_settings
 
 
 @cli_boundary
@@ -73,15 +74,15 @@ def migrate_up(
         "--force",
         help="Force application, skip state checks (default: off)",
     ),
-    lock_timeout: int = typer.Option(
-        30000,
+    lock_timeout: int | None = typer.Option(
+        None,
         "--lock-timeout",
-        help="Lock timeout in milliseconds (default: 30000ms)",
+        help="Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000)",
     ),
-    no_lock: bool = typer.Option(
-        False,
+    no_lock: bool | None = typer.Option(
+        None,
         "--no-lock",
-        help="Disable migration locking (default: off, DANGEROUS in multi-pod)",
+        help="Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod)",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -254,6 +255,9 @@ def migrate_up(
         env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
         install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
+        lock_timeout, no_lock = resolve_lock_settings(
+            env_cfg.migration.locking if env_cfg else None, lock_timeout, no_lock
+        )
 
         # Advisory lines go to stderr in JSON mode: stdout is the payload.
         say = error_console if is_json(format_output) else console

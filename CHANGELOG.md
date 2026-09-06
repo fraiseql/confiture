@@ -12,6 +12,16 @@ exported surface is exactly as wide as the code behind it.
 
 ### Changed
 
+- ⚠️ **Every configuration field is read (ARC-03).** A guard test now fails on a
+  config field nothing consumes. Wired: `seed.continue_on_error` and
+  `seed.transaction_mode` (`"transaction"` commits after each seed file — the
+  documented "future" mode exists now) drive `build --sequential` and
+  `seed apply` when the flags are absent; `migration.locking.enabled` and
+  `migration.locking.timeout_ms` are the defaults behind `--no-lock` and
+  `--lock-timeout` and for the library session. Deleted with their
+  documentation, because nothing ever read them: `auto_backup`,
+  `require_confirmation`, and the whole `pggit:` block (`PgGitConfig`). A YAML
+  file that still sets them is accepted and the keys are ignored.
 - ⚠️ **`import confiture` is lazy, and two names are one.** The package imported
   the schema linter eagerly, which loaded `confiture.core` and the whole rule
   library on every `import confiture`; `SchemaLinter`, `ExternalGeneratorError`
