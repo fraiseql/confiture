@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
@@ -116,6 +116,7 @@ def _migrator(source: str, target: str):  # noqa: ANN202 — returns SchemaToSch
 
 
 @schema_to_schema_app.command("setup")
+@cli_boundary
 def s2s_setup(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -143,6 +144,7 @@ def s2s_setup(
 
 
 @schema_to_schema_app.command("analyze")
+@cli_boundary
 def s2s_analyze(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -172,6 +174,7 @@ def s2s_analyze(
 
 
 @schema_to_schema_app.command("migrate")
+@cli_boundary
 def s2s_migrate(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -217,6 +220,7 @@ def s2s_migrate(
 
 
 @schema_to_schema_app.command("migrate-table")
+@cli_boundary
 def s2s_migrate_table(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -255,6 +259,7 @@ def s2s_migrate_table(
 
 
 @schema_to_schema_app.command("verify")
+@cli_boundary
 def s2s_verify(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -300,6 +305,7 @@ def s2s_verify(
 
 
 @schema_to_schema_app.command("cleanup")
+@cli_boundary
 def s2s_cleanup(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,

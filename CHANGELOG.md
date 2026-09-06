@@ -38,6 +38,8 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   `cli/error_json.cli_boundary` decorator re-raises `typer.Exit` and sends every
   other exception through `fail()`; missing `migrate diff` inputs and
   `--generate` without `--name` are validation failures (exit 5).
+  The decorator wraps all 78 registered commands (a registry-driven guard
+  test keeps it that way).
 
 ## [0.48.0] - 2026-09-06
 

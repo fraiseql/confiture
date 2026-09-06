@@ -22,7 +22,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
@@ -86,6 +86,7 @@ def _get_connection(database_url: str | None = None) -> psycopg.Connection:
 
 
 @coordinate_app.command()
+@cli_boundary
 def register(
     agent_id: str = typer.Option(
         ..., help="Identifier for the agent, e.g. claude-payments (required)"
@@ -199,6 +200,7 @@ def register(
 
 
 @coordinate_app.command()
+@cli_boundary
 def list_intents(
     status_filter: str | None = typer.Option(
         None,
@@ -274,6 +276,7 @@ def list_intents(
 
 
 @coordinate_app.command()
+@cli_boundary
 def check(
     agent_id: str = typer.Option(..., help="Agent ID"),
     feature_name: str = typer.Option(..., help="Feature name"),
@@ -367,6 +370,7 @@ def check(
 
 
 @coordinate_app.command()
+@cli_boundary
 def status(
     intent_id: str = typer.Option(..., help="Intention ID"),
     database_url: str | None = typer.Option(None, help="Database URL"),
@@ -438,6 +442,7 @@ def status(
 
 
 @coordinate_app.command()
+@cli_boundary
 def conflicts(
     database_url: str | None = typer.Option(None, help="Database URL"),
     format_output: str = format_option("text", "json"),
@@ -505,6 +510,7 @@ def conflicts(
 
 
 @coordinate_app.command()
+@cli_boundary
 def resolve(
     conflict_id: int = typer.Option(..., help="Conflict ID"),
     notes: str = typer.Option(..., help="Resolution notes"),
@@ -542,6 +548,7 @@ def resolve(
 
 
 @coordinate_app.command()
+@cli_boundary
 def abandon(
     intent_id: str = typer.Option(..., help="Intention ID"),
     reason: str = typer.Option(..., help="Reason for abandonment"),

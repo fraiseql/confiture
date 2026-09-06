@@ -508,6 +508,7 @@ def migrate_status(
         raise typer.Exit(1)
 
 
+@cli_boundary
 def migrate_current(
     ctx: typer.Context,
     config: Path = typer.Option(
@@ -609,6 +610,7 @@ def migrate_current(
         print(cur.version if cur is not None else "")
 
 
+@cli_boundary
 def migrate_up(
     ctx: typer.Context,
     migrations_dir: Path = typer.Option(
@@ -992,6 +994,7 @@ def migrate_up(
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+@cli_boundary
 def migrate_down(
     ctx: typer.Context,
     migrations_dir: Path = typer.Option(
@@ -1154,6 +1157,7 @@ def migrate_down(
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+@cli_boundary
 def migrate_down_to(
     ctx: typer.Context,
     revision: str = typer.Argument(
@@ -1257,6 +1261,7 @@ def migrate_down_to(
             console.print(f"  • {v}")
 
 
+@cli_boundary
 def migrate_generate(
     name: str = typer.Argument(..., help="Migration name (snake_case)"),
     migrations_dir: Path = typer.Option(
@@ -1656,6 +1661,7 @@ class {class_name}(Migration):
         fail(e, json_mode=is_json(format_output))
 
 
+@cli_boundary
 def migrate_estimate(
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),

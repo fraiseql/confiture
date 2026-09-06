@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, error_console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
@@ -145,6 +145,7 @@ def _split_csv(value: str | None) -> list[str] | None:
     return items or None
 
 
+@cli_boundary
 def sync(
     from_: str = typer.Option(..., "--from", help="Source database: env name or DSN."),
     to: str = typer.Option(..., "--to", help="Target database: env name or DSN."),

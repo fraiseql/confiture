@@ -216,6 +216,7 @@ def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:  # noqa: ANN40
     return None
 
 
+@cli_boundary
 def migrate_validate(
     ctx: typer.Context,
     migrations_dir: Path = typer.Option(
@@ -742,6 +743,7 @@ def _reject_exclusive_composition(checks: list[ValidationCheck]) -> None:
         )
 
 
+@cli_boundary
 def migrate_fix(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -853,6 +855,7 @@ def migrate_fix(
         fail(e, json_mode=json_mode, output_file=output_file)
 
 
+@cli_boundary
 def migrate_introspect(
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
@@ -1007,6 +1010,7 @@ def migrate_introspect(
         fail(e, json_mode=json_mode)
 
 
+@cli_boundary
 def migrate_verify(
     ctx: typer.Context,
     migrations_dir: Path = typer.Option(
@@ -1214,6 +1218,7 @@ def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+@cli_boundary
 def migrate_fix_signatures(
     config: Path = typer.Option(
         Path("confiture.yaml"),
@@ -2008,6 +2013,7 @@ def _display_dependent_analysis(report: Any, cons: Any) -> None:
             cons.print(f"      - {dep.kind} [cyan]{dep.schema}.{dep.name}[/cyan]{cols}")
 
 
+@cli_boundary
 def migrate_preflight(
     ctx: typer.Context,
     migrations_dir: Path = typer.Option(

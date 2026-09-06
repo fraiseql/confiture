@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import is_json
 from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
@@ -144,6 +144,7 @@ def _validate_prep_seed(
 
 
 @seed_app.command("validate")
+@cli_boundary
 def validate(
     seeds_dir: Path = typer.Option(
         Path("db/seeds"),
@@ -400,6 +401,7 @@ def validate(
 
 
 @seed_app.command("apply")
+@cli_boundary
 def apply(
     seeds_dir: Path = typer.Option(
         DEFAULT_SEEDS_DIR,
@@ -620,6 +622,7 @@ def apply(
 
 
 @seed_app.command("convert")
+@cli_boundary
 def convert(
     input_file: Path = typer.Option(
         ...,
@@ -814,6 +817,7 @@ def convert(
 
 
 @seed_app.command("benchmark")
+@cli_boundary
 def benchmark(
     seeds_dir: Path = typer.Option(
         DEFAULT_SEEDS_DIR,
@@ -920,6 +924,7 @@ def benchmark(
 
 
 @seed_app.command("generate")
+@cli_boundary
 def seed_generate(
     table: str = typer.Argument(..., help="Table name to generate seed data for"),
     database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),

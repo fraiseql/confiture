@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError
@@ -19,6 +19,7 @@ debug_app = typer.Typer(
 
 
 @debug_app.command("cte")
+@cli_boundary
 def debug_cte(
     database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
     sql: str | None = typer.Option(None, "--sql", "-s", help="SQL query to debug"),

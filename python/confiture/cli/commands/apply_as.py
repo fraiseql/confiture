@@ -21,13 +21,14 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, console, is_json
 from confiture.cli.options import format_option
 from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
+@cli_boundary
 def migrate_apply_as(
     role: str = typer.Argument(
         ...,

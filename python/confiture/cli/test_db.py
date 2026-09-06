@@ -13,7 +13,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _output_json, console, is_json, redact_url
 from confiture.cli.options import format_option
 from confiture.config.environment import Environment
@@ -103,6 +103,7 @@ def _print_ram_setup_text(result: RamSetupResult, guided_command: str | None) ->
 
 
 @test_db_app.command("provision-template")
+@cli_boundary
 def provision_template(
     template: str = typer.Option(..., "--template", help="Template database name."),
     env: str = typer.Option("local", "--env", "-e", help="Environment to build."),
@@ -165,6 +166,7 @@ def provision_template(
 
 
 @test_db_app.command("clone")
+@cli_boundary
 def clone(
     template: str = typer.Option(..., "--template", help="Source template database."),
     target: str = typer.Option(..., "--target", help="Clone database name to create."),
@@ -206,6 +208,7 @@ def clone(
 
 
 @test_db_app.command("ram-setup")
+@cli_boundary
 def ram_setup(
     tablespace: str = typer.Option(..., "--tablespace", help="Tablespace name to (re)create."),
     location: str = typer.Option(
@@ -261,6 +264,7 @@ def ram_setup(
 
 
 @test_db_app.command("drop")
+@cli_boundary
 def drop(
     target: str = typer.Option(..., "--target", help="Database to drop."),
     force: bool = typer.Option(
@@ -288,6 +292,7 @@ def drop(
 
 
 @test_db_app.command("status")
+@cli_boundary
 def status(
     template: str = typer.Option(..., "--template", help="Template database name."),
     env: str = typer.Option("local", "--env", "-e", help="Environment to hash."),
@@ -317,6 +322,7 @@ def status(
 
 
 @test_db_app.command("list")
+@cli_boundary
 def list_databases(
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
     project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
@@ -341,6 +347,7 @@ def list_databases(
 
 
 @test_db_app.command("prune")
+@cli_boundary
 def prune(
     template: str = typer.Option(..., "--template", help="Template whose clones to drop."),
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),

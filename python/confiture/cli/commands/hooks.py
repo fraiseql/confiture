@@ -24,7 +24,7 @@ from typing import Any
 import typer
 import yaml
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _resolve_config, console
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.notifications.config import load_notifications_config
@@ -91,6 +91,7 @@ def _synthetic_execution_context() -> ExecutionContext:
 
 
 @hooks_app.command("test")
+@cli_boundary
 def hooks_test(
     config: Path = typer.Option(
         Path("confiture.yaml"),

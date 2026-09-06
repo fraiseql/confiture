@@ -5,7 +5,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.diff_formatter import print_diff_text
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
@@ -14,6 +14,7 @@ from confiture.exceptions import DifferError, SchemaError
 from confiture.models.results import DiffResult
 
 
+@cli_boundary
 def schema_diff(
     from_file: Path = typer.Option(..., "--from", help="Old schema SQL file"),
     to_file: Path = typer.Option(..., "--to", help="New schema SQL file"),

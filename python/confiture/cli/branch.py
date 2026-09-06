@@ -15,7 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfiturError
@@ -74,6 +74,7 @@ def _get_pggit_client(config_path: Path):
 
 
 @branch_app.command("list")
+@cli_boundary
 def branch_list(
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
@@ -147,6 +148,7 @@ def branch_list(
 
 
 @branch_app.command("create")
+@cli_boundary
 def branch_create(
     name: str = typer.Argument(..., help="Name of the new branch"),
     from_branch: str = typer.Option(
@@ -209,6 +211,7 @@ def branch_create(
 
 
 @branch_app.command("checkout")
+@cli_boundary
 def branch_checkout(
     name: str = typer.Argument(..., help="Branch name to checkout"),
     config: Path = typer.Option(
@@ -243,6 +246,7 @@ def branch_checkout(
 
 
 @branch_app.command("delete")
+@cli_boundary
 def branch_delete(
     name: str = typer.Argument(..., help="Branch name to delete"),
     force: bool = typer.Option(
@@ -300,6 +304,7 @@ def branch_delete(
 
 
 @branch_app.command("status")
+@cli_boundary
 def branch_status(
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
@@ -353,6 +358,7 @@ def branch_status(
 
 
 @branch_app.command("commit")
+@cli_boundary
 def branch_commit(
     message: str = typer.Argument(..., help="Commit message"),
     config: Path = typer.Option(
@@ -396,6 +402,7 @@ def branch_commit(
 
 
 @branch_app.command("log")
+@cli_boundary
 def branch_log(
     limit: int = typer.Option(
         10,
@@ -447,6 +454,7 @@ def branch_log(
 
 
 @branch_app.command("merge")
+@cli_boundary
 def branch_merge(
     source: str = typer.Argument(..., help="Source branch to merge from"),
     target: str = typer.Option(
@@ -530,6 +538,7 @@ def branch_merge(
 
 
 @branch_app.command("merge-abort")
+@cli_boundary
 def branch_merge_abort(
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),
@@ -561,6 +570,7 @@ def branch_merge_abort(
 
 
 @branch_app.command("diff")
+@cli_boundary
 def branch_diff(
     source: str = typer.Argument(None, help="Source branch (default: current branch)"),
     target: str = typer.Argument(None, help="Target branch to compare against"),

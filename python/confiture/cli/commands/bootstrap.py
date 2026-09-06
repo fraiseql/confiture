@@ -31,7 +31,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
 from confiture.config._env_vars import expand_env_vars
@@ -41,6 +41,7 @@ from confiture.core.validation.config_loaders import load_ownership_expectation
 from confiture.exceptions import BootstrapError, BootstrapScopeError, ConfigurationError
 
 
+@cli_boundary
 def bootstrap(
     config: Path = typer.Option(
         Path("confiture.yaml"),

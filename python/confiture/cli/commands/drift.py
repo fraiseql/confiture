@@ -5,7 +5,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
@@ -33,6 +33,7 @@ def _demote_missing_grant_warnings(report: DriftReport) -> None:
             item.severity = DriftSeverity.WARNING
 
 
+@cli_boundary
 def drift(
     config: Path = typer.Option(
         Path("confiture.yaml"),

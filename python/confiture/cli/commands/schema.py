@@ -193,6 +193,7 @@ Documentation: https://github.com/evoludigit/confiture
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+@cli_boundary
 def build(
     env: str = typer.Option(
         "local",
@@ -681,6 +682,7 @@ def build(
         fail(e, json_mode=is_json(format_type), output_file=report_output)
 
 
+@cli_boundary
 def lint(
     env: str = typer.Option(
         "local",
@@ -1113,6 +1115,7 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     )
 
 
+@cli_boundary
 def lint_unified(
     files: list[Path] = typer.Argument(
         default=None,
@@ -1244,6 +1247,7 @@ def lint_unified(
         raise typer.Exit(1)  # success-signal: lint found errors
 
 
+@cli_boundary
 def introspect(
     db: str = typer.Option(
         ...,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     _get_tracking_table,
@@ -99,6 +99,7 @@ def _checksum_payload(
     return payload
 
 
+@cli_boundary
 def install_helpers(
     config: Path = typer.Option(
         None,
@@ -178,6 +179,7 @@ def install_helpers(
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+@cli_boundary
 def validate_profile(
     path: Path = typer.Argument(
         ...,
@@ -251,6 +253,7 @@ def validate_profile(
         fail(e, json_mode=False)
 
 
+@cli_boundary
 def verify_checksums(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -448,6 +451,7 @@ def verify_checksums(
         fail(e, json_mode=json_mode)
 
 
+@cli_boundary
 def verify_deprecated(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -496,6 +500,7 @@ def verify_deprecated(
     )
 
 
+@cli_boundary
 def validate_config(
     config: Path = typer.Option(
         None,
@@ -589,6 +594,7 @@ def validate_config(
         raise typer.Exit(exit_code)
 
 
+@cli_boundary
 def restore(
     backup_file: Path = typer.Argument(
         ...,

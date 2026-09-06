@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import parse_migration_filename
@@ -88,6 +88,7 @@ def _baseline_from_db_flow(
         conn.close()
 
 
+@cli_boundary
 def migrate_baseline(
     through: str = typer.Option(
         None,
@@ -321,6 +322,7 @@ def migrate_baseline(
         fail(e, json_mode=False)
 
 
+@cli_boundary
 def migrate_reinit(
     through: str = typer.Option(
         None,
@@ -503,6 +505,7 @@ def migrate_reinit(
         fail(e, json_mode=False)
 
 
+@cli_boundary
 def migrate_rebuild(
     config: Path = typer.Option(
         Path("db/environments/local.yaml"),

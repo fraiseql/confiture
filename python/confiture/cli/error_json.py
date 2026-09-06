@@ -193,4 +193,5 @@ def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
             out = next((kwargs[k] for k in _OUTPUT_PARAMS if k in kwargs), None)
             fail(coerce_to_confiture_error(exc), json_mode=fmt == "json", output_file=out)
 
+    setattr(wrapper, "__confiture_boundary__", True)  # noqa: B010 — a marker the registry guard reads
     return wrapper
