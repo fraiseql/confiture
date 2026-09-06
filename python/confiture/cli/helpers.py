@@ -8,11 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from psycopg import sql as pgsql
 from rich.console import Console
 
 from confiture.core.idempotency.python_migration_extractor import (
     is_migration_file as _is_migration_file,
 )
+from confiture.core.ledger import table_identifier, validate_table_name
 from confiture.core.linting.schema_linter import (
     LintReport as LinterReport,
 )
@@ -20,6 +22,7 @@ from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
 from confiture.core.url_redaction import redact_url as redact_url  # re-export (layering)
+from confiture.exceptions import ConfigurationError
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
@@ -472,6 +475,12 @@ def _get_tracking_table(config_data: Any) -> str:
     Always returns a ``str``: a non-string candidate (e.g. a bare ``MagicMock``
     config in tests) falls back to the default rather than leaking a non-string
     into callers that build SQL identifiers from it (#152).
+
+    Raises:
+        ConfigurationError: ``tracking_table`` is not a plain, optionally
+            schema-qualified identifier (``CONFIG_008``).  The same rule
+            ``Migrator.__init__`` applies is applied here, before any connection
+            is opened, so no command carries an unvalidated name into a query.
     """
     candidate: Any = "tb_confiture"
     if hasattr(config_data, "migration") and hasattr(config_data.migration, "tracking_table"):
@@ -480,7 +489,20 @@ def _get_tracking_table(config_data: Any) -> str:
         migration_cfg = config_data.get("migration") or {}
         if isinstance(migration_cfg, dict):
             candidate = migration_cfg.get("tracking_table", "tb_confiture")
-    return candidate if isinstance(candidate, str) else "tb_confiture"
+    table = candidate if isinstance(candidate, str) else "tb_confiture"
+    try:
+        return validate_table_name(table)
+    except ValueError as e:
+        raise ConfigurationError(
+            f"Invalid migration.tracking_table: {e}",
+            error_code="CONFIG_008",
+            context={"tracking_table": table},
+            resolution_hint=(
+                "Set migration.tracking_table to a plain identifier — letters, "
+                "digits and underscores, optionally schema-qualified "
+                "(e.g. 'public.tb_confiture')."
+            ),
+        ) from e
 
 
 def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
@@ -1381,21 +1403,18 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
     """
     from confiture.core.connection import create_connection
 
+    # Validated before the connection exists: a bad name is a configuration
+    # error to surface, not a query failure to swallow.
+    table = _get_tracking_table(config_data)
+
     try:
         conn = create_connection(config_data)
     except Exception:
         return set()
 
-    table = _get_tracking_table(config_data)
     try:
         with conn.cursor() as cur:
-            # Schema-qualified identifier needs splitting + quoting.
-            schema, _, name = table.partition(".")
-            if not name:
-                schema, name = "public", table
-            cur.execute(
-                f'SELECT version FROM "{schema}"."{name}"'  # nosec B608 - schema/table identifiers double-quoted, derived from tracking_table config not user input
-            )
+            cur.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
             return {row[0] for row in cur.fetchall()}
     except Exception:
         return set()

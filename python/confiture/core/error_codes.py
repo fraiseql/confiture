@@ -220,6 +220,16 @@ def _create_global_registry() -> ErrorCodeRegistry:
                 "authoritative."
             ),
         ),
+        ErrorCodeDefinition(
+            code="CONFIG_008",
+            message_template="Invalid migration.tracking_table: {value}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint=(
+                "Use letters, digits and underscores only, optionally "
+                "schema-qualified (e.g. public.tb_confiture)"
+            ),
+        ),
     ]
 
     for code in config_codes:
@@ -864,6 +874,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_005": 5,
     "CONFIG_006": 3,  # carve-out: DB connection failed (family is otherwise 5)
     "CONFIG_007": 5,  # conflicting explicit DSN sources (#152)
+    "CONFIG_008": 5,  # tracking_table is not a plain identifier
     "CONFIG_010": 5,
     # MIGR family → 3, with two success-with-signal carve-outs at 0.
     "MIGR_001": 3,

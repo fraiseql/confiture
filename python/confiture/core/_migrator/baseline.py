@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg import sql as pgsql
 
-from confiture.core._migrator._constants import _VALID_TABLE_RE
+from confiture.core.ledger import VALID_TABLE_RE, table_identifier
 from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
@@ -86,16 +86,12 @@ def _read_source_tracking_table(
     Returns rows as dicts keyed by column name, ordered by version ascending.
     Closes the source connection before returning.
     """
-    if not _VALID_TABLE_RE.match(source_table):
+    if not VALID_TABLE_RE.match(source_table):
         raise MigrationError(
             f"Invalid source table name: {source_table!r}.",
             resolution_hint="Pass --source-table with a valid identifier.",
         )
-    src_parts = source_table.split(".", 1)
-    if len(src_parts) == 2:
-        src_ident = pgsql.Identifier(src_parts[0], src_parts[1])
-    else:
-        src_ident = pgsql.Identifier(src_parts[0])
+    src_ident = table_identifier(source_table)
 
     try:
         with psycopg.connect(source_dsn) as src_conn, src_conn.cursor() as cursor:
