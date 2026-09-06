@@ -4,6 +4,8 @@ Every rule `confiture lint` can emit, generated from the rule registry
 (`confiture lint --list-rules` prints the same catalogue). Select and ignore
 rules by code or by family with `--select` / `--ignore` — see the
 [schema linting guide](../guides/schema-linting.md#selecting-rules--list-rules--select--ignore).
+Adopt a rule on a schema that already trips it with a
+[baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline--baseline--write-baseline).
 
 <!-- BEGIN GENERATED: lint-rules -->
 | Code | Family | Severity | Default | Rule |

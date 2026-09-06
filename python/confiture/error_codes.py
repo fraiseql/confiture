@@ -447,6 +447,13 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=5,
             resolution_hint="Install a pglast release confiture supports (pglast>=6.0, current major)",
         ),
+        ErrorCodeDefinition(
+            code="CONFIG_012",
+            message_template="Lint baseline file is missing or malformed: {file}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Create or regenerate it with `confiture lint --baseline <file> --write-baseline`",
+        ),
     ]
 
     for code in migr_extra_codes:
@@ -621,6 +628,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_009": 5,  # ANONYMIZATION_SECRET unset (D8: the secret is mandatory)
     "CONFIG_010": 5,
     "CONFIG_011": 5,  # installed pglast lacks enum members confiture walks (D13)
+    "CONFIG_012": 5,  # lint baseline file missing or malformed (#219)
     # MIGR family → 3, with one success-with-signal carve-out at 0.
     "MIGR_001": 3,
     "MIGR_004": 3,

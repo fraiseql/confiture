@@ -9,6 +9,7 @@ from rich.console import Console
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     FINDINGS_EXIT_CODE,
+    USAGE_EXIT_CODE,
     _convert_linter_report,
     _output_json,
     _output_yaml,
@@ -776,6 +777,16 @@ def lint(
         help="Rules or families to skip, comma-separated. Applied after --select, "
         "so --ignore always wins.",
     ),
+    baseline: Path | None = typer.Option(
+        None,
+        "--baseline",
+        help="Baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear",
+    ),
+    write_baseline: bool = typer.Option(
+        False,
+        "--write-baseline",
+        help="Create or reset the --baseline file from the current findings",
+    ),
     list_rules: bool = typer.Option(
         False,
         "--list-rules",
@@ -876,6 +887,9 @@ def lint(
         if list_rules:
             _emit_rule_catalogue(format_type, output)
             return
+        if write_baseline and baseline is None:
+            error_console.print("[red]❌ Error: --write-baseline requires --baseline <file>[/red]")
+            raise typer.Exit(USAGE_EXIT_CODE)
         # One selection, resolved once (#150). The three per-rule flags are
         # aliases over it rather than branches further down: each adds its
         # family to the defaults, which is exactly what it always did.
@@ -907,7 +921,14 @@ def lint(
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
         # second pass over the findings.
         _keep_selected_rules(linter_report, selected)
-        report = _convert_linter_report(linter_report, schema_name=env)
+        baseline_diff = _apply_baseline(
+            linter_report, baseline=baseline, write=write_baseline, project_dir=project_dir
+        )
+        report = _convert_linter_report(
+            linter_report,
+            schema_name=env,
+            baseline=None if baseline_diff is None else baseline_diff.summary(),
+        )
         if format_type == "table":
             format_lint_report(report, format_type="table", console=console)
         else:
@@ -924,6 +945,9 @@ def lint(
         should_fail = (report.has_errors and fail_on_error) or (
             report.has_warnings and fail_on_warning
         )
+        if baseline_diff is not None:
+            _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
+            should_fail = should_fail or bool(baseline_diff.new)
         if "replica_001" in selected:
             should_fail = (
                 _replica_lint(
@@ -947,12 +971,12 @@ def lint(
     except typer.Exit:
         raise
     except FileNotFoundError as e:
-        print_error_to_console(e)
-        console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
-        raise typer.Exit(handle_cli_error(e)) from e
+        if not is_json(format_type):
+            console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
+        fail(e, json_mode=is_json(format_type), output_file=output)
     except Exception as e:
-        print_error_to_console(e)
-        raise typer.Exit(handle_cli_error(e)) from e
+        # The one error boundary: an envelope in JSON mode, the Rich rendering otherwise.
+        fail(e, json_mode=is_json(format_type), output_file=output)
 
 
 def _replica_lint(
@@ -1045,6 +1069,51 @@ def _security_definer_lint(
     errors = any(v.severity == _RS.ERROR for v in violations)
     warnings = any(v.severity == _RS.WARNING for v in violations)
     return (errors and fail_on_error) or (warnings and fail_on_warning)
+
+
+def _apply_baseline(
+    linter_report: LinterReport, *, baseline: Path | None, write: bool, project_dir: Path
+) -> Any:
+    """Keep only the findings the baseline does not know; write or tighten the file (#219).
+
+    Returns the ``BaselineDiff`` (``None`` without ``--baseline``). ``--write-baseline``
+    records every current finding and leaves nothing to report; otherwise findings
+    the file knows are dropped from the report, identities no longer found are
+    removed from the file (D12), and what remains is new.
+    """
+    if baseline is None:
+        return None
+    from confiture.core.linting.baseline import Baseline, BaselineDiff, identity
+
+    path = baseline if baseline.is_absolute() else project_dir / baseline
+    buckets = (linter_report.errors, linter_report.warnings, linter_report.info)
+    current = [v for bucket in buckets for v in bucket]
+    if write:
+        Baseline.from_violations(current).write(path)
+        for bucket in buckets:
+            bucket[:] = []
+        return BaselineDiff(known=len({identity(v) for v in current}))
+    known = Baseline.load(path)
+    diff = known.diff(current)
+    if diff.fixed:
+        known.without(diff.fixed).write(path)
+    new_identities = {identity(v) for v in diff.new}
+    for bucket in buckets:
+        bucket[:] = [v for v in bucket if identity(v) in new_identities]
+    return diff
+
+
+def _print_baseline_note(diff: Any, format_type: str, *, wrote: bool) -> None:
+    """One human line about the baseline — only when something happened, never in JSON/CSV."""
+    if format_type != "table":
+        return
+    if wrote:
+        console.print(f"[green]✅ Baseline written: {diff.known} finding(s) recorded[/green]")
+    elif diff.new or diff.fixed:
+        console.print(
+            f"[cyan]Baseline: {diff.known} known, {len(diff.new)} new, "
+            f"{len(diff.fixed)} fixed{' (file tightened)' if diff.fixed else ''}[/cyan]"
+        )
 
 
 def _keep_selected_rules(linter_report: LinterReport, selected: frozenset[str]) -> None:

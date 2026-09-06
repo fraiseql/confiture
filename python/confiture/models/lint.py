@@ -141,6 +141,7 @@ class LintReport:
     warnings_count: int
     info_count: int
     execution_time_ms: int
+    baseline: dict[str, Any] | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -197,8 +198,11 @@ class LintReport:
         return "\n".join(lines)
 
     def to_dict(self) -> dict[str, Any]:
-        """The ``lint --format json`` payload (before the envelope adds ``parser``)."""
-        return {
+        """The ``lint --format json`` payload (before the envelope adds ``parser``).
+
+        ``baseline`` is present only when the run compared against one (#219).
+        """
+        payload: dict[str, Any] = {
             "schema_name": self.schema_name,
             "tables_checked": self.tables_checked,
             "columns_checked": self.columns_checked,
@@ -221,3 +225,6 @@ class LintReport:
                 ],
             },
         }
+        if self.baseline is not None:
+            payload["baseline"] = self.baseline
+        return payload

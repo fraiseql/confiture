@@ -32,6 +32,14 @@ project asked for (#217, #218, #219, #226, #227).
   `build --format json` carries the findings under `duplicates`.
 - `docs/reference/lint-rules.md` is generated from the rule registry and held
   in sync by a test, like the error codebook.
+- **`lint --baseline <file>` adopts a rule without a flag day (#219).** The
+  file records the identity of every current finding (`rule_id:kind:name`,
+  plus `@file` for file-scoped rules — never a line number); a later run fails
+  only on identities it does not know and prints only those; when findings
+  disappear the file is rewritten without them, so the ratchet only tightens;
+  `--write-baseline` creates or resets it. `--format json` adds
+  `baseline: {new, fixed, known}`. A missing or malformed file is `CONFIG_012`
+  (exit 5). The conventional name is `.confiture-lint-baseline.json`.
 
 ### Fixed
 

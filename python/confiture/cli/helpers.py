@@ -116,7 +116,11 @@ def _get_suggestion(unknown_command: str) -> str | None:
     return matches[0] if matches else None
 
 
-def _convert_linter_report(linter_report: LinterReport, schema_name: str = "schema") -> LintReport:
+def _convert_linter_report(
+    linter_report: LinterReport,
+    schema_name: str = "schema",
+    baseline: dict[str, Any] | None = None,
+) -> LintReport:
     """Convert a schema_linter.LintReport to models.lint.LintReport.
 
     Args:
@@ -178,6 +182,7 @@ def _convert_linter_report(linter_report: LinterReport, schema_name: str = "sche
         warnings_count=len(linter_report.warnings),
         info_count=len(linter_report.info),
         execution_time_ms=0,  # Not tracked in linter
+        baseline=baseline,
     )
 
 
@@ -293,6 +298,10 @@ def _get_tracking_table(config_data: Any) -> str:
 #: The success-signal exit for a gate that ran and found something — lint
 #: violations, duplicate definitions. Not an error: no envelope, exit 1 (#146).
 FINDINGS_EXIT_CODE = 1
+
+#: Flag combinations that make no sense exit 2 before anything runs (Phase 04
+#: CLI contract) — a usage error, not a failure envelope.
+USAGE_EXIT_CODE = 2
 
 
 def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
