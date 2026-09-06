@@ -45,6 +45,12 @@ class TestPythonMatrix:
             "a step must assert `sys.version_info[:2]` against the matrix entry"
         )
 
+    def test_uv_python_is_pinned_to_the_matrix_entry(self) -> None:
+        """`uv sync`/`uv run` re-resolve the interpreter; UV_PYTHON is what they honour."""
+        data = yaml.safe_load((WORKFLOWS / "python-version-matrix.yml").read_text())
+        env = data["jobs"]["test-matrix"].get("env", {})
+        assert env.get("UV_PYTHON") == "${{ matrix.python-version }}", env
+
     def test_matrix_declares_three_interpreters(self) -> None:
         data = yaml.safe_load((WORKFLOWS / "python-version-matrix.yml").read_text())
         versions = data["jobs"]["test-matrix"]["strategy"]["matrix"]["python-version"]

@@ -21,6 +21,11 @@ jobs:
   test-matrix:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    env:
+      # uv resolves the interpreter for `venv`, `sync` and `run` from UV_PYTHON
+      # first; without it, `uv sync`/`uv run` fall back to the project default
+      # (3.11) and silently rebuild the venv the previous step created (#209).
+      UV_PYTHON: ${{ matrix.python-version }}
 
     strategy:
       fail-fast: false  # Continue testing other versions even if one fails
