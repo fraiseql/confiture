@@ -20,6 +20,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console, is_json
+from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ _TARGET_OPTION = typer.Option(
     "--target",
     help="Target (new) database: env name, config path, or DSN.",
 )
-_FORMAT_OPTION = typer.Option("text", "--format", "-f", help="Output format: text or json.")
+_FORMAT_OPTION = format_option("text", "json")
 
 
 def _resolve_connection(spec: str) -> psycopg.Connection:

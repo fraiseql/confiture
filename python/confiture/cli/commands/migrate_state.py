@@ -6,6 +6,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console, is_json
+from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
 
@@ -545,12 +546,7 @@ def migrate_rebuild(
         "-y",
         help="Skip confirmation prompt",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Rebuild database from DDL schema and bootstrap tracking table.
 
@@ -613,14 +609,6 @@ def migrate_rebuild(
         )
 
     # Pre-flight: validate format
-    if format_output not in ("text", "json"):
-        fail(
-            ConfigurationError(
-                f"Invalid format '{format_output}'. Use 'text' or 'json'.",
-                resolution_hint="Pass --format text or --format json.",
-            ),
-            json_mode=False,
-        )
 
     # Pre-flight: check for duplicate versions
     duplicates = find_duplicate_migration_versions(migrations_dir)

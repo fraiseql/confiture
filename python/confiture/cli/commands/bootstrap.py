@@ -33,6 +33,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console, is_json
+from confiture.cli.options import format_option
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
@@ -79,12 +80,7 @@ def bootstrap(
             "exist in non-scoped schemas. Use during maintenance windows."
         ),
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text).",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """One-shot environment ownership setup (idempotent).
 

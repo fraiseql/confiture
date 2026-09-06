@@ -24,6 +24,7 @@ from confiture.cli.helpers import (
     is_json,
     resolve_database_url,
 )
+from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.migration_generator import MigrationGenerator
@@ -61,12 +62,7 @@ def migrate_status(
         "--no-config",
         help=NO_CONFIG_OPTION_HELP,
     ),
-    output_format: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table, json, or csv (default: table)",
-    ),
+    output_format: str = format_option("table", "json", "csv"),
     output_file: Path = typer.Option(
         None,
         "--output",
@@ -132,14 +128,6 @@ def migrate_status(
     fatal_error_exit: bool = False
     try:
         # Validate output format
-        if output_format not in ("table", "json", "csv"):
-            fail(
-                ValidationError(
-                    f"Invalid --format {output_format!r}: use 'table', 'json' or 'csv'.",
-                    context={"format": output_format},
-                ),
-                json_mode=False,
-            )
 
         if not migrations_dir.exists():
             if output_format == "json":
@@ -523,12 +511,7 @@ def migrate_current(
         "--no-config",
         help=NO_CONFIG_OPTION_HELP,
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -559,12 +542,6 @@ def migrate_current(
     from confiture.core.migrator import Migrator
     from confiture.exceptions import DatabaseNotInitializedError
     from confiture.models.results import CurrentRevision
-
-    if output_format not in ("text", "json"):
-        error_console.print(
-            f"[red]❌ Error: Invalid format '{output_format}'. Use 'text' or 'json'[/red]"
-        )
-        raise typer.Exit(2)
 
     try:
         override = resolve_database_url(
@@ -692,12 +669,7 @@ def migrate_up(
         "-v",
         help="Show detailed analysis in dry-run (default: off)",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Report format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -815,11 +787,6 @@ def migrate_up(
             raise typer.Exit(2)
 
         # Validate format option
-        if format_output not in ("text", "json"):
-            error_console.print(
-                f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
-            )
-            raise typer.Exit(2)
 
         # Validate checksum mismatch option
         valid_mismatch_behaviors = ("fail", "warn", "ignore")
@@ -1061,12 +1028,7 @@ def migrate_down(
         "-v",
         help="Show detailed analysis in dry-run (default: off)",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Report format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -1117,12 +1079,6 @@ def migrate_down(
     del verbose  # accepted for compatibility
 
     try:
-        if format_output not in ("text", "json"):
-            error_console.print(
-                f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
-            )
-            raise typer.Exit(2)
-
         _db_url_override = resolve_database_url(
             database_url,
             config,
@@ -1216,12 +1172,7 @@ def migrate_down_to(
         "--dry-run",
         help="Print the rollback plan and exit 0 without applying anything.",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -1251,12 +1202,6 @@ def migrate_down_to(
       confiture migrate down-to 20260101_a --dry-run --format json
     """
     from confiture.core.migrator import Migrator, MigratorSession
-
-    if format_output not in ("text", "json"):
-        error_console.print(
-            f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
-        )
-        raise typer.Exit(2)
 
     try:
         override = resolve_database_url(
@@ -1304,12 +1249,7 @@ def migrate_generate(
         "--migrations-dir",
         help="Migrations directory (default: db/migrations)",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
     force: bool = typer.Option(
         False,
         "--force",
@@ -1729,12 +1669,7 @@ def migrate_estimate(
         "-t",
         help="Tables to estimate (default: all tables)",
     ),
-    format_output: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table or json (default: table)",
-    ),
+    format_output: str = format_option("table", "json"),
 ) -> None:
     """Estimate row counts for tables to decide if --batched is needed.
 

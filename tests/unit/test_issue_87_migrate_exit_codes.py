@@ -117,7 +117,7 @@ class TestMigrateUpValidationExitCodes:
         )
         assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
 
-    def test_invalid_format_exits_2(self, tmp_path):
+    def test_invalid_format_exits_5(self, tmp_path):
         """Invalid --format value → exit 2."""
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
@@ -136,7 +136,7 @@ class TestMigrateUpValidationExitCodes:
                 "xml",
             ],
         )
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}"
 
     def test_invalid_checksum_mismatch_exits_2(self, tmp_path):
         """Invalid --on-checksum-mismatch value → exit 2."""
@@ -422,7 +422,7 @@ class TestMigrateUpGenericErrors:
 class TestMigrateDownValidationExitCodes:
     """Validation errors in migrate down should exit 2."""
 
-    def test_invalid_format_exits_2(self, tmp_path):
+    def test_invalid_format_exits_5(self, tmp_path):
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         _write_migrations(migrations_dir)
@@ -440,7 +440,7 @@ class TestMigrateDownValidationExitCodes:
                 "xml",
             ],
         )
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}"
 
 
 class TestMigrateDownGenericErrors:

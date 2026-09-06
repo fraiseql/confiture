@@ -378,7 +378,7 @@ class TestDryRunValidation:
         )
 
         # Should fail with validation error (exit 2)
-        assert result.exit_code == 2
+        assert result.exit_code == 5  # one --format validator (ARC-02)
 
     def test_migrate_down_invalid_format(self):
         """Test that invalid format is rejected in migrate down."""
@@ -389,7 +389,7 @@ class TestDryRunValidation:
         )
 
         # Should fail with validation error (exit 2)
-        assert result.exit_code == 2
+        assert result.exit_code == 5  # one --format validator (ARC-02)
 
 
 class TestDryRunExecution:

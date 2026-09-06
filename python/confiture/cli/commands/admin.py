@@ -15,6 +15,7 @@ from confiture.cli.helpers import (
     is_json,
     resolve_database_url,
 )
+from confiture.cli.options import format_option
 from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error
 from confiture.exceptions import (
@@ -272,12 +273,7 @@ def verify_checksums(
         "--allow-uninitialized",
         help=ALLOW_UNINITIALIZED_HELP,
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """Verify migration file integrity against stored checksums.
 
@@ -320,14 +316,6 @@ def verify_checksums(
     from confiture.core.connection import create_connection, load_config
     from confiture.core.ledger import find_ledger_relations, notable_resolution, probe_ledger
 
-    if output_format not in ("text", "json"):
-        fail(
-            ConfigurationError(
-                f"Invalid format '{output_format}'. Use 'text' or 'json'.",
-                resolution_hint="Pass --format text or --format json.",
-            ),
-            json_mode=False,
-        )
     json_mode = is_json(output_format)
 
     try:
@@ -482,12 +470,7 @@ def verify_deprecated(
         "--allow-uninitialized",
         help=ALLOW_UNINITIALIZED_HELP,
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """[DEPRECATED] Alias for `confiture verify-checksums`.
 
@@ -531,12 +514,7 @@ def validate_config(
         "--migrations-path",
         help="Migrations directory to validate (default: db/migrations)",
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
     strict: bool = typer.Option(
         False,
         "--strict",
@@ -560,15 +538,6 @@ def validate_config(
     JSON output: {valid, config_source, migrations_path, migration_count, issues[]}.
     """
     from confiture.core.config_validator import ConfigValidator
-
-    if output_format not in ("text", "json"):
-        fail(
-            ConfigurationError(
-                f"Invalid format '{output_format}'. Use 'text' or 'json'.",
-                resolution_hint="Pass --format text or --format json.",
-            ),
-            json_mode=False,
-        )
 
     # Source selection: an explicit --config validates that YAML; a
     # --database-url flag is validated for *format* as an issue (not raised);

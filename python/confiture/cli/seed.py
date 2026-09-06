@@ -15,6 +15,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import is_json
+from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.core.seed_applier import SeedApplier
 from confiture.core.seed_validation import SeedFixer, SeedValidator
@@ -169,11 +170,7 @@ def validate(
         "--database-url",
         help="Database URL for database mode validation (default: none)",
     ),
-    format_: str = typer.Option(
-        "text",
-        "--format",
-        help="Output format: text, json, csv (default: text)",
-    ),
+    format_: str = format_option("text", "json", "csv"),
     output: Path | None = typer.Option(
         None,
         "--output",
@@ -444,12 +441,7 @@ def apply(
         "--benchmark",
         help="Show VALUES vs COPY performance comparison",
     ),
-    format_type: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text, json, csv (default: text)",
-    ),
+    format_type: str = format_option("text", "json", "csv"),
     report_output: Path = typer.Option(
         None,
         "--output",
@@ -940,9 +932,7 @@ def seed_generate(
     overwrite: bool = typer.Option(
         False, "--overwrite", help="Overwrite existing seed file (default: off)"
     ),
-    format_type: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text, json (default: text)"
-    ),
+    format_type: str = format_option("text", "json"),
 ) -> None:
     """Generate a seed SQL stub for a PostgreSQL table.
 

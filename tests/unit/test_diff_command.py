@@ -238,11 +238,12 @@ class TestDiffCommandParseError:
 class TestDiffCommandFormatFallthrough:
     """Gap J — unknown --format value falls through to text output."""
 
-    def test_diff_command_unknown_format_falls_through_to_text(self):
+    def test_diff_command_unknown_format_is_rejected(self):
         p = _write_sql(OLD_SQL)
         result = runner.invoke(app, ["diff", "--from", p, "--to", p, "--format", "csv"])
-        assert result.exit_code == 0
-        assert "No changes" in result.output
+        # One --format validator for every command: an unknown value exits 5 (ARC-02).
+        assert result.exit_code == 5, result.output
+        assert "Invalid --format" in result.output
 
 
 class TestDiffTextRenameOutput:

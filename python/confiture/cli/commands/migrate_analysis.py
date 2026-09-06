@@ -26,6 +26,7 @@ from confiture.cli.helpers import (
     is_json,
     param_is_explicit,
 )
+from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
@@ -63,12 +64,7 @@ def migrate_diff(
         "--migrations-dir",
         help="Migrations directory (default: db/migrations)",
     ),
-    format_type: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text, json, or csv (default: text)",
-    ),
+    format_type: str = format_option("text", "json", "csv"),
     report_file: Path | None = typer.Option(
         None,
         "--report",
@@ -99,14 +95,6 @@ def migrate_diff(
     """
     try:
         # Validate format
-        if format_type not in ("text", "json", "csv"):
-            fail(
-                ValidationError(
-                    f"Invalid --format {format_type!r}: use 'text', 'json' or 'csv'.",
-                    context={"format": format_type},
-                ),
-                json_mode=False,
-            )
 
         # Validate files exist
         for label, schema_path in (("Old", old_schema), ("New", new_schema)):
@@ -546,12 +534,7 @@ def migrate_validate(
             "If omitted with --check-signatures, schema is auto-built from DDL files."
         ),
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json", "csv"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -640,10 +623,6 @@ def migrate_validate(
     json_mode = is_json(format_output)
     try:
         # Validate output format
-        if format_output not in ("text", "json", "csv"):
-            raise ConfigurationError(
-                f"Invalid format: {format_output}. Use 'text', 'json', or 'csv'."
-            )
 
         # --list-patterns is a read-only catalog query with no config or
         # migrations directory behind it, so its options are assembled without
@@ -803,12 +782,7 @@ def migrate_fix(
         "--dry-run",
         help="Preview changes without modifying files (default: off)",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -845,8 +819,6 @@ def migrate_fix(
     json_mode = is_json(format_output)
     try:
         # Validate output format
-        if format_output not in ("text", "json"):
-            raise ConfigurationError(f"Invalid format: {format_output}. Use 'text' or 'json'.")
 
         if not migrations_dir.exists():
             raise ConfigurationError(
@@ -893,12 +865,7 @@ def migrate_introspect(
         "--snapshots-dir",
         help="Schema history snapshots directory (default: db/schema_history)",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Detect migration level by comparing live schema to history snapshots.
 
@@ -1069,12 +1036,7 @@ def migrate_verify(
         "--version",
         help="Verify a single migration version (default: verify all applied)",
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_output: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -1293,12 +1255,7 @@ def migrate_fix_signatures(
             "Default is dry-run: print the SQL and exit without changing the DB."
         ),
     ),
-    format_output: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text).",
-    ),
+    format_output: str = format_option("text", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",
@@ -2058,12 +2015,7 @@ def migrate_preflight(
         "--migrations-dir",
         help="Migrations directory (default: db/migrations)",
     ),
-    format_type: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table or json (default: table)",
-    ),
+    format_type: str = format_option("table", "json"),
     output_file: Path | None = typer.Option(
         None,
         "--output",

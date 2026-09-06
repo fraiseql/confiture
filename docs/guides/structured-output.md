@@ -466,9 +466,12 @@ confiture migrate status --format json --output "status_$(date -u +%Y-%m-%dT%H:%
 
 ### Invalid Format Error
 ```
-❌ Invalid format: excel. Use text, json, or csv
+❌ Error VALID_001
+Invalid --format 'excel': use 'text', 'json', 'csv'.
 ```
-Ensure format is one of: `text`, `json`, `csv`
+Every command validates `--format` the same way, before it does anything: the
+error goes to stderr, stdout stays empty, and the exit code is 5. Each command's
+`--help` lists the values it accepts.
 
 ### File Not Found
 ```

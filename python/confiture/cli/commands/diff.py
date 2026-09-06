@@ -8,6 +8,7 @@ import typer
 from confiture.cli.error_json import fail
 from confiture.cli.formatters.diff_formatter import print_diff_text
 from confiture.cli.helpers import console, is_json
+from confiture.cli.options import format_option
 from confiture.core.differ import SchemaDiffer
 from confiture.exceptions import DifferError, SchemaError
 from confiture.models.results import DiffResult
@@ -16,12 +17,7 @@ from confiture.models.results import DiffResult
 def schema_diff(
     from_file: Path = typer.Option(..., "--from", help="Old schema SQL file"),
     to_file: Path = typer.Option(..., "--to", help="New schema SQL file"),
-    format_type: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    format_type: str = format_option("text", "json"),
 ) -> None:
     """Compare two SQL schema files and report differences.
 

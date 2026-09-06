@@ -8,6 +8,7 @@ import typer
 from confiture.cli.error_json import fail
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, is_json
+from confiture.cli.options import format_option
 from confiture.config.environment import AclExpectation, OwnershipExpectation
 from confiture.core.connection import create_connection, load_config
 from confiture.core.drift import (
@@ -59,12 +60,7 @@ def drift(
         "--warn-only",
         help="Demote MISSING_GRANT items from critical to warning (progressive rollout)",
     ),
-    format_output: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table or json (default: table)",
-    ),
+    format_output: str = format_option("table", "json"),
     fail_on_warning: bool = typer.Option(
         False,
         "--fail-on-warning",
@@ -114,15 +110,6 @@ def drift(
     """
     json_mode = is_json(format_output)
     try:
-        if format_output not in ("table", "json"):
-            fail(
-                ConfigurationError(
-                    f"Invalid format: {format_output}. Use 'table' or 'json'.",
-                    resolution_hint="Pass --format table or --format json.",
-                ),
-                json_mode=json_mode,
-            )
-
         if not config.exists():
             fail(
                 ConfigurationError(

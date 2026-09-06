@@ -269,10 +269,10 @@ class TestBuildFormatValidation:
             ],
         )
 
-        # Should fail with a config error (exit 5); the "Invalid format" message
-        # is rendered to stderr via the fail() boundary (mixed into result.output).
+        # One --format validator for every command (ARC-02): exit 5, the message on
+        # stderr via the fail() boundary (mixed into result.output by the runner).
         assert result.exit_code == 5
-        assert "Invalid format" in result.output
+        assert "Invalid --format" in result.output
 
 
 class TestBuildWithShowHash:

@@ -191,4 +191,4 @@ class TestLintCommand:
 
         # Invalid --format is a config error → exit 5.
         assert result.exit_code == 5
-        assert "Invalid format" in result.output
+        assert "Invalid --format" in result.output

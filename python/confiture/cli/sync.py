@@ -37,6 +37,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console, error_console, is_json
+from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
@@ -170,9 +171,7 @@ def sync(
     resume: bool = typer.Option(
         False, "--resume", help="Resume from --checkpoint, skipping completed tables."
     ),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json."
-    ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Copy data from a production database to a local/staging target (Medium 3).
 

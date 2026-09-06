@@ -13,6 +13,7 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
+from confiture.cli.options import format_option
 from confiture.core.builder import SchemaBuilder
 from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
@@ -264,12 +265,7 @@ def build(
         "--continue-on-error",
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
-    format_type: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text, json, csv (default: text)",
-    ),
+    format_type: str = format_option("text", "json", "csv"),
     report_output: Path = typer.Option(
         None,
         "--report",
@@ -563,15 +559,6 @@ def build(
             schema_hash = builder.compute_hash()
 
         # Validate format_type
-        if format_type not in ("text", "json", "csv"):
-            fail(
-                ConfigurationError(
-                    f"Invalid format: {format_type}. Use text, json, or csv.",
-                    resolution_hint="Pass --format text, json, or csv.",
-                ),
-                json_mode=False,  # an invalid format can't be honored as JSON
-                output_file=report_output,
-            )
 
         # Emit a cacheable pg_dump artifact when --dump is given. The schema is
         # built into an ephemeral throwaway database and dumped from there, so
@@ -703,12 +690,7 @@ def lint(
         "--project-dir",
         help="Project directory (default: current directory)",
     ),
-    format_type: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table, json, csv (default: table)",
-    ),
+    format_type: str = format_option("table", "json", "csv"),
     output: Path = typer.Option(
         None,
         "--output",
@@ -1161,12 +1143,7 @@ def lint_unified(
         "--overrides-dir",
         help="Overrides mirror directory for GEN004 orphan check (optional).",
     ),
-    format_type: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table, json (default: table)",
-    ),
+    format_type: str = format_option("table", "json"),
     fail_on_error: bool = typer.Option(
         True,
         "--fail-on-error",
@@ -1275,12 +1252,7 @@ def introspect(
         "--schema",
         help="Schema to introspect (default: public)",
     ),
-    format_type: str = typer.Option(
-        "json",
-        "--format",
-        "-f",
-        help="Output format: json, yaml (default: json)",
-    ),
+    format_type: str = format_option("json", "yaml"),
     all_tables: bool = typer.Option(
         False,
         "--all-tables",
@@ -1330,16 +1302,6 @@ def introspect(
     # route failures through fail() in JSON mode only when the requested format
     # is json (yaml failures fall back to the human path).
     json_mode = is_json(format_type)
-
-    if format_type not in ("json", "yaml"):
-        fail(
-            ConfigurationError(
-                f"Invalid format: {format_type!r}. Use 'json' or 'yaml'.",
-                resolution_hint="Pass --format json or --format yaml.",
-            ),
-            json_mode=False,  # an invalid format can't be honored as JSON
-            output_file=output,
-        )
 
     try:
         conn = create_connection(db)

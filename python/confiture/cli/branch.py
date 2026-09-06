@@ -17,6 +17,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import is_json
+from confiture.cli.options import format_option
 from confiture.exceptions import ConfiturError
 
 # Create Rich console for pretty output
@@ -80,12 +81,7 @@ def branch_list(
         "-c",
         help="Configuration file (default: db/environments/local.yaml)",
     ),
-    format_output: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table or json (default: table)",
-    ),
+    format_output: str = format_option("table", "json"),
 ) -> None:
     """List all schema branches.
 

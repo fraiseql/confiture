@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
+`--format` validator, stdout reserved for the payload.
+
+### Changed
+
+- ⚠️ **One `--format` validator, exit 5.** Fourteen commands validated
+  `--format` by hand — each with its own message, stream and exit code (1, 2,
+  or a swallowed `typer.Exit`) — and thirty-two did not validate at all.
+  Every `--format` option is now `cli/options.format_option(*allowed)`: an
+  invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
+  nothing on stdout, before the command body runs. `migrate preflight` and
+  `schema diff` no longer fall through to text on an unknown value.
+- ⚠️ **`typer.Exit` crosses the error boundary.** `init`, `migrate status` and
+  `migrate diff` raised their own `typer.Exit` inside the `try` whose
+  `except Exception` was their boundary, which printed `Error: <code>` and exited
+  with a different code (a declined `init` exited 1 instead of 0; `migrate
+  status --format xml` exited 3; `migrate diff --format json` with a missing
+  file emitted a result whose error was the string `"1"`). The new
+  `cli/error_json.cli_boundary` decorator re-raises `typer.Exit` and sends every
+  other exception through `fail()`; missing `migrate diff` inputs and
+  `--generate` without `--name` are validation failures (exit 5).
+
 ## [0.48.0] - 2026-09-06
 
 Phase 03 of the 2026-09-06 review: one apply loop. `MigratorSession.up()` is the

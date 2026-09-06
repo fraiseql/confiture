@@ -23,6 +23,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import _get_tracking_table, console, is_json
+from confiture.cli.options import format_option
 from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError, MigrationError
 
@@ -58,12 +59,7 @@ def migrate_apply_as(
         "--migrations-dir",
         help="Migrations directory (default: db/migrations).",
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text).",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """Apply exactly one migration as an explicit PostgreSQL role.
 

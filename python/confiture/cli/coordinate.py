@@ -24,6 +24,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import is_json
+from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.integrations.pggit.coordination import (
     ConflictSeverity,
@@ -98,9 +99,7 @@ def register(
     estimated_hours: float = typer.Option(0, help="Estimated hours to complete (default: 0)"),
     database_url: str | None = typer.Option(None, help="Database URL (default: from config)"),
     metadata: str | None = typer.Option(None, help="JSON metadata string (default: none)"),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json (default: text)"
-    ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Register a new agent intention for schema changes.
 
@@ -207,7 +206,7 @@ def list_intents(
     ),
     agent_filter: str | None = typer.Option(None, help="Filter by agent ID"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """List all registered intentions with optional filtering.
 
@@ -281,7 +280,7 @@ def check(
     schema_changes: str = typer.Option(..., help="DDL statements or SQL file path"),
     tables_affected: str | None = typer.Option(None, help="Comma-separated table names"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Check for conflicts with a proposed set of schema changes.
 
@@ -371,7 +370,7 @@ def check(
 def status(
     intent_id: str = typer.Option(..., help="Intention ID"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Show detailed status of a specific intention.
 
@@ -441,7 +440,7 @@ def status(
 @coordinate_app.command()
 def conflicts(
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """List all detected conflicts between intentions.
 
@@ -510,7 +509,7 @@ def resolve(
     conflict_id: int = typer.Option(..., help="Conflict ID"),
     notes: str = typer.Option(..., help="Resolution notes"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Mark a conflict as reviewed and provide resolution notes.
 
@@ -547,7 +546,7 @@ def abandon(
     intent_id: str = typer.Option(..., help="Intention ID"),
     reason: str = typer.Option(..., help="Reason for abandonment"),
     database_url: str | None = typer.Option(None, help="Database URL"),
-    format_output: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Abandon an intention before completion.
 
