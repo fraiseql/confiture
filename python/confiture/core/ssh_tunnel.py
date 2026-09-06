@@ -85,8 +85,10 @@ def _build_ssh_cmd(config: SshTunnelConfig, local_port: int) -> list[str]:
     if config.identity_file:
         cmd += ["-i", str(Path(config.identity_file).expanduser())]
 
+    # `--` ends option parsing: whatever the destination looks like, ssh reads
+    # it as a destination and never as an option.
     user_host = f"{config.user}@{config.host}" if config.user else config.host
-    cmd.append(user_host)
+    cmd += ["--", user_host]
     return cmd
 
 

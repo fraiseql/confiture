@@ -1,6 +1,7 @@
 """Core migration commands: migrate status, up, down, generate."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,12 @@ from confiture.cli.helpers import (
 )
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.exceptions import ValidationError
+
+# A migration name becomes a filename and a class name. snake_case only: a `/`
+# or `..` would walk out of the migrations directory, anything else is not a
+# Python identifier fragment.
+_MIGRATION_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
 def migrate_status(
@@ -1931,6 +1938,17 @@ def migrate_generate(
       confiture migrate status  - View all migrations
       confiture migrate diff    - Compare schema files
     """
+    if not _MIGRATION_NAME_RE.match(name):
+        fail(
+            ValidationError(
+                f"Invalid migration name {name!r}: use snake_case — lowercase letters, "
+                "digits and underscores only (e.g. add_user_bio).",
+                context={"name": name},
+                resolution_hint="Rename the migration, e.g. `confiture migrate generate add_user_bio`.",
+            ),
+            json_mode=format_output == "json",
+        )
+
     # External generator path
     if generator is not None:
         if from_schema is None or to_schema is None:

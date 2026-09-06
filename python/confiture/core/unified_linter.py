@@ -24,7 +24,7 @@ class SquawkRunner:
         if not self.available or not files:
             return []
         result = subprocess.run(
-            ["squawk", "--reporter=json", *[str(f) for f in files]],
+            ["squawk", "--reporter=json", "--", *[str(f) for f in files]],
             capture_output=True,
             text=True,
             check=False,
@@ -108,7 +108,7 @@ class UnifiedLinter:
     def _get_changed_sql_files(self) -> list[Path]:
         """Get SQL files changed in git diff."""
         result = subprocess.run(
-            ["git", "diff", "--name-only", "--diff-filter=AM"],
+            ["git", "diff", "--name-only", "--diff-filter=AM", "--"],
             capture_output=True,
             text=True,
             check=False,

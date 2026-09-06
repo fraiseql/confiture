@@ -143,10 +143,13 @@ class GitSchemaBuilder:
         """
         import subprocess
 
+        from confiture.core.git import validate_ref
         from confiture.exceptions import GitError
 
-        # Build git command
-        cmd = ["git", "ls-tree", ref, "--", directory.as_posix()]
+        # An option-shaped ref would be parsed by git as an option; refuse it
+        # before anything is spawned. The `--` then ends option parsing so the
+        # directory can never be read as one either.
+        cmd = ["git", "ls-tree", validate_ref(ref), "--", directory.as_posix()]
         if recursive:
             cmd.insert(2, "-r")
 

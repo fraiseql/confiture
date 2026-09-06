@@ -78,7 +78,9 @@ _TablePrivilege = Literal[
 
 # SSH parameter validation patterns
 _VALID_SSH_HOST_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-._]*$")
-_VALID_SSH_USER_RE = re.compile(r"^[a-zA-Z0-9_\-\.@]+$")
+# Must start with a word character: a leading `-` would make the destination an
+# option to ssh, a leading `.` or `@` is never a login name.
+_VALID_SSH_USER_RE = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_\-\.@]*$")
 
 
 class CommentValidationConfig(BaseModel):
@@ -355,7 +357,8 @@ class SshTunnelConfig(BaseModel):
         if v is not None and not _VALID_SSH_USER_RE.match(v):
             raise ValueError(
                 f"Invalid SSH username: {v!r}. "
-                "Use only letters, digits, hyphens, underscores, dots, or @."
+                "Start with a letter, digit or underscore; then letters, digits, "
+                "hyphens, underscores, dots, or @."
             )
         return v
 
