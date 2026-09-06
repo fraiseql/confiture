@@ -240,8 +240,16 @@ profile)`: a rule's own `seed` wins, else the profile's `global_seed`, else `0`.
 
 ## Security notes
 
-- **Seeds are secrets.** Use `seed_env_var` (or `salt_env_var` for
-  `salted_hashing`) in production; never commit seeds to version control.
+- **The anonymization secret is mandatory.** `ANONYMIZATION_SECRET` must be set
+  for the `hash` strategy and for `confiture sync --anonymize`'s keyed strategies
+  (`email`, `phone`, `name`, `hash`); there is no default. An unset or blank
+  secret raises `ConfigurationError` (`CONFIG_009`, exit 5) before any row is
+  read. Every keyed pseudonym is HMAC-SHA256 under this secret, produced by
+  `confiture.core.anonymization.pseudonymizer.Pseudonymizer`, so a different
+  secret yields unrelated pseudonyms for the same value.
+- **Seeds are domain separators, not keys.** Use `seed_env_var` (or
+  `salt_env_var` for `salted_hashing`) in production; never commit seeds to
+  version control.
 - **Custom strategy files are sandboxed.** `register_from_file` rejects files
   with blocked imports (`os`, `subprocess`, …) before loading them.
 - **Anonymization is not encryption.** The hashing strategies are one-way (no
