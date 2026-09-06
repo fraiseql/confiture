@@ -67,6 +67,21 @@ engine; what it reports is what happened.
 
 ### Fixed
 
+- **Names are identifiers in `large_tables` and `run_against`.** Every table,
+  column, index and access-method name `BatchedMigration`, `OnlineIndexBuilder`
+  and `TableSizeEstimator` put into SQL was f-string interpolated; so were
+  `run_against`'s savepoint names (`SAVEPOINT sp_<version>`). They now go
+  through `psycopg.sql.Identifier` (schema-qualified names via
+  `core.ledger.split_qualified_table`). `expression`, `where_clause`, `default`
+  and `column_type` stay raw SQL by documented contract, and an index column
+  that is not a bare identifier (`lower(email)`) is kept as an expression. A
+  consequence of quoting: mixed-case names are now case-sensitive, as they are
+  everywhere else in confiture. `copy_to_new_table` also resolves a
+  schema-qualified source's columns in that schema instead of `public`. The
+  engine's mixed-transactional-mode warning loads `.up.sql` migrations instead
+  of importing them as Python. The Phase 01 tripwire gains a strict rule for
+  `preconditions.py`, `_migrator/session.py` and `large_tables.py`: no bare
+  interpolation after a relation, column, index or savepoint keyword.
 - **`BatchedMigration.backfill_column()` terminates.** Each batch used to
   update `LIMIT batch_size` rows matching *where_clause* and stop when a batch
   touched nothing — with the default `where_clause="TRUE"` that never happened

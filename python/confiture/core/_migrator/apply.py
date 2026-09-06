@@ -22,7 +22,7 @@ from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 from confiture.core.checksum import (
     compute_checksum,
 )
-from confiture.core.connection import get_migration_class, load_migration_module
+from confiture.core.connection import load_migration_class
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.hooks.phases import HookPhase
@@ -488,8 +488,7 @@ def warn_mixed_transactional_modes(migration_files: list[Path]) -> None:
     non_transactional_migrations: list[str] = []
 
     for migration_file in migration_files:
-        module = load_migration_module(migration_file)
-        migration_class = get_migration_class(module)
+        migration_class = load_migration_class(migration_file)
 
         # Check transactional attribute (default is True)
         is_transactional = getattr(migration_class, "transactional", True)

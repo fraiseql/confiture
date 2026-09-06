@@ -23,6 +23,8 @@ if TYPE_CHECKING:
         StatusResult,
     )
 
+from psycopg import sql as pgsql
+
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator.events import UpObserver, emit
 from confiture.core.checksum import (
@@ -1428,7 +1430,7 @@ class MigratorSession:
 
         # Outer SAVEPOINT: ROLLBACK TO here at the end undoes all migration DDL.
         # No initialize() call — tracking table never needed (we skip apply()).
-        self._conn.execute(f"SAVEPOINT {outer_sp}")
+        self._conn.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(outer_sp)))
         try:
             for migration_file in pending_files:
                 migration_class = _m.load_migration_class(migration_file)
@@ -1487,12 +1489,14 @@ class MigratorSession:
 
                 # Transactional migration: per-migration SAVEPOINT.
                 per_sp = f"sp_{migration.version}"
-                self._conn.execute(f"SAVEPOINT {per_sp}")
+                self._conn.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(per_sp)))
                 try:
                     start = _time.time()
                     migration.up()  # Direct call — no commit, no tracking
                     elapsed = int((_time.time() - start) * 1000)
-                    self._conn.execute(f"RELEASE SAVEPOINT {per_sp}")
+                    self._conn.execute(
+                        pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(per_sp))
+                    )
                     results.append(
                         PreflightAgainstMigration(
                             version=migration.version,
@@ -1503,8 +1507,12 @@ class MigratorSession:
                     )
                 except Exception as exc:
                     # ROLLBACK TO resets to before per_sp without destroying outer_sp.
-                    self._conn.execute(f"ROLLBACK TO SAVEPOINT {per_sp}")
-                    self._conn.execute(f"RELEASE SAVEPOINT {per_sp}")
+                    self._conn.execute(
+                        pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(per_sp))
+                    )
+                    self._conn.execute(
+                        pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(per_sp))
+                    )
                     results.append(
                         PreflightAgainstMigration(
                             version=migration.version,
@@ -1517,8 +1525,12 @@ class MigratorSession:
             # Roll back all migration DDL — only meaningful when outer_sp is still
             # active (i.e. no non-transactional migration triggered a commit).
             if outer_sp_active:
-                self._conn.execute(f"ROLLBACK TO SAVEPOINT {outer_sp}")
-                self._conn.execute(f"RELEASE SAVEPOINT {outer_sp}")
+                self._conn.execute(
+                    pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(outer_sp))
+                )
+                self._conn.execute(
+                    pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(outer_sp))
+                )
 
         return PreflightAgainstResult(
             migrations=results,
