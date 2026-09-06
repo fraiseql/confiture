@@ -363,7 +363,7 @@ class TestRebuildOrchestrator:
         # Dry run should still build DDL for reporting
         builder_instance.build.assert_called_once()
 
-    @patch("confiture.core.seed_applier.SeedApplier")
+    @patch("confiture.core.seed.applier.SeedApplier")
     @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_with_seeds(self, MockBuilder, MockSeedApplier):
         migrator = self._make_migrator()

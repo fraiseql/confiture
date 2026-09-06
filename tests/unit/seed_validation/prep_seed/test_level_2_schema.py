@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from confiture.core.seed_validation.prep_seed.level_2_schema import (
+from confiture.core.seed.validation.prep_seed.level_2_schema import (
     Level2SchemaValidator,
     TableDefinition,
 )
-from confiture.core.seed_validation.prep_seed.models import (
+from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
 )
 

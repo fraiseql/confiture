@@ -32,7 +32,7 @@ from psycopg.sql import SQL, Identifier, Literal
 
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.restorer import DatabaseRestorer, RestoreOptions
-from confiture.core.seed_applier import apply_seed_files
+from confiture.core.seed.applier import apply_seed_files
 from confiture.core.temp_database import (
     _maintenance_url,
     _replace_dbname,

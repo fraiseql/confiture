@@ -130,7 +130,7 @@ This additionally checks:
 ```bash
 python -c "
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig, PrepSeedOrchestrator
 )
 
@@ -153,7 +153,7 @@ print(f'Violations: {report.violation_count}')
 ```bash
 python -c "
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig, PrepSeedOrchestrator
 )
 
@@ -176,7 +176,7 @@ print(f'Schema issues: {report.violation_count}')
 ```bash
 python -c "
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig, PrepSeedOrchestrator
 )
 
@@ -259,4 +259,4 @@ INSERT INTO catalog.tb_manufacturer ...
 
 - [Prep-Seed Validation Guide](../../docs/guides/prep-seed-validation.md)
 - [CLAUDE.md Seed Validation Section](../../CLAUDE.md)
-- [Orchestrator API](../../python/confiture/core/seed_validation/prep_seed/orchestrator.py)
+- [Orchestrator API](../../python/confiture/core/seed/validation/prep_seed/orchestrator.py)

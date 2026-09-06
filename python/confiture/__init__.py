@@ -224,8 +224,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "IntrospectedColumn": ("confiture.models.introspection", "IntrospectedColumn"),
     "FKReference": ("confiture.models.introspection", "FKReference"),
     # Seed operations
-    "SeedApplier": ("confiture.core.seed_applier", "SeedApplier"),
-    "ApplyResult": ("confiture.core.seed_applier", "ApplyResult"),
+    "SeedApplier": ("confiture.core.seed.applier", "SeedApplier"),
+    "ApplyResult": ("confiture.core.seed.applier", "ApplyResult"),
     # Large table operations
     "BatchedMigration": ("confiture.core.large_tables", "BatchedMigration"),
     "BatchConfig": ("confiture.core.large_tables", "BatchConfig"),

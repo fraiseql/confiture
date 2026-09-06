@@ -418,7 +418,7 @@ def rebuild(
 
     # Step 6: Optionally apply seeds
     if apply_seeds:
-        from confiture.core.seed_applier import SeedApplier
+        from confiture.core.seed.applier import SeedApplier
 
         applier = SeedApplier(
             seeds_dir=seeds_dir,

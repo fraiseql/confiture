@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.seed_applier import SeedApplier, apply_seed_files
+from confiture.core.seed.applier import SeedApplier, apply_seed_files
 from confiture.exceptions import SchemaError
 
 
@@ -20,7 +20,7 @@ class TestApplySeedFiles:
             assert sql is None
             calls.append(sql_file)
 
-        monkeypatch.setattr("confiture.core.seed_applier.apply_sql_via_psql", fake_apply)
+        monkeypatch.setattr("confiture.core.seed.applier.apply_sql_via_psql", fake_apply)
 
         files = [tmp_path / "01_a.sql", tmp_path / "02_b.sql", tmp_path / "03_c.sql"]
         for f in files:
@@ -40,7 +40,7 @@ class TestApplySeedFiles:
             if sql_file == bad:
                 raise SchemaError("psql failed: syntax error", resolution_hint="fix it")
 
-        monkeypatch.setattr("confiture.core.seed_applier.apply_sql_via_psql", fake_apply)
+        monkeypatch.setattr("confiture.core.seed.applier.apply_sql_via_psql", fake_apply)
 
         good = tmp_path / "01_ok.sql"
         good.write_text("INSERT INTO t VALUES (1);")

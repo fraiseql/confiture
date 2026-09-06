@@ -5,7 +5,7 @@ Cycle 1 & 2: Core Models - PrepSeedViolation, Report, and Pattern enum
 
 from __future__ import annotations
 
-from confiture.core.seed_validation.prep_seed.models import (
+from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedReport,
     PrepSeedViolation,

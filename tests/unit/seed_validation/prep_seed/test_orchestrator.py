@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.seed_validation.prep_seed.models import PrepSeedReport
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.models import PrepSeedReport
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )

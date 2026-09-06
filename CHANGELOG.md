@@ -22,6 +22,11 @@ Phase 08 of the 2026-09-06 review: the package boundaries say what the modules d
   embedder or a test sets one attribute instead of patching a module. The
   CLI's `migrate up`, `down`, `down-to`, `apply-as` and `preflight` hand the
   session the CLI's one connection seam (`confiture.cli.helpers.create_connection`).
+- **One seed package.** `core/seed_applier.py`, `core/seed_executor.py`,
+  `core/seed_bridge.py` and `core/seed_validation/` (with `prep_seed`) moved
+  under `confiture.core.seed` as `applier`, `executor`, `bridge` and
+  `validation`. The old import paths keep working through thin shims that are
+  removed at 1.0.0; nothing inside the package uses them, and a test holds it.
 
 ## [0.52.0] - 2026-09-07
 

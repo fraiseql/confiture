@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.seed_validation.prep_seed.level_1_seed_files import Level1SeedValidator
+from confiture.core.seed.validation.prep_seed.level_1_seed_files import Level1SeedValidator
 
 # A canonical structured UUID (fraiseql-uuid Pattern: table=012345, type=21, ...).
 STRUCTURED_UUID = "01234521-0000-4000-8000-000000000001"

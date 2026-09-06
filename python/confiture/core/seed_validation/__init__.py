@@ -1,33 +1,8 @@
-"""Seed data validation for consistent seed files.
+"""Compatibility shim — removed at 1.0.0. Import from ``confiture.core.seed.validation`` instead.
 
-This module provides tools to validate that seed files contain correct SQL
-and don't have common issues like double semicolons or missing ON CONFLICT
-clauses.
+Seed logic lives in one package since 0.53.0 (Phase 08); this module re-exports
+its new home so existing imports keep working for one release.
 """
 
-from confiture.core.seed_validation.database_validator import (
-    DatabaseSeedValidator,
-)
-from confiture.core.seed_validation.fixer import FixResult, SeedFixer
-from confiture.core.seed_validation.models import (
-    SeedValidationPattern,
-    SeedValidationReport,
-    SeedViolation,
-)
-from confiture.core.seed_validation.patterns import (
-    PatternMatch,
-    detect_seed_issues,
-)
-from confiture.core.seed_validation.validator import SeedValidator
-
-__all__ = [
-    "DatabaseSeedValidator",
-    "FixResult",
-    "PatternMatch",
-    "SeedFixer",
-    "SeedValidator",
-    "SeedValidationPattern",
-    "SeedValidationReport",
-    "SeedViolation",
-    "detect_seed_issues",
-]
+from confiture.core.seed.validation import *  # noqa: F401,F403
+from confiture.core.seed.validation import __all__  # noqa: F401

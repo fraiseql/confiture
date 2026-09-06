@@ -126,14 +126,14 @@ def test_seed_apply_copy_options_reach_the_applier(project: Path) -> None:
 
 
 def test_seed_applier_converts_large_insert_files(tmp_path: Path) -> None:
-    from confiture.core.seed_applier import SeedApplier
+    from confiture.core.seed.applier import SeedApplier
 
     (tmp_path / "001_big.sql").write_text(
         "INSERT INTO t (id) VALUES " + ", ".join(f"({i})" for i in range(120)) + ";\n"
     )
     (tmp_path / "002_small.sql").write_text("INSERT INTO t (id) VALUES (1), (2);\n")
     conn = MagicMock()
-    with patch("confiture.core.seed_applier.InsertToCopyConverter", autospec=True) as converter_cls:
+    with patch("confiture.core.seed.applier.InsertToCopyConverter", autospec=True) as converter_cls:
         converter_cls.return_value.convert.return_value = "COPY t (id) FROM stdin;\n1\n\\.\n"
         applier = SeedApplier(tmp_path, connection=conn, copy_format=True, copy_threshold=100)
         applier.apply_sequential()

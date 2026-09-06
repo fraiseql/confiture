@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from confiture.core.seed_bridge import SeedBridge, SeedGenerationConfig, SeedGenerationResult
+from confiture.core.seed.bridge import SeedBridge, SeedGenerationConfig, SeedGenerationResult
 
 
 def test_seed_generation_config_defaults():

@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.seed_formatter import format_apply_result
-from confiture.core.seed_applier import ApplyResult
+from confiture.core.seed.applier import ApplyResult
 
 
 class TestSeedApplyFormatter:

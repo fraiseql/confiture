@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from confiture.core.seed_executor import SeedExecutor
+from confiture.core.seed.executor import SeedExecutor
 from confiture.exceptions import SeedError
 
 

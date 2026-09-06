@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from confiture.core.seed_applier import apply_seed_files
+from confiture.core.seed.applier import apply_seed_files
 from confiture.core.temp_database import TempDatabase
 from confiture.exceptions import SchemaError
 from confiture.url_redaction import libpq_env, split_password

@@ -5,7 +5,7 @@ Tests for data models, pattern detection, and validation logic.
 
 from __future__ import annotations
 
-from confiture.core.seed_validation.models import (
+from confiture.core.seed.validation.models import (
     SeedValidationPattern,
     SeedValidationReport,
     SeedViolation,
@@ -221,7 +221,7 @@ class TestDoublesemicolonDetection:
 
     def test_detect_double_semicolon(self) -> None:
         """Test that double semicolons are detected."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -232,7 +232,7 @@ class TestDoublesemicolonDetection:
 
     def test_detect_double_semicolon_line_number(self) -> None:
         """Test that line number is correct for double semicolon."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -244,7 +244,7 @@ class TestDoublesemicolonDetection:
 
     def test_no_double_semicolon_false_positive(self) -> None:
         """Test that single semicolons don't trigger error."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -258,7 +258,7 @@ class TestDDLDetection:
 
     def test_detect_create_table_in_seeds(self) -> None:
         """Test that CREATE TABLE in seeds is detected."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -268,7 +268,7 @@ class TestDDLDetection:
 
     def test_detect_alter_table_in_seeds(self) -> None:
         """Test that ALTER TABLE in seeds is detected."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -278,7 +278,7 @@ class TestDDLDetection:
 
     def test_detect_drop_table_in_seeds(self) -> None:
         """Test that DROP TABLE in seeds is detected."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -288,7 +288,7 @@ class TestDDLDetection:
 
     def test_no_ddl_for_insert_only(self) -> None:
         """Test that INSERT-only seeds don't trigger DDL detection."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -302,7 +302,7 @@ class TestMissingOnConflictDetection:
 
     def test_detect_insert_without_on_conflict(self) -> None:
         """Test that INSERT without ON CONFLICT is detected as warning."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -312,7 +312,7 @@ class TestMissingOnConflictDetection:
 
     def test_no_warning_for_insert_with_on_conflict(self) -> None:
         """Test that INSERT with ON CONFLICT doesn't trigger warning."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -322,7 +322,7 @@ class TestMissingOnConflictDetection:
 
     def test_detect_insert_on_conflict_update(self) -> None:
         """Test that INSERT with ON CONFLICT UPDATE doesn't trigger warning."""
-        from confiture.core.seed_validation.patterns import (
+        from confiture.core.seed.validation.patterns import (
             detect_seed_issues,
         )
 
@@ -336,14 +336,14 @@ class TestSeedValidator:
 
     def test_validator_initialization(self) -> None:
         """Test creating a SeedValidator instance."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         validator = SeedValidator()
         assert validator is not None
 
     def test_validate_sql_string(self, tmp_path) -> None:
         """Test validating SQL from a string."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         validator = SeedValidator()
         sql = "INSERT INTO users VALUES (1, 'test');;"
@@ -353,7 +353,7 @@ class TestSeedValidator:
 
     def test_validate_sql_no_violations(self) -> None:
         """Test SQL with no violations."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         validator = SeedValidator()
         sql = "INSERT INTO users (id, name) VALUES (1, 'test') ON CONFLICT DO NOTHING;"
@@ -362,7 +362,7 @@ class TestSeedValidator:
 
     def test_validate_file(self, tmp_path) -> None:
         """Test validating a single file."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         # Create a test seed file
         seed_file = tmp_path / "seeds.sql"
@@ -375,7 +375,7 @@ class TestSeedValidator:
 
     def test_validate_directory(self, tmp_path) -> None:
         """Test validating a directory of files."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         # Create multiple seed files
         (tmp_path / "001_users.sql").write_text(
@@ -390,7 +390,7 @@ class TestSeedValidator:
 
     def test_validate_directory_recursive(self, tmp_path) -> None:
         """Test recursive directory scanning."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         # Create nested directories
         subdir = tmp_path / "subdir"
@@ -404,7 +404,7 @@ class TestSeedValidator:
 
     def test_ignore_patterns(self) -> None:
         """Test that ignored patterns don't appear in violations."""
-        from confiture.core.seed_validation.validator import SeedValidator
+        from confiture.core.seed.validation.validator import SeedValidator
 
         validator = SeedValidator(ignore_patterns=[SeedValidationPattern.DOUBLE_SEMICOLON])
         sql = "INSERT INTO users VALUES (1);;"
@@ -420,7 +420,7 @@ class TestDatabaseSeedValidator:
 
     def test_validator_initialization(self) -> None:
         """Test creating a DatabaseSeedValidator instance."""
-        from confiture.core.seed_validation.database_validator import (
+        from confiture.core.seed.validation.database_validator import (
             DatabaseSeedValidator,
         )
 
@@ -430,7 +430,7 @@ class TestDatabaseSeedValidator:
 
     def test_validator_with_no_connection_skips_validation(self) -> None:
         """Test that validator handles missing connection gracefully."""
-        from confiture.core.seed_validation.database_validator import (
+        from confiture.core.seed.validation.database_validator import (
             DatabaseSeedValidator,
         )
 
@@ -446,7 +446,7 @@ class TestAutoFix:
 
     def test_auto_fix_on_conflict_missing(self) -> None:
         """Test adding ON CONFLICT to INSERT statements."""
-        from confiture.core.seed_validation.fixer import SeedFixer
+        from confiture.core.seed.validation.fixer import SeedFixer
 
         fixer = SeedFixer()
         sql = "INSERT INTO users (id, name) VALUES (1, 'test');"
@@ -456,7 +456,7 @@ class TestAutoFix:
 
     def test_auto_fix_no_change_if_already_present(self) -> None:
         """Test that ON CONFLICT is not duplicated."""
-        from confiture.core.seed_validation.fixer import SeedFixer
+        from confiture.core.seed.validation.fixer import SeedFixer
 
         fixer = SeedFixer()
         sql = "INSERT INTO users (id, name) VALUES (1, 'test') ON CONFLICT DO NOTHING;"
@@ -465,7 +465,7 @@ class TestAutoFix:
 
     def test_auto_fix_dry_run(self, tmp_path) -> None:
         """Test that dry-run doesn't modify files."""
-        from confiture.core.seed_validation.fixer import SeedFixer
+        from confiture.core.seed.validation.fixer import SeedFixer
 
         seed_file = tmp_path / "seeds.sql"
         original_sql = "INSERT INTO users (id) VALUES (1);"
@@ -481,7 +481,7 @@ class TestAutoFix:
 
     def test_auto_fix_applies_changes(self, tmp_path) -> None:
         """Test that auto-fix modifies files when not dry-run."""
-        from confiture.core.seed_validation.fixer import SeedFixer
+        from confiture.core.seed.validation.fixer import SeedFixer
 
         seed_file = tmp_path / "seeds.sql"
         original_sql = "INSERT INTO users (id) VALUES (1);"

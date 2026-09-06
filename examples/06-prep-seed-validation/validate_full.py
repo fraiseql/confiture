@@ -19,8 +19,8 @@ import os
 import sys
 from pathlib import Path
 
-from confiture.core.seed_validation.prep_seed.models import ViolationSeverity
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.models import ViolationSeverity
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )

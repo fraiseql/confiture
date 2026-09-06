@@ -17,9 +17,9 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import connect, is_json
 from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
-from confiture.core.seed_applier import SeedApplier
-from confiture.core.seed_validation import SeedFixer, SeedValidator
-from confiture.core.seed_validation.prep_seed import (
+from confiture.core.seed.applier import SeedApplier
+from confiture.core.seed.validation import SeedFixer, SeedValidator
+from confiture.core.seed.validation.prep_seed import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
@@ -945,7 +945,7 @@ def seed_generate(
       confiture seed generate bookings -d $DATABASE_URL --rows 5 --env test
         ↳ Generate 5-row stub for bookings in the test environment
     """
-    from confiture.core.seed_bridge import SeedBridge, SeedGenerationConfig
+    from confiture.core.seed.bridge import SeedBridge, SeedGenerationConfig
 
     config = SeedGenerationConfig(
         table=table,

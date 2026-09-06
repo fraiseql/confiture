@@ -11,13 +11,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.core.seed_validation.prep_seed import (
+from confiture.core.seed.validation.prep_seed import (
     PrepSeedReport,
     PrepSeedViolation,
     ViolationSeverity,
 )
-from confiture.core.seed_validation.prep_seed.models import PrepSeedPattern
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.models import PrepSeedPattern
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
@@ -94,7 +94,7 @@ class TestPrepSeedOrchestrator:
         )
 
         with patch(
-            "confiture.core.seed_validation.prep_seed.orchestrator.Level1SeedValidator"
+            "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
         ) as mock_level1:
             mock_instance = MagicMock()
             mock_instance.validate_seed_file.return_value = [mock_violation]
@@ -124,10 +124,10 @@ class TestPrepSeedOrchestrator:
         # Mock validators to return no violations
         with (
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level1SeedValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
             ) as mock_level1,
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level3ResolutionValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level3ResolutionValidator"
             ) as mock_level3,
         ):
             l1 = MagicMock()
@@ -174,10 +174,10 @@ class TestPrepSeedOrchestrator:
 
         with (
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level1SeedValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
             ) as mock_level1,
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level3ResolutionValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level3ResolutionValidator"
             ) as mock_level3,
         ):
             # Set up mocks
@@ -225,10 +225,10 @@ class TestPrepSeedOrchestrator:
 
         with (
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level1SeedValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
             ) as mock_level1,
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level3ResolutionValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level3ResolutionValidator"
             ) as mock_level3,
         ):
             l1 = MagicMock()
@@ -283,10 +283,10 @@ class TestPrepSeedOrchestrator:
 
         with (
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level1SeedValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
             ) as mock_level1,
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level3ResolutionValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level3ResolutionValidator"
             ) as mock_level3,
         ):
             l1 = MagicMock()
@@ -329,9 +329,9 @@ class TestPrepSeedOrchestrator:
 
         with (
             patch(
-                "confiture.core.seed_validation.prep_seed.orchestrator.Level1SeedValidator"
+                "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
             ) as mock_level1,
-            patch("confiture.core.seed_validation.prep_seed.orchestrator.Path.rglob") as mock_rglob,
+            patch("confiture.core.seed.validation.prep_seed.orchestrator.Path.rglob") as mock_rglob,
         ):
             test_file = Path("db/seeds/prep/test.sql")
             mock_rglob.return_value = [test_file]

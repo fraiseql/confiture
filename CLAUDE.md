@@ -291,8 +291,7 @@ confiture/
 │   │   ├── error_codes.py       # ErrorCodeDefinition, ErrorCodeRegistry
 │   │   ├── ledger.py            # ledger_exists() — shared migration-ledger probe
 │   │   ├── linting/             # SchemaLinter and rules
-│   │   ├── seed/                # Seed validation system (5 levels)
-│   │   ├── seed_validation/     # PrepSeedOrchestrator and validators
+│   │   ├── seed/                # One seed package: applier, executor, bridge, paths, validation/ (prep_seed, 5 levels)
 │   │   ├── anonymization/       # PII anonymization strategies
 │   │   ├── hooks/               # Migration lifecycle hooks
 │   │   └── idempotency/         # Idempotency analysis and fixing
@@ -449,7 +448,7 @@ The prep-seed pattern transforms UUID-based foreign keys into BIGINT keys using 
 
 ```python
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
@@ -513,7 +512,7 @@ OrchestrationConfig(
 # Static validation (no database, ~5s)
 python -c "
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
@@ -535,7 +534,7 @@ if report.has_violations:
 python -c "
 import os
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
