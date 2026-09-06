@@ -99,6 +99,7 @@ resolution hint surfaced in the envelope.
 | `SCHEMA_202` | 4 | error | Circular dependency detected | Break the circular dependency between schema files |
 | `SCHEMA_203` | 4 | error | Duplicate table definition: {table} | Remove the duplicate table definition |
 | `SCHEMA_204` | 4 | error | Schema hash mismatch | Schema definition has changed; rebuild the schema |
+| `SCHEMA_205` | 4 | error | psql meta-command in {file} at line {line} | Remove the backslash commands; only SQL statements and inline COPY … FROM stdin data blocks are applied |
 | `SEED_001` | 5 | error | Seed execution error | Check seed file syntax and database state |
 | `SQL_001` | 1 | error | SQL execution error | Check the SQL statement for errors |
 | `SQL_700` | 1 | error | SQL execution failed | Check the SQL statement for errors |

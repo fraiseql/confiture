@@ -346,6 +346,16 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=4,
             resolution_hint="Schema definition has changed; rebuild the schema",
         ),
+        ErrorCodeDefinition(
+            code="SCHEMA_205",
+            message_template="psql meta-command in {file} at line {line}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=4,
+            resolution_hint=(
+                "Remove the backslash commands; only SQL statements and inline "
+                "COPY … FROM stdin data blocks are applied"
+            ),
+        ),
     ]
 
     for code in schema_codes:
@@ -896,6 +906,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "SCHEMA_202": 4,
     "SCHEMA_203": 4,
     "SCHEMA_204": 4,
+    "SCHEMA_205": 4,  # psql meta-command refused before psql runs (SEC-03)
     # SYNC family → 5.
     "SYNC_001": 5,
     "SYNC_300": 5,
