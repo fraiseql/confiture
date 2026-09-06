@@ -10,9 +10,15 @@ transformations happen there:
 
 ``$MASKED$`` is a valid PostgreSQL dollar-quote tag, so pglast parses
 the masked output cleanly. This module asserts that empirically against
-every ``*.sql`` and ``*.up.sql`` fixture we can find in the repo. If
+every ``*.sql`` and ``*.up.sql`` fixture the repository **tracks**. If
 any fixture breaks, the AST path must fork (consume raw SQL and use
 pglast's native location info instead of sharing the preprocessor).
+
+Tracked, not present: a filesystem glob over the checkout also picked up the
+gitignored ``db/schema_history/`` snapshots the suite writes for itself —
+~1,600 near-identical files on a developer machine, none in CI — and the two
+environments collected thousands of different test ids (#207).
+``tests/unit/test_collection_integrity.py`` keeps the list honest.
 
 Smoke test: also asserts pglast ≥ 6 is importable. The visitors reference
 PostgreSQL enum *names* that are stable across pglast 6.x → 7.x, but
@@ -21,6 +27,7 @@ this test catches a downstream environment that pinned a pre-6.0 version.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -29,22 +36,43 @@ from confiture.core.idempotency.validator import IdempotencyValidator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
+# Where tracked SQL fixtures live, for a checkout without git metadata (an
+# sdist). Kept narrow on purpose: never ``db/schema_history`` or ``db/generated``.
+_FALLBACK_FIXTURE_ROOTS = ("db/schema", "tests/fixtures", "examples", "scripts")
+
+
+def _tracked_sql_files() -> list[Path] | None:
+    """Every ``*.sql`` git tracks under the repo root, or ``None`` outside a checkout."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--", "*.sql"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return [PROJECT_ROOT / p for p in result.stdout.split("\0") if p]
+
 
 def _iter_sql_fixtures() -> list[Path]:
-    """Collect representative SQL files from the repo.
+    """The SQL fixtures the repository tracks, sorted.
 
-    Includes ``db/schema/``, ``db/schema_history/``, ``examples/**``,
-    ``scripts/init-databases.sql``, and any other top-level SQL. Skips
-    ``.venv`` and ``node_modules``.
+    ``git ls-files`` is the source of truth so that a local run and CI
+    parametrize over the same files. Without git (an sdist), the explicit
+    fixture roots are globbed instead — still excluding anything the suite
+    generates.
     """
-    skip_parts = {".venv", "node_modules", "__pycache__"}
-    candidates: list[Path] = []
-    for path in PROJECT_ROOT.rglob("*.sql"):
-        if any(part in skip_parts for part in path.parts):
-            continue
-        candidates.append(path)
-    candidates.sort()
-    return candidates
+    tracked = _tracked_sql_files()
+    if tracked is None:
+        tracked = [
+            path
+            for root in _FALLBACK_FIXTURE_ROOTS
+            for path in (PROJECT_ROOT / root).rglob("*.sql")
+            if not {"schema_history", "generated"} & set(path.parts)
+        ]
+    return sorted(tracked)
 
 
 SQL_FIXTURES = _iter_sql_fixtures()

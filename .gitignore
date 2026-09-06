@@ -52,8 +52,10 @@ htmlcov/
 Thumbs.db
 
 # Project specific
-db/generated/
-db/schema_history/*.sql
+# Build output and snapshots the suite writes for itself — at any depth, so a
+# stray project tree (python/db/…) cannot re-track them (#207).
+**/db/generated/
+**/db/schema_history/*.sql
 *.db
 *.sqlite
 *.sql.bak
