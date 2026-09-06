@@ -12,6 +12,14 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- **Quoted identifiers keep their case.** The change set and the replica
+  classifier lower-cased every name a second time, so `CREATE TABLE "MyTable"`
+  was reported as `public.mytable` — a different relation. pglast has already
+  folded unquoted identifiers; the analyzers now report a name exactly as it
+  parsed. A shape table (`tests/fixtures/sql_shapes/`) pins what every analyzer
+  says about quoted, spaced and semicolon-bearing names, unnamed indexes,
+  qualified names, DDL inside function bodies, nested dollar tags and literals
+  containing `--`.
 - **One lexer, and `sqlparse` is gone.** Ten hand-written scanners split
   statements, skipped comments and matched dollar tags across the codebase and
   disagreed on `"a;b"` identifiers, `E'\';'` literals and nested tags.

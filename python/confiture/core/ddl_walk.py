@@ -35,14 +35,15 @@ def relation_parts(relation: object) -> tuple[str | None, str | None]:
 
 
 def qualified_relname(relation: object) -> str | None:
-    """``schema.name`` (lower-cased, schema only when present) of a ``RangeVar``."""
+    """``schema.name`` (schema only when present) of a ``RangeVar``, as pglast spells it."""
     if relation is None:
         return None
     relname = getattr(relation, "relname", None)
     if not relname:
         return None
+    # pglast has already folded unquoted identifiers; a quoted "MyTable" keeps its case.
     schema = getattr(relation, "schemaname", None)
-    return f"{str(schema).lower()}.{str(relname).lower()}" if schema else str(relname).lower()
+    return f"{schema}.{relname}" if schema else str(relname)
 
 
 def name_parts(raw: Any) -> str | None:

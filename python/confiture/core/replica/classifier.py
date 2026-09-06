@@ -421,9 +421,10 @@ _IDENT = r'(?P<{name}>"?[\w.]+"?)'
 
 
 def _norm(ident: str | None) -> str | None:
+    # pglast has already folded unquoted identifiers; a quoted name keeps its case.
     if ident is None:
         return None
-    return ident.strip().strip('"').lower()
+    return ident.strip().strip('"')
 
 
 def _readable_node(node_name: str) -> str:

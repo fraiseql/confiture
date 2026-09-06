@@ -444,13 +444,17 @@ class _Context:
 
 
 def _ident(raw: str | None) -> str | None:
-    """Fold an identifier the way PostgreSQL folds an unquoted one."""
+    """An identifier as pglast spells it: quotes stripped, case kept.
+
+    pglast has already folded unquoted identifiers; folding again would turn a
+    quoted ``"MyTable"`` into a different relation.
+    """
     if raw is None:
         return None
     text = str(raw).strip()
     if text.startswith('"') and text.endswith('"') and len(text) > 1:
         return text[1:-1]
-    return text.lower()
+    return text
 
 
 def _split_dotted(raw: str) -> list[str]:
