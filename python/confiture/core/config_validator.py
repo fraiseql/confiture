@@ -22,6 +22,7 @@ from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
+from confiture.core.url_redaction import redact_url
 
 
 @dataclass(frozen=True)
@@ -315,7 +316,7 @@ class ConfigValidator:
             ConfigIssue(
                 severity="error",
                 code="CONFIG_003",
-                message=f"Invalid database URL format: {database_url}",
+                message=f"Invalid database URL format: {redact_url(database_url)}",
                 actionable="Use format: postgresql://user:password@host:port/database",
             )
         ]

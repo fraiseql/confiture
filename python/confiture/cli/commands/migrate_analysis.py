@@ -32,6 +32,7 @@ from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import Migrator
 from confiture.core.schema_facts import SchemaFacts
+from confiture.core.url_redaction import redact_url
 from confiture.core.validation.context import ValidationContext
 from confiture.core.validation.registry import (
     ValidationCheck,
@@ -1904,12 +1905,11 @@ def _display_against_result(
     cons: Any,
 ) -> None:
     """Render --against execution results to the console."""
-    from confiture.models.results import PreflightAgainstResult  # noqa: PLC0415
 
     if format_type == "json":
         return
 
-    safe_url = PreflightAgainstResult._redact_url(result.against_url)
+    safe_url = redact_url(result.against_url)
     cons.print(
         f"\nExecution check: {len(result.migrations)} migration(s) against [dim]{safe_url}[/dim]"
     )

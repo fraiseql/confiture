@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from confiture.core.url_redaction import redact_url
+
 if TYPE_CHECKING:
     from confiture.core.migration_verifier import VerifyResult
     from confiture.models.schema import SchemaChange, SchemaDiff
@@ -1065,26 +1067,9 @@ class PreflightAgainstResult:
             for m in self.failures
         ]
 
-    @staticmethod
-    def _redact_url(url: str) -> str:
-        """Return URL with password replaced by ***, username preserved."""
-        from urllib.parse import urlparse, urlunparse
-
-        parsed = urlparse(url)
-        if not parsed.password:
-            return url
-
-        host_part = parsed.hostname or ""
-        if parsed.port:
-            host_part = f"{host_part}:{parsed.port}"
-        if parsed.username:
-            host_part = f"{parsed.username}@{host_part}"
-
-        return urlunparse(parsed._replace(netloc=host_part))
-
     def to_dict(self) -> dict[str, Any]:
         return {
-            "against_url": self._redact_url(self.against_url),
+            "against_url": redact_url(self.against_url),
             "all_passed": self.all_passed,
             "total": len(self.migrations),
             "passed": sum(1 for m in self.migrations if m.success),

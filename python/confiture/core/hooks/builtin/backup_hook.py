@@ -10,6 +10,7 @@ from pathlib import Path
 
 from confiture.core.hooks.base import Hook, HookResult
 from confiture.core.hooks.context import ExecutionContext, HookContext
+from confiture.core.url_redaction import libpq_env, split_password
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +55,16 @@ class BackupHook(Hook[ExecutionContext]):
         suffix = ".sql.gz" if self._config.compress else ".sql"
         backup_path = backup_dir / f"{migration_name}{suffix}"
 
-        # Run pg_dump as subprocess
-        cmd = ["pg_dump", "--no-owner", "--no-acl", self._config.database_url]
+        # Run pg_dump as a subprocess. The password rides in PGPASSWORD, never
+        # on argv, where `ps aux` would show it to every user on the host.
+        safe_url, password = split_password(self._config.database_url)
+        cmd = ["pg_dump", "--no-owner", "--no-acl", safe_url]
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=libpq_env(password),
             )
             stdout, stderr = await proc.communicate()
 
