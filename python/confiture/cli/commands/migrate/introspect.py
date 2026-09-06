@@ -15,6 +15,7 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     console,
     is_json,
+    open_connection,
 )
 from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import parse_migration_filename
@@ -58,7 +59,7 @@ def migrate_introspect(
       confiture migrate baseline --through <ver>    - Manually establish baseline
     """
     from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
     from confiture.core.migrator import Migrator
 
     json_mode = is_json(format_output)
@@ -67,54 +68,56 @@ def migrate_introspect(
             raise ConfigurationError(f"Config file not found: {config}", error_code="CONFIG_004")
 
         config_data = load_config(config)
-        conn = create_connection(config_data)
-        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
+        with open_connection(config_data) as conn:
+            migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
 
-        tb_present = migrator.tracking_table_exists()
+            tb_present = migrator.tracking_table_exists()
 
-        if format_output == "text":
-            console.print("\n[cyan]Introspecting database schema...[/cyan]\n")
-            console.print(f"  Snapshots directory: {snapshots_dir}")
-            if not snapshots_dir.exists():
-                console.print("  [yellow](directory not found — no snapshots available)[/yellow]")
-            else:
-                snap_count = len(list(snapshots_dir.glob("*.sql")))
-                console.print(f"  ({snap_count} snapshot(s) found)")
-            console.print(
-                f"  {_get_tracking_table(config_data)}: "
-                f"{'PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]'}"
-            )
-
-        if not snapshots_dir.exists():
-            if format_output == "json":
-                print(
-                    json.dumps(
-                        _introspect_payload(
-                            tb_present,
-                            detected_version=None,
-                            error="snapshots_dir not found",
-                        ),
-                        indent=2,
+            if format_output == "text":
+                console.print("\n[cyan]Introspecting database schema...[/cyan]\n")
+                console.print(f"  Snapshots directory: {snapshots_dir}")
+                if not snapshots_dir.exists():
+                    console.print(
+                        "  [yellow](directory not found — no snapshots available)[/yellow]"
                     )
-                )
-            else:
-                console.print("\n[red]❌ Cannot introspect: snapshots directory not found.[/red]")
+                else:
+                    snap_count = len(list(snapshots_dir.glob("*.sql")))
+                    console.print(f"  ({snap_count} snapshot(s) found)")
                 console.print(
-                    "  Run 'confiture migrate generate' to start building snapshot history."
+                    f"  {_get_tracking_table(config_data)}: "
+                    f"{'PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]'}"
                 )
-            conn.close()
-            raise typer.Exit(1)
 
-        from confiture.core.baseline_detector import BaselineDetector
+            if not snapshots_dir.exists():
+                if format_output == "json":
+                    print(
+                        json.dumps(
+                            _introspect_payload(
+                                tb_present,
+                                detected_version=None,
+                                error="snapshots_dir not found",
+                            ),
+                            indent=2,
+                        )
+                    )
+                else:
+                    console.print(
+                        "\n[red]❌ Cannot introspect: snapshots directory not found.[/red]"
+                    )
+                    console.print(
+                        "  Run 'confiture migrate generate' to start building snapshot history."
+                    )
+                raise typer.Exit(1)
 
-        detector = BaselineDetector(snapshots_dir)
+            from confiture.core.baseline_detector import BaselineDetector
 
-        if format_output == "text":
-            console.print("\n  Comparing live schema against snapshots...")
+            detector = BaselineDetector(snapshots_dir)
 
-        live_sql = detector.introspect_live_schema(conn)
-        detected_version = detector.find_matching_snapshot(live_sql)
-        conn.close()
+            if format_output == "text":
+                console.print("\n  Comparing live schema against snapshots...")
+
+            live_sql = detector.introspect_live_schema(conn)
+            detected_version = detector.find_matching_snapshot(live_sql)
 
         if detected_version:
             # Resolve name from snapshot filename

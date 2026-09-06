@@ -12,6 +12,16 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
 
 ### Changed
 
+- **Connections are injected.** `core.connection.open_connection(config,
+  factory=create_connection)` takes the connection factory as a keyword bound
+  at definition time, so replacing the module's `create_connection` afterwards
+  changes nothing; embedders and tests pass `factory=`. Every CLI command opens
+  its connection through one seam, `cli.helpers.open_connection` (or
+  `cli.helpers.connect` where the caller owns the lifetime), and no command
+  imports the factory inside a function any more. Nine commands that closed
+  their connection by hand — or forgot to, on an error path — now hold it in a
+  `with` block. A guard test fails any test that patches
+  `confiture.core.connection.create_connection`.
 - **No CLI function over 150 lines.** No function in `cli/` exceeds 150
   body lines (an AST budget test enforces it): the 811-line `migrate up` is
   options plus `session.up()` plus a reporter, and `migrate_core.py`,

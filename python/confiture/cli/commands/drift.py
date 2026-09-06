@@ -7,10 +7,10 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.common import display_drift_report
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import console, is_json, open_connection
 from confiture.cli.options import format_option
 from confiture.config.environment import AclExpectation, OwnershipExpectation
-from confiture.core.connection import create_connection, load_config
+from confiture.core.connection import load_config
 from confiture.core.drift import (
     AclDriftDetector,
     DriftReport,
@@ -142,9 +142,7 @@ def drift(
         if check_ownership:
             ownership_expectation = load_ownership_expectation(config_data, config, require=True)
 
-        conn = create_connection(config_data)
-
-        try:
+        with open_connection(config_data) as conn:
             structural_report: DriftReport | None = None
             if schema is not None:
                 structural_report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema))
@@ -166,8 +164,6 @@ def drift(
                     drift_report.drift_items.extend(own_report.drift_items)
 
             assert drift_report is not None  # guarded by the schema/--check-* check above
-        finally:
-            conn.close()
 
         if warn_only:
             _demote_missing_grant_warnings(drift_report)

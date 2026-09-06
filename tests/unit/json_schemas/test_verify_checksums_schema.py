@@ -96,7 +96,7 @@ def _mismatch(version: str, name: str) -> MagicMock:
     return m
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch(
     "confiture.core.ledger.probe_ledger",
     return_value=LedgerProbe(exists=True, resolved_name="audit.tb_migrations"),
@@ -126,7 +126,7 @@ def test_clean_run_matches_schema(
     assert payload["summary"]["resolved_table"] == "audit.tb_migrations"
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch(
     "confiture.core.ledger.probe_ledger",
     return_value=LedgerProbe(exists=True, resolved_name="audit.tb_migrations"),
@@ -155,7 +155,7 @@ def test_mismatch_run_matches_schema(
     assert "tb_confiture" not in result.stdout
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch("confiture.core.ledger.find_ledger_relations", return_value=[])
 @patch("confiture.core.ledger.probe_ledger", return_value=LedgerProbe(exists=False))
 def test_no_ledger_with_allow_uninitialized_matches_schema(
@@ -175,7 +175,7 @@ def test_no_ledger_with_allow_uninitialized_matches_schema(
     assert payload["summary"]["resolved_table"] is None
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch("confiture.core.ledger.find_ledger_relations", return_value=[])
 @patch("confiture.core.ledger.probe_ledger", return_value=LedgerProbe(exists=False))
 def test_no_ledger_without_flag_emits_error_envelope(

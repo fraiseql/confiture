@@ -2,7 +2,7 @@
 
 import importlib.util
 import sys
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
@@ -107,9 +107,15 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
         ) from e
 
 
+ConnectionFactory = Callable[[Any], "psycopg.Connection[Any]"]
+"""``config -> connection``; :func:`create_connection` is the default."""
+
+
 @contextmanager
 def open_connection(
     config: "dict[str, Any] | Any",
+    *,
+    factory: ConnectionFactory = create_connection,
 ) -> "Generator[psycopg.Connection[Any], None, None]":
     """Open a psycopg connection, transparently handling SSH tunnels.
 
@@ -120,6 +126,9 @@ def open_connection(
 
     Args:
         config: ``Environment`` instance, raw config dict, or database URL string.
+        factory: What opens the connection — injected by tests and embedders;
+            bound at definition time, so replacing this module's
+            ``create_connection`` afterwards changes nothing here.
 
     Yields:
         An open ``psycopg.Connection``.
@@ -163,8 +172,8 @@ def open_connection(
 
         with ssh_tunnel(tunnel_cfg, database_url) as patched_url:
             try:
-                conn = psycopg.connect(patched_url)
-            except psycopg.Error as e:
+                conn = factory(patched_url)
+            except (psycopg.Error, ConfigurationError) as e:
                 raise ConfigurationError(
                     f"Failed to connect through SSH tunnel: {e}",
                     error_code="CONFIG_006",
@@ -175,7 +184,7 @@ def open_connection(
             finally:
                 conn.close()
     else:
-        conn = create_connection(config)
+        conn = factory(config)
         try:
             yield conn
         finally:

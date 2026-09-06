@@ -50,7 +50,7 @@ BASELINE: dict[str, int] = {
     "dsn.py": 1,
     "error_json.py": 1,
     "generate.py": 5,
-    "helpers.py": 2,
+    "helpers.py": 1,
     "schema_to_schema.py": 7,
     "seed.py": 10,
     "sync.py": 1,

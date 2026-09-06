@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import is_json
+from confiture.cli.helpers import connect, is_json
 from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.core.seed_applier import SeedApplier
@@ -523,10 +523,9 @@ def apply(
         # Get database connection
         if database_url:
             # Use provided URL directly
-            from confiture.core.connection import create_connection
 
             try:
-                connection = create_connection(database_url)
+                connection = connect(database_url)
             except Exception as e:
                 fail(
                     ConfigurationError(
@@ -542,9 +541,8 @@ def apply(
                 from confiture.config.environment import Environment
 
                 env_config = Environment.load(env)
-                from confiture.core.connection import create_connection
 
-                connection = create_connection(env_config.database_url)
+                connection = connect(env_config.database_url)
             except Exception as e:
                 fail(
                     ConfigurationError(

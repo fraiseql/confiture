@@ -223,7 +223,7 @@ class TestMigrateUpLockExitCodes:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=mock_conn),
+            patch("confiture.core.migrator.create_connection", return_value=mock_conn),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
             patch(
                 "confiture.core.locking.MigrationLock.acquire",
@@ -268,7 +268,7 @@ class TestMigrateUpLockExitCodes:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=mock_conn),
+            patch("confiture.core.migrator.create_connection", return_value=mock_conn),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
             patch(
                 "confiture.core.locking.MigrationLock.acquire",
@@ -331,7 +331,7 @@ class TestMigrateUpMigrationFailure:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=mock_conn),
+            patch("confiture.core.migrator.create_connection", return_value=mock_conn),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
             patch(
                 "confiture.core.connection.load_migration_class", return_value=mock_migration_class

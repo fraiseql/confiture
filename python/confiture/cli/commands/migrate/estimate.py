@@ -15,6 +15,7 @@ from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
     console,
     error_console,
+    open_connection,
 )
 from confiture.cli.options import format_option
 
@@ -50,7 +51,7 @@ def migrate_estimate(
     RELATED:
       confiture migrate up --batched - Apply migrations in batch mode
     """
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
     from confiture.core.large_tables import TableSizeEstimator
 
     try:
@@ -59,9 +60,8 @@ def migrate_estimate(
             raise typer.Exit(2)
 
         config_data = load_config(config)
-        conn = create_connection(config_data)
-
-        estimator = TableSizeEstimator(conn)
+        with open_connection(config_data) as conn:
+            estimator = TableSizeEstimator(conn)
 
         # If no tables specified, estimate all in public schema
         if not tables:

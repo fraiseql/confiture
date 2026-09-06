@@ -80,8 +80,12 @@ autospecced one fails when a method is renamed. `tests/unit/test_double_discipli
 enforces both rules. `tests/_helpers.py` holds `strip_ansi`, used by the CLI tests that
 compare Rich output.
 
-Still open: 59 tests patch `confiture.core.connection.create_connection`. Phase 04
-gives the CLI an injected connection factory and converts them (Cycle 9).
+Connections are injected, never patched at the source. `core.connection.open_connection(config, factory=...)`
+takes the factory as a keyword (bound at definition time, so replacing the module's `create_connection`
+changes nothing). A CLI command test replaces the CLI's one seam, `confiture.cli.helpers.create_connection`
+(what `cli.helpers.open_connection` / `connect` call); a `migrate up`/`down` test replaces the session's
+seam, `confiture.core.migrator.create_connection`. `tests/unit/test_no_core_connection_patch.py` fails on
+any test that patches `confiture.core.connection.create_connection`.
 
 ## Assertion discipline
 

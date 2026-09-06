@@ -110,7 +110,7 @@ def test_migrate_estimate_with_mock_db(tmp_path):
 
     with (
         patch("confiture.core.connection.load_config", return_value=MagicMock()),
-        patch("confiture.core.connection.create_connection", return_value=mock_conn),
+        patch("confiture.cli.helpers.create_connection", return_value=mock_conn),
         patch(
             "confiture.core.large_tables.TableSizeEstimator",
             return_value=mock_estimator,

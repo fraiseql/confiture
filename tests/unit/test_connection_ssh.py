@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from confiture.config.environment import SshTunnelConfig
+from confiture.core import connection as connection_module
 from confiture.core.connection import open_connection
 
 # ---------------------------------------------------------------------------
@@ -28,19 +29,30 @@ def _make_env(tunnel: SshTunnelConfig | None = None) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-def test_open_connection_no_tunnel_calls_create_connection() -> None:
+def test_open_connection_no_tunnel_uses_the_injected_factory() -> None:
     env = _make_env(tunnel=None)
     fake_conn = MagicMock()
     fake_conn.close = MagicMock()
+    factory = MagicMock(return_value=fake_conn)
 
-    with patch(
-        "confiture.core.connection.create_connection", return_value=fake_conn
-    ) as mock_create:
-        with open_connection(env) as conn:
-            assert conn is fake_conn
+    with open_connection(env, factory=factory) as conn:
+        assert conn is fake_conn
 
-        mock_create.assert_called_once_with(env)
-        fake_conn.close.assert_called_once()
+    factory.assert_called_once_with(env)
+    fake_conn.close.assert_called_once()
+
+
+def test_open_connection_default_factory_is_bound_at_definition_time() -> None:
+    """Replacing the module's ``create_connection`` afterwards must change nothing."""
+    env = _make_env(tunnel=None)
+    with (
+        patch("confiture.core.connection.psycopg.connect", return_value=MagicMock()) as connect,
+        patch.object(connection_module, "create_connection", MagicMock()) as replaced,
+    ):
+        with open_connection(env):
+            pass
+    connect.assert_called_once()
+    replaced.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

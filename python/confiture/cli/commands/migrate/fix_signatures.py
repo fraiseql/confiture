@@ -17,9 +17,10 @@ from confiture.cli.helpers import (
     _resolve_config,
     console,
     error_console,
+    open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core.connection import load_config, open_connection
+from confiture.core.connection import load_config
 
 
 def _extract_function_source(sql: str, schema: str, name: str) -> str | None:

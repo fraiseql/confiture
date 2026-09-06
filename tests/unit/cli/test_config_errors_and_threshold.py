@@ -47,7 +47,7 @@ def _status(fmt: str):
         get_applied_migrations_with_timestamps=[],
     )
     with (
-        patch("confiture.core.connection.create_connection", return_value=connection_double()),
+        patch("confiture.cli.helpers.create_connection", return_value=connection_double()),
         patch("confiture.core.migrator.Migrator", autospec=True, return_value=migrator),
     ):
         return runner.invoke(

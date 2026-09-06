@@ -21,11 +21,12 @@ from confiture.cli.helpers import (
     console,
     error_console,
     is_json,
+    open_connection,
 )
 from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.session import MigratorSession
-from confiture.core.connection import create_connection, load_config
+from confiture.core.connection import load_config
 from confiture.core.migrator import Migrator
 from confiture.core.schema_facts import SchemaFacts
 from confiture.core.url_redaction import redact_url
@@ -187,15 +188,12 @@ def _resolve_preflight_pending(
         else:
             resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
             config_data = load_config(resolved)
-        conn = create_connection(config_data)
-        try:
+        with open_connection(config_data) as conn:
             migrator = Migrator(
                 connection=conn,
                 migration_table=_get_tracking_table(config_data),
             )
             return migrator.find_pending(migrations_dir=migrations_dir)
-        finally:
-            conn.close()
 
     all_files: list[Path] = sorted(
         list(migrations_dir.glob("*.up.sql"))

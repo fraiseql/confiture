@@ -40,7 +40,7 @@ class TestMigrateVerifyCLI:
 
         with (
             patch("confiture.core.connection.load_config") as mock_load,
-            patch("confiture.core.connection.create_connection") as mock_conn_fn,
+            patch("confiture.cli.helpers.create_connection") as mock_conn_fn,
             patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.migration_verifier.MigrationVerifier") as mock_verifier_cls,
         ):
@@ -79,7 +79,7 @@ class TestMigrateVerifyCLI:
 
         with (
             patch("confiture.core.connection.load_config") as mock_load,
-            patch("confiture.core.connection.create_connection") as mock_conn_fn,
+            patch("confiture.cli.helpers.create_connection") as mock_conn_fn,
             patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.migration_verifier.MigrationVerifier") as mock_verifier_cls,
         ):
@@ -118,7 +118,7 @@ class TestMigrateVerifyCLI:
 
         with (
             patch("confiture.core.connection.load_config") as mock_load,
-            patch("confiture.core.connection.create_connection") as mock_conn_fn,
+            patch("confiture.cli.helpers.create_connection") as mock_conn_fn,
             patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.migration_verifier.MigrationVerifier") as mock_verifier_cls,
         ):
@@ -162,7 +162,7 @@ class TestMigrateVerifyCLI:
 
         with (
             patch("confiture.core.connection.load_config") as mock_load,
-            patch("confiture.core.connection.create_connection") as mock_conn_fn,
+            patch("confiture.cli.helpers.create_connection") as mock_conn_fn,
             patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.migration_verifier.MigrationVerifier") as mock_verifier_cls,
         ):

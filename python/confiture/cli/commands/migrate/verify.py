@@ -12,7 +12,7 @@ import typer
 
 from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, NO_CONFIG_OPTION_HELP
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _output_json, console, is_json
+from confiture.cli.helpers import _output_json, console, is_json, open_connection
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -96,7 +96,7 @@ def migrate_verify(
     )
     from confiture.cli.formatters.migrate_formatter import format_verify_results
     from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator
     from confiture.exceptions import DatabaseNotInitializedError
@@ -124,8 +124,7 @@ def migrate_verify(
             raise ConfigurationError("Config file or --database-url required for migrate verify")
         tracking_table = _get_tracking_table(config_data)
 
-        conn = create_connection(config_data)
-        try:
+        with open_connection(config_data) as conn:
             migrator = Migrator(connection=conn, migration_table=tracking_table)
 
             # #182: get_applied_versions() raises psycopg's UndefinedTable on an
@@ -176,9 +175,6 @@ def migrate_verify(
 
             if verify_result.failed_count > 0:
                 raise typer.Exit(1)
-
-        finally:
-            conn.close()
 
     except typer.Exit:
         raise

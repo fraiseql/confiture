@@ -82,7 +82,7 @@ class TestExitCode0AllApplied:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -128,7 +128,7 @@ class TestExitCode0AllApplied:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -168,7 +168,7 @@ class TestExitCode1PendingExist:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -195,7 +195,7 @@ class TestExitCode1PendingExist:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -222,7 +222,7 @@ class TestExitCode1PendingExist:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -261,7 +261,7 @@ class TestExitCode2TrackingTableAbsent:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -288,7 +288,7 @@ class TestExitCode2TrackingTableAbsent:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -319,7 +319,7 @@ class TestExitCode2TrackingTableAbsent:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -353,7 +353,7 @@ class TestExitCode3FatalError:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch(
-                "confiture.core.connection.create_connection",
+                "confiture.cli.helpers.create_connection",
                 side_effect=RuntimeError("Connection refused"),
             ),
         ):
@@ -380,7 +380,7 @@ class TestExitCode3FatalError:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch(
-                "confiture.core.connection.create_connection",
+                "confiture.cli.helpers.create_connection",
                 side_effect=OSError("Network unreachable"),
             ),
         ):

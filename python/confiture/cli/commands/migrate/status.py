@@ -29,6 +29,7 @@ from confiture.cli.helpers import (
     _print_orphaned_files_warning,
     console,
     error_console,
+    open_connection,
 )
 from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
@@ -299,30 +300,28 @@ def _probe_database(
 
     tracking_table = _get_tracking_table(config_data)
     try:
-        from confiture.core.connection import create_connection
         from confiture.core.ledger import find_ledger_relations, probe_ledger
         from confiture.core.migrator import Migrator
         from confiture.exceptions import ConfiturError
 
-        conn = create_connection(config_data)
-        migrator = Migrator(connection=conn, migration_table=tracking_table)
-        was_present = migrator.tracking_table_exists()
-        # A bare name resolves through search_path since 0.41.0, so "absent" no
-        # longer implies "nowhere in this database" (#188).
-        elsewhere = () if was_present else tuple(find_ledger_relations(conn, tracking_table))
-        migrator.initialize()
-        # Reporting metadata only: a probe refused for lack of privilege must not
-        # turn a working status into "could not connect to database".
-        try:
-            resolved = probe_ledger(conn, tracking_table).resolved_name
-        except ConfiturError:
-            resolved = None
-        applied = frozenset(migrator.get_applied_versions())
-        applied_at = {
-            row["version"]: row["applied_at"]
-            for row in migrator.get_applied_migrations_with_timestamps()
-        }
-        conn.close()
+        with open_connection(config_data) as conn:
+            migrator = Migrator(connection=conn, migration_table=tracking_table)
+            was_present = migrator.tracking_table_exists()
+            # A bare name resolves through search_path since 0.41.0, so "absent" no
+            # longer implies "nowhere in this database" (#188).
+            elsewhere = () if was_present else tuple(find_ledger_relations(conn, tracking_table))
+            migrator.initialize()
+            # Reporting metadata only: a probe refused for lack of privilege must not
+            # turn a working status into "could not connect to database".
+            try:
+                resolved = probe_ledger(conn, tracking_table).resolved_name
+            except ConfiturError:
+                resolved = None
+            applied = frozenset(migrator.get_applied_versions())
+            applied_at = {
+                row["version"]: row["applied_at"]
+                for row in migrator.get_applied_migrations_with_timestamps()
+            }
         return _StatusFacts(
             db_source=True,
             applied_versions=applied,

@@ -16,7 +16,14 @@ from confiture.cli.dsn import (
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _get_tracking_table, _output_json, console, error_console, is_json
+from confiture.cli.helpers import (
+    _get_tracking_table,
+    _output_json,
+    console,
+    error_console,
+    is_json,
+    open_connection,
+)
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 
@@ -68,7 +75,7 @@ def migrate_current(
       confiture migrate current -c db/environments/prod.yaml
       confiture migrate current --database-url "$DATABASE_URL" --format json
     """
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
     from confiture.core.migrator import Migrator
     from confiture.exceptions import DatabaseNotInitializedError
     from confiture.models.results import CurrentRevision
@@ -81,8 +88,7 @@ def migrate_current(
             no_config=no_config,
         )
         config_data = {"database_url": override} if override is not None else load_config(config)
-        conn = create_connection(config_data)
-        try:
+        with open_connection(config_data) as conn:
             migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
             # Probe first: the row query raises on an absent table (≠ empty).
             if not migrator.tracking_table_exists():
@@ -90,8 +96,6 @@ def migrate_current(
                     "Database not initialized (tracking table absent)"
                 )
             row = migrator.get_current_revision_row()
-        finally:
-            conn.close()
     except typer.Exit:
         raise
     except Exception as e:

@@ -52,7 +52,7 @@ class TestMigrateStatusJsonOutput:
                 "confiture.core.connection.load_config",
                 return_value=_make_env("myschema.my_migrations"),
             ),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -99,7 +99,7 @@ class TestMigrateStatusJsonOutput:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -146,7 +146,7 @@ class TestMigrateStatusJsonOutput:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(

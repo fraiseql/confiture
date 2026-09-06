@@ -31,6 +31,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.helpers import connect
 from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.tree_allocator import TreeAllocator
@@ -354,7 +355,6 @@ def _get_generator(config_path: Path):
     Raises:
         typer.Exit: If pgGit is not available
     """
-    from confiture.core.connection import create_connection
     from confiture.integrations.pggit import (
         MigrationGenerator,
         PgGitNotAvailableError,
@@ -362,7 +362,7 @@ def _get_generator(config_path: Path):
     )
 
     # Load config and create connection
-    conn = create_connection(config_path)
+    conn = connect(config_path)
 
     # Check if pgGit is available
     if not is_pggit_available(conn):
@@ -567,10 +567,9 @@ def show_diff(
         confiture generate diff feature/payments --show-sql
     """
     try:
-        from confiture.core.connection import create_connection
         from confiture.integrations.pggit import PgGitClient, is_pggit_available
 
-        conn = create_connection(config)
+        conn = connect(config)
 
         if not is_pggit_available(conn):
             conn.close()

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import connect, console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -49,7 +49,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
 
     Resolution order:
       1. Looks like a DSN (``postgres://`` / ``postgresql://``) → connect directly.
-      2. A ``.yaml`` path or existing file → ``load_config`` + ``create_connection``.
+      2. A ``.yaml`` path or existing file → ``load_config`` + the CLI connection seam.
       3. Otherwise treat as an environment name → ``db/environments/{name}.yaml``.
 
     Raises:
@@ -57,7 +57,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
     """
     import psycopg
 
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
 
     try:
         if spec.startswith(("postgres://", "postgresql://")):
@@ -72,7 +72,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
                 f"(db/environments/{spec}.yaml), a config path, or a DSN.",
                 error_code="CONFIG_004",
             )
-        return create_connection(load_config(candidate))
+        return connect(load_config(candidate))
     except ConfiturError:
         raise
     except Exception as exc:  # noqa: BLE001 — surfaced as a connection ConfigurationError

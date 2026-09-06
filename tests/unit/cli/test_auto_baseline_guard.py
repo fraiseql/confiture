@@ -77,7 +77,7 @@ def doubles(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     migrator.get_applied_versions.return_value = []
     state["migrator"] = migrator
 
-    monkeypatch.setattr("confiture.core.connection.create_connection", lambda *a, **k: MagicMock())
+    monkeypatch.setattr("confiture.core.migrator.create_connection", lambda *a, **k: MagicMock())
     monkeypatch.setattr("confiture.core.migrator.Migrator", lambda *a, **k: migrator)
 
     def fake_sweep(_conn: Any, table: str) -> list[str]:

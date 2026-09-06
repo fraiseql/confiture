@@ -101,7 +101,7 @@ def test_config_detects_pending(tmp_path):
     with (
         patch("confiture.cli.commands.migrate.preflight._resolve_config") as mock_rc,
         patch("confiture.cli.commands.migrate.preflight.load_config") as mock_lc,
-        patch("confiture.cli.commands.migrate.preflight.create_connection") as mock_cc,
+        patch("confiture.cli.helpers.create_connection") as mock_cc,
         patch("confiture.cli.commands.migrate.preflight.Migrator", autospec=True) as MockMigrator,
     ):
         mock_rc.return_value = Path("db/environments/prod.yaml")

@@ -116,4 +116,4 @@ def test_detector_shapes() -> None:
     assert scan('patch("confiture.core.migrator.Migrator", autospec=True)') == 0
     assert scan('patch("confiture.core.migrator.Migrator", return_value=migrator_double())') == 0
     assert scan('patch("confiture.core.builder.SchemaBuilder", spec=SchemaBuilder)') == 0
-    assert scan('patch("confiture.core.connection.create_connection")') == 0
+    assert scan('patch("confiture.core.migrator.create_connection")') == 0

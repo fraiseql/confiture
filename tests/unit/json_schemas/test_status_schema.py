@@ -104,7 +104,7 @@ def test_resolved_table_validates(tmp_path, schemas_dir, schema_registry, monkey
         {"name": "test", "database_url": "postgresql://localhost/test"}
     )
     monkeypatch.setattr("confiture.core.connection.load_config", lambda *a, **k: env)
-    monkeypatch.setattr("confiture.core.connection.create_connection", lambda *a, **k: MagicMock())
+    monkeypatch.setattr("confiture.cli.helpers.create_connection", lambda *a, **k: MagicMock())
     monkeypatch.setattr("confiture.core.migrator.Migrator", lambda *a, **k: migrator)
     probe = MagicMock(return_value=LedgerProbe(exists=True, resolved_name="staging.tb_confiture"))
     monkeypatch.setattr("confiture.core.ledger.probe_ledger", probe)

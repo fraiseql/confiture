@@ -66,7 +66,7 @@ def migrations_dir(tmp_path: Path) -> Path:
 
 def _invoke(cfg: Path, migrations_dir: Path, *extra: str):
     with (
-        patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+        patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
         patch("confiture.core.migrator.Migrator.tracking_table_exists", return_value=False),
     ):
         return runner.invoke(

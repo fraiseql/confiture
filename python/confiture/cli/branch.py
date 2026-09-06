@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import is_json
+from confiture.cli.helpers import connect, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfiturError
 
@@ -43,7 +43,6 @@ def _get_pggit_client(config_path: Path):
         ConfiturError: If pgGit is not available (PRECON_1000); the calling
             command routes it through the fail() boundary.
     """
-    from confiture.core.connection import create_connection
     from confiture.integrations.pggit import (
         PgGitClient,
         PgGitNotAvailableError,
@@ -51,7 +50,7 @@ def _get_pggit_client(config_path: Path):
     )
 
     # Load config and create connection
-    conn = create_connection(config_path)
+    conn = connect(config_path)
 
     # Check if pgGit is available
     if not is_pggit_available(conn):

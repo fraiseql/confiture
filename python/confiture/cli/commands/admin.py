@@ -7,9 +7,15 @@ import typer
 
 from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, resolve_database_url
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _get_tracking_table, _output_json, console, error_console, is_json
+from confiture.cli.helpers import (
+    _get_tracking_table,
+    _output_json,
+    console,
+    error_console,
+    is_json,
+    open_connection,
+)
 from confiture.cli.options import format_option
-from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error
 from confiture.exceptions import (
     ConfigurationError,
@@ -140,27 +146,23 @@ def install_helpers(
             environment = Environment.load(env)
             cfg = {"database": {"url": environment.database_url}}
 
-        conn = create_connection(cfg)
+        with open_connection(cfg) as conn:
+            if dry_run:
+                from importlib import resources
 
-        if dry_run:
-            from importlib import resources
+                sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
+                console.print("[bold]SQL that would be executed:[/bold]\n")
+                console.print(sql)
+                return
 
-            sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
-            console.print("[bold]SQL that would be executed:[/bold]\n")
-            console.print(sql)
-            conn.close()
-            return
+            vm = ViewManager(conn)
 
-        vm = ViewManager(conn)
+            if not force and vm.helpers_installed():
+                console.print("[green]✓[/green] View helpers already installed — nothing to do")
+                console.print("  Use [bold]--force[/bold] to reinstall")
+                return
 
-        if not force and vm.helpers_installed():
-            console.print("[green]✓[/green] View helpers already installed — nothing to do")
-            console.print("  Use [bold]--force[/bold] to reinstall")
-            conn.close()
-            return
-
-        vm.install_helpers()
-        conn.close()
+            vm.install_helpers()
 
         console.print("[green]✓[/green] Installed confiture view helper functions")
         console.print("  Schema: [bold]confiture[/bold]")
@@ -309,7 +311,7 @@ def verify_checksums(
         ChecksumMismatchBehavior,
         MigrationChecksumVerifier,
     )
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
     from confiture.core.ledger import find_ledger_relations, notable_resolution, probe_ledger
 
     json_mode = is_json(output_format)
@@ -317,122 +319,115 @@ def verify_checksums(
     try:
         # Load config and connect
         config_data = load_config(config)
-        conn = create_connection(config_data)
+        with open_connection(config_data) as conn:
+            tracking_table = _get_tracking_table(config_data)
+            ledger = probe_ledger(conn, tracking_table)
+            if not ledger.exists:
+                # Since 0.41.0 a bare name is resolved through search_path, so
+                # "absent" can mean "present, but not where this session looks".
+                # Saying which is the difference between an actionable message and
+                # a puzzle (#188).
+                _elsewhere = find_ledger_relations(conn, tracking_table)
+                _note = (
+                    f" A relation of that name does exist in {', '.join(_elsewhere)}, but this "
+                    "connection's search_path does not reach it."
+                    if _elsewhere
+                    else ""
+                )
+                if allow_uninitialized:
+                    if json_mode:
+                        # 0.37.0 turned this crash into a graceful exit but left it
+                        # returning after a Rich print, so --format json produced
+                        # no JSON at all on the one path most likely to be scripted.
+                        _output_json(
+                            _checksum_payload(
+                                ledger_present=False,
+                                checked=0,
+                                mismatches=[],
+                                tracking_table=tracking_table,
+                                resolved_table=None,
+                            ),
+                            None,
+                            console,
+                        )
+                        return
+                    console.print(
+                        f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
+                        f"present in this database){_note} — 0 migrations recorded, nothing to "
+                        "verify.[/yellow]"
+                    )
+                    return
+                raise DatabaseNotInitializedError(
+                    f"No migration ledger found: `{tracking_table}` is not present in "
+                    f"this database.{_note}",
+                    resolution_hint=_NO_LEDGER_HINT,
+                )
 
-        # Probe before building the verifier: if verify_all() returned [] for
-        # "no table", that would be indistinguishable from "no mismatches" —
-        # the absent-vs-empty conflation this guard exists to prevent.
-        tracking_table = _get_tracking_table(config_data)
-        ledger = probe_ledger(conn, tracking_table)
-        if not ledger.exists:
-            # Since 0.41.0 a bare name is resolved through search_path, so
-            # "absent" can mean "present, but not where this session looks".
-            # Saying which is the difference between an actionable message and
-            # a puzzle (#188).
-            _elsewhere = find_ledger_relations(conn, tracking_table)
-            _note = (
-                f" A relation of that name does exist in {', '.join(_elsewhere)}, but this "
-                "connection's search_path does not reach it."
-                if _elsewhere
-                else ""
+            # Run verification (warn mode - we'll handle display)
+            verifier = MigrationChecksumVerifier(
+                conn,
+                ChecksumConfig(
+                    enabled=True,
+                    on_mismatch=ChecksumMismatchBehavior.WARN,
+                ),
+                migration_table=tracking_table,
             )
-            conn.close()
-            if allow_uninitialized:
+            mismatches = verifier.verify_all(migrations_dir)
+            checked = verifier.count_applied()
+
+            if not mismatches:
                 if json_mode:
-                    # 0.37.0 turned this crash into a graceful exit but left it
-                    # returning after a Rich print, so --format json produced
-                    # no JSON at all on the one path most likely to be scripted.
                     _output_json(
                         _checksum_payload(
-                            ledger_present=False,
-                            checked=0,
+                            ledger_present=True,
+                            checked=checked,
                             mismatches=[],
                             tracking_table=tracking_table,
-                            resolved_table=None,
+                            resolved_table=ledger.resolved_name,
                         ),
                         None,
                         console,
                     )
-                    return
-                console.print(
-                    f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
-                    f"present in this database){_note} — 0 migrations recorded, nothing to "
-                    "verify.[/yellow]"
-                )
+                else:
+                    _read = notable_resolution(tracking_table, ledger.resolved_name)
+                    _suffix = f" (read `{_read}`)" if _read else ""
+                    console.print(f"[green]✅ All migration checksums verified!{_suffix}[/green]")
                 return
-            raise DatabaseNotInitializedError(
-                f"No migration ledger found: `{tracking_table}` is not present in "
-                f"this database.{_note}",
-                resolution_hint=_NO_LEDGER_HINT,
-            )
 
-        # Run verification (warn mode - we'll handle display)
-        verifier = MigrationChecksumVerifier(
-            conn,
-            ChecksumConfig(
-                enabled=True,
-                on_mismatch=ChecksumMismatchBehavior.WARN,
-            ),
-            migration_table=tracking_table,
-        )
-        mismatches = verifier.verify_all(migrations_dir)
-        checked = verifier.count_applied()
+            updated: int | None = None
+            if fix:
+                updated = verifier.update_all_checksums(migrations_dir)
 
-        if not mismatches:
             if json_mode:
                 _output_json(
                     _checksum_payload(
                         ledger_present=True,
                         checked=checked,
-                        mismatches=[],
+                        mismatches=mismatches,
                         tracking_table=tracking_table,
                         resolved_table=ledger.resolved_name,
+                        fixed=updated,
                     ),
                     None,
                     console,
                 )
             else:
-                _read = notable_resolution(tracking_table, ledger.resolved_name)
-                _suffix = f" (read `{_read}`)" if _read else ""
-                console.print(f"[green]✅ All migration checksums verified!{_suffix}[/green]")
-            conn.close()
-            return
+                console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
+                for m in mismatches:
+                    console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+                    console.print(f"    File: {m.file_path}")
+                    expected_preview = m.expected[:16] if m.expected else "(none)"
+                    console.print(f"    Expected: {expected_preview}...")
+                    console.print(f"    Actual:   {m.actual[:16]}...")
+                    console.print()
+                if fix:
+                    console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
+                    console.print(f"[green]✅ Updated {updated} checksum(s)[/green]")
+                else:
+                    console.print(
+                        "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
+                    )
 
-        updated: int | None = None
-        if fix:
-            updated = verifier.update_all_checksums(migrations_dir)
-
-        if json_mode:
-            _output_json(
-                _checksum_payload(
-                    ledger_present=True,
-                    checked=checked,
-                    mismatches=mismatches,
-                    tracking_table=tracking_table,
-                    resolved_table=ledger.resolved_name,
-                    fixed=updated,
-                ),
-                None,
-                console,
-            )
-        else:
-            console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
-            for m in mismatches:
-                console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-                console.print(f"    File: {m.file_path}")
-                expected_preview = m.expected[:16] if m.expected else "(none)"
-                console.print(f"    Expected: {expected_preview}...")
-                console.print(f"    Actual:   {m.actual[:16]}...")
-                console.print()
-            if fix:
-                console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
-                console.print(f"[green]✅ Updated {updated} checksum(s)[/green]")
-            else:
-                console.print(
-                    "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
-                )
-
-        conn.close()
         if not fix:
             # success-signal: verification ran and found mismatches (the CI gate
             # this command exists to trip) — not a confiture-domain error.

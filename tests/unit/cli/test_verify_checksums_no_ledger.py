@@ -75,7 +75,7 @@ def _invoke(
         )
     )
     with (
-        patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+        patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
         patch("confiture.core.ledger.probe_ledger", probe),
         patch("confiture.core.ledger.find_ledger_relations", return_value=elsewhere or []),
     ):

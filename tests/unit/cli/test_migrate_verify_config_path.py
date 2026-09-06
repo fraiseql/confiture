@@ -50,7 +50,7 @@ def migrations_dir(tmp_path: Path) -> Path:
 def test_explicit_config_path_is_loaded_not_stringified(cfg: Path, migrations_dir: Path) -> None:
     """An explicit --config reaches the ledger probe rather than crashing."""
     with (
-        patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+        patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
         patch("confiture.core.migrator.Migrator.tracking_table_exists", return_value=False),
     ):
         result = runner.invoke(

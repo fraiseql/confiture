@@ -10,6 +10,7 @@ from confiture.cli.helpers import (
     _convert_linter_report,
     _output_json,
     _output_yaml,
+    connect,
     console,
     error_console,
     is_json,
@@ -17,7 +18,6 @@ from confiture.cli.helpers import (
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.options import format_option
 from confiture.core.builder import SchemaBuilder
-from confiture.core.connection import create_connection
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.introspector import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
@@ -1252,7 +1252,7 @@ def introspect(
     json_mode = is_json(format_type)
 
     try:
-        conn = create_connection(db)
+        conn = connect(db)
     except Exception as e:
         fail(
             ConfigurationError(

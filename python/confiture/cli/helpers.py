@@ -3,12 +3,16 @@
 import difflib
 import json
 import re
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any
 
+import psycopg
 from psycopg import sql as pgsql
 from rich.console import Console
 
+from confiture.core.connection import create_connection
+from confiture.core.connection import open_connection as _core_open_connection
 from confiture.core.ledger import table_identifier, validate_table_name
 from confiture.core.linting.schema_linter import (
     LintReport as LinterReport,
@@ -29,6 +33,21 @@ console = Console()
 error_console = Console(stderr=True)
 
 _MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
+
+
+def open_connection(config: Any) -> AbstractContextManager["psycopg.Connection[Any]"]:
+    """The CLI's one connection seam.
+
+    Every command opens its database connection here, so a test replaces
+    ``confiture.cli.helpers.create_connection`` once and every command sees the
+    double; core's own factory is never patched (guard test).
+    """
+    return _core_open_connection(config, factory=create_connection)
+
+
+def connect(config: Any) -> "psycopg.Connection[Any]":
+    """Open a connection the caller owns (and closes) — same seam as :func:`open_connection`."""
+    return create_connection(config)
 
 
 def _emit_hint(
@@ -387,22 +406,13 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
     a checksum guard that can't open a connection is no guard at all,
     so we'd rather degrade gracefully than block the fix.
     """
-    from confiture.core.connection import create_connection
-
     # Validated before the connection exists: a bad name is a configuration
     # error to surface, not a query failure to swallow.
     table = _get_tracking_table(config_data)
 
     try:
-        conn = create_connection(config_data)
-    except Exception:  # noqa: BLE001 — best-effort: no DB means no guard, not a failure
-        return set()
-
-    try:
-        with conn.cursor() as cur:
+        with open_connection(config_data) as conn, conn.cursor() as cur:
             cur.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
             return {row[0] for row in cur.fetchall()}
-    except Exception:  # noqa: BLE001 — best-effort: a missing table degrades to "rewrite everything"
+    except Exception:  # noqa: BLE001 — best-effort: no DB or no table means no guard, not a failure
         return set()
-    finally:
-        conn.close()
