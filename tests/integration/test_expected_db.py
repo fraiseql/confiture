@@ -91,11 +91,12 @@ def test_from_source_yields_connection_with_expected_objects(
         # Capture the scratch DB name so we can assert it is gone afterwards.
         scratch_name = conn.execute("SELECT current_database()").fetchone()[0]
 
-    # The scratch DB is dropped on exit — no orphan left behind.
+    # The scratch DB is dropped on exit — no orphan left behind. Only *this*
+    # run's scratch name is asserted: under -n N other workers create and drop
+    # their own `confiture_tmp_*` databases concurrently.
     assert scratch_name.startswith("confiture_tmp_")
-    after = _scratch_db_names(server_url)
-    assert scratch_name not in after
-    assert after <= before  # created no net-new scratch DBs
+    assert scratch_name not in before
+    assert scratch_name not in _scratch_db_names(server_url)
 
 
 _BASE_SQL = """

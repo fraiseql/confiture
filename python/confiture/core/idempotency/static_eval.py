@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import ast
 import symtable
+import sys
 import textwrap
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -383,6 +384,18 @@ _SCOPE_NODES = (
 )
 
 
+# PEP 709 (Python 3.12) inlines list, set and dict comprehensions into the
+# enclosing scope: ``symtable`` emits no child table for them, and their
+# targets are symbols of the enclosing table. Generator expressions keep their
+# own table on every version. The walker still gives an inlined comprehension
+# its own ``_Scope`` — a comprehension target is a binding the evaluator
+# refuses — but pairs that scope with the *enclosing* table instead of
+# consuming a symtable child that does not exist.
+_INLINED_COMPREHENSIONS: tuple[type[ast.AST], ...] = (
+    (ast.ListComp, ast.SetComp, ast.DictComp) if sys.version_info >= (3, 12) else ()
+)
+
+
 class _BindingCollector:
     """Collect every binding a scope's statements make, without entering nested scopes."""
 
@@ -654,12 +667,18 @@ class ModuleModel:
         children = (
             list(scope.table.get_children()) if self.scopes_ok and scope.table is not None else []
         )
-        if self.scopes_ok and len(children) != len(nested):
+        with_own_table = [n for n in nested if not isinstance(n, _INLINED_COMPREHENSIONS)]
+        if self.scopes_ok and len(children) != len(with_own_table):
             self.scopes_ok = False
-        for index, child_node in enumerate(nested):
+        index = 0
+        for child_node in nested:
             table: symtable.SymbolTable | None = scope.table
-            if self.scopes_ok:
+            if isinstance(child_node, _INLINED_COMPREHENSIONS):
+                # Inlined (PEP 709): its names live in the enclosing table.
+                pass
+            elif self.scopes_ok:
                 candidate = children[index]
+                index += 1
                 expected = _expected_table_name(child_node)
                 if candidate.get_name() == expected and candidate.get_lineno() == child_node.lineno:
                     table = candidate

@@ -314,11 +314,20 @@ def superuser_db_url(test_db_url: str) -> str:
 
 @pytest.fixture
 def test_db_connection(test_db_url: str) -> Generator[psycopg.Connection, None, None]:
-    """Create a test database connection
+    """Create a test database connection.
+
+    The ``confiture`` helper schema is dropped first. ``migrate up`` installs
+    the view helpers into a schema of that name, and under a connecting role
+    *also* named ``confiture`` — what CI uses — PostgreSQL's default
+    ``"$user", public`` search_path would send every later unqualified
+    ``CREATE TABLE`` into it, so a test asserting on ``public.x`` fails only in
+    CI, and only after some other module on the same worker ran a migration.
 
     Yields:
         psycopg Connection to test database
     """
+    with psycopg.connect(test_db_url, autocommit=True) as admin:
+        admin.execute("DROP SCHEMA IF EXISTS confiture CASCADE")
     conn = psycopg.connect(test_db_url, autocommit=False)
     try:
         yield conn
