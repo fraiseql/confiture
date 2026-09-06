@@ -19,6 +19,19 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
   nothing on stdout, before the command body runs. `migrate preflight` and
   `schema diff` no longer fall through to text on an unknown value.
+- ⚠️ **An honest `--dry-run`.** `migrate up --dry-run` printed
+  `Estimated time: 500ms | Disk: 1.0MB | CPU: 30%` for every migration,
+  classified each as `"warning"` whatever it contained, and always closed with
+  "All migrations appear safe to execute". The summary now carries, per
+  migration, the change-set classification of its SQL (`additive` …
+  `irreversible`, `null` for a `.py` migration), its statement count, the row
+  estimate PostgreSQL's statistics hold for the tables it touches (`null` when
+  unknown) and its findings; `summary.unsafe_count` counts migrations at
+  `lock_risky` or worse, and the "appear safe" line appears only when nothing is
+  unsafe or unclassified. The fabricated `estimated_*` keys are gone
+  (`migrate down --dry-run` likewise). `MigratorSession.connection` exposes the
+  live connection; the dry-run guide's example is rendered from a fixture and
+  kept in sync by a test.
 - ⚠️ **One envelope, pure stdout.** With `--format json`, stdout is the payload
   and nothing else: `migrate up`'s advisory lines and `build`'s progress lines go
   to stderr, `migrate status`'s "could not connect" warning goes to stderr in

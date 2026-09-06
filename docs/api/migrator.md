@@ -311,6 +311,10 @@ from confiture.models.results import CurrentRevision
 
 ## Advanced: an existing connection
 
+`session.connection` is the live connection inside the `with` block — for a
+read-only query alongside the session (the CLI uses it for the dry-run row
+estimates). It raises `ConfigurationError` outside the block.
+
 For callers that already hold a `psycopg` connection (and have loaded their
 own config), construct the engine directly:
 

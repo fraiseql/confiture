@@ -133,6 +133,18 @@ class MigratorSession:
             self._conn.close()
             self._conn = None
 
+    @property
+    def connection(self) -> Connection:
+        """The session's live connection (inside ``with``)."""
+        if self._conn is None:
+            from confiture.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        return self._conn
+
     # ------------------------------------------------------------------ #
     # Lock inspection                                                    #
     # ------------------------------------------------------------------ #

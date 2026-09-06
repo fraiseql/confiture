@@ -938,10 +938,12 @@ def migrate_up(
                 session.up(dry_run=True, **options)
                 _render_dry_run_analysis(
                     reporter.pending,
+                    migrations_dir=migrations_dir,
                     migration_id=f"dry_run_{config.stem}",
                     execute=dry_run_execute,
                     format_output=format_output,
                     output_file=output_file,
+                    estimate_rows=_row_estimator(session.connection),
                 )
                 if dry_run:
                     return
@@ -1127,10 +1129,12 @@ def migrate_down(
                 preview = session.down(steps=steps, dry_run=True)
                 _render_dry_run_analysis(
                     [(m.version, m.name) for m in preview.migrations_rolled_back],
+                    migrations_dir=migrations_dir,
                     migration_id=f"dry_run_rollback_{config.stem}",
                     execute=False,
                     format_output=format_output,
                     output_file=output_file,
+                    estimate_rows=_row_estimator(session.connection),
                     rollback=True,
                 )
                 return
@@ -1830,80 +1834,42 @@ class _UpReporter:
 def _render_dry_run_analysis(
     pending: list[tuple[str, str]],
     *,
+    migrations_dir: Path,
     migration_id: str,
     execute: bool,
     format_output: str,
     output_file: Path | None,
+    estimate_rows: Any = None,
     rollback: bool = False,
 ) -> None:
     """The dry-run summary of ``migrate up --dry-run`` / ``migrate down --dry-run``."""
     from confiture.cli.dry_run import print_json_report, save_json_report, save_text_report
+    from confiture.cli.dry_run_summary import build_dry_run_summary, render_dry_run_text
 
-    entries = [
-        {
-            "version": version,
-            "name": name,
-            "classification": "warning",
-            "estimated_duration_ms": 500,
-            "estimated_disk_usage_mb": 1.0,
-            "estimated_cpu_percent": 30.0,
-        }
-        for version, name in pending
-    ]
-    summary: dict[str, Any] = {
-        "migration_id": migration_id,
-        "mode": "execute_and_analyze" if execute else "analysis",
-        "statements_analyzed": len(pending),
-        "migrations": entries,
-        "summary": {
-            "unsafe_count": 0,
-            "total_estimated_time_ms": 0,
-            "total_estimated_disk_mb": 0.0,
-            "has_unsafe_statements": False,
-        },
-        "warnings": [],
-        "analyses": entries,
-    }
-    verb = "rollback" if rollback else "apply"
+    summary = build_dry_run_summary(
+        pending,
+        migrations_dir=migrations_dir,
+        migration_id=migration_id,
+        mode="execute_and_analyze" if execute else "analysis",
+        estimate_rows=estimate_rows,
+    )
     if format_output == "json":
         if output_file:
             save_json_report(summary, output_file)
-            console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
+            error_console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
         else:
             print_json_report(summary)
         return
 
+    text = render_dry_run_text(summary, rollback=rollback)
     if not rollback:
         console.print(f"[cyan]📦 Found {len(pending)} pending migration(s)[/cyan]\n")
-    console.print(
-        "[cyan]Rollback Analysis Summary[/cyan]"
-        if rollback
-        else "\n[cyan]Migration Analysis Summary[/cyan]"
-    )
-    console.print("=" * 80)
-    console.print(f"Migrations to {verb}: {len(pending)}")
-    console.print()
-    for mig in entries:
-        console.print(f"  {mig['version']}: {mig['name']}")
-        console.print(
-            f"    Estimated time: {mig['estimated_duration_ms']}ms | "
-            f"Disk: {mig['estimated_disk_usage_mb']:.1f}MB | "
-            f"CPU: {mig['estimated_cpu_percent']:.0f}%"
-        )
-    console.print()
-    if rollback:
-        console.print("[yellow]⚠️  Rollback will undo these migrations[/yellow]")
-    else:
-        console.print("[green]✓ All migrations appear safe to execute[/green]")
-    console.print("=" * 80)
+    console.print(text, end="", highlight=False, markup=False)
     if output_file:
         title = (
             "DRY-RUN ROLLBACK ANALYSIS REPORT" if rollback else "DRY-RUN MIGRATION ANALYSIS REPORT"
         )
-        text_report = title + "\n" + "=" * 80 + "\n\n"
-        for mig in entries:
-            text_report += f"{mig['version']}: {mig['name']}\n"
-        save_text_report(text_report, output_file)
+        save_text_report(title + "\n" + "=" * 80 + "\n\n" + text, output_file)
         console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
 
 
@@ -1971,3 +1937,9 @@ class _FailedMigration:
     def __init__(self, *, version: str, name: str) -> None:
         self.version = version
         self.name = name
+
+
+def _row_estimator(connection: Any) -> Any:
+    from confiture.cli.dry_run_summary import row_estimator
+
+    return row_estimator(connection)
