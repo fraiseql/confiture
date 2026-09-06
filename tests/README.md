@@ -83,3 +83,10 @@ compare Rich output.
 Still open: 59 tests patch `confiture.core.connection.create_connection`. Phase 04
 gives the CLI an injected connection factory and converts them (Cycle 9).
 
+## Assertion discipline
+
+`tests/unit/test_assertions_present.py`: every test function asserts something.
+`tests/unit/test_disjunctive_assertions.py`: an `assert A or B` without a comment saying
+why either side is acceptable counts against a baseline that may only shrink, and a
+disjunction over an exit code always carries its reason.
+

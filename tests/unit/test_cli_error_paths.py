@@ -71,8 +71,8 @@ database_url: postgresql://localhost/test
             app, ["build", "--env", "nonexistent", "--project-dir", str(tmp_path)]
         )
 
-        assert result.exit_code in (1, 5)  # 5 if ConfigurationError (#146: CONFIG → 5)
-        assert "File not found" in result.output or "Error" in result.output
+        assert result.exit_code == 5, result.output  # missing environment config → CONFIG (#146)
+        assert "Error" in result.output
 
     def test_build_with_custom_output(self, tmp_path):
         """Test build with custom output path."""
@@ -267,5 +267,6 @@ class TestInitCommand:
 
         result = runner.invoke(app, ["init", str(tmp_path)], input="n\n")
 
-        # Should exit without error (user cancelled)
-        assert result.exit_code in [0, 1]  # May exit with 0 or 1 depending on flow
+        # Declining to overwrite an existing project is exit 1.
+        assert result.exit_code == 1, result.output
+        assert "already exists" in result.output

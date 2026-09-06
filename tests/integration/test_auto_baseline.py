@@ -198,5 +198,7 @@ class TestAutoDetectBaselineCLI:
             ],
         )
 
-        # Should warn about missing snapshots dir, not crash
-        assert "schema_history" in result.output or result.exit_code in (0, 1)
+        # No matching snapshot: says so and proceeds with an empty baseline → exit 0.
+        assert result.exit_code == 0, result.output
+        assert "auto-detect baseline" in result.output
+        assert "empty baseline" in result.output

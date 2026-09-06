@@ -320,5 +320,4 @@ class TestSeedCliConfiguration:
             result = cli_runner.invoke(
                 seed_app, ["apply", "--seeds-dir", str(temp_seed_file.parent)]
             )
-            # Should work with env var
-            assert result.exit_code in (0, 1)  # Success or handled error
+            assert result.exit_code == 0, result.output

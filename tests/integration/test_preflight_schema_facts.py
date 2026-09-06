@@ -55,6 +55,7 @@ def _preflight(migrations: Path, dsn: str) -> dict:
             "json",
         ],
     )
+    # 0 = clean, 7 = a preflight finding; the JSON payload is the subject here.
     assert result.exit_code in (0, 7), result.output
     return json.loads(result.stdout)
 

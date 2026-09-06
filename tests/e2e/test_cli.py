@@ -463,10 +463,10 @@ class TestCLIErrorHandling:
         """Should show error for missing required argument."""
         result = runner.invoke(app, ["migrate", "diff"])
 
-        assert result.exit_code != 0
-        # Should mention missing argument (could be in stdout or stderr)
+        # Click reports a missing argument as a usage error: exit 2, "Missing" in the text.
+        assert result.exit_code == 2, result.output
         output = (result.stdout + result.stderr).lower()
-        assert "missing" in output or "required" in output or result.exit_code == 2
+        assert "missing" in output
 
     def test_invalid_file_path(self):
         """Should show error for invalid file path."""
