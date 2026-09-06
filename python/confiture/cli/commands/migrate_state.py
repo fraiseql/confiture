@@ -6,6 +6,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console, is_json
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -284,11 +285,7 @@ def migrate_baseline(
         for migration_file in migrations_to_mark:
             version = migrator._version_from_filename(migration_file.name)
             # Extract name
-            base_name = migration_file.stem
-            if base_name.endswith(".up"):
-                base_name = base_name[:-3]
-            parts = base_name.split("_", 1)
-            name = parts[1] if len(parts) > 1 else base_name
+            _, name = parse_migration_filename(migration_file.name)
 
             if version in applied_versions:
                 console.print(f"  [dim]⏭️  {version} {name} (already applied)[/dim]")
@@ -464,11 +461,7 @@ def migrate_reinit(
 
             for migration_file in migrations_to_mark:
                 version = migrator._version_from_filename(migration_file.name)
-                base_name = migration_file.stem
-                if base_name.endswith(".up"):
-                    base_name = base_name[:-3]
-                parts = base_name.split("_", 1)
-                name = parts[1] if len(parts) > 1 else base_name
+                _, name = parse_migration_filename(migration_file.name)
                 console.print(f"  [dim]•[/dim] {version} {name}")
 
             console.print()

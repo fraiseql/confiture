@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
+from tests.unit._doubles import connection_double
 
 
 def _make_entered_session(migrations_dir: Path | None = None) -> MigratorSession:
@@ -17,8 +18,9 @@ def _make_entered_session(migrations_dir: Path | None = None) -> MigratorSession
 
     mdir = migrations_dir or Path("db/migrations")
     session = MigratorSession(config=env, migrations_dir=mdir)
-    session._conn = MagicMock()
+    session._conn = connection_double()
     session._migrator = MagicMock()
+    session._migrator.migration_table = "tb_confiture"
     return session
 
 

@@ -206,11 +206,13 @@ for diagnostics (`from confiture.core.hooks import HookError`).
 
 ## Important caveat: the event loop
 
-Hook `execute` methods are `async`. The migrator runs them on an internal
-asyncio loop it creates per trigger. **If you drive `up()` / `down()` from inside
-an already-running event loop, hook triggering is skipped** (to avoid nested-loop
-conflicts) and a debug line is logged. Run migrations from synchronous code when
-you rely on hooks.
+Hook `execute` methods are `async`; the migrator runs each trigger to completion
+from synchronous code. With no event loop running it uses a private loop and
+closes it again, leaving the caller's current loop untouched. When `up()` /
+`down()` is driven from *inside* a running event loop, the hooks run on a worker
+thread with their own loop — they are no longer skipped. A hook that raises
+under the default `FAIL_FAST` strategy surfaces as `HookError` from the migration
+call instead of a log line; choose `FAIL_SAFE` to log and continue.
 
 ---
 

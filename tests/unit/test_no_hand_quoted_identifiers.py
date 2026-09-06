@@ -32,6 +32,28 @@ _OPEN_QUOTE_TAIL = re.compile(r'\b(?:FROM|TABLE|INTO|JOIN|UPDATE)\s+"\s*$', re.I
 # Deliberately empty.  Fix the site instead of listing it here.
 ALLOWLIST: frozenset[str] = frozenset()
 
+# Modules held to the stricter rule (Phase 03, Cycle 6): in a SQL string, no
+# *bare* interpolation may follow a keyword that introduces a relation, column,
+# index or savepoint name either — ``f"SAVEPOINT {name}"`` is not quoted at all.
+# Only expressions and predicates (after ``WHERE``, ``=``, ``SET DEFAULT``) may
+# be raw, by documented contract.
+STRICT_FILES: frozenset[str] = frozenset(
+    {
+        "python/confiture/core/preconditions.py",
+        "python/confiture/core/_migrator/session.py",
+        "python/confiture/core/large_tables.py",
+    }
+)
+_SQL_START = re.compile(
+    r"^\s*(?:SELECT|INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|SAVEPOINT|RELEASE|ROLLBACK|REINDEX|WITH)\b",
+    re.IGNORECASE,
+)
+_BARE_INTERPOLATION = re.compile(
+    r"\b(?:FROM|TABLE|INTO|JOIN|UPDATE|INDEX|SAVEPOINT|COLUMN|ON|SET)\s+"
+    r"(?:IF\s+(?:NOT\s+)?EXISTS\s+|CONCURRENTLY\s+)*[{%]",
+    re.IGNORECASE,
+)
+
 
 def _offending_text(node: ast.AST) -> str | None:
     """Return the offending source text if *node* hand-quotes an identifier."""
@@ -64,6 +86,46 @@ def _offending_text(node: ast.AST) -> str | None:
         return None
 
     return None
+
+
+def _bare_interpolation_text(node: ast.AST) -> str | None:
+    """The SQL text if *node* interpolates a bare identifier (strict rule)."""
+    text: str | None = None
+    if isinstance(node, ast.JoinedStr):
+        text = ast.unparse(node)
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        if isinstance(node.left, ast.Constant) and isinstance(node.left.value, str):
+            text = node.left.value
+    elif (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+        and isinstance(node.func.value, ast.Constant)
+        and isinstance(node.func.value.value, str)
+    ):
+        text = node.func.value.value
+    if text is None:
+        return None
+    body = text[1:] if text.startswith(("f'", 'f"')) else text
+    body = body.lstrip("'\"")
+    if not _SQL_START.search(body):
+        return None
+    return text if _BARE_INTERPOLATION.search(text) else None
+
+
+def find_bare_interpolations(root: Path) -> list[str]:
+    """Every ``path:line: text`` in a STRICT_FILES module that interpolates a bare identifier."""
+    findings: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root.parent.parent).as_posix()
+        if rel not in STRICT_FILES:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            text = _bare_interpolation_text(node)
+            if text is not None:
+                findings.append(f"{rel}:{node.lineno}: {text.strip()}")
+    return findings
 
 
 def find_hand_quoted_identifiers(root: Path) -> list[str]:
@@ -128,3 +190,28 @@ def test_detector_allows_identifier_composition() -> None:
 
 def test_detector_allows_parameter_placeholders() -> None:
     assert not _scan("""q = "SELECT 1 FROM t WHERE name = %s" % (name,)""")
+
+
+def test_strict_files_exist() -> None:
+    for rel in STRICT_FILES:
+        assert (_CONFITURE_SRC.parent.parent / rel).exists(), rel
+
+
+def test_strict_files_compose_every_identifier() -> None:
+    assert find_bare_interpolations(_CONFITURE_SRC) == []
+
+
+def test_strict_detector_catches_bare_savepoint() -> None:
+    node = ast.parse('f"SAVEPOINT {name}"').body[0].value  # type: ignore[attr-defined]
+    assert _bare_interpolation_text(node) is not None
+
+
+def test_strict_detector_catches_bare_table() -> None:
+    node = ast.parse('f"SELECT COUNT(*) FROM {table} WHERE {where}"').body[0].value  # type: ignore[attr-defined]
+    assert _bare_interpolation_text(node) is not None
+
+
+def test_strict_detector_allows_raw_predicates_and_messages() -> None:
+    for src in ('f"SELECT 1 FROM t WHERE {where_clause}"', 'f"Table {schema}.{table} exists"'):
+        node = ast.parse(src).body[0].value  # type: ignore[attr-defined]
+        assert _bare_interpolation_text(node) is None, src

@@ -13,6 +13,7 @@ from typing import Any
 
 import psycopg
 from psycopg import sql as pgsql
+from psycopg.pq import TransactionStatus
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from confiture.config.environment import DatabaseConfig
@@ -114,7 +115,12 @@ class ProductionSyncer:
     def __enter__(self) -> "ProductionSyncer":
         """Context manager entry."""
         self._source_conn = create_connection(self.source_config)
-        self._target_conn = create_connection(self.target_config)
+        try:
+            self._target_conn = create_connection(self.target_config)
+        except BaseException:
+            self._source_conn.close()
+            self._source_conn = None
+            raise
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -280,10 +286,13 @@ class ProductionSyncer:
                         progress,
                     )
             finally:
-                # Re-enable triggers
-                dst_cursor.execute(
-                    pgsql.SQL("ALTER TABLE {} ENABLE TRIGGER ALL").format(table_ident)
-                )
+                # Re-enable triggers — unless the target transaction is already
+                # aborted: another statement would only mask the real error, and
+                # the rollback undoes the DISABLE anyway.
+                if self._target_conn.info.transaction_status != TransactionStatus.INERROR:
+                    dst_cursor.execute(
+                        pgsql.SQL("ALTER TABLE {} ENABLE TRIGGER ALL").format(table_ident)
+                    )
 
             # Commit target transaction
             self._target_conn.commit()

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.ledger import VALID_TABLE_RE, table_identifier
 from confiture.exceptions import MigrationError
 
@@ -116,31 +117,18 @@ def _read_source_tracking_table(
 
 
 def _insert_baseline_row(migrator: Migrator, row: dict[str, Any], *, index: int = 0) -> None:
-    """Insert one source row into the target tracking table.
+    """Copy one ledger row from the source database (``baseline-from-db``)."""
+    from confiture.core._migrator.apply import record_migration
 
-    See :meth:`Migrator._insert_baseline_row` for the slug/uniqueness contract.
-    """
-    from datetime import datetime
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = f"{row['name']}_{timestamp}_{index:04d}_baseline_from_db"
-
-    with migrator.connection.cursor() as cursor:
-        cursor.execute(
-            pgsql.SQL("""
-            INSERT INTO {}
-                (id, slug, version, name, applied_at, execution_time_ms, checksum)
-            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
-            """).format(migrator._table_ident),
-            (
-                slug,
-                row["version"],
-                row["name"],
-                row.get("applied_at"),
-                row.get("execution_time_ms") or 0,
-                row.get("checksum"),
-            ),
-        )
+    record_migration(
+        migrator,
+        version=row["version"],
+        name=row["name"],
+        execution_time_ms=row.get("execution_time_ms") or 0,
+        checksum=row.get("checksum"),
+        applied_at=row.get("applied_at"),
+        reason=f"{index:04d}_baseline_from_db",
+    )
 
 
 def clear_tracking_table(migrator: Migrator) -> int:
@@ -197,8 +185,8 @@ def reinit(
 
         # Re-mark each migration using direct INSERT (avoid mark_applied's
         # commit which would interfere with dry-run rollback)
-        from datetime import datetime
 
+        from confiture.core._migrator.apply import record_migration
         from confiture.core.checksum import compute_checksum
         from confiture.core.connection import load_migration_class
 
@@ -207,24 +195,14 @@ def reinit(
             migration_class = load_migration_class(migration_file)
             migration = migration_class(connection=migrator.connection)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            slug = f"{migration.name}_{timestamp}_reinit"
-            checksum = compute_checksum(migration_file)
-
-            with migrator.connection.cursor() as cursor:
-                cursor.execute(
-                    pgsql.SQL("""
-                    INSERT INTO {}
-                        (id, slug, version, name, execution_time_ms, checksum)
-                    VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
-                    """).format(migrator._table_ident),
-                    (slug, migration.version, migration.name, 0, checksum),
-                )
-
-            name_parts = migration_file.stem.split("_", 1)
-            name = name_parts[1] if len(name_parts) > 1 else migration_file.stem
-            if name.endswith(".up"):
-                name = name[:-3]
+            record_migration(
+                migrator,
+                version=migration.version,
+                name=migration.name,
+                checksum=compute_checksum(migration_file),
+                reason="reinit",
+            )
+            _, name = parse_migration_filename(migration_file.name)
             marked.append(
                 MigrationApplied(
                     version=migration.version,
@@ -408,11 +386,7 @@ def rebuild(
 
         marked = []
         for mf in all_migrations:
-            version = migrator._version_from_filename(mf.name)
-            name_parts = mf.stem.split("_", 1)
-            name = name_parts[1] if len(name_parts) > 1 else mf.stem
-            if name.endswith(".up"):
-                name = name[:-3]
+            version, name = parse_migration_filename(mf.name)
             marked.append(MigrationApplied(version=version, name=name, execution_time_ms=0))
 
         # Discover schemas that would be dropped

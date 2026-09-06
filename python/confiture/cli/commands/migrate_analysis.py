@@ -26,6 +26,7 @@ from confiture.cli.helpers import (
     is_json,
     param_is_explicit,
 )
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import create_connection, load_config, open_connection
 from confiture.core.differ import SchemaDiffer
@@ -966,9 +967,7 @@ def migrate_introspect(
             # Resolve name from snapshot filename
             detected_name = ""
             for snap_path in snapshots_dir.glob(f"{detected_version}_*.sql"):
-                stem = snap_path.stem
-                parts = stem.split("_", 1)
-                detected_name = parts[1] if len(parts) > 1 else stem
+                detected_name = parse_migration_filename(snap_path.name)[1]
                 break
 
             if format_output == "json":
@@ -1645,11 +1644,7 @@ def migrate_fix_signatures(
 
 def _preflight_version_from_filename(filename: str) -> str:
     """Extract version prefix from a migration filename."""
-    for suffix in (".up.sql", ".py"):
-        if filename.endswith(suffix):
-            filename = filename[: -len(suffix)]
-            break
-    return filename.split("_")[0]
+    return parse_migration_filename(filename)[0]
 
 
 def _introspect_payload(ledger_present: bool, **extra: Any) -> dict[str, Any]:

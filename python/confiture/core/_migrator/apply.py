@@ -20,17 +20,13 @@ from psycopg import sql as pgsql
 
 from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 from confiture.core.checksum import (
-    ChecksumConfig,
-    MigrationChecksumVerifier,
     compute_checksum,
 )
-from confiture.core.connection import get_migration_class, load_migration_module
+from confiture.core.connection import load_migration_class
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.hooks.phases import HookPhase
-from confiture.core.locking import LockConfig, MigrationLock
 from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
-from confiture.core.progress import ProgressManager
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 
@@ -63,6 +59,21 @@ def apply(
             migration.name,
             error_code="MIGR_101",
             resolution_hint="Use --force to re-apply this migration, or run 'confiture migrate status' to review applied migrations",
+        )
+
+    if not migration.transactional and not commit:
+        # ``commit=False`` means "inside a SAVEPOINT — persist nothing". The
+        # non-transactional path commits the current transaction and runs in
+        # autocommit; it cannot honour that, so it must not be asked to.
+        raise MigrationError(
+            f"Migration {migration.version} ({migration.name}) is non-transactional and "
+            "cannot run with commit=False (inside a SAVEPOINT)",
+            version=migration.version,
+            error_code="MIGR_108",
+            resolution_hint=(
+                "Run it for real with `migrate up`, or exclude it from the dry run; "
+                "`session.up(dry_run_execute=True)` skips non-transactional migrations."
+            ),
         )
 
     # Validate preconditions before applying
@@ -373,49 +384,62 @@ def rollback_to_savepoint(migrator: Migrator, name: str, *, commit: bool = True)
 
 def record_migration(
     migrator: Migrator,
+    *,
+    version: str,
+    name: str,
+    execution_time_ms: int = 0,
+    checksum: str | None = None,
+    applied_by: str | None = None,
+    applied_at: Any = None,
+    reason: str | None = None,
+) -> None:
+    """The one INSERT into the ledger.
+
+    ``slug`` is ``<name>_<version>_<timestamp>[_<reason>]`` — unique per row
+    because the version is, however many same-named migrations land in the
+    same second. ``reason`` marks rows that were not applied by ``up()``
+    (``baseline``, ``reinit``, ``0003_baseline_from_db``). ``applied_by``
+    defaults to the connection's ``current_user``; ``applied_at`` to ``now()``.
+    """
+    from datetime import datetime
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    slug = f"{name}_{version}_{timestamp}" + (f"_{reason}" if reason else "")
+    if applied_by is None:
+        row = migrator.connection.execute("SELECT current_user").fetchone()
+        applied_by = row[0] if row else None
+    with migrator.connection.cursor() as cursor:
+        cursor.execute(
+            pgsql.SQL("""
+            INSERT INTO {}
+                (id, slug, version, name, applied_at, execution_time_ms, checksum, applied_by)
+            VALUES (gen_random_uuid(), %s, %s, %s, COALESCE(%s, NOW()), %s, %s, %s)
+            """).format(migrator._table_ident),
+            (slug, version, name, applied_at, execution_time_ms, checksum, applied_by),
+        )
+
+
+def record_applied(
+    migrator: Migrator,
     migration: Migration,
     execution_time_ms: int,
     migration_file: Path | None = None,
     *,
     applied_by: str | None = None,
 ) -> None:
-    """Record migration in tracking table with checksum.
-
-    See :meth:`Migrator._record_migration` for the ``applied_by`` contract.
-    """
-    from datetime import datetime
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = f"{migration.name}_{timestamp}"
-
-    # Compute checksum if file path provided
+    """Record a migration ``up()`` just applied, with its file's checksum."""
     checksum = None
     if migration_file is not None and migration_file.exists():
         checksum = compute_checksum(migration_file)
         logger.debug(f"Computed checksum for {migration.version}: {checksum[:16]}...")
-
-    if applied_by is None:
-        # Capture the role that opened the connection.  Quoting
-        # is unnecessary — current_user is read-only on the server.
-        row = migrator.connection.execute("SELECT current_user").fetchone()
-        applied_by = row[0] if row else None
-
-    with migrator.connection.cursor() as cursor:
-        cursor.execute(
-            pgsql.SQL("""
-            INSERT INTO {}
-                (id, slug, version, name, execution_time_ms, checksum, applied_by)
-            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
-            """).format(migrator._table_ident),
-            (
-                slug,
-                migration.version,
-                migration.name,
-                execution_time_ms,
-                checksum,
-                applied_by,
-            ),
-        )
+    record_migration(
+        migrator,
+        version=migration.version,
+        name=migration.name,
+        execution_time_ms=execution_time_ms,
+        checksum=checksum,
+        applied_by=applied_by,
+    )
 
 
 def mark_applied(
@@ -427,8 +451,6 @@ def mark_applied(
 
     See :meth:`Migrator.mark_applied` for the full contract.
     """
-    from datetime import datetime
-
     from confiture.core.connection import load_migration_class
 
     # Load the migration class to get version and name
@@ -445,125 +467,23 @@ def mark_applied(
         return migration.version
 
     # Generate slug with reason marker
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = f"{migration.name}_{timestamp}_{reason}"
 
     # Compute checksum
     checksum = compute_checksum(migration_file)
 
     # Record in tracking table with execution_time_ms = 0 (not executed)
-    with migrator.connection.cursor() as cursor:
-        cursor.execute(
-            pgsql.SQL("""
-            INSERT INTO {}
-                (id, slug, version, name, execution_time_ms, checksum)
-            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
-            """).format(migrator._table_ident),
-            (slug, migration.version, migration.name, 0, checksum),
-        )
+    record_migration(
+        migrator,
+        version=migration.version,
+        name=migration.name,
+        checksum=checksum,
+        reason=reason,
+    )
 
     migrator.connection.commit()
     logger.info(f"Marked migration {migration.version} ({migration.name}) as applied ({reason})")
 
     return migration.version
-
-
-def migrate_up(
-    migrator: Migrator,
-    force: bool = False,
-    migrations_dir: Path | None = None,
-    target: str | None = None,
-    lock_config: LockConfig | None = None,
-    checksum_config: ChecksumConfig | None = None,
-    progress: ProgressManager | None = None,
-) -> list[str]:
-    """Apply pending migrations up to target version.
-
-    See :meth:`Migrator.migrate_up` for the full contract.
-    """
-    effective_migrations_dir = migrations_dir or Path("db/migrations")
-
-    verify_task = None
-    if progress:
-        verify_task = progress.add_task("Verifying checksums...", total=None)
-
-    # Verify checksums before running migrations (unless force mode)
-    if checksum_config is None:
-        checksum_config = ChecksumConfig()
-
-    if checksum_config.enabled and not force:
-        verifier = MigrationChecksumVerifier(
-            migrator.connection, checksum_config, migration_table=migrator.migration_table
-        )
-        verifier.verify_all(effective_migrations_dir)
-
-    if progress and verify_task is not None:
-        progress.finish_task(verify_task)
-
-    # Create lock manager
-    lock = MigrationLock(migrator.connection, lock_config)
-
-    # Acquire lock and run migrations
-    with lock.acquire():
-        return migrator._migrate_up_internal(force, migrations_dir, target, progress=progress)
-
-
-def migrate_up_internal(
-    migrator: Migrator,
-    force: bool = False,
-    migrations_dir: Path | None = None,
-    target: str | None = None,
-    progress: ProgressManager | None = None,
-) -> list[str]:
-    """Internal implementation of migrate_up (called within lock)."""
-    discover_task = None
-    if progress:
-        discover_task = progress.add_task("Discovering migrations...", total=None)
-
-    # Find migrations to apply
-    if force:
-        # In force mode, apply all migrations regardless of state
-        migrations_to_apply = migrator.find_migration_files(migrations_dir)
-    else:
-        # Normal mode: only apply pending migrations
-        migrations_to_apply = migrator.find_pending(migrations_dir)
-
-    if progress and discover_task is not None:
-        progress.update(discover_task, len(migrations_to_apply))
-
-    # Check for mixed transactional modes and warn
-    migrator._warn_mixed_transactional_modes(migrations_to_apply)
-
-    apply_task = None
-    if progress:
-        apply_task = progress.add_task("Applying migrations...", total=len(migrations_to_apply))
-
-    applied_versions = []
-
-    for migration_file in migrations_to_apply:
-        # Load migration module
-        module = load_migration_module(migration_file)
-        migration_class = get_migration_class(module)
-
-        # Create migration instance
-        migration = migration_class(connection=migrator.connection)
-
-        # Check target
-        if target and migration.version > target:
-            break
-
-        # Apply migration with file path for checksum computation
-        migrator.apply(migration, force=force, migration_file=migration_file)
-        applied_versions.append(migration.version)
-
-        # Update progress
-        if progress and apply_task is not None:
-            progress.update(apply_task, advance=1)
-
-    if progress and apply_task is not None:
-        progress.finish_task(apply_task)
-
-    return applied_versions
 
 
 def warn_mixed_transactional_modes(migration_files: list[Path]) -> None:
@@ -575,8 +495,7 @@ def warn_mixed_transactional_modes(migration_files: list[Path]) -> None:
     non_transactional_migrations: list[str] = []
 
     for migration_file in migration_files:
-        module = load_migration_module(migration_file)
-        migration_class = get_migration_class(module)
+        migration_class = load_migration_class(migration_file)
 
         # Check transactional attribute (default is True)
         is_transactional = getattr(migration_class, "transactional", True)

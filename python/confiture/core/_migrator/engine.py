@@ -310,7 +310,7 @@ class Migrator:
         ``applied_by`` defaults to the connection's ``current_user`` when None;
         pre-0.17.0 rows keep ``applied_by IS NULL`` as a documented invariant.
         """
-        apply_impl.record_migration(
+        apply_impl.record_applied(
             self, migration, execution_time_ms, migration_file, applied_by=applied_by
         )
 
@@ -746,65 +746,55 @@ class Migrator:
         checksum_config: ChecksumConfig | None = None,
         progress: ProgressManager | None = None,
     ) -> list[str]:
-        """Apply pending migrations up to target version.
+        """Apply pending migrations through the one apply loop.
 
-        Uses distributed locking to ensure only one migration process runs
-        at a time. This is critical for multi-pod Kubernetes deployments.
-
-        Optionally verifies checksums before running migrations to detect
-        unauthorized modifications to migration files.
+        A thin call into :meth:`MigratorSession.up` attached to this engine's
+        connection: the lock is taken first, discovery and the ledger init run
+        under it, checksums are verified before anything is applied.
 
         Args:
             force: If True, skip migration state checks and apply all migrations
             migrations_dir: Custom migrations directory (default: db/migrations)
             target: Target migration version (applies all if None)
-            lock_config: Locking configuration. If None, uses default (enabled,
-                30s timeout, blocking mode). Pass LockConfig(enabled=False)
-                to disable locking.
-            checksum_config: Checksum verification configuration. If None, uses
-                default (enabled, fail on mismatch). Pass
-                ChecksumConfig(enabled=False) to disable verification.
-            progress: Optional ProgressManager for displaying migration progress
+            lock_config: ``enabled`` and ``timeout_ms`` are honoured (default:
+                enabled, 30s). Pass ``LockConfig(enabled=False)`` to disable locking.
+            checksum_config: ``enabled`` and ``on_mismatch`` are honoured (default:
+                enabled, fail on mismatch).
+            progress: Optional ProgressManager advanced once per applied migration
 
         Returns:
-            List of applied migration versions
+            Versions applied, in order.
 
         Raises:
-            MigrationError: If migration application fails
-            LockAcquisitionError: If lock cannot be acquired within timeout
-            ChecksumVerificationError: If checksum mismatch and behavior is FAIL
+            ChecksumVerificationError: A tampered applied file (``on_mismatch=FAIL``).
+            LockAcquisitionError: The migration lock could not be taken.
+            MigrationError: A migration failed (the original exception is re-raised),
+                or the chain halted on ``requires_superuser=True``.
 
         Example:
             >>> migrator = Migrator(connection=conn)
-            >>> migrator.initialize()
-            >>> # Default: verify checksums, fail on mismatch
             >>> applied = migrator.migrate_up()
-            >>>
-            >>> # With progress tracking
-            >>> with ProgressManager() as pm:
-            ...     applied = migrator.migrate_up(progress=pm)
         """
-        return apply_impl.migrate_up(
-            self,
-            force=force,
-            migrations_dir=migrations_dir,
-            target=target,
-            lock_config=lock_config,
-            checksum_config=checksum_config,
-            progress=progress,
-        )
+        from confiture.core._migrator.session import MigratorSession  # session imports engine
+        from confiture.exceptions import MigrationError
 
-    def _migrate_up_internal(
-        self,
-        force: bool = False,
-        migrations_dir: Path | None = None,
-        target: str | None = None,
-        progress: ProgressManager | None = None,
-    ) -> list[str]:
-        """Internal implementation of migrate_up (called within lock)."""
-        return apply_impl.migrate_up_internal(
-            self, force, migrations_dir, target, progress=progress
+        lock_config = lock_config or LockConfig()
+        checksum_config = checksum_config or ChecksumConfig()
+        session = MigratorSession.attached(self, migrations_dir or Path("db/migrations"))
+        result = session.up(
+            target=target,
+            force=force,
+            verify_checksums=checksum_config.enabled,
+            on_checksum_mismatch=checksum_config.on_mismatch.value,
+            lock_timeout=lock_config.timeout_ms,
+            no_lock=not lock_config.enabled,
+            on_event=_progress_observer(progress) if progress is not None else None,
         )
+        if result.failure is not None:
+            raise result.failure
+        if not result.success:
+            raise MigrationError(result.error_summary or "Migration chain halted before completion")
+        return [m.version for m in result.migrations_applied]
 
     def _warn_mixed_transactional_modes(self, migration_files: list[Path]) -> None:
         """Warn if batch contains both transactional and non-transactional migrations."""
@@ -893,3 +883,16 @@ class Migrator:
             ...         result = m.up()
         """
         return factory.from_config(config, migrations_dir=migrations_dir)
+
+
+def _progress_observer(progress: ProgressManager) -> Any:
+    """Advance a ``ProgressManager`` task once per applied migration."""
+    state: dict[str, Any] = {"task": None}
+
+    def observe(event: Any) -> None:
+        if event.kind == "applying" and state["task"] is None:
+            state["task"] = progress.add_task("Applying migrations...", total=None)
+        elif event.kind == "applied" and state["task"] is not None:
+            progress.update(state["task"], advance=1)
+
+    return observe

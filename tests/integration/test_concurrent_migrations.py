@@ -8,6 +8,7 @@ Requires a running PostgreSQL instance with test database.
 
 import threading
 import time
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -318,3 +319,87 @@ class TestLockRecovery:
         # Lock should be released, second connection should acquire
         with lock2.acquire():
             assert lock2.lock_held is True
+
+
+@pytest.mark.integration
+class TestConcurrentSessionUp:
+    """Two deployers, one migration (ENG-03).
+
+    Deployer A holds the migration lock and applies the only pending migration
+    while deployer B is already inside ``session.up()``. B must wait for the
+    lock, then discover — against the ledger A just wrote — that nothing is
+    pending: ``success=True, applied=[]``, no MIGR_101. Discovery before the
+    lock is what made B fail here.
+    """
+
+    @staticmethod
+    def _write_migration(migrations: Path) -> Path:
+        migrations.mkdir(parents=True, exist_ok=True)
+        path = migrations / "20260906000001_create_widgets.up.sql"
+        path.write_text("CREATE TABLE widgets (id INT PRIMARY KEY);\n")
+        (migrations / "20260906000001_create_widgets.down.sql").write_text("DROP TABLE widgets;\n")
+        return path
+
+    def test_second_deployer_finds_nothing_pending(
+        self, clean_test_db, test_db_url: str, tmp_path: Path
+    ) -> None:
+        from confiture.core.migrator import MigratorSession
+
+        migrations = tmp_path / "migrations"
+        self._write_migration(migrations)
+
+        # A: hold the lock on its own connection, apply the migration while B waits.
+        conn_a = psycopg.connect(test_db_url)
+        lock_a = MigrationLock(conn_a, LockConfig(timeout_ms=10000))
+        result_b: dict[str, object] = {}
+
+        def deployer_b() -> None:
+            with MigratorSession(None, migrations, database_url_override=test_db_url) as s:
+                result_b["result"] = s.up(lock_timeout=10000)
+
+        with lock_a.acquire():
+            thread = threading.Thread(target=deployer_b)
+            thread.start()
+            time.sleep(0.5)  # B is inside up(), blocked on the lock
+            with MigratorSession(None, migrations, database_url_override=test_db_url) as s_a:
+                # A's own session runs on a fresh connection: lock-free apply under A's lock.
+                a_result = s_a.up(no_lock=True, lock_timeout=10000)
+            assert a_result.success is True, a_result.errors
+            assert [m.version for m in a_result.migrations_applied] == ["20260906000001"]
+        thread.join(timeout=15)
+        conn_a.close()
+
+        assert not thread.is_alive(), "deployer B never returned"
+        result = result_b["result"]
+        assert result.success is True, result.errors
+        assert result.migrations_applied == []
+        assert not any("MIGR_101" in e or "already applied" in e for e in result.errors)
+
+    def test_two_first_run_deployers_do_not_race_the_ledger(
+        self, clean_test_db, test_db_url: str, tmp_path: Path
+    ) -> None:
+        """On an empty database both deployers create the ledger under the lock; one applies."""
+        from confiture.core.migrator import MigratorSession
+
+        migrations = tmp_path / "migrations"
+        self._write_migration(migrations)
+        results: list = []
+        errors: list[str] = []
+
+        def deployer() -> None:
+            try:
+                with MigratorSession(None, migrations, database_url_override=test_db_url) as s:
+                    results.append(s.up(lock_timeout=10000))
+            except Exception as exc:  # noqa: BLE001 — collected for the assertion
+                errors.append(repr(exc))
+
+        threads = [threading.Thread(target=deployer) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=20)
+
+        assert errors == []
+        assert [r.success for r in results] == [True, True]
+        applied = sorted(m.version for r in results for m in r.migrations_applied)
+        assert applied == ["20260906000001"]

@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
+from confiture.core.hooks.base import HookError
+
 logger = logging.getLogger(__name__)
 
 
@@ -214,7 +216,5 @@ class HookExecutionTracer:
         return critical_path
 
 
-class HookExecutionError(Exception):
-    """Exception raised when hook execution fails."""
-
-    pass
+class HookExecutionError(HookError):
+    """A hook failed under the FAIL_FAST strategy — a :class:`HookError`."""

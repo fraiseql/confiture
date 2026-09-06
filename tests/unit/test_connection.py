@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import psycopg
 import pytest
 import yaml
+from psycopg.conninfo import conninfo_to_dict
 
 from confiture.core.connection import (
     create_connection,
@@ -82,13 +83,13 @@ class TestCreateConnection:
         conn = create_connection(config)
 
         assert conn == mock_conn
-        mock_connect.assert_called_once_with(
-            host="localhost",
-            port=5432,
-            dbname="test_db",
-            user="test_user",
-            password="test_pass",
-        )
+        assert conninfo_to_dict(mock_connect.call_args[0][0]) == {
+            "host": "localhost",
+            "port": "5432",
+            "dbname": "test_db",
+            "user": "test_user",
+            "password": "test_pass",
+        }
 
     @patch("confiture.core.connection.psycopg.connect")
     def test_create_connection_defaults(self, mock_connect):
@@ -101,13 +102,13 @@ class TestCreateConnection:
         conn = create_connection(config)
 
         assert conn == mock_conn
-        mock_connect.assert_called_once_with(
-            host="localhost",  # Default
-            port=5432,  # Default
-            dbname="postgres",  # Default
-            user="postgres",  # Default
-            password="",  # Default
-        )
+        assert conninfo_to_dict(mock_connect.call_args[0][0]) == {
+            "host": "localhost",
+            "port": "5432",
+            "dbname": "postgres",
+            "user": "postgres",
+            "password": "",
+        }
 
     @patch("confiture.core.connection.psycopg.connect")
     def test_create_connection_no_database_section(self, mock_connect):

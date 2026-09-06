@@ -7,6 +7,150 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-09-06
+
+Phase 03 of the 2026-09-06 review: one apply loop. `MigratorSession.up()` is the
+engine; what it reports is what happened.
+
+### Changed
+
+- ⚠️ **`MigratorSession.up()` plans under the lock.** Migration discovery, the
+  ledger `CREATE TABLE` and the pending computation used to run *before* the
+  advisory lock was taken, so two deployers starting together could both see
+  the same pending set and race the ledger CREATE. The lock is now acquired
+  first; discovery and `initialize()` run under it, and the ledger DDL is
+  `IF NOT EXISTS`. A second concurrent `up()` returns `success=True` with
+  nothing applied. A lock that cannot be taken raises `LockAcquisitionError`,
+  as before.
+- ⚠️ **`MigratorSession.up()` verifies checksums.** `verify_checksums=True`
+  (the default) used to set `checksums_verified=True` on the result and never
+  call the verifier — the library path had no checksum check at all. The
+  session now runs `MigrationChecksumVerifier` under the lock, before anything
+  is applied. A modified applied file raises `ChecksumVerificationError` under
+  the new `on_checksum_mismatch="fail"` default; `"warn"` continues and lists
+  each mismatch in `result.warnings`; `force=True` skips the check.
+  `checksums_verified` is `True` only when the verifier ran and found no
+  mismatch. Library callers who edit applied migration files in place will now
+  see the error the CLI has always reported.
+
+- ⚠️ **`confiture migrate up` and `migrate down` run the library session.** The
+  CLI carried its own apply loop (and `migrate down` its own rollback loop):
+  its own lock, its own discovery before the lock, its own checksum check —
+  and after the `--dry-run-execute` confirmation it fell through into that
+  loop and **committed**. Both commands now call `MigratorSession.up()` /
+  `down()` and render the result; live progress comes from the session's new
+  `on_event` observer. `--dry-run-execute` executes inside a SAVEPOINT that is
+  always rolled back — no table survives, no ledger row is written — and the
+  new `--yes` flag skips its confirmation prompt. Auto-baseline
+  (`--auto-detect-baseline`), strict mode and view-helper auto-install moved
+  into the session (`core/_migrator/policy.py`) as `up()` options, so the
+  library path applies them too: a session built from an `Environment` with
+  `migration.view_helpers: auto` (the default) now installs the helpers the
+  way the CLI always did. A guard test (`test_cli_has_no_apply_loop.py`) keeps
+  the lock, the migration loaders and the engine's `apply`/`rollback` out of
+  `confiture/cli/`.
+- ⚠️ **Exit code 5 for a missing or empty `--snapshots-dir`.** `--auto-detect-
+  baseline` used to exit 2 there; 2 is "tracking table absent" in the frozen
+  exit table, 5 is a configuration failure. Orphaned migration files are
+  reported before the database is touched; under strict mode they abort
+  (exit 1) even when nothing is pending, where they were previously only
+  checked once pending migrations existed.
+- ⚠️ **`Migrator.migrate_up()` is a thin call into the same session loop**
+  (`MigratorSession.attached(migrator, dir).up()`), so it now applies
+  `.up.sql` migrations, plans under the lock and re-raises the failing
+  migration's exception; `lock_config.lock_id`/`mode` and the mixed-mode
+  warning of the deleted engine loop are gone. `confiture migrate apply-as`
+  runs `MigratorSession.apply_one(version, applied_by=role)`.
+- **`MigrateUpResult.failure`** holds the exception behind `errors[0]` (not
+  serialized); `pending` is filled on a dry run. New
+  `confiture.core.connection.dsn_from_config()` is the one derivation of a
+  libpq connection string from a config (URL key, legacy `database:` block,
+  `DatabaseConfig`, `Environment`); `create_connection()` uses it.
+
+### Changed
+
+- **`core/_migrator/session.py` is orchestration only.** The apply loop
+  (`apply_loop.py`), the rollback loop (`rollback_loop.py`), `run_against`
+  (`replay.py`) and the read-only views `status`/`current_revision`/`preflight`
+  (`reporting.py`) are their own modules; `MigratorSession`'s methods delegate
+  to them with unchanged signatures, docstrings and import paths. `down()` and
+  `down_to()` now read the ledger *under* the migration lock, like `up()`.
+
+### Fixed
+
+- **Two same-named migrations in one run are both recorded.** The ledger slug
+  was `<name>_<timestamp to the second>`, so two migrations sharing a name and
+  applied within the same second collided on `slug UNIQUE`. The slug is now
+  `<name>_<version>_<timestamp>[_<reason>]`, written by the one
+  `record_migration()` in `_migrator/apply.py` — `mark_applied`, `reinit` and
+  `baseline-from-db` no longer carry their own INSERTs.
+- **One filename parser, one discovery.** `discovery.parse_migration_filename()`
+  replaces the fourteen `split("_", 1)` copies across the engine, the models,
+  `preflight`, the verifier and the CLI; `session.status()` and the CLI's
+  `migrate status` list the same files `up()` applies (`__init__.py` and
+  `_helper.py` are no longer reported as migrations). `FileSQLMigration.from_files`
+  returns a real `FileSQLMigration` subclass instead of a closure-built class,
+  so `Migrator.dry_run` on a SQL-file migration returns its statements rather
+  than the "no statements" stub. A migration module is loaded as
+  `confiture_migration_<stem>`: a migration named `json.py` no longer replaces
+  the stdlib `json` in `sys.modules`. `SchemaBuilder` loses two unreachable
+  duplicate `include_dirs` branches.
+- **Hooks fire from async code and fail loudly.** `trigger_hook` skipped every
+  hook when an event loop was already running, logged and swallowed every hook
+  failure, and left a closed loop installed as the current one. Hooks now run
+  on a worker thread with their own loop when a loop is running, on a private
+  loop otherwise (the caller's loop is never replaced), and a hook failing under
+  the default `FAIL_FAST` strategy raises `HookError` (`HookExecutionError` is
+  now a `HookError`) from the migration call.
+- **Three resource leaks.** `ProductionSyncer.__enter__` closes the source
+  connection when the target connection fails; `MigratorSession.__enter__`
+  closes the connection it just opened when the tracking-table name is
+  rejected; `MigrationVerifier.run_verify` uses a cursor context and
+  `RELEASE SAVEPOINT verify_check` after every `ROLLBACK TO`, so a long verify
+  run no longer accumulates savepoints. `sync_table` re-enables triggers only
+  when the target transaction is not already aborted, so the original error is
+  the one reported.
+- **Names are identifiers in `large_tables` and `run_against`.** Every table,
+  column, index and access-method name `BatchedMigration`, `OnlineIndexBuilder`
+  and `TableSizeEstimator` put into SQL was f-string interpolated; so were
+  `run_against`'s savepoint names (`SAVEPOINT sp_<version>`). They now go
+  through `psycopg.sql.Identifier` (schema-qualified names via
+  `core.ledger.split_qualified_table`). `expression`, `where_clause`, `default`
+  and `column_type` stay raw SQL by documented contract, and an index column
+  that is not a bare identifier (`lower(email)`) is kept as an expression. A
+  consequence of quoting: mixed-case names are now case-sensitive, as they are
+  everywhere else in confiture. `copy_to_new_table` also resolves a
+  schema-qualified source's columns in that schema instead of `public`. The
+  engine's mixed-transactional-mode warning loads `.up.sql` migrations instead
+  of importing them as Python. The Phase 01 tripwire gains a strict rule for
+  `preconditions.py`, `_migrator/session.py` and `large_tables.py`: no bare
+  interpolation after a relation, column, index or savepoint keyword.
+- **`BatchedMigration.backfill_column()` terminates.** Each batch used to
+  update `LIMIT batch_size` rows matching *where_clause* and stop when a batch
+  touched nothing — with the default `where_clause="TRUE"` that never happened
+  and the loop ran forever. Batches now walk the table's `ctid` block range as
+  measured at the start (`pg_relation_size`), sized to about `batch_size` rows,
+  and exclude tuples created after the backfill began (`xmin`), so every row is
+  rewritten exactly once and the loop ends when the last block is visited.
+- **Two `CREATE INDEX CONCURRENTLY` in one `.up.sql` apply.** A
+  non-transactional SQL-file migration was sent to the server as one
+  multi-statement string, which PostgreSQL wraps in an implicit transaction
+  block even under autocommit — so it failed. It is now split with the shared
+  statement splitter and executed one statement at a time (`.down.sql` too).
+- **`dry_run_execute` no longer commits through a non-transactional
+  migration.** The SAVEPOINT path handed such a migration to the autocommit
+  apply, which committed the transaction — and with it every migration tested
+  before. `session.up(dry_run_execute=True)` now skips non-transactional
+  migrations (listed in `skipped`, with a warning; the CLI prints a
+  `⏭️  Skipping … (non-transactional)` line), and
+  `Migrator.apply(..., commit=False)` on one is an error, new `MIGR_108`
+  (exit 3).
+- **SQL-file migrations are checksum-verified.** The verifier looked up
+  applied migrations as `<version>_<name>.py` only, so every `.up.sql`
+  migration logged "migration file not found" and was skipped — `migrate up`'s
+  check and `confiture verify-checksums` never caught a tampered SQL file.
+  The lookup now sees `.up.sql` too (`.down.sql` is never checksummed).
+
 ## [0.47.0] - 2026-09-06
 
 The first two phases of the 2026-09-06 whole-repository review: the security

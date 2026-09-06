@@ -59,3 +59,48 @@ def builder_double(**returns: Any) -> MagicMock:
     for name, value in returns.items():
         getattr(double, name).return_value = value
     return double
+
+
+def connection_double(
+    dbname: str = "confiture_test", *, view_helpers_installed: bool = True
+) -> MagicMock:
+    """A psycopg connection stand-in that answers the engine's bookkeeping queries.
+
+    The advisory lock asks ``SELECT current_database()``; the view-helper policy
+    counts functions in ``pg_proc``; ``COUNT(*)`` probes (is this version
+    applied?) answer 0; the ledger probe (``to_regclass``/``pg_class``) finds no
+    tracking table; the checksum verifier reads an (empty) ledger with
+    ``fetchall()``. Anything else fetches ``(dbname,)``.
+    """
+    conn = MagicMock(name="connection")
+    last: dict[str, str] = {"sql": ""}
+
+    def _fetchone() -> tuple[Any, ...]:
+        sql = last["sql"].lower()
+        if "pg_proc" in sql:
+            return (2 if view_helpers_installed else 0,)
+        if "count(" in sql:
+            return (0,)  # nothing applied, nothing recorded
+        if "to_regclass" in sql or "pg_class" in sql:
+            return None  # the ledger probe: no tracking table yet
+        return (dbname,)
+
+    def _wire(cursor: MagicMock) -> None:
+        def _execute(sql: Any, *args: Any, **kwargs: Any) -> MagicMock:
+            last["sql"] = str(sql)
+            return cursor
+
+        cursor.execute.side_effect = _execute
+        cursor.fetchone.side_effect = _fetchone
+        cursor.fetchall.return_value = []  # an empty ledger
+        cursor.rowcount = -1  # what psycopg reports before any statement
+
+    _wire(conn.execute.return_value)
+    conn.execute.side_effect = lambda sql, *a, **k: (
+        last.__setitem__("sql", str(sql)),
+        conn.execute.return_value,
+    )[1]
+    cursor = conn.cursor.return_value
+    _wire(cursor)
+    _wire(cursor.__enter__.return_value)
+    return conn

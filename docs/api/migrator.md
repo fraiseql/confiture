@@ -109,13 +109,46 @@ def up(
     dry_run: bool = False,
     dry_run_execute: bool = False,
     verify_checksums: bool = True,
+    on_checksum_mismatch: str = "fail",
     force: bool = False,
     lock_timeout: int = 30000,
     no_lock: bool = False,
     require_reversible: bool = False,
+    strict_mode: bool | None = None,
+    auto_baseline: Path | None = None,
+    install_view_helpers: bool | None = None,
+    on_event: Callable[[UpEvent], None] | None = None,
 ) -> "MigrateUpResult":
     """Apply pending migrations (atomically) up to an optional target."""
 ```
+
+`up()` is the one apply loop: `confiture migrate up` and `Migrator.migrate_up()`
+both run it. The lock is taken first; discovery and the ledger `CREATE TABLE IF NOT
+EXISTS` happen under it; checksums are verified before anything is applied. A lock
+that cannot be taken raises `LockAcquisitionError`; a failing migration is a
+`success=False` result whose `failure` attribute holds the exception.
+
+- `strict_mode`: fail on warnings/notices; `None` follows the environment's
+  `migration.strict_mode`.
+- `auto_baseline`: a snapshots directory — self-baseline a database whose ledger is
+  missing (the CLI's `--auto-detect-baseline`). Refuses with `ConfigurationError`
+  when a relation of the ledger's name exists in another schema, or when the
+  directory is missing or empty.
+- `install_view_helpers`: install the view helper functions first; `None` follows
+  `migration.view_helpers: auto`.
+- `on_event`: live progress. Each `UpEvent` has a `kind` (`lock_acquired`,
+  `baseline_probe`, `baseline_detected`, `baseline_missed`, `view_helpers_installed`,
+  `checksums_verified`, `pending`, `applying`, `applied`, `failed`, `superuser_halt`,
+  `target_reached`), a `version`/`name` when one migration is concerned, a
+  `message`, and `elapsed_ms` on `applied`.
+
+`verify_checksums=True` (the default) checks every applied migration file —
+`.py` and `.up.sql` — against the ledger before anything is applied, under the
+migration lock. A modified file raises `confiture.core.checksum.ChecksumVerificationError`
+(`.mismatches` lists the versions) under `on_checksum_mismatch="fail"`;
+`"warn"` continues and reports each mismatch in `result.warnings`; `"ignore"`
+continues silently. `force=True` skips the check. `result.checksums_verified` is
+`True` only when the verifier ran and found no mismatch — never a copy of the flag.
 
 ```python
 with Migrator.from_config("db/environments/production.yaml") as session:
@@ -171,6 +204,35 @@ def down_to(
 It validates up front that every required `.down.sql` exists, refusing
 atomically (no partial rollback) if any is missing.
 
+### `apply_one()`
+
+```python
+def apply_one(
+    self,
+    version: str,
+    *,
+    applied_by: str | None = None,
+    lock_timeout: int = 30000,
+    no_lock: bool = False,
+) -> "MigrationApplied":
+    """Apply exactly one migration by version, under the migration lock."""
+```
+
+The engine behind `confiture migrate apply-as`: open a session on the privileged
+role's URL, apply the migration `up()` halted on (`requires_superuser=True`), then
+re-run `up()`. Raises `MigrationError` `MIGR_001` when the version is already
+applied and `MIGR_100` when no file carries it.
+
+### `MigratorSession.attached()`
+
+```python
+session = MigratorSession.attached(migrator, Path("db/migrations"))
+result = session.up()
+```
+
+A session over an engine that already owns its connection — the connection is not
+closed when the block ends. `Migrator.migrate_up()` is implemented this way.
+
 ### Other operations
 
 | Method | Purpose |
@@ -213,7 +275,10 @@ from confiture.models.results import MigrateUpResult
 #   success: bool
 #   migrations_applied: list[MigrationApplied]
 #   total_execution_time_ms: int
-#   checksums_verified: bool
+#   checksums_verified: bool   # the verifier ran and found no mismatch
+#   skipped_superuser: list[SkippedMigration]
+#   pending: list[str]        # versions not applied (dry run, or after a halt)
+#   failure: BaseException | None   # the exception behind errors[0]; not serialized
 #   dry_run: bool
 #   dry_run_execute: bool
 #   warnings: list[str]

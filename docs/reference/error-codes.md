@@ -82,6 +82,7 @@ resolution hint surfaced in the envelope.
 | `MIGR_105` | 0 | info | No pending migrations to apply | Your database schema is up to date |
 | `MIGR_106` | 3 | error | Duplicate migration version: {version} | Multiple migration files share the same version number. Rename files to use unique version prefixes. Run 'confiture migrate validate' to see all duplicates. |
 | `MIGR_107` | 3 | error | Migration {version} ({name}) issued an explicit COMMIT or ROLLBACK in its body, breaking confiture's transaction envelope | Remove any explicit COMMIT or ROLLBACK from the migration body. Confiture manages the outer transaction; embedded transaction control leaves the database in an unrecoverable state if a subsequent statement fails. If you need autocommit semantics, set transactional = False on the migration. |
+| `MIGR_108` | 3 | error | Migration {version} is non-transactional and cannot run with commit=False (inside a SAVEPOINT) | A non-transactional migration commits the current transaction and runs in autocommit, so it cannot be tested inside a SAVEPOINT. `session.up(dry_run_execute=True)` skips such migrations; apply them for real with `migrate up`. |
 | `PGGIT_900` | 7 | error | pgGit command failed | Check pgGit is installed and configured |
 | `PGGIT_901` | 7 | error | Invalid pgGit configuration | Check pgGit configuration in confiture config |
 | `POOL_1200` | 6 | error | Connection pool exhausted | Increase pool size or wait for connections to be released |

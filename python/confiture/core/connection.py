@@ -45,6 +45,45 @@ def load_config(config_file: Path) -> dict[str, Any]:
         ) from e
 
 
+def dsn_from_config(config: dict[str, Any] | str | Any) -> str:
+    """The libpq connection string a configuration resolves to.
+
+    One derivation for every consumer — :func:`create_connection` and
+    :class:`~confiture.core.migrator.MigratorSession` — so a legacy
+    ``database:`` block and a ``database_url`` key open the same connection
+    whichever path a command takes.
+
+    Args:
+        config: A DSN string, a configuration dictionary with a ``database_url``
+                key or a ``database`` section, a ``DatabaseConfig`` instance,
+                or ``None`` (all defaults).
+    """
+    from psycopg.conninfo import make_conninfo
+
+    from confiture.config.environment import DatabaseConfig
+
+    if isinstance(config, str):
+        return config
+    if isinstance(config, DatabaseConfig):
+        block = config.to_dict().get("database", {})
+    elif config is not None and not isinstance(config, dict):
+        # An ``Environment`` (or anything else carrying a resolved URL).
+        return str(config.database_url)
+    else:
+        data: dict[str, Any] = config or {}
+        database_url = data.get("database_url")
+        if database_url:
+            return str(database_url)
+        block = data.get("database") or {}
+    return make_conninfo(
+        host=block.get("host", "localhost"),
+        port=block.get("port", 5432),
+        dbname=block.get("database", "postgres"),
+        user=block.get("user", "postgres"),
+        password=block.get("password", ""),
+    )
+
+
 def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
     """Create database connection from configuration.
 
@@ -53,45 +92,13 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
                 'database_url' key, or DatabaseConfig instance
 
     Returns:
-        PostgreSQL connection
+        psycopg.Connection instance
 
     Raises:
-        ConfigurationError: If the connection fails (CONFIG_006 → exit 3).
+        ConfigurationError: If connection fails
     """
-    from confiture.config.environment import DatabaseConfig
-
     try:
-        # Handle string database URL
-        if isinstance(config, str):
-            return psycopg.connect(config)
-
-        # Handle DatabaseConfig instance
-        if isinstance(config, DatabaseConfig):
-            config_dict = config.to_dict()
-            db_config = config_dict.get("database", {})
-            conn = psycopg.connect(
-                host=db_config.get("host", "localhost"),
-                port=db_config.get("port", 5432),
-                dbname=db_config.get("database", "postgres"),
-                user=db_config.get("user", "postgres"),
-                password=db_config.get("password", ""),
-            )
-        else:
-            # Check for database_url first
-            database_url = config.get("database_url")
-            if database_url:
-                conn = psycopg.connect(database_url)
-            else:
-                # Fall back to database section
-                db_config = config.get("database", {})
-                conn = psycopg.connect(
-                    host=db_config.get("host", "localhost"),
-                    port=db_config.get("port", 5432),
-                    dbname=db_config.get("database", "postgres"),
-                    user=db_config.get("user", "postgres"),
-                    password=db_config.get("password", ""),
-                )
-        return conn
+        return psycopg.connect(dsn_from_config(config))
     except psycopg.Error as e:
         raise ConfigurationError(
             f"Failed to connect to database: {e}",
@@ -189,7 +196,10 @@ def load_migration_module(migration_file: Path) -> ModuleType:
     """
     try:
         # Create module spec
-        spec = importlib.util.spec_from_file_location(migration_file.stem, migration_file)
+        # A namespaced module name: a migration called ``json.py`` must not
+        # replace the stdlib ``json`` in ``sys.modules``.
+        module_name = f"confiture_migration_{migration_file.stem}"
+        spec = importlib.util.spec_from_file_location(module_name, migration_file)
         if spec is None or spec.loader is None:
             raise MigrationError(
                 f"Cannot load migration: {migration_file}",
@@ -198,7 +208,7 @@ def load_migration_module(migration_file: Path) -> ModuleType:
 
         # Load module
         module = importlib.util.module_from_spec(spec)
-        sys.modules[migration_file.stem] = module
+        sys.modules[module_name] = module
         spec.loader.exec_module(module)
 
         return module

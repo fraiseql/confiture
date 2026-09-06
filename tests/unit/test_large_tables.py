@@ -358,8 +358,8 @@ class TestOnlineIndexBuilder:
 
         builder.create_index_concurrently(table="documents", columns=["content"], method="gin")
 
-        call_args = str(cursor.execute.call_args)
-        assert "USING gin" in call_args
+        rendered = cursor.execute.call_args.args[0].as_string()
+        assert 'USING "gin"' in rendered
 
     def test_drop_index_concurrently(self, mock_connection):
         """Test dropping index concurrently."""

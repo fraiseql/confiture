@@ -24,6 +24,7 @@ from confiture.cli.helpers import (
     is_json,
     resolve_database_url,
 )
+from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.exceptions import ValidationError
@@ -146,9 +147,7 @@ def migrate_status(
             return
 
         # Find migration files (both Python and SQL)
-        py_files = list(migrations_dir.glob("*.py"))
-        sql_files = list(migrations_dir.glob("*.up.sql"))
-        migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
+        migration_files = discover_migration_files(migrations_dir)
 
         # Check for orphaned SQL files that don't match the naming pattern
         orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
@@ -261,12 +260,7 @@ def migrate_status(
             # Extract version and name from filename
             # Python: "001_add_users.py" -> version="001", name="add_users"
             # SQL: "001_add_users.up.sql" -> version="001", name="add_users"
-            base_name = migration_file.stem
-            if base_name.endswith(".up"):
-                base_name = base_name[:-3]  # Remove ".up" suffix
-            parts = base_name.split("_", 1)
-            version = parts[0] if len(parts) > 0 else "???"
-            name = parts[1] if len(parts) > 1 else base_name
+            version, name = parse_migration_filename(migration_file.name)
 
             # Determine status
             if _db_source and not db_error:
@@ -734,13 +728,20 @@ def migrate_up(
         "--batch-sleep",
         help="Seconds to sleep between batches to reduce lock pressure (default: 0.1)",
     ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip the --dry-run-execute confirmation prompt (default: off)",
+    ),
 ) -> None:
     """Apply pending migrations to the database.
 
     PROCESS:
-      Applies pending migrations in order, with distributed locking to prevent
-      concurrent runs. Verifies checksums to detect unauthorized changes. Use
-      --dry-run to analyze, or --dry-run-execute to test in a SAVEPOINT.
+      Runs the library's MigratorSession: the migration lock is taken first,
+      discovery and the ledger init happen under it, checksums are verified,
+      then pending migrations apply in order. --dry-run analyzes; --dry-run-execute
+      executes inside a SAVEPOINT that is always rolled back.
 
     EXAMPLES:
       confiture migrate up
@@ -771,7 +772,7 @@ def migrate_up(
       CORE: --target
         Which migration version to apply (default: all pending)
 
-      DRY-RUN: --dry-run, --dry-run-execute, --verbose, --format, --output
+      DRY-RUN: --dry-run, --dry-run-execute, --yes, --verbose, --format, --output
         Analyze migrations before executing, with optional SAVEPOINT testing
 
       STRUCTURAL DIFF: --dry-run does not emit a structural diff (column adds,
@@ -785,28 +786,15 @@ def migrate_up(
       ADVANCED: --force
         Skip safety checks (use with caution in production)
     """
-    import time
 
     from confiture.cli.dry_run import (
         ask_dry_run_execute_confirmation,
         display_dry_run_header,
-        print_json_report,
-        save_json_report,
-        save_text_report,
     )
-    from confiture.core.checksum import (
-        ChecksumConfig,
-        ChecksumMismatchBehavior,
-        ChecksumVerificationError,
-        MigrationChecksumVerifier,
-    )
-    from confiture.core.connection import (
-        create_connection,
-        load_config,
-        load_migration_class,
-    )
-    from confiture.core.locking import LockAcquisitionError, LockConfig, MigrationLock
-    from confiture.core.migrator import Migrator
+    from confiture.core.checksum import ChecksumVerificationError
+    from confiture.core.connection import dsn_from_config, load_config
+    from confiture.core.locking import LockAcquisitionError
+    from confiture.core.migrator import MigratorSession, find_duplicate_migration_versions
 
     try:
         # Validate dry-run options
@@ -836,17 +824,11 @@ def migrate_up(
             )
             raise typer.Exit(2)
 
-        # Build BatchConfig if --batched is requested
-        if batched:
-            from confiture.core.large_tables import BatchConfig
-
-            _batch_config = BatchConfig(batch_size=batch_size, sleep_between_batches=batch_sleep)
-        else:
-            _batch_config = None
+        # --batched is accepted for compatibility; batch processing is an
+        # engine concern (`migrate estimate`, large_tables) — see Cycle 5.
+        del batched, batch_size, batch_sleep, verbose
 
         # Check for duplicate migration versions (hard block, no DB needed)
-        from confiture.core.migrator import find_duplicate_migration_versions
-
         _up_duplicates = find_duplicate_migration_versions(migrations_dir)
         if _up_duplicates:
             if is_json(format_output):
@@ -895,27 +877,23 @@ def migrate_up(
         else:
             config_data = load_config(config)
 
-        # Try to load environment config for migration settings
-        effective_strict_mode = strict
+        # Environment-level migration settings (strict mode, view helpers) come
+        # from the environment config only when YAML is the DSN source.
+        env_cfg = None
         if (
             _db_url_override is None
-            and not strict
             and config.parent.name == "environments"
             and config.parent.parent.name == "db"
         ):
-            # Check if config is in standard environments directory
             try:
                 from confiture.config.environment import Environment as _Env
 
-                env_name = config.stem  # e.g., "local" from "local.yaml"
-                project_dir = config.parent.parent.parent
-                env_config = _Env.load(env_name, project_dir=project_dir)
-                effective_strict_mode = env_config.migration.strict_mode
+                env_cfg = _Env.load(config.stem, project_dir=config.parent.parent.parent)
             except Exception:
-                # If environment config loading fails, use default (False)
-                pass
+                env_cfg = None  # unparsable environment config: defaults apply
+        effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
+        install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
 
-        # Show warnings for force mode before attempting database operations
         if force:
             console.print(
                 "[yellow]⚠️  Force mode enabled - skipping migration state checks[/yellow]"
@@ -923,8 +901,6 @@ def migrate_up(
             console.print(
                 "[yellow]This may cause issues if applied incorrectly. Use with caution![/yellow]\n"
             )
-
-        # Show warning for no-lock mode
         if no_lock:
             console.print(
                 "[yellow]⚠️  Locking disabled - DANGEROUS in multi-pod environments![/yellow]"
@@ -933,181 +909,7 @@ def migrate_up(
                 "[yellow]Concurrent migrations may cause race conditions or data corruption.[/yellow]\n"
             )
 
-        # Create database connection
-        conn = create_connection(config_data)
-
-        # Create migrator
-        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
-
-        # Auto-detect baseline pre-flight (before initialize so we can check absence)
-        if auto_detect_baseline and not migrator.tracking_table_exists():
-            # #188: "absent" got stricter. It used to mean "no table of this
-            # name in any schema"; it now means "this session cannot resolve
-            # one", which is the right precondition for reading the ledger and
-            # the wrong trigger for rebuilding it. A ledger parked in a schema
-            # off `search_path` reads absent here, and auto-baseline would
-            # answer by creating a second one and marking every migration
-            # applied in it. This is the only path in the command that can
-            # rewrite migration history unprompted, so it refuses rather than
-            # guesses. `LedgerProbe.resolved_name` cannot answer this — it is
-            # None exactly when the probe says absent.
-            from confiture.core.ledger import find_ledger_relations
-
-            _elsewhere = find_ledger_relations(conn, _get_tracking_table(config_data))
-            if _elsewhere:
-                from confiture.exceptions import ConfigurationError
-
-                conn.close()
-                raise ConfigurationError(
-                    f"--auto-detect-baseline: {_get_tracking_table(config_data)!r} does not "
-                    f"resolve for this session, but a relation of that name exists in "
-                    f"{', '.join(_elsewhere)}. Refusing to auto-baseline: doing so would "
-                    f"create a second ledger and mark every migration applied in it.",
-                    resolution_hint=(
-                        "Point at the existing ledger — set `migration.tracking_table` to "
-                        f"{_elsewhere[0]!r}, or put its schema on the connection's "
-                        "search_path — then re-run. If the ledger really is meant to be "
-                        "new, drop or rename the other relation first."
-                    ),
-                )
-
-            _resolved_snapshots_dir = snapshots_dir_up or Path("db/schema_history")
-            if not _resolved_snapshots_dir.exists():
-                error_console.print(
-                    f"[red]❌ --auto-detect-baseline: snapshots directory not found: "
-                    f"{_resolved_snapshots_dir}[/red]"
-                )
-                error_console.print(
-                    "[yellow]💡 Generate snapshots with 'confiture migrate snapshot' "
-                    "or remove --auto-detect-baseline[/yellow]"
-                )
-                conn.close()
-                raise typer.Exit(2)
-
-            _snapshot_files = list(_resolved_snapshots_dir.glob("*.sql"))
-            if not _snapshot_files:
-                error_console.print(
-                    f"[red]❌ --auto-detect-baseline: no snapshot files found in "
-                    f"{_resolved_snapshots_dir}[/red]"
-                )
-                error_console.print(
-                    "[yellow]💡 Generate snapshots with 'confiture migrate snapshot' "
-                    "or remove --auto-detect-baseline[/yellow]"
-                )
-                conn.close()
-                raise typer.Exit(2)
-            else:
-                from confiture.core.baseline_detector import BaselineDetector
-
-                _detector = BaselineDetector(_resolved_snapshots_dir)
-                console.print(
-                    f"[cyan]🔍 {_get_tracking_table(config_data)} missing — attempting "
-                    "auto-detect baseline...[/cyan]"
-                )
-                _live_sql = _detector.introspect_live_schema(conn)
-                _detected_version = _detector.find_matching_snapshot(_live_sql)
-                if _detected_version:
-                    console.print(f"[green]✓ Detected baseline: {_detected_version}[/green]")
-                    migrator.initialize()
-                    migrator.baseline_through(_detected_version, migrations_dir)
-                    console.print(f"[green]✅ Auto-baselined through {_detected_version}[/green]")
-                else:
-                    closest = _detector.last_closest
-                    if closest:
-                        _cv, _cr = closest
-                        console.print(
-                            f"[yellow]⚠️  No exact snapshot match found "
-                            f"(closest: {_cv}, {_cr:.0%} similar) — proceeding with empty baseline[/yellow]"
-                        )
-                    else:
-                        console.print(
-                            "[yellow]⚠️  No matching snapshot found — proceeding with empty baseline[/yellow]"
-                        )
-
-        migrator.initialize()
-
-        # Auto-install view helpers if configured
-        try:
-            if config.parent.name == "environments" and config.parent.parent.name == "db":
-                from confiture.config.environment import Environment as _EnvCfg
-                from confiture.core.view_manager import ViewManager as _VM
-
-                _env_name = config.stem
-                _project_dir = config.parent.parent.parent
-                _env_cfg = _EnvCfg.load(_env_name, project_dir=_project_dir)
-                if _env_cfg.migration.view_helpers == "auto":
-                    _vm = _VM(conn)
-                    if not _vm.helpers_installed():
-                        _vm.install_helpers()
-                        console.print(
-                            "[cyan]🔧 Auto-installed view helper functions "
-                            "(migration.view_helpers: auto)[/cyan]\n"
-                        )
-        except Exception:
-            pass  # Non-critical — don't block migration on helper install failure
-
-        # Verify checksums before running migrations (unless force mode)
-        if verify_checksums and not force:
-            mismatch_behavior = ChecksumMismatchBehavior(on_checksum_mismatch)
-            checksum_config = ChecksumConfig(
-                enabled=True,
-                on_mismatch=mismatch_behavior,
-            )
-            verifier = MigrationChecksumVerifier(
-                conn,
-                checksum_config,
-                migration_table=_get_tracking_table(config_data),
-            )
-
-            try:
-                mismatches = verifier.verify_all(migrations_dir)
-                if not mismatches:
-                    console.print("[cyan]🔐 Checksum verification passed[/cyan]\n")
-            except ChecksumVerificationError as e:
-                error_console.print("[red]❌ Checksum verification failed![/red]\n")
-                for m in e.mismatches:
-                    error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-                    expected_preview = m.expected[:16] if m.expected else "(none)"
-                    error_console.print(f"    Expected: {expected_preview}...")
-                    error_console.print(f"    Actual:   {m.actual[:16]}...")
-                error_console.print(
-                    "\n[yellow]💡 Tip: Use 'confiture verify --fix' to update checksums, "
-                    "or --no-verify-checksums to skip[/yellow]"
-                )
-                conn.close()
-                raise typer.Exit(1) from e
-
-        # Find migrations to apply
-        skipped_versions: list[str] = []
-        if force:
-            # In force mode, apply all migrations regardless of state
-            migrations_to_apply = migrator.find_migration_files(migrations_dir=migrations_dir)
-            if not migrations_to_apply:
-                console.print("[yellow]⚠️  No migration files found.[/yellow]")
-                conn.close()
-                return
-            console.print(
-                f"[cyan]📦 Force mode: Found {len(migrations_to_apply)} migration(s) to apply[/cyan]\n"
-            )
-        else:
-            # Normal mode: only apply pending migrations
-            all_migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
-            migrations_to_apply = migrator.find_pending(migrations_dir=migrations_dir)
-            apply_versions = {migrator._version_from_filename(f.name) for f in migrations_to_apply}
-            skipped_versions = [
-                migrator._version_from_filename(f.name)
-                for f in all_migration_files
-                if migrator._version_from_filename(f.name) not in apply_versions
-            ]
-            if not migrations_to_apply:
-                console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
-                conn.close()
-                return
-            console.print(
-                f"[cyan]📦 Found {len(migrations_to_apply)} pending migration(s)[/cyan]\n"
-            )
-
-        # Check for orphaned migration files
+        # Orphaned migration files (filesystem only): a warning, an abort in strict mode.
         orphaned_files = _find_orphaned_sql_files(migrations_dir)
         if orphaned_files:
             _print_orphaned_files_warning(orphaned_files, error_console)
@@ -1115,313 +917,86 @@ def migrate_up(
                 error_console.print(
                     "\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]"
                 )
-                conn.close()
                 raise typer.Exit(1)
 
-        # Reversibility gate
-        if require_reversible:
-            from confiture.core.preflight import run_preflight
+        reporter = _UpReporter(live=not is_json(format_output), force=force)
+        options: dict[str, Any] = {
+            "target": target,
+            "verify_checksums": verify_checksums,
+            "on_checksum_mismatch": on_checksum_mismatch,
+            "force": force,
+            "lock_timeout": lock_timeout,
+            "no_lock": no_lock,
+            "require_reversible": require_reversible,
+            "strict_mode": effective_strict_mode,
+            "auto_baseline": (
+                (snapshots_dir_up or Path("db/schema_history")) if auto_detect_baseline else None
+            ),
+            "install_view_helpers": install_helpers,
+            "on_event": reporter,
+        }
 
-            _preflight = run_preflight(migrations_dir)
-            if not _preflight.all_reversible:
-                _irr_names = ", ".join(m.version for m in _preflight.irreversible)
-                error_msg = (
-                    f"Irreversible migrations detected (missing .down.sql): {_irr_names}. "
-                    f"Remove --require-reversible or add .down.sql files."
-                )
-                if format_output == "json":
-                    _output_json(
-                        {
-                            "success": False,
-                            "errors": [error_msg],
-                            "irreversible_versions": [m.version for m in _preflight.irreversible],
-                        },
-                        output_file,
-                        console,
-                    )
-                else:
-                    error_console.print(f"[red]❌ {error_msg}[/red]")
-                conn.close()
-                raise typer.Exit(1)
-
-        # Handle dry-run modes
-        if dry_run or dry_run_execute:
-            display_dry_run_header("testing" if dry_run_execute else "analysis")
-
-            # Build migration summary
-            migration_summary: dict[str, Any] = {
-                "migration_id": f"dry_run_{config.stem}",
-                "mode": "execute_and_analyze" if dry_run_execute else "analysis",
-                "statements_analyzed": len(migrations_to_apply),
-                "migrations": [],
-                "summary": {
-                    "unsafe_count": 0,
-                    "total_estimated_time_ms": 0,
-                    "total_estimated_disk_mb": 0.0,
-                    "has_unsafe_statements": False,
-                },
-                "warnings": [],
-                "analyses": [],
-            }
-
-            try:
-                # Collect migration information
-                for migration_file in migrations_to_apply:
-                    migration_class = load_migration_class(migration_file)
-                    migration = migration_class(connection=conn)
-
-                    migration_info = {
-                        "version": migration.version,
-                        "name": migration.name,
-                        "classification": "warning",  # Most migrations are complex changes
-                        "estimated_duration_ms": 500,  # Conservative estimate
-                        "estimated_disk_usage_mb": 1.0,
-                        "estimated_cpu_percent": 30.0,
-                    }
-                    migration_summary["migrations"].append(migration_info)
-                    migration_summary["analyses"].append(migration_info)
-
-                # Display format
-                if format_output == "json":
-                    if output_file:
-                        save_json_report(migration_summary, output_file)
-                        console.print(
-                            f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]"
-                        )
-                    else:
-                        print_json_report(migration_summary)
-                else:
-                    # Text format (default)
-                    console.print("\n[cyan]Migration Analysis Summary[/cyan]")
-                    console.print("=" * 80)
-                    console.print(f"Migrations to apply: {len(migrations_to_apply)}")
-                    console.print()
-                    for mig in migration_summary["migrations"]:
-                        console.print(f"  {mig['version']}: {mig['name']}")
-                        console.print(
-                            f"    Estimated time: {mig['estimated_duration_ms']}ms | "
-                            f"Disk: {mig['estimated_disk_usage_mb']:.1f}MB | "
-                            f"CPU: {mig['estimated_cpu_percent']:.0f}%"
-                        )
-                    console.print()
-                    console.print("[green]✓ All migrations appear safe to execute[/green]")
-                    console.print("=" * 80)
-
-                    if output_file:
-                        # Create a simple text report for file output
-                        text_report = "DRY-RUN MIGRATION ANALYSIS REPORT\n"
-                        text_report += "=" * 80 + "\n\n"
-                        for mig in migration_summary["migrations"]:
-                            text_report += f"{mig['version']}: {mig['name']}\n"
-                        save_text_report(text_report, output_file)
-                        console.print(
-                            f"[green]✅ Report saved to: {output_file.absolute()}[/green]"
-                        )
-
-                # Stop here if dry-run only (not execute)
-                if dry_run and not dry_run_execute:
-                    conn.close()
-                    return
-
-                # For dry_run_execute: ask for confirmation
-                if dry_run_execute and not ask_dry_run_execute_confirmation():
-                    console.print("[yellow]Cancelled - no changes applied[/yellow]")
-                    conn.close()
-                    return
-
-                # Continue to actual execution below
-
-            except Exception as e:
-                print_error_to_console(e)
-                conn.close()
-                raise typer.Exit(1) from e
-
-        # Configure locking (command recorded in the lock-holder metadata, #147)
-        lock_config = LockConfig(
-            enabled=not no_lock,
-            timeout_ms=lock_timeout,
+        with MigratorSession(
+            None,
+            migrations_dir,
+            database_url_override=dsn_from_config(config_data),
+            migration_table_override=_get_tracking_table(config_data),
             command="confiture migrate up",
-        )
-
-        # Create lock manager
-        lock = MigrationLock(conn, lock_config)
-
-        from confiture.cli.formatters.migrate_formatter import format_migrate_up_result
-        from confiture.core.progress import ProgressManager
-        from confiture.models.results import MigrateUpResult, MigrationApplied
-
-        applied_count = 0
-        failed_migration = None
-        failed_exception = None
-        migrations_applied = []
-        total_execution_time_ms = 0
-
-        try:
-            with lock.acquire():
-                if not no_lock:
-                    console.print("[cyan]🔒 Acquired migration lock[/cyan]\n")
-
-                # Use progress manager for migration application
-                with ProgressManager() as progress:
-                    apply_task = progress.add_task(
-                        "Applying migrations...", total=len(migrations_to_apply)
-                    )
-
-                    for migration_file in migrations_to_apply:
-                        # Load migration module
-                        migration_class = load_migration_class(migration_file)
-
-                        # Create migration instance
-                        migration = migration_class(connection=conn)
-                        # Override strict_mode from CLI/config if not already set on class
-                        if effective_strict_mode and not getattr(
-                            migration_class, "strict_mode", False
-                        ):
-                            migration.strict_mode = effective_strict_mode
-
-                        # Check target
-                        if target and migration.version > target:
-                            console.print(
-                                f"[yellow]⏭️  Skipping {migration.version} (after target)[/yellow]"
-                            )
-                            break
-
-                        # Issue #137 — halt at first requires_superuser=True.
-                        # Print the recovery hint pointing to `apply-as` and
-                        # exit 1.  Subsequent migrations are NOT applied.
-                        if getattr(migration, "requires_superuser", False) is True:
-                            console.print(
-                                f"\n[yellow]⏸  Skipping migration {migration.version}"
-                                f"_{migration.name}:[/yellow]"
-                            )
-                            console.print(
-                                "[dim]  requires_superuser=True.  Apply this "
-                                "migration separately as a superuser:[/dim]"
-                            )
-                            console.print(
-                                f"[dim]    confiture migrate apply-as <role> "
-                                f"{migration.version}[/dim]"
-                            )
-                            console.print(
-                                "[dim]  Then re-run `confiture migrate up` to "
-                                "resume the chain.[/dim]"
-                            )
-                            conn.close()
-                            raise typer.Exit(1)
-
-                        # Apply migration
-                        console.print(
-                            f"[cyan]⚡ Applying {migration.version}_{migration.name}...[/cyan]",
-                            end=" ",
-                        )
-
-                        try:
-                            start_time = time.time()
-                            migrator.apply(migration, force=force, migration_file=migration_file)
-                            execution_time_ms = int((time.time() - start_time) * 1000)
-                            total_execution_time_ms += execution_time_ms
-
-                            console.print("[green]✅[/green]")
-                            applied_count += 1
-
-                            # Track successful migration
-                            migrations_applied.append(
-                                MigrationApplied(
-                                    version=migration.version,
-                                    name=migration.name,
-                                    execution_time_ms=execution_time_ms,
-                                    rows_affected=0,  # Not easily tracked, so default to 0
-                                )
-                            )
-                            progress.update(apply_task, advance=1)
-                        except Exception as e:
-                            console.print("[red]❌[/red]")
-                            failed_migration = migration
-                            failed_exception = e
-                            break
-
-        except LockAcquisitionError as e:
-            conn.close()
-            if is_json(format_output):
-                from confiture.cli.error_json import lock_error_to_confiture
-
-                # LOCK_1300 envelope enriched with holder identity (#147).
-                fail(
-                    lock_error_to_confiture(e),
-                    json_mode=True,
+        ) as session:
+            if dry_run or dry_run_execute:
+                display_dry_run_header("testing" if dry_run_execute else "analysis")
+                session.up(dry_run=True, **options)
+                _render_dry_run_analysis(
+                    reporter.pending,
+                    migration_id=f"dry_run_{config.stem}",
+                    execute=dry_run_execute,
+                    format_output=format_output,
                     output_file=output_file,
                 )
-            print_error_to_console(e, error_console)
-            if e.timeout:
-                error_console.print(
-                    f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
-                )
+                if dry_run:
+                    return
+                if not yes and not ask_dry_run_execute_confirmation():
+                    console.print("[yellow]Cancelled - no changes applied[/yellow]")
+                    return
+                reporter.reset()
+                result = session.up(dry_run_execute=True, **options)
             else:
-                error_console.print(
-                    "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
-                )
-            raise typer.Exit(6) from e
+                result = session.up(**options)
 
-        # Handle results
-        if failed_migration:
-            # Create error result
-            error_result = MigrateUpResult(
-                success=False,
-                migrations_applied=migrations_applied,
-                total_execution_time_ms=total_execution_time_ms,
-                checksums_verified=verify_checksums,
-                dry_run=False,
-                errors=[str(failed_exception)],
-                skipped=skipped_versions,
-            )
-
-            # Format output if not text (text format handled above)
-            if format_output != "text":
-                format_migrate_up_result(error_result, format_output, output_file, console)
-            else:
-                # Show detailed error information for text format
-                from confiture.cli.formatters.migrate_formatter import show_migration_error_details
-
-                show_migration_error_details(
-                    failed_migration, failed_exception, applied_count, console
-                )
-
-            conn.close()
-            raise typer.Exit(3)
-        else:
-            # Create success result
-            success_result = MigrateUpResult(
-                success=True,
-                migrations_applied=migrations_applied,
-                total_execution_time_ms=total_execution_time_ms,
-                checksums_verified=verify_checksums,
-                dry_run=False,
-                warnings=["Force mode enabled"] if force else [],
-                skipped=skipped_versions,
-            )
-
-            # Format output
-            format_migrate_up_result(success_result, format_output, output_file, console)
-
-            # Show next steps for text format only
-            if format_output == "text":
-                if force:
-                    console.print(
-                        "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
-                    )
-                else:
-                    console.print("\n💡 Next steps:")
-                    console.print("  • Verify: confiture migrate status")
-                    console.print("  • Validate: confiture lint")
-                    console.print("  • Load data: confiture seed apply")
-
-            conn.close()
+        _render_up_result(result, reporter, format_output, output_file, force=force)
 
     except typer.Exit:
         raise
-    except LockAcquisitionError:
-        # Already handled above
-        raise
+    except ChecksumVerificationError as e:
+        if is_json(format_output):
+            fail(e, json_mode=True, output_file=output_file)
+        error_console.print("[red]❌ Checksum verification failed![/red]\n")
+        for m in e.mismatches:
+            error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+            expected_preview = m.expected[:16] if m.expected else "(none)"
+            error_console.print(f"    Expected: {expected_preview}...")
+            error_console.print(f"    Actual:   {m.actual[:16]}...")
+        error_console.print(
+            "\n[yellow]💡 Tip: Use 'confiture verify-checksums --fix' to update checksums, "
+            "or --no-verify-checksums to skip[/yellow]"
+        )
+        raise typer.Exit(1) from e
+    except LockAcquisitionError as e:
+        if is_json(format_output):
+            from confiture.cli.error_json import lock_error_to_confiture
+
+            # LOCK_1300 envelope enriched with holder identity (#147).
+            fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
+        print_error_to_console(e, error_console)
+        if e.timeout:
+            error_console.print(
+                f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
+            )
+        else:
+            error_console.print(
+                "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
+            )
+        raise typer.Exit(6) from e
     except Exception as e:
         if is_json(format_output):
             fail(e, json_mode=True, output_file=output_file)
@@ -1527,24 +1102,21 @@ def migrate_down(
       OUTPUT: --format, --output
         Control report format and destination
     """
-    from confiture.core.connection import (
-        create_connection,
-        load_config,
-        load_migration_class,
-    )
-    from confiture.core.locking import LockAcquisitionError, LockConfig, MigrationLock
-    from confiture.core.migrator import Migrator
+
+    from confiture.cli.formatters.migrate_formatter import format_migrate_down_result
+    from confiture.core.connection import dsn_from_config, load_config
+    from confiture.core.locking import LockAcquisitionError
+    from confiture.core.migrator import MigratorSession
+
+    del verbose  # accepted for compatibility
 
     try:
-        # Validate format option
         if format_output not in ("text", "json"):
             error_console.print(
                 f"[red]❌ Error: Invalid format '{format_output}'. Use 'text' or 'json'[/red]"
             )
             raise typer.Exit(2)
 
-        # Resolve the DSN under the #152 precedence contract. `down` is
-        # mutating, so an ambient-only DATABASE_URL is refused.
         _db_url_override = resolve_database_url(
             database_url,
             config,
@@ -1557,175 +1129,47 @@ def migrate_down(
         else:
             config_data = load_config(config)
 
-        # Create database connection
-        conn = create_connection(config_data)
+        with MigratorSession(
+            None,
+            migrations_dir,
+            database_url_override=dsn_from_config(config_data),
+            migration_table_override=_get_tracking_table(config_data),
+            command="confiture migrate down",
+        ) as session:
+            if session.current_revision() is None:
+                console.print("[yellow]⚠️  No applied migrations to rollback.[/yellow]")
+                return
 
-        # Create migrator
-        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
-        migrator.initialize()
+            if dry_run:
+                from confiture.cli.dry_run import display_dry_run_header
 
-        # Get applied migrations
-        applied_versions = migrator.get_applied_versions()
+                display_dry_run_header("analysis")
+                preview = session.down(steps=steps, dry_run=True)
+                _render_dry_run_analysis(
+                    [(m.version, m.name) for m in preview.migrations_rolled_back],
+                    migration_id=f"dry_run_rollback_{config.stem}",
+                    execute=False,
+                    format_output=format_output,
+                    output_file=output_file,
+                    rollback=True,
+                )
+                return
 
-        if not applied_versions:
-            console.print("[yellow]⚠️  No applied migrations to rollback.[/yellow]")
-            conn.close()
-            return
+            if not is_json(format_output):
+                console.print(f"[cyan]📦 Rolling back up to {steps} migration(s)[/cyan]\n")
+            result = session.down(steps=steps, lock_timeout=lock_timeout, no_lock=no_lock)
 
-        # Get migrations to rollback (last N)
-        versions_to_rollback = applied_versions[-steps:]
-
-        # Handle dry-run mode
-        if dry_run:
-            from confiture.cli.dry_run import (
-                display_dry_run_header,
-                save_json_report,
-                save_text_report,
-            )
-
-            display_dry_run_header("analysis")
-
-            # Build rollback summary
-            rollback_summary: dict[str, Any] = {
-                "migration_id": f"dry_run_rollback_{config.stem}",
-                "mode": "analysis",
-                "statements_analyzed": len(versions_to_rollback),
-                "migrations": [],
-                "summary": {
-                    "unsafe_count": 0,
-                    "total_estimated_time_ms": 0,
-                    "total_estimated_disk_mb": 0.0,
-                    "has_unsafe_statements": False,
-                },
-                "warnings": [],
-                "analyses": [],
-            }
-
-            # Collect rollback migration information
-            for version in reversed(versions_to_rollback):
-                # Find migration file
-                migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
-                migration_file = None
-                for mf in migration_files:
-                    if migrator._version_from_filename(mf.name) == version:
-                        migration_file = mf
-                        break
-
-                if not migration_file:
-                    continue
-
-                # Load migration class
-                migration_class = load_migration_class(migration_file)
-
-                migration = migration_class(connection=conn)
-
-                migration_info = {
-                    "version": migration.version,
-                    "name": migration.name,
-                    "classification": "warning",
-                    "estimated_duration_ms": 500,
-                    "estimated_disk_usage_mb": 1.0,
-                    "estimated_cpu_percent": 30.0,
-                }
-                rollback_summary["migrations"].append(migration_info)
-                rollback_summary["analyses"].append(migration_info)
-
-            # Display format
-            if format_output == "json":
-                if output_file:
-                    save_json_report(rollback_summary, output_file)
-                    console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
-                else:
-                    from confiture.cli.dry_run import print_json_report
-
-                    print_json_report(rollback_summary)
-            else:
-                # Text format (default)
-                console.print("[cyan]Rollback Analysis Summary[/cyan]")
-                console.print("=" * 80)
-                console.print(f"Migrations to rollback: {len(versions_to_rollback)}")
-                console.print()
-                for mig in rollback_summary["migrations"]:
-                    console.print(f"  {mig['version']}: {mig['name']}")
-                    console.print(
-                        f"    Estimated time: {mig['estimated_duration_ms']}ms | "
-                        f"Disk: {mig['estimated_disk_usage_mb']:.1f}MB | "
-                        f"CPU: {mig['estimated_cpu_percent']:.0f}%"
-                    )
-                console.print()
-                console.print("[yellow]⚠️  Rollback will undo these migrations[/yellow]")
-                console.print("=" * 80)
-
-                if output_file:
-                    text_report = "DRY-RUN ROLLBACK ANALYSIS REPORT\n"
-                    text_report += "=" * 80 + "\n\n"
-                    for mig in rollback_summary["migrations"]:
-                        text_report += f"{mig['version']}: {mig['name']}\n"
-                    save_text_report(text_report, output_file)
-                    console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
-
-            conn.close()
-            return
-
-        console.print(f"[cyan]📦 Rolling back {len(versions_to_rollback)} migration(s)[/cyan]\n")
-
-        # Acquire the migration lock for the rollback (#142): atomic w.r.t. a
-        # concurrent migrate up/down.
-        lock = MigrationLock(
-            conn,
-            LockConfig(
-                enabled=not no_lock,
-                timeout_ms=lock_timeout,
-                command="confiture migrate down",
-            ),
-        )
-        try:
-            with lock.acquire():
-                # Rollback migrations in reverse order
-                rolled_back_count = 0
-                for version in reversed(versions_to_rollback):
-                    # Find migration file
-                    migration_files = migrator.find_migration_files(migrations_dir=migrations_dir)
-                    migration_file = None
-                    for mf in migration_files:
-                        if migrator._version_from_filename(mf.name) == version:
-                            migration_file = mf
-                            break
-
-                    if not migration_file:
-                        console.print(
-                            f"[red]❌ Migration file for version {version} not found[/red]"
-                        )
-                        continue
-
-                    # Load migration module + instance
-                    migration_class = load_migration_class(migration_file)
-                    migration = migration_class(connection=conn)
-
-                    # Rollback migration
-                    console.print(
-                        f"[cyan]⚡ Rolling back {migration.version}_{migration.name}...[/cyan]",
-                        end=" ",
-                    )
-                    migrator.rollback(migration)
-                    console.print("[green]✅[/green]")
-                    rolled_back_count += 1
-        except LockAcquisitionError as e:
-            conn.close()
-            if is_json(format_output):
-                from confiture.cli.error_json import lock_error_to_confiture
-
-                fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
-            print_error_to_console(e, error_console)
-            raise typer.Exit(6) from e
-
-        console.print(
-            f"\n[green]✅ Successfully rolled back {rolled_back_count} migration(s)![/green]"
-        )
-        conn.close()
+        format_migrate_down_result(result, format_output, output_file, console)
 
     except typer.Exit:
         raise
+    except LockAcquisitionError as e:
+        if is_json(format_output):
+            from confiture.cli.error_json import lock_error_to_confiture
+
+            fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
+        print_error_to_console(e, error_console)
+        raise typer.Exit(6) from e
     except Exception as e:
         if is_json(format_output):
             fail(e, json_mode=True, output_file=output_file)
@@ -2025,7 +1469,7 @@ def migrate_generate(
             console.print(f"  Found {len(migration_files)} migration files:")
 
             for f in migration_files:
-                version_str = f.name.split("_")[0]
+                version_str = parse_migration_filename(f.name)[0]
                 console.print(f"    - {f.name} (version: {version_str})")
 
         # Check for duplicate versions (covers both .py and .up.sql files)
@@ -2357,3 +1801,226 @@ def migrate_estimate(
     except Exception as e:
         error_console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+class _UpReporter:
+    """Turns ``MigratorSession.up()`` events into the console lines of ``migrate up``.
+
+    Collects the pending list (for the dry-run summary) and the failure event
+    (for the error details) whatever the output mode; prints live only in text
+    mode, where JSON output must stay clean.
+    """
+
+    def __init__(self, *, live: bool, force: bool = False) -> None:
+        self.live = live
+        self.force = force
+        self.reset()
+
+    def reset(self) -> None:
+        self.pending: list[tuple[str, str]] = []
+        self.failed: Any = None
+        self._announced = False
+
+    def _announce(self) -> None:
+        if self._announced:
+            return
+        self._announced = True
+        n = len(self.pending)
+        if self.force:
+            console.print(f"[cyan]📦 Force mode: Found {n} migration(s) to apply[/cyan]\n")
+        else:
+            console.print(f"[cyan]📦 Found {n} pending migration(s)[/cyan]\n")
+
+    def __call__(self, event: Any) -> None:
+        kind = event.kind
+        if kind == "pending":
+            self.pending.append((event.version or "", event.name or ""))
+            return
+        if kind == "failed":
+            self.failed = event
+        if not self.live:
+            return
+        if kind == "lock_acquired":
+            console.print("[cyan]🔒 Acquired migration lock[/cyan]\n")
+        elif kind == "baseline_probe":
+            console.print(f"[cyan]🔍 {event.message}[/cyan]")
+        elif kind == "baseline_detected":
+            console.print(f"[green]✓ Detected baseline: {event.version}[/green]")
+            console.print(f"[green]✅ Auto-baselined through {event.version}[/green]")
+        elif kind == "baseline_missed":
+            console.print(f"[yellow]⚠️  {event.message}[/yellow]")
+        elif kind == "view_helpers_installed":
+            console.print(
+                "[cyan]🔧 Auto-installed view helper functions "
+                "(migration.view_helpers: auto)[/cyan]\n"
+            )
+        elif kind == "checksums_verified":
+            console.print("[cyan]🔐 Checksum verification passed[/cyan]\n")
+        elif kind == "applying":
+            self._announce()
+            console.print(f"[cyan]⚡ Applying {event.label}...[/cyan]", end=" ")
+        elif kind == "applied":
+            console.print("[green]✅[/green]")
+        elif kind == "failed":
+            console.print("[red]❌[/red]")
+        elif kind == "target_reached":
+            console.print(f"[yellow]⏭️  Skipping {event.version} (after target)[/yellow]")
+        elif kind == "skipped_non_transactional":
+            console.print(
+                f"[yellow]⏭️  Skipping {event.label} (non-transactional — "
+                "cannot run inside a SAVEPOINT)[/yellow]"
+            )
+        elif kind == "superuser_halt":
+            self._announce()
+            console.print(f"\n[yellow]⏸  Skipping migration {event.label}:[/yellow]")
+            console.print(
+                "[dim]  requires_superuser=True.  Apply this migration separately as a superuser:[/dim]"
+            )
+            console.print(f"[dim]    confiture migrate apply-as <role> {event.version}[/dim]")
+            console.print("[dim]  Then re-run `confiture migrate up` to resume the chain.[/dim]")
+
+
+def _render_dry_run_analysis(
+    pending: list[tuple[str, str]],
+    *,
+    migration_id: str,
+    execute: bool,
+    format_output: str,
+    output_file: Path | None,
+    rollback: bool = False,
+) -> None:
+    """The dry-run summary of ``migrate up --dry-run`` / ``migrate down --dry-run``."""
+    from confiture.cli.dry_run import print_json_report, save_json_report, save_text_report
+
+    entries = [
+        {
+            "version": version,
+            "name": name,
+            "classification": "warning",
+            "estimated_duration_ms": 500,
+            "estimated_disk_usage_mb": 1.0,
+            "estimated_cpu_percent": 30.0,
+        }
+        for version, name in pending
+    ]
+    summary: dict[str, Any] = {
+        "migration_id": migration_id,
+        "mode": "execute_and_analyze" if execute else "analysis",
+        "statements_analyzed": len(pending),
+        "migrations": entries,
+        "summary": {
+            "unsafe_count": 0,
+            "total_estimated_time_ms": 0,
+            "total_estimated_disk_mb": 0.0,
+            "has_unsafe_statements": False,
+        },
+        "warnings": [],
+        "analyses": entries,
+    }
+    verb = "rollback" if rollback else "apply"
+    if format_output == "json":
+        if output_file:
+            save_json_report(summary, output_file)
+            console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
+        else:
+            print_json_report(summary)
+        return
+
+    if not rollback:
+        console.print(f"[cyan]📦 Found {len(pending)} pending migration(s)[/cyan]\n")
+    console.print(
+        "[cyan]Rollback Analysis Summary[/cyan]"
+        if rollback
+        else "\n[cyan]Migration Analysis Summary[/cyan]"
+    )
+    console.print("=" * 80)
+    console.print(f"Migrations to {verb}: {len(pending)}")
+    console.print()
+    for mig in entries:
+        console.print(f"  {mig['version']}: {mig['name']}")
+        console.print(
+            f"    Estimated time: {mig['estimated_duration_ms']}ms | "
+            f"Disk: {mig['estimated_disk_usage_mb']:.1f}MB | "
+            f"CPU: {mig['estimated_cpu_percent']:.0f}%"
+        )
+    console.print()
+    if rollback:
+        console.print("[yellow]⚠️  Rollback will undo these migrations[/yellow]")
+    else:
+        console.print("[green]✓ All migrations appear safe to execute[/green]")
+    console.print("=" * 80)
+    if output_file:
+        title = (
+            "DRY-RUN ROLLBACK ANALYSIS REPORT" if rollback else "DRY-RUN MIGRATION ANALYSIS REPORT"
+        )
+        text_report = title + "\n" + "=" * 80 + "\n\n"
+        for mig in entries:
+            text_report += f"{mig['version']}: {mig['name']}\n"
+        save_text_report(text_report, output_file)
+        console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
+
+
+def _render_up_result(
+    result: Any,
+    reporter: _UpReporter,
+    format_output: str,
+    output_file: Path | None,
+    *,
+    force: bool,
+) -> None:
+    """Render a ``MigrateUpResult`` and exit with the command's contract code."""
+    from confiture.cli.formatters.migrate_formatter import (
+        format_migrate_up_result,
+        show_migration_error_details,
+    )
+
+    text = format_output == "text"
+
+    if result.skipped_superuser:
+        # Issue #137 — halted at the first requires_superuser=True migration;
+        # the reporter already printed the recovery hint in text mode.
+        if not text:
+            format_migrate_up_result(result, format_output, output_file, console)
+        raise typer.Exit(1)
+
+    if not result.success:
+        if text:
+            failed = reporter.failed
+            failed_migration = _FailedMigration(
+                version=getattr(failed, "version", None) or "?",
+                name=getattr(failed, "name", None) or "?",
+            )
+            exception = result.failure or Exception(result.error_summary or "migration failed")
+            show_migration_error_details(
+                failed_migration, exception, len(result.migrations_applied), console
+            )
+        else:
+            format_migrate_up_result(result, format_output, output_file, console)
+        raise typer.Exit(3)
+
+    if not result.dry_run and not result.migrations_applied and text:
+        if force:
+            console.print("[yellow]⚠️  No migration files found.[/yellow]")
+        else:
+            console.print("[green]✅ No pending migrations. Database is up to date.[/green]")
+        return
+
+    format_migrate_up_result(result, format_output, output_file, console)
+    if text and not result.dry_run:
+        if force:
+            console.print(
+                "[yellow]⚠️  Remember to verify your database state after force application[/yellow]"
+            )
+        else:
+            console.print("\n💡 Next steps:")
+            console.print("  • Verify: confiture migrate status")
+            console.print("  • Validate: confiture lint")
+            console.print("  • Load data: confiture seed apply")
+
+
+class _FailedMigration:
+    """The ``version``/``name`` pair ``show_migration_error_details`` renders."""
+
+    def __init__(self, *, version: str, name: str) -> None:
+        self.version = version
+        self.name = name

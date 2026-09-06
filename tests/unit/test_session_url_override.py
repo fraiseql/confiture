@@ -48,7 +48,7 @@ def test_no_config_no_override_raises():
 def test_migration_table_override_used(mock_env):
     with (
         patch("confiture.core.migrator.create_connection") as mock_cc,
-        patch("confiture.core._migrator.session.Migrator", autospec=True) as MockMigrator,
+        patch("confiture.core.migrator.Migrator", autospec=True) as MockMigrator,
     ):
         mock_cc.return_value = MagicMock()
         session = MigratorSession(
@@ -68,7 +68,7 @@ def test_migration_table_override_used(mock_env):
 def test_override_url_no_table_override_defaults_to_tb_confiture():
     with (
         patch("confiture.core.migrator.create_connection") as mock_cc,
-        patch("confiture.core._migrator.session.Migrator", autospec=True) as MockMigrator,
+        patch("confiture.core.migrator.Migrator", autospec=True) as MockMigrator,
     ):
         mock_cc.return_value = MagicMock()
         session = MigratorSession(

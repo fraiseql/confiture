@@ -39,7 +39,7 @@ reference from the CLI with `confiture --exit-codes`.
 - **2** — Tracking table absent — confiture not initialized on this database yet
   - PRECON_1001
 - **3** — Database connection failed — host/auth/network unreachable
-  - CONFIG_006, GEN_001, MIGR_001, MIGR_004, MIGR_010, MIGR_011, MIGR_100, MIGR_102, MIGR_103, MIGR_104, MIGR_106, MIGR_107
+  - CONFIG_006, GEN_001, MIGR_001, MIGR_004, MIGR_010, MIGR_011, MIGR_100, MIGR_102, MIGR_103, MIGR_104, MIGR_106, MIGR_107, MIGR_108
 - **4** — Schema / DDL / build error
   - REBUILD_001, SCHEMA_001, SCHEMA_200, SCHEMA_201, SCHEMA_202, SCHEMA_203, SCHEMA_204, SCHEMA_205
 - **5** — Configuration invalid, or validation / sync / lint / precondition failure

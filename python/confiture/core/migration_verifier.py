@@ -20,6 +20,7 @@ from typing import Any, Literal
 
 import sqlparse
 
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.migrator import _version_from_migration_filename
 from confiture.exceptions import VerifyFileError
 
@@ -128,50 +129,37 @@ class MigrationVerifier:
         content = verify_file.read_text().strip()
         self.validate_verify_sql(content)
 
-        cursor = self.connection.cursor()
-        try:
+        failed = {"version": version, "name": name, "verify_file": verify_file, "status": "failed"}
+        with self.connection.cursor() as cursor:
             cursor.execute("SAVEPOINT verify_check")
-            cursor.execute(content)
-            row = cursor.fetchone()
-            cursor.execute("ROLLBACK TO SAVEPOINT verify_check")
+            try:
+                cursor.execute(content)
+                row = cursor.fetchone()
+            except VerifyFileError:
+                raise
+            except Exception as e:
+                self._end_savepoint(cursor)
+                return VerifyResult(**failed, error=str(e))
+            self._end_savepoint(cursor)
 
-            if row is None:
-                return VerifyResult(
-                    version=version,
-                    name=name,
-                    verify_file=verify_file,
-                    status="failed",
-                    error="Query returned zero rows",
-                )
-
-            value = row[0]
-            if _is_truthy(value):
-                return VerifyResult(
-                    version=version,
-                    name=name,
-                    verify_file=verify_file,
-                    status="verified",
-                    actual_value=value,
-                )
+        if row is None:
+            return VerifyResult(**failed, error="Query returned zero rows")
+        value = row[0]
+        if _is_truthy(value):
             return VerifyResult(
                 version=version,
                 name=name,
                 verify_file=verify_file,
-                status="failed",
+                status="verified",
                 actual_value=value,
             )
+        return VerifyResult(**failed, actual_value=value)
 
-        except VerifyFileError:
-            raise
-        except Exception as e:
-            cursor.execute("ROLLBACK TO SAVEPOINT verify_check")
-            return VerifyResult(
-                version=version,
-                name=name,
-                verify_file=verify_file,
-                status="failed",
-                error=str(e),
-            )
+    @staticmethod
+    def _end_savepoint(cursor: Any) -> None:
+        """Undo the query's effects and release the savepoint — read-only means read-only."""
+        cursor.execute("ROLLBACK TO SAVEPOINT verify_check")
+        cursor.execute("RELEASE SAVEPOINT verify_check")
 
     def verify_all(
         self,
@@ -218,9 +206,7 @@ class MigrationVerifier:
         Returns:
             Human-readable name (everything after the version prefix)
         """
-        stem = path.name[: -len(".verify.sql")]
-        parts = stem.split("_", 1)
-        return parts[1] if len(parts) > 1 else stem
+        return parse_migration_filename(path.name)[1]
 
 
 def _is_truthy(value: Any) -> bool:

@@ -310,6 +310,9 @@ class MigrateUpResult:
     # entry and reports remaining migrations in `pending`.
     skipped_superuser: list[SkippedMigration] = field(default_factory=list)
     pending: list[str] = field(default_factory=list)
+    # The exception behind ``errors[0]`` when a migration failed — for callers
+    # that want the type and its attributes, not just the message. Not serialized.
+    failure: BaseException | None = field(default=None, repr=False, compare=False)
 
     @property
     def has_errors(self) -> bool:

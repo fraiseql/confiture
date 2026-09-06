@@ -202,6 +202,25 @@ inside a transaction, set `transactional = False` on the migration
 class.  Never call `COMMIT` or `ROLLBACK` from inside a transactional
 migration body.
 
+
+### Non-transactional migrations run one statement at a time
+
+Under autocommit, PostgreSQL still wraps a multi-statement string in an
+implicit transaction block — two `CREATE INDEX CONCURRENTLY` in one
+`.up.sql` used to fail with "cannot run inside a transaction block". A
+non-transactional SQL-file migration is therefore split with the shared
+statement splitter and sent one statement at a time (`.down.sql` too).
+
+### `--dry-run-execute` skips them
+
+A non-transactional migration cannot be tested inside the SAVEPOINT: its
+path commits the current transaction and switches to autocommit, which
+would persist everything tested before it. `session.up(dry_run_execute=True)`
+skips such migrations — the result lists them under `skipped` with a
+warning, and the CLI prints `⏭️  Skipping <version> (non-transactional)`.
+Asking the engine directly (`Migrator.apply(..., commit=False)`) for a
+non-transactional migration is an error, `MIGR_108`.
+
 ---
 
 ## Cheat sheet

@@ -23,7 +23,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import _get_tracking_table, console, is_json
-from confiture.core.connection import load_config, load_migration_class
+from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -69,10 +69,10 @@ def migrate_apply_as(
 
     PROCESS:
       1. Look up `apply_as.<role>.url` in the env config; refuse if absent.
-      2. Connect with that URL (typically a superuser DSN).
+      2. Open a MigratorSession on that URL (typically a superuser DSN).
       3. Load the named migration version from --migrations-dir.
       4. Refuse if the version is unknown or already applied.
-      5. Run apply() with applied_by=<role>; record in the tracking table.
+      5. session.apply_one(version, applied_by=<role>) under the migration lock.
 
     EXAMPLES:
       confiture migrate apply-as postgres 20260528120000 --env production
@@ -144,75 +144,39 @@ def migrate_apply_as(
             json_mode=json_mode,
         )
 
-    import psycopg
+    from confiture.core.migrator import MigratorSession
 
-    from confiture.core._migrator.engine import Migrator
-
+    tracking_table = _get_tracking_table(config_data)
     try:
-        conn = psycopg.connect(raw_url, autocommit=False)
-    except psycopg.OperationalError as exc:
-        fail(
-            ConfigurationError(
-                f"Could not connect with apply_as.{role}.url: {exc}",
-                error_code="CONFIG_006",
-            ),
-            json_mode=json_mode,
-        )
-
-    try:
-        # The shared resolver, not a local re-implementation: it also handles
-        # Environment objects and coerces a non-string candidate to the default
-        # rather than leaking it into an SQL identifier (#152).
-        tracking_table = _get_tracking_table(config_data)
-        migrator = Migrator(connection=conn, migration_table=tracking_table)
-        migrator.initialize()
-
-        # Refuse if already applied.
-        applied = set(migrator.get_applied_versions())
-        if version in applied:
-            fail(
-                MigrationError(
-                    f"Migration {version} is already applied.",
-                    version=version,
-                    error_code="MIGR_001",
-                    context={"reason": "already_applied"},
-                    resolution_hint="Nothing to do — the version is already in the tracking table.",
-                ),
-                json_mode=json_mode,
-            )
-
-        migration_class = load_migration_class(migration_file)
-        migration = migration_class(connection=conn)
-
-        try:
-            migrator.apply(
-                migration,
-                migration_file=migration_file,
-                applied_by=role,
-            )
-        except MigrationError as exc:
-            fail(exc, json_mode=json_mode)
-
-        if output_format == "json":
-            print(
-                json.dumps(
-                    {
-                        "success": True,
-                        "version": migration.version,
-                        "name": migration.name,
-                        "applied_by": role,
-                    }
-                )
-            )
-        else:
-            console.print(
-                f"[green]✅ Applied migration {migration.version} "
-                f"({migration.name}) as {role!r}.[/green]"
-            )
+        with MigratorSession(
+            None,
+            migrations_dir,
+            database_url_override=raw_url,
+            migration_table_override=tracking_table,
+            command="confiture migrate apply-as",
+        ) as session:
+            try:
+                applied = session.apply_one(version, applied_by=role)
+            except MigrationError as exc:
+                fail(exc, json_mode=json_mode)
     except ConfigurationError as exc:
         fail(exc, json_mode=json_mode)
-    finally:
-        conn.close()
+
+    if output_format == "json":
+        print(
+            json.dumps(
+                {
+                    "success": True,
+                    "version": applied.version,
+                    "name": applied.name,
+                    "applied_by": role,
+                }
+            )
+        )
+    else:
+        console.print(
+            f"[green]✅ Applied migration {applied.version} ({applied.name}) as {role!r}.[/green]"
+        )
 
 
 def _find_migration_file(migrations_dir: Path, version: str) -> Path | None:

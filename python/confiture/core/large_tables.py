@@ -6,12 +6,35 @@ reporting, and resumable patterns.
 """
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from psycopg import sql as pgsql
+
+from confiture.core.ledger import split_qualified_table
+
 logger = logging.getLogger(__name__)
+
+
+_SIMPLE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+
+
+def _relation(name: str) -> pgsql.Identifier:
+    """A table or index name, optionally ``schema.``-qualified, as an identifier."""
+    schema, bare = split_qualified_table(name)
+    return pgsql.Identifier(schema, bare) if schema else pgsql.Identifier(bare)
+
+
+def _column_or_expression(text: str) -> pgsql.Composable:
+    """A bare column name is quoted; anything else (``lower(email)``) is an expression."""
+    return pgsql.Identifier(text) if _SIMPLE_IDENT.match(text) else pgsql.SQL(text)
+
+
+def _columns(names: list[str]) -> pgsql.Composed:
+    return pgsql.SQL(", ").join(_column_or_expression(n) for n in names)
 
 
 @dataclass
@@ -145,16 +168,18 @@ class BatchedMigration:
 
         with self.connection.cursor() as cur:
             # Add column without default first (instant in PG 11+)
+            rel, col = _relation(table), pgsql.Identifier(column)
             cur.execute(
-                f"""
-                ALTER TABLE {table}
-                ADD COLUMN IF NOT EXISTS {column} {column_type}
-            """
+                pgsql.SQL("ALTER TABLE {t} ADD COLUMN IF NOT EXISTS {c} {type}").format(
+                    t=rel, c=col, type=pgsql.SQL(column_type)
+                )
             )
             self.connection.commit()
 
             # Get total rows needing update
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} IS NULL")  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
+            cur.execute(
+                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {c} IS NULL").format(t=rel, c=col)
+            )
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -177,15 +202,15 @@ class BatchedMigration:
                     try:
                         # Update batch using ctid for efficiency
                         cur.execute(
-                            f"""
-                            UPDATE {table}
-                            SET {column} = {default}
-                            WHERE ctid IN (
-                                SELECT ctid FROM {table}
-                                WHERE {column} IS NULL
-                                LIMIT {self.config.batch_size}
+                            pgsql.SQL(
+                                "UPDATE {t} SET {c} = {d} WHERE ctid IN ("
+                                "SELECT ctid FROM {t} WHERE {c} IS NULL LIMIT {n})"
+                            ).format(
+                                t=rel,
+                                c=col,
+                                d=pgsql.SQL(default),
+                                n=pgsql.Literal(self.config.batch_size),
                             )
-                        """  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
                         )
                         rows_affected = cur.rowcount
                         self.connection.commit()
@@ -223,10 +248,9 @@ class BatchedMigration:
 
             # Set default for future inserts
             cur.execute(
-                f"""
-                ALTER TABLE {table}
-                ALTER COLUMN {column} SET DEFAULT {default}
-            """
+                pgsql.SQL("ALTER TABLE {t} ALTER COLUMN {c} SET DEFAULT {d}").format(
+                    t=rel, c=col, d=pgsql.SQL(default)
+                )
             )
             self.connection.commit()
 
@@ -241,7 +265,23 @@ class BatchedMigration:
         where_clause: str = "TRUE",
         start_from: int = 0,
     ) -> BatchProgress:
-        """Backfill column values in batches.
+        """Backfill a column in batches, committing after each.
+
+        Termination contract: the table's block range is measured once, up
+        front (``pg_relation_size`` / block size), and each batch updates one
+        slice of ``ctid`` block ranges, ``WHERE ctid >= '(b,0)' AND ctid <
+        '(b+n,0)' AND (where_clause)``. The loop ends when the last block has
+        been visited — it never depends on *where_clause* becoming false, so
+        the default ``"TRUE"`` terminates. Blocks per batch is sized so a batch
+        holds about ``batch_size`` rows.
+
+        Each row is updated once: a rewritten row's new tuple version may land
+        in a block not yet visited, so every batch also excludes tuples created
+        after the backfill began (``xmin`` newer than the starting transaction).
+        Rows inserted concurrently, after the start, are therefore not visited.
+
+        ``expression`` and ``where_clause`` are SQL fragments supplied by the
+        migration author and are interpolated raw by documented contract.
 
         Example:
             >>> progress = batched.backfill_column(
@@ -254,43 +294,60 @@ class BatchedMigration:
         start_time = time.perf_counter()
 
         with self.connection.cursor() as cur:
-            # Get total rows
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
+            rel = _relation(table)
+            cur.execute(
+                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(
+                    t=rel, w=pgsql.SQL(where_clause)
+                )
+            )
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
                 return BatchProgress(total_rows=0)
 
-            total_batches = (total_rows + self.config.batch_size - 1) // self.config.batch_size
+            cur.execute(
+                "SELECT pg_relation_size(%s::regclass) / current_setting('block_size')::int",
+                (rel.as_string(),),
+            )
+            blocks = max(1, int(cur.fetchone()[0]))
+            # Tuples this backfill writes carry a newer xmin than this
+            # transaction's id; excluding them keeps a rewritten row from being
+            # updated again when its new version lands in a later block.
+            cur.execute("SELECT txid_current() % 4294967296")
+            start_xid = int(cur.fetchone()[0])
+            rows_per_block = max(1, -(-total_rows // blocks))
+            blocks_per_batch = max(1, self.config.batch_size // rows_per_block)
+            total_batches = -(-blocks // blocks_per_batch)
+            first_block = min(blocks, start_from // rows_per_block)
+
             processed = start_from
             progress = BatchProgress(
                 total_rows=total_rows,
                 processed_rows=processed,
                 total_batches=total_batches,
             )
+            batch_num = first_block // blocks_per_batch
 
-            batch_num = start_from // self.config.batch_size
-
-            while True:
+            for block in range(first_block, blocks, blocks_per_batch):
                 batch_num += 1
-
                 cur.execute(
-                    f"""
-                    UPDATE {table}
-                    SET {column} = {expression}
-                    WHERE ctid IN (
-                        SELECT ctid FROM {table}
-                        WHERE {where_clause}
-                        LIMIT {self.config.batch_size}
+                    pgsql.SQL(
+                        "UPDATE {table} SET {column} = {expression} "
+                        "WHERE ctid >= {lower}::tid AND ctid < {upper}::tid "
+                        "AND xmin::text::bigint < {start_xid} AND ({where})"
+                    ).format(
+                        table=rel,
+                        column=pgsql.Identifier(column),
+                        expression=pgsql.SQL(expression),
+                        lower=pgsql.Literal(f"({block},0)"),
+                        upper=pgsql.Literal(f"({block + blocks_per_batch},0)"),
+                        start_xid=pgsql.Literal(start_xid),
+                        where=pgsql.SQL(where_clause),
                     )
-                """  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
                 )
-
                 rows_affected = cur.rowcount
-                if rows_affected == 0:
-                    break
-
                 self.connection.commit()
+
                 processed += rows_affected
                 progress.processed_rows = processed
                 progress.current_batch = batch_num
@@ -303,10 +360,11 @@ class BatchedMigration:
                     self.config.checkpoint_callback(processed)
 
                 logger.info(
-                    f"Backfill batch {batch_num}: {progress.percent_complete:.1f}% complete"
+                    f"Backfill batch {batch_num}/{total_batches}: "
+                    f"{progress.percent_complete:.1f}% complete"
                 )
 
-                if self.config.sleep_between_batches > 0:
+                if self.config.sleep_between_batches > 0 and block + blocks_per_batch < blocks:
                     time.sleep(self.config.sleep_between_batches)
 
             progress.elapsed_seconds = time.perf_counter() - start_time
@@ -329,7 +387,12 @@ class BatchedMigration:
         start_time = time.perf_counter()
 
         with self.connection.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
+            rel = _relation(table)
+            cur.execute(
+                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(
+                    t=rel, w=pgsql.SQL(where_clause)
+                )
+            )
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -349,14 +412,11 @@ class BatchedMigration:
                 batch_num += 1
 
                 cur.execute(
-                    f"""
-                    DELETE FROM {table}
-                    WHERE ctid IN (
-                        SELECT ctid FROM {table}
-                        WHERE {where_clause}
-                        LIMIT {self.config.batch_size}
+                    pgsql.SQL(
+                        "DELETE FROM {t} WHERE ctid IN (SELECT ctid FROM {t} WHERE {w} LIMIT {n})"
+                    ).format(
+                        t=rel, w=pgsql.SQL(where_clause), n=pgsql.Literal(self.config.batch_size)
                     )
-                """  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
                 )
 
                 rows_deleted = cur.rowcount
@@ -413,7 +473,9 @@ class BatchedMigration:
 
         with self.connection.cursor() as cur:
             # Get total rows
-            cur.execute(f"SELECT COUNT(*) FROM {source_table} WHERE {where_clause}")  # nosec B608 - source table identifier supplied by the migration author via the library API, not user input
+            src, tgt = _relation(source_table), _relation(target_table)
+            where = pgsql.SQL(where_clause)
+            cur.execute(pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(t=src, w=where))
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -421,24 +483,27 @@ class BatchedMigration:
 
             # Get columns if not specified
             if columns is None:
+                schema, bare = split_qualified_table(source_table)
                 cur.execute(
                     """
                     SELECT column_name FROM information_schema.columns
-                    WHERE table_name = %s AND table_schema = 'public'
+                    WHERE table_name = %s AND table_schema = %s
                     ORDER BY ordinal_position
                 """,
-                    (source_table,),
+                    (bare, schema or "public"),
                 )
                 columns = [row[0] for row in cur.fetchall()]
 
             # Build select expressions
             transform = transform or {}
-            select_exprs = [transform.get(col, col) for col in columns]
-            select_str = ", ".join(select_exprs)
-            columns_str = ", ".join(columns)
+            select_list = pgsql.SQL(", ").join(
+                pgsql.SQL(transform[col]) if col in transform else pgsql.Identifier(col)
+                for col in columns
+            )
+            column_list = pgsql.SQL(", ").join(pgsql.Identifier(col) for col in columns)
 
             # Track last ID for pagination
-            cur.execute(f"SELECT MIN(ctid) FROM {source_table} WHERE {where_clause}")  # nosec B608 - source table identifier supplied by the migration author via the library API, not user input
+            cur.execute(pgsql.SQL("SELECT MIN(ctid) FROM {t} WHERE {w}").format(t=src, w=where))
             result = cur.fetchone()
             if result[0] is None:
                 return BatchProgress(total_rows=0)
@@ -453,12 +518,10 @@ class BatchedMigration:
 
             # Use a tracking column for batching
             cur.execute(
-                f"""
-                CREATE TEMP TABLE _batch_tracker AS
-                SELECT ctid as row_ctid, ROW_NUMBER() OVER () as rn
-                FROM {source_table}
-                WHERE {where_clause}
-            """  # nosec B608 - source table identifier supplied by the migration author via the library API, not user input
+                pgsql.SQL(
+                    "CREATE TEMP TABLE _batch_tracker AS "
+                    "SELECT ctid AS row_ctid, ROW_NUMBER() OVER () AS rn FROM {t} WHERE {w}"
+                ).format(t=src, w=where)
             )
             self.connection.commit()
 
@@ -468,16 +531,18 @@ class BatchedMigration:
                     offset = processed
 
                     cur.execute(
-                        f"""
-                        INSERT INTO {target_table} ({columns_str})
-                        SELECT {select_str}
-                        FROM {source_table} s
-                        WHERE s.ctid IN (
-                            SELECT row_ctid FROM _batch_tracker
-                            WHERE rn > %s AND rn <= %s
+                        pgsql.SQL(
+                            "INSERT INTO {tgt} ({cols}) SELECT {exprs} FROM {src} s "
+                            "WHERE s.ctid IN (SELECT row_ctid FROM _batch_tracker "
+                            "WHERE rn > {lo} AND rn <= {hi})"
+                        ).format(
+                            tgt=tgt,
+                            cols=column_list,
+                            exprs=select_list,
+                            src=src,
+                            lo=pgsql.Literal(offset),
+                            hi=pgsql.Literal(offset + self.config.batch_size),
                         )
-                    """,  # nosec B608 - table/column identifiers supplied by the migration author via the library API, row range is parameter-bound
-                        (offset, offset + self.config.batch_size),
                     )
 
                     rows_inserted = cur.rowcount
@@ -560,12 +625,7 @@ class OnlineIndexBuilder:
         """
         if index_name is None:
             col_names = "_".join(columns)
-            index_name = f"idx_{table}_{col_names}"
-
-        unique_str = "UNIQUE " if unique else ""
-        columns_str = ", ".join(columns)
-        where_str = f" WHERE {where}" if where else ""
-        include_str = f" INCLUDE ({', '.join(include)})" if include else ""
+            index_name = f"idx_{split_qualified_table(table)[1]}_{col_names}"
 
         # Must use autocommit for CONCURRENTLY
         old_autocommit = self.connection.autocommit
@@ -573,13 +633,24 @@ class OnlineIndexBuilder:
 
         try:
             with self.connection.cursor() as cur:
-                sql = f"""
-                    CREATE {unique_str}INDEX CONCURRENTLY IF NOT EXISTS
-                    {index_name} ON {table} USING {method} ({columns_str})
-                    {include_str}{where_str}
-                """
+                statement = pgsql.SQL(
+                    "CREATE {unique}INDEX CONCURRENTLY IF NOT EXISTS {name} ON {table} "
+                    "USING {method} ({columns}){include}{where}"
+                ).format(
+                    unique=pgsql.SQL("UNIQUE " if unique else ""),
+                    name=pgsql.Identifier(index_name),
+                    table=_relation(table),
+                    method=pgsql.Identifier(method),
+                    columns=_columns(columns),
+                    include=(
+                        pgsql.SQL(" INCLUDE (") + _columns(include) + pgsql.SQL(")")
+                        if include
+                        else pgsql.SQL("")
+                    ),
+                    where=pgsql.SQL(" WHERE " + where) if where else pgsql.SQL(""),
+                )
                 logger.info(f"Creating index: {index_name}")
-                cur.execute(sql)
+                cur.execute(statement)
                 logger.info(f"Index created: {index_name}")
         finally:
             self.connection.autocommit = old_autocommit
@@ -598,7 +669,9 @@ class OnlineIndexBuilder:
         try:
             with self.connection.cursor() as cur:
                 logger.info(f"Dropping index: {index_name}")
-                cur.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {index_name}")
+                cur.execute(
+                    pgsql.SQL("DROP INDEX CONCURRENTLY IF EXISTS {}").format(_relation(index_name))
+                )
                 logger.info(f"Index dropped: {index_name}")
         finally:
             self.connection.autocommit = old_autocommit
@@ -615,7 +688,9 @@ class OnlineIndexBuilder:
         try:
             with self.connection.cursor() as cur:
                 logger.info(f"Reindexing: {index_name}")
-                cur.execute(f"REINDEX INDEX CONCURRENTLY {index_name}")
+                cur.execute(
+                    pgsql.SQL("REINDEX INDEX CONCURRENTLY {}").format(_relation(index_name))
+                )
                 logger.info(f"Reindex complete: {index_name}")
         finally:
             self.connection.autocommit = old_autocommit
@@ -734,7 +809,11 @@ class TableSizeEstimator:
             Exact row count
         """
         with self.connection.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
+            cur.execute(
+                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(
+                    t=_relation(table), w=pgsql.SQL(where_clause)
+                )
+            )
             return cur.fetchone()[0]
 
     def get_table_size(self, table: str) -> dict[str, int]:

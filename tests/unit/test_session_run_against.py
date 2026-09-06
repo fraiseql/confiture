@@ -9,6 +9,13 @@ from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
 
 
+def _sql_text(statement: object) -> str:
+    """Rendered SQL for a plain string or a ``psycopg.sql`` composable."""
+    from psycopg import sql as pgsql
+
+    return statement.as_string() if isinstance(statement, pgsql.Composable) else str(statement)
+
+
 def _make_session(conn=None):
     """Return a MigratorSession wired to a mock connection."""
     if conn is None:
@@ -89,7 +96,7 @@ def test_run_against_outer_rollback():
     rollback_calls = [
         c
         for c in mock_conn.execute.call_args_list
-        if "ROLLBACK TO SAVEPOINT preflight_run" in str(c)
+        if 'ROLLBACK TO SAVEPOINT "preflight_run"' in _sql_text(c.args[0])
     ]
     assert len(rollback_calls) == 1
 
@@ -228,7 +235,7 @@ def test_non_transactional_runs_when_allowed():
     rollback_calls = [
         c
         for c in mock_conn.execute.call_args_list
-        if "ROLLBACK TO SAVEPOINT preflight_run" in str(c)
+        if 'ROLLBACK TO SAVEPOINT "preflight_run"' in _sql_text(c.args[0])
     ]
     assert len(rollback_calls) == 0
     mock_conn.commit.assert_called_once()
@@ -270,9 +277,9 @@ def test_per_migration_savepoint_set_and_released_on_success():
             [Path("db/migrations/20260428000000_a.up.sql")],
             against_url="postgresql://localhost/preflight",
         )
-    calls = [str(c) for c in mock_conn.execute.call_args_list]
-    assert any("SAVEPOINT sp_20260428000000" in c for c in calls)
-    assert any("RELEASE SAVEPOINT sp_20260428000000" in c for c in calls)
+    calls = [_sql_text(c.args[0]) for c in mock_conn.execute.call_args_list]
+    assert any('SAVEPOINT "sp_20260428000000"' in c for c in calls)
+    assert any('RELEASE SAVEPOINT "sp_20260428000000"' in c for c in calls)
 
 
 def test_per_migration_savepoint_rolled_back_on_failure():
@@ -284,9 +291,9 @@ def test_per_migration_savepoint_rolled_back_on_failure():
             [Path("db/migrations/20260428111111_bad.up.sql")],
             against_url="postgresql://localhost/preflight",
         )
-    calls = [str(c) for c in mock_conn.execute.call_args_list]
-    assert any("ROLLBACK TO SAVEPOINT sp_20260428111111" in c for c in calls)
-    assert any("RELEASE SAVEPOINT sp_20260428111111" in c for c in calls)
+    calls = [_sql_text(c.args[0]) for c in mock_conn.execute.call_args_list]
+    assert any('ROLLBACK TO SAVEPOINT "sp_20260428111111"' in c for c in calls)
+    assert any('RELEASE SAVEPOINT "sp_20260428111111"' in c for c in calls)
 
 
 def test_outer_rollback_runs_even_on_first_migration_failure():
@@ -301,7 +308,7 @@ def test_outer_rollback_runs_even_on_first_migration_failure():
     rollback_calls = [
         c
         for c in mock_conn.execute.call_args_list
-        if "ROLLBACK TO SAVEPOINT preflight_run" in str(c)
+        if 'ROLLBACK TO SAVEPOINT "preflight_run"' in _sql_text(c.args[0])
     ]
     assert len(rollback_calls) == 1
 
@@ -346,6 +353,6 @@ def test_outer_sp_active_false_skips_rollback_in_finally():
     rollback_calls = [
         c
         for c in mock_conn.execute.call_args_list
-        if "ROLLBACK TO SAVEPOINT preflight_run" in str(c)
+        if 'ROLLBACK TO SAVEPOINT "preflight_run"' in _sql_text(c.args[0])
     ]
     assert len(rollback_calls) == 0

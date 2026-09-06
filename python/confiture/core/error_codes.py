@@ -315,6 +315,21 @@ def _create_global_registry() -> ErrorCodeRegistry:
                 "set transactional = False on the migration."
             ),
         ),
+        ErrorCodeDefinition(
+            code="MIGR_108",
+            message_template=(
+                "Migration {version} is non-transactional and cannot run with "
+                "commit=False (inside a SAVEPOINT)"
+            ),
+            severity=ErrorSeverity.ERROR,
+            exit_code=3,
+            resolution_hint=(
+                "A non-transactional migration commits the current transaction and "
+                "runs in autocommit, so it cannot be tested inside a SAVEPOINT. "
+                "`session.up(dry_run_execute=True)` skips such migrations; apply "
+                "them for real with `migrate up`."
+            ),
+        ),
     ]
 
     for code in migr_codes:
@@ -911,6 +926,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "MIGR_105": 0,  # carve-out: no pending migrations — success-with-signal
     "MIGR_106": 3,
     "MIGR_107": 3,
+    "MIGR_108": 3,
     # SCHEMA family → 4.
     "SCHEMA_001": 4,
     "SCHEMA_200": 4,

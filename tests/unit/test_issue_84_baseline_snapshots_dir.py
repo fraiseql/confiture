@@ -1,7 +1,7 @@
 """Tests for Issue #84: --auto-detect-baseline should error on missing/empty snapshots dir.
 
 When a user explicitly passes --auto-detect-baseline, a missing or empty snapshots
-directory should be a hard error (exit 2), not a silent warning.
+directory should be a hard error (exit 5, configuration failure), not a silent warning.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from tests.unit._doubles import migrator_double
+from tests.unit._doubles import connection_double, migrator_double
 
 runner = CliRunner()
 
@@ -64,7 +64,7 @@ def _make_migrator_mock(*, tracking_table_exists: bool) -> MagicMock:
 
 
 class TestAutoDetectBaselineMissingSnapshotsDir:
-    """--auto-detect-baseline with non-existent snapshots dir should exit 2."""
+    """--auto-detect-baseline with non-existent snapshots dir should exit 5 (configuration failure)."""
 
     def test_errors_when_snapshots_dir_does_not_exist(self, tmp_path):
         config_file = _write_config(tmp_path)
@@ -77,7 +77,7 @@ class TestAutoDetectBaselineMissingSnapshotsDir:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.connection.create_connection", return_value=connection_double()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -98,11 +98,11 @@ class TestAutoDetectBaselineMissingSnapshotsDir:
         # Exit code 2 = configuration error.
         # Error messages go to stderr (error_console), so result.output is empty.
         # Typer's CliRunner does not support mix_stderr, so we only check exit_code.
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}\n{result.output}"
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}\n{result.output}"
 
 
 class TestAutoDetectBaselineEmptySnapshotsDir:
-    """--auto-detect-baseline with empty snapshots dir should exit 2."""
+    """--auto-detect-baseline with empty snapshots dir should exit 5 (configuration failure)."""
 
     def test_errors_when_snapshots_dir_is_empty(self, tmp_path):
         config_file = _write_config(tmp_path)
@@ -116,7 +116,7 @@ class TestAutoDetectBaselineEmptySnapshotsDir:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.core.connection.create_connection", return_value=connection_double()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -134,4 +134,4 @@ class TestAutoDetectBaselineEmptySnapshotsDir:
                 ],
             )
 
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}\n{result.output}"
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}\n{result.output}"
