@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     _convert_linter_report,
     _output_json,
@@ -43,6 +43,7 @@ def _violation_to_unified_issue(v, tool: str, file=None):
     )
 
 
+@cli_boundary
 def init(
     path: Path = typer.Argument(
         Path("."),
@@ -183,6 +184,8 @@ Documentation: https://github.com/evoludigit/confiture
         console.print("  2. Configure environments in db/environments/")
         console.print("  3. Run 'confiture migrate diff' to detect changes")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e

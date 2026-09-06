@@ -475,5 +475,6 @@ class TestCLIErrorHandling:
             ["migrate", "diff", "/nonexistent/old.sql", "/nonexistent/new.sql"],
         )
 
-        assert result.exit_code != 0
-        assert "not found" in result.stdout.lower() or "does not exist" in result.stdout.lower()
+        assert result.exit_code == 5  # validation failure — docs/reference/exit-codes.md
+        # Errors go to stderr; `output` is stdout + stderr under the CliRunner.
+        assert "not found" in result.output.lower() or "does not exist" in result.output.lower()

@@ -59,11 +59,11 @@ _ALLOWLIST: dict[str, int] = {
     # eleven per-check `Exit(1)` success-signals collapsed into the single
     # aggregated `Exit(aggregate_exit_code(...))` — a computed value, not a
     # literal, so it no longer appears here at all. 29 → 15.
-    "commands/migrate_analysis.py": 15,
+    "commands/migrate_analysis.py": 11,
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.
-    "commands/migrate_core.py": 29,  # TODO(phase-02/03): mixed success-signal + debt
+    "commands/migrate_core.py": 28,  # TODO(phase-02/03): mixed success-signal + debt
     # ---- Cycle 1 conversion cohort (this phase) ----
     "seed.py": 14,  # success-signal: clean Exit(0) + "found issues/failed" Exit(1) gates
     # commands/migrate_state.py: fully converted (Cycle 1) — baseline/reinit/

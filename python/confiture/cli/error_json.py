@@ -13,6 +13,7 @@ The process still exits with the #146 exit code (``ConfiturError.exit_code``).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
@@ -163,3 +164,33 @@ def fail(
         print_error_to_console(err, error_console or default_error_console)
 
     raise typer.Exit(err.exit_code)
+
+
+_FORMAT_PARAMS = ("format_output", "output_format", "format_type")
+_OUTPUT_PARAMS = ("output_file", "report_file")
+
+
+def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
+    """The one error boundary for a CLI command (ENG-08, ARC-02).
+
+    ``typer.Exit`` and ``click.exceptions.Abort`` cross it untouched — a
+    command's own exit code is its own. A ``ConfiturError`` goes through
+    :func:`fail`; anything else is coerced first. JSON mode is read from the
+    command's ``--format`` parameter so the envelope lands on stdout.
+    """
+    import functools
+
+    import click
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except (typer.Exit, click.exceptions.Abort, click.exceptions.Exit):
+            raise
+        except Exception as exc:
+            fmt = next((kwargs[k] for k in _FORMAT_PARAMS if k in kwargs), None)
+            out = next((kwargs[k] for k in _OUTPUT_PARAMS if k in kwargs), None)
+            fail(coerce_to_confiture_error(exc), json_mode=fmt == "json", output_file=out)
+
+    return wrapper

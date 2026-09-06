@@ -12,7 +12,7 @@ from confiture.cli.commands.validate_checks import (
     build_registry,
     validate_flag_dependencies,
 )
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
@@ -41,9 +41,10 @@ from confiture.core.validation.registry import (
     compose_payload,
     run_checks,
 )
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import ConfigurationError, ConfiturError, ValidationError
 
 
+@cli_boundary
 def migrate_diff(
     old_schema: Path = typer.Argument(..., help="Old schema file"),
     new_schema: Path = typer.Argument(..., help="New schema file"),
@@ -99,17 +100,26 @@ def migrate_diff(
     try:
         # Validate format
         if format_type not in ("text", "json", "csv"):
-            console.print(f"[red]❌ Invalid format: {format_type}. Use text, json, or csv[/red]")
-            raise typer.Exit(1)
+            fail(
+                ValidationError(
+                    f"Invalid --format {format_type!r}: use 'text', 'json' or 'csv'.",
+                    context={"format": format_type},
+                ),
+                json_mode=False,
+            )
 
         # Validate files exist
-        if not old_schema.exists():
-            console.print(f"[red]❌ Old schema file not found: {old_schema}[/red]")
-            raise typer.Exit(1)
-
-        if not new_schema.exists():
-            console.print(f"[red]❌ New schema file not found: {new_schema}[/red]")
-            raise typer.Exit(1)
+        for label, schema_path in (("Old", old_schema), ("New", new_schema)):
+            if not schema_path.exists():
+                fail(
+                    ValidationError(
+                        f"{label} schema file not found: {schema_path}",
+                        context={"path": str(schema_path)},
+                        resolution_hint="Pass two existing schema files: migrate diff OLD.sql NEW.sql",
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_file,
+                )
 
         # Read schemas
         old_sql = old_schema.read_text()
@@ -129,11 +139,16 @@ def migrate_diff(
         # Handle migration generation if requested
         if generate:
             if not name:
-                console.print("[red]❌ Migration name is required when using --generate[/red]")
-                console.print(
-                    "Usage: confiture migrate diff old.sql new.sql --generate --name migration_name"
+                fail(
+                    ValidationError(
+                        "--generate requires --name",
+                        resolution_hint=(
+                            "Usage: confiture migrate diff old.sql new.sql --generate --name migration_name"
+                        ),
+                    ),
+                    json_mode=is_json(format_type),
+                    output_file=report_file,
                 )
-                raise typer.Exit(1)
 
             # Ensure migrations directory exists
             migrations_dir.mkdir(parents=True, exist_ok=True)
@@ -154,6 +169,8 @@ def migrate_diff(
 
         format_migrate_diff_result(result, format_type, report_file, console)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
         from confiture.models.results import MigrateDiffResult

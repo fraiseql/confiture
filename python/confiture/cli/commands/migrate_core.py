@@ -7,7 +7,7 @@ from typing import Any
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
@@ -35,6 +35,7 @@ from confiture.exceptions import ValidationError
 _MIGRATION_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
+@cli_boundary
 def migrate_status(
     ctx: typer.Context,
     migrations_dir: Path = typer.Option(
@@ -132,10 +133,13 @@ def migrate_status(
     try:
         # Validate output format
         if output_format not in ("table", "json", "csv"):
-            console.print(
-                f"[red]❌ Invalid format: {output_format}. Use 'table', 'json', or 'csv'[/red]"
+            fail(
+                ValidationError(
+                    f"Invalid --format {output_format!r}: use 'table', 'json' or 'csv'.",
+                    context={"format": output_format},
+                ),
+                json_mode=False,
             )
-            raise typer.Exit(1)
 
         if not migrations_dir.exists():
             if output_format == "json":
@@ -472,6 +476,8 @@ def migrate_status(
         elif _db_source and not db_error and not tracking_table_absent and len(pending_list) > 0:
             pending_migrations_exit = True
 
+    except typer.Exit:
+        raise
     except Exception as e:
         if output_format == "json":
             # #145: a genuinely unexpected status failure emits the structured
