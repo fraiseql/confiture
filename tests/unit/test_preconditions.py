@@ -44,8 +44,11 @@ def create_mock_connection(query_results: dict[str, list]) -> MagicMock:
     mock_cursor = MagicMock()
 
     def execute_side_effect(sql, params=None):
+        # Identifier-bearing queries arrive as psycopg.sql.Composed; render
+        # them so the substring match sees the same text the server would.
+        text = sql if isinstance(sql, str) else sql.as_string()
         for query_substring, result in query_results.items():
-            if query_substring in sql:
+            if query_substring in text:
                 mock_cursor.fetchone.return_value = result
                 return
         mock_cursor.fetchone.return_value = None
@@ -616,3 +619,32 @@ class TestMigrationPreconditions:
 
         assert SimpleMigration.up_preconditions == []
         assert SimpleMigration.down_preconditions == []
+
+
+# =============================================================================
+# Identifier quoting (SEC-01)
+# =============================================================================
+
+
+class TestRowCountPreconditionsQuoteIdentifiers:
+    """The table and schema reach the server as identifiers, never as SQL text."""
+
+    @pytest.mark.parametrize(
+        "precondition",
+        [
+            RowCountEquals('we"ird', 1, schema="sch;ema"),
+            RowCountGreaterThan('we"ird', 0, schema="sch;ema"),
+            TableIsEmpty('we"ird', schema="sch;ema"),
+        ],
+        ids=["RowCountEquals", "RowCountGreaterThan", "TableIsEmpty"],
+    )
+    def test_hostile_names_are_escaped_by_the_driver(self, precondition):
+        from psycopg import sql
+
+        mock_conn = create_mock_connection({"COUNT(*)": [0]})
+
+        precondition.check(mock_conn)
+
+        (query,), _ = mock_conn.cursor.return_value.execute.call_args
+        assert isinstance(query, sql.Composed)
+        assert query.as_string() == 'SELECT COUNT(*) FROM "sch;ema"."we""ird"'
