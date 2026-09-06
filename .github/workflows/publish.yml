@@ -112,7 +112,8 @@ jobs:
         echo "=== Running Core Tests for Release ==="
         # Run core tests against the BUILT WHEEL - MUST PASS for release.
         # --no-sync keeps the wheel installed (see the install step above).
-        uv run --no-sync pytest tests/ --cov=confiture --cov-report=xml --cov-report=term-missing -v
+        # The wheel bundles the native extension; the parity tests must run it, not skip it.
+        CONFITURE_REQUIRE_NATIVE=1 uv run --no-sync pytest tests/ --cov=confiture --cov-report=xml --cov-report=term-missing -v
       env:
         # See quality-gate.yml: CONFITURE_TEST_DB_URL is the variable the
         # test fixtures read; without it the service container is unused and the

@@ -143,7 +143,9 @@ Check `include_dirs` in your environment config matches your directory structure
 Add `IF NOT EXISTS` to all CREATE statements.
 
 ### Build slow (>5s)
-Rust extension may not be installed. Reinstall with: `pip install fraiseql-confiture`
+Building is pure Python; check the file count (`confiture build` prints it), disable
+`validate_comments` in CI where a pre-commit hook already ran it, and make sure the
+schema directory is not on a slow network mount.
 
 ---
 

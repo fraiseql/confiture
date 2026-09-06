@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.52.0
+**Version**: 0.53.0
 **Last Updated**: 2026-09-06
 **Current Status**: Production-Ready
 
@@ -207,19 +207,24 @@ Note that a literal can hide *inline* (`if sub_int == 17:`), not just in a
 constant block — that form is how `core/idempotency/_captures.py` survived the
 first sweep. The guard checks both shapes.
 
-### Rust Extension (Optional Performance)
+### Native extension (schema hash only)
 
-Confiture includes an optional Rust extension for improved performance:
+Confiture bundles one native function, `confiture._core.hash_files`, behind
+`SchemaBuilder.compute_hash()`. It computes byte-for-byte the digest the Python
+path computes (a parity test holds it) and is absent on an sdist/editable
+install without a Rust toolchain — the Python path then runs and says so once
+at INFO. Building the schema is pure Python.
 
 ```toml
 # Cargo.toml
 [dependencies]
-pyo3 = "0.22"             # Python bindings
-sqlparser = "0.52"        # SQL parsing (Rust)
-tokio = "1"               # Async runtime
-tokio-postgres = "0.7"    # PostgreSQL driver
+pyo3 = { version = "0.23", default-features = false, features = ["macros"] }
 sha2 = "0.10"             # Hashing
 ```
+
+`scripts/cargo-test.sh` runs the crate tests (they link libpython, so the script
+puts the interpreter's `LIBDIR` on the loader path; the `extension-module` feature
+is on only for maturin); `[lints]` forbid `unsafe` and deny `clippy::all` + `pedantic`.
 
 > ⚠️ **`confiture-core` (this PyO3 crate) is a performance accelerator for the
 > Python package, NOT the start of a Rust rewrite.** Confiture's **1.x line is
@@ -1005,7 +1010,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-09-06
-**Version**: 0.52.0
+**Version**: 0.53.0
 
 ---
 

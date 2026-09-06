@@ -121,7 +121,7 @@ File separators are visual dividers between concatenated SQL files. Confiture su
 - Clear visual boundary
 - Professional appearance
 
-#### Line Comment (Default for Rust Extension)
+#### Line Comment (Default)
 ```sql
 -- ==========================================
 -- File: db/schema/10_tables/users.sql
@@ -130,7 +130,6 @@ File separators are visual dividers between concatenated SQL files. Confiture su
 
 **Advantages:**
 - Traditional style
-- Compatible with Rust fast path
 - Familiar to SQL users
 
 #### MySQL
@@ -564,14 +563,14 @@ db/environments/
   └── production.yaml  # Production (minimal)
 ```
 
-### Rust Extension
+### Native extension
 
-The Rust extension provides 10-50x speedup for schema building. It's used automatically when:
-
-1. Rust extension is installed
-2. Separator style is `line_comment` (Rust uses this style)
-
-For other separator styles, the Python implementation is used automatically.
+Schema *building* is Python, whatever the separator style. The native extension
+(`confiture._core`, bundled in the wheels) accelerates one thing: the schema
+*hash* behind `compute_hash()`, template staleness and artifact headers. It
+computes byte-for-byte the digest the Python path computes, so a wheel install
+and an editable install always agree; when it is absent the Python path is used
+and `confiture --version` says `native extension: no`.
 
 ---
 

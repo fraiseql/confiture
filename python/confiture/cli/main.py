@@ -3,6 +3,8 @@
 This module defines the main Typer application and registers all CLI commands.
 """
 
+import importlib.util
+
 import typer
 
 # Sub-applications
@@ -124,6 +126,8 @@ def version_callback(value: bool) -> None:
 
         console.print(f"confiture version {__version__}")
         console.print(parser_line())
+        native = importlib.util.find_spec("confiture._core") is not None
+        console.print(f"native extension: {'yes' if native else 'no'}")
         raise typer.Exit()
 
 
