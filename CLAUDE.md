@@ -698,6 +698,16 @@ uv run ruff check .
 uv run ty check python/confiture/
 ```
 
+### Adding or changing a CLI option
+
+`docs/reference/cli.md` carries one generated block per command (usage,
+arguments, options) between `<!-- BEGIN GENERATED: cli confiture … -->` markers.
+After changing a Typer command run `python scripts/gen_cli_reference.py --write`
+and keep the hand prose around the block; `--check` (and
+`tests/unit/docs/test_doc_sync_cli.py`) fails on a stale block, an undocumented
+flag, an example using a flag the command has not got, or a section for a
+command that does not exist.
+
 ### Adding a `confiture lint` rule
 
 Register it in `python/confiture/core/linting/rule_registry.py` — **do not add a

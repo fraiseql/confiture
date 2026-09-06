@@ -5,6 +5,26 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 10 of the 2026-09-06 review: documentation truth — every documented
+command, flag, config field and output shape exists and behaves as written,
+and the checks that caught this review's findings run in CI.
+
+### Fixed
+
+- **`docs/reference/cli.md` documents the CLI that exists.** It described
+  `confiture admin install-helpers`, `coordinate init`, `coordinate complete`
+  and `coordinate list`, none of which are commands, and had no section for
+  fifty-six commands that are (`branch`, `generate`, `seed`, the `test-db` and
+  `schema-to-schema` subcommands, `bootstrap`, `restore`, `introspect`, …).
+  Every leaf command now has a section with a generated block — usage,
+  arguments, options — rendered from the live Typer app by
+  `scripts/gen_cli_reference.py` between named markers; the prose around it
+  is hand-written. A test holds every block current, every registered flag
+  documented, every example valid for its command, and every flag named
+  anywhere real.
+
 ## [0.53.0] - 2026-09-07
 
 Phase 08 of the 2026-09-06 review: the package boundaries say what the modules do.
