@@ -36,6 +36,8 @@ class TestRegistryContents:
             "doc_002",
             "doc_003",
             "doc_004",
+            "build_001",
+            "build_002",
             "sec_001",
             "acl_001",
             "tenant_001",
@@ -53,6 +55,8 @@ class TestRegistryContents:
             "doc_002",
             "doc_003",
             "doc_004",
+            "build_001",
+            "build_002",
             "sec_001",
         }
 
@@ -75,6 +79,7 @@ class TestRegistryContents:
             "naming",
             "pk",
             "doc",
+            "build",
             "security",
             "acl",
             "tenant",
@@ -94,6 +99,8 @@ class TestSelection:
                 "doc_002",
                 "doc_003",
                 "doc_004",
+                "build_001",
+                "build_002",
                 "sec_001",
             }
         )
@@ -115,6 +122,8 @@ class TestSelection:
                 "doc_002",
                 "doc_003",
                 "doc_004",
+                "build_001",
+                "build_002",
                 "sec_001",
                 "replica_001",
             }
@@ -130,7 +139,16 @@ class TestSelection:
 
     def test_ignore_accepts_a_family(self) -> None:
         assert resolve_selection([DEFAULT_SELECTOR], ["naming"]) == frozenset(
-            {"pk_001", "doc_001", "doc_002", "doc_003", "doc_004", "sec_001"}
+            {
+                "pk_001",
+                "doc_001",
+                "doc_002",
+                "doc_003",
+                "doc_004",
+                "build_001",
+                "build_002",
+                "sec_001",
+            }
         )
 
     def test_ignoring_everything_selects_nothing(self) -> None:

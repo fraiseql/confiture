@@ -108,6 +108,8 @@ confiture build [OPTIONS]
 | `--no-fail-on-unclosed` | - | Flag | from env config | Override: don't fail on unclosed comments |
 | `--fail-on-spillover` | - | Flag | from env config | Override: fail on comment spillover |
 | `--no-fail-on-spillover` | - | Flag | from env config | Override: don't fail on spillover |
+| `--warn-duplicates` | - | Flag | off | Report objects defined more than once across the build's files (`build_001` / `build_002`), then build |
+| `--fail-on-duplicates` | - | Flag | off | Report duplicate definitions and exit 1 without building |
 | `--separator-style` | - | String | from env config | Override separator style (block_comment, line_comment, mysql, custom) |
 | `--separator-template` | - | String | from env config | Custom separator template with {file_path} placeholder |
 

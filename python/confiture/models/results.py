@@ -150,6 +150,7 @@ class BuildResult:
     seed_profile: str | None = None
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
+    duplicates: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -170,6 +171,7 @@ class BuildResult:
             "seed_profile": self.seed_profile,
             "warnings": self.warnings,
             "error": self.error,
+            "duplicates": self.duplicates,
         }
 
 

@@ -75,7 +75,9 @@ class SchemaObject:
     comma-joined input parameter types of a function or procedure — the part of
     its identity after the name — and ``None`` for every other kind. ``offset``
     is the character position of the statement in the parsed text; ``file`` is
-    set by callers that inventory one file at a time.
+    set by callers that inventory one file at a time. ``replace`` and
+    ``if_not_exists`` record ``CREATE OR REPLACE`` / ``IF NOT EXISTS``, which
+    decide what a second definition of the same object does at build time.
     """
 
     kind: str
@@ -92,6 +94,8 @@ class SchemaObject:
     signature: str | None = None
     offset: int = 0
     file: str | None = None
+    replace: bool = False
+    if_not_exists: bool = False
 
     @property
     def qualified(self) -> str:
@@ -283,6 +287,7 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         is_partition=stmt.partbound is not None,
         is_temporary=getattr(rv, "relpersistence", "p") == "t",
         offset=offset,
+        if_not_exists=bool(getattr(stmt, "if_not_exists", False)),
     )
     for elt in stmt.tableElts or []:
         kind = type(elt).__name__
@@ -304,6 +309,7 @@ def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         _line_of(sql, offset),
         offset,
         signature=_signature(stmt.parameters),
+        replace=bool(getattr(stmt, "replace", False)),
     )
 
 
@@ -320,9 +326,13 @@ def _object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     if kind == "CreateFunctionStmt":
         return _routine_from_create(sql, stmt, offset)
     if kind == "ViewStmt":
-        return _relation_object(sql, "view", stmt.view, offset)
+        view = _relation_object(sql, "view", stmt.view, offset)
+        view.replace = bool(getattr(stmt, "replace", False))
+        return view
     if kind == "CreateTableAsStmt" and _enum_value(stmt.objtype) == _OBJECT_MATVIEW:
-        return _relation_object(sql, "matview", stmt.into.rel, offset)
+        matview = _relation_object(sql, "matview", stmt.into.rel, offset)
+        matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
+        return matview
     if kind == "CompositeTypeStmt":
         return _relation_object(sql, "type", stmt.typevar, offset)
     if kind == "CreateEnumStmt":

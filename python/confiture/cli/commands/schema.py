@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from rich.console import Console
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
+    FINDINGS_EXIT_CODE,
     _convert_linter_report,
     _output_json,
     _output_yaml,
@@ -268,6 +270,16 @@ def build(
         "--continue-on-error",
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
+    warn_duplicates: bool = typer.Option(
+        False,
+        "--warn-duplicates",
+        help="Report objects defined more than once across the build's files (build_001/build_002), then build",
+    ),
+    fail_on_duplicates: bool = typer.Option(
+        False,
+        "--fail-on-duplicates",
+        help="Report duplicate definitions and exit 1 without building",
+    ),
     format_type: str = format_option("text", "json", "csv"),
     report_output: Path = typer.Option(
         None,
@@ -384,6 +396,16 @@ def build(
 
         with ProgressManager() as progress:
             sql_files = builder.find_sql_files()
+            duplicates = _duplicate_gate(
+                sql_files,
+                project_dir=project_dir,
+                output=output,
+                warn=warn_duplicates,
+                fail=fail_on_duplicates,
+                out=out,
+                json_mode=json_mode,
+                report_output=report_output,
+            )
             if apply_sequential:
                 schema = builder.build(output_path=output, schema_only=True, progress=progress)
                 schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
@@ -440,6 +462,7 @@ def build(
             artifact_path=artifact_path_str,
             artifact_hash=artifact_hash_str,
             seed_profile=seed_profile,
+            duplicates=duplicates,
         )
         format_build_result(build_result, format_type, report_output, console)
         if format_type == "text":
@@ -464,6 +487,61 @@ def build(
         )
     except Exception as e:
         fail(e, json_mode=json_mode, output_file=report_output)
+
+
+def _duplicate_gate(
+    sql_files: list[Path],
+    *,
+    project_dir: Path,
+    output: Path,
+    warn: bool,
+    fail: bool,
+    out: Console,
+    json_mode: bool,
+    report_output: Path | None,
+) -> list[dict[str, Any]]:
+    """Scan the build's files for duplicate definitions when asked (#218).
+
+    ``--warn-duplicates`` reports and builds; ``--fail-on-duplicates`` reports
+    and exits 1 before anything is written. A plain build does not scan.
+    """
+    if not (warn or fail):
+        return []
+    from confiture.core.linting.duplicates import (
+        duplicate_violations,
+        find_duplicates,
+        inventory_files,
+    )
+
+    objects, unparseable = inventory_files(sql_files, root=project_dir)
+    for label in unparseable:
+        out.print(
+            f"[yellow]⚠️ {label}: pglast could not parse it — not checked for duplicates[/yellow]"
+        )
+    duplicates = find_duplicates(objects)
+    if not duplicates:
+        return []
+    if not json_mode:
+        out.print("[yellow]Duplicate definitions:[/yellow]")
+        for violation in duplicate_violations(duplicates):
+            out.print(f"  ⚠️ {violation.rule_id}: {violation.message}")
+    payload = [duplicate.to_dict() for duplicate in duplicates]
+    if fail:
+        from confiture.cli.formatters.build_formatter import format_build_result
+        from confiture.models.results import BuildResult
+
+        result = BuildResult(
+            success=False,
+            files_processed=len(sql_files),
+            schema_size_bytes=0,
+            output_path=str(output.absolute()),
+            hash=None,
+            duplicates=payload,
+            error=f"{len(duplicates)} duplicate definition(s); nothing was built",
+        )
+        format_build_result(result, "json" if json_mode else "text", report_output, console)
+        raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: the duplicate gate tripped
+    return payload
 
 
 _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
@@ -815,6 +893,7 @@ def lint(
             check_naming="naming_001" in selected or "naming_002" in selected,
             check_primary_keys="pk_001" in selected,
             check_documentation=any(code.startswith("doc_") for code in selected),
+            check_duplicates=any(code.startswith("build_") for code in selected),
             check_security="sec_001" in selected,
             check_tenant_isolation="tenant_001" in selected,
             check_acl_coverage="acl_001" in selected,
@@ -864,7 +943,7 @@ def lint(
                 or should_fail
             )
         if should_fail:
-            raise typer.Exit(1)  # success-signal: lint found violations
+            raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found violations
     except typer.Exit:
         raise
     except FileNotFoundError as e:
@@ -1194,7 +1273,7 @@ def lint_unified(
                     console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
 
     if fail_on_error and unified_result.has_errors:
-        raise typer.Exit(1)  # success-signal: lint found errors
+        raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found errors
 
 
 @cli_boundary

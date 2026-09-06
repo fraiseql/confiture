@@ -121,6 +121,20 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="build_001",
+        family="build",
+        title="An object is defined more than once in one build",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
+        code="build_002",
+        family="build",
+        title="A routine's overloads are split across files",
+        severity="info",
+        default_on=True,
+    ),
+    LintRule(
         code="sec_001",
         family="security",
         title="Columns that look like secrets should not be plain text",

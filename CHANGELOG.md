@@ -5,6 +5,41 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 07 of the 2026-09-06 review: lint and drift capabilities the downstream
+project asked for (#217, #218, #219, #226, #227).
+
+### Added
+
+- **The `doc` family covers every commentable object (#217).** `doc_002`
+  (functions and procedures, one finding per overload — a comment on
+  `f(integer)` says nothing about `f(text)`), `doc_003` (views and
+  materialized views) and `doc_004` (composite and enum types, domains) join
+  `doc_001` at `info`, on by default; `--select doc` takes all four and
+  `--ignore doc_002` drops one. `doc_001` no longer asks a `PARTITION OF` child
+  for its own comment. All four read the pglast-built object inventory, which
+  now records functions (with their input parameter types), procedures, views,
+  materialized views, types and domains, so a schema qualifier changes nothing.
+- **An object defined more than once in one build is reported (#218).**
+  `build_001` (warning) names every definition of the same object — file,
+  offset, line — and which one the database ends up with (`last` for
+  `CREATE OR REPLACE`, `first` for `IF NOT EXISTS`, `conflict` when a later
+  plain `CREATE` would fail the build); `build_002` (info) notes a routine whose
+  overloads are split across files. Both are lint rules (`--select build`) and
+  both run from the build: `confiture build --warn-duplicates` reports and
+  builds, `--fail-on-duplicates` reports and exits 1 without writing anything;
+  `build --format json` carries the findings under `duplicates`.
+- `docs/reference/lint-rules.md` is generated from the rule registry and held
+  in sync by a test, like the error codebook.
+
+### Fixed
+
+- `confiture lint --format json` printed its "Linting schema" banner to stdout
+  ahead of the payload, and printed the payload through the Rich console, which
+  wrapped it at the terminal width — invalid JSON as soon as a message crossed
+  80 columns. The banner is table-mode only and JSON/CSV are printed raw.
+
 ## [0.51.0] - 2026-09-06
 
 Phase 06 of the 2026-09-06 review: the public API and its contracts. The

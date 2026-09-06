@@ -290,6 +290,11 @@ def _get_tracking_table(config_data: Any) -> str:
         ) from e
 
 
+#: The success-signal exit for a gate that ran and found something — lint
+#: violations, duplicate definitions. Not an error: no envelope, exit 1 (#146).
+FINDINGS_EXIT_CODE = 1
+
+
 def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
     """Output JSON data to file or console.
 
