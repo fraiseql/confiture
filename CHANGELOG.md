@@ -12,6 +12,18 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- ⚠️ **The default lint rules see schema-qualified DDL (#216).** `naming_001`,
+  `naming_002`, `pk_001` and `doc_001` matched `CREATE TABLE (\w+)`, so on
+  `CREATE TABLE tenant.tb_x (…)` they captured the schema, found no body and
+  reported nothing — a clean report for a schema they had not read. The rules
+  now read a pglast-built inventory (`core/linting/inventory.py`): tables with
+  their columns as written, primary keys from column or table constraints and
+  from `ALTER TABLE … ADD PRIMARY KEY`, partitions (which inherit their key),
+  and `COMMENT ON TABLE` attached to the table it names — `COMMENT ON TABLE
+  tenant.tb_thing` no longer documents `tenant.tb_other`. `sec_001` reads
+  column names from the same inventory instead of scanning text near the words
+  `CREATE TABLE`. Quoted identifiers (`"UserAccounts"`) are judged as written.
+  Violations name the table as written (`tenant.tb_other`) and carry the line.
 - ⚠️ **Unparseable is a finding.** A file pglast rejected used to make the
   idempotency check swap to its regex backend and report *ok*, made
   `migrate preflight` crash, left `lint` and its AST-backed rules clean, and let
