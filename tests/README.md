@@ -1,0 +1,58 @@
+# Test suite
+
+## Layers
+
+| Directory | What it needs |
+|---|---|
+| `tests/unit` | nothing — no database, no network |
+| `tests/integration`, `tests/e2e`, `tests/contract` | a PostgreSQL server (see below) |
+| `tests/performance` | the same server, plus the sync source/target pair; wall-clock assertions |
+| `tests/migration_testing` | a PostgreSQL server via `DATABASE_URL` (being folded into the layers above) |
+
+## Where the database comes from
+
+Every database test reaches its server through `tests/conftest.py`; no test module
+carries a connection string (`tests/unit/test_no_literal_dsn.py` enforces it, with a
+short allowlist of sentinel URLs written into config files that are never dialled).
+
+```
+CONFITURE_TEST_DB_URL         default postgresql://localhost/confiture_test
+CONFITURE_SOURCE_DB_URL       default postgresql://localhost/confiture_source_test
+CONFITURE_TARGET_DB_URL       default postgresql://localhost/confiture_target_test
+```
+
+The rule for a server that cannot be reached:
+
+* the variable is **set** — a failed connection is a **failure**, not a skip. CI sets it;
+  a database test cannot skip its way to green there.
+* the variable is **unset** — the local default is probed once per session and, if
+  unreachable, the test skips with that reason.
+
+Every remaining skip names a missing capability (the pgGit extension, a tmpfs
+tablespace, a superuser role), never a missing URL.
+
+Fixtures: `test_db_url`, `test_db_connection`, `clean_test_db` (drops every user schema
+and recreates `public`), `maintenance_url` / `maintenance_connection` (same server,
+database `postgres`), `fresh_database` / `fresh_database_factory` (throwaway databases,
+dropped after the test), `superuser_db_url`, `drop_roles`.
+
+## Running in parallel
+
+```
+uv run pytest tests/unit -n auto
+uv run pytest tests/integration tests/e2e tests/contract -n 4
+```
+
+Under pytest-xdist every worker gets its own databases: `confiture_test` becomes
+`confiture_test_gw0` for worker `gw0` (resolved through
+`confiture.testing.worker_db.resolve_worker_db_url`, created on first use and left in
+place for the next run). Two workers therefore never share a ledger, an advisory lock or a
+`DROP SCHEMA`. `--dist=loadfile` (in `addopts`) keeps a module's tests on one worker, so
+the fixed role names some modules create — roles are server-global — cannot race.
+
+When a test derives another database's URL, use `maintenance_url` or
+`database_url_for(url, name)`; a string replace on the database *name* breaks under the
+worker suffix.
+
+CI runs the database suites both serially (the `Tests` job, with coverage) and with
+`-n 4` (the `Integration (parallel, -n 4)` job).
