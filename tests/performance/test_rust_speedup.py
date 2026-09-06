@@ -10,6 +10,9 @@ import pytest
 
 from confiture.core.builder import SchemaBuilder
 
+# Every test here asserts an upper bound on a measured duration.
+pytestmark = pytest.mark.benchmark
+
 
 @pytest.fixture
 def large_schema_dir(tmp_path):

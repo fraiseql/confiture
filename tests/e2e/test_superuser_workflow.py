@@ -86,7 +86,6 @@ def _write_config(tmp_path: Path, db_url: str) -> Path:
     return cfg
 
 
-@pytest.mark.integration
 def test_halt_apply_as_resume_workflow(workflow_db: str, tmp_path: Path) -> None:
     """The full workflow: up halts at #2, apply-as runs #2, up resumes at #3."""
     migrations_dir = tmp_path / "db" / "migrations"

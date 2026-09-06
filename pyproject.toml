@@ -154,13 +154,21 @@ addopts = [
     # server-global objects (roles) reuse fixed names, and per-worker databases
     # only isolate what lives inside a database.
     "--dist=loadfile",
+    # Wall-clock assertions pass or fail with the load on the machine; they run
+    # only when asked for (`-m benchmark`, the performance workflow).
+    "-m",
+    "not benchmark",
 ]
 markers = [
+    # Layer markers — assigned from the directory by tests/conftest.py.
     "unit: Unit tests (no database required)",
     "integration: Integration tests (require database)",
     "e2e: End-to-end tests (full workflows)",
+    "performance: Performance suites (tests/performance)",
+    "contract: Adapter contract tests (tests/contract)",
+    # Orthogonal markers.
     "slow: Slow tests (skip in fast CI)",
-    "benchmark: Performance benchmark tests",
+    "benchmark: Asserts an upper bound on a measured duration; excluded by default",
 ]
 
 [tool.coverage.run]

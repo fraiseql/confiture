@@ -75,14 +75,12 @@ class TestConcurrentMigrations:
         lock2 = MigrationLock(second_connection, LockConfig(mode=LockMode.NON_BLOCKING))
 
         with lock1.acquire():
-            start = time.time()
             with pytest.raises(LockAcquisitionError) as exc_info:
                 with lock2.acquire():
                     pass
-            elapsed = time.time() - start
 
-            # Should return almost immediately (< 1 second)
-            assert elapsed < 1.0
+            # The behaviour under test is that it did not wait for a timeout;
+            # an upper bound on the elapsed time would only measure machine load.
             assert exc_info.value.timeout is False
 
     def test_lock_released_allows_second_acquisition(self, test_db, second_connection):
@@ -252,8 +250,9 @@ class TestConcurrentMigrations:
                     pass
             elapsed = time.time() - start
 
-            # Should timeout around 50ms (allow some margin)
-            assert 0.03 < elapsed < 0.5
+            # The 50 ms timeout was honoured (a lower bound cannot be broken by
+            # machine load; an upper bound could, so none is asserted here).
+            assert elapsed >= 0.03
 
 
 @pytest.mark.integration

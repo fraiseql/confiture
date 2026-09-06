@@ -80,7 +80,22 @@ jobs:
         echo "=== Creating Performance Test Database ==="
         psql -h localhost -U confiture -d postgres -c "DROP DATABASE IF EXISTS confiture_perf_test;"
         psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_perf_test;"
+        psql -h localhost -U confiture -d postgres -c "SELECT 1" confiture_source_test >/dev/null 2>&1 || psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;"
+        psql -h localhost -U confiture -d postgres -c "SELECT 1" confiture_target_test >/dev/null 2>&1 || psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;"
         echo "✅ Performance test database created"
+
+    - name: Run benchmark-marked tests
+      # Every test asserting an upper bound on a measured duration is marked
+      # `benchmark` and excluded from the default gate (`-m "not benchmark"` in
+      # addopts); this is the leg that runs them.
+      env:
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+        CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
+        CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
+        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_perf_test
+      run: |
+        echo "=== Running benchmark-marked tests ==="
+        uv run pytest tests -m benchmark -v --tb=short --durations=15 -rs
 
     - name: Run performance profiling tests
       env:

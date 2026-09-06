@@ -44,7 +44,6 @@ def _write_env_config(tmp_path: Path, db_url: str) -> Path:
     return cfg
 
 
-@pytest.mark.integration
 def test_check_exits_1_when_drift_exists(bootstrap_db: str, tmp_path: Path) -> None:
     """`bootstrap --check` exits 1 when the migrator role is missing."""
     cfg = _write_env_config(tmp_path, bootstrap_db)
@@ -54,7 +53,6 @@ def test_check_exits_1_when_drift_exists(bootstrap_db: str, tmp_path: Path) -> N
     assert "create_role" in result.output
 
 
-@pytest.mark.integration
 def test_apply_then_check_exits_0(bootstrap_db: str, tmp_path: Path) -> None:
     """After `--apply`, `--check` finds no drift."""
     cfg = _write_env_config(tmp_path, bootstrap_db)
@@ -69,7 +67,6 @@ def test_apply_then_check_exits_0(bootstrap_db: str, tmp_path: Path) -> None:
     assert check_result.exit_code == 0, check_result.output
 
 
-@pytest.mark.integration
 def test_dry_run_prints_sql(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = _write_env_config(tmp_path, bootstrap_db)
     result = CliRunner().invoke(app, ["bootstrap", "--dry-run", "--config", str(cfg)])
@@ -77,7 +74,6 @@ def test_dry_run_prints_sql(bootstrap_db: str, tmp_path: Path) -> None:
     assert "CREATE ROLE" in result.output
 
 
-@pytest.mark.integration
 def test_check_emits_json(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = _write_env_config(tmp_path, bootstrap_db)
     result = CliRunner().invoke(
@@ -90,7 +86,6 @@ def test_check_emits_json(bootstrap_db: str, tmp_path: Path) -> None:
     assert any(s["label"] == "create_role" for s in payload["plan"]["steps"])
 
 
-@pytest.mark.integration
 def test_config_without_bootstrap_url_exits_2(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = tmp_path / "confiture.yaml"
     cfg.write_text(

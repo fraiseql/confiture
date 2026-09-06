@@ -23,6 +23,9 @@ from confiture.integrations.pggit.coordination import (
     RiskLevel,
 )
 
+# Every test here asserts an upper bound on a measured duration.
+pytestmark = pytest.mark.benchmark
+
 
 @pytest.fixture
 def benchmark_registry(test_db_connection):

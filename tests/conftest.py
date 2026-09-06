@@ -507,3 +507,36 @@ def _sync_clean_database(conn: psycopg.Connection) -> None:
         extensions = cur.fetchall()
         for (ext_name,) in extensions:
             cur.execute(f'DROP EXTENSION IF EXISTS "{ext_name}" CASCADE')
+
+
+# ---------------------------------------------------------------------------
+# Layer markers (Phase 02 Cycle 4)
+#
+# A test's layer is where it lives. Assigning the marker from the directory
+# means `-m integration` selects exactly the integration layer and a test can
+# never claim a layer it is not in; tests/unit/test_markers.py checks that every
+# collected item ends up with exactly one.
+# ---------------------------------------------------------------------------
+
+_TESTS_ROOT = Path(__file__).resolve().parent
+_LAYER_MARKERS = frozenset({"unit", "integration", "e2e", "performance", "contract"})
+
+
+def _layer_for(path: Path) -> str | None:
+    try:
+        top = path.resolve().relative_to(_TESTS_ROOT).parts[0]
+    except (ValueError, IndexError):
+        return None
+    if top == "migration_testing":  # database tests; folded into the layers by Cycle 5
+        return "integration"
+    return top if top in _LAYER_MARKERS else None
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Give every item the layer marker of its directory (if it has none yet)."""
+    for item in items:
+        if any(m.name in _LAYER_MARKERS for m in item.iter_markers()):
+            continue
+        layer = _layer_for(Path(str(item.path)))
+        if layer is not None:
+            item.add_marker(getattr(pytest.mark, layer))
