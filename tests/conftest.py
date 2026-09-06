@@ -9,10 +9,13 @@ This module provides fixtures for:
 
 import os
 import tempfile
-from collections.abc import Generator
+import uuid
+from collections.abc import Callable, Generator
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 import psycopg
+import psycopg.sql
 import pytest
 import yaml
 
@@ -130,10 +133,7 @@ def local_env_config(temp_project_dir: Path) -> Path:
 
     config_data = {
         "name": "local",
-        "database_url": os.getenv(
-            "CONFITURE_TEST_DB_URL",
-            "postgresql://localhost/confiture_test",
-        ),
+        "database_url": os.getenv("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL),
         "include_dirs": ["db/schema"],
         "exclude_dirs": ["db/schema/99_deprecated"],
         "migration_table": "tb_confiture",
@@ -145,17 +145,136 @@ def local_env_config(temp_project_dir: Path) -> Path:
     return local_config
 
 
-@pytest.fixture
-def test_db_url() -> str:
-    """Get test database URL from environment
+# ---------------------------------------------------------------------------
+# Database routing (TST-02)
+#
+# Every database test reaches its server through the fixtures below; no test
+# module carries its own connection string (tests/unit/test_no_literal_dsn.py
+# enforces that). The rule for a server that cannot be reached:
+#
+#   * `CONFITURE_TEST_DB_URL` (or the SOURCE/TARGET pair) is **set** — the
+#     operator asked for that server, so a failed connection is a **failure**.
+#     CI sets it; a DB test can no longer skip its way to green there.
+#   * it is **unset** — the conventional local default is tried once per
+#     session and, if unreachable, the test **skips** with that reason.
+# ---------------------------------------------------------------------------
 
-    Returns:
-        Database connection URL for testing
+DEFAULT_TEST_DB_URL = "postgresql://localhost/confiture_test"
+DEFAULT_SOURCE_DB_URL = "postgresql://localhost/confiture_source_test"
+DEFAULT_TARGET_DB_URL = "postgresql://localhost/confiture_target_test"
+
+_REACHABILITY: dict[str, str | None] = {}
+
+
+def pg_available(url: str) -> str | None:
+    """``None`` when *url* accepts a connection, else the error text (probed once)."""
+    if url not in _REACHABILITY:
+        try:
+            with psycopg.connect(url, connect_timeout=5):
+                pass
+            _REACHABILITY[url] = None
+        except psycopg.OperationalError as exc:
+            _REACHABILITY[url] = str(exc).strip()
+    return _REACHABILITY[url]
+
+
+def resolve_db_url(env_var: str, default: str) -> str:
+    """The URL a database fixture should use, applying the fail/skip rule above."""
+    explicit = os.getenv(env_var)
+    url = explicit or default
+    error = pg_available(url)
+    if error is None:
+        return url
+    if explicit:
+        pytest.fail(f"{env_var} is set but the server does not accept connections: {error}")
+    pytest.skip(f"{env_var} unset and the local default {default} is unreachable: {error}")
+
+
+@pytest.fixture(scope="session")
+def test_db_url() -> str:
+    """The test database URL (see the routing rule above)."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
+
+
+@pytest.fixture(scope="session")
+def maintenance_url(test_db_url: str) -> str:
+    """Same server and credentials as the test database, database ``postgres``.
+
+    For ``CREATE DATABASE`` / ``DROP DATABASE`` / role cleanup — the things a
+    test cannot do from inside the database it is testing.
     """
-    return os.getenv(
-        "CONFITURE_TEST_DB_URL",
-        "postgresql://localhost/confiture_test",
-    )
+    parsed = urlparse(test_db_url)
+    return urlunparse(parsed._replace(path="/postgres"))
+
+
+@pytest.fixture
+def maintenance_connection(maintenance_url: str) -> Generator[psycopg.Connection, None, None]:
+    """An autocommit connection to the maintenance database."""
+    conn = psycopg.connect(maintenance_url, autocommit=True)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def database_url_for(test_db_url: str, db_name: str) -> str:
+    """*test_db_url* pointed at *db_name* on the same server, same credentials."""
+    parsed = urlparse(test_db_url)
+    return urlunparse(parsed._replace(path=f"/{db_name}"))
+
+
+@pytest.fixture
+def fresh_database_factory(
+    test_db_url: str, maintenance_connection: psycopg.Connection
+) -> Generator[Callable[[str], str], None, None]:
+    """``make(prefix) -> url``: a throwaway database per call, all dropped at teardown."""
+    created: list[str] = []
+
+    def make(prefix: str = "confiture_t") -> str:
+        db_name = f"{prefix}_{uuid.uuid4().hex[:8]}"
+        maintenance_connection.execute(
+            psycopg.sql.SQL("CREATE DATABASE {}").format(psycopg.sql.Identifier(db_name))
+        )
+        created.append(db_name)
+        return database_url_for(test_db_url, db_name)
+
+    yield make
+
+    for db_name in created:
+        maintenance_connection.execute(
+            psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                psycopg.sql.Identifier(db_name)
+            )
+        )
+
+
+@pytest.fixture
+def fresh_database(fresh_database_factory: Callable[[str], str]) -> str:
+    """URL of one throwaway database, created for this test and dropped after it."""
+    return fresh_database_factory("confiture_t")
+
+
+def drop_roles(conn: psycopg.Connection, *roles: str) -> None:
+    """Best-effort ``DROP OWNED BY`` + ``DROP ROLE`` for test roles on *conn*."""
+    for role in roles:
+        for stmt in (
+            psycopg.sql.SQL("DROP OWNED BY {} CASCADE").format(psycopg.sql.Identifier(role)),
+            psycopg.sql.SQL("DROP ROLE IF EXISTS {}").format(psycopg.sql.Identifier(role)),
+        ):
+            try:
+                conn.execute(stmt)
+            except psycopg.Error:
+                pass
+
+
+@pytest.fixture
+def superuser_db_url(test_db_url: str) -> str:
+    """The test database URL, or a skip naming the missing capability."""
+    with psycopg.connect(test_db_url) as conn:
+        row = conn.execute("SELECT rolsuper FROM pg_roles WHERE rolname = current_user").fetchone()
+    if not (row and row[0]):
+        pytest.skip("the connecting role is not a superuser (needed for this test)")
+    return test_db_url
 
 
 @pytest.fixture
@@ -164,19 +283,12 @@ def test_db_connection(test_db_url: str) -> Generator[psycopg.Connection, None, 
 
     Yields:
         psycopg Connection to test database
-
-    Note:
-        This fixture requires a PostgreSQL server to be running
-        and accessible at CONFITURE_TEST_DB_URL.
     """
+    conn = psycopg.connect(test_db_url, autocommit=False)
     try:
-        conn = psycopg.connect(test_db_url, autocommit=False)
         yield conn
-    except psycopg.OperationalError as e:
-        pytest.skip(f"PostgreSQL not available: {e}")
     finally:
-        if "conn" in locals():
-            conn.close()
+        conn.close()
 
 
 @pytest.fixture
@@ -248,30 +360,16 @@ def mock_git_repo(temp_project_dir: Path) -> Path:
 # Fixtures for syncer tests (source and target databases)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def source_db_url() -> str:
-    """Get source test database URL from environment.
-
-    Returns:
-        Database connection URL for source database
-    """
-    return os.getenv(
-        "CONFITURE_SOURCE_DB_URL",
-        "postgresql://localhost/confiture_source_test",
-    )
+    """The sync source database URL (routing rule: see ``resolve_db_url``)."""
+    return resolve_db_url("CONFITURE_SOURCE_DB_URL", DEFAULT_SOURCE_DB_URL)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def target_db_url() -> str:
-    """Get target test database URL from environment.
-
-    Returns:
-        Database connection URL for target database
-    """
-    return os.getenv(
-        "CONFITURE_TARGET_DB_URL",
-        "postgresql://localhost/confiture_target_test",
-    )
+    """The sync target database URL (routing rule: see ``resolve_db_url``)."""
+    return resolve_db_url("CONFITURE_TARGET_DB_URL", DEFAULT_TARGET_DB_URL)
 
 
 @pytest.fixture
@@ -281,19 +379,13 @@ def source_db(source_db_url: str) -> Generator[psycopg.Connection, None, None]:
     Yields:
         psycopg Connection to source database
     """
+    conn = psycopg.connect(source_db_url, autocommit=True)
     try:
-        conn = psycopg.connect(source_db_url, autocommit=True)
-
-        # Clean before test
         _sync_clean_database(conn)
-
         yield conn
-
-        # Clean after test
         _sync_clean_database(conn)
+    finally:
         conn.close()
-    except psycopg.OperationalError as e:
-        pytest.skip(f"PostgreSQL not available for source database: {e}")
 
 
 @pytest.fixture
@@ -303,19 +395,13 @@ def target_db(target_db_url: str) -> Generator[psycopg.Connection, None, None]:
     Yields:
         psycopg Connection to target database
     """
+    conn = psycopg.connect(target_db_url, autocommit=True)
     try:
-        conn = psycopg.connect(target_db_url, autocommit=True)
-
-        # Clean before test
         _sync_clean_database(conn)
-
         yield conn
-
-        # Clean after test
         _sync_clean_database(conn)
+    finally:
         conn.close()
-    except psycopg.OperationalError as e:
-        pytest.skip(f"PostgreSQL not available for target database: {e}")
 
 
 @pytest.fixture

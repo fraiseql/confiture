@@ -7,7 +7,6 @@ Mirrors :mod:`tests.integration.test_drift_check_acls_cli`.
 from __future__ import annotations
 
 import json
-import os
 import textwrap
 from collections.abc import Generator
 from pathlib import Path
@@ -23,8 +22,8 @@ _ROLES = ("own_cli_migrator", "own_cli_intruder")
 
 
 @pytest.fixture
-def pg_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+def pg_url(test_db_url: str) -> str:
+    return test_db_url
 
 
 @pytest.fixture

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.temp_database import _maintenance_url, _replace_dbname
 from confiture.core.test_db import TemplateState, TestDbProvisioner
@@ -29,7 +30,8 @@ _TEMPLATE = "confiture_p3_template"
 
 
 def _server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 def _drop_like(prefix: str) -> None:

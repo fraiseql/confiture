@@ -4,57 +4,25 @@ from __future__ import annotations
 
 import json
 import textwrap
-import uuid
+from collections.abc import Generator
 from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import drop_roles
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
 
 
-def _drop_e2e_roles() -> None:
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-    except psycopg.OperationalError:
-        return
-    try:
-        for role in ("bootstrap_e2e_role",):
-            try:
-                admin.execute(f"DROP OWNED BY {role} CASCADE")
-            except psycopg.Error:
-                pass
-            try:
-                admin.execute(f'DROP ROLE IF EXISTS "{role}"')
-            except psycopg.Error:
-                pass
-    finally:
-        admin.close()
-
-
 @pytest.fixture()
-def bootstrap_db() -> str:
-    """Throwaway database connectable as the local superuser."""
-    _drop_e2e_roles()
-    db_name = f"confiture_boot_e2e_{uuid.uuid4().hex[:8]}"
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'CREATE DATABASE "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"PostgreSQL not available: {exc}")
-    db_url = f"postgresql://localhost/{db_name}"
-    try:
-        yield db_url
-    finally:
-        _drop_e2e_roles()
-        try:
-            admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            admin.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            admin.close()
-        except psycopg.OperationalError:
-            pass
+def bootstrap_db(
+    superuser_db_url: str, fresh_database: str, maintenance_connection: psycopg.Connection
+) -> Generator[str, None, None]:
+    """Throwaway database, connected as a superuser: the executor creates roles."""
+    drop_roles(maintenance_connection, "bootstrap_e2e_role")
+    yield fresh_database
+    drop_roles(maintenance_connection, "bootstrap_e2e_role")
 
 
 def _write_env_config(tmp_path: Path, db_url: str) -> Path:

@@ -6,7 +6,7 @@ carries the old body — and asserts that the detector surfaces both bodies and 
 readable, line-oriented unified diff built from the live ``pg_proc.prosrc``.
 
 Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``
-(default ``postgresql://localhost/confiture_test``).
+(routing rule in ``tests/conftest.py``).
 """
 
 from __future__ import annotations

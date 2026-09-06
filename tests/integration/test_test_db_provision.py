@@ -8,7 +8,6 @@ fixture teardown.
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import threading
 from collections.abc import Iterator
@@ -16,6 +15,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.schema_artifact import build_schema_artifact
 from confiture.core.temp_database import _maintenance_url
@@ -31,7 +31,8 @@ _CLONE = "confiture_p2_clone"
 
 
 def _server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 def _drop_all(names: list[str]) -> None:

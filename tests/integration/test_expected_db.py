@@ -6,12 +6,10 @@ expected side through Postgres' own deparser (``pg_get_viewdef``, ``prosrc``)
 instead of text-normalising source DDL.
 
 Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``
-(default ``postgresql://localhost/confiture_test``).
+(routing rule in ``tests/conftest.py``).
 """
 
 from __future__ import annotations
-
-import os
 
 import psycopg
 import pytest
@@ -20,8 +18,8 @@ from confiture.core.expected_db import ExpectedSchemaDB
 
 
 @pytest.fixture
-def server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+def server_url(test_db_url: str) -> str:
+    return test_db_url
 
 
 @pytest.fixture

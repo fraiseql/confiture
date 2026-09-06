@@ -167,7 +167,9 @@ class TestBaselineDetectorLiveIntrospection:
 class TestAutoDetectBaselineCLI:
     """Integration test for migrate up --auto-detect-baseline CLI flag."""
 
-    def test_auto_detect_warns_when_no_snapshots_dir(self, clean_db, tmp_path: Path) -> None:
+    def test_auto_detect_warns_when_no_snapshots_dir(
+        self, clean_db, tmp_path: Path, test_db_url: str
+    ) -> None:
         """When schema_history/ is absent, warns and proceeds without baselining."""
         from typer.testing import CliRunner
 
@@ -176,7 +178,7 @@ class TestAutoDetectBaselineCLI:
         # Write a minimal config
         env_dir = tmp_path / "db" / "environments"
         env_dir.mkdir(parents=True)
-        db_url = os.environ.get("DATABASE_URL", "postgresql://localhost/test")
+        db_url = test_db_url
         (env_dir / "local.yaml").write_text(
             f"database_url: {db_url}\ninclude_dirs:\n  - {tmp_path / 'db' / 'schema'}\n"
         )

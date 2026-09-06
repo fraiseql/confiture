@@ -7,11 +7,11 @@ dropped on exit.
 
 from __future__ import annotations
 
-import os
 import shutil
 
 import psycopg
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed_applier import apply_seed_files
@@ -22,7 +22,8 @@ pytestmark = pytest.mark.integration
 
 
 def _server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 @pytest.fixture

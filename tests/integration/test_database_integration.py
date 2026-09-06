@@ -13,10 +13,10 @@ from confiture.models.migration import Migration
 
 
 @pytest.fixture
-def db_connection():
-    """Create test database connection if available."""
+def db_connection(test_db_url: str):
+    """Create test database connection."""
     try:
-        conn = psycopg.connect("postgresql://localhost/confiture_test")
+        conn = psycopg.connect(test_db_url)
         yield conn
         conn.close()
     except Exception:

@@ -1,7 +1,7 @@
 """Integration tests for SchemaIntrospector.
 
 These tests require a running PostgreSQL instance accessible at
-CONFITURE_TEST_DB_URL (default: postgresql://localhost/confiture_test).
+CONFITURE_TEST_DB_URL (routing rule in tests/conftest.py).
 
 Run with:
     uv run pytest tests/integration/test_introspect.py -v
