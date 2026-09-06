@@ -13,23 +13,7 @@ from confiture.exceptions import (
     SchemaError,
 )
 
-# ── C-1: MIGR_010 (lock timeout) and MIGR_011 (checksum mismatch) in registry ──
-
-
-def test_migr_010_registered():
-    from confiture.error_codes import ERROR_CODE_REGISTRY
-
-    definition = ERROR_CODE_REGISTRY.get("MIGR_010")
-    assert definition.code == "MIGR_010"
-    assert definition.exit_code == 3
-
-
-def test_migr_011_registered():
-    from confiture.error_codes import ERROR_CODE_REGISTRY
-
-    definition = ERROR_CODE_REGISTRY.get("MIGR_011")
-    assert definition.code == "MIGR_011"
-    assert definition.exit_code == 3
+# ── C-1: CONFIG_010 in registry ──────────────────────────────────────────────
 
 
 def test_config_010_registered():

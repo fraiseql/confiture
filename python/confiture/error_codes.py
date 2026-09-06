@@ -12,11 +12,10 @@ docs/reference/exit-codes.md and CANONICAL_EXIT_CODES below for the contract):
 - CONFIG (001-099): Configuration errors → exit code 5
     (carve-out: CONFIG_006 "connection failed" → 3)
 - MIGR (100-199): Migration execution errors → exit code 3
-    (carve-outs: MIGR_101/105 success-with-signal → 0)
+    (carve-out: MIGR_101 "already applied" success-with-signal → 0)
 - SCHEMA (200-299): Schema DDL and build errors → exit code 4
 - SYNC (300-399): Production data sync errors → exit code 5
 - DIFFER (400-499): Schema diff detection errors → exit code 5
-    (carve-out: DIFFER_402 ambiguous-change advisory → 1)
 - VALID (500-599): Validation errors → exit code 5
 - ROLLBACK (600-699): Rollback errors → exit code 8
 - SQL (700-799): SQL execution errors → exit code 1
@@ -24,12 +23,8 @@ docs/reference/exit-codes.md and CANONICAL_EXIT_CODES below for the contract):
 - PGGIT (900-999): pgGit integration errors → exit code 7
 - PRECON (1000-1099): Precondition errors → exit code 5
     (carve-out: PRECON_1001 "tracking table absent" → 2)
-- HOOK (1100-1199): Hook execution errors → exit code 1
-- POOL (1200-1299): Connection pool errors → exit code 6
 - LOCK (1300-1399): Database locking errors → exit code 6
 - ANON (1400-1499): Anonymization errors → exit code 5
-- LINT (1500-1599): Schema linting errors → exit code 5
-    (carve-out: LINT_1501 non-blocking advisory → 0)
 """
 
 import json
@@ -193,13 +188,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
             resolution_hint="Create configuration file for this environment or use an existing one",
         ),
         ErrorCodeDefinition(
-            code="CONFIG_005",
-            message_template="Invalid include/exclude pattern",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Check glob patterns in your configuration",
-        ),
-        ErrorCodeDefinition(
             code="CONFIG_006",
             message_template="Database connection failed",
             severity=ErrorSeverity.ERROR,
@@ -270,27 +258,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
             resolution_hint="Regenerate or restore the migration file",
         ),
         ErrorCodeDefinition(
-            code="MIGR_103",
-            message_template="Migration dependency not met: {version}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=3,
-            resolution_hint="Apply prerequisite migrations before this one",
-        ),
-        ErrorCodeDefinition(
-            code="MIGR_104",
-            message_template="Migration locked by another process",
-            severity=ErrorSeverity.ERROR,
-            exit_code=3,
-            resolution_hint="Wait for other migration to complete or check for stale locks",
-        ),
-        ErrorCodeDefinition(
-            code="MIGR_105",
-            message_template="No pending migrations to apply",
-            severity=ErrorSeverity.INFO,
-            exit_code=0,
-            resolution_hint="Your database schema is up to date",
-        ),
-        ErrorCodeDefinition(
             code="MIGR_106",
             message_template="Duplicate migration version: {version}",
             severity=ErrorSeverity.ERROR,
@@ -345,13 +312,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
             resolution_hint="Re-run with --force if the destructive change is intended",
         ),
         ErrorCodeDefinition(
-            code="SCHEMA_200",
-            message_template="SQL syntax error in {file} at line {line}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=4,
-            resolution_hint="Fix the SQL syntax error at the specified location",
-        ),
-        ErrorCodeDefinition(
             code="SCHEMA_201",
             message_template="Schema directory not found: {directory}",
             severity=ErrorSeverity.ERROR,
@@ -364,20 +324,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
             severity=ErrorSeverity.ERROR,
             exit_code=4,
             resolution_hint="Break the circular dependency between schema files",
-        ),
-        ErrorCodeDefinition(
-            code="SCHEMA_203",
-            message_template="Duplicate table definition: {table}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=4,
-            resolution_hint="Remove the duplicate table definition",
-        ),
-        ErrorCodeDefinition(
-            code="SCHEMA_204",
-            message_template="Schema hash mismatch",
-            severity=ErrorSeverity.ERROR,
-            exit_code=4,
-            resolution_hint="Schema definition has changed; rebuild the schema",
         ),
         ErrorCodeDefinition(
             code="SCHEMA_205",
@@ -394,41 +340,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
     for code in schema_codes:
         registry.register(code)
 
-    # ========== SYNC (300-399): Production data sync errors → exit code 5 ==========
-    sync_codes = [
-        ErrorCodeDefinition(
-            code="SYNC_300",
-            message_template="Cannot connect to source database",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Check source database connection settings",
-        ),
-        ErrorCodeDefinition(
-            code="SYNC_301",
-            message_template="Table '{table}' not found in source database",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Verify table exists in source database",
-        ),
-        ErrorCodeDefinition(
-            code="SYNC_302",
-            message_template="Anonymization rule failed for column '{column}'",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Check anonymization rule syntax",
-        ),
-        ErrorCodeDefinition(
-            code="SYNC_303",
-            message_template="Data copy operation failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Check both source and target database connections",
-        ),
-    ]
-
-    for code in sync_codes:
-        registry.register(code)
-
     # ========== DIFFER (400-499): Schema diff detection errors → exit code 5 ==========
     differ_codes = [
         ErrorCodeDefinition(
@@ -438,51 +349,9 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=5,
             resolution_hint="Fix the SQL syntax in your schema files",
         ),
-        ErrorCodeDefinition(
-            code="DIFFER_401",
-            message_template="Schema comparison failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Verify both schema definitions are valid",
-        ),
-        ErrorCodeDefinition(
-            code="DIFFER_402",
-            message_template="Ambiguous schema changes detected",
-            severity=ErrorSeverity.WARNING,
-            exit_code=1,
-            resolution_hint="Review and clarify the schema changes",
-        ),
     ]
 
     for code in differ_codes:
-        registry.register(code)
-
-    # ========== VALID (500-599): Validation errors → exit code 5 ==========
-    valid_codes = [
-        ErrorCodeDefinition(
-            code="VALID_500",
-            message_template="Row count mismatch: expected {expected}, got {actual}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Verify data was copied correctly",
-        ),
-        ErrorCodeDefinition(
-            code="VALID_501",
-            message_template="Foreign key constraint violated",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Check foreign key relationships in your data",
-        ),
-        ErrorCodeDefinition(
-            code="VALID_502",
-            message_template="Custom validation rule failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Review custom validation rules",
-        ),
-    ]
-
-    for code in valid_codes:
         registry.register(code)
 
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
@@ -494,86 +363,9 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=8,
             resolution_hint="Manual intervention required; cannot automatically rollback",
         ),
-        ErrorCodeDefinition(
-            code="ROLLBACK_601",
-            message_template="Rollback SQL failed",
-            severity=ErrorSeverity.CRITICAL,
-            exit_code=8,
-            resolution_hint="Check rollback script syntax and database state",
-        ),
-        ErrorCodeDefinition(
-            code="ROLLBACK_602",
-            message_template="Database state inconsistent after rollback",
-            severity=ErrorSeverity.CRITICAL,
-            exit_code=8,
-            resolution_hint="Database may be partially rolled back; manual recovery needed",
-        ),
     ]
 
     for code in rollback_codes:
-        registry.register(code)
-
-    # ========== SQL (700-799): SQL execution errors → exit code 1 ==========
-    sql_codes = [
-        ErrorCodeDefinition(
-            code="SQL_700",
-            message_template="SQL execution failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=1,
-            resolution_hint="Check the SQL statement for errors",
-        ),
-        ErrorCodeDefinition(
-            code="SQL_701",
-            message_template="Prepared statement error",
-            severity=ErrorSeverity.ERROR,
-            exit_code=1,
-            resolution_hint="Check statement parameters",
-        ),
-        ErrorCodeDefinition(
-            code="SQL_702",
-            message_template="Transaction deadlock detected",
-            severity=ErrorSeverity.WARNING,
-            exit_code=1,
-            resolution_hint="Retry the transaction",
-        ),
-        ErrorCodeDefinition(
-            code="SQL_703",
-            message_template="Lock timeout exceeded",
-            severity=ErrorSeverity.ERROR,
-            exit_code=1,
-            resolution_hint="Wait for locks to be released or reduce query load",
-        ),
-    ]
-
-    for code in sql_codes:
-        registry.register(code)
-
-    # ========== GIT (800-899): Git operation errors → exit code 7 ==========
-    git_codes = [
-        ErrorCodeDefinition(
-            code="GIT_800",
-            message_template="Git command failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=7,
-            resolution_hint="Check git repository status",
-        ),
-        ErrorCodeDefinition(
-            code="GIT_801",
-            message_template="Invalid git reference: {ref}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=7,
-            resolution_hint="Check the git reference name",
-        ),
-        ErrorCodeDefinition(
-            code="GIT_802",
-            message_template="Not a git repository",
-            severity=ErrorSeverity.ERROR,
-            exit_code=7,
-            resolution_hint="Initialize a git repository or use a valid repository path",
-        ),
-    ]
-
-    for code in git_codes:
         registry.register(code)
 
     # ========== PGGIT (900-999): pgGit integration errors → exit code 7 ==========
@@ -584,13 +376,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
             severity=ErrorSeverity.ERROR,
             exit_code=7,
             resolution_hint="Check pgGit is installed and configured",
-        ),
-        ErrorCodeDefinition(
-            code="PGGIT_901",
-            message_template="Invalid pgGit configuration",
-            severity=ErrorSeverity.ERROR,
-            exit_code=7,
-            resolution_hint="Check pgGit configuration in confiture config",
         ),
     ]
 
@@ -618,48 +403,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
     for code in precon_codes:
         registry.register(code)
 
-    # ========== HOOK (1100-1199): Hook execution errors → exit code 1 ==========
-    hook_codes = [
-        ErrorCodeDefinition(
-            code="HOOK_1100",
-            message_template="Pre-migration hook failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=1,
-            resolution_hint="Check hook script and address the failure",
-        ),
-        ErrorCodeDefinition(
-            code="HOOK_1101",
-            message_template="Post-migration hook failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=1,
-            resolution_hint="Migration succeeded but hook failed",
-        ),
-    ]
-
-    for code in hook_codes:
-        registry.register(code)
-
-    # ========== POOL (1200-1299): Connection pool errors → exit code 6 ==========
-    pool_codes = [
-        ErrorCodeDefinition(
-            code="POOL_1200",
-            message_template="Connection pool exhausted",
-            severity=ErrorSeverity.ERROR,
-            exit_code=6,
-            resolution_hint="Increase pool size or wait for connections to be released",
-        ),
-        ErrorCodeDefinition(
-            code="POOL_1201",
-            message_template="Connection pool initialization failed",
-            severity=ErrorSeverity.ERROR,
-            exit_code=6,
-            resolution_hint="Check database connection settings",
-        ),
-    ]
-
-    for code in pool_codes:
-        registry.register(code)
-
     # ========== LOCK (1300-1399): Database locking errors → exit code 6 ==========
     lock_codes = [
         ErrorCodeDefinition(
@@ -668,13 +411,6 @@ def _create_global_registry() -> ErrorCodeRegistry:
             severity=ErrorSeverity.ERROR,
             exit_code=6,
             resolution_hint="Wait for other operations to complete",
-        ),
-        ErrorCodeDefinition(
-            code="LOCK_1301",
-            message_template="Lock held by {holder}",
-            severity=ErrorSeverity.WARNING,
-            exit_code=6,
-            resolution_hint="Check what operation is holding the lock",
         ),
     ]
 
@@ -690,55 +426,13 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=5,
             resolution_hint="Check anonymization rule syntax",
         ),
-        ErrorCodeDefinition(
-            code="ANON_1401",
-            message_template="Anonymization function not found: {function}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Define the anonymization function or use a built-in",
-        ),
     ]
 
     for code in anon_codes:
         registry.register(code)
 
-    # ========== LINT (1500-1599): Schema linting errors → exit code 5 ==========
-    lint_codes = [
-        ErrorCodeDefinition(
-            code="LINT_1500",
-            message_template="Schema lint error: {message}",
-            severity=ErrorSeverity.ERROR,
-            exit_code=5,
-            resolution_hint="Fix the schema linting error",
-        ),
-        ErrorCodeDefinition(
-            code="LINT_1501",
-            message_template="Schema lint warning: {message}",
-            severity=ErrorSeverity.WARNING,
-            exit_code=0,
-            resolution_hint="Address the linting warning",
-        ),
-    ]
-
-    for code in lint_codes:
-        registry.register(code)
-
     # ========== MIGR extra: granular migration execution codes ==========
     migr_extra_codes = [
-        ErrorCodeDefinition(
-            code="MIGR_010",
-            message_template="Lock timeout waiting for migration lock",
-            severity=ErrorSeverity.ERROR,
-            exit_code=3,
-            resolution_hint="Retry with a higher --lock-timeout value or schedule during low-traffic window",
-        ),
-        ErrorCodeDefinition(
-            code="MIGR_011",
-            message_template="Checksum mismatch for migration '{version}'",
-            severity=ErrorSeverity.ERROR,
-            exit_code=3,
-            resolution_hint="Migration file was modified after application. Restore the original file or use --force to override.",
-        ),
         ErrorCodeDefinition(
             code="CONFIG_010",
             message_template="Database URL not set in environment '{env}'",
@@ -760,7 +454,7 @@ def _create_global_registry() -> ErrorCodeRegistry:
 
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
-    # More specific codes (e.g., MIGR_100, SCHEMA_200) are used at raise sites.
+    # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.
     default_codes = [
         ErrorCodeDefinition(
             code="MIGR_001",
@@ -910,8 +604,8 @@ ERROR_CODE_REGISTRY = _create_global_registry()
 # Family defaults (the renumbered convention #146 freezes as a contract):
 #   2 = tracking table absent (PRECON_1001 only)   3 = DB connection failed
 #   4 = schema/DDL/build       5 = config invalid + validation/sync/lint/...
-#   6 = lock / pool contention 7 = git / pggit / grant
-#   8 = irreversible rollback  1 = generic SQL/hook   0 = success-with-signal
+#   6 = lock contention        7 = git / pggit / grant
+#   8 = irreversible rollback  1 = generic SQL        0 = success-with-signal
 #
 # Per-code carve-outs that deliberately differ from their family default are
 # annotated inline; do not "align" them to the family number during audits.
@@ -921,93 +615,55 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_002": 5,
     "CONFIG_003": 5,
     "CONFIG_004": 5,
-    "CONFIG_005": 5,
     "CONFIG_006": 3,  # carve-out: DB connection failed (family is otherwise 5)
     "CONFIG_007": 5,  # conflicting explicit DSN sources (#152)
     "CONFIG_008": 5,  # tracking_table is not a plain identifier
     "CONFIG_009": 5,  # ANONYMIZATION_SECRET unset (D8: the secret is mandatory)
     "CONFIG_010": 5,
     "CONFIG_011": 5,  # installed pglast lacks enum members confiture walks (D13)
-    # MIGR family → 3, with two success-with-signal carve-outs at 0.
+    # MIGR family → 3, with one success-with-signal carve-out at 0.
     "MIGR_001": 3,
     "MIGR_004": 3,
-    "MIGR_010": 3,
-    "MIGR_011": 3,
     "MIGR_100": 3,
     "MIGR_101": 0,  # carve-out: already applied — success-with-signal
     "MIGR_102": 3,
-    "MIGR_103": 3,
-    "MIGR_104": 3,
-    "MIGR_105": 0,  # carve-out: no pending migrations — success-with-signal
     "MIGR_106": 3,
     "MIGR_107": 3,
     "MIGR_108": 3,
     # SCHEMA family → 4.
     "DDL_001": 4,  # destructive DDL refused without --force (schema family)
     "SCHEMA_001": 4,
-    "SCHEMA_200": 4,
     "SCHEMA_201": 4,
     "SCHEMA_202": 4,
-    "SCHEMA_203": 4,
-    "SCHEMA_204": 4,
     "SCHEMA_205": 4,  # psql meta-command refused before psql runs (SEC-03)
     # SYNC family → 5.
     "SYNC_001": 5,
-    "SYNC_300": 5,
-    "SYNC_301": 5,
-    "SYNC_302": 5,
-    "SYNC_303": 5,
-    # DIFFER family → 5, with DIFFER_402 carved out to 1 (generic advisory).
+    # DIFFER family → 5.
     "DIFFER_400": 5,
-    "DIFFER_401": 5,
-    "DIFFER_402": 1,  # carve-out: ambiguous-change advisory (family is otherwise 5)
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,
-    "VALID_500": 5,
-    "VALID_501": 5,
-    "VALID_502": 5,
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,
     "ROLLBACK_600": 8,
-    "ROLLBACK_601": 8,
-    "ROLLBACK_602": 8,
     # SQL family → 1 (generic execution failure).
     "SQL_001": 1,
-    "SQL_700": 1,
-    "SQL_701": 1,
-    "SQL_702": 1,
-    "SQL_703": 1,
     # GIT / PGGIT / GRANT → 7.
     "GIT_001": 7,
     "GIT_002": 7,
     "GIT_003": 7,
-    "GIT_800": 7,
-    "GIT_801": 7,
-    "GIT_802": 7,
     "GRANT_001": 7,
     "PGGIT_900": 7,
-    "PGGIT_901": 7,
     # GEN → 3 (migration generation belongs with the MIGR family number).
     "GEN_001": 3,
     # PRECON family → 5, with PRECON_1001 carved out to 2 (no tracking table).
     "PRECON_1000": 5,
     "PRECON_1001": 2,  # carve-out: tracking table absent (family is otherwise 5)
-    # HOOK family → 1 (generic; a hook failure is not a confiture-domain error).
-    "HOOK_1100": 1,
-    "HOOK_1101": 1,
-    # POOL / LOCK → 6 (contention).
-    "POOL_1200": 6,
-    "POOL_1201": 6,
+    # LOCK → 6 (contention).
     "LOCK_1300": 6,
-    "LOCK_1301": 6,
     # ANON family → 5.
     "ANON_1400": 5,
-    "ANON_1401": 5,
-    # LINT family → 5, with LINT_1501 carved out to 0 (non-blocking advisory).
-    "LINT_1500": 5,
-    "LINT_1501": 0,  # carve-out: lint warning — informational, non-blocking
     # REBUILD → 4 (schema family number).
     "REBUILD_001": 4,
     # RESTORE / SEED → 5.
@@ -1021,12 +677,12 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
 # CANONICAL_EXIT_CODES above. Codes 0–8 are in use; 9 is reserved.
 EXIT_CODE_MEANINGS: dict[int, str] = {
     0: "Success (including success-with-signal: already applied, nothing pending, advisories)",
-    1: "Generic failure (SQL/hook execution, ambiguous-change advisory, status: pending)",
+    1: "Generic failure (SQL/hook execution, status: pending)",
     2: "Tracking table absent — confiture not initialized on this database yet",
     3: "Database connection failed — host/auth/network unreachable",
     4: "Schema / DDL / build error",
     5: "Configuration invalid, or validation / sync / lint / precondition failure",
-    6: "Lock or connection-pool contention — another writer holds the lock",
+    6: "Lock contention — another writer holds the lock",
     7: "Git / pgGit / grant-accompaniment error",
     8: "Irreversible rollback, or inconsistent state after rollback",
 }

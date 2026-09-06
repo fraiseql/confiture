@@ -21,35 +21,35 @@ reference from the CLI with `confiture --exit-codes`.
 | Exit | Meaning |
 |------|---------|
 | 0 | Success (including success-with-signal: already applied, nothing pending, advisories) |
-| 1 | Generic failure (SQL/hook execution, ambiguous-change advisory, status: pending) |
+| 1 | Generic failure (SQL/hook execution, status: pending) |
 | 2 | Tracking table absent — confiture not initialized on this database yet |
 | 3 | Database connection failed — host/auth/network unreachable |
 | 4 | Schema / DDL / build error |
 | 5 | Configuration invalid, or validation / sync / lint / precondition failure |
-| 6 | Lock or connection-pool contention — another writer holds the lock |
+| 6 | Lock contention — another writer holds the lock |
 | 7 | Git / pgGit / grant-accompaniment error |
 | 8 | Irreversible rollback, or inconsistent state after rollback |
 
 ### Symbolic codes per exit code
 
 - **0** — Success (including success-with-signal: already applied, nothing pending, advisories)
-  - LINT_1501, MIGR_101, MIGR_105
-- **1** — Generic failure (SQL/hook execution, ambiguous-change advisory, status: pending)
-  - DIFFER_402, HOOK_1100, HOOK_1101, SQL_001, SQL_700, SQL_701, SQL_702, SQL_703
+  - MIGR_101
+- **1** — Generic failure (SQL/hook execution, status: pending)
+  - SQL_001
 - **2** — Tracking table absent — confiture not initialized on this database yet
   - PRECON_1001
 - **3** — Database connection failed — host/auth/network unreachable
-  - CONFIG_006, GEN_001, MIGR_001, MIGR_004, MIGR_010, MIGR_011, MIGR_100, MIGR_102, MIGR_103, MIGR_104, MIGR_106, MIGR_107, MIGR_108
+  - CONFIG_006, GEN_001, MIGR_001, MIGR_004, MIGR_100, MIGR_102, MIGR_106, MIGR_107, MIGR_108
 - **4** — Schema / DDL / build error
-  - DDL_001, REBUILD_001, SCHEMA_001, SCHEMA_200, SCHEMA_201, SCHEMA_202, SCHEMA_203, SCHEMA_204, SCHEMA_205
+  - DDL_001, REBUILD_001, SCHEMA_001, SCHEMA_201, SCHEMA_202, SCHEMA_205
 - **5** — Configuration invalid, or validation / sync / lint / precondition failure
-  - ANON_1400, ANON_1401, CONFIG_001, CONFIG_002, CONFIG_003, CONFIG_004, CONFIG_005, CONFIG_007, CONFIG_008, CONFIG_009, CONFIG_010, CONFIG_011, DIFFER_400, DIFFER_401, DIFF_001, LINT_1500, PRECON_1000, RESTORE_001, SEED_001, SYNC_001, SYNC_300, SYNC_301, SYNC_302, SYNC_303, VALID_001, VALID_500, VALID_501, VALID_502, VERIFY_001
-- **6** — Lock or connection-pool contention — another writer holds the lock
-  - LOCK_1300, LOCK_1301, POOL_1200, POOL_1201
+  - ANON_1400, CONFIG_001, CONFIG_002, CONFIG_003, CONFIG_004, CONFIG_007, CONFIG_008, CONFIG_009, CONFIG_010, CONFIG_011, DIFFER_400, DIFF_001, PRECON_1000, RESTORE_001, SEED_001, SYNC_001, VALID_001, VERIFY_001
+- **6** — Lock contention — another writer holds the lock
+  - LOCK_1300
 - **7** — Git / pgGit / grant-accompaniment error
-  - GIT_001, GIT_002, GIT_003, GIT_800, GIT_801, GIT_802, GRANT_001, PGGIT_900, PGGIT_901
+  - GIT_001, GIT_002, GIT_003, GRANT_001, PGGIT_900
 - **8** — Irreversible rollback, or inconsistent state after rollback
-  - ROLLBACK_001, ROLLBACK_600, ROLLBACK_601, ROLLBACK_602
+  - ROLLBACK_001, ROLLBACK_600
 <!-- END GENERATED -->
 
 > The block above is generated from `CANONICAL_EXIT_CODES` /
@@ -66,9 +66,6 @@ number:
 | Code | Exit | Family default | Why it differs |
 |------|------|----------------|----------------|
 | `MIGR_101` (already applied) | 0 | 3 | success-with-signal, not an error |
-| `MIGR_105` (no pending migrations) | 0 | 3 | success-with-signal, not an error |
-| `LINT_1501` (lint advisory) | 0 | 5 | informational, non-blocking |
-| `DIFFER_402` (ambiguous change) | 1 | 5 | generic advisory, not a hard diff error |
 | `PRECON_1001` (tracking table absent) | 2 | 5 | the fresh-DB "not initialized yet" signal |
 | `CONFIG_006` (connection failed) | 3 | 5 | host/auth/network, distinct from config-invalid |
 
@@ -174,7 +171,6 @@ numbers must update:
 | `CONFIG_002` | Invalid YAML syntax | 2 | **5** |
 | `CONFIG_003` | Invalid database URL format | 2 | **5** |
 | `CONFIG_004` | Environment config not found | 2 | **5** |
-| `CONFIG_005` | Invalid include/exclude pattern | 2 | **5** |
 | `CONFIG_006` | Database connection failed | 2 | **3** |
 | `CONFIG_010` | Database URL not set in environment | 2 | **5** |
 
@@ -185,8 +181,7 @@ Migration guidance for wrapper authors:
 - **Exit 3** now distinguishes a **connection failure** from a config error.
 
 Codes that already matched the convention and did **not** change: `MIGR_106`
-(duplicate version) = 3, `ROLLBACK_600` (irreversible) = 8, the entire lock/pool
-family = 6.
+(duplicate version) = 3, `ROLLBACK_600` (irreversible) = 8, the lock family = 6.
 
 ## Stability contract
 
@@ -200,7 +195,10 @@ Going forward, the exit-code convention is **frozen**:
   CHANGELOG old→new table.
 
 The one sanctioned break before this contract took effect was the #146
-renumbering documented in the reconciliation appendix above.
+renumbering documented in the reconciliation appendix above. 0.51.0 removed 36
+symbolic codes that no command had ever emitted (listed in the CHANGELOG); no
+integer changed, and every code left in the canonical table is one the package
+can produce.
 
 ## Semantic classes (machine-readable)
 

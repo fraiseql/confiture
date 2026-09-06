@@ -54,6 +54,30 @@ exported surface is exactly as wide as the code behind it.
   `models/`); `confiture.core.url_redaction` becomes `confiture.url_redaction`
   and `confiture.core.error_codes` becomes `confiture.error_codes`.
 
+### Removed
+
+- ⚠️ **36 error codes that nothing could emit (D9).** The registry and the
+  published codebook listed 80 symbolic codes; 36 of them were referenced by no
+  exception default, no `fail()` call and no finding constructor, so a consumer
+  matching on one of them would have waited forever. They are gone from
+  `ERROR_CODE_REGISTRY`, `CANONICAL_EXIT_CODES`, `docs/reference/error-codes.md`
+  and `docs/reference/exit-codes.md`, and a guard test now fails on any
+  registered code the package never names. Removed: `ANON_1401`, `CONFIG_005`,
+  `DIFFER_401`, `DIFFER_402`, `GIT_800`, `GIT_801`, `GIT_802`, `HOOK_1100`,
+  `HOOK_1101`, `LINT_1500`, `LINT_1501`, `LOCK_1301`, `MIGR_010`, `MIGR_011`,
+  `MIGR_103`, `MIGR_104`, `MIGR_105`, `PGGIT_901`, `POOL_1200`, `POOL_1201`,
+  `ROLLBACK_601`, `ROLLBACK_602`, `SCHEMA_200`, `SCHEMA_203`, `SCHEMA_204`,
+  `SQL_700`, `SQL_701`, `SQL_702`, `SQL_703`, `SYNC_300`, `SYNC_301`,
+  `SYNC_302`, `SYNC_303`, `VALID_500`, `VALID_501`, `VALID_502`.
+  Two of them deserve a note. `MIGR_011` was documented as the checksum-mismatch
+  code, but `migrate up` never emitted it: a tampered applied file exits 1 with
+  the mismatch list, `verify-checksums` reports `CHECKSUM_MISMATCH` issue objects
+  and `migrate preflight` reports `PFLIGHT_CHECKSUM_MISMATCH` — none of those
+  change. `MIGR_010` (lock timeout) was a dead twin of `LOCK_1300`, which is
+  what a lock timeout actually produces. The integer exit codes, their meanings
+  and the nine semantic classes are unchanged; no code that was ever emitted is
+  renamed or renumbered.
+
 ## [0.50.0] - 2026-09-06
 
 Phase 05 of the 2026-09-06 review: analyzer honesty and one parser. pglast is

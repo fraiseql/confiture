@@ -20,7 +20,9 @@ REQUIRED_COMMON = {
     "ROLLBACK_600",  # irreversible / missing down
     "LOCK_1300",  # lock contention
     "CONFIG_006",  # connection failed
-    "MIGR_011",  # checksum mismatch
+    # checksum mismatch is a *report* finding, never an envelope code: `verify-checksums`
+    # emits `CHECKSUM_MISMATCH` issue objects and preflight `PFLIGHT_CHECKSUM_MISMATCH`;
+    # the registry's MIGR_011 was never emitted and was pruned in 0.51.0 (D9).
     "PRECON_1001",  # not initialized / no tracking table
 }
 
