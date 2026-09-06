@@ -54,6 +54,15 @@ behaviour change for anyone relying on a default.
   module and names remain importable as a deprecated alias
   (`DeprecationWarning`) until 1.0.0.
 
+- **Names and refs are validated before they become a path or an argv.**
+  `migrate generate NAME` accepts `^[a-z0-9_]+$` only and exits 5
+  (`VALID_001`) before touching the filesystem — `../../x` used to walk out of
+  the migrations directory. An SSH `user` must start with a letter, digit or
+  underscore, and the `ssh` argv carries `--` before the destination. Every git
+  ref confiture passes to a subprocess goes through one `core.git.validate_ref`
+  (`git ls-tree` included), and squawk / `git diff` receive `--` before any
+  file list.
+
 ### Added
 
 - `CONFIG_008` (invalid `tracking_table`), `CONFIG_009` (anonymization secret
