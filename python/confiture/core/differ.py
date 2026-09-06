@@ -12,7 +12,9 @@ from typing import Any
 
 import pglast
 from pglast.enums.parsenodes import ConstrType
+from pglast.stream import RawStream
 
+from confiture.core._pglast_enums import member as _pg_member
 from confiture.models.schema import (
     CheckConstraint,
     Column,
@@ -92,47 +94,6 @@ _COLUMN_TYPE_MAP: dict[str, ColumnType] = {
     "DATERANGE": ColumnType.DATERANGE,
 }
 
-# Regex patterns for ALTER TABLE / CREATE TYPE / CREATE SEQUENCE / CREATE INDEX
-_FK_RE = re.compile(
-    r"ALTER\s+TABLE\s+(?:\w+\.)?(?P<table>\w+)\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)"
-    r"\s+FOREIGN\s+KEY\s*\((?P<cols>[^)]+)\)"
-    r"\s+REFERENCES\s+(?:(?P<ref_schema>\w+)\.)?(?P<ref_table>\w+)\s*\((?P<ref_cols>[^)]+)\)"
-    r"(?:\s+ON\s+DELETE\s+(?P<on_delete>\w+(?:\s+\w+)?))?",
-    re.IGNORECASE | re.DOTALL,
-)
-
-_CHECK_RE = re.compile(
-    r"ALTER\s+TABLE\s+(?:\w+\.)?(?P<table>\w+)\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)"
-    r"\s+CHECK\s*\((?P<expr>.+?)\)\s*;?",
-    re.IGNORECASE | re.DOTALL,
-)
-
-_UNIQUE_RE = re.compile(
-    r"ALTER\s+TABLE\s+(?:\w+\.)?(?P<table>\w+)\s+ADD\s+CONSTRAINT\s+(?P<name>\w+)"
-    r"\s+UNIQUE\s*\((?P<cols>[^)]+)\)",
-    re.IGNORECASE | re.DOTALL,
-)
-
-_ENUM_RE = re.compile(
-    r"CREATE\s+TYPE\s+(?:(?P<schema>\w+)\.)?(?P<name>\w+)"
-    r"\s+AS\s+ENUM\s*\((?P<values>[^)]+)\)",
-    re.IGNORECASE,
-)
-
-_SEQ_RE = re.compile(
-    r"CREATE\s+SEQUENCE\s+(?:(?P<schema>\w+)\.)?(?P<name>\w+)"
-    r"(?:\s+START(?:\s+WITH)?\s+(?P<start>\d+))?"
-    r"(?:\s+INCREMENT(?:\s+BY)?\s+(?P<increment>\d+))?",
-    re.IGNORECASE,
-)
-
-_INDEX_RE = re.compile(
-    r"CREATE\s+(?P<unique>UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?"
-    r"(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>\w+)\s+ON\s+(?:(?P<schema>\w+)\.)?(?P<table>\w+)"
-    r"\s*\((?P<cols>[^)]+)\)"
-    r"(?:\s+WHERE\s+(?P<where>.+?))?(?:;|$)",
-    re.IGNORECASE | re.DOTALL,
-)
 
 # DDL statement prefixes — used to filter out non-DDL (INSERT, COPY, GRANT, etc.)
 # before passing individual statements to sqlparse (avoids MAX_GROUPING_TOKENS crash).
@@ -163,32 +124,17 @@ _PGLAST_TYPE_ALIASES: dict[str, str] = {
 
 # pglast FK on-delete action code → human-readable string
 _PG_FK_DEL_ACTION: dict[str, str | None] = {
-    "c": "CASCADE",
-    "a": "SET NULL",
-    "d": "NO ACTION",
+    "a": None,  # NO ACTION — PostgreSQL's default, reported as no clause
     "r": "RESTRICT",
-    "p": "SET DEFAULT",
+    "c": "CASCADE",
+    "n": "SET NULL",
+    "d": "SET DEFAULT",
     "": None,
     "\x00": None,
 }
-
-# Inline constraint patterns (inside CREATE TABLE body)
-_INLINE_FK_RE = re.compile(
-    r"CONSTRAINT\s+(?P<name>\w+)\s+FOREIGN\s+KEY\s*\((?P<cols>[^)]+)\)"
-    r"\s+REFERENCES\s+(?:(?P<ref_schema>\w+)\.)?(?P<ref_table>\w+)\s*\((?P<ref_cols>[^)]+)\)"
-    r"(?:\s+ON\s+DELETE\s+(?P<on_delete>\w+(?:\s+\w+)?))?",
-    re.IGNORECASE | re.DOTALL,
-)
-
-_INLINE_CHECK_RE = re.compile(
-    r"CONSTRAINT\s+(?P<name>\w+)\s+CHECK\s*\((?P<expr>.+)\)",
-    re.IGNORECASE | re.DOTALL,
-)
-
-_INLINE_UNIQUE_RE = re.compile(
-    r"CONSTRAINT\s+(?P<name>\w+)\s+UNIQUE\s*\((?P<cols>[^)]+)\)",
-    re.IGNORECASE | re.DOTALL,
-)
+_CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
+_CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
+_CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
 
 
 class SchemaDiffer:
@@ -242,75 +188,30 @@ class SchemaDiffer:
 
         result = ParsedSchema()
 
-        # pglast — PostgreSQL's actual C parser, no token limits.
-        self._parse_create_tables_pglast(sql, result, pglast)
-
-        # Regex pass: CREATE INDEX / TYPE AS ENUM / SEQUENCE / ALTER TABLE ADD CONSTRAINT.
-        # These are more reliably matched by regex than by either AST parser, and regex
-        # has no token-count limits.
-        self._parse_alter_table(sql, result)
-
-        for m in _INDEX_RE.finditer(sql):
-            cols = [c.strip() for c in m.group("cols").split(",")]
-            table_name = m.group("table")
-            idx = Index(
-                name=m.group("name"),
-                table=table_name,
-                columns=cols,
-                unique=bool(m.group("unique")),
-                where=m.group("where"),
-            )
-            for t in result.tables:
-                if t.name == table_name:
-                    t.indexes.append(idx)
-                    break
-
-        for m in _ENUM_RE.finditer(sql):
-            raw_values = m.group("values")
-            values = [v.strip().strip("'\"") for v in raw_values.split(",")]
-            result.enum_types.append(
-                EnumType(name=m.group("name"), schema=m.group("schema"), values=values)
-            )
-
-        for m in _SEQ_RE.finditer(sql):
-            result.sequences.append(
-                Sequence(
-                    name=m.group("name"),
-                    schema=m.group("schema"),
-                    start=int(m.group("start")) if m.group("start") else 1,
-                    increment=int(m.group("increment")) if m.group("increment") else 1,
-                )
-            )
-
+        # One parse, one walk (ANA-04): pglast.parser.ParseError propagates —
+        # what PostgreSQL rejects is not a schema to diff, and `migrate diff`
+        # reports it as DIFFER_400. A commented-out statement is not a node.
+        statements = [raw.stmt for raw in pglast.parse_sql(sql) or []]
+        for stmt in statements:
+            if type(stmt).__name__ == "CreateStmt":
+                table = self._parse_create_table_pglast(stmt)
+                if table:
+                    result.tables.append(table)
+        for stmt in statements:
+            kind = type(stmt).__name__
+            if kind == "IndexStmt":
+                self._collect_index(stmt, result)
+            elif kind == "CreateEnumStmt":
+                result.enum_types.append(_enum_type_from_stmt(stmt))
+            elif kind == "CreateSeqStmt":
+                result.sequences.append(_sequence_from_stmt(stmt))
+            elif kind == "AlterTableStmt":
+                self._collect_alter_table_constraints(stmt, result)
         return result
 
     # ------------------------------------------------------------------
     # pglast-based CREATE TABLE parser (primary path)
     # ------------------------------------------------------------------
-
-    def _parse_create_tables_pglast(self, sql: str, result: ParsedSchema, pglast: Any) -> None:
-        """Parse CREATE TABLE statements using pglast (PostgreSQL's own parser).
-
-        pglast has no token/recursion limits and handles all PostgreSQL syntax.
-        Raises ``pglast.parser.ParseError`` on SQL PostgreSQL rejects.
-
-        Args:
-            sql: Full SQL text (may contain any statements)
-            result: ParsedSchema to populate
-            pglast: The already-imported pglast module
-        """
-        # pglast.parser.ParseError propagates: what PostgreSQL rejects is not a
-        # schema to diff, and `migrate diff` reports it as DIFFER_400 (ANA-02).
-        tree = pglast.parse_sql(sql)
-        if tree is None:
-            return
-
-        for stmt_wrapper in tree:
-            stmt = stmt_wrapper.stmt
-            if type(stmt).__name__ == "CreateStmt":
-                table = self._parse_create_table_pglast(stmt)
-                if table:
-                    result.tables.append(table)
 
     def _parse_create_table_pglast(self, stmt: Any) -> Table | None:
         """Build a Table model from a pglast CreateStmt node."""
@@ -449,46 +350,67 @@ class SchemaDiffer:
     # sqlparse-based CREATE TABLE parser (fallback when pglast not installed)
     # ------------------------------------------------------------------
 
-    def _parse_alter_table(self, sql_text: str, result: ParsedSchema) -> None:
-        """Parse ALTER TABLE ... ADD CONSTRAINT ... statements via regex."""
-        for m in _FK_RE.finditer(sql_text):
-            table_name = m.group("table")
-            fk = ForeignKey(
-                name=m.group("name"),
-                table=table_name,
-                columns=[c.strip() for c in m.group("cols").split(",")],
-                ref_table=m.group("ref_table"),
-                ref_columns=[c.strip() for c in m.group("ref_cols").split(",")],
-                on_delete=m.group("on_delete"),
-            )
-            for t in result.tables:
-                if t.name == table_name:
-                    t.foreign_keys.append(fk)
-                    break
+    # ------------------------------------------------------------------
+    # AST collectors for indexes and ALTER TABLE constraints (ANA-04)
+    # ------------------------------------------------------------------
 
-        for m in _CHECK_RE.finditer(sql_text):
-            table_name = m.group("table")
-            cc = CheckConstraint(
-                name=m.group("name"),
-                table=table_name,
-                expression=m.group("expr").strip(),
-            )
-            for t in result.tables:
-                if t.name == table_name:
-                    t.check_constraints.append(cc)
-                    break
+    def _table_named(self, result: ParsedSchema, relation: Any) -> Table | None:
+        relname = getattr(relation, "relname", None)
+        return next((t for t in result.tables if t.name == relname), None)
 
-        for m in _UNIQUE_RE.finditer(sql_text):
-            table_name = m.group("table")
-            uc = UniqueConstraint(
-                name=m.group("name"),
-                table=table_name,
-                columns=[c.strip() for c in m.group("cols").split(",")],
+    def _collect_index(self, stmt: Any, result: ParsedSchema) -> None:
+        table = self._table_named(result, stmt.relation)
+        if table is None:
+            return
+        columns = [
+            elem.name if elem.name else RawStream()(elem.expr) for elem in stmt.indexParams or []
+        ]
+        table.indexes.append(
+            Index(
+                name=stmt.idxname,
+                table=table.name,
+                columns=columns,
+                unique=bool(stmt.unique),
+                where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
             )
-            for t in result.tables:
-                if t.name == table_name:
-                    t.unique_constraints.append(uc)
-                    break
+        )
+
+    def _collect_alter_table_constraints(self, stmt: Any, result: ParsedSchema) -> None:
+        table = self._table_named(result, stmt.relation)
+        if table is None:
+            return
+        for cmd in stmt.cmds or []:
+            constraint = getattr(cmd, "def_", None)
+            if constraint is None or type(constraint).__name__ != "Constraint":
+                continue
+            contype = _enum_value(constraint.contype)
+            if contype == _CONSTR_FOREIGN:
+                table.foreign_keys.append(
+                    ForeignKey(
+                        name=constraint.conname,
+                        table=table.name,
+                        columns=[k.sval for k in constraint.fk_attrs or []],
+                        ref_table=constraint.pktable.relname,
+                        ref_columns=[k.sval for k in constraint.pk_attrs or []],
+                        on_delete=_PG_FK_DEL_ACTION.get(constraint.fk_del_action or ""),
+                    )
+                )
+            elif contype == _CONSTR_CHECK and constraint.raw_expr is not None:
+                table.check_constraints.append(
+                    CheckConstraint(
+                        name=constraint.conname,
+                        table=table.name,
+                        expression=RawStream()(constraint.raw_expr),
+                    )
+                )
+            elif contype == _CONSTR_UNIQUE:
+                table.unique_constraints.append(
+                    UniqueConstraint(
+                        name=constraint.conname,
+                        table=table.name,
+                        columns=[k.sval for k in constraint.keys or []],
+                    )
+                )
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
         """Compare two schemas and detect changes.
@@ -870,3 +792,35 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
     # SQL parsing helpers
     # ------------------------------------------------------------------
+
+
+def _enum_value(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _qualified_parts(names: Any) -> tuple[str | None, str]:
+    parts = [str(getattr(part, "sval", part)) for part in names or []]
+    return (parts[-2] if len(parts) >= 2 else None), parts[-1]
+
+
+def _enum_type_from_stmt(stmt: Any) -> EnumType:
+    schema, name = _qualified_parts(stmt.typeName)
+    return EnumType(name=name, schema=schema, values=[v.sval for v in stmt.vals or []])
+
+
+def _sequence_from_stmt(stmt: Any) -> Sequence:
+    options: dict[str, Any] = {}
+    for opt in stmt.options or []:
+        arg = getattr(opt, "arg", None)
+        options[opt.defname] = getattr(arg, "ival", None) if arg is not None else None
+    return Sequence(
+        name=stmt.sequence.relname,
+        schema=stmt.sequence.schemaname,
+        start=options.get("start", 1) if options.get("start") is not None else 1,
+        increment=options.get("increment", 1) if options.get("increment") is not None else 1,
+        min_value=options.get("minvalue"),
+        max_value=options.get("maxvalue"),
+    )
