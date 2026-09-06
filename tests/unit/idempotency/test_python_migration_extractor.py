@@ -664,13 +664,13 @@ class TestExecuteReadTextBoundary:
         monkeypatch.chdir(tmp_path)
 
         calls: list[str] = []
-        original = static_eval.resolve_sql_file
+        original = static_eval.file_io.resolve_sql_file
 
         def _spy(raw, **kwargs):  # type: ignore[no-untyped-def]
             calls.append(str(raw))
             return original(raw, **kwargs)
 
-        monkeypatch.setattr(static_eval, "resolve_sql_file", _spy)
+        monkeypatch.setattr(static_eval.file_io, "resolve_sql_file", _spy)
 
         result = extract_sql_from_python_migration(migration, project_root=tmp_path)
 

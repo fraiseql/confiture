@@ -86,6 +86,8 @@ def test_patterns_exports_only_the_ast_detector() -> None:
 
 def test_classifier_and_change_set_have_one_path_each() -> None:
     classifier = _top_level_functions(PACKAGE / "core" / "replica" / "classifier.py")
-    change_set = _top_level_functions(PACKAGE / "core" / "change_set.py")
+    change_set: set[str] = set()
+    for module in sorted((PACKAGE / "core" / "change_set").glob("*.py")):
+        change_set |= _top_level_functions(module)
     assert not {n for n in classifier if "regex" in n.lower()}, classifier
     assert not {n for n in change_set if "regex" in n.lower()}, change_set

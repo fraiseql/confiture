@@ -92,7 +92,8 @@ def test_the_evaluator_never_imports_or_executes() -> None:
     """The module's whole promise, pinned: no eval, exec, importlib or __import__."""
     import confiture.core.idempotency.static_eval as static_eval
 
-    source = Path(static_eval.__file__).read_text(encoding="utf-8")  # type: ignore[arg-type]
+    package = Path(static_eval.__file__).parent  # type: ignore[arg-type]
+    source = "\n".join(p.read_text(encoding="utf-8") for p in sorted(package.glob("*.py")))
     tree = ast.parse(source)
     forbidden = {"eval", "exec", "compile", "__import__"}
     calls = {

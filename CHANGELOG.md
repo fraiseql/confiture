@@ -12,6 +12,10 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- **Two modules become packages.** `core/idempotency/static_eval` (values,
+  scope, str_methods, file_io, evaluator) and `core/change_set` (models, naming,
+  walker), each module under 600 lines and every public name importable from
+  the package as before. The change set's leftover regex tables went with it.
 - **Quoted identifiers keep their case.** The change set and the replica
   classifier lower-cased every name a second time, so `CREATE TABLE "MyTable"`
   was reported as `public.mytable` — a different relation. pglast has already
