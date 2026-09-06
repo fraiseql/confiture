@@ -164,7 +164,7 @@ def test_check_ownership_coverage_json_output(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 1, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["check"] == "ownership_coverage"
     assert len(payload["violations"]) == 1
     v = payload["violations"][0]

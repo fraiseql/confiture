@@ -122,6 +122,6 @@ def test_migrate_estimate_with_mock_db(tmp_path):
         )
 
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert isinstance(data, list)
     assert data[0]["table"] in ("users", "orders")

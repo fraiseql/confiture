@@ -146,7 +146,7 @@ class TestExitCode0AllApplied:
             )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["pending"] == []
 
 
@@ -240,7 +240,7 @@ class TestExitCode1PendingExist:
             )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["pending"]) == 2
         assert "warning" not in data
 
@@ -306,7 +306,7 @@ class TestExitCode2TrackingTableAbsent:
             )
 
         assert result.exit_code == 2
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "warning" in data
 
     def test_exit_2_not_3_when_table_absent(self, tmp_path):

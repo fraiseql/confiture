@@ -94,7 +94,7 @@ def test_contention_json_surfaces_holder(holder_connection, cfg, migrations_dir)
     assert result.exit_code == 6, result.output  # LOCK_1300 → 6
     # migrate up prints human progress preamble before the error envelope in
     # JSON mode (pre-existing); the envelope is the final JSON document.
-    payload = json.loads(result.stdout[result.stdout.index("{") :])
+    payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "LOCK_1300"
     holder = payload["error"]["details"]["holder"]

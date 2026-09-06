@@ -29,7 +29,7 @@ def test_debug_cte_no_input_exits_config_error() -> None:
 def test_debug_cte_no_input_json_envelope() -> None:
     result = runner.invoke(app, ["debug", "cte", "-d", "postgresql://x/y", "--format", "json"])
     assert result.exit_code == 5
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["code"] == "CONFIG_001"
 
@@ -54,6 +54,6 @@ def test_debug_cte_connection_failure_json_envelope() -> None:
             ["debug", "cte", "-d", "postgresql://x/y", "--sql", "SELECT 1", "--format", "json"],
         )
     assert result.exit_code == 3
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["code"] == "CONFIG_006"

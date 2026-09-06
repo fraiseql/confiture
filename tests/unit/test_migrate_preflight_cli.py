@@ -319,7 +319,7 @@ def test_against_json_is_unified_envelope(runner, tmp_path):
             ],
         )
 
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert "static" not in data
     assert "against" not in data
     assert "hints" not in data
@@ -364,7 +364,7 @@ def test_against_json_replay_failure_is_issue(runner, tmp_path):
         )
 
     assert result.exit_code == 7
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     replay = [i for i in data["issues"] if i["code"] == "PFLIGHT_REPLAY_FAILED"]
     assert len(replay) == 1
@@ -403,7 +403,7 @@ def test_against_static_error_exits_7(runner, tmp_path):
         )
 
     assert result.exit_code == 7
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert any(i["code"] == "PFLIGHT_MISSING_DOWN" for i in data["issues"])
 
@@ -425,7 +425,7 @@ def test_json_output_without_against_is_structured_report(runner, tmp_path):
         ],
     )
 
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert "static" not in data  # not the --against envelope
     assert set(data.keys()) >= {"ok", "summary", "issues"}  # structured report
     assert data["ok"] is True
@@ -487,7 +487,7 @@ def test_against_unreachable_url_json_envelope_exits_3(runner, tmp_path):
         )
 
     assert result.exit_code == 3
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["code"] == "CONFIG_006"
 
@@ -560,7 +560,7 @@ def test_db_consumed_in_json_envelope(runner, tmp_path):
             ],
         )
 
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["summary"]["db_consumed"] is True
 
 

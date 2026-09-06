@@ -119,6 +119,6 @@ class TestMigrateValidateGrantAccompaniment:
             assert result.exit_code == 1
             import json
 
-            output = json.loads(result.output)
+            output = json.loads(result.stdout)
             assert output["status"] == "failed"
             assert output["check"] == "grant_accompaniment"

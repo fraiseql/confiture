@@ -178,7 +178,7 @@ class TestMigrateStatusCommand:
         )
 
         # Parse JSON output
-        output = json.loads(result.output)
+        output = json.loads(result.stdout)
 
         # Should include orphaned_migrations field
         assert "orphaned_migrations" in output
@@ -309,7 +309,7 @@ class TestMigrateValidateCommand:
         )
 
         # Parse JSON output
-        output = json.loads(result.output)
+        output = json.loads(result.stdout)
 
         # Should report the fix
         assert "fixed" in output or "renamed" in output

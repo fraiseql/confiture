@@ -131,8 +131,24 @@ def migrate_status(
 
         if not migrations_dir.exists():
             if output_format == "json":
-                result = {"error": f"Migrations directory not found: {migrations_dir.absolute()}"}
-                _output_json(result, output_file, console)
+                # The status payload shape, empty, with the situation as its warning —
+                # not a hand-built error envelope (exit 0: nothing is wrong with the DB).
+                _output_json(
+                    {
+                        "tracking_table": None,
+                        "resolved_table": None,
+                        "applied": [],
+                        "pending": [],
+                        "current": None,
+                        "total": 0,
+                        "migrations": [],
+                        "summary": {"applied": 0, "pending": 0, "total": 0},
+                        "hints": [],
+                        "warning": f"Migrations directory not found: {migrations_dir.absolute()}",
+                    },
+                    output_file,
+                    console,
+                )
             else:
                 console.print("[yellow]No migrations directory found.[/yellow]")
                 console.print(f"Expected: {migrations_dir.absolute()}")
@@ -240,7 +256,7 @@ def migrate_status(
             except Exception as e:
                 db_error = str(e)
                 if output_format != "json":
-                    console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
+                    error_console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
                     console.print("[yellow]Showing file list only (status unknown)[/yellow]\n")
 
         # Build migrations data
@@ -867,18 +883,16 @@ def migrate_up(
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
         install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
 
+        # Advisory lines go to stderr in JSON mode: stdout is the payload.
+        say = error_console if is_json(format_output) else console
         if force:
-            console.print(
-                "[yellow]⚠️  Force mode enabled - skipping migration state checks[/yellow]"
-            )
-            console.print(
+            say.print("[yellow]⚠️  Force mode enabled - skipping migration state checks[/yellow]")
+            say.print(
                 "[yellow]This may cause issues if applied incorrectly. Use with caution![/yellow]\n"
             )
         if no_lock:
-            console.print(
-                "[yellow]⚠️  Locking disabled - DANGEROUS in multi-pod environments![/yellow]"
-            )
-            console.print(
+            say.print("[yellow]⚠️  Locking disabled - DANGEROUS in multi-pod environments![/yellow]")
+            say.print(
                 "[yellow]Concurrent migrations may cause race conditions or data corruption.[/yellow]\n"
             )
 
@@ -917,7 +931,8 @@ def migrate_up(
             command="confiture migrate up",
         ) as session:
             if dry_run or dry_run_execute:
-                display_dry_run_header("testing" if dry_run_execute else "analysis")
+                if not is_json(format_output):
+                    display_dry_run_header("testing" if dry_run_execute else "analysis")
                 session.up(dry_run=True, **options)
                 _render_dry_run_analysis(
                     reporter.pending,
@@ -929,7 +944,7 @@ def migrate_up(
                 if dry_run:
                     return
                 if not yes and not ask_dry_run_execute_confirmation():
-                    console.print("[yellow]Cancelled - no changes applied[/yellow]")
+                    say.print("[yellow]Cancelled - no changes applied[/yellow]")
                     return
                 reporter.reset()
                 result = session.up(dry_run_execute=True, **options)
@@ -1510,20 +1525,14 @@ class {class_name}(Migration):
 
         # Check if file exists
         if filepath.exists() and not force:
-            if format_output == "json":
-                output = {
-                    "status": "error",
-                    "error": "file_exists",
-                    "message": f"Migration file already exists: {filepath.name}",
-                    "filepath": str(filepath.absolute()),
-                    "resolution": "Use --force flag to overwrite existing file",
-                }
-                print(json.dumps(output, indent=2))
-            else:
-                console.print("[red]❌ Error: Migration file already exists:[/red]")
-                console.print(f"  {filepath.absolute()}")
-                console.print("\n[yellow]Use --force to overwrite[/yellow]")
-            raise typer.Exit(1)
+            fail(
+                ValidationError(
+                    f"Migration file already exists: {filepath.name}",
+                    context={"filepath": str(filepath.absolute())},
+                    resolution_hint="Use --force to overwrite the existing file.",
+                ),
+                json_mode=is_json(format_output),
+            )
 
         # Warn if overwriting
         if filepath.exists() and force and format_output == "text":
@@ -1644,16 +1653,7 @@ class {class_name}(Migration):
     except typer.Exit:
         raise
     except Exception as e:
-        if format_output == "json":
-            output = {
-                "status": "error",
-                "error": "generation_failed",
-                "message": str(e),
-            }
-            print(json.dumps(output, indent=2))
-        else:
-            console.print(f"[red]❌ Error generating migration: {e}[/red]")
-        raise typer.Exit(1) from e
+        fail(e, json_mode=is_json(format_output))
 
 
 def migrate_estimate(

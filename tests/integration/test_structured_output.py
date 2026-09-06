@@ -63,15 +63,9 @@ class TestBuildJsonOutput:
         # Should succeed
         assert result.exit_code == 0
 
-        # Output should contain valid JSON (may have progress messages before it)
-        # Extract JSON by finding the first '{' and last '}'
-        stdout = result.stdout
-        json_start = stdout.find("{")
-        json_end = stdout.rfind("}") + 1
-
+        # stdout is the payload: it parses directly (progress goes to stderr).
         try:
-            json_str = stdout[json_start:json_end]
-            data = json.loads(json_str)
+            data = json.loads(result.stdout)
             assert "success" in data
             assert data["success"] is True
             assert "files_processed" in data
@@ -127,12 +121,7 @@ class TestBuildJsonOutput:
 
         assert result.exit_code == 0
 
-        # Extract JSON from output
-        stdout = result.stdout
-        json_start = stdout.find("{")
-        json_end = stdout.rfind("}") + 1
-        json_str = stdout[json_start:json_end]
-        data = json.loads(json_str)
+        data = json.loads(result.stdout)
 
         # Check expected fields
         assert "success" in data
@@ -296,12 +285,7 @@ class TestBuildWithShowHash:
 
         assert result.exit_code == 0
 
-        # Extract JSON from output
-        stdout = result.stdout
-        json_start = stdout.find("{")
-        json_end = stdout.rfind("}") + 1
-        json_str = stdout[json_start:json_end]
-        data = json.loads(json_str)
+        data = json.loads(result.stdout)
 
         assert "hash" in data
         # Hash should be a non-empty string (or None is ok)

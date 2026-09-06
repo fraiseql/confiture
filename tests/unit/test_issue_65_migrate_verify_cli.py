@@ -142,7 +142,7 @@ class TestMigrateVerifyCLI:
                 ["migrate", "verify", "-c", str(config_file), "--format", "json"],
             )
             assert result.exit_code == 0
-            output = json.loads(result.output)
+            output = json.loads(result.stdout)
             assert "verified_count" in output
             assert "failed_count" in output
             assert "skipped_count" in output
@@ -186,6 +186,6 @@ class TestMigrateVerifyCLI:
                 ["migrate", "verify", "-c", str(config_file), "--format", "json"],
             )
             assert result.exit_code == 0
-            output = json.loads(result.output)
+            output = json.loads(result.stdout)
             assert output["skipped_count"] == 1
             assert output["failed_count"] == 0

@@ -212,7 +212,7 @@ class TestFixSignaturesDryRun:
                 ],
             )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["status"] == "dry_run"
         assert data["fixes_planned"] == 1
         assert "DROP FUNCTION" in data["sql"]

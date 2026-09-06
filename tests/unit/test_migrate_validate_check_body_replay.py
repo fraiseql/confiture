@@ -96,7 +96,7 @@ def test_drift_exits_1(tmp_path):
 def test_json_hash_only_by_default(tmp_path):
     result = _invoke(tmp_path, _drift(), ["--format", "json"])
     assert result.exit_code == 1
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["check"] == "replay_body_drift"
     assert data["has_drift"] is True
     entry = data["body_drifts"][0]
@@ -107,7 +107,7 @@ def test_json_hash_only_by_default(tmp_path):
 def test_json_show_diff_includes_bodies(tmp_path):
     result = _invoke(tmp_path, _drift(), ["--show-diff", "--format", "json"])
     assert result.exit_code == 1
-    entry = json.loads(result.output)["body_drifts"][0]
+    entry = json.loads(result.stdout)["body_drifts"][0]
     assert entry["expected_body"].startswith("SELECT sum(price)")
     assert "* 1.2" in entry["live_body"]
     assert "+select sum(price) * 1.2 from widgets;" in entry["unified_diff"]
@@ -118,6 +118,6 @@ def test_broken_migration_surfaces_error_not_drift(tmp_path):
     exc = SchemaError("Migration replay into the scratch database failed: [...]")
     result = _invoke(tmp_path, exc, ["--format", "json"])
     assert result.exit_code != 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert "replay" in data["error"]["message"].lower()

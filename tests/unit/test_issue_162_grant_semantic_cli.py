@@ -123,7 +123,7 @@ class TestSemanticGrantCli:
         )
         with _run_with(report, "--format", "json") as result:
             assert result.exit_code == 1
-            payload = json.loads(result.output)
+            payload = json.loads(result.stdout)
             assert payload["status"] == "failed"
             assert payload["check"] == "grant_accompaniment"
             assert payload["unmatched_grants"][0]["grantee"] == "r"

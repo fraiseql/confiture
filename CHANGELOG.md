@@ -19,6 +19,16 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
   nothing on stdout, before the command body runs. `migrate preflight` and
   `schema diff` no longer fall through to text on an unknown value.
+- ⚠️ **One envelope, pure stdout.** With `--format json`, stdout is the payload
+  and nothing else: `migrate up`'s advisory lines and `build`'s progress lines go
+  to stderr, `migrate status`'s "could not connect" warning goes to stderr in
+  table mode, and a `migrate status` without a migrations directory emits the
+  status payload (with a `warning`) instead of a hand-built `{"error": …}`.
+  Every error path is `fail()`: `migrate generate` on an existing file (exit 5,
+  was 1) or a generation failure, and `fix-ownership`'s refusal of already-applied
+  files (exit 5, was a raw `SystemExit(2)`) — no CLI module builds an error
+  envelope by hand or raises `SystemExit` (guard tests). Tests read JSON with
+  `json.loads(result.stdout)`; the first-`{` scraping is gone.
 - ⚠️ **`typer.Exit` crosses the error boundary.** `init`, `migrate status` and
   `migrate diff` raised their own `typer.Exit` inside the `try` whose
   `except Exception` was their boundary, which printed `Error: <code>` and exited

@@ -190,7 +190,7 @@ class TestMigrateStatusTrackingTableAbsent:
             )
 
         assert result.exit_code == 2
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "warning" in data
         assert "tb_confiture" in data["warning"]
         # All migrations must be in pending list
@@ -224,7 +224,7 @@ class TestMigrateStatusTrackingTableAbsent:
                 ],
             )
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["pending"]) == 3
         for m in data["migrations"]:
             assert m["status"] == "pending"
@@ -330,7 +330,7 @@ class TestMigrateStatusTablePresentWithApplied:
             )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "001" in data["applied"]
         assert "002" in data["applied"]
         assert "003" in data["pending"]
@@ -498,7 +498,7 @@ class TestSemanticExitCodes:
             )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["pending"]) == 1
 
     def test_exit_code_2_json_format_table_absent(self, tmp_path):
@@ -529,7 +529,7 @@ class TestSemanticExitCodes:
             )
 
         assert result.exit_code == 2
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "warning" in data
 
 

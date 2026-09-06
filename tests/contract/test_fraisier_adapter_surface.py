@@ -345,7 +345,7 @@ def _read_report(result, report: Path) -> dict:
     """Read the JSON report file-first, then stdout — mirrors read_report_json."""
     if report.exists() and report.read_text().strip():
         return json.loads(report.read_text())
-    return json.loads(result.output)
+    return json.loads(result.stdout)
 
 
 def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path) -> None:

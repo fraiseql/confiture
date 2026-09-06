@@ -10,6 +10,7 @@ from confiture.cli.helpers import (
     _output_json,
     _output_yaml,
     console,
+    error_console,
     is_json,
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
@@ -335,6 +336,8 @@ def build(
                          --validate-comments, --fail-on-unclosed, --fail-on-spillover
         For applying seeds after build and controlling validation behavior
     """
+    # Progress lines go to stderr in JSON mode: stdout is the payload.
+    out = error_console if is_json(format_type) else console
     try:
         # Create schema builder
         builder = SchemaBuilder(env=env, project_dir=project_dir)
@@ -397,19 +400,19 @@ def build(
             ]
         )
         if overrides_applied:
-            console.print("[cyan]📝 Configuration overrides applied:[/cyan]")
+            out.print("[cyan]📝 Configuration overrides applied:[/cyan]")
             if two_pass is not None:
-                console.print(f"  • Two-pass FK emission: {two_pass}")
+                out.print(f"  • Two-pass FK emission: {two_pass}")
             if validate_comments is not None:
-                console.print(f"  • Comment validation: {validate_comments}")
+                out.print(f"  • Comment validation: {validate_comments}")
             if fail_on_unclosed is not None:
-                console.print(f"  • Fail on unclosed blocks: {fail_on_unclosed}")
+                out.print(f"  • Fail on unclosed blocks: {fail_on_unclosed}")
             if fail_on_spillover is not None:
-                console.print(f"  • Fail on spillover: {fail_on_spillover}")
+                out.print(f"  • Fail on spillover: {fail_on_spillover}")
             if separator_style is not None:
-                console.print(f"  • Separator style: {separator_style}")
+                out.print(f"  • Separator style: {separator_style}")
             if separator_template is not None:
-                console.print(
+                out.print(
                     f"  • Custom template: {separator_template[:50]}..."
                     if len(separator_template or "") > 50
                     else f"  • Custom template: {separator_template}"
@@ -445,7 +448,7 @@ def build(
         )
 
         # Build schema (with or without seeds)
-        console.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
+        out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
         # Import ProgressManager for progress tracking
         from confiture.core.progress import ProgressManager
@@ -468,14 +471,14 @@ def build(
                 schema = builder.build(output_path=output, progress=progress)
                 schema_file_count = len(sql_files)
 
-        console.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+        out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
 
         # Track seed files applied (will be updated if sequential)
         seed_files_applied = 0
 
         # Apply seeds sequentially if requested
         if apply_sequential:
-            console.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
+            out.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
 
             # Get database URL (from CLI or config)
             db_url = database_url or builder.env_config.database_url
@@ -523,9 +526,9 @@ def build(
                     )
 
                     seed_files_applied = result.succeeded
-                    console.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
+                    out.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
                     if result.failed > 0:
-                        console.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
+                        out.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
                         if not continue_on_error:
                             # fail() raises typer.Exit → the enclosing
                             # `except typer.Exit` closes the connection.
@@ -539,7 +542,7 @@ def build(
                                 output_file=report_output,
                             )
                 else:
-                    console.print("[yellow]⚠️  No seed files found[/yellow]")
+                    out.print("[yellow]⚠️  No seed files found[/yellow]")
 
                 connection.close()
             except typer.Exit:
@@ -624,11 +627,11 @@ def build(
             artifact_hash_str = artifact_result.artifact_hash
             if format_type == "text":
                 if artifact_result.skipped:
-                    console.print(
+                    out.print(
                         f"[cyan]📦 Artifact up-to-date (cache hit): {artifact_path_str}[/cyan]"
                     )
                 else:
-                    console.print(f"[green]📦 Artifact written: {artifact_path_str}[/green]")
+                    out.print(f"[green]📦 Artifact written: {artifact_path_str}[/green]")
 
         # Create and format build result
         from confiture.cli.formatters.build_formatter import format_build_result
@@ -652,9 +655,9 @@ def build(
 
         # Show next steps only for text format
         if format_type == "text":
-            console.print("\n💡 Next steps:")
-            console.print(f"  • Apply schema: psql -f {output}")
-            console.print("  • Or use: confiture migrate up")
+            out.print("\n💡 Next steps:")
+            out.print(f"  • Apply schema: psql -f {output}")
+            out.print("  • Or use: confiture migrate up")
 
     except typer.Exit:
         # An inner fail() already emitted its envelope and is exiting — let it
@@ -664,7 +667,7 @@ def build(
         # In text mode keep the human-friendly "run init" tip on stderr; the
         # envelope (json mode) carries the actionable hint instead.
         if not is_json(format_type):
-            console.print("\n💡 Tip: Run 'confiture init' to create project structure")
+            out.print("\n💡 Tip: Run 'confiture init' to create project structure")
         fail(
             SchemaError(
                 f"Schema source not found: {e}",

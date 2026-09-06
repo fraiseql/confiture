@@ -1297,8 +1297,14 @@ def _fix_ownership(
     from confiture.core.validation.config_loaders import load_ownership_expectation
 
     if not config_path.exists():
-        error_console.print(f"[red]❌ Config file not found: {config_path}[/red]")
-        raise SystemExit(2)
+        from confiture.cli.error_json import fail
+        from confiture.exceptions import ConfigurationError
+
+        fail(
+            ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004"),
+            json_mode=is_json(format_output),
+            output_file=output_file,
+        )
 
     config_data = load_config(config_path)
     expectation = load_ownership_expectation(config_data, config_path, require=False)
@@ -1340,7 +1346,23 @@ def _fix_ownership(
             preview.file.write_text(preview.after)
             modified.append(preview.file)
 
+    def _refuse() -> None:
+        from confiture.cli.error_json import fail
+        from confiture.exceptions import ValidationError
+
+        fail(
+            ValidationError(
+                f"Refused to rewrite {len(refused)} already-applied migration file(s).",
+                context={"refused": [{"file": str(f), "reason": r} for f, r in refused]},
+                resolution_hint="Pass --force to rewrite files whose version is already applied.",
+            ),
+            json_mode=is_json(format_output),
+            output_file=output_file,
+        )
+
     if format_output == "json":
+        if refused and not force:
+            _refuse()
         _output_json(
             {
                 "status": "preview" if dry_run else "fixed",
@@ -1358,8 +1380,6 @@ def _fix_ownership(
             output_file,
             console,
         )
-        if refused and not force:
-            raise SystemExit(2)
         return
 
     if not previews:
@@ -1379,7 +1399,7 @@ def _fix_ownership(
         for file_path, reason in refused:
             console.print(f"  [red]✗[/red] {file_path.name}: {reason}")
         if not force:
-            raise SystemExit(2)
+            _refuse()
 
 
 def _extract_version(filename: str) -> str | None:

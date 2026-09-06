@@ -299,7 +299,7 @@ def test_check_body_dry_run_json(tmp_path):
         )
 
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["status"] == "dry_run"
     assert data["body_drift_fixes_planned"] == 1
     assert len(data["body_drift_blocks"]) == 1
@@ -561,7 +561,7 @@ def test_apply_json_includes_body_fields(tmp_path):
         )
 
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["status"] == "applied"
     assert data["body_drift_fixes_applied"] == 1
     assert "public.my_fn(text)" in data["body_drift_applied"]
@@ -677,6 +677,6 @@ def test_apply_json_no_body_fields_without_flag(tmp_path):
         )
 
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert "body_drift_fixes_applied" not in data
     assert "remaining_body_drift" not in data
