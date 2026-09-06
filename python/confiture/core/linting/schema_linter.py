@@ -59,6 +59,9 @@ class LintReport:
     errors: list[LintViolation] = field(default_factory=list)
     warnings: list[LintViolation] = field(default_factory=list)
     info: list[LintViolation] = field(default_factory=list)
+    #: What the inventory read — the counts the JSON payload reports.
+    tables_checked: int = 0
+    columns_checked: int = 0
 
     @property
     def has_errors(self) -> bool:
@@ -238,6 +241,9 @@ class SchemaLinter:
                     suggested_fix="Fix the SQL syntax; rules cannot see past a parse error.",
                 )
             )
+
+        report.tables_checked = len(self._inventory.tables)
+        report.columns_checked = sum(len(t.columns) for t in self._inventory.tables)
 
         # Run configured checks
         if self.config.check_naming:

@@ -2091,6 +2091,58 @@ for the full cutover playbook and the column-mapping YAML format.
 
 ---
 
+## `confiture lint`
+
+Lint the schema DDL of an environment against the registered rules — naming,
+primary keys, documentation, duplicate definitions, security — and, opt-in,
+the tenant, replica and security-definer families. Rules are selected by code
+or family; see [lint-rules.md](lint-rules.md) for the catalogue and the
+[schema linting guide](../guides/schema-linting.md) for adoption with a baseline.
+
+### Usage
+
+```bash
+confiture lint [OPTIONS]
+```
+
+### Options
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--env` | `-e` | Text | `local` | Environment whose schema to lint |
+| `--project-dir` | - | Path | `.` | Project directory |
+| `--format` | - | Text | `table` | Output format: `table`, `json` or `csv` (JSON validates against `lint.schema.json`) |
+| `--output` | `-o` | Path | stdout | Write the json/csv report to a file |
+| `--fail-on-error` | - | Flag | on | Exit 1 when error-level findings exist |
+| `--fail-on-warning` | - | Flag | off | Exit 1 when warning-level findings exist |
+| `--select` | - | Text (repeatable) | the default set | Rules or families to run, comma-separated; `default` is the plain-lint set, so `--select default,replica` adds one family |
+| `--ignore` | - | Text (repeatable) | - | Rules or families to skip; applied after `--select`, so it always wins |
+| `--baseline` | - | Path | - | Compare against a baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear |
+| `--write-baseline` | - | Flag | off | Create or reset the `--baseline` file from the current findings |
+| `--list-rules` | - | Flag | off | Print the rule catalogue (code, family, severity, default/opt-in) and exit 0; honours `--format json` |
+| `--replica-safe` | - | Flag | off | Deprecated alias for `--select default,replica` |
+| `--migrations-dir` | - | Path | `db/migrations` | Migrations directory for `--replica-safe` |
+| `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant` |
+| `--check-security-definer` | - | Flag | off | Deprecated alias for `--select default,security-definer` |
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | No failing finding (info never fails; warnings only with `--fail-on-warning`); with `--baseline`, nothing new |
+| 1 | Findings at a failing severity — or, with `--baseline`, any finding the file does not know |
+| 2 | Usage error (`--write-baseline` without `--baseline`) |
+| 5 | Configuration error: unknown rule or family, missing or malformed baseline file (`CONFIG_012`) |
+
+### Examples
+
+```bash
+confiture lint --env production --format json
+confiture lint --select doc,build --ignore doc_002
+confiture lint --baseline .confiture-lint-baseline.json --write-baseline   # once
+confiture lint --baseline .confiture-lint-baseline.json                    # every run
+```
+
 ## `confiture drift`
 
 Compare the live database schema against expected DDL and/or the configured `acls:` block.

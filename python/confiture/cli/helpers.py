@@ -176,8 +176,8 @@ def _convert_linter_report(
     return LintReport(
         violations=violations,
         schema_name=schema_name,
-        tables_checked=0,  # Not tracked in linter
-        columns_checked=0,  # Not tracked in linter
+        tables_checked=linter_report.tables_checked,
+        columns_checked=linter_report.columns_checked,
         errors_count=len(linter_report.errors),
         warnings_count=len(linter_report.warnings),
         info_count=len(linter_report.info),
