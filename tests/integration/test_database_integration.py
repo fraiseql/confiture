@@ -43,7 +43,8 @@ class TestDriftDetectorIntegration:
         report = detector.compare_with_expected(expected)
 
         assert isinstance(report, DriftReport)
-        assert report.database_name == "confiture_test"
+        # Per-worker databases carry an xdist suffix; the report names the one we used.
+        assert report.database_name == db_connection.info.dbname
 
 
 class TestSchemaAnalyzerIntegration:

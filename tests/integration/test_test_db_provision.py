@@ -21,13 +21,16 @@ from confiture.core.schema_artifact import build_schema_artifact
 from confiture.core.temp_database import _maintenance_url
 from confiture.core.test_db import TemplateState, TestDbProvisioner
 from confiture.exceptions import ConfigurationError, SchemaError
+from confiture.testing.worker_db import resolve_worker_db_name
 
 pytestmark = pytest.mark.integration
 
 _SCHEMA = "CREATE TABLE widget (id int PRIMARY KEY, name text);"
 
-_TEMPLATE = "confiture_p2_template"
-_CLONE = "confiture_p2_clone"
+# Worker-suffixed so that `-n N` workers never provision or drop each other's
+# template and clones (the names are server-global).
+_TEMPLATE = resolve_worker_db_name("confiture_p2_template")
+_CLONE = resolve_worker_db_name("confiture_p2_clone")
 
 
 def _server_url() -> str:

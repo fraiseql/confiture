@@ -10,7 +10,7 @@ from confiture.models.migration import Migration
 class TestMigrationTransactionRollback:
     """Test transaction rollback on migration failure"""
 
-    def test_partial_migration_is_rolled_back(self, test_db_connection):
+    def test_partial_migration_is_rolled_back(self, clean_test_db):
         """Failed migration should rollback ALL changes, not partial"""
 
         class PartialFailureMigration(Migration):
@@ -31,17 +31,17 @@ class TestMigrationTransactionRollback:
                 self.execute("DROP TABLE IF EXISTS test_table1")
                 self.execute("DROP TABLE IF EXISTS test_table2")
 
-        migrator = Migrator(connection=test_db_connection)
+        migrator = Migrator(connection=clean_test_db)
         migrator.initialize()
 
-        migration = PartialFailureMigration(connection=test_db_connection)
+        migration = PartialFailureMigration(connection=clean_test_db)
 
         # Apply migration through migrator (should fail)
         with pytest.raises(MigrationError):
             migrator.apply(migration)
 
         # Verify NO tables were created (transaction rolled back)
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("""
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_name IN ('test_table1', 'test_table2')
@@ -51,7 +51,7 @@ class TestMigrationTransactionRollback:
         # Should be 0 (all rolled back)
         assert count == 0, "Partial migration should be rolled back completely"
 
-    def test_migrator_apply_rolls_back_on_failure(self, test_db_connection):
+    def test_migrator_apply_rolls_back_on_failure(self, clean_test_db):
         """Migrator.apply() should rollback both migration and tracking record"""
 
         class FailingMigration(Migration):
@@ -65,17 +65,17 @@ class TestMigrationTransactionRollback:
             def down(self):
                 pass
 
-        migrator = Migrator(connection=test_db_connection)
+        migrator = Migrator(connection=clean_test_db)
         migrator.initialize()
 
-        migration = FailingMigration(connection=test_db_connection)
+        migration = FailingMigration(connection=clean_test_db)
 
         # Apply migration (should fail)
         with pytest.raises(MigrationError):
             migrator.apply(migration)
 
         # Verify table was NOT created
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables

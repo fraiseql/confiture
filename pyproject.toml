@@ -150,6 +150,10 @@ pythonpath = ["python"]
 addopts = [
     "--strict-markers",
     "--tb=short",
+    # Under -n N, keep every test of a module on one worker: modules that create
+    # server-global objects (roles) reuse fixed names, and per-worker databases
+    # only isolate what lives inside a database.
+    "--dist=loadfile",
 ]
 markers = [
     "unit: Unit tests (no database required)",
