@@ -6,7 +6,6 @@ when no DATABASE_URL is available.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -15,11 +14,9 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def db_url() -> str:
-    url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        pytest.skip("DATABASE_URL not set — skipping integration tests")
-    return url
+def db_url(test_db_url: str) -> str:
+    """The shared test database (routing rule in tests/conftest.py)."""
+    return test_db_url
 
 
 @pytest.fixture
