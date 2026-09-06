@@ -115,10 +115,16 @@ class MigratorSession:
             )
 
         self._conn = _m.create_connection(url)
-        self._migrator = _m.Migrator(
-            connection=self._conn,
-            migration_table=migration_table,
-        )
+        try:
+            self._migrator = _m.Migrator(
+                connection=self._conn,
+                migration_table=migration_table,
+            )
+        except BaseException:
+            # A rejected tracking-table name must not leak the connection.
+            self._conn.close()
+            self._conn = None
+            raise
         return self
 
     def __exit__(

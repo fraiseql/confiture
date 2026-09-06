@@ -20,6 +20,7 @@ def mock_connection():
     conn = MagicMock()
     cursor = MagicMock()
     conn.cursor.return_value = cursor
+    cursor.__enter__.return_value = cursor
     return conn, cursor
 
 
@@ -188,7 +189,8 @@ class TestRunVerify:
     def test_sql_error_returns_failed(self, tmp_migrations, mock_connection):
         """SQL execution error should return failed status, not raise."""
         conn, cursor = mock_connection
-        cursor.execute.side_effect = [None, Exception("syntax error"), None]
+        # SAVEPOINT, the query (fails), ROLLBACK TO, RELEASE
+        cursor.execute.side_effect = [None, Exception("syntax error"), None, None]
 
         verify_file = tmp_migrations / "001_foo.verify.sql"
         verify_file.write_text("SELECT true")

@@ -210,34 +210,34 @@ def trigger_hook(
 
     hook_context = HookContext(phase=phase, data=context)
 
-    # Run async hook triggering in synchronous context
+    result = _run_coroutine(migrator.hook_registry.trigger(phase, hook_context))
+    if result.failed_count > 0:
+        logger.warning(
+            f"Hook execution failed for phase {phase}: {result.failed_count} hook(s) failed"
+        )
+
+
+def _run_coroutine(coro: Any) -> Any:
+    """Run *coro* to completion from synchronous code, whatever the loop state.
+
+    With no event loop running in this thread, a private loop runs it and is
+    closed again — the caller's current loop (if any) is never replaced. When
+    a loop *is* running (the migrator called from async code), the coroutine
+    runs on a worker thread with its own loop, so hooks fire instead of being
+    skipped. Hook failures propagate to the caller.
+    """
     import asyncio
+    from concurrent.futures import ThreadPoolExecutor
 
     try:
-        # Check if we're already in an event loop (e.g., during testing)
-        try:
-            loop = asyncio.get_running_loop()
-            # We're in an async context, skip hook triggering to avoid conflicts
-            logger.debug(f"Skipping hook triggering for {phase} due to running event loop")
-            return
-        except RuntimeError:
-            # No running loop, we can create one
-            pass
-
-        # Create new event loop for synchronous context
+        asyncio.get_running_loop()
+    except RuntimeError:
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(migrator.hook_registry.trigger(phase, hook_context))
-        if result.failed_count > 0:
-            logger.warning(
-                f"Hook execution failed for phase {phase}: {result.failed_count} hook(s) failed"
-            )
-    except Exception as e:
-        logger.error(f"Hook triggering failed for phase {phase}: {e}")
-        # Don't let hook failures break migrations
-    finally:
         try:
-            if "loop" in locals():
-                loop.close()
-        except Exception:
-            pass
+            return loop.run_until_complete(coro)
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="confiture-hooks") as pool:
+        return pool.submit(asyncio.run, coro).result()

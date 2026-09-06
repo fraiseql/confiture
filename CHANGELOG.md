@@ -67,6 +67,21 @@ engine; what it reports is what happened.
 
 ### Fixed
 
+- **Hooks fire from async code and fail loudly.** `trigger_hook` skipped every
+  hook when an event loop was already running, logged and swallowed every hook
+  failure, and left a closed loop installed as the current one. Hooks now run
+  on a worker thread with their own loop when a loop is running, on a private
+  loop otherwise (the caller's loop is never replaced), and a hook failing under
+  the default `FAIL_FAST` strategy raises `HookError` (`HookExecutionError` is
+  now a `HookError`) from the migration call.
+- **Three resource leaks.** `ProductionSyncer.__enter__` closes the source
+  connection when the target connection fails; `MigratorSession.__enter__`
+  closes the connection it just opened when the tracking-table name is
+  rejected; `MigrationVerifier.run_verify` uses a cursor context and
+  `RELEASE SAVEPOINT verify_check` after every `ROLLBACK TO`, so a long verify
+  run no longer accumulates savepoints. `sync_table` re-enables triggers only
+  when the target transaction is not already aborted, so the original error is
+  the one reported.
 - **Names are identifiers in `large_tables` and `run_against`.** Every table,
   column, index and access-method name `BatchedMigration`, `OnlineIndexBuilder`
   and `TableSizeEstimator` put into SQL was f-string interpolated; so were
