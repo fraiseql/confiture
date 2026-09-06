@@ -62,6 +62,41 @@ Aside from `hints` population, schemas are additive — new optional fields
 may appear in patch releases, but documented `required` fields will not
 change without a top-level version bump.
 
+## Timing vocabulary
+
+Every duration a payload carries is an integer number of milliseconds under a
+key ending in `_ms`. The migrate family uses two words: `total_duration_ms` for
+the whole run and `duration_ms` for each applied item. Build, lint and the CTE
+debugger emit `execution_time_ms`; the drift reports emit `detection_time_ms`.
+Five models keep an older attribute name behind their wire key
+(`total_execution_time_ms` serializes as `total_duration_ms`,
+`MigrationApplied.execution_time_ms` as `duration_ms`). The table below is the
+one mapping from attribute to key; `tests/unit/json_schemas/test_timing_vocabulary.py`
+derives the same rows from every `to_dict()` in the package and from every
+`*_ms` property in the shipped schemas, so a new timing key, a renamed
+attribute or a stale row fails the build. The JSON keys are the contract; the
+attribute names are scheduled to follow them at 1.0.0.
+
+| Model | Attribute | JSON key | Where it appears |
+|---|---|---|---|
+| `confiture.models.results.MigrateUpResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate up --format json` ([`migrate-up.schema.json`](json-schemas/migrate-up.schema.json)) |
+| `confiture.models.results.MigrationApplied` | `execution_time_ms` | `duration_ms` | `migrate up` — each `applied[]` item |
+| `confiture.models.results.MigrateDownResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate down --format json` |
+| `confiture.models.results.MigrateRebuildResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate rebuild --format json` |
+| `confiture.models.results.MigrateReinitResult` | `total_execution_time_ms` | `total_duration_ms` | library result of `MigratorSession.reinit()` (text output only) |
+| `confiture.models.results.BuildResult` | `execution_time_ms` | `execution_time_ms` | `build --format json` ([`build.schema.json`](json-schemas/build.schema.json)) |
+| `confiture.models.results.SplitBuildResult` | `execution_time_ms` | `execution_time_ms` | library result of the split build |
+| `confiture.models.results.PreflightAgainstMigration` | `execution_time_ms` | `execution_time_ms` | library result of `run_against()`; the CLI prints it as text |
+| `confiture.models.lint.LintReport` | `execution_time_ms` | `execution_time_ms` | `lint --format json` ([`lint.schema.json`](json-schemas/lint.schema.json)) |
+| `confiture.models.debug_models.CTEStepResult` | `execution_time_ms` | `execution_time_ms` | `debug cte --format json` |
+| `confiture.core.drift.DriftReport` | `detection_time_ms` | `detection_time_ms` | `drift --format json` ([`drift.schema.json`](json-schemas/drift.schema.json)) |
+| `confiture.core.function_signature_drift.FunctionSignatureDriftReport` | `detection_time_ms` | `detection_time_ms` | `migrate validate --check-signatures --format json` |
+| `confiture.core.function_body_drift.FunctionBodyDriftReport` | `detection_time_ms` | `detection_time_ms` | `migrate validate --check-body` (`body_drift`) |
+| `confiture.core.view_body_drift.ViewBodyDriftReport` | `detection_time_ms` | `detection_time_ms` | `migrate validate --check-body-views` (`view_body_drift`) |
+| `confiture.core.schema_analyzer.ValidationResult` | `validation_time_ms` | `validation_time_ms` | library result of `SchemaAnalyzer.validate()` |
+| `confiture.core.rollback_generator.RollbackTestResult` | `duration_ms` | `duration_ms` | library only (rollback generator) |
+| `confiture.integrations.pggit.coordination.models.Intent` | `estimated_duration_ms` | `estimated_duration_ms` | `coordinate` subcommands (`intent`, `intents[]`) |
+
 ---
 
 ## Schemas by command
