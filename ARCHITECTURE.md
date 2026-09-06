@@ -46,30 +46,41 @@ Confiture is a modern PostgreSQL migration tool with **four distinct mediums** f
 
 #### 1.1 Entry Point
 
-- **`main.py`** (166 lines) — App setup only. Creates the `app` Typer instance, registers sub-apps (`migrate`, `branch`, `generate`, `coordinate`, `seed`), and attaches all command functions imported from command modules. Contains no business logic.
+- **`main.py`** — App setup only. Creates the `app` Typer instance, registers sub-apps (`migrate`, `branch`, `generate`, `coordinate`, `seed`), and attaches all command functions imported from command modules. Contains no business logic.
 
-#### 1.2 Shared Helpers (`helpers.py`, 418 lines)
+#### 1.2 Shared Helpers (`helpers.py`, ≤600 lines, guarded)
 
 Central module providing utilities shared across all command modules:
 - `console` / `error_console` — Rich consoles for stdout and stderr
-- `_output_json()` / `_output_yaml()` — structured output helpers
+- `_output_json()` / `_output_yaml()` — structured output helpers; `is_json()` collapses the varied `--format` parameter names to the one boolean the error boundary needs
 - `_get_tracking_table()` — safely extracts `migration.tracking_table` from `Environment`, dict, or MagicMock
-- `_get_suggestion()` — "Did you mean?" suggestions via difflib
+- `_resolve_config()`, `_emit_hint()`, `_get_suggestion()` — config path resolution, stderr hints, "Did you mean?" suggestions
 - `_convert_linter_report()` — linter report type conversion
-- `_find_orphaned_sql_files()`, `_validate_idempotency()`, `_fix_idempotency()` — migration hygiene helpers
-- `_print_duplicate_versions_warning()`, `_print_orphaned_files_warning()` — warning printers
+- `_find_orphaned_sql_files()`, `_print_duplicate_versions_warning()`, `_print_orphaned_files_warning()` — migration hygiene printers
+- `_query_applied_versions()` — best-effort read of the ledger for the idempotency fixer
+
+The heavier concerns live beside it, each a leaf that imports *from* `helpers.py`:
+- **`options.py`** — `format_option(*allowed)`: the one `--format` validator (Click callback → `fail(ValidationError)`, exit 5, stderr)
+- **`error_json.py`** — `fail()` and `@cli_boundary`: the one error boundary (`typer.Exit` crosses it; everything else becomes a `ConfiturError` envelope)
+- **`dsn.py`** — `resolve_database_url()`, `param_is_explicit()`, `config_is_explicit()`, `has_intentional_dsn_source()` and the option help: the #152 DSN precedence contract
+- **`idempotency.py`** — `migrate validate --idempotent` / `migrate fix --idempotent`: git scoping, reporting, fixing
+- **`ownership.py`** — `migrate fix --ownership`
+- **`dry_run_summary.py`** — the dry-run payload built from the real change-set classification and PostgreSQL's row statistics
 
 #### 1.3 Command Modules (`commands/`)
 
-Each module registers with `migrate_app` or `app` in `main.py`. No module contains shared state.
+Each module registers with `migrate_app` or `app` in `main.py`. No module contains shared state. Two AST guards
+hold the shape: no CLI function body exceeds 150 lines (`tests/unit/cli/test_function_size_budget.py`) and no
+CLI module reaches into a `_private` attribute of a core object (`tests/unit/cli/test_no_private_reach_in.py`).
 
-| Module | Commands | Lines |
-|--------|----------|-------|
-| `commands/schema.py` | `init`, `build`, `lint`, `introspect` | 733 |
-| `commands/migrate_core.py` | `migrate status`, `migrate up`, `migrate down`, `migrate generate` | 1635 |
-| `commands/migrate_state.py` | `migrate baseline`, `migrate reinit`, `migrate rebuild` | 522 |
-| `commands/migrate_analysis.py` | `migrate diff`, `migrate validate`, `migrate fix`, `migrate introspect`, `migrate verify` | 860 |
-| `commands/admin.py` | `install-helpers`, `validate_profile`, `verify`, `restore` | 379 |
+| Module | Commands |
+|--------|----------|
+| `commands/schema.py` | `init`, `build`, `lint`, `introspect` |
+| `commands/migrate/{up,down,status,generate,current,estimate}.py` | `migrate up/down/status/generate/current/estimate` |
+| `commands/migrate/{baseline,reinit,rebuild}.py` | `migrate baseline/reinit/rebuild` |
+| `commands/migrate/{diff,validate,fix,fix_signatures,introspect,verify,preflight}.py` | `migrate diff/validate/fix/fix-signatures/introspect/verify/preflight` |
+| `commands/migrate/_settings.py`, `_dry_run_render.py` | shared by the `migrate` commands: validated `migration:` settings, dry-run rendering |
+| `commands/admin.py` | `install-helpers`, `validate_profile`, `verify-checksums`, `restore` |
 
 #### 1.4 Additional CLI Modules
 
@@ -77,7 +88,7 @@ Each module registers with `migrate_app` or `app` in `main.py`. No module contai
 - **`coordinate.py`** — `coordinate` subcommand group (multi-agent coordination)
 - **`seed.py`** — `seed` subcommand group (seed validation)
 - **`generate.py`** — `generate` subcommand group (migration generation)
-- **`dry_run.py`** — Dry-run UI helpers (`display_dry_run_header`, `save_text_report`, `save_json_report`, `ask_dry_run_execute_confirmation`, `extract_sql_statements_from_migration`)
+- **`dry_run.py`** — Dry-run UI helpers (`display_dry_run_header`, `save_text_report`, `save_json_report`, `ask_dry_run_execute_confirmation`)
 - **`git_validation.py`** — Pre-commit git validation helpers
 
 #### 1.5 Formatters (`formatters/`)

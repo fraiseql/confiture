@@ -10,13 +10,10 @@ from pathlib import Path
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import (
-    _fix_idempotency,
-    _fix_ownership,
-    console,
-    is_json,
-)
+from confiture.cli.helpers import console, is_json
+from confiture.cli.idempotency import _fix_idempotency
 from confiture.cli.options import format_option
+from confiture.cli.ownership import _fix_ownership
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 

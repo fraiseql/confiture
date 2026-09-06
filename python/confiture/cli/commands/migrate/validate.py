@@ -15,14 +15,9 @@ from confiture.cli.commands.validate_checks import (
     build_registry,
     validate_flag_dependencies,
 )
+from confiture.cli.dsn import param_is_explicit
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import (
-    _output_json,
-    _resolve_config,
-    console,
-    is_json,
-    param_is_explicit,
-)
+from confiture.cli.helpers import _output_json, _resolve_config, console, is_json
 from confiture.cli.options import format_option
 from confiture.core.validation.context import ValidationContext
 from confiture.core.validation.registry import (

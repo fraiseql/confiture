@@ -65,4 +65,4 @@ def test_cli_module_has_no_apply_loop(path: Path) -> None:
 
 
 def test_guard_sees_the_cli_package() -> None:
-    assert any(p.name == "migrate_core.py" for p in CLI_FILES)
+    assert any(p.name == "up.py" for p in CLI_FILES)

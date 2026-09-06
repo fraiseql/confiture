@@ -5,14 +5,15 @@ Split out of the monolithic migrate command modules (Phase 04, Cycle 8).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import typer
 
+from confiture.cli.dsn import NO_CONFIG_OPTION_HELP
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
-    NO_CONFIG_OPTION_HELP,
     _emit_hint,
     _get_tracking_table,
     _output_json,
@@ -559,15 +560,9 @@ def migrate_preflight(
         - default: migrate-preflight.schema.json
         - with --against: migrate-preflight-against.schema.json
     """
-    from rich.table import Table
-
     from confiture.core.change_set import build_change_set
     from confiture.core.linting.libraries.replica import replica_preflight_issues
-    from confiture.core.preflight import (
-        is_window_safe,
-        preflight_exit_code,
-        run_preflight,
-    )
+    from confiture.core.preflight import preflight_exit_code, run_preflight
 
     if check_dependents not in {"off", "fail", "warn"}:
         error_console.print(
@@ -579,109 +574,233 @@ def migrate_preflight(
     result = run_preflight(migrations_dir)
 
     if against is None:
-        # Backward-compatible path: flat output, no --against execution.
-        dependent_skip_payload: dict[str, Any] | None = None
+        _static_preflight(
+            result,
+            migrations_dir=migrations_dir,
+            config=config,
+            env=env,
+            check_dependents=check_dependents,
+            strict=strict,
+            format_type=format_type,
+            output_file=output_file,
+        )
+        return
+
+    # --against path: static analysis + exhaustive execution against preflight DB.
+    pending_files = _against_pending_files(
+        ctx,
+        migrations_dir=migrations_dir,
+        config=config,
+        env=env,
+        since=since,
+        database_url=database_url,
+        no_config=no_config,
+        format_type=format_type,
+        output_file=output_file,
+    )
+    # Resolved once and threaded through the override, the probe and the hint
+    # (#190) — three sites that previously each spelled the default by hand.
+    target_tracking_table = _preflight_tracking_table(config)
+    run = _run_against(
+        pending_files,
+        migrations_dir=migrations_dir,
+        against=against,
+        tracking_table=target_tracking_table,
+        allow_non_transactional=allow_non_transactional,
+        format_type=format_type,
+        output_file=output_file,
+    )
+    dependent_report = None
+    if check_dependents != "off":
+        dependent_report = _run_dependent_check(
+            mode=check_dependents,
+            pending_files=pending_files,
+            migrations_dir=migrations_dir,
+            against_url=against,
+        )
+    if run.tracking_empty and pending_files:
+        _state = "is empty" if run.tracking_exists else "is missing"
+        _emit_hint(
+            f"`{target_tracking_table}` on the target {_state}. If --against points "
+            "at a restored backup, was the tracking table dropped during "
+            "anonymization?",
+            # The unified --against envelope (#151) has no `hints` array; in
+            # text mode this still prints the breadcrumb to stderr.
+            hints_list=[],
+            format_=format_type,
+        )
+
+    # #151: unified {ok, summary, issues[]} envelope — same shape as the
+    # no-`--against` path. Replay failures join the static + replica findings;
+    # run-level metadata (db_consumed) rides in `summary`.
+    _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
+    replica_issues = replica_preflight_issues(
+        migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
+    )
+    all_issues = result.issues + replica_issues + run.result.replay_issues
+    summary = _preflight_summary(
+        all_issues,
+        migrations_checked=len(run.result.migrations),
+        db_consumed=run.result.db_consumed,
+    )
+    exit_code = preflight_exit_code(summary, strict=strict)
+    # #199: the same change set as the no-`--against` path, plus the refinements
+    # the target database made possible (current column types, server version).
+    change_set = build_change_set(migrations_dir, facts=run.facts)
+    if format_type == "json":
+        payload = _preflight_payload(all_issues, summary, change_set, exit_code)
+        if dependent_report is not None:
+            payload["dependent_analysis"] = dependent_report.to_dict()
+        _output_json(payload, output_file, console)
+    else:
+        _display_against_result(run.result, format_type, console)
+        _display_change_set(change_set, console)
+        if dependent_report is not None:
+            _display_dependent_analysis(dependent_report, console)
+    if exit_code:
+        raise typer.Exit(exit_code)
+    if dependent_report is not None and dependent_report.has_blocking():
+        raise typer.Exit(1)
+
+
+def _preflight_summary(all_issues: list[Any], **counts: Any) -> dict[str, Any]:
+    return {
+        "errors": sum(1 for i in all_issues if i.severity in ("error", "critical")),
+        "warnings": sum(1 for i in all_issues if i.severity == "warning"),
+        "info": sum(1 for i in all_issues if i.severity == "info"),
+        **counts,
+    }
+
+
+def _preflight_payload(
+    all_issues: list[Any], summary: dict[str, Any], change_set: Any, exit_code: int
+) -> dict[str, Any]:
+    from confiture.core.preflight import is_window_safe
+
+    return {
+        "ok": exit_code == 0,
+        # #154: top-level typed blue-green window-safety verdict — the whole
+        # safety contract for the consumer (folds in replica-unsafe ops,
+        # unreadable .py migrations, and the down path).
+        "window_safe": is_window_safe(all_issues),
+        "summary": summary,
+        "issues": [i.to_dict() for i in all_issues],
+        # #197: per-change risk tiers. The object wrapper is load-bearing —
+        # an empty `changes` means "classified, nothing to change", while an
+        # absent `change_set` means "did not classify" and denies.
+        "change_set": change_set.to_dict(),
+    }
+
+
+def _static_preflight(
+    result: Any,
+    *,
+    migrations_dir: Path,
+    config: Path,
+    env: str | None,
+    check_dependents: str,
+    strict: bool,
+    format_type: str,
+    output_file: Path | None,
+) -> None:
+    """No ``--against``: static findings only, flat output."""
+    from confiture.core.change_set import build_change_set
+    from confiture.core.linting.libraries.replica import replica_preflight_issues
+    from confiture.core.preflight import preflight_exit_code
+
+    # #148 structured report + #139 replica-safety: merge the base preflight
+    # issues with the replica-forward-compat findings (PFLIGHT_REPLICA_*).
+    has_replicas, replica_bypass = _preflight_replica_policy(config, env)
+    replica_issues = replica_preflight_issues(
+        migrations_dir, has_replicas=has_replicas, bypass=replica_bypass
+    )
+    all_issues = result.issues + replica_issues
+    summary = _preflight_summary(all_issues, migrations_checked=len(result.migrations))
+    exit_code = preflight_exit_code(summary, strict=strict)
+    change_set = build_change_set(migrations_dir)
+    if format_type == "json":
+        payload = _preflight_payload(all_issues, summary, change_set, exit_code)
         if check_dependents != "off":
-            dependent_skip_payload = {
+            payload["dependent_analysis"] = {
                 "status": "skipped",
                 "entries": [],
                 "has_blocking": False,
                 "skip_reason": "no_preflight_db",
             }
+        _output_json(payload, output_file, console)
+    else:
+        _render_static_preflight(result, summary, change_set, all_issues, check_dependents)
+    if exit_code:
+        raise typer.Exit(exit_code)
 
-        # #148 structured report + #139 replica-safety: merge the base preflight
-        # issues with the replica-forward-compat findings (PFLIGHT_REPLICA_*).
-        _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
-        replica_issues = replica_preflight_issues(
-            migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
-        )
-        all_issues = result.issues + replica_issues
-        summary = {
-            "errors": sum(1 for i in all_issues if i.severity in ("error", "critical")),
-            "warnings": sum(1 for i in all_issues if i.severity == "warning"),
-            "info": sum(1 for i in all_issues if i.severity == "info"),
-            "migrations_checked": len(result.migrations),
-        }
-        exit_code = preflight_exit_code(summary, strict=strict)
-        change_set = build_change_set(migrations_dir)
 
-        if format_type == "json":
-            payload = {
-                "ok": exit_code == 0,
-                # #154: top-level typed blue-green window-safety verdict — the whole
-                # safety contract for the consumer (folds in replica-unsafe ops,
-                # unreadable .py migrations, and the down path).
-                "window_safe": is_window_safe(all_issues),
-                "summary": summary,
-                "issues": [i.to_dict() for i in all_issues],
-                # #197: per-change risk tiers. The object wrapper is load-bearing —
-                # an empty `changes` means "classified, nothing to change", while an
-                # absent `change_set` means "did not classify" and denies.
-                "change_set": change_set.to_dict(),
-            }
-            if dependent_skip_payload is not None:
-                payload["dependent_analysis"] = dependent_skip_payload
-            _output_json(payload, output_file, console)
-            if exit_code:
-                raise typer.Exit(exit_code)
-            return
+def _render_static_preflight(
+    result: Any, summary: dict[str, Any], change_set: Any, issues: list[Any], check_dependents: str
+) -> None:
+    from rich.table import Table
 
-        table = Table(title="Pre-flight Check")
-        table.add_column("Version", style="cyan")
-        table.add_column("Name")
-        table.add_column("Reversible", justify="center")
-        table.add_column("Transactional", justify="center")
-
-        for m in result.migrations:
-            rev = "[green]✓[/green]" if m.reversible else "[red]✗[/red]"
-            if m.fully_transactional:
-                txn = "[green]✓[/green]"
-            else:
-                txn = "[red]✗[/red] " + "; ".join(m.non_transactional_statements)
-            table.add_row(m.version, m.name, rev, txn)
-
-        console.print(table)
+    table = Table(title="Pre-flight Check")
+    table.add_column("Version", style="cyan")
+    table.add_column("Name")
+    table.add_column("Reversible", justify="center")
+    table.add_column("Transactional", justify="center")
+    for m in result.migrations:
+        rev = "[green]✓[/green]" if m.reversible else "[red]✗[/red]"
+        if m.fully_transactional:
+            txn = "[green]✓[/green]"
+        else:
+            txn = "[red]✗[/red] " + "; ".join(m.non_transactional_statements)
+        table.add_row(m.version, m.name, rev, txn)
+    console.print(table)
+    console.print(
+        f"\nSummary: {summary['migrations_checked']} migration(s) checked, "
+        f"{summary['errors']} error(s), {summary['warnings']} warning(s)"
+    )
+    _display_change_set(change_set, console)
+    if not issues:
+        console.print("  [green]✓ No issues[/green]")
+    for issue in issues:
+        color = "red" if issue.severity == "error" else "yellow"
         console.print(
-            f"\nSummary: {summary['migrations_checked']} migration(s) checked, "
-            f"{summary['errors']} error(s), {summary['warnings']} warning(s)"
+            f"  [{color}]{issue.severity.upper()}[/{color}] {issue.code}: {issue.message}"
         )
-        _display_change_set(change_set, console)
+        if issue.actionable:
+            console.print(f"    [dim]💡 {issue.actionable}[/dim]")
+    if check_dependents != "off":
+        console.print(
+            "[yellow]⚠️  Dependent check skipped: no preflight DB configured. "
+            "Pass --against <url> to enable.[/yellow]"
+        )
 
-        issues = all_issues
-        if not issues:
-            console.print("  [green]✓ No issues[/green]")
-        for issue in issues:
-            color = "red" if issue.severity == "error" else "yellow"
-            console.print(
-                f"  [{color}]{issue.severity.upper()}[/{color}] {issue.code}: {issue.message}"
-            )
-            if issue.actionable:
-                console.print(f"    [dim]💡 {issue.actionable}[/dim]")
 
-        if check_dependents != "off":
-            console.print(
-                "[yellow]⚠️  Dependent check skipped: no preflight DB configured. "
-                "Pass --against <url> to enable.[/yellow]"
-            )
+def _against_pending_files(
+    ctx: typer.Context,
+    *,
+    migrations_dir: Path,
+    config: Path,
+    env: str | None,
+    since: str | None,
+    database_url: str | None,
+    no_config: bool,
+    format_type: str,
+    output_file: Path | None,
+) -> list[Path]:
+    """The pending set to replay, under the #152 DSN-precedence contract.
 
-        if exit_code:
-            raise typer.Exit(exit_code)
-        return
-
-    # --against path: static analysis + exhaustive execution against preflight DB.
+    A ``--database-url`` flag, ``--no-config``, an explicit ``--config``/``--env``,
+    or the canonical ``CONFITURE_DATABASE_URL`` drive a tracking-DB connect; a
+    merely-ambient ``DATABASE_URL`` must NOT silently flip "``--against`` alone →
+    all local files" into a tracking-DB connect. Two explicit sources fail loud
+    (CONFIG_007).
+    """
     try:
-        from confiture.cli.helpers import (  # noqa: PLC0415
+        from confiture.cli.dsn import (
             config_is_explicit,
             has_intentional_dsn_source,
             resolve_database_url,
         )
 
-        # Pending-detection DSN under the #152 contract: a --database-url flag,
-        # --no-config, an explicit --config/--env, or the canonical
-        # CONFITURE_DATABASE_URL drive a tracking-DB connect; a merely-ambient
-        # DATABASE_URL must NOT silently flip "--against alone → all local files"
-        # into a tracking-DB connect. Two explicit sources fail loud (CONFIG_007).
-        pending_files = _resolve_preflight_pending(
+        return _resolve_preflight_pending(
             migrations_dir=migrations_dir,
             config_path=config,
             env_name=env,
@@ -717,27 +836,44 @@ def migrate_preflight(
             output_file=output_file,
         )
 
+
+@dataclass(frozen=True)
+class _AgainstRun:
+    result: Any
+    facts: SchemaFacts
+    tracking_exists: bool
+    tracking_empty: bool
+
+
+def _run_against(
+    pending_files: list[Path],
+    *,
+    migrations_dir: Path,
+    against: str,
+    tracking_table: str,
+    allow_non_transactional: bool,
+    format_type: str,
+    output_file: Path | None,
+) -> _AgainstRun:
+    """Replay the pending set against the preflight database."""
     target_tracking_empty = False
     target_tracking_exists = True
     # Empty unless the --against connection yields facts (#199).
     schema_facts = SchemaFacts()
-    # Resolved once and threaded through the override, the probe and the hint
-    # (#190) — three sites that previously each spelled the default by hand.
-    target_tracking_table = _preflight_tracking_table(config)
     try:
         session = MigratorSession(
             config=None,
             migrations_dir=migrations_dir,
             database_url_override=against,
-            migration_table_override=target_tracking_table,
+            migration_table_override=tracking_table,
         )
         with session:
-            # Snapshot whether the target's tracking table is empty BEFORE
-            # the SAVEPOINT-bounded run_against — used to emit a
-            # quiet-success hint when the target looks like a restored
-            # backup with the tracking table stripped.
+            # Snapshot whether the target's tracking table is empty BEFORE the
+            # SAVEPOINT-bounded run_against — used to emit a quiet-success hint
+            # when the target looks like a restored backup with the tracking
+            # table stripped.
             target_tracking_exists, target_tracking_empty = _target_tracking_table_state(
-                session, target_tracking_table
+                session, tracking_table
             )
             # #199: read the current column types and server version BEFORE the
             # replay, so `ALTER COLUMN … TYPE` can be reasoned about as widening
@@ -762,70 +898,4 @@ def migrate_preflight(
             json_mode=is_json(format_type),
             output_file=output_file,
         )
-
-    dependent_report = None
-    if check_dependents != "off":
-        dependent_report = _run_dependent_check(
-            mode=check_dependents,
-            pending_files=pending_files,
-            migrations_dir=migrations_dir,
-            against_url=against,
-        )
-
-    if target_tracking_empty and pending_files:
-        _state = "is empty" if target_tracking_exists else "is missing"
-        _emit_hint(
-            f"`{target_tracking_table}` on the target {_state}. If --against points "
-            "at a restored backup, was the tracking table dropped during "
-            "anonymization?",
-            # The unified --against envelope (#151) has no `hints` array; in
-            # text mode this still prints the breadcrumb to stderr.
-            hints_list=[],
-            format_=format_type,
-        )
-
-    # #151: unified {ok, summary, issues[]} envelope — same shape as the
-    # no-`--against` path. Replay failures join the static + replica findings;
-    # run-level metadata (db_consumed) rides in `summary`.
-    _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
-    replica_issues = replica_preflight_issues(
-        migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
-    )
-    all_issues = result.issues + replica_issues + against_result.replay_issues
-    summary = {
-        "errors": sum(1 for i in all_issues if i.severity in ("error", "critical")),
-        "warnings": sum(1 for i in all_issues if i.severity == "warning"),
-        "info": sum(1 for i in all_issues if i.severity == "info"),
-        "migrations_checked": len(against_result.migrations),
-        "db_consumed": against_result.db_consumed,
-    }
-    exit_code = preflight_exit_code(summary, strict=strict)
-
-    change_set = build_change_set(migrations_dir, facts=schema_facts)
-
-    if format_type == "json":
-        payload: dict[str, Any] = {
-            "ok": exit_code == 0,
-            # #154: same top-level typed window-safety verdict as the no-`--against` path.
-            "window_safe": is_window_safe(all_issues),
-            "summary": summary,
-            "issues": [i.to_dict() for i in all_issues],
-            # #197: the same change set as the no-`--against` path, plus the
-            # #199 refinements the target database made possible (current column
-            # types, server version). Absent those, byte-identical to the static
-            # path.
-            "change_set": change_set.to_dict(),
-        }
-        if dependent_report is not None:
-            payload["dependent_analysis"] = dependent_report.to_dict()
-        _output_json(payload, output_file, console)
-    else:
-        _display_against_result(against_result, format_type, console)
-        _display_change_set(change_set, console)
-        if dependent_report is not None:
-            _display_dependent_analysis(dependent_report, console)
-
-    if exit_code:
-        raise typer.Exit(exit_code)
-    if dependent_report is not None and dependent_report.has_blocking():
-        raise typer.Exit(1)
+    return _AgainstRun(against_result, schema_facts, target_tracking_exists, target_tracking_empty)

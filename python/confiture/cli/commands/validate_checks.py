@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from confiture.cli.helpers import _validate_idempotency, console
+from confiture.cli.helpers import console
+from confiture.cli.idempotency import _validate_idempotency
 from confiture.core.validation.registry import CheckOutcome, ValidationCheck
 from confiture.exceptions import ConfigurationError, GitError
 
@@ -285,7 +286,7 @@ def _resolve_grant_dir(opts: ValidateOptions, ctx: ValidationContext) -> str:
 
 
 def _run_list_patterns(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.commands.migrate_analysis import _pattern_catalog_payload
+    from confiture.cli.commands.migrate.validate import _pattern_catalog_payload
 
     return CheckOutcome("list_patterns", passed=True, payload=_pattern_catalog_payload(opts))
 

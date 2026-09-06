@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from confiture.cli.helpers import resolve_database_url
+from confiture.cli.dsn import resolve_database_url
 from confiture.exceptions import ConfigurationError
 
 
@@ -200,21 +200,21 @@ class _FakeCtx:
 
 
 def test_config_is_explicit_detects_explicit_env() -> None:
-    from confiture.cli.helpers import config_is_explicit
+    from confiture.cli.dsn import config_is_explicit
 
     ctx = _FakeCtx({"config": _Src("DEFAULT"), "env": _Src("COMMANDLINE")})
     assert config_is_explicit(ctx) is True
 
 
 def test_config_is_explicit_false_when_all_defaulted() -> None:
-    from confiture.cli.helpers import config_is_explicit
+    from confiture.cli.dsn import config_is_explicit
 
     ctx = _FakeCtx({"config": _Src("DEFAULT"), "env": _Src("DEFAULT_MAP")})
     assert config_is_explicit(ctx) is False
 
 
 def test_config_is_explicit_detects_explicit_config() -> None:
-    from confiture.cli.helpers import config_is_explicit
+    from confiture.cli.dsn import config_is_explicit
 
     ctx = _FakeCtx({"config": _Src("COMMANDLINE")})  # command with no "env" param
     assert config_is_explicit(ctx) is True

@@ -5,27 +5,30 @@ Split out of the monolithic migrate command modules (Phase 04, Cycle 8).
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import typer
 
 from confiture.cli.commands.migrate._settings import _effective_rebuild_threshold
-from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import (
+from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
+    config_is_explicit,
+    has_intentional_dsn_source,
+    resolve_database_url,
+)
+from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.helpers import (
     _emit_hint,
     _find_orphaned_sql_files,
     _get_tracking_table,
     _output_json,
     _print_duplicate_versions_warning,
     _print_orphaned_files_warning,
-    config_is_explicit,
     console,
     error_console,
-    has_intentional_dsn_source,
-    resolve_database_url,
 )
 from confiture.cli.options import format_option
 from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
@@ -118,371 +121,397 @@ def migrate_status(
       confiture migrate down     - Rollback applied migrations
       confiture migrate generate - Create new migration
     """
-    tracking_table_absent_exit: bool = False
-    pending_migrations_exit: bool = False
-    fatal_error_exit: bool = False
+    if not migrations_dir.exists():
+        _report_missing_migrations_dir(migrations_dir, output_format, output_file)
+        return
+    migration_files = discover_migration_files(migrations_dir)
+    orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
+    from confiture.core.migrator import find_duplicate_migration_versions as _status_find
+
+    duplicate_versions = _status_find(migrations_dir)
+    if not migration_files:
+        _report_no_migrations(orphaned_sql_files, output_format, output_file)
+        return
+
     try:
-        # Validate output format
-
-        if not migrations_dir.exists():
-            if output_format == "json":
-                # The status payload shape, empty, with the situation as its warning —
-                # not a hand-built error envelope (exit 0: nothing is wrong with the DB).
-                _output_json(
-                    {
-                        "tracking_table": None,
-                        "resolved_table": None,
-                        "applied": [],
-                        "pending": [],
-                        "current": None,
-                        "total": 0,
-                        "migrations": [],
-                        "summary": {"applied": 0, "pending": 0, "total": 0},
-                        "hints": [],
-                        "warning": f"Migrations directory not found: {migrations_dir.absolute()}",
-                    },
-                    output_file,
-                    console,
-                )
-            else:
-                console.print("[yellow]No migrations directory found.[/yellow]")
-                console.print(f"Expected: {migrations_dir.absolute()}")
-            return
-
-        # Find migration files (both Python and SQL)
-        migration_files = discover_migration_files(migrations_dir)
-
-        # Check for orphaned SQL files that don't match the naming pattern
-        orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
-
-        # Check for duplicate migration versions (warning only)
-        from confiture.core.migrator import find_duplicate_migration_versions as _status_find
-
-        duplicate_versions = _status_find(migrations_dir)
-
-        if not migration_files:
-            if output_format == "json":
-                result = {
-                    "applied": [],
-                    "pending": [],
-                    "current": None,
-                    "total": 0,
-                    "migrations": [],
-                    "hints": [],
-                }
-                if orphaned_sql_files:
-                    result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
-                _output_json(result, output_file, console)
-            else:
-                console.print("[yellow]No migrations found.[/yellow]")
-                if orphaned_sql_files:
-                    _print_orphaned_files_warning(orphaned_sql_files, console)
-            return
-
-        # Get applied migrations from database if a connection source is given.
-        # Precedence (#140): --database-url / env override > --config file.
-        applied_versions: set[str] = set()
-        applied_at_by_version: dict[str, Any] = {}
-        db_error: str | None = None
-        tracking_table_absent: bool = False
-        status_tracking_table: str | None = None
-        # What the configured name actually resolved to for this session, and
-        # (when it did not) where a relation of that name does live (#188).
-        status_resolved_table: str | None = None
-        ledger_elsewhere: list[str] = []
-        # status connects only on an *intentional* source: a --database-url
-        # flag, --no-config, an explicit --config, or the canonical
-        # CONFITURE_DATABASE_URL. A merely-ambient DATABASE_URL must NOT force a
-        # connection — "status-unknown" (exit 0) stays the informative default
-        # rather than auto-connecting to whatever DATABASE_URL is in the env
-        # (#152; supersedes the #140 flag-only carve-out). Two explicit sources
-        # still fail loud via CONFIG_007.
-        _status_config_data: Any = None
-        if has_intentional_dsn_source(ctx, database_url, no_config):
-            _db_url_override = resolve_database_url(
-                database_url,
-                config,
-                config_explicit=config_is_explicit(ctx),
-                no_config=no_config,
-            )
-            if _db_url_override is not None:
-                _status_config_data = {"database_url": _db_url_override}
-            elif config is not None and config.exists():
-                from confiture.core.connection import load_config
-
-                _status_config_data = load_config(config)
-        _db_source = _status_config_data is not None
-        if _db_source:
-            try:
-                from confiture.core.connection import create_connection
-                from confiture.core.migrator import Migrator
-
-                config_data = _status_config_data
-                status_tracking_table = _get_tracking_table(config_data)
-                from confiture.core.ledger import find_ledger_relations, probe_ledger
-                from confiture.exceptions import ConfiturError
-
-                conn = create_connection(config_data)
-                migrator = Migrator(connection=conn, migration_table=status_tracking_table)
-                tracking_table_was_present = migrator.tracking_table_exists()
-                if not tracking_table_was_present:
-                    # A bare name resolves through search_path since 0.41.0, so
-                    # "absent" no longer implies "nowhere in this database".
-                    # Reporting only the first half sends the operator looking
-                    # for a table that is sitting right there (#188).
-                    ledger_elsewhere = find_ledger_relations(conn, status_tracking_table)
-                migrator.initialize()
-                # After initialize, so this names the ledger the run will read
-                # rather than the one it found (or did not) a moment earlier.
-                # Reporting metadata only: a probe refused for lack of
-                # privilege must not turn a working status into "could not
-                # connect to database". Narrow on purpose — a NameError in the
-                # probe still surfaces rather than degrading to None.
-                try:
-                    status_resolved_table = probe_ledger(conn, status_tracking_table).resolved_name
-                except ConfiturError:
-                    status_resolved_table = None
-                applied_versions = set(migrator.get_applied_versions())
-                for row in migrator.get_applied_migrations_with_timestamps():
-                    applied_at_by_version[row["version"]] = row["applied_at"]
-                conn.close()
-                if not tracking_table_was_present:
-                    tracking_table_absent = True
-            except Exception as e:
-                db_error = str(e)
-                if output_format != "json":
-                    error_console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
-                    console.print("[yellow]Showing file list only (status unknown)[/yellow]\n")
-
-        # Build migrations data
-        migrations_data: list[dict[str, str]] = []
-        applied_list: list[str] = []
-        pending_list: list[str] = []
-
-        for migration_file in migration_files:
-            # Extract version and name from filename
-            # Python: "001_add_users.py" -> version="001", name="add_users"
-            # SQL: "001_add_users.up.sql" -> version="001", name="add_users"
-            version, name = parse_migration_filename(migration_file.name)
-
-            # Determine status
-            if _db_source and not db_error:
-                # tracking_table_absent: table was missing → all migrations are pending
-                # (confiture has not been set up on this database yet)
-                if tracking_table_absent or version not in applied_versions:
-                    status = "pending"
-                    pending_list.append(version)
-                else:
-                    status = "applied"
-                    applied_list.append(version)
-            else:
-                # No config provided or DB connection failed: status is genuinely unknown
-                status = "unknown"
-
-            applied_at: str | None = (
-                applied_at_by_version.get(version) if status == "applied" else None
-            )
-            migrations_data.append(
-                {
-                    "version": version,
-                    "name": name,
-                    "status": status,
-                    "applied_at": applied_at,
-                }
-            )
-
-        # Determine current version (highest applied)
-        current_version = applied_list[-1] if applied_list else None
-
-        status_hints: list[str] = []
-        # The tracking table missing on the target DB is a quiet-success
-        # ambiguity: every migration shows "pending" even though the
-        # database may already match the schema. Emit a hint so agents
-        # don't blindly run `migrate up` on a possibly-baselined DB.
-        if tracking_table_absent:
-            _emit_hint(
-                "Tracking table not found in this database. All migrations "
-                "are reported 'pending' — if the schema is already applied, "
-                "run `confiture migrate baseline --through <version>` first.",
-                hints_list=status_hints,
-                format_=output_format,
-            )
-            if ledger_elsewhere:
-                # The likeliest cause of a surprising "all pending", and one an
-                # operator cannot diagnose from the ledger name alone.
-                _emit_hint(
-                    f"`{status_tracking_table}` does not resolve on this "
-                    f"connection's search_path, but a relation of that name "
-                    f"exists in {', '.join(ledger_elsewhere)}. Qualify "
-                    "`migration.tracking_table` or adjust search_path if that "
-                    "is the ledger you meant.",
-                    hints_list=status_hints,
-                    format_=output_format,
-                )
+        facts = _probe_database(
+            ctx,
+            database_url=database_url,
+            config=config,
+            no_config=no_config,
+            output_format=output_format,
+        )
+        rows = _migration_rows(migration_files, facts)
+        hints = _status_hints(facts, output_format)
+        rebuild_reasons = (
+            _rebuild_reasons(rows.pending, migrations_dir, rebuild_threshold, config)
+            if check_rebuild and rows.pending
+            else []
+        )
         if output_format == "json":
-            result: dict[str, Any] = {
-                "tracking_table": status_tracking_table,
-                "resolved_table": status_resolved_table,
-                "applied": applied_list,
-                "pending": pending_list,
-                "current": current_version,
-                "total": len(migration_files),
-                "migrations": migrations_data,
-                "summary": {
-                    "applied": len(applied_list),
-                    "pending": len(pending_list),
-                    "total": len(migration_files),
-                },
-                "hints": status_hints,
-            }
-            if db_error:
-                result["warning"] = f"Could not connect to database: {db_error}"
-            elif tracking_table_absent:
-                result["warning"] = (
-                    f"{status_tracking_table or 'The migration ledger'} not found in this "
-                    "database. All migrations shown as 'pending'. Run `confiture migrate up` "
-                    "to apply all migrations, or `confiture migrate baseline --through "
-                    "<version>` if the schema is already applied."
-                )
-            if orphaned_sql_files:
-                result["orphaned_migrations"] = [f.name for f in orphaned_sql_files]
-            if duplicate_versions:
-                result["duplicate_versions"] = {
-                    v: [f.name for f in files] for v, files in duplicate_versions.items()
-                }
-            if check_rebuild and pending_list:
-                from confiture.core.strategy import (
-                    find_rebuild_strategy_files as _json_find_rebuild,
-                )
-
-                _json_threshold = _effective_rebuild_threshold(rebuild_threshold, config)
-                _json_reasons: list[str] = []
-                if len(pending_list) >= _json_threshold:
-                    _json_reasons.append(
-                        f"{len(pending_list)} pending migrations exceed threshold of {_json_threshold}"
-                    )
-                for sf in _json_find_rebuild(migrations_dir):
-                    _json_reasons.append(f"Migration {sf.name} has '-- Strategy: rebuild' header")
-                if _json_reasons:
-                    result["rebuild_recommended"] = True
-                    result["rebuild_reasons"] = _json_reasons
-            _output_json(result, output_file, console)
-            if tracking_table_absent:
-                tracking_table_absent_exit = True
+            _render_status_json(
+                facts,
+                rows,
+                hints=hints,
+                total=len(migration_files),
+                orphaned=orphaned_sql_files,
+                duplicates=duplicate_versions,
+                rebuild_reasons=rebuild_reasons,
+                output_file=output_file,
+            )
         elif output_format == "csv":
-            # CSV output with migration list
             from confiture.cli.formatters.common import handle_output
 
             csv_data = (
                 ["version", "name", "status"],
-                [[m["version"], m["name"], m["status"]] for m in migrations_data],
+                [[m["version"], m["name"], m["status"]] for m in rows.migrations],
             )
             handle_output("csv", {}, csv_data, output_file, console)
         else:
-            from rich.table import Table
-
-            # Display migrations in a table
-            table = Table(title="Migrations")
-            table.add_column("Version", style="cyan")
-            table.add_column("Name", style="green")
-            table.add_column("Status", style="yellow")
-
-            for migration in migrations_data:
-                if migration["status"] == "applied":
-                    status_display = "[green]✅ applied[/green]"
-                elif migration["status"] == "pending":
-                    status_display = "[yellow]⏳ pending[/yellow]"
-                else:
-                    status_display = "[dim]⚠️ unknown (no config)[/dim]"
-
-                table.add_row(migration["version"], migration["name"], status_display)
-
-            console.print(table)
-            console.print(f"\n📊 Total: {len(migration_files)} migrations", end="")
-            if applied_versions:
-                console.print(f" ({len(applied_list)} applied, {len(pending_list)} pending)")
-            else:
-                console.print()
-
-            if tracking_table_absent:
-                console.print(
-                    f"\n[yellow]⚠️  {status_tracking_table or 'The migration ledger'} not "
-                    "found in this database. Migrations shown as 'pending'.[/yellow]"
-                )
-                console.print(
-                    "[yellow]   Run `confiture migrate up` to apply all migrations, or[/yellow]"
-                )
-                console.print(
-                    "[yellow]   `confiture migrate baseline --through <version>` if the "
-                    "schema is already applied.[/yellow]"
-                )
-                tracking_table_absent_exit = True
-
-            # Warn about duplicate versions
-            if duplicate_versions:
-                _print_duplicate_versions_warning(duplicate_versions, console)
-
-            # Warn about orphaned files
-            if orphaned_sql_files:
-                _print_orphaned_files_warning(orphaned_sql_files, console)
-
-            # Check if rebuild is recommended
-            if check_rebuild and pending_list:
-                from confiture.core.strategy import find_rebuild_strategy_files
-
-                threshold = _effective_rebuild_threshold(rebuild_threshold, config)
-
-                rebuild_reasons: list[str] = []
-
-                if len(pending_list) >= threshold:
-                    rebuild_reasons.append(
-                        f"{len(pending_list)} pending migrations exceed threshold of {threshold}"
-                    )
-
-                strategy_files = find_rebuild_strategy_files(migrations_dir)
-                if strategy_files:
-                    for sf in strategy_files:
-                        rebuild_reasons.append(
-                            f"Migration {sf.name} has '-- Strategy: rebuild' header"
-                        )
-
-                if rebuild_reasons and output_format in ("text", "table"):
-                    console.print("\n[yellow]🔄 Rebuild recommended:[/yellow]")
-                    for reason in rebuild_reasons:
-                        console.print(f"  • {reason}")
-                    console.print(
-                        "\n[yellow]  Run: confiture migrate rebuild --drop-schemas --yes[/yellow]"
-                    )
-
-        # Set exit flags after output is written (avoids raising inside try)
-        if _db_source and db_error:
-            fatal_error_exit = True
-        elif _db_source and not db_error and not tracking_table_absent and len(pending_list) > 0:
-            pending_migrations_exit = True
-
+            _render_status_table(
+                facts,
+                rows,
+                total=len(migration_files),
+                orphaned=orphaned_sql_files,
+                duplicates=duplicate_versions,
+                rebuild_reasons=rebuild_reasons,
+            )
     except typer.Exit:
         raise
     except Exception as e:
-        if output_format == "json":
-            # #145: a genuinely unexpected status failure emits the structured
-            # error envelope (the informative no-table/pending payloads above are
-            # emitted on their own paths and are not errors).
-            fail(e, json_mode=True, output_file=output_file)
-        elif output_format == "csv":
-            from confiture.cli.formatters.common import handle_output
-
-            csv_data = (
-                ["error"],
-                [[str(e)]],
-            )
-            handle_output("csv", {}, csv_data, output_file, console)
-        else:
-            console.print(f"[red]❌ Error: {e}[/red]")
+        _render_status_error(e, output_format, output_file)
         raise typer.Exit(3) from e
 
-    if fatal_error_exit:
+    # Exit flags after output is written (avoids raising inside the try).
+    if facts.db_source and facts.db_error:
         raise typer.Exit(3)
-    if tracking_table_absent_exit:
+    if facts.tracking_table_absent and output_format != "csv":
         raise typer.Exit(2)
-    if pending_migrations_exit:
+    if facts.db_source and not facts.db_error and not facts.tracking_table_absent and rows.pending:
         raise typer.Exit(1)
+
+
+@dataclass(frozen=True)
+class _StatusFacts:
+    """What the database said — or that nothing was asked of it."""
+
+    db_source: bool = False
+    applied_versions: frozenset[str] = frozenset()
+    applied_at_by_version: dict[str, Any] = field(default_factory=dict)
+    db_error: str | None = None
+    tracking_table_absent: bool = False
+    tracking_table: str | None = None
+    resolved_table: str | None = None
+    ledger_elsewhere: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _StatusRows:
+    migrations: list[dict[str, Any]]
+    applied: list[str]
+    pending: list[str]
+
+    @property
+    def current(self) -> str | None:
+        return self.applied[-1] if self.applied else None
+
+
+def _report_missing_migrations_dir(
+    migrations_dir: Path, output_format: str, output_file: Path | None
+) -> None:
+    if output_format == "json":
+        # The status payload shape, empty, with the situation as its warning —
+        # not a hand-built error envelope (exit 0: nothing is wrong with the DB).
+        _output_json(
+            {
+                "tracking_table": None,
+                "resolved_table": None,
+                "applied": [],
+                "pending": [],
+                "current": None,
+                "total": 0,
+                "migrations": [],
+                "summary": {"applied": 0, "pending": 0, "total": 0},
+                "hints": [],
+                "warning": f"Migrations directory not found: {migrations_dir.absolute()}",
+            },
+            output_file,
+            console,
+        )
+    else:
+        console.print("[yellow]No migrations directory found.[/yellow]")
+        console.print(f"Expected: {migrations_dir.absolute()}")
+
+
+def _report_no_migrations(
+    orphaned: list[Path], output_format: str, output_file: Path | None
+) -> None:
+    if output_format == "json":
+        result: dict[str, Any] = {
+            "applied": [],
+            "pending": [],
+            "current": None,
+            "total": 0,
+            "migrations": [],
+            "hints": [],
+        }
+        if orphaned:
+            result["orphaned_migrations"] = [f.name for f in orphaned]
+        _output_json(result, output_file, console)
+    else:
+        console.print("[yellow]No migrations found.[/yellow]")
+        if orphaned:
+            _print_orphaned_files_warning(orphaned, console)
+
+
+def _probe_database(
+    ctx: typer.Context,
+    *,
+    database_url: str | None,
+    config: Path,
+    no_config: bool,
+    output_format: str,
+) -> _StatusFacts:
+    """Read the ledger — only on an *intentional* DSN source.
+
+    A --database-url flag, --no-config, an explicit --config, or the canonical
+    CONFITURE_DATABASE_URL connects. A merely-ambient DATABASE_URL must NOT force
+    a connection — "status-unknown" (exit 0) stays the informative default
+    (#152; supersedes the #140 flag-only carve-out). Two explicit sources still
+    fail loud via CONFIG_007.
+    """
+    config_data: Any = None
+    if has_intentional_dsn_source(ctx, database_url, no_config):
+        override = resolve_database_url(
+            database_url,
+            config,
+            config_explicit=config_is_explicit(ctx),
+            no_config=no_config,
+        )
+        if override is not None:
+            config_data = {"database_url": override}
+        elif config is not None and config.exists():
+            from confiture.core.connection import load_config
+
+            config_data = load_config(config)
+    if config_data is None:
+        return _StatusFacts()
+
+    tracking_table = _get_tracking_table(config_data)
+    try:
+        from confiture.core.connection import create_connection
+        from confiture.core.ledger import find_ledger_relations, probe_ledger
+        from confiture.core.migrator import Migrator
+        from confiture.exceptions import ConfiturError
+
+        conn = create_connection(config_data)
+        migrator = Migrator(connection=conn, migration_table=tracking_table)
+        was_present = migrator.tracking_table_exists()
+        # A bare name resolves through search_path since 0.41.0, so "absent" no
+        # longer implies "nowhere in this database" (#188).
+        elsewhere = () if was_present else tuple(find_ledger_relations(conn, tracking_table))
+        migrator.initialize()
+        # Reporting metadata only: a probe refused for lack of privilege must not
+        # turn a working status into "could not connect to database".
+        try:
+            resolved = probe_ledger(conn, tracking_table).resolved_name
+        except ConfiturError:
+            resolved = None
+        applied = frozenset(migrator.get_applied_versions())
+        applied_at = {
+            row["version"]: row["applied_at"]
+            for row in migrator.get_applied_migrations_with_timestamps()
+        }
+        conn.close()
+        return _StatusFacts(
+            db_source=True,
+            applied_versions=applied,
+            applied_at_by_version=applied_at,
+            tracking_table_absent=not was_present,
+            tracking_table=tracking_table,
+            resolved_table=resolved,
+            ledger_elsewhere=elsewhere,
+        )
+    except Exception as e:
+        if output_format != "json":
+            error_console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
+            console.print("[yellow]Showing file list only (status unknown)[/yellow]\n")
+        return _StatusFacts(db_source=True, db_error=str(e), tracking_table=tracking_table)
+
+
+def _migration_rows(migration_files: list[Path], facts: _StatusFacts) -> _StatusRows:
+    migrations: list[dict[str, Any]] = []
+    applied: list[str] = []
+    pending: list[str] = []
+    known = facts.db_source and not facts.db_error
+    for migration_file in migration_files:
+        version, name = parse_migration_filename(migration_file.name)
+        if known:
+            # An absent tracking table means confiture has not been set up on
+            # this database yet: every migration is pending.
+            if facts.tracking_table_absent or version not in facts.applied_versions:
+                status = "pending"
+                pending.append(version)
+            else:
+                status = "applied"
+                applied.append(version)
+        else:
+            status = "unknown"  # no config, or the connection failed
+        migrations.append(
+            {
+                "version": version,
+                "name": name,
+                "status": status,
+                "applied_at": (
+                    facts.applied_at_by_version.get(version) if status == "applied" else None
+                ),
+            }
+        )
+    return _StatusRows(migrations=migrations, applied=applied, pending=pending)
+
+
+def _status_hints(facts: _StatusFacts, output_format: str) -> list[str]:
+    """An absent ledger is a quiet-success ambiguity worth a hint."""
+    hints: list[str] = []
+    if facts.tracking_table_absent:
+        _emit_hint(
+            "Tracking table not found in this database. All migrations "
+            "are reported 'pending' — if the schema is already applied, "
+            "run `confiture migrate baseline --through <version>` first.",
+            hints_list=hints,
+            format_=output_format,
+        )
+        if facts.ledger_elsewhere:
+            _emit_hint(
+                f"`{facts.tracking_table}` does not resolve on this "
+                f"connection's search_path, but a relation of that name "
+                f"exists in {', '.join(facts.ledger_elsewhere)}. Qualify "
+                "`migration.tracking_table` or adjust search_path if that "
+                "is the ledger you meant.",
+                hints_list=hints,
+                format_=output_format,
+            )
+    return hints
+
+
+def _rebuild_reasons(
+    pending: list[str], migrations_dir: Path, rebuild_threshold: int | None, config: Path
+) -> list[str]:
+    from confiture.core.strategy import find_rebuild_strategy_files
+
+    threshold = _effective_rebuild_threshold(rebuild_threshold, config)
+    reasons: list[str] = []
+    if len(pending) >= threshold:
+        reasons.append(f"{len(pending)} pending migrations exceed threshold of {threshold}")
+    for sf in find_rebuild_strategy_files(migrations_dir):
+        reasons.append(f"Migration {sf.name} has '-- Strategy: rebuild' header")
+    return reasons
+
+
+def _absent_ledger_warning(facts: _StatusFacts) -> str:
+    return (
+        f"{facts.tracking_table or 'The migration ledger'} not found in this "
+        "database. All migrations shown as 'pending'. Run `confiture migrate up` "
+        "to apply all migrations, or `confiture migrate baseline --through "
+        "<version>` if the schema is already applied."
+    )
+
+
+def _render_status_json(
+    facts: _StatusFacts,
+    rows: _StatusRows,
+    *,
+    hints: list[str],
+    total: int,
+    orphaned: list[Path],
+    duplicates: dict[str, list[Path]],
+    rebuild_reasons: list[str],
+    output_file: Path | None,
+) -> None:
+    result: dict[str, Any] = {
+        "tracking_table": facts.tracking_table,
+        "resolved_table": facts.resolved_table,
+        "applied": rows.applied,
+        "pending": rows.pending,
+        "current": rows.current,
+        "total": total,
+        "migrations": rows.migrations,
+        "summary": {"applied": len(rows.applied), "pending": len(rows.pending), "total": total},
+        "hints": hints,
+    }
+    if facts.db_error:
+        result["warning"] = f"Could not connect to database: {facts.db_error}"
+    elif facts.tracking_table_absent:
+        result["warning"] = _absent_ledger_warning(facts)
+    if orphaned:
+        result["orphaned_migrations"] = [f.name for f in orphaned]
+    if duplicates:
+        result["duplicate_versions"] = {
+            v: [f.name for f in files] for v, files in duplicates.items()
+        }
+    if rebuild_reasons:
+        result["rebuild_recommended"] = True
+        result["rebuild_reasons"] = rebuild_reasons
+    _output_json(result, output_file, console)
+
+
+def _render_status_table(
+    facts: _StatusFacts,
+    rows: _StatusRows,
+    *,
+    total: int,
+    orphaned: list[Path],
+    duplicates: dict[str, list[Path]],
+    rebuild_reasons: list[str],
+) -> None:
+    from rich.table import Table
+
+    table = Table(title="Migrations")
+    table.add_column("Version", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Status", style="yellow")
+    for migration in rows.migrations:
+        if migration["status"] == "applied":
+            status_display = "[green]✅ applied[/green]"
+        elif migration["status"] == "pending":
+            status_display = "[yellow]⏳ pending[/yellow]"
+        else:
+            status_display = "[dim]⚠️ unknown (no config)[/dim]"
+        table.add_row(migration["version"], migration["name"], status_display)
+    console.print(table)
+    console.print(f"\n📊 Total: {total} migrations", end="")
+    if facts.applied_versions:
+        console.print(f" ({len(rows.applied)} applied, {len(rows.pending)} pending)")
+    else:
+        console.print()
+    if facts.tracking_table_absent:
+        console.print(
+            f"\n[yellow]⚠️  {facts.tracking_table or 'The migration ledger'} not "
+            "found in this database. Migrations shown as 'pending'.[/yellow]"
+        )
+        console.print("[yellow]   Run `confiture migrate up` to apply all migrations, or[/yellow]")
+        console.print(
+            "[yellow]   `confiture migrate baseline --through <version>` if the "
+            "schema is already applied.[/yellow]"
+        )
+    if duplicates:
+        _print_duplicate_versions_warning(duplicates, console)
+    if orphaned:
+        _print_orphaned_files_warning(orphaned, console)
+    if rebuild_reasons:
+        console.print("\n[yellow]🔄 Rebuild recommended:[/yellow]")
+        for reason in rebuild_reasons:
+            console.print(f"  • {reason}")
+        console.print("\n[yellow]  Run: confiture migrate rebuild --drop-schemas --yes[/yellow]")
+
+
+def _render_status_error(error: Exception, output_format: str, output_file: Path | None) -> None:
+    """#145: a genuinely unexpected status failure — the informative payloads above are not errors."""
+    if output_format == "json":
+        fail(error, json_mode=True, output_file=output_file)
+    elif output_format == "csv":
+        from confiture.cli.formatters.common import handle_output
+
+        handle_output("csv", {}, (["error"], [[str(error)]]), output_file, console)
+    else:
+        console.print(f"[red]❌ Error: {error}[/red]")

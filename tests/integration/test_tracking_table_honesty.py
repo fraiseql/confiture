@@ -141,7 +141,7 @@ def test_migrate_status_names_the_configured_table(ledger_db, project: Path) -> 
 
 @pytest.mark.integration
 def test_migrate_status_absent_ledger_names_the_configured_table(ledger_db, project: Path) -> None:
-    """The `tracking_table_absent` warning — text mode (`migrate_core.py:369`)."""
+    """The `tracking_table_absent` warning — text mode (`commands/migrate/status.py`)."""
     result = runner.invoke(app, ["migrate", "status", "--config", _cfg(project, "absent")])
     _assert_no_literal(result, "migrate status (ledger absent)")
 
@@ -150,7 +150,7 @@ def test_migrate_status_absent_ledger_names_the_configured_table(ledger_db, proj
 def test_migrate_status_absent_ledger_json_names_the_configured_table(
     ledger_db, project: Path
 ) -> None:
-    """The same warning on the JSON path (`migrate_core.py:302`).
+    """The same warning on the JSON path (`commands/migrate/status.py`).
 
     Separate from the text case because the two messages are independent string
     literals — fixing one and not the other is the exact shape of this bug.

@@ -13,18 +13,20 @@ import typer
 
 from confiture.cli.commands.migrate._dry_run_render import _render_dry_run_analysis, _row_estimator
 from confiture.cli.commands.migrate._settings import _load_environment_if_present
-from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import (
+from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
+    config_is_explicit,
+    resolve_database_url,
+)
+from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.helpers import (
     _find_orphaned_sql_files,
     _get_tracking_table,
     _print_orphaned_files_warning,
-    config_is_explicit,
     console,
     error_console,
     is_json,
-    resolve_database_url,
 )
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
@@ -213,28 +215,12 @@ def migrate_up(
     from confiture.core.migrator import MigratorSession, find_duplicate_migration_versions
 
     try:
-        # Validate dry-run options
-        if dry_run and dry_run_execute:
-            error_console.print(
-                "[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]"
-            )
-            raise typer.Exit(2)
-
-        if (dry_run or dry_run_execute) and force:
-            error_console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
-            raise typer.Exit(2)
-
-        # Validate format option
-
-        # Validate checksum mismatch option
-        valid_mismatch_behaviors = ("fail", "warn", "ignore")
-        if on_checksum_mismatch not in valid_mismatch_behaviors:
-            error_console.print(
-                f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
-                f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
-            )
-            raise typer.Exit(2)
-
+        _validate_up_flags(
+            dry_run=dry_run,
+            dry_run_execute=dry_run_execute,
+            force=force,
+            on_checksum_mismatch=on_checksum_mismatch,
+        )
         if verbose:
             logging.getLogger("confiture").setLevel(logging.DEBUG)
         batch = None
@@ -243,39 +229,10 @@ def migrate_up(
 
             batch = BatchConfig(batch_size=batch_size, sleep_between_batches=batch_sleep)
 
-        # Check for duplicate migration versions (hard block, no DB needed)
-        _up_duplicates = find_duplicate_migration_versions(migrations_dir)
-        if _up_duplicates:
-            if is_json(format_output):
-                from confiture.exceptions import MigrationConflictError
-
-                _dupe_files = sorted(f.name for files in _up_duplicates.values() for f in files)
-                fail(
-                    MigrationConflictError(
-                        "Duplicate migration versions detected: "
-                        + ", ".join(sorted(_up_duplicates)),
-                        conflicting_files=_dupe_files,
-                    ),
-                    json_mode=True,
-                    output_file=output_file,
-                )
-            error_console.print(
-                "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
-            )
-            error_console.print(
-                "[red]Multiple migration files share the same version number:[/red]\n"
-            )
-            for version, files in sorted(_up_duplicates.items()):
-                error_console.print(f"  Version {version}:")
-                for f in files:
-                    error_console.print(f"    • {f.name}")
-            error_console.print(
-                "\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]"
-            )
-            error_console.print(
-                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
-            )
-            raise typer.Exit(3)
+        # Duplicate versions are a hard block; no database needed to see them.
+        duplicates = find_duplicate_migration_versions(migrations_dir)
+        if duplicates:
+            _refuse_duplicate_versions(duplicates, format_output, output_file)
 
         # Resolve the DSN under the #152 precedence contract. A resolved
         # override (flag / canonical env / --no-config) skips YAML loading;
@@ -287,33 +244,20 @@ def migrate_up(
             no_config=no_config,
             require_intentional_source=True,
         )
-        if _db_url_override is not None:
-            config_data = {"database_url": _db_url_override}
-        else:
-            config_data = load_config(config)
-
-        # Environment-level migration settings (strict mode, view helpers) come
-        # from the environment config only when YAML is the DSN source.
-        # An invalid environment file is an error (exit 5), not a silently
-        # non-strict run; only its absence leaves the defaults in place.
+        config_data = (
+            {"database_url": _db_url_override}
+            if _db_url_override is not None
+            else load_config(config)
+        )
+        # Environment-level migration settings apply only when YAML is the DSN
+        # source; an invalid file is an error, only its absence means defaults.
         env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
         install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
 
         # Advisory lines go to stderr in JSON mode: stdout is the payload.
         say = error_console if is_json(format_output) else console
-        if force:
-            say.print("[yellow]⚠️  Force mode enabled - skipping migration state checks[/yellow]")
-            say.print(
-                "[yellow]This may cause issues if applied incorrectly. Use with caution![/yellow]\n"
-            )
-        if no_lock:
-            say.print("[yellow]⚠️  Locking disabled - DANGEROUS in multi-pod environments![/yellow]")
-            say.print(
-                "[yellow]Concurrent migrations may cause race conditions or data corruption.[/yellow]\n"
-            )
-
-        # Orphaned migration files (filesystem only): a warning, an abort in strict mode.
+        _print_mode_warnings(say, force=force, no_lock=no_lock)
         orphaned_files = _find_orphaned_sql_files(migrations_dir)
         if orphaned_files:
             _print_orphaned_files_warning(orphaned_files, error_console)
@@ -340,7 +284,6 @@ def migrate_up(
             "on_event": reporter,
             "batch": batch,
         }
-
         with MigratorSession(
             None,
             migrations_dir,
@@ -370,46 +313,113 @@ def migrate_up(
                 result = session.up(dry_run_execute=True, **options)
             else:
                 result = session.up(**options)
-
         _render_up_result(result, reporter, format_output, output_file, force=force)
-
     except typer.Exit:
         raise
     except ChecksumVerificationError as e:
-        if is_json(format_output):
-            fail(e, json_mode=True, output_file=output_file)
-        error_console.print("[red]❌ Checksum verification failed![/red]\n")
-        for m in e.mismatches:
-            error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-            expected_preview = m.expected[:16] if m.expected else "(none)"
-            error_console.print(f"    Expected: {expected_preview}...")
-            error_console.print(f"    Actual:   {m.actual[:16]}...")
-        error_console.print(
-            "\n[yellow]💡 Tip: Use 'confiture verify-checksums --fix' to update checksums, "
-            "or --no-verify-checksums to skip[/yellow]"
-        )
-        raise typer.Exit(1) from e
+        _report_checksum_failure(e, format_output, output_file)
     except LockAcquisitionError as e:
-        if is_json(format_output):
-            from confiture.cli.error_json import lock_error_to_confiture
-
-            # LOCK_1300 envelope enriched with holder identity (#147).
-            fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
-        print_error_to_console(e, error_console)
-        if e.timeout:
-            error_console.print(
-                f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
-            )
-        else:
-            error_console.print(
-                "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
-            )
-        raise typer.Exit(6) from e
+        _report_lock_failure(e, lock_timeout, format_output, output_file)
     except Exception as e:
         if is_json(format_output):
             fail(e, json_mode=True, output_file=output_file)
         print_error_to_console(e, error_console)
         raise typer.Exit(handle_cli_error(e)) from e
+
+
+def _validate_up_flags(
+    *, dry_run: bool, dry_run_execute: bool, force: bool, on_checksum_mismatch: str
+) -> None:
+    """Flag combinations that make no sense exit 2 before anything runs."""
+    if dry_run and dry_run_execute:
+        error_console.print("[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]")
+        raise typer.Exit(2)
+    if (dry_run or dry_run_execute) and force:
+        error_console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
+        raise typer.Exit(2)
+    valid_mismatch_behaviors = ("fail", "warn", "ignore")
+    if on_checksum_mismatch not in valid_mismatch_behaviors:
+        error_console.print(
+            f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
+            f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
+        )
+        raise typer.Exit(2)
+
+
+def _refuse_duplicate_versions(
+    duplicates: dict[str, list[Path]], format_output: str, output_file: Path | None
+) -> None:
+    if is_json(format_output):
+        from confiture.exceptions import MigrationConflictError
+
+        fail(
+            MigrationConflictError(
+                "Duplicate migration versions detected: " + ", ".join(sorted(duplicates)),
+                conflicting_files=sorted(f.name for files in duplicates.values() for f in files),
+            ),
+            json_mode=True,
+            output_file=output_file,
+        )
+    error_console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
+    error_console.print("[red]Multiple migration files share the same version number:[/red]\n")
+    for version, files in sorted(duplicates.items()):
+        error_console.print(f"  Version {version}:")
+        for f in files:
+            error_console.print(f"    • {f.name}")
+    error_console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+    error_console.print(
+        "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
+    )
+    raise typer.Exit(3)
+
+
+def _print_mode_warnings(say: Any, *, force: bool, no_lock: bool) -> None:
+    if force:
+        say.print("[yellow]⚠️  Force mode enabled - skipping migration state checks[/yellow]")
+        say.print(
+            "[yellow]This may cause issues if applied incorrectly. Use with caution![/yellow]\n"
+        )
+    if no_lock:
+        say.print("[yellow]⚠️  Locking disabled - DANGEROUS in multi-pod environments![/yellow]")
+        say.print(
+            "[yellow]Concurrent migrations may cause race conditions or data corruption.[/yellow]\n"
+        )
+
+
+def _report_checksum_failure(error: Any, format_output: str, output_file: Path | None) -> None:
+    if is_json(format_output):
+        fail(error, json_mode=True, output_file=output_file)
+    error_console.print("[red]❌ Checksum verification failed![/red]\n")
+    for m in error.mismatches:
+        error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+        expected_preview = m.expected[:16] if m.expected else "(none)"
+        error_console.print(f"    Expected: {expected_preview}...")
+        error_console.print(f"    Actual:   {m.actual[:16]}...")
+    error_console.print(
+        "\n[yellow]💡 Tip: Use 'confiture verify-checksums --fix' to update checksums, "
+        "or --no-verify-checksums to skip[/yellow]"
+    )
+    raise typer.Exit(1) from error
+
+
+def _report_lock_failure(
+    error: Any, lock_timeout: int, format_output: str, output_file: Path | None
+) -> None:
+    if is_json(format_output):
+        from confiture.cli.error_json import lock_error_to_confiture
+
+        # LOCK_1300 envelope enriched with holder identity (#147).
+        fail(lock_error_to_confiture(error), json_mode=True, output_file=output_file)
+    print_error_to_console(error, error_console)
+    if error.timeout:
+        error_console.print(
+            f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
+        )
+    else:
+        error_console.print(
+            "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
+        )
+    raise typer.Exit(6) from error
 
 
 class _UpReporter:

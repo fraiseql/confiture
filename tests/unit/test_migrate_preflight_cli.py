@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from confiture.cli.commands.migrate_analysis import (
+from confiture.cli.commands.migrate.preflight import (
     _preflight_version_from_filename,
     _resolve_preflight_pending,
 )

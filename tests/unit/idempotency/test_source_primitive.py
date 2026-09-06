@@ -12,7 +12,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from confiture.cli.helpers import _collect_idempotency_report
+from confiture.cli.idempotency import _collect_idempotency_report
 from confiture.core.idempotency import IdempotencyValidator, extract_sql_from_python_source
 
 _READS_NEXT_TO_ITSELF = """\

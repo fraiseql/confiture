@@ -543,9 +543,12 @@ class Migrator:
         """
         return baseline_impl.apply_ddl_string(self, ddl)
 
-    def _backup_tracking_table(self) -> list[dict[str, Any]]:
+    def backup_tracking_table(self) -> list[dict[str, Any]]:
         """Dump current tracking table contents as list of dicts (empty if absent)."""
         return baseline_impl.backup_tracking_table(self)
+
+    def _backup_tracking_table(self) -> list[dict[str, Any]]:
+        return self.backup_tracking_table()
 
     def rebuild(
         self,

@@ -52,5 +52,5 @@ def test_no_hand_built_error_envelope(path: Path) -> None:
 
 
 def test_guard_covers_the_cli_package() -> None:
-    assert any(p.name == "migrate_core.py" for p in FILES)
+    assert any(p.name == "up.py" for p in FILES)
     assert ENVELOPE_MODULE.exists()

@@ -93,7 +93,9 @@ def test_without_check_body_no_regression(tmp_path):
     schema.write_text("-- no functions")
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch("confiture.cli.commands.migrate.fix_signatures.open_connection", _make_conn_cm()),
         patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
         patch(
@@ -122,7 +124,9 @@ def test_check_body_body_only_dry_run(tmp_path):
     schema.write_text(SCHEMA_WITH_FN)
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch("confiture.cli.commands.migrate.fix_signatures.open_connection", _make_conn_cm()),
         patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
         patch(
@@ -166,7 +170,9 @@ def test_check_body_both_clean_exits_0(tmp_path):
     schema.write_text("-- no functions")
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch("confiture.cli.commands.migrate.fix_signatures.open_connection", _make_conn_cm()),
         patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
         patch(
@@ -226,7 +232,9 @@ def test_check_body_no_fixable_overloads_body_still_detected(tmp_path):
     )
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch("confiture.cli.commands.migrate.fix_signatures.open_connection", _make_conn_cm()),
         patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
         patch(
@@ -270,7 +278,9 @@ def test_check_body_dry_run_json(tmp_path):
     schema.write_text(SCHEMA_WITH_FN)
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch("confiture.cli.commands.migrate.fix_signatures.open_connection", _make_conn_cm()),
         patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
         patch(
@@ -324,7 +334,9 @@ def test_apply_executes_body_corf(tmp_path):
     fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),
@@ -376,7 +388,9 @@ def test_apply_body_corf_failure_rolls_back(tmp_path):
     fake_cursor.execute.side_effect = Exception("syntax error in body")
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),
@@ -426,7 +440,9 @@ def test_apply_body_only_no_sig_fixes(tmp_path):
     fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),
@@ -476,7 +492,9 @@ def test_apply_text_output_lists_body_fixes(tmp_path):
     fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),
@@ -528,7 +546,9 @@ def test_apply_json_includes_body_fields(tmp_path):
     fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),
@@ -583,7 +603,9 @@ def test_apply_residual_body_drift_exits_1(tmp_path):
     fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),
@@ -649,7 +671,9 @@ def test_apply_json_no_body_fields_without_flag(tmp_path):
     fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
-        patch("confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()),
+        patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ),
         patch(
             "confiture.cli.commands.migrate.fix_signatures.open_connection",
             _make_conn_cm(fake_conn),

@@ -110,89 +110,82 @@ def migrate_reinit(
             json_mode=False,
         )
 
-    try:
-        with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
-            migrator = m._migrator
-            assert migrator is not None
-            migrator.initialize()
+    with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
+        migrator = m.migrator
+        migrator.initialize()
 
-            all_migrations = migrator.find_migration_files(migrations_dir)
-            if not all_migrations:
-                console.print("[yellow]No migrations found.[/yellow]")
+        all_migrations = migrator.find_migration_files(migrations_dir)
+        if not all_migrations:
+            console.print("[yellow]No migrations found.[/yellow]")
+            return
+
+        # Determine which migrations will be marked
+        if through is not None:
+            migrations_to_mark: list[Path] = []
+            for migration_file in all_migrations:
+                version = parse_migration_filename(migration_file.name)[0]
+                migrations_to_mark.append(migration_file)
+                if version == through:
+                    break
+            else:
+                console.print("[yellow]Available versions:[/yellow]")
+                for mf in all_migrations[:10]:
+                    v = parse_migration_filename(mf.name)[0]
+                    console.print(f"  • {v}")
+                if len(all_migrations) > 10:
+                    console.print(f"  ... and {len(all_migrations) - 10} more")
+                fail(
+                    MigrationError(
+                        f"Migration version '{through}' not found",
+                        version=through,
+                        error_code="MIGR_100",
+                    ),
+                    json_mode=False,
+                )
+        else:
+            migrations_to_mark = list(all_migrations)
+
+        current_count = len(migrator.get_applied_versions())
+        target_desc = f"through {through}" if through else "all files on disk"
+        console.print(
+            f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
+        )
+        console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
+        console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
+
+        for migration_file in migrations_to_mark:
+            version = parse_migration_filename(migration_file.name)[0]
+            _, name = parse_migration_filename(migration_file.name)
+            console.print(f"  [dim]•[/dim] {version} {name}")
+
+        console.print()
+
+        if dry_run:
+            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+
+        if not yes and not dry_run:
+            # The resolved name, not the default (#190). This is a
+            # destructive confirmation: naming the wrong table here is the
+            # one place a wrong name could get an operator to approve the
+            # wrong action.
+            confirmed = typer.confirm(
+                f"Will delete {current_count} entries from {migrator.migration_table} "
+                f"and re-mark {len(migrations_to_mark)} migrations. Continue?"
+            )
+            if not confirmed:
+                console.print("[dim]Aborted.[/dim]")
                 return
 
-            # Determine which migrations will be marked
-            if through is not None:
-                migrations_to_mark: list[Path] = []
-                for migration_file in all_migrations:
-                    version = migrator._version_from_filename(migration_file.name)
-                    migrations_to_mark.append(migration_file)
-                    if version == through:
-                        break
-                else:
-                    console.print("[yellow]Available versions:[/yellow]")
-                    for mf in all_migrations[:10]:
-                        v = migrator._version_from_filename(mf.name)
-                        console.print(f"  • {v}")
-                    if len(all_migrations) > 10:
-                        console.print(f"  ... and {len(all_migrations) - 10} more")
-                    fail(
-                        MigrationError(
-                            f"Migration version '{through}' not found",
-                            version=through,
-                            error_code="MIGR_100",
-                        ),
-                        json_mode=False,
-                    )
-            else:
-                migrations_to_mark = list(all_migrations)
+        result = m.reinit(through=through, dry_run=dry_run)
 
-            current_count = len(migrator.get_applied_versions())
-            target_desc = f"through {through}" if through else "all files on disk"
+        if dry_run:
             console.print(
-                f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
+                f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
+                f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
             )
-            console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
-            console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
-
-            for migration_file in migrations_to_mark:
-                version = migrator._version_from_filename(migration_file.name)
-                _, name = parse_migration_filename(migration_file.name)
-                console.print(f"  [dim]•[/dim] {version} {name}")
-
-            console.print()
-
-            if dry_run:
-                console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
-
-            if not yes and not dry_run:
-                # The resolved name, not the default (#190). This is a
-                # destructive confirmation: naming the wrong table here is the
-                # one place a wrong name could get an operator to approve the
-                # wrong action.
-                confirmed = typer.confirm(
-                    f"Will delete {current_count} entries from {migrator.migration_table} "
-                    f"and re-mark {len(migrations_to_mark)} migrations. Continue?"
-                )
-                if not confirmed:
-                    console.print("[dim]Aborted.[/dim]")
-                    return
-
-            result = m.reinit(through=through, dry_run=dry_run)
-
-            if dry_run:
-                console.print(
-                    f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
-                    f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
-                )
-                console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
-            else:
-                console.print(
-                    f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
-                    f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
-                )
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        fail(e, json_mode=False)
+            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+        else:
+            console.print(
+                f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
+                f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
+            )

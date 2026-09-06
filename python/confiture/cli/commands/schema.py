@@ -1,6 +1,7 @@
 """Schema commands: init, build, lint, introspect."""
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -24,8 +25,7 @@ from confiture.core.linting.schema_linter import LintConfig as LinterConfig
 from confiture.core.linting.schema_linter import LintReport as LinterReport
 from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
 from confiture.core.seed.paths import is_seed_path
-from confiture.core.seed_applier import SeedApplier
-from confiture.exceptions import ConfigurationError, SchemaError, SeedError
+from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 
 # Valid output formats for linting (re-exported so main.py can keep LINT_FORMATS there)
 LINT_FORMATS = ("table", "json", "csv")
@@ -339,98 +339,30 @@ def build(
         For applying seeds after build and controlling validation behavior
     """
     # Progress lines go to stderr in JSON mode: stdout is the payload.
+    # Progress lines go to stderr in JSON mode: stdout is the payload.
     out = error_console if is_json(format_type) else console
+    json_mode = is_json(format_type)
     try:
-        # Create schema builder
         builder = SchemaBuilder(env=env, project_dir=project_dir)
-
-        # Apply CLI overrides for comment validation
-        if validate_comments is not None:
-            builder.env_config.build.validate_comments.enabled = validate_comments
-        if fail_on_unclosed is not None:
-            builder.env_config.build.validate_comments.fail_on_unclosed_blocks = fail_on_unclosed
-        if fail_on_spillover is not None:
-            builder.env_config.build.validate_comments.fail_on_spillover = fail_on_spillover
-
-        # Apply CLI override for two-pass FK emission
-        if two_pass is not None:
-            builder.env_config.build.two_pass = two_pass
-
-        # Apply CLI overrides for separator style
-        if separator_style is not None:
-            # Validate separator style
-            valid_styles = ["block_comment", "line_comment", "mysql", "custom"]
-            if separator_style not in valid_styles:
-                fail(
-                    ConfigurationError(
-                        f"Invalid separator style: {separator_style}",
-                        resolution_hint=f"Valid options: {', '.join(valid_styles)}",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-            builder.env_config.build.separators.style = separator_style
-
-        # Apply custom template if provided
-        if separator_template is not None:
-            builder.env_config.build.separators.custom_template = separator_template
-
-        # Validate custom template requirement
-        if (
-            separator_style == "custom"
-            and not separator_template
-            and not builder.env_config.build.separators.custom_template
-        ):
-            fail(
-                ConfigurationError(
-                    "Custom separator style requires --separator-template",
-                    resolution_hint="Pass --separator-template with a {file_path} placeholder.",
-                ),
-                json_mode=is_json(format_type),
-                output_file=report_output,
-            )
-
-        # Show overrides if any were applied
-        overrides_applied = any(
-            [
-                two_pass is not None,
-                validate_comments is not None,
-                fail_on_unclosed is not None,
-                fail_on_spillover is not None,
-                separator_style is not None,
-                separator_template is not None,
-            ]
+        _apply_build_overrides(
+            builder,
+            out,
+            two_pass=two_pass,
+            validate_comments=validate_comments,
+            fail_on_unclosed=fail_on_unclosed,
+            fail_on_spillover=fail_on_spillover,
+            separator_style=separator_style,
+            separator_template=separator_template,
+            json_mode=json_mode,
+            report_output=report_output,
         )
-        if overrides_applied:
-            out.print("[cyan]📝 Configuration overrides applied:[/cyan]")
-            if two_pass is not None:
-                out.print(f"  • Two-pass FK emission: {two_pass}")
-            if validate_comments is not None:
-                out.print(f"  • Comment validation: {validate_comments}")
-            if fail_on_unclosed is not None:
-                out.print(f"  • Fail on unclosed blocks: {fail_on_unclosed}")
-            if fail_on_spillover is not None:
-                out.print(f"  • Fail on spillover: {fail_on_spillover}")
-            if separator_style is not None:
-                out.print(f"  • Separator style: {separator_style}")
-            if separator_template is not None:
-                out.print(
-                    f"  • Custom template: {separator_template[:50]}..."
-                    if len(separator_template or "") > 50
-                    else f"  • Custom template: {separator_template}"
-                )
-
-        # Override to exclude seeds if --schema-only is specified
         if schema_only:
             builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
             builder.include_configs = [
                 cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
             ]
-            # Recalculate base_dir after filtering
             if builder.include_dirs:
-                builder.base_dir = builder._find_common_parent(builder.include_dirs)
-
-        # Set default output path if not specified
+                builder.base_dir = builder.find_common_parent(builder.include_dirs)
         if output is None:
             output_dir = project_dir / "db" / "generated"
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -442,194 +374,58 @@ def build(
             try:
                 seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
             except Exception as e:
-                fail(e, json_mode=is_json(format_type), output_file=report_output)
-
-        # Determine if we should apply seeds sequentially
+                fail(e, json_mode=json_mode, output_file=report_output)
         apply_sequential = sequential or (
             builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
         )
 
-        # Build schema (with or without seeds)
         out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
-
-        # Import ProgressManager for progress tracking
         from confiture.core.progress import ProgressManager
 
         with ProgressManager() as progress:
+            sql_files = builder.find_sql_files()
             if apply_sequential:
-                # Build schema only, seeds will be applied separately
                 schema = builder.build(output_path=output, schema_only=True, progress=progress)
-                sql_files = builder.find_sql_files()
                 schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
             else:
-                # Build schema with seeds
-                sql_files = builder.find_sql_files()
                 schema = builder.build(output_path=output, progress=progress)
                 schema_file_count = len(sql_files)
-
         out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
 
-        # Track seed files applied (will be updated if sequential)
         seed_files_applied = 0
-
-        # Apply seeds sequentially if requested
         if apply_sequential:
-            out.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
+            seed_files_applied = _apply_seeds_sequentially(
+                builder,
+                out,
+                env=env,
+                database_url=database_url,
+                continue_on_error=continue_on_error,
+                profile=seed_profile_obj,
+                json_mode=json_mode,
+                report_output=report_output,
+            )
 
-            # Get database URL (from CLI or config)
-            db_url = database_url or builder.env_config.database_url
-            if not db_url:
-                fail(
-                    ConfigurationError(
-                        "Database URL required for --sequential mode",
-                        error_code="CONFIG_010",
-                        resolution_hint="Provide via --database-url or in the environment config.",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-
-            # Import psycopg here to connect to database
-            try:
-                import psycopg
-
-                connection = psycopg.connect(db_url)
-            except Exception as e:
-                fail(
-                    ConfigurationError(
-                        f"Failed to connect to database: {e}",
-                        error_code="CONFIG_006",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-
-            try:
-                # Get seeds directory (parent of first seed file)
-                schema_files, seed_files = builder.categorize_sql_files()
-                if seed_files:
-                    seeds_dir = seed_files[0].parent.parent
-
-                    # Apply seeds
-                    applier = SeedApplier(
-                        seeds_dir=seeds_dir,
-                        env=env,
-                        connection=connection,
-                        console=console,
-                    )
-                    result = applier.apply_sequential(
-                        continue_on_error=continue_on_error, profile=seed_profile_obj
-                    )
-
-                    seed_files_applied = result.succeeded
-                    out.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
-                    if result.failed > 0:
-                        out.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
-                        if not continue_on_error:
-                            # fail() raises typer.Exit → the enclosing
-                            # `except typer.Exit` closes the connection.
-                            fail(
-                                SeedError(
-                                    f"{result.failed} seed file(s) failed during sequential apply.",
-                                    resolution_hint="Re-run with --continue-on-error to skip "
-                                    "failures, or fix the failing seed files.",
-                                ),
-                                json_mode=is_json(format_type),
-                                output_file=report_output,
-                            )
-                else:
-                    out.print("[yellow]⚠️  No seed files found[/yellow]")
-
-                connection.close()
-            except typer.Exit:
-                connection.close()
-                raise
-            except Exception as e:
-                connection.close()
-                fail(
-                    SeedError(f"Seed application failed: {e}"),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-
-        # Show hash if requested
-        schema_hash = None
-        if show_hash:
-            schema_hash = builder.compute_hash()
-
-        # Validate format_type
-
-        # Emit a cacheable pg_dump artifact when --dump is given. The schema is
-        # built into an ephemeral throwaway database and dumped from there, so
-        # the artifact content always matches the db/ hash that names it.
+        schema_hash = builder.compute_hash() if show_hash else None
         artifact_path_str: str | None = None
         artifact_hash_str: str | None = None
         if dump is not None:
-            if dump_format not in ("custom", "directory"):
-                fail(
-                    ConfigurationError(
-                        f"Invalid dump format: {dump_format}. Use custom or directory.",
-                        resolution_hint="Pass --dump-format custom or directory.",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-
-            server_url = database_url or builder.env_config.database_url
-            if not server_url:
-                fail(
-                    ConfigurationError(
-                        "--dump requires a database server URL to build the ephemeral "
-                        "dump database.",
-                        error_code="CONFIG_010",
-                        resolution_hint="Provide --database-url or set it in the environment "
-                        "config.",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-
             if schema_hash is None:
                 schema_hash = builder.compute_hash()
-
-            if dump.is_dir() or str(dump).endswith("/"):
-                artifact_out = default_artifact_path(
-                    dump, env, schema_hash, profile=seed_profile, dump_format=dump_format
-                )
-            else:
-                artifact_out = dump
-
-            # Schema-only DDL plus seed files, applied into the ephemeral DB.
-            artifact_schema_sql = builder.build(schema_only=True)
-            if schema_only:
-                artifact_seed_files: list[Path] | None = None
-            else:
-                _schema_files, seed_paths = builder.categorize_sql_files()
-                if seed_profile_obj is not None:
-                    from confiture.core.seed_applier import _apply_profile_filter
-
-                    seed_paths = _apply_profile_filter(seed_paths, seed_profile_obj)
-                artifact_seed_files = seed_paths or None
-
-            artifact_result = build_schema_artifact(
-                server_url=server_url,
-                schema_sql=artifact_schema_sql,
-                output_path=artifact_out,
-                schema_hash=schema_hash,
-                seed_files=artifact_seed_files,
+            artifact_path_str, artifact_hash_str = _write_dump_artifact(
+                builder,
+                out,
+                dump=dump,
                 dump_format=dump_format,
+                env=env,
+                database_url=database_url,
+                schema_hash=schema_hash,
+                schema_only=schema_only,
+                seed_profile=seed_profile,
+                seed_profile_obj=seed_profile_obj,
+                json_mode=json_mode,
+                report_output=report_output,
             )
-            artifact_path_str = str(artifact_result.artifact_path)
-            artifact_hash_str = artifact_result.artifact_hash
-            if format_type == "text":
-                if artifact_result.skipped:
-                    out.print(
-                        f"[cyan]📦 Artifact up-to-date (cache hit): {artifact_path_str}[/cyan]"
-                    )
-                else:
-                    out.print(f"[green]📦 Artifact written: {artifact_path_str}[/green]")
 
-        # Create and format build result
         from confiture.cli.formatters.build_formatter import format_build_result
         from confiture.models.results import BuildResult
 
@@ -639,30 +435,23 @@ def build(
             schema_size_bytes=len(schema),
             output_path=str(output.absolute()),
             hash=schema_hash,
-            execution_time_ms=0,  # Could track this if needed
+            execution_time_ms=0,
             seed_files_applied=seed_files_applied,
             artifact_path=artifact_path_str,
             artifact_hash=artifact_hash_str,
             seed_profile=seed_profile,
         )
-
-        # Format and output result
         format_build_result(build_result, format_type, report_output, console)
-
-        # Show next steps only for text format
         if format_type == "text":
             out.print("\n💡 Next steps:")
             out.print(f"  • Apply schema: psql -f {output}")
             out.print("  • Or use: confiture migrate up")
-
     except typer.Exit:
-        # An inner fail() already emitted its envelope and is exiting — let it
-        # through untouched (do not re-handle via the generic except below).
-        raise
+        raise  # an inner fail() already emitted its envelope
     except FileNotFoundError as e:
         # In text mode keep the human-friendly "run init" tip on stderr; the
         # envelope (json mode) carries the actionable hint instead.
-        if not is_json(format_type):
+        if not json_mode:
             out.print("\n💡 Tip: Run 'confiture init' to create project structure")
         fail(
             SchemaError(
@@ -670,11 +459,194 @@ def build(
                 error_code="SCHEMA_201",
                 resolution_hint="Run 'confiture init' to create the project structure.",
             ),
-            json_mode=is_json(format_type),
+            json_mode=json_mode,
             output_file=report_output,
         )
     except Exception as e:
-        fail(e, json_mode=is_json(format_type), output_file=report_output)
+        fail(e, json_mode=json_mode, output_file=report_output)
+
+
+_SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
+
+
+def _apply_build_overrides(
+    builder: SchemaBuilder,
+    out: Any,
+    *,
+    two_pass: bool | None,
+    validate_comments: bool | None,
+    fail_on_unclosed: bool | None,
+    fail_on_spillover: bool | None,
+    separator_style: str | None,
+    separator_template: str | None,
+    json_mode: bool,
+    report_output: Path | None,
+) -> None:
+    """CLI flags override the environment's ``build:`` settings; report what changed."""
+    cfg = builder.env_config.build
+    if validate_comments is not None:
+        cfg.validate_comments.enabled = validate_comments
+    if fail_on_unclosed is not None:
+        cfg.validate_comments.fail_on_unclosed_blocks = fail_on_unclosed
+    if fail_on_spillover is not None:
+        cfg.validate_comments.fail_on_spillover = fail_on_spillover
+    if two_pass is not None:
+        cfg.two_pass = two_pass
+    if separator_style is not None:
+        if separator_style not in _SEPARATOR_STYLES:
+            fail(
+                ConfigurationError(
+                    f"Invalid separator style: {separator_style}",
+                    resolution_hint=f"Valid options: {', '.join(_SEPARATOR_STYLES)}",
+                ),
+                json_mode=json_mode,
+                output_file=report_output,
+            )
+        cfg.separators.style = separator_style
+    if separator_template is not None:
+        cfg.separators.custom_template = separator_template
+    if (
+        separator_style == "custom"
+        and not separator_template
+        and not cfg.separators.custom_template
+    ):
+        fail(
+            ConfigurationError(
+                "Custom separator style requires --separator-template",
+                resolution_hint="Pass --separator-template with a {file_path} placeholder.",
+            ),
+            json_mode=json_mode,
+            output_file=report_output,
+        )
+    shown = [
+        ("Two-pass FK emission", two_pass),
+        ("Comment validation", validate_comments),
+        ("Fail on unclosed blocks", fail_on_unclosed),
+        ("Fail on spillover", fail_on_spillover),
+        ("Separator style", separator_style),
+    ]
+    if separator_template is not None:
+        shown.append(
+            (
+                "Custom template",
+                f"{separator_template[:50]}..."
+                if len(separator_template) > 50
+                else separator_template,
+            )
+        )
+    applied = [(label, value) for label, value in shown if value is not None]
+    if applied:
+        out.print("[cyan]📝 Configuration overrides applied:[/cyan]")
+        for label, value in applied:
+            out.print(f"  • {label}: {value}")
+
+
+def _apply_seeds_sequentially(
+    builder: SchemaBuilder,
+    out: Any,
+    *,
+    env: str,
+    database_url: str | None,
+    continue_on_error: bool,
+    profile: Any,
+    json_mode: bool,
+    report_output: Path | None,
+) -> int:
+    """``--sequential``: apply the seed files through the core sequencer; return the count."""
+    from confiture.core.seed.sequencer import apply_seed_files
+
+    out.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
+    _schema_files, seed_files = builder.categorize_sql_files()
+    if not seed_files:
+        out.print("[yellow]⚠️  No seed files found[/yellow]")
+        return 0
+    try:
+        result = apply_seed_files(
+            database_url or builder.env_config.database_url,
+            seed_files[0].parent.parent,
+            env=env,
+            profile=profile,
+            continue_on_error=continue_on_error,
+            console=console,
+        )
+    except ConfiturError as e:
+        fail(e, json_mode=json_mode, output_file=report_output)
+    out.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
+    if result.failed > 0:
+        out.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
+    return result.succeeded
+
+
+def _write_dump_artifact(
+    builder: SchemaBuilder,
+    out: Any,
+    *,
+    dump: Path,
+    dump_format: str,
+    env: str,
+    database_url: str | None,
+    schema_hash: str,
+    schema_only: bool,
+    seed_profile: str | None,
+    seed_profile_obj: Any,
+    json_mode: bool,
+    report_output: Path | None,
+) -> tuple[str, str | None]:
+    """``--dump``: a cacheable pg_dump artifact built from an ephemeral database.
+
+    The artifact content always matches the db/ hash that names it.
+    """
+    if dump_format not in ("custom", "directory"):
+        fail(
+            ConfigurationError(
+                f"Invalid dump format: {dump_format}. Use custom or directory.",
+                resolution_hint="Pass --dump-format custom or directory.",
+            ),
+            json_mode=json_mode,
+            output_file=report_output,
+        )
+    server_url = database_url or builder.env_config.database_url
+    if not server_url:
+        fail(
+            ConfigurationError(
+                "--dump requires a database server URL to build the ephemeral dump database.",
+                error_code="CONFIG_010",
+                resolution_hint="Provide --database-url or set it in the environment config.",
+            ),
+            json_mode=json_mode,
+            output_file=report_output,
+        )
+    if dump.is_dir() or str(dump).endswith("/"):
+        artifact_out = default_artifact_path(
+            dump, env, schema_hash, profile=seed_profile, dump_format=dump_format
+        )
+    else:
+        artifact_out = dump
+    artifact_schema_sql = builder.build(schema_only=True)
+    if schema_only:
+        artifact_seed_files: list[Path] | None = None
+    else:
+        _schema_files, seed_paths = builder.categorize_sql_files()
+        if seed_profile_obj is not None:
+            from confiture.core.seed_applier import _apply_profile_filter
+
+            seed_paths = _apply_profile_filter(seed_paths, seed_profile_obj)
+        artifact_seed_files = seed_paths or None
+    artifact_result = build_schema_artifact(
+        server_url=server_url,
+        schema_sql=artifact_schema_sql,
+        output_path=artifact_out,
+        schema_hash=schema_hash,
+        seed_files=artifact_seed_files,
+        dump_format=dump_format,
+    )
+    path_str = str(artifact_result.artifact_path)
+    if not json_mode:
+        if artifact_result.skipped:
+            out.print(f"[cyan]📦 Artifact up-to-date (cache hit): {path_str}[/cyan]")
+        else:
+            out.print(f"[green]📦 Artifact written: {path_str}[/green]")
+    return path_str, artifact_result.artifact_hash
 
 
 @cli_boundary
@@ -818,21 +790,9 @@ def lint(
         Control exit behavior based on issue severity
     """
     try:
-        # Validate format option
-        if format_type not in LINT_FORMATS:
-            fail(
-                ConfigurationError(
-                    f"Invalid format: {format_type}",
-                    resolution_hint=f"Valid formats: {', '.join(LINT_FORMATS)}",
-                ),
-                json_mode=False,  # an invalid format can't be honored as JSON
-                output_file=output,
-            )
-
         if list_rules:
             _emit_rule_catalogue(format_type, output)
             return
-
         # One selection, resolved once (#150). The three per-rule flags are
         # aliases over it rather than branches further down: each adds its
         # family to the defaults, which is exactly what it always did.
@@ -843,8 +803,6 @@ def lint(
             check_tenant_isolation=check_tenant_isolation,
             check_security_definer=check_security_definer,
         )
-
-        # Create linter configuration (use LinterConfig for the linter)
         config = LinterConfig(
             enabled=True,
             fail_on_error=fail_on_error,
@@ -856,152 +814,48 @@ def lint(
             check_tenant_isolation="tenant_001" in selected,
             check_acl_coverage="acl_001" in selected,
         )
-
-        # Create linter and run linting
         console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
         linter = SchemaLinter(env=env, config=config)
         linter_report = linter.lint()
-
         # LintConfig's switches are coarser than the rule codes — `check_naming`
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
-        # second pass over the findings. Cheap, and it means every rule is
-        # selectable individually without reshaping LintConfig.
+        # second pass over the findings.
         _keep_selected_rules(linter_report, selected)
-
-        # Convert to model LintReport for formatting
         report = _convert_linter_report(linter_report, schema_name=env)
-
-        # Display results based on format
         if format_type == "table":
             format_lint_report(report, format_type="table", console=console)
         else:
-            # JSON/CSV format: format and optionally save
-            # Cast format_type for type checker
             fmt = "json" if format_type == "json" else "csv"
-            formatted = format_lint_report(
-                report,
-                format_type=fmt,
-                console=console,
-            )
-
+            formatted = format_lint_report(report, format_type=fmt, console=console)
             if output:
                 save_report(report, output, format_type=fmt)
                 console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
                 console.print(formatted)
 
-        # Determine exit code based on violations and fail mode
         should_fail = (report.has_errors and fail_on_error) or (
             report.has_warnings and fail_on_warning
         )
-
-        # #139: replica-aware forward-compatibility lint over the migrations tree
-        # (a migration-tree check, distinct from the schema lint above).
         if "replica_001" in selected:
-            from confiture.core.linting.libraries.replica import Replica001ForwardCompat
-            from confiture.core.linting.schema_linter import RuleSeverity
-
-            has_replicas = False
-            bypass = False
-            try:
-                from confiture.config.environment import Environment
-
-                _env = Environment.load(env, project_dir=project_dir)
-                has_replicas = bool(_env.infrastructure.replicas)
-                bypass = _env.migration.allow_unsafe_under_replication
-            except Exception:  # noqa: BLE001 — replica policy degrades to defaults
-                pass
-
-            replica_violations = Replica001ForwardCompat(
-                has_replicas=has_replicas, bypass=bypass
-            ).check(migrations_dir)
-            if replica_violations:
-                console.print("\n[cyan]🔁 Replica forward-compatibility:[/cyan]")
-                for v in replica_violations:
-                    color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
-                    console.print(
-                        f"  [{color}]{v.severity.value.upper()}[/{color}] {v.rule_id} "
-                        f"({v.object_name}): {v.message}"
-                    )
-                rep_errors = any(v.severity == RuleSeverity.ERROR for v in replica_violations)
-                rep_warnings = any(v.severity == RuleSeverity.WARNING for v in replica_violations)
-                should_fail = (
-                    should_fail
-                    or (rep_errors and fail_on_error)
-                    or (rep_warnings and fail_on_warning)
+            should_fail = (
+                _replica_lint(
+                    env,
+                    project_dir,
+                    migrations_dir,
+                    fail_on_error=fail_on_error,
+                    fail_on_warning=fail_on_warning,
                 )
-            else:
-                console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
-
-        # #161: sec_002 — SECURITY DEFINER / search_path bolt-on.
-        # Scans the env's schema DDL (same DDL as confiture build uses).
-        # Note: sec_002 findings print to the console here; they are NOT
-        # folded into the JSON report produced above.  For machine-readable
-        # output use `migrate validate --check-security-definer --format json`.
-        if "sec_002" in selected:
-            from confiture.core.builder import SchemaBuilder
-            from confiture.core.linting.libraries.security_definer import (
-                Sec002SecurityDefinerSearchPath,
+                or should_fail
             )
-            from confiture.core.linting.schema_linter import RuleSeverity as _RS
-
-            sd_violations: list = []
-            _sec_cfg = None
-            try:
-                _pd = project_dir or Path.cwd()
-                _cfg_path = _pd / "db" / "environments" / f"{env}.yaml"
-                if _cfg_path.exists():
-                    from confiture.core.connection import load_config as _lc
-                    from confiture.core.validation.config_loaders import (
-                        load_security_lint as _lsl,
-                    )
-
-                    _sec_cfg = _lsl(_lc(_cfg_path), _cfg_path, require=False)
-                if _sec_cfg is not None and not _sec_cfg.enabled:
-                    _sec_cfg = None
-            except Exception:  # noqa: BLE001 — degrade gracefully
-                _sec_cfg = None
-
-            if _sec_cfg is not None:
-                _severity = _RS.ERROR if _sec_cfg.severity == "error" else _RS.WARNING
-                try:
-                    _sb = SchemaBuilder(env=env, project_dir=project_dir)
-                    _ddl_paths = _sb.find_sql_files()
-                except Exception:  # noqa: BLE001
-                    _ddl_paths = (
-                        sorted(Path("db/schema").rglob("*.sql"))
-                        if Path("db/schema").exists()
-                        else []
-                    )
-                _rule = Sec002SecurityDefinerSearchPath(
-                    apply_to=_sec_cfg.apply_to,
-                    ignore=_sec_cfg.ignore,
-                    severity=_severity,
+        if "sec_002" in selected:
+            should_fail = (
+                _security_definer_lint(
+                    env, project_dir, fail_on_error=fail_on_error, fail_on_warning=fail_on_warning
                 )
-                sd_violations = _rule.check(_ddl_paths or [Path("db/schema")])
-
-            if sd_violations:
-                console.print("\n[cyan]🔒 Security-definer search_path lint:[/cyan]")
-                for _v in sd_violations:
-                    _color = "red" if _v.severity == _RS.ERROR else "yellow"
-                    _loc = f" ({_v.file_path}:{_v.line_number})" if _v.line_number else ""
-                    console.print(
-                        f"  [{_color}]{_v.severity.value.upper()}[/{_color}] "
-                        f"{_v.rule_id} ({_v.object_name}){_loc}: {_v.message}"
-                    )
-                _sd_errors = any(_v.severity == _RS.ERROR for _v in sd_violations)
-                _sd_warnings = any(_v.severity == _RS.WARNING for _v in sd_violations)
-                should_fail = (
-                    should_fail
-                    or (_sd_errors and fail_on_error)
-                    or (_sd_warnings and fail_on_warning)
-                )
-            elif _sec_cfg is not None:
-                console.print("\n[green]🔒 Security-definer search_path lint: no issues[/green]")
-
+                or should_fail
+            )
         if should_fail:
             raise typer.Exit(1)  # success-signal: lint found violations
-
     except typer.Exit:
         raise
     except FileNotFoundError as e:
@@ -1011,6 +865,98 @@ def lint(
     except Exception as e:
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e
+
+
+def _replica_lint(
+    env: str, project_dir: Path, migrations_dir: Path, *, fail_on_error: bool, fail_on_warning: bool
+) -> bool:
+    """#139: replica-aware forward-compatibility lint over the migrations tree.
+
+    A migration-tree check, distinct from the schema lint. Returns whether it
+    fails the run under the given fail modes.
+    """
+    from confiture.core.linting.libraries.replica import Replica001ForwardCompat
+    from confiture.core.linting.schema_linter import RuleSeverity
+
+    has_replicas = False
+    bypass = False
+    try:
+        from confiture.config.environment import Environment
+
+        _env = Environment.load(env, project_dir=project_dir)
+        has_replicas = bool(_env.infrastructure.replicas)
+        bypass = _env.migration.allow_unsafe_under_replication
+    except Exception:  # noqa: BLE001 — replica policy degrades to defaults
+        pass
+    violations = Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
+        migrations_dir
+    )
+    if not violations:
+        console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
+        return False
+    console.print("\n[cyan]🔁 Replica forward-compatibility:[/cyan]")
+    for v in violations:
+        color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
+        console.print(
+            f"  [{color}]{v.severity.value.upper()}[/{color}] {v.rule_id} "
+            f"({v.object_name}): {v.message}"
+        )
+    errors = any(v.severity == RuleSeverity.ERROR for v in violations)
+    warnings = any(v.severity == RuleSeverity.WARNING for v in violations)
+    return (errors and fail_on_error) or (warnings and fail_on_warning)
+
+
+def _security_definer_lint(
+    env: str, project_dir: Path, *, fail_on_error: bool, fail_on_warning: bool
+) -> bool:
+    """#161: sec_002 — SECURITY DEFINER / search_path bolt-on over the env's schema DDL.
+
+    Findings print to the console; they are NOT folded into the JSON report. For
+    machine-readable output use `migrate validate --check-security-definer --format json`.
+    Returns whether it fails the run under the given fail modes.
+    """
+    from confiture.core.builder import SchemaBuilder
+    from confiture.core.linting.libraries.security_definer import (
+        Sec002SecurityDefinerSearchPath,
+    )
+    from confiture.core.linting.schema_linter import RuleSeverity as _RS
+
+    sec_cfg = None
+    try:
+        cfg_path = (project_dir or Path.cwd()) / "db" / "environments" / f"{env}.yaml"
+        if cfg_path.exists():
+            from confiture.core.connection import load_config as _lc
+            from confiture.core.validation.config_loaders import load_security_lint as _lsl
+
+            sec_cfg = _lsl(_lc(cfg_path), cfg_path, require=False)
+        if sec_cfg is not None and not sec_cfg.enabled:
+            sec_cfg = None
+    except Exception:  # noqa: BLE001 — degrade gracefully
+        sec_cfg = None
+    if sec_cfg is None:
+        return False
+    severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
+    try:
+        ddl_paths = SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
+    except Exception:  # noqa: BLE001
+        ddl_paths = sorted(Path("db/schema").rglob("*.sql")) if Path("db/schema").exists() else []
+    violations = Sec002SecurityDefinerSearchPath(
+        apply_to=sec_cfg.apply_to, ignore=sec_cfg.ignore, severity=severity
+    ).check(ddl_paths or [Path("db/schema")])
+    if not violations:
+        console.print("\n[green]🔒 Security-definer search_path lint: no issues[/green]")
+        return False
+    console.print("\n[cyan]🔒 Security-definer search_path lint:[/cyan]")
+    for v in violations:
+        color = "red" if v.severity == _RS.ERROR else "yellow"
+        loc = f" ({v.file_path}:{v.line_number})" if v.line_number else ""
+        console.print(
+            f"  [{color}]{v.severity.value.upper()}[/{color}] "
+            f"{v.rule_id} ({v.object_name}){loc}: {v.message}"
+        )
+    errors = any(v.severity == _RS.ERROR for v in violations)
+    warnings = any(v.severity == _RS.WARNING for v in violations)
+    return (errors and fail_on_error) or (warnings and fail_on_warning)
 
 
 def _keep_selected_rules(linter_report: LinterReport, selected: frozenset[str]) -> None:

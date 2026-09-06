@@ -334,7 +334,7 @@ def check(
         existing.extend(registry.list_intents(status=IntentStatus.IN_PROGRESS))
 
         # Detect conflicts
-        detector = registry._detector
+        detector = registry.detector
         all_conflicts = []
 
         for existing_intent in existing:

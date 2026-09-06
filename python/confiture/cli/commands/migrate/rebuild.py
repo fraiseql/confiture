@@ -144,9 +144,8 @@ def migrate_rebuild(
             tracking_backup_data = None
             tracking_backup_table = "tb_confiture"
             if backup_tracking and not dry_run:
-                migrator = m._migrator
-                assert migrator is not None
-                tracking_backup_data = migrator._backup_tracking_table()
+                migrator = m.migrator
+                tracking_backup_data = migrator.backup_tracking_table()
                 # Captured here, where the resolved name is in hand (#190).
                 tracking_backup_table = migrator.migration_table
 

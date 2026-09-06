@@ -145,6 +145,18 @@ class MigratorSession:
             )
         return self._conn
 
+    @property
+    def migrator(self) -> Migrator:
+        """The session's engine (inside ``with``, or when attached)."""
+        if self._migrator is None:
+            from confiture.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        return self._migrator
+
     # ------------------------------------------------------------------ #
     # Lock inspection                                                    #
     # ------------------------------------------------------------------ #

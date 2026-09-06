@@ -20,7 +20,7 @@ import psycopg
 import pytest
 import yaml
 
-from confiture.cli.commands.migrate_analysis import (
+from confiture.cli.commands.migrate.preflight import (
     _preflight_tracking_table,
     _target_tracking_table_state,
 )

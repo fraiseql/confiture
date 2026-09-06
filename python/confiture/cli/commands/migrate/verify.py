@@ -10,14 +10,9 @@ from typing import Any
 
 import typer
 
+from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, NO_CONFIG_OPTION_HELP
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import (
-    DATABASE_URL_OPTION_HELP,
-    NO_CONFIG_OPTION_HELP,
-    _output_json,
-    console,
-    is_json,
-)
+from confiture.cli.helpers import _output_json, console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -94,13 +89,13 @@ def migrate_verify(
       confiture migrate up      - Apply pending migrations
     """
     from confiture.cli.commands.admin import _NO_LEDGER_HINT
-    from confiture.cli.formatters.migrate_formatter import format_verify_results
-    from confiture.cli.helpers import (
-        _get_tracking_table,
+    from confiture.cli.dsn import (
         config_is_explicit,
         has_intentional_dsn_source,
         resolve_database_url,
     )
+    from confiture.cli.formatters.migrate_formatter import format_verify_results
+    from confiture.cli.helpers import _get_tracking_table
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migration_verifier import MigrationVerifier
     from confiture.core.migrator import Migrator

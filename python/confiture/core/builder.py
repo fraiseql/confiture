@@ -168,6 +168,10 @@ class SchemaBuilder:
             elif hasattr(su_post_dir, "path"):
                 self._superuser_post_paths.append(Path(su_post_dir.path).resolve())
 
+    def find_common_parent(self, paths: list[Path]) -> Path:
+        """Public spelling of :meth:`_find_common_parent`."""
+        return self._find_common_parent(paths)
+
     def _find_common_parent(self, paths: list[Path]) -> Path:
         """Find common parent directory of all paths.
 

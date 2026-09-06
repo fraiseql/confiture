@@ -12,6 +12,22 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
 
 ### Changed
 
+- **No CLI function over 150 lines.** No function in `cli/` exceeds 150
+  body lines (an AST budget test enforces it): the 811-line `migrate up` is
+  options plus `session.up()` plus a reporter, and `migrate_core.py`,
+  `migrate_state.py` and `migrate_analysis.py` are split into one module per
+  command under `cli/commands/migrate/`. `build --sequential` delegates to
+  `core/seed/sequencer.apply_seed_files()`. No CLI module reaches into a
+  `_private` attribute of a core object any more (AST guard):
+  `Migrator.backup_tracking_table()`, `MigratorSession.migrator`,
+  `IntentRegistry.detector`, `SchemaBuilder.find_common_parent()` and
+  `is_seed_file()` are the public spellings, and filenames are parsed by the
+  one `parse_migration_filename()`. `cli/helpers.py` drops from 1442 to ~400
+  lines: DSN resolution lives in `cli/dsn.py`, the idempotency check and fixer
+  in `cli/idempotency.py`, the ownership fixer in `cli/ownership.py`. The
+  redundant `except Exception: fail(e)` wrappers under `@cli_boundary` are
+  gone from `migrate baseline/reinit/generate`, and the remaining broad
+  handlers in `cli/` are pinned by a per-file baseline that may only shrink.
 - ⚠️ **One `--format` validator, exit 5.** Fourteen commands validated
   `--format` by hand — each with its own message, stream and exit code (1, 2,
   or a swallowed `typer.Exit`) — and thirty-two did not validate at all.

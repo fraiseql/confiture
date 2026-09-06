@@ -171,156 +171,151 @@ def migrate_baseline(
     from confiture.core.connection import create_connection, load_config
     from confiture.core.migrator import Migrator
 
-    try:
-        if through is None and from_db is None:
-            fail(
-                ConfigurationError(
-                    "Missing required option. Pass either --through <version> or --from-db <DSN>.",
-                ),
-                json_mode=False,
-            )
+    if through is None and from_db is None:
+        fail(
+            ConfigurationError(
+                "Missing required option. Pass either --through <version> or --from-db <DSN>.",
+            ),
+            json_mode=False,
+        )
 
-        if not config.exists():
-            fail(
-                ConfigurationError(
-                    f"Config file not found: {config}",
-                    error_code="CONFIG_004",
-                    resolution_hint="Specify config with --config path/to/config.yaml.",
-                ),
-                json_mode=False,
-            )
+    if not config.exists():
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Specify config with --config path/to/config.yaml.",
+            ),
+            json_mode=False,
+        )
 
-        if not migrations_dir.exists():
-            fail(
-                ConfigurationError(
-                    f"Migrations directory not found: {migrations_dir}",
-                    error_code="CONFIG_004",
-                ),
-                json_mode=False,
-            )
+    if not migrations_dir.exists():
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=False,
+        )
 
-        if from_db is not None:
-            _baseline_from_db_flow(
-                from_db=from_db,
-                through=through,
-                source_table=source_table,
-                migrations_dir=migrations_dir,
-                config=config,
-                dry_run=dry_run,
-            )
-            return
+    if from_db is not None:
+        _baseline_from_db_flow(
+            from_db=from_db,
+            through=through,
+            source_table=source_table,
+            migrations_dir=migrations_dir,
+            config=config,
+            dry_run=dry_run,
+        )
+        return
 
-        # Check for duplicate migration versions (hard block, no DB needed)
-        from confiture.core.migrator import find_duplicate_migration_versions as _baseline_find
+    _refuse_duplicate_baseline(migrations_dir)
 
-        _baseline_duplicates = _baseline_find(migrations_dir)
-        if _baseline_duplicates:
-            console.print(
-                "[red]❌ Duplicate migration versions detected — refusing to proceed[/red]"
-            )
-            console.print("[red]Multiple migration files share the same version number:[/red]\n")
-            for version, files in sorted(_baseline_duplicates.items()):
-                console.print(f"  Version {version}:")
-                for f in files:
-                    console.print(f"    • {f.name}")
-            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-            console.print(
-                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
-            )
-            fail(
-                MigrationError(
-                    "Duplicate migration versions detected — refusing to proceed.",
-                    error_code="MIGR_106",
-                ),
-                json_mode=False,
-            )
+    # Load config and create connection
+    config_data = load_config(config)
+    conn = create_connection(config_data)
 
-        # Load config and create connection
-        config_data = load_config(config)
-        conn = create_connection(config_data)
+    # Initialize migrator
+    migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
+    migrator.initialize()
 
-        # Initialize migrator
-        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
-        migrator.initialize()
+    # Find all migration files
+    all_migrations = migrator.find_migration_files(migrations_dir)
 
-        # Find all migration files
-        all_migrations = migrator.find_migration_files(migrations_dir)
-
-        if not all_migrations:
-            console.print("[yellow]No migrations found.[/yellow]")
-            conn.close()
-            return
-
-        # Filter migrations up to and including the target version
-        migrations_to_mark: list[Path] = []
-        for migration_file in all_migrations:
-            version = migrator._version_from_filename(migration_file.name)
-            migrations_to_mark.append(migration_file)
-            if version == through:
-                break
-        else:
-            # Target version not found
-            console.print("[yellow]Available versions:[/yellow]")
-            for mf in all_migrations[:10]:
-                v = migrator._version_from_filename(mf.name)
-                console.print(f"  • {v}")
-            if len(all_migrations) > 10:
-                console.print(f"  ... and {len(all_migrations) - 10} more")
-            conn.close()
-            fail(
-                MigrationError(
-                    f"Migration version '{through}' not found",
-                    version=through,
-                    error_code="MIGR_100",
-                ),
-                json_mode=False,
-            )
-
-        # Get already applied versions
-        applied_versions = set(migrator.get_applied_versions())
-
-        # Show what will be done
-        console.print(f"\n[cyan]📋 Baseline: marking migrations through {through}[/cyan]\n")
-
-        if dry_run:
-            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
-
-        marked_count = 0
-        skipped_count = 0
-
-        for migration_file in migrations_to_mark:
-            version = migrator._version_from_filename(migration_file.name)
-            # Extract name
-            _, name = parse_migration_filename(migration_file.name)
-
-            if version in applied_versions:
-                console.print(f"  [dim]⏭️  {version} {name} (already applied)[/dim]")
-                skipped_count += 1
-            else:
-                if dry_run:
-                    console.print(f"  [cyan]📝 {version} {name} (would mark as applied)[/cyan]")
-                else:
-                    migrator.mark_applied(migration_file, reason="baseline")
-                    console.print(f"  [green]✅ {version} {name} (marked as applied)[/green]")
-                marked_count += 1
-
-        # Summary
-        console.print()
-        if dry_run:
-            console.print(
-                f"[cyan]📊 Would mark {marked_count} migration(s), "
-                f"skip {skipped_count} already applied[/cyan]"
-            )
-            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
-        else:
-            console.print(
-                f"[green]✅ Marked {marked_count} migration(s) as applied, "
-                f"skipped {skipped_count} already applied[/green]"
-            )
-
+    if not all_migrations:
+        console.print("[yellow]No migrations found.[/yellow]")
         conn.close()
+        return
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        fail(e, json_mode=False)
+    # Filter migrations up to and including the target version
+    migrations_to_mark: list[Path] = []
+    for migration_file in all_migrations:
+        version = parse_migration_filename(migration_file.name)[0]
+        migrations_to_mark.append(migration_file)
+        if version == through:
+            break
+    else:
+        # Target version not found
+        console.print("[yellow]Available versions:[/yellow]")
+        for mf in all_migrations[:10]:
+            v = parse_migration_filename(mf.name)[0]
+            console.print(f"  • {v}")
+        if len(all_migrations) > 10:
+            console.print(f"  ... and {len(all_migrations) - 10} more")
+        conn.close()
+        fail(
+            MigrationError(
+                f"Migration version '{through}' not found",
+                version=through,
+                error_code="MIGR_100",
+            ),
+            json_mode=False,
+        )
+
+    # Get already applied versions
+    applied_versions = set(migrator.get_applied_versions())
+
+    # Show what will be done
+    console.print(f"\n[cyan]📋 Baseline: marking migrations through {through}[/cyan]\n")
+
+    if dry_run:
+        console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+
+    marked_count = 0
+    skipped_count = 0
+
+    for migration_file in migrations_to_mark:
+        version = parse_migration_filename(migration_file.name)[0]
+        # Extract name
+        _, name = parse_migration_filename(migration_file.name)
+
+        if version in applied_versions:
+            console.print(f"  [dim]⏭️  {version} {name} (already applied)[/dim]")
+            skipped_count += 1
+        else:
+            if dry_run:
+                console.print(f"  [cyan]📝 {version} {name} (would mark as applied)[/cyan]")
+            else:
+                migrator.mark_applied(migration_file, reason="baseline")
+                console.print(f"  [green]✅ {version} {name} (marked as applied)[/green]")
+            marked_count += 1
+
+    # Summary
+    console.print()
+    if dry_run:
+        console.print(
+            f"[cyan]📊 Would mark {marked_count} migration(s), "
+            f"skip {skipped_count} already applied[/cyan]"
+        )
+        console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+    else:
+        console.print(
+            f"[green]✅ Marked {marked_count} migration(s) as applied, "
+            f"skipped {skipped_count} already applied[/green]"
+        )
+
+    conn.close()
+
+
+def _refuse_duplicate_baseline(migrations_dir: Path) -> None:
+    """Duplicate migration versions are a hard block (no DB needed)."""
+    from confiture.core.migrator import find_duplicate_migration_versions as _baseline_find
+
+    duplicates = _baseline_find(migrations_dir)
+    if not duplicates:
+        return
+    console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
+    console.print("[red]Multiple migration files share the same version number:[/red]\n")
+    for version, files in sorted(duplicates.items()):
+        console.print(f"  Version {version}:")
+        for f in files:
+            console.print(f"    • {f.name}")
+    console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+    console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
+    fail(
+        MigrationError(
+            "Duplicate migration versions detected — refusing to proceed.",
+            error_code="MIGR_106",
+        ),
+        json_mode=False,
+    )
