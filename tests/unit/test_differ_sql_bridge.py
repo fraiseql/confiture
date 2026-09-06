@@ -2,7 +2,7 @@
 
 import pytest
 
-from confiture.core.introspection.differ_sql import DifferSQLGenerator
+from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.exceptions import UnsafeOperationError
 from confiture.models.schema import SchemaChange
 

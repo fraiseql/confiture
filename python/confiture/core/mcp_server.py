@@ -235,7 +235,7 @@ class MCPServer:
         return result.to_dict()
 
     def _call_schema_introspect(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from confiture.core.introspector import SchemaIntrospector
+        from confiture.core.introspection.tables import SchemaIntrospector
 
         schema: str = arguments.get("schema", "public")
         all_tables: bool = bool(arguments.get("all_tables", False))

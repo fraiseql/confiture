@@ -19,10 +19,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from confiture.config.environment import DatabaseConfig, Environment
-from confiture.core.config_validator import ConfigValidator
 from confiture.core.hooks.builtin.backup_hook import BackupConfig, BackupHook
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.phases import HookPhase
+from confiture.core.validation.config_validator import ConfigValidator
 from confiture.models.results import PreflightAgainstResult
 from confiture.url_redaction import redact_url, split_password
 

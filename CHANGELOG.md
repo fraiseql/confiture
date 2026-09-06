@@ -27,6 +27,12 @@ Phase 08 of the 2026-09-06 review: the package boundaries say what the modules d
   under `confiture.core.seed` as `applier`, `executor`, `bridge` and
   `validation`. The old import paths keep working through thin shims that are
   removed at 1.0.0; nothing inside the package uses them, and a test holds it.
+- **One validation package, one introspection package.** `core/validators/`
+  (the comment validator) and `core/config_validator.py` move into
+  `confiture.core.validation`; `core/introspector.py` becomes
+  `confiture.core.introspection.tables`; `introspection/differ_sql.py`, a
+  differ helper, becomes `confiture.core.differ_sql` beside `differ.py`. The
+  old paths are thin shims until 1.0.0.
 
 ## [0.52.0] - 2026-09-07
 

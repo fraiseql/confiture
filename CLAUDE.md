@@ -274,6 +274,7 @@ confiture/
 │   │   ├── builder.py           # SchemaBuilder — Medium 1: build from DDL
 │   │   ├── migrator.py          # Migrator + MigratorSession — Medium 2
 │   │   ├── differ.py            # SchemaDiffer — schema diff detection
+│   │   ├── differ_sql.py        # SQL rendering for schema changes
 │   │   ├── syncer.py            # Production sync — Medium 3
 │   │   ├── schema_to_schema.py  # FDW migration — Medium 4
 │   │   ├── migration_generator.py  # Migration file generation (+ external generators)
@@ -281,13 +282,14 @@ confiture/
 │   │   ├── grant_accompaniment.py  # GrantAccompanimentChecker
 │   │   ├── baseline_detector.py    # BaselineDetector (fuzzy snapshot matching)
 │   │   ├── schema_snapshot.py      # SchemaSnapshotGenerator
-│   │   ├── introspector.py         # SchemaIntrospector (tables/columns/FKs)
 │   │   ├── introspection/          # Phase 6 introspection package
+│   │   │   ├── tables.py           # SchemaIntrospector (tables/columns/FKs)
 │   │   │   ├── functions.py        # FunctionIntrospector
 │   │   │   ├── type_mapping.py     # TypeMapper
 │   │   │   ├── dependency_graph.py # DependencyGraph
 │   │   │   └── sql_ast.py          # CTENode, JSONBKey
 │   │   ├── connection.py        # create_connection, load_config
+│   │   ├── validation/          # validate checks, comment_validator, config_validator
 │   │   ├── error_codes.py       # ErrorCodeDefinition, ErrorCodeRegistry
 │   │   ├── ledger.py            # ledger_exists() — shared migration-ledger probe
 │   │   ├── linting/             # SchemaLinter and rules

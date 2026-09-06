@@ -5,7 +5,7 @@ All database interactions are mocked so these tests run without PostgreSQL.
 
 from unittest.mock import MagicMock
 
-from confiture.core.introspector import SchemaIntrospector, _detect_hints
+from confiture.core.introspection.tables import SchemaIntrospector, _detect_hints
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,

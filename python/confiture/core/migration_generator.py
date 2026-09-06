@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from confiture.core._migrator.discovery import parse_migration_filename
-from confiture.core.introspection.differ_sql import DifferSQLGenerator
+from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff

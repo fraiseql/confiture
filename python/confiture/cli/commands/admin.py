@@ -474,7 +474,7 @@ def validate_config(
 
     JSON output: {valid, config_source, migrations_path, migration_count, issues[]}.
     """
-    from confiture.core.config_validator import ConfigValidator
+    from confiture.core.validation.config_validator import ConfigValidator
 
     # Source selection: an explicit --config validates that YAML; a
     # --database-url flag is validated for *format* as an issue (not raised);

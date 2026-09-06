@@ -17,7 +17,7 @@ from confiture.core.progress import ProgressManager
 # The seed-path rule lives in core.seed.paths; re-exported for callers that
 # imported it from here.
 from confiture.core.seed.paths import _SEED_DIR_RE, is_seed_path  # noqa: F401
-from confiture.core.validators import CommentValidator
+from confiture.core.validation.comment_validator import CommentValidator
 from confiture.exceptions import SchemaError
 from confiture.models.results import SplitBuildResult
 

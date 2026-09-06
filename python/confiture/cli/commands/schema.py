@@ -22,7 +22,7 @@ from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.options import format_option
 from confiture.core.builder import SchemaBuilder
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
-from confiture.core.introspector import SchemaIntrospector
+from confiture.core.introspection.tables import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import LintConfig as LinterConfig
 from confiture.core.linting.schema_linter import LintReport as LinterReport

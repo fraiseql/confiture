@@ -218,7 +218,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "MigrationVerifier": ("confiture.core.migration_verifier", "MigrationVerifier"),
     "VerifyResult": ("confiture.core.migration_verifier", "VerifyResult"),
     # Table/schema introspection
-    "SchemaIntrospector": ("confiture.core.introspector", "SchemaIntrospector"),
+    "SchemaIntrospector": ("confiture.core.introspection.tables", "SchemaIntrospector"),
     "IntrospectionResult": ("confiture.models.introspection", "IntrospectionResult"),
     "IntrospectedTable": ("confiture.models.introspection", "IntrospectedTable"),
     "IntrospectedColumn": ("confiture.models.introspection", "IntrospectedColumn"),

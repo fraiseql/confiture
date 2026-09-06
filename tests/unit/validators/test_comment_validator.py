@@ -9,7 +9,7 @@ Tests cover:
 
 from pathlib import Path
 
-from confiture.core.validators.comment_validator import (
+from confiture.core.validation.comment_validator import (
     CommentValidator,
     CommentViolation,
     CommentViolationSeverity,
