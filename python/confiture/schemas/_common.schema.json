@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/_common.schema.json",
+  "title": "Confiture common JSON-Schema definitions",
+  "description": "Shared sub-schemas referenced by per-command output schemas in this directory. Stable contract: changes require a top-level version bump in each consuming schema.",
+  "$defs": {
+    "HintsArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Advisory hints emitted on quiet-success states (e.g. zero migration files found, empty tracking table). Always present. Empty list when no hints are applicable. Hints never change the exit code \u2014 agents may treat presence of items as 'this success looks unusual'."
+    },
+    "Violation": {
+      "type": "object",
+      "description": "A single non-idempotent SQL pattern detected in a migration file.",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Stable pattern id (see migrate-validate-list-patterns.schema.json for the full enumeration)."
+        },
+        "sql_snippet": {
+          "type": "string"
+        },
+        "line_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Line number where the violation starts. For .py migrations this is the line within the embedded SQL; see `source_line` for the .py file line."
+        },
+        "file_path": {
+          "type": "string"
+        },
+        "source_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Line number in the source file (.py file or .sql file). Only present when different from `line_number` \u2014 i.e. SQL embedded in a Python migration. NOTE: field name is `source_line`, NOT `line_number`."
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Suggested fix template. Placeholders may be filled with captured identifiers (table name, constraint name, etc.) when available."
+        },
+        "fix_available": {
+          "type": "boolean",
+          "description": "True when `confiture migrate fix --idempotent` can rewrite this violation automatically."
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "error",
+            "info"
+          ],
+          "description": "`error` fails the gate (exit 1). `info` is a heuristic finding (e.g. CREATE OR REPLACE VIEW shape-risk) that's rendered but does NOT fail the gate unless `--strict-cor` is passed."
+        }
+      },
+      "required": [
+        "pattern",
+        "sql_snippet",
+        "line_number",
+        "file_path",
+        "suggestion",
+        "fix_available",
+        "severity"
+      ]
+    },
+    "ExtractorWarning": {
+      "type": "object",
+      "description": "An execute/execute_file call the analyzer could not statically read (a loop variable in an f-string, a parameter, a missing file, \u2026). Recorded so the caller knows idempotency was not established for it. Since 0.46.0 `message` states the reason, `reason_code` categorises it and `remedy` names the rewrite that makes the call readable (#213).",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "source_file": {
+          "type": "string"
+        },
+        "source_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "reason_code": {
+          "type": "string",
+          "description": "The static evaluator's refusal category (e.g. `fstring_dynamic`, `parameter`, `multiple_bindings`, `file_missing`); empty for a syntax error. Added in 0.46.0."
+        },
+        "remedy": {
+          "type": "string",
+          "description": "The rewrite that makes this call statically readable. Added in 0.46.0."
+        }
+      },
+      "required": [
+        "kind",
+        "source_file",
+        "source_line",
+        "message"
+      ]
+    },
+    "DriftItem": {
+      "type": "object",
+      "description": "A single schema-drift finding between live database and expected DDL.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "missing_table",
+            "extra_table",
+            "missing_column",
+            "extra_column",
+            "type_mismatch",
+            "nullable_mismatch",
+            "default_mismatch",
+            "missing_index",
+            "extra_index",
+            "missing_constraint",
+            "extra_constraint",
+            "missing_grant",
+            "extra_grant",
+            "wrong_owner"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "warning",
+            "info"
+          ]
+        },
+        "object": {
+          "type": "string"
+        },
+        "expected": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actual": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "severity",
+        "object",
+        "message"
+      ]
+    },
+    "Parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

@@ -309,6 +309,8 @@ jobs:
       run: uv run ruff check .
     - name: Run ruff format check
       run: uv run ruff format --check .
+    - name: Published JSON schemas are in sync (docs copy == packaged source)
+      run: uv run python scripts/gen_schemas.py --check
 
   type-check:
     name: Type Check

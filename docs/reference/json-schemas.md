@@ -35,6 +35,17 @@ validator = Draft202012Validator(schema, registry=registry)
 validator.validate(your_payload)  # raises ValidationError on mismatch
 ```
 
+## One source
+
+The schema files live in the package — `python/confiture/schemas/*.schema.json`,
+shipped in the wheel and loadable with `confiture.core.schema_exporter.load_schema()`
+or copied out with `confiture.export_all(dir)`. This directory is a byte-identical
+copy written by `scripts/gen_schemas.py`; CI fails when it drifts. For every
+result model that *is* a command's payload (`MigrateUpResult` → `migrate-up`,
+`VerifyAllResult` → `migrate-verify`, …) a test populates the model and validates
+its `to_dict()` against the schema, so a field added to a model without its
+schema fails the build.
+
 ## Stability
 
 The `hints: list[string]` field is pre-allocated on every top-level
@@ -397,6 +408,22 @@ Live-database drift report against expected DDL.
 [drift-check-acls.schema.json](./json-schemas/drift-check-acls.schema.json)
 
 Shape is identical to plain `drift` — items of type `missing_grant` / `extra_grant` may appear in `drift_items`.
+
+### `confiture build --format json`
+
+**Schema**: [`build.schema.json`](json-schemas/build.schema.json) — `BuildResult.to_dict()`: files processed, schema size and hash, output and artifact paths, seed files applied, warnings, error.
+
+### `confiture lint --format json`
+
+**Schema**: [`lint.schema.json`](json-schemas/lint.schema.json) — `LintReport.to_dict()`: the counts and the violation items (`rule_id`, `severity`, `location`, `message`, `suggested_fix`).
+
+### `confiture introspect --format json`
+
+**Schema**: [`introspect.schema.json`](json-schemas/introspect.schema.json) — `IntrospectionResult.to_dict()`: the tables with their columns, foreign keys and hints.
+
+### `confiture sync --format json`
+
+**Schema**: [`sync.schema.json`](json-schemas/sync.schema.json) — `SyncResult.to_dict()`: rows copied per table, the total, and whether values were anonymized.
 
 ### `confiture lint --list-rules --format json`
 

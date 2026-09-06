@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/drift-check-acls.schema.json",
+  "title": "confiture drift --check-acls --format json",
+  "description": "Drift report including ACL coverage findings. Shape is identical to `drift.schema.json`; the difference is that `drift_items` may include items with `type` ∈ {`missing_grant`, `extra_grant`}. Provided as a separate file so consumers wanting ACL-aware drift can reference it explicitly.",
+  "$ref": "drift.schema.json"
+}

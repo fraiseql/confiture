@@ -1,16 +1,10 @@
-"""Pre-generated JSON Schema v7 files for Confiture result models.
+"""The JSON schemas confiture publishes: the one source (Phase 06, ENG-10).
 
-Load a schema with importlib.resources::
+Every ``*.schema.json`` here ships in the wheel and is what
+``docs/reference/json-schemas/`` copies byte for byte::
 
-    from importlib.resources import files
-    import json
+    from confiture.core.schema_exporter import load_schema
+    load_schema("migrate-up.schema.json")
 
-    schema = json.loads(
-        files("confiture.schemas").joinpath("migrate_up_result.json").read_text()
-    )
-
-Or use the Python API::
-
-    from confiture import generate_schema
-    schema = generate_schema("MigrateUpResult")
+``confiture.export_all(dir)`` writes them all to a directory.
 """

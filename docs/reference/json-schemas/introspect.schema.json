@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.dev/schemas/introspect.schema.json",
+  "title": "confiture introspect --format json",
+  "description": "The result of `confiture introspect --format json`: the tables with their columns, foreign keys and hints. Payload = IntrospectionResult.to_dict() (dataclasses.asdict).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "database",
+    "schema",
+    "introspected_at",
+    "tables"
+  ],
+  "properties": {
+    "database": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "introspected_at": {
+      "type": "string"
+    },
+    "tables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "columns",
+          "outbound_fks",
+          "inbound_fks",
+          "hints"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "pg_type",
+                "nullable",
+                "is_primary_key"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pg_type": {
+                  "type": "string"
+                },
+                "nullable": {
+                  "type": "boolean"
+                },
+                "is_primary_key": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "outbound_fks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from_table",
+                "to_table",
+                "via_column",
+                "on_column"
+              ],
+              "properties": {
+                "from_table": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "to_table": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "via_column": {
+                  "type": "string"
+                },
+                "on_column": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "inbound_fks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from_table",
+                "to_table",
+                "via_column",
+                "on_column"
+              ],
+              "properties": {
+                "from_table": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "to_table": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "via_column": {
+                  "type": "string"
+                },
+                "on_column": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "hints": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "surrogate_pk",
+              "natural_id"
+            ],
+            "properties": {
+              "surrogate_pk": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "natural_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0).",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

@@ -29,16 +29,16 @@ the ``warnings`` array).
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import console, error_console, is_json
+from confiture.cli.helpers import _output_json, console, error_console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError
+from confiture.models.results import SyncResult
 
 if TYPE_CHECKING:
     from confiture.config.environment import DatabaseConfig
@@ -209,17 +209,12 @@ def sync(
 
     total = sum(results.values())
     if json_mode:
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "command": "sync",
-                    "anonymized": anonymize,
-                    "tables": results,
-                    "total_rows": total,
-                    "warnings": warnings,
-                }
-            )
+        _output_json(
+            SyncResult(
+                anonymized=anonymize, tables=dict(results), warnings=list(warnings)
+            ).to_dict(),
+            None,
+            console,
         )
     else:
         for table, rows in results.items():

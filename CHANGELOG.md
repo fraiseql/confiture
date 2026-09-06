@@ -12,6 +12,19 @@ exported surface is exactly as wide as the code behind it.
 
 ### Changed
 
+- ⚠️ **One schema source (ENG-10).** Two schema sets used to drift apart: the
+  seventeen hand-coded "model" schemas shipped in the package (which rejected
+  real `migrate up` output — no `pending`, no `skipped_superuser`) and the
+  hand-written CLI schemas in `docs/reference/json-schemas/`. The packaged
+  `confiture/schemas/*.schema.json` files are the source now (draft 2020-12,
+  `additionalProperties: false`); the docs directory is a byte-identical copy
+  written by `scripts/gen_schemas.py` and checked in CI; `confiture.export_all()`
+  and `generate_schema()` serve those files, and the old `*_result.json` names
+  are gone. For every result model that is a command's payload a test populates
+  the model and validates its `to_dict()`. `build`, `lint`, `introspect` and
+  `sync` gain schemas — `LintReport.to_dict()` is the lint payload and a
+  `SyncResult` model replaces `sync`'s inline dict — so the README's claim that
+  every machine-readable output has a schema is true.
 - ⚠️ **Every configuration field is read (ARC-03).** A guard test now fails on a
   config field nothing consumes. Wired: `seed.continue_on_error` and
   `seed.transaction_mode` (`"transaction"` commits after each seed file — the
