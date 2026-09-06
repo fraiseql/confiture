@@ -87,6 +87,20 @@ jobs:
         echo "=== Rust Extension Verification ==="
         uv run python -c "from confiture.core.builder import HAS_RUST; print(f'✅ Rust extension loaded: {HAS_RUST}')" || echo "❌ Builder import failed"
 
+    - name: Collection census
+      # The collected count is the honest size of the suite; it must be the same
+      # here and on a developer machine. A run that collects a gitignored
+      # artefact (build output, schema snapshots) inflates the local count and
+      # is caught here before it is carried as an unexplained gap (#207).
+      run: |
+        echo "=== Collection census ==="
+        uv run pytest tests/ --collect-only -q -p no:cacheprovider > collected.txt
+        tail -1 collected.txt
+        if grep -E "db/(generated|schema_history)/" collected.txt; then
+          echo "❌ collected test ids reference build output or schema snapshots"
+          exit 1
+        fi
+
     - name: Create test databases
       run: |
         PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_test;"
