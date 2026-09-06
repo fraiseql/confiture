@@ -223,18 +223,6 @@ POSTGRES_PASSWORD=mysecret docker-compose up -d
 docker-compose up -d postgres
 ```
 
-### Building Custom Images
-
-For production-like setup:
-
-```bash
-# Build PostgreSQL image with custom extensions
-docker build -f docker/Dockerfile.postgres -t confiture-postgres:latest .
-
-# Use in compose
-docker-compose -f docker-compose.prod.yml up -d
-```
-
 ### Monitoring
 
 ```bash
@@ -482,17 +470,15 @@ psql postgresql://localhost/confiture_test -c "VACUUM ANALYZE;"
 
 ### Custom PostgreSQL Image
 
-Create `docker/Dockerfile.postgres`:
+The compose file runs the stock `postgres:16` image with three development-only
+flags (`fsync=off`, `synchronous_commit=off`, `full_page_writes=off`). To add
+extensions, build your own image and point `docker-compose.yml` at it:
 
 ```dockerfile
-FROM postgres:16-alpine
-
-RUN apt-get update && apt-get install -y \
-    postgresql-contrib \
-    postgresql-16-pg-stat-kcache
-
-COPY docker/postgresql.conf /etc/postgresql/postgresql.conf
-COPY docker/pg_hba.conf /etc/postgresql/pg_hba.conf
+FROM postgres:16
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-16-pg-stat-kcache \
+ && rm -rf /var/lib/apt/lists/*
 ```
 
 ### Multiple PostgreSQL Versions

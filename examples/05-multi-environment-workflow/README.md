@@ -189,12 +189,7 @@ File: `db/environments/local.yaml`
 
 ```yaml
 name: local
-database:
-  host: localhost
-  port: 5432
-  database: confiture_workflow
-  user: postgres
-  password: postgres
+database_url: postgresql://postgres:postgres@localhost:5432/confiture_workflow
 
 include_dirs:
   - db/schema
@@ -208,6 +203,11 @@ exclude_dirs:
 ```bash
 make build-local
 # OR: confiture build --env local
+
+# The schema directory already carries migrations 001–003 (each column says which
+# migration introduced it), so record them instead of re-running them:
+confiture migrate baseline --through 003 --config db/environments/local.yaml --migrations-dir db/migrations
+confiture migrate status --config db/environments/local.yaml --migrations-dir db/migrations   # 0 pending
 ```
 
 **4. Load test data:**
@@ -222,12 +222,7 @@ psql confiture_workflow < db/seeds/local/sample_users.sql
 
 ```yaml
 name: ci
-database:
-  host: localhost
-  port: 5432
-  database: confiture_ci
-  user: postgres
-  password: postgres  # GitHub Actions default
+database_url: postgresql://postgres:postgres@localhost:5432/confiture_ci
 
 include_dirs:
   - db/schema
@@ -252,13 +247,7 @@ The CI pipeline runs automatically on every push (see `.github/workflows/ci.yml`
 
 ```yaml
 name: staging
-database:
-  host: ${STAGING_DB_HOST}      # From GitHub Secrets
-  port: ${STAGING_DB_PORT}
-  database: ${STAGING_DB_NAME}
-  user: ${STAGING_DB_USER}
-  password: ${STAGING_DB_PASSWORD}
-  sslmode: require              # Require SSL
+database_url: postgresql://${STAGING_DB_USER}:${STAGING_DB_PASSWORD}@${STAGING_DB_HOST}:${STAGING_DB_PORT}/${STAGING_DB_NAME}?sslmode=require
 
 include_dirs:
   - db/schema
@@ -281,14 +270,7 @@ Staging deploys automatically when changes are merged to `main` branch.
 
 ```yaml
 name: production
-database:
-  host: ${PRODUCTION_DB_HOST}
-  port: ${PRODUCTION_DB_PORT}
-  database: ${PRODUCTION_DB_NAME}
-  user: ${PRODUCTION_DB_USER}
-  password: ${PRODUCTION_DB_PASSWORD}
-  sslmode: require
-  connect_timeout: 10
+database_url: postgresql://${PRODUCTION_DB_USER}:${PRODUCTION_DB_PASSWORD}@${PRODUCTION_DB_HOST}:${PRODUCTION_DB_PORT}/${PRODUCTION_DB_NAME}?sslmode=require&connect_timeout=10
 
 include_dirs:
   - db/schema
@@ -377,7 +359,8 @@ make status-local
 **Test migration applies cleanly:**
 
 ```bash
-# Apply migration
+# On a database that predates the change (built before you edited db/schema/);
+# a database you just rebuilt from the schema already has the column — baseline it instead
 confiture migrate up --env local
 
 # Verify table structure
@@ -464,9 +447,9 @@ jobs:
         run: |
           confiture build --env ci
 
-      - name: Run migrations
+      - name: Record the migrations the schema already carries
         run: |
-          confiture migrate up --env ci
+          confiture migrate baseline --through 003 --config db/environments/ci.yaml --migrations-dir db/migrations
 
       - name: Run tests
         run: |

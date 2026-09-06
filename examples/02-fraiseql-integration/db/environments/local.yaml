@@ -1,20 +1,9 @@
 # Local Development Environment Configuration
 #
-# This configuration is used for local development with `confiture build --env local`
+# Used by `confiture build --env local` and `confiture migrate ... --env local`.
 
 name: local
-
-database:
-  host: localhost
-  port: 5432
-  database: fraiseql_blog
-  user: postgres
-  password: postgres
-
-  # Connection pool settings for local development
-  pool_size: 5
-  max_overflow: 10
-  pool_timeout: 30
+database_url: postgresql://postgres:postgres@localhost:5432/fraiseql_blog
 
 # Include directories (processed in order)
 include_dirs:
@@ -24,11 +13,3 @@ include_dirs:
 
 # Exclude directories (optional)
 exclude_dirs: []
-
-# Migration settings
-migrations_dir: db/migrations
-migration_table: confiture_migrations
-
-# Logging (verbose for development)
-verbose: true
-log_queries: true

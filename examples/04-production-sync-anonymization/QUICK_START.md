@@ -41,18 +41,16 @@ export PROD_DB_PASSWORD=$(aws secretsmanager get-secret-value \
 
 Edit `db/environments/production.yaml`:
 ```yaml
-host: your-prod-host.example.com
-database: your_database_name
-user: confiture_sync_user
-password: ${PROD_DB_PASSWORD}
+name: production
+database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@your-prod-host.example.com:5432/your_database_name
+include_dirs: []
 ```
 
 Edit `db/environments/staging.yaml`:
 ```yaml
-host: your-staging-host.example.com
-database: your_database_name
-user: confiture_sync_user
-password: ${STAGING_DB_PASSWORD}
+name: staging
+database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@your-staging-host.example.com:5432/your_database_name
+include_dirs: []
 ```
 
 **Test connections**:

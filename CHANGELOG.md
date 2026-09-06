@@ -5,6 +5,13 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Backfill note (2026-09-07).** Before 0.12.0 the entries and the git tags diverged and the gaps are
+> recorded here rather than reconstructed: `0.0.1`, `0.3.8`, `0.6.1`, `0.8.10` and `0.11.0` have an
+> entry but were never tagged or published, and sixteen tags were published without an entry
+> (`0.2.0-alpha`, `0.3.1`, `0.3.4`, `0.3.5`, `0.3.12`, `0.4.2`, `0.4.3`, `0.4.3.1`, `0.4.4`, `0.5.1`,
+> `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
+> every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
+
 ## [Unreleased]
 
 Phase 10 of the 2026-09-06 review: documentation truth — every documented
@@ -51,6 +58,23 @@ and the checks that caught this review's findings run in CI.
 - **README: the JSON-schema sentence names exactly the schema-backed commands.** It claimed every
   machine-readable output had a schema; 26 schemas cover 16 of the 52 commands that offer
   `--format json`. `tests/unit/docs/test_readme_claims.py` derives both sets and pins the sentence.
+- **Guides and examples tell the truth** (Phase 10, Cycle 5). `docs/guides/dry-run.md`'s JSON sample is
+  the real `--dry-run --format json` payload for a one-migration project (it invented
+  `estimated_duration_ms` and omitted `statements_analyzed`, `classification`, `findings`, `warnings`);
+  `tests/unit/docs/test_doc_dry_run_json_shape.py` compares it with the builder's output. Six example
+  environment files still used the pre-0.10 `database:` block the model rejects (02, 04 ×2, 05 ×3) and
+  ten README snippets showed it; all are `database_url` now and `tests/unit/docs/test_example_configs.py`
+  loads every `examples/*/db/environments/*.yaml` through `Environment.load` and validates every README
+  snippet. The 01 and 05 READMEs described `build` followed by `migrate up` on the same fresh database,
+  which double-applies a change the schema already carries; they now record the baseline the way their
+  `run.sh` does. `examples/07-comment-validation` gains an asserting `run.sh` (CI runs it) in place of
+  the unasserted `test-scenarios.sh`. A backfill note at the top of this file records the pre-0.12
+  tag/entry gaps.
+- **Removed: `helm/` and `docker/`** (D4). The chart was unreleased and unreferenced; `docker/` held two
+  PostgreSQL config files that `docker-compose.yml` mounted (and a pgAdmin servers file it referenced
+  but that did not exist). Compose now runs the stock image with three development flags
+  (`fsync=off`, `synchronous_commit=off`, `full_page_writes=off`); the database-setup guide's
+  custom-image section no longer points at files that were never in the repo.
 
 ## [0.53.0] - 2026-09-07
 

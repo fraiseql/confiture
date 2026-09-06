@@ -1,26 +1,19 @@
-name: local
+# Local development environment
 
-database:
-  host: localhost
-  port: 5432
-  database: confiture_workflow
-  user: postgres
-  password: postgres
+name: local
+database_url: postgresql://postgres:postgres@localhost:5432/confiture_workflow
 
 # Which directories to include when building schema
 include_dirs:
   - db/schema
 
-# Exclude production-only files in local development
+# Exclude production-only files locally
 exclude_dirs:
   - db/schema/00_common/roles.sql
 
-# Local development options
+# Local-specific options
 options:
-  # Fast rebuilds for development
   skip_slow_indexes: false
   verbose: true
-
-  # Allow dangerous operations in local
   allow_drop_tables: true
   allow_drop_columns: true

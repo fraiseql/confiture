@@ -47,12 +47,7 @@ include_dirs:
   - db/schema/10_tables
 exclude_dirs: []
 
-database:
-  host: localhost
-  port: 5432
-  database: blog_app_local
-  user: postgres
-  password: postgres  # Change this!
+database_url: postgresql://postgres:postgres@localhost:5432/blog_app_local
 ```
 
 ### 4. Apply Initial Migration
@@ -394,12 +389,7 @@ include_dirs:
   - db/schema/10_tables
 exclude_dirs: []
 
-database:
-  host: localhost
-  port: 5432
-  database: blog_app_local
-  user: postgres
-  password: postgres
+database_url: postgresql://postgres:postgres@localhost:5432/blog_app_local
 ```
 
 ### Environment Configurations
