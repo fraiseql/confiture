@@ -44,6 +44,15 @@ behaviour change for anyone relying on a default.
   apply with `SchemaError` `SCHEMA_205` (exit 4), naming the file and line.
   The `\.` COPY terminator is the one tolerated backslash. Hard reject, no
   warn-only mode.
+- **The custom-strategy "sandbox" is named for what it is.**
+  `core/anonymization/plugins/sandbox.py` rejected files importing `os` or
+  `subprocess` and then executed the module in-process with confiture's
+  privileges — an import lint, not isolation. It is now
+  `plugins/import_lint.py` (`BlockedImportError`, `TimedResult`,
+  `execute_timed`); every `load_strategy` / `register_from_file` emits
+  `InProcessPluginWarning` and a WARNING log line naming the file. The old
+  module and names remain importable as a deprecated alias
+  (`DeprecationWarning`) until 1.0.0.
 
 ### Added
 
