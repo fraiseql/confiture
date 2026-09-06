@@ -18,6 +18,7 @@ from confiture.core.drift import (
     DriftType,
     OwnershipDriftDetector,
     SchemaDriftDetector,
+    drift_config_from,
 )
 from confiture.core.validation.config_loaders import (
     load_acl_expectations,
@@ -50,6 +51,11 @@ def drift(
         "public",
         "--default-schema",
         help="Schema an unqualified CREATE TABLE in --schema belongs to (#227)",
+    ),
+    ignore_column_order: bool = typer.Option(
+        False,
+        "--ignore-column-order",
+        help="Do not report column_order_mismatch (#226); also drift.ignore_column_order in the config",
     ),
     check_acls: bool = typer.Option(
         False,
@@ -150,9 +156,12 @@ def drift(
         with open_connection(config_data) as conn:
             structural_report: DriftReport | None = None
             if schema is not None:
-                structural_report = SchemaDriftDetector(conn).compare_with_schema_file(
-                    str(schema), default_schema=default_schema
-                )
+                drift_cfg = drift_config_from(config_data)
+                structural_report = SchemaDriftDetector(
+                    conn,
+                    ignore_column_order=ignore_column_order or drift_cfg.ignore_column_order,
+                    column_order_severity=drift_cfg.column_order_severity,
+                ).compare_with_schema_file(str(schema), default_schema=default_schema)
 
             drift_report: DriftReport | None = structural_report
             if check_acls:

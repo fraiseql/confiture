@@ -77,6 +77,7 @@ class ValidateOptions:
     check_security_definer: bool = False
     check_imports: bool = False
     check_live_drift: bool = False
+    ignore_column_order: bool = False
     check_signatures: bool = False
     check_body_views: bool = False
     check_body_replay: bool = False
@@ -385,7 +386,9 @@ def _run_live_drift(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
     from confiture.cli.formatters.validate_formatter import render_live_drift
     from confiture.core.validation.live_drift import check_live_drift
 
-    report = check_live_drift(opts.config, opts.schema_file, ctx)
+    report = check_live_drift(
+        opts.config, opts.schema_file, ctx, ignore_column_order=opts.ignore_column_order
+    )
     payload = render_live_drift(report, json_mode=opts.json_mode)
     return CheckOutcome("live_drift", passed=not report.has_critical_drift, payload=payload)
 

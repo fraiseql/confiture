@@ -2111,6 +2111,8 @@ confiture drift [OPTIONS]
 | `--warn-only` | - | Flag | `False` | Demote `MISSING_GRANT` items from CRITICAL to WARNING (progressive rollout) |
 | `--format` | `-f` | Text | `table` | Output format: `table` or `json` |
 | `--fail-on-warning` | - | Flag | `False` | Exit with code 1 on warnings as well as critical drift |
+| `--default-schema` | - | String | `public` | Schema an unqualified `CREATE TABLE` in `--schema` belongs to; tables are compared as `schema.table` (#227) |
+| `--ignore-column-order` | - | Flag | `False` | Do not report `column_order_mismatch` (#226); `drift.ignore_column_order` in the config does the same |
 
 ### Exit Codes
 

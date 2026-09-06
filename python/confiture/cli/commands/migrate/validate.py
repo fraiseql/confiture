@@ -196,6 +196,11 @@ def migrate_validate(
             "Requires --config and a database connection."
         ),
     ),
+    ignore_column_order: bool = typer.Option(
+        False,
+        "--ignore-column-order",
+        help="With --check-live-drift: do not report column_order_mismatch (#226)",
+    ),
     check_signatures: bool = typer.Option(
         False,
         "--check-signatures",
@@ -510,6 +515,7 @@ def migrate_validate(
         check_security_definer=check_security_definer,
         check_imports=check_imports,
         check_live_drift=check_live_drift,
+        ignore_column_order=ignore_column_order,
         check_signatures=check_signatures,
         check_body_views=check_body_views,
         check_body_replay=check_body_replay,

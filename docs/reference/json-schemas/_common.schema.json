@@ -118,7 +118,8 @@
             "extra_constraint",
             "missing_grant",
             "extra_grant",
-            "wrong_owner"
+            "wrong_owner",
+            "column_order_mismatch"
           ]
         },
         "severity": {
@@ -147,6 +148,10 @@
         },
         "message": {
           "type": "string"
+        },
+        "details": {
+          "type": "object",
+          "description": "Item-specific structured detail. column_order_mismatch carries expected_order and actual_order (column name lists)."
         }
       },
       "required": [

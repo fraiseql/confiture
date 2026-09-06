@@ -681,6 +681,19 @@ class OwnershipExpectation(BaseModel):
         return v
 
 
+class DriftConfig(BaseModel):
+    """``drift:`` — how ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (#226).
+
+    ``ignore_column_order`` turns the ``column_order_mismatch`` item off;
+    ``column_order_severity`` is ``warning`` (default, never fails a run on its
+    own) or ``critical`` (fails like a missing column). ``--ignore-column-order``
+    on either command wins over the file.
+    """
+
+    ignore_column_order: bool = False
+    column_order_severity: Literal["warning", "critical"] = "warning"
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -719,6 +732,7 @@ class Environment(BaseModel):
     migration: MigrationConfig = Field(default_factory=MigrationConfig)
     infrastructure: InfrastructureConfig = Field(default_factory=InfrastructureConfig)
     seed: SeedConfig = Field(default_factory=SeedConfig)
+    drift: DriftConfig = Field(default_factory=DriftConfig)
     ssh_tunnel: SshTunnelConfig | None = None
     acls: list[AclExpectation] = Field(default_factory=list)
     # Opt-in switch for the ACL coverage lint rule.  Defaults to False so a

@@ -25,6 +25,8 @@ def check_live_drift(  # noqa: ANN201
     config_path: Path,
     schema_file: Path | None,
     ctx: ValidationContext | None = None,
+    *,
+    ignore_column_order: bool = False,
 ):
     """Compare the live schema against *schema_file*.
 
@@ -57,7 +59,9 @@ def check_live_drift(  # noqa: ANN201
             raise ConfigurationError(
                 f"Database connection failed: {exc}", error_code="CONFIG_006"
             ) from exc
-        return SchemaDriftDetector(shared).compare_with_schema_file(str(schema_file))
+        return _detector(shared, config_path, ignore_column_order).compare_with_schema_file(
+            str(schema_file)
+        )
 
     config_data = load_config(config_path)
     try:
@@ -68,6 +72,20 @@ def check_live_drift(  # noqa: ANN201
         ) from exc
 
     try:
-        return SchemaDriftDetector(conn).compare_with_schema_file(str(schema_file))
+        return _detector(conn, config_path, ignore_column_order).compare_with_schema_file(
+            str(schema_file)
+        )
     finally:
         conn.close()
+
+
+def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDriftDetector:  # noqa: ANN001
+    """A detector honouring the config's ``drift:`` block and the CLI flag (#226)."""
+    from confiture.core.drift import drift_config_from
+
+    cfg = drift_config_from(load_config(config_path))
+    return SchemaDriftDetector(
+        conn,
+        ignore_column_order=ignore_column_order or cfg.ignore_column_order,
+        column_order_severity=cfg.column_order_severity,
+    )

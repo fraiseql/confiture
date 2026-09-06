@@ -40,6 +40,14 @@ project asked for (#217, #218, #219, #226, #227).
   `--write-baseline` creates or resets it. `--format json` adds
   `baseline: {new, fixed, known}`. A missing or malformed file is `CONFIG_012`
   (exit 5). The conventional name is `.confiture-lint-baseline.json`.
+- **Drift compares column ordinal position (#226).** Both sides already
+  carried the order and the differ never read it. A table whose columns are
+  the same set in a different order is one `column_order_mismatch` item
+  (`warning` by default, with `expected_order` / `actual_order` under
+  `details`); a differing set is still reported column by column and gets no
+  order item. `--ignore-column-order` on `drift` and on `migrate validate
+  --check-live-drift`, or `drift.ignore_column_order: true` in the config,
+  turns it off; `drift.column_order_severity: critical` makes it fail the run.
 
 ### Changed
 

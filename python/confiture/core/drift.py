@@ -16,12 +16,13 @@ import pglast
 import psycopg
 
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
-from confiture.exceptions import SchemaError
+from confiture.exceptions import ConfigurationError, SchemaError
 
 if TYPE_CHECKING:
     from confiture.config.environment import (
         AclExpectation,
         AclGrant,
+        DriftConfig,
         OwnershipExpectation,
     )
 
@@ -38,6 +39,7 @@ class DriftType(Enum):
     TYPE_MISMATCH = "type_mismatch"
     NULLABLE_MISMATCH = "nullable_mismatch"
     DEFAULT_MISMATCH = "default_mismatch"
+    COLUMN_ORDER_MISMATCH = "column_order_mismatch"
     MISSING_INDEX = "missing_index"
     EXTRA_INDEX = "extra_index"
     MISSING_CONSTRAINT = "missing_constraint"
@@ -65,13 +67,14 @@ class DriftItem:
     expected: Any = None
     actual: Any = None
     message: str = ""
+    details: dict[str, Any] | None = None
 
     def __str__(self) -> str:
         return f"[{self.severity.value}] {self.drift_type.value}: {self.message}"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        payload: dict[str, Any] = {
             "type": self.drift_type.value,
             "severity": self.severity.value,
             "object": self.object_name,
@@ -79,6 +82,9 @@ class DriftItem:
             "actual": str(self.actual) if self.actual is not None else None,
             "message": self.message,
         }
+        if self.details is not None:
+            payload["details"] = self.details
+        return payload
 
 
 @dataclass
@@ -216,6 +222,35 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
     return ExpectedSchema(info=info, schemas=frozenset(schemas))
 
 
+def drift_config_from(config_data: Any) -> "DriftConfig":
+    """The ``drift:`` block of a loaded config as a :class:`DriftConfig` (#226).
+
+    A missing block is the defaults; a block that is not a mapping or fails
+    validation is ``CONFIG_001`` — a configuration error, not a connection one.
+    """
+    from pydantic import ValidationError
+
+    from confiture.config.environment import DriftConfig
+
+    raw = config_data.get("drift") if isinstance(config_data, dict) else None
+    if raw is None:
+        return DriftConfig()
+    if not isinstance(raw, dict):
+        raise ConfigurationError(
+            f"'drift' must be a mapping, got {type(raw).__name__}",
+            error_code="CONFIG_001",
+            resolution_hint="Use `drift:\n  ignore_column_order: false\n  column_order_severity: warning`.",
+        )
+    try:
+        return DriftConfig.model_validate(raw)
+    except ValidationError as exc:
+        raise ConfigurationError(
+            f"Invalid 'drift' configuration: {exc.errors()[0].get('msg', exc)}",
+            error_code="CONFIG_001",
+            resolution_hint="Allowed keys: ignore_column_order (bool), column_order_severity (warning|critical).",
+        ) from exc
+
+
 class SchemaDriftDetector:
     """Detects schema drift between live database and expected state.
 
@@ -246,14 +281,24 @@ class SchemaDriftDetector:
         self,
         connection: psycopg.Connection,
         ignore_tables: list[str] | None = None,
+        *,
+        ignore_column_order: bool = False,
+        column_order_severity: str = "warning",
     ):
         """Initialize drift detector.
 
         Args:
             connection: Database connection
             ignore_tables: Additional tables to ignore in drift detection
+            ignore_column_order: Skip the column-order comparison (#226)
+            column_order_severity: ``"warning"`` (default) or ``"critical"`` for a
+                ``column_order_mismatch`` item
         """
         self.connection = connection
+        self.ignore_column_order = ignore_column_order
+        self.column_order_severity = (
+            DriftSeverity.CRITICAL if column_order_severity == "critical" else DriftSeverity.WARNING
+        )
         self.analyzer = SchemaAnalyzer(connection)
         self.ignore_tables = set(ignore_tables or [])
         # Always ignore Confiture's own tables
@@ -414,6 +459,42 @@ class SchemaDriftDetector:
                         f"expected {exp_nullable}, got {act_nullable}",
                     )
                 )
+
+        self._compare_column_order(table_name, expected_cols, actual_cols, report)
+
+    def _compare_column_order(
+        self,
+        table_name: str,
+        expected_cols: dict[str, dict],
+        actual_cols: dict[str, dict],
+        report: DriftReport,
+    ) -> None:
+        """One ``column_order_mismatch`` per table whose columns are the same set in another order (#226).
+
+        Both sides keep declaration order: the expected DDL as written, the live
+        side by ``ordinal_position``. A differing set is already reported column by
+        column, so only equal sets are compared.
+        """
+        if self.ignore_column_order:
+            return
+        expected_order = list(expected_cols)
+        actual_order = list(actual_cols)
+        if set(expected_order) != set(actual_order) or expected_order == actual_order:
+            return
+        report.drift_items.append(
+            DriftItem(
+                drift_type=DriftType.COLUMN_ORDER_MISMATCH,
+                severity=self.column_order_severity,
+                object_name=table_name,
+                expected=", ".join(expected_order),
+                actual=", ".join(actual_order),
+                message=(
+                    f"Columns of '{table_name}' are in a different order: expected "
+                    f"({', '.join(expected_order)}), got ({', '.join(actual_order)})"
+                ),
+                details={"expected_order": expected_order, "actual_order": actual_order},
+            )
+        )
 
     def _types_compatible(self, type1: str, type2: str) -> bool:
         """Check if two PostgreSQL types are compatible/equivalent."""
