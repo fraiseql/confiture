@@ -433,55 +433,6 @@ def verify_checksums(
 
 
 @cli_boundary
-def verify_deprecated(
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file",
-    ),
-    fix: bool = typer.Option(
-        False,
-        "--fix",
-        help="Update stored checksums to match current files (dangerous)",
-    ),
-    allow_uninitialized: bool = typer.Option(
-        False,
-        "--allow-uninitialized",
-        help=ALLOW_UNINITIALIZED_HELP,
-    ),
-    output_format: str = format_option("text", "json"),
-) -> None:
-    """[DEPRECATED] Alias for `confiture verify-checksums`.
-
-    `confiture verify` was ambiguous with `confiture migrate verify` (runtime
-    correctness). Use `confiture verify-checksums` for file-integrity checks.
-    This alias still works for one release cycle and is removed in the next major.
-    """
-    # Warning to stderr so piped/JSON stdout consumers stay clean (#143).
-    error_console.print(
-        "[yellow]⚠️  'confiture verify' is deprecated and will be removed in a "
-        "future major release. Use 'confiture verify-checksums' for checksum "
-        "integrity (or 'confiture migrate verify' for runtime correctness).[/yellow]"
-    )
-    # Every argument forwarded explicitly: an omitted one arrives as Typer's
-    # OptionInfo sentinel rather than its default, which the format validation
-    # would reject as an invalid format (exit 5).
-    verify_checksums(
-        migrations_dir=migrations_dir,
-        config=config,
-        fix=fix,
-        allow_uninitialized=allow_uninitialized,
-        output_format=output_format,
-    )
-
-
-@cli_boundary
 def validate_config(
     config: Path = typer.Option(
         None,

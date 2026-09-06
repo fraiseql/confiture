@@ -129,11 +129,11 @@ def test_generate_schema_in_public_api():
     assert schema["title"] == "StatusResult"
 
 
-def test_export_all_schemas_in_public_api(tmp_path: Path):
+def test_export_all_in_public_api(tmp_path: Path):
     import confiture
 
-    assert "export_all_schemas" in confiture.__all__
-    written = confiture.export_all_schemas(tmp_path)
+    assert "export_all" in confiture.__all__
+    written = confiture.export_all(tmp_path)
     assert len(written) == 16
 
 

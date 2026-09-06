@@ -7,7 +7,6 @@ cross-referential help.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import yaml
@@ -41,31 +40,12 @@ def test_verify_checksums_help_points_to_migrate_verify() -> None:
     assert "integrity" in out.lower()
 
 
-# ── deprecation alias ─────────────────────────────────────────────────────────
-
-
-def test_deprecated_verify_alias_warns(tmp_path: Path, test_db_url: str) -> None:
-    # The warning prints before any DB work, so it's present regardless of the
-    # checksum outcome. (CliRunner merges streams — see test-conventions.md.)
-    result = runner.invoke(app, ["verify", "-c", str(_cfg(tmp_path, test_db_url))])
-    assert "deprecated" in result.output.lower()
-    assert "verify-checksums" in result.output
+# ── the removed alias must stay removed ────────────────────────────────────────
 
 
 def test_verify_checksums_does_not_warn(tmp_path: Path, test_db_url: str) -> None:
     result = runner.invoke(app, ["verify-checksums", "-c", str(_cfg(tmp_path, test_db_url))])
     assert "deprecated" not in result.output.lower()
-
-
-def test_alias_warning_on_stderr_not_stdout(tmp_path: Path, test_db_url: str) -> None:
-    # True stream separation needs real FDs → subprocess (test-conventions.md).
-    proc = subprocess.run(
-        ["confiture", "verify", "-c", str(_cfg(tmp_path, test_db_url))],
-        capture_output=True,
-        text=True,
-    )
-    assert "deprecated" not in proc.stdout  # stdout stays clean for pipes
-    assert "deprecated" in proc.stderr.lower()  # warning lands on stderr
 
 
 def test_verify_checksums_is_registered() -> None:

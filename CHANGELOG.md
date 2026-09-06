@@ -5,6 +5,32 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 06 of the 2026-09-06 review: the public API and its contracts. The
+exported surface is exactly as wide as the code behind it.
+
+### Changed
+
+- ⚠️ **`import confiture` is lazy, and two names are one.** The package imported
+  the schema linter eagerly, which loaded `confiture.core` and the whole rule
+  library on every `import confiture`; `SchemaLinter`, `ExternalGeneratorError`
+  and `__version__` now resolve on first use like the rest of the public API,
+  and the import stays under 30 ms (a test pins it). `export_all_schemas` (an
+  alias of `export_all`) is removed, and so is the `confiture verify` CLI alias
+  of `verify-checksums`, deprecated in 0.19.0.
+- **Every exception resolves to a registered code.** `UnsafeOperationError`
+  defaulted to `DDL_001`, which the registry did not know, so the error path
+  itself crashed on the way to the envelope; `DDL_001` is registered at exit 4
+  (the schema family). `PreconditionError` and `PreconditionValidationError`
+  were plain `Exception`s defined in `core/preconditions.py`; they are
+  `ConfiturError`s now (`PRECON_1000`, exit 5), defined in
+  `confiture.exceptions` and re-exported where they were. `PreStateSimulationError`
+  moves to `confiture.exceptions` too, so the exception module imports nothing
+  from `core/` or `testing/` (a guard test keeps it that way, together with
+  `models/`); `confiture.core.url_redaction` becomes `confiture.url_redaction`
+  and `confiture.core.error_codes` becomes `confiture.error_codes`.
+
 ## [0.50.0] - 2026-09-06
 
 Phase 05 of the 2026-09-06 review: analyzer honesty and one parser. pglast is

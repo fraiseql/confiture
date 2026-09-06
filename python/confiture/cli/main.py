@@ -13,7 +13,6 @@ from confiture.cli.commands.admin import (
     validate_config,
     validate_profile,
     verify_checksums,
-    verify_deprecated,
 )
 from confiture.cli.commands.apply_as import migrate_apply_as
 from confiture.cli.commands.bootstrap import bootstrap
@@ -199,9 +198,8 @@ app.command()(drift)
 # Register admin commands
 app.command("install-helpers")(install_helpers)
 app.command()(validate_profile)
-# #143: verify-checksums is canonical; `verify` is a deprecated alias for one cycle.
+# #143: verify-checksums is canonical (the `verify` alias, deprecated in 0.19.0, is gone).
 app.command("verify-checksums")(verify_checksums)
-app.command("verify")(verify_deprecated)
 # #144: offline config + migrations-tree validation (never connects).
 app.command("validate-config")(validate_config)
 app.command()(restore)

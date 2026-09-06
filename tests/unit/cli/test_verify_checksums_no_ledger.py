@@ -142,26 +142,6 @@ class TestAbsentIsNotEmpty:
         assert "no migration ledger" not in result.output.lower()
 
 
-class TestDeprecatedAliasParity:
-    def test_deprecated_verify_alias_inherits_no_ledger_handling(
-        self, cfg: Path, migrations_dir: Path
-    ) -> None:
-        result = _invoke(cfg, migrations_dir, ledger=False, argv0="verify")
-
-        assert result.exit_code == 2
-        assert "is not present in this database" in result.output
-        # The deprecation warning still fires (combined-stream assertion).
-        assert "deprecated" in result.output.lower()
-
-    def test_deprecated_alias_accepts_allow_uninitialized(
-        self, cfg: Path, migrations_dir: Path
-    ) -> None:
-        result = _invoke(cfg, migrations_dir, "--allow-uninitialized", ledger=False, argv0="verify")
-
-        assert result.exit_code == 0
-        assert "no migration ledger" in result.output.lower()
-
-
 class TestAbsentButPresentElsewhere:
     """0.41.0 made "absent" mean "does not resolve *here*" (#188).
 

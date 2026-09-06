@@ -1586,8 +1586,7 @@ Compares SHA-256 checksums of migration files against the checksums stored when
 they were applied, detecting files modified after application (tampering /
 schema drift). Top-level, **not** a `migrate` subcommand.
 
-`confiture verify` is a deprecated alias, removed in the next major; it accepts
-the same options.
+`confiture verify` (a deprecated alias since 0.19.0) was removed in 0.51.0; use `verify-checksums`.
 
 #### Options
 

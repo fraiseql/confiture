@@ -13,17 +13,8 @@ Library API example::
             result = m.up()
 """
 
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _metadata_version
 from typing import Any
 
-from confiture.core.linting import SchemaLinter
-from confiture.exceptions import ExternalGeneratorError
-
-try:
-    __version__ = _metadata_version("fraiseql-confiture")
-except PackageNotFoundError:
-    __version__ = "0.0.0+unknown"
 __author__ = "Lionel Hamayon"
 __email__ = "lionel.hamayon@evolution-digitale.fr"
 
@@ -120,7 +111,7 @@ __all__ = [
     "IntentStatus",
     # Schema export
     "generate_schema",
-    "export_all_schemas",
+    "export_all",
     # Scaffold / generate tree
     "EmittedFunction",
     "ConfitureEmitter",
@@ -261,7 +252,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "StatementResult": ("confiture.core.dry_run", "StatementResult"),
     # Schema export
     "generate_schema": ("confiture.core.schema_exporter", "generate_schema"),
-    "export_all_schemas": ("confiture.core.schema_exporter", "export_all"),
+    "export_all": ("confiture.core.schema_exporter", "export_all"),
+    "SchemaLinter": ("confiture.core.linting", "SchemaLinter"),
+    "ExternalGeneratorError": ("confiture.exceptions", "ExternalGeneratorError"),
     # Scaffold / generate tree
     "EmittedFunction": ("confiture.core.scaffold.emitter", "EmittedFunction"),
     "ConfitureEmitter": ("confiture.core.scaffold.emitter", "ConfitureEmitter"),
@@ -306,8 +299,21 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
 }
 
 
+def _installed_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    try:
+        return version("fraiseql-confiture")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
 def __getattr__(name: str) -> Any:
-    """Lazy imports to avoid circular dependency issues at module load time."""
+    """The lazy public surface: names resolve on first use, so ``import confiture`` stays cheap."""
+    if name == "__version__":
+        value = _installed_version()
+        globals()["__version__"] = value
+        return value
     if name in _LAZY_IMPORTS:
         module_path, attr_name = _LAZY_IMPORTS[name]
         module = __import__(module_path, fromlist=[attr_name])
