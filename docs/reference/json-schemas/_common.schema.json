@@ -9,7 +9,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Advisory hints emitted on quiet-success states (e.g. zero migration files found, empty tracking table). Always present. Empty list when no hints are applicable. Hints never change the exit code — agents may treat presence of items as 'this success looks unusual'."
+      "description": "Advisory hints emitted on quiet-success states (e.g. zero migration files found, empty tracking table). Always present. Empty list when no hints are applicable. Hints never change the exit code \u2014 agents may treat presence of items as 'this success looks unusual'."
     },
     "Violation": {
       "type": "object",
@@ -36,7 +36,7 @@
             "null"
           ],
           "minimum": 1,
-          "description": "Line number in the source file (.py file or .sql file). Only present when different from `line_number` — i.e. SQL embedded in a Python migration. NOTE: field name is `source_line`, NOT `line_number`."
+          "description": "Line number in the source file (.py file or .sql file). Only present when different from `line_number` \u2014 i.e. SQL embedded in a Python migration. NOTE: field name is `source_line`, NOT `line_number`."
         },
         "suggestion": {
           "type": "string",
@@ -67,7 +67,7 @@
     },
     "ExtractorWarning": {
       "type": "object",
-      "description": "An execute/execute_file call the analyzer could not statically read (a loop variable in an f-string, a parameter, a missing file, …). Recorded so the caller knows idempotency was not established for it. Since 0.46.0 `message` states the reason, `reason_code` categorises it and `remedy` names the rewrite that makes the call readable (#213).",
+      "description": "An execute/execute_file call the analyzer could not statically read (a loop variable in an f-string, a parameter, a missing file, \u2026). Recorded so the caller knows idempotency was not established for it. Since 0.46.0 `message` states the reason, `reason_code` categorises it and `remedy` names the rewrite that makes the call readable (#213).",
       "properties": {
         "kind": {
           "type": "string"
@@ -154,6 +154,23 @@
         "object",
         "message"
       ]
+    },
+    "Parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

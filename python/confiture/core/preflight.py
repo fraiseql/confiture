@@ -12,11 +12,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pglast.parser
+
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
     parse_migration_filename,
 )
+from confiture.core.migration_analyzer import MigrationAnalyzer
+from confiture.core.parser_info import parse_error_line as parse_error_line_of
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
 
 if TYPE_CHECKING:
@@ -30,7 +34,8 @@ def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
     for a two-version shared-DB window** — both N-1 and N serving against one
     Postgres during the cutover. It is ``False`` when any ``PFLIGHT_REPLICA_*``
     finding is present: a replica-unsafe op, **or** a non-SQL ``.py`` migration the
-    classifier could not read (``PFLIGHT_REPLICA_UNCLASSIFIED``).
+    classifier could not read (``PFLIGHT_REPLICA_UNCLASSIFIED``), and when a
+    migration could not be parsed at all (``PFLIGHT_UNPARSEABLE``).
 
     Window-safety is purely about forward-compatibility, **not** atomicity:
     reversibility (``PFLIGHT_MISSING_DOWN``) and transactionality
@@ -49,7 +54,9 @@ def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
     from confiture.core.linting.libraries.replica import replica_lint_codes
 
     replica_codes = replica_lint_codes()
-    return not any(issue.code in replica_codes for issue in issues)
+    return not any(
+        issue.code in replica_codes or issue.code == "PFLIGHT_UNPARSEABLE" for issue in issues
+    )
 
 
 def preflight_exit_code(summary: dict[str, int], *, strict: bool) -> int:
@@ -106,13 +113,16 @@ def run_preflight(
 
         # Analyze non-transactional statements
         non_txn: list[str] = []
+        parse_error: str | None = None
+        parse_error_line: int | None = None
+        sql_content = up_file.read_text(encoding="utf-8")
         try:
-            from confiture.core.migration_analyzer import MigrationAnalyzer
-
-            sql_content = up_file.read_text(encoding="utf-8")
             non_txn = MigrationAnalyzer().analyze(sql_content)
-        except ImportError:
-            pass
+        except pglast.parser.ParseError as exc:
+            # A file PostgreSQL's parser rejects is a finding (PFLIGHT_UNPARSEABLE),
+            # never an empty analysis (ANA-02).
+            parse_error = str(exc)
+            parse_error_line = parse_error_line_of(sql_content, exc)
 
         infos.append(
             MigrationPreflightInfo(
@@ -121,6 +131,8 @@ def run_preflight(
                 has_down=down_file.exists(),
                 non_transactional_statements=non_txn,
                 filename=up_file.name,
+                parse_error=parse_error,
+                parse_error_line=parse_error_line,
             )
         )
 

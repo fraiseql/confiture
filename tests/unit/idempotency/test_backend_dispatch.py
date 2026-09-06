@@ -63,26 +63,6 @@ def test_unset_env_var_uses_ast_when_available(monkeypatch):
     assert calls == ["ast"]
 
 
-def test_ast_parse_error_falls_through_to_regex(monkeypatch):
-    """An exception from the AST backend (e.g. ParseError) falls through silently."""
-    monkeypatch.delenv("CONFITURE_IDEMPOTENCY_FORCE_REGEX", raising=False)
-    calls: list[str] = []
-
-    def stub_ast(_sql):
-        calls.append("ast")
-        raise RuntimeError("simulated parse failure")
-
-    def stub_regex(_sql):
-        calls.append("regex")
-        return []
-
-    monkeypatch.setattr(patterns, "_detect_via_ast", stub_ast)
-    monkeypatch.setattr(patterns, "_detect_via_regex", stub_regex)
-
-    patterns.detect_non_idempotent_patterns("malformed SQL")
-    assert calls == ["ast", "regex"]
-
-
 @pytest.mark.parametrize("value", ["0", "false", "no", "", "off"])
 def test_falsy_env_var_does_not_force_regex(monkeypatch, value):
     """The env var must be truthy to flip the switch — 0/false/empty don't count."""

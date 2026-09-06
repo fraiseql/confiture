@@ -17,7 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pglast.parser
+
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.linting.unparseable import unparseable_notice
 from confiture.core.replica.classifier import DdlOperation, OperationClassifier
 from confiture.core.replica.safety import (
     ReplicaVerdict,
@@ -89,16 +92,31 @@ class ReplicaFinding:
         return msg
 
 
+@dataclass(frozen=True)
+class UnparseableMigration:
+    """A ``.up.sql`` pglast rejected — reported, never silently skipped."""
+
+    migration_file: Path
+    text: str
+    error: Exception
+
+
 def _iter_findings(
     migrations_dir: Path, *, has_replicas: bool, bypass: bool
-) -> Iterator[ReplicaFinding]:
+) -> Iterator[ReplicaFinding | UnparseableMigration]:
     """Yield one finding per replica-unsafe / unclassifiable operation."""
     if not migrations_dir.exists():
         return
     classifier = OperationClassifier()
     for migration in sorted(migrations_dir.glob("*.up.sql")):
         text = migration.read_text()
-        for op in classifier.classify(text):
+        try:
+            ops = classifier.classify(text)
+        except pglast.parser.ParseError as exc:
+            # What the parser rejects cannot be classified: say so (ANA-02).
+            yield UnparseableMigration(migration_file=migration, text=text, error=exc)
+            continue
+        for op in ops:
             verdict = classify_replica_safety(op)
             if verdict.safety == "safe":
                 continue
@@ -118,22 +136,25 @@ class Replica001ForwardCompat:
         self.bypass = bypass
 
     def check(self, migrations_dir: Path) -> list[LintViolation]:
-        """Return one LintViolation per replica-unsafe / unclassifiable operation."""
-        return [
-            LintViolation(
-                rule_id=RULE_ID,
-                rule_name=RULE_NAME,
-                severity=RuleSeverity(f.severity),
-                object_type="migration",
-                object_name=f.op.table or f.migration_file.name,
-                message=f.message,
-                file_path=str(f.migration_file),
-                line_number=f.op.line,
+        """One LintViolation per replica-unsafe / unclassifiable operation, or per unparseable file."""
+        violations: list[LintViolation] = []
+        for f in _iter_findings(migrations_dir, has_replicas=self.has_replicas, bypass=self.bypass):
+            if isinstance(f, UnparseableMigration):
+                violations.append(unparseable_notice(f.migration_file, f.text, f.error))
+                continue
+            violations.append(
+                LintViolation(
+                    rule_id=RULE_ID,
+                    rule_name=RULE_NAME,
+                    severity=RuleSeverity(f.severity),
+                    object_type="migration",
+                    object_name=f.op.table or f.migration_file.name,
+                    message=f.message,
+                    file_path=str(f.migration_file),
+                    line_number=f.op.line,
+                )
             )
-            for f in _iter_findings(
-                migrations_dir, has_replicas=self.has_replicas, bypass=self.bypass
-            )
-        ]
+        return violations
 
 
 def _unreadable_migrations(migrations_dir: Path) -> Iterator[Path]:
@@ -168,18 +189,35 @@ def replica_preflight_issues(
     """
     from confiture.models.results import PreflightIssue
 
-    issues = [
-        PreflightIssue(
-            severity=f.severity,
-            code=f.code,
-            message=f.message,
-            migration=f.op.table,
-            file=f.migration_file.name,
-            actionable=f.verdict.multi_step,
-            details={"operation": type(f.op).__name__},
+    issues: list[PreflightIssue] = []
+    for f in _iter_findings(migrations_dir, has_replicas=has_replicas, bypass=bypass):
+        if isinstance(f, UnparseableMigration):
+            issues.append(
+                PreflightIssue(
+                    severity="warning",
+                    code="PFLIGHT_REPLICA_UNCLASSIFIED",
+                    message=(
+                        f"{f.migration_file.name}: pglast could not parse the migration, so "
+                        "its replica forward-compatibility cannot be classified"
+                    ),
+                    migration=None,
+                    file=f.migration_file.name,
+                    actionable="fix the SQL syntax so the classifier can read the migration",
+                    details={"operation": "Unparseable"},
+                )
+            )
+            continue
+        issues.append(
+            PreflightIssue(
+                severity=f.severity,
+                code=f.code,
+                message=f.message,
+                migration=f.op.table,
+                file=f.migration_file.name,
+                actionable=f.verdict.multi_step,
+                details={"operation": type(f.op).__name__},
+            )
         )
-        for f in _iter_findings(migrations_dir, has_replicas=has_replicas, bypass=bypass)
-    ]
     issues.extend(
         PreflightIssue(
             severity="warning",

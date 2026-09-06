@@ -66,7 +66,7 @@ confiture migrate <subcommand> [<args>] --no-config --format json --output <file
 | `down_to`          | `migrate down-to <rev>`                    | [migrate-down-to](json-schemas/migrate-down-to.schema.json) |
 | `verify`           | `migrate verify`                           | [migrate-verify](json-schemas/migrate-verify.schema.json) |
 | `preflight`        | `migrate preflight`                        | [migrate-preflight](json-schemas/migrate-preflight.schema.json) |
-| `describe`         | `confiture --version` (synthesised)        | — (last whitespace token is the version) |
+| `describe`         | `confiture --version` (synthesised)        | — (first line; its last whitespace token is the version — 0.50.0 adds a second `parser: pglast …` line the adapter never reads) |
 
 > ℹ️ **Behaviour advisory — ledger-existence probe, 0.41.0 (#188).** Every
 > command above that distinguishes "no ledger" from "empty ledger" — `current`,

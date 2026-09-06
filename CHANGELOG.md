@@ -12,6 +12,19 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- ⚠️ **Unparseable is a finding.** A file pglast rejected used to make the
+  idempotency check swap to its regex backend and report *ok*, made
+  `migrate preflight` crash, left `lint` and its AST-backed rules clean, and let
+  the change set read as "nothing changes". Each surface now says what happened:
+  `migrate validate --idempotent` records one `IDEM_UNPARSEABLE` warning with
+  the line (the verdict is `unverified`, and `--fail-on-unanalyzable` fails the
+  run), `migrate preflight` reports `PFLIGHT_UNPARSEABLE` and `window_safe` is
+  `false`, `lint` and the `func_001` / `sec_002` / `own_001` / `own_002` rules
+  emit an `UNPARSEABLE` notice, and the change set holds one unclassified entry
+  for the file. `confiture --version` prints a second line naming the parser —
+  `parser: pglast 8.4 (PostgreSQL 18 grammar)` — and every JSON payload and
+  error envelope carries `parser: {"pglast": "8.4", "pg_major": 18}` (the JSON
+  schemas declare it). Closes #210.
 - **pglast reads the raw file.** The idempotency validator blanked `--` to the
   end of the line and masked `$tag$…$tag$` with a tag-blind regex before
   parsing. `'a--b'` lost its closing quote, a `$q$` nested in a `$body$` was

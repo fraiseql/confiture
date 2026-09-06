@@ -4,12 +4,25 @@
   "title": "Confiture unified issue/error object",
   "description": "The shared inner object embedded by every structured error/issue surface (error envelope #145, validate-config #144, preflight report #148). severity/code/message are always present; the rest are present-but-nullable. Stable contract: changes require a version bump.",
   "type": "object",
-  "required": ["severity", "code", "message", "actionable", "details", "migration", "file", "line"],
+  "required": [
+    "severity",
+    "code",
+    "message",
+    "actionable",
+    "details",
+    "migration",
+    "file",
+    "line"
+  ],
   "additionalProperties": false,
   "properties": {
     "severity": {
       "type": "string",
-      "enum": ["error", "warning", "info"],
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ],
       "description": "Lowercased ErrorSeverity. CRITICAL folds to \"error\" in the public contract."
     },
     "code": {
@@ -21,7 +34,10 @@
       "description": "Human-readable message."
     },
     "actionable": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Suggested fix (maps from ConfiturError.resolution_hint); null when none."
     },
     "details": {
@@ -29,17 +45,43 @@
       "description": "Code-specific structured data; {} when none."
     },
     "migration": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Migration version identifier when the issue is migration-specific; else null."
     },
     "file": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Filesystem path when known; else null."
     },
     "line": {
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 1,
       "description": "1-based line within `file` when known; else null."
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

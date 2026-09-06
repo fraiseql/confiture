@@ -741,6 +741,8 @@ class MigrationPreflightInfo:
     non_transactional_statements: list[str] = field(default_factory=list)
     checksum: str | None = None
     filename: str | None = None  # source filename, for issue attribution (#148)
+    parse_error: str | None = None  # pglast rejected the file (PFLIGHT_UNPARSEABLE)
+    parse_error_line: int | None = None
 
     @property
     def reversible(self) -> bool:
@@ -839,6 +841,18 @@ class PreflightResult:
         checksum checks into ``PreflightIssue``s. One issue per (check, migration).
         """
         out: list[PreflightIssue] = []
+        for m in self.migrations:
+            if m.parse_error is None:
+                continue
+            out.append(
+                PreflightIssue.of(
+                    "PFLIGHT_UNPARSEABLE",
+                    f"Migration {m.version} ({m.name}) could not be parsed: {m.parse_error}",
+                    migration=m.version,
+                    file=m.filename,
+                    line=m.parse_error_line,
+                )
+            )
         for m in self.irreversible:
             out.append(
                 PreflightIssue.of(
@@ -911,6 +925,11 @@ class PreflightResult:
 # command's exit code is computed from the summary (preflight_exit_code), not
 # per issue code.
 PFLIGHT_CODES: dict[str, tuple[str, str]] = {
+    "PFLIGHT_UNPARSEABLE": (
+        "error",
+        "Fix the SQL syntax: confiture cannot analyse a migration PostgreSQL's parser rejects, "
+        "and cannot certify it window-safe.",
+    ),
     "PFLIGHT_MISSING_DOWN": (
         "error",
         "Add a matching .down.sql sibling, or mark the migration explicitly non-reversible.",

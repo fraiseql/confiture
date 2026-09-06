@@ -121,8 +121,10 @@ def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
         from confiture import __version__
+        from confiture.core.parser_info import parser_line
 
         console.print(f"confiture version {__version__}")
+        console.print(parser_line())
         raise typer.Exit()
 
 

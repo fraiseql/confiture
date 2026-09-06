@@ -19,6 +19,7 @@ def test_envelope_shape_for_duplicate_version() -> None:
         conflicting_files=["foo.sql", "bar.sql"],
     )
     env = emit_error_json(err)
+    assert set(env.pop("parser")) == {"pglast", "pg_major"}  # additive since 0.50.0
     assert env == {
         "ok": False,
         "error": {

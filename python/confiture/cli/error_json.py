@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 
 import typer
 
+from confiture.core.parser_info import parser_stamp
 from confiture.exceptions import ConfiturError
 
 if TYPE_CHECKING:
@@ -121,6 +122,7 @@ def emit_error_json(error: ConfiturError) -> dict[str, Any]:
 
     return {
         "ok": False,
+        "parser": parser_stamp(),
         "error": {
             "code": base["error_code"] or INTERNAL_ERROR_CODE,
             "message": base["message"],

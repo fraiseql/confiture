@@ -2,9 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/verify-checksums.schema.json",
   "title": "confiture verify-checksums --format json",
-  "description": "File-integrity verification of applied migrations: SHA-256 of each migration file compared against the checksum stored when it was applied. Detects files modified after application. Distinct from `migrate verify`, which checks runtime state via .verify.sql sidecars. Added in 0.39.0 (#189). Consumers read ok (⇔ summary.mismatched == 0) and issues[]. Exit code is 1 when mismatches are found — a success-signal, not an error — so a crash (config/DB error, or an absent ledger without --allow-uninitialized) emits the error envelope (error-envelope.schema.json) instead of this shape. NOT part of the fraisier adapter contract.",
+  "description": "File-integrity verification of applied migrations: SHA-256 of each migration file compared against the checksum stored when it was applied. Detects files modified after application. Distinct from `migrate verify`, which checks runtime state via .verify.sql sidecars. Added in 0.39.0 (#189). Consumers read ok (\u21d4 summary.mismatched == 0) and issues[]. Exit code is 1 when mismatches are found \u2014 a success-signal, not an error \u2014 so a crash (config/DB error, or an absent ledger without --allow-uninitialized) emits the error envelope (error-envelope.schema.json) instead of this shape. NOT part of the fraisier adapter contract.",
   "type": "object",
-  "required": ["ok", "ledger_present", "summary", "issues"],
+  "required": [
+    "ok",
+    "ledger_present",
+    "summary",
+    "issues"
+  ],
   "additionalProperties": false,
   "properties": {
     "ok": {
@@ -22,7 +27,10 @@
     },
     "summary": {
       "type": "object",
-      "required": ["checked", "mismatched"],
+      "required": [
+        "checked",
+        "mismatched"
+      ],
       "additionalProperties": false,
       "properties": {
         "checked": {
@@ -37,18 +45,40 @@
         },
         "tracking_table": {
           "type": "string",
-          "description": "The ledger name as configured — the project's tracking_table, not necessarily the tb_confiture default. May be bare or schema-qualified; see resolved_table for what it actually resolved to."
+          "description": "The ledger name as configured \u2014 the project's tracking_table, not necessarily the tb_confiture default. May be bare or schema-qualified; see resolved_table for what it actually resolved to."
         },
         "resolved_table": {
-          "type": ["string", "null"],
-          "description": "The schema-qualified relation the ledger name resolved to for this session, e.g. \"public.tb_confiture\" (0.41.0, #188). A bare tracking_table resolves through search_path, so this is how a consumer learns which of several same-named tables was actually read. Null when the ledger did not resolve — only emitted so under --allow-uninitialized, since otherwise an absent ledger raises PRECON_1001."
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The schema-qualified relation the ledger name resolved to for this session, e.g. \"public.tb_confiture\" (0.41.0, #188). A bare tracking_table resolves through search_path, so this is how a consumer learns which of several same-named tables was actually read. Null when the ledger did not resolve \u2014 only emitted so under --allow-uninitialized, since otherwise an absent ledger raises PRECON_1001."
         }
       }
     },
     "issues": {
       "type": "array",
       "description": "One entry per checksum mismatch, using the shared issue object. Empty on a clean run.",
-      "items": { "$ref": "issue-object.schema.json" }
+      "items": {
+        "$ref": "issue-object.schema.json"
+      }
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

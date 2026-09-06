@@ -293,10 +293,9 @@ class OperationClassifier:
         parity-tested for the supported operations.
         """
         if _use_ast():
-            try:
-                return self._classify_ast(sql)
-            except Exception:  # noqa: BLE001 — fall back to regex on any parse hiccup
-                return self._classify_regex(sql)
+            # pglast.parser.ParseError propagates: the caller reports the file
+            # as unclassifiable instead of reading a regex guess (ANA-02).
+            return self._classify_ast(sql)
         return self._classify_regex(sql)
 
     # ------------------------------------------------------------------ #

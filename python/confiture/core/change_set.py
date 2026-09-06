@@ -33,6 +33,8 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
+import pglast.parser
+
 from confiture.core._pglast_enums import enums_are_usable
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency.ast_detector import is_pglast_available
@@ -538,8 +540,10 @@ def classify_statements(
     if _use_ast():
         try:
             return _ast_entries(sql, ctx)
-        except Exception:  # noqa: BLE001 — any parse hiccup falls back to regex
-            pass
+        except pglast.parser.ParseError as exc:
+            return [
+                ctx.unclassified("unparseable", None, f"pglast could not parse {source}: {exc}")
+            ]
     return _regex_entries(sql, ctx)
 
 

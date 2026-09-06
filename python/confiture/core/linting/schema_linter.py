@@ -14,7 +14,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import pglast
+import pglast.parser
+
 from confiture.config.environment import Environment
+from confiture.core.parser_info import parse_error_line
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +211,25 @@ class SchemaLinter:
         if not self._schema_sql:
             logger.warning("No schema SQL found, skipping linting")
             return report
+
+        # A schema PostgreSQL's own parser rejects can never lint clean: the
+        # rules below read what they can, and this notice says the rest was
+        # not read (ANA-02).
+        try:
+            pglast.parse_sql(self._schema_sql)
+        except pglast.parser.ParseError as exc:
+            report.add_violation(
+                LintViolation(
+                    rule_id="UNPARSEABLE",
+                    rule_name="Unparseable SQL",
+                    severity=RuleSeverity.INFO,
+                    object_type="schema",
+                    object_name="schema",
+                    message=f"pglast could not parse the schema: {exc}",
+                    line_number=parse_error_line(self._schema_sql, exc),
+                    suggested_fix="Fix the SQL syntax; rules cannot see past a parse error.",
+                )
+            )
 
         # Run configured checks
         if self.config.check_naming:

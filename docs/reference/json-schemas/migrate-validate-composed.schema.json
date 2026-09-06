@@ -2,10 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-composed.schema.json",
   "title": "confiture migrate validate --format json (two or more checks)",
-  "description": "Wrapper emitted when one `migrate validate` invocation runs more than one check (0.40.0, #187). A single-check invocation keeps emitting that check's own documented payload verbatim and never matches this schema — the wrapper exists precisely so the single-check shapes stay byte-for-byte stable. Each value under `checks` is the payload the same check would have emitted on its own, keyed by the check's stable machine name.",
+  "description": "Wrapper emitted when one `migrate validate` invocation runs more than one check (0.40.0, #187). A single-check invocation keeps emitting that check's own documented payload verbatim and never matches this schema \u2014 the wrapper exists precisely so the single-check shapes stay byte-for-byte stable. Each value under `checks` is the payload the same check would have emitted on its own, keyed by the check's stable machine name.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "status", "checks", "hints"],
+  "required": [
+    "version",
+    "status",
+    "checks",
+    "hints"
+  ],
   "properties": {
     "version": {
       "type": "string",
@@ -14,7 +19,10 @@
     },
     "status": {
       "type": "string",
-      "enum": ["passed", "failed"],
+      "enum": [
+        "passed",
+        "failed"
+      ],
       "description": "`failed` when any check that ran reported a finding. The process exit code is 1 in that case, 0 otherwise."
     },
     "checks": {
@@ -47,6 +55,25 @@
         }
       }
     },
-    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+    "hints": {
+      "$ref": "_common.schema.json#/$defs/HintsArray"
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
   }
 }

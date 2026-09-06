@@ -30,8 +30,8 @@ class TestBannerInTextMode:
         migs = _migrations_dir(tmp_path)
         runner = CliRunner()
         with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=True,
+            "confiture.core.idempotency.patterns._force_regex",
+            return_value=False,
         ):
             result = runner.invoke(
                 app,
@@ -51,8 +51,8 @@ class TestBannerInTextMode:
         migs = _migrations_dir(tmp_path)
         runner = CliRunner()
         with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=False,
+            "confiture.core.idempotency.patterns._force_regex",
+            return_value=True,
         ):
             result = runner.invoke(
                 app,
@@ -65,9 +65,9 @@ class TestBannerInTextMode:
                 ],
             )
         out = _strip_ansi(result.output)
-        assert "Regex fallback" in out
+        assert "Regex backend forced" in out
         # The install hint must appear so the user knows what to do.
-        assert "fraiseql-confiture[ast]" in out
+        assert "FORCE_REGEX" in out
 
 
 class TestBannerInJsonMode:
@@ -97,8 +97,8 @@ class TestBannerInJsonMode:
         migs = _migrations_dir(tmp_path)
         runner = CliRunner()
         with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=True,
+            "confiture.core.idempotency.patterns._force_regex",
+            return_value=False,
         ):
             result = runner.invoke(
                 app,
@@ -119,8 +119,8 @@ class TestBannerInJsonMode:
         migs = _migrations_dir(tmp_path)
         runner = CliRunner()
         with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=False,
+            "confiture.core.idempotency.patterns._force_regex",
+            return_value=True,
         ):
             result = runner.invoke(
                 app,

@@ -5,7 +5,12 @@
   "description": "The catalogue of rules `confiture lint` can apply, and the identifiers `--select` / `--ignore` accept (#150). A report mode: it never inspects a schema and always exits 0.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "status", "rules", "hints"],
+  "required": [
+    "version",
+    "status",
+    "rules",
+    "hints"
+  ],
   "properties": {
     "version": {
       "type": "string",
@@ -36,14 +41,18 @@
           },
           "family": {
             "type": "string",
-            "description": "Selector group. Usually the code prefix — `sec_001` (security) and `sec_002` (security-definer) are the exception."
+            "description": "Selector group. Usually the code prefix \u2014 `sec_001` (security) and `sec_002` (security-definer) are the exception."
           },
           "title": {
             "type": "string"
           },
           "severity": {
             "type": "string",
-            "enum": ["error", "warning", "info"],
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ],
             "description": "Severity the rule emits by default. sec_002 and replica_001 can be escalated by configuration."
           },
           "default_on": {
@@ -51,11 +60,17 @@
             "description": "Whether a plain `confiture lint` applies the rule."
           },
           "legacy_flag": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Pre-0.42.0 per-rule flag kept as an alias, or null."
           },
           "requires_config": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Configuration the rule additionally needs; selecting it is necessary, not sufficient."
           }
         }
@@ -63,6 +78,23 @@
     },
     "hints": {
       "$ref": "_common.schema.json#/$defs/HintsArray"
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

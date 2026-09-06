@@ -34,6 +34,7 @@ Preconditions for SQL-only migrations can be defined in a YAML sidecar file:
 import logging
 from pathlib import Path
 
+import pglast.parser
 import psycopg
 
 from confiture.core._migrator.discovery import parse_migration_filename
@@ -68,7 +69,12 @@ def _detect_transactional(up_file: Path) -> bool:
 
     try:
         sql = up_file.read_text(encoding="utf-8")
-        return not MigrationAnalyzer().analyze(sql)
+        try:
+            return not MigrationAnalyzer().analyze(sql)
+        except pglast.parser.ParseError:
+            # The statement is about to be executed: PostgreSQL will reject it
+            # with its own error inside the transaction. Nothing to classify.
+            return True
     except Exception:  # noqa: BLE001 — never let detection break migration loading
         return True
 

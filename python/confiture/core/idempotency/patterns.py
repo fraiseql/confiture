@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
 from confiture.core._pglast_enums import enums_are_usable
-from confiture.core.idempotency.ast_detector import _detect_via_ast, is_pglast_available
+from confiture.core.idempotency.ast_detector import _detect_via_ast
 from confiture.core.idempotency.models import IdempotencyPattern
 
 
@@ -746,18 +746,14 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
         >>> matches[0].pattern
         <IdempotencyPattern.CREATE_TABLE: 'CREATE_TABLE'>
     """
-    # enums_are_usable(): an upstream pglast release that removed a member the
-    # visitors walk would make the AST path drop those statements silently
-    # (#192). Degrading to regex under-reports loudly instead of lying quietly.
-    if is_pglast_available() and enums_are_usable() and not _force_regex():
-        try:
-            return _detect_via_ast(sql)
-        except Exception:  # noqa: BLE001 — pglast.parser.ParseError + defensive fallback
-            # The AST backend is best-effort; any failure (parse error,
-            # unexpected node shape) falls through to the regex backend
-            # so partial/templated SQL is still scanned.
-            pass
-    return _detect_via_regex(sql)
+    if _force_regex():
+        return _detect_via_regex(sql)
+    # Raises CONFIG_011 when the installed pglast lacks a member the visitors
+    # walk (#192) — a loud stop, never a quiet degrade.
+    enums_are_usable()
+    # pglast.parser.ParseError propagates: the validator records the file as
+    # unparseable (IDEM_UNPARSEABLE), which is a finding, not a clean result.
+    return _detect_via_ast(sql)
 
 
 def _mask_for_regex(sql: str) -> str:

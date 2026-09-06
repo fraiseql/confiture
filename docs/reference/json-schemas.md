@@ -42,6 +42,11 @@ schema and emitted as `[]` today. Future releases may populate it on
 quiet-success ambiguities (Phase 05 of issue #123). Consumers should
 *accept* the field today but not depend on specific content.
 
+Every top-level payload and the error envelope carry `parser` (0.50.0):
+`{"pglast": "<release>", "pg_major": <PostgreSQL grammar major>}` — what
+parsed the SQL behind the verdict. It is declared (`_common.schema.json#/$defs/Parser`)
+but not required, so payloads from earlier versions stay valid.
+
 Aside from `hints` population, schemas are additive — new optional fields
 may appear in patch releases, but documented `required` fields will not
 change without a top-level version bump.

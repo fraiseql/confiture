@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pglast.parser
+
 from confiture.core.idempotency.models import (
     IdempotencyPattern,
     IdempotencyReport,
@@ -18,6 +20,8 @@ from confiture.core.idempotency.models import (
 from confiture.core.idempotency.patterns import (
     detect_non_idempotent_patterns,
 )
+from confiture.core.idempotency.python_migration_extractor import ExtractionWarning, WarningKind
+from confiture.core.parser_info import parse_error_line
 
 if TYPE_CHECKING:
     from confiture.core.idempotency.python_migration_extractor import ExtractedSQL
@@ -147,7 +151,23 @@ class IdempotencyValidator:
         # The raw text goes to the parser: pglast handles comments, literals and
         # dollar-quoted bodies itself, and its statement locations index this
         # exact string (ANA-01).
-        matches = detect_non_idempotent_patterns(sql)
+        try:
+            matches = detect_non_idempotent_patterns(sql)
+        except pglast.parser.ParseError as exc:
+            # What PostgreSQL's own parser rejects cannot be certified: one
+            # finding, counted as unanalyzed, so `--fail-on-unanalyzable`
+            # covers it and the verdict reads "unverified" (ANA-02).
+            report.warnings.append(
+                ExtractionWarning(
+                    kind=WarningKind.UNPARSEABLE_SQL,
+                    source_file=Path(file_path),
+                    source_line=parse_error_line(sql, exc),
+                    message=f"pglast could not parse {file_path}: {exc}",
+                    reason_code="IDEM_UNPARSEABLE",
+                    remedy="Fix the SQL syntax; confiture cannot check idempotency past a parse error.",
+                )
+            )
+            return report
 
         # Convert matches to violations, filtering ignored patterns
         for match in matches:
@@ -234,6 +254,7 @@ class IdempotencyValidator:
                 report.add_file_scanned(scanned)
             for violation in file_report.violations:
                 report.add_violation(violation)
+            report.warnings.extend(file_report.warnings)
 
         if include_python:
             py_iter = directory.rglob("*.py") if recursive else directory.glob("*.py")
@@ -246,6 +267,20 @@ class IdempotencyValidator:
                     continue
                 combined_sql, origins = _combine_python_snippets(extraction.snippets)
                 combined_report = self.validate_sql(combined_sql, file_path=str(py_path))
+                for warning in combined_report.warnings:
+                    origin = _map_combined_line_to_source(warning.source_line, origins)
+                    report.warnings.append(
+                        ExtractionWarning(
+                            kind=warning.kind,
+                            source_file=py_path,
+                            source_line=origin.source_line
+                            if origin is not None
+                            else warning.source_line,
+                            message=warning.message,
+                            reason_code=warning.reason_code,
+                            remedy=warning.remedy,
+                        )
+                    )
                 for violation in combined_report.violations:
                     origin = _map_combined_line_to_source(violation.line_number, origins)
                     if origin is not None:
