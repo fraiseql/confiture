@@ -1,127 +1,88 @@
-"""#131: --dry-run-execute must roll back all migration changes, not commit them."""
+"""``migrate up --dry-run-execute`` never commits (ENG-01).
+
+The CLI used to run the analysis, ask for confirmation, then fall through into
+its *own* apply loop — the one that commits. The SAVEPOINT existed only in the
+library session, which the CLI did not call.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import psycopg
 import pytest
+from typer.testing import CliRunner
 
-from confiture.core._migrator.session import MigratorSession
+from confiture.cli.main import app
+
+runner = CliRunner()
+VERSION = "20260906000003"
 
 
-@pytest.fixture()
-def dry_run_db(fresh_database: str) -> str:
-    """Throwaway database for one test."""
-    return fresh_database
+def _migrations(tmp_path: Path) -> Path:
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / f"{VERSION}_create_gizmos.up.sql").write_text(
+        "CREATE TABLE gizmos (id INT PRIMARY KEY);\n"
+    )
+    (migrations / f"{VERSION}_create_gizmos.down.sql").write_text("DROP TABLE gizmos;\n")
+    return migrations
+
+
+def _state(url: str) -> tuple[bool, int]:
+    with psycopg.connect(url) as conn:
+        exists = conn.execute("SELECT to_regclass('public.gizmos') IS NOT NULL").fetchone()[0]
+        ledger = conn.execute(
+            "SELECT count(*) FROM tb_confiture WHERE version = %s", (VERSION,)
+        ).fetchone()[0]
+    return exists, ledger
 
 
 @pytest.mark.integration
-def test_dry_run_execute_does_not_persist_a_single_successful_migration(
-    dry_run_db: str, tmp_path
+def test_confirmed_dry_run_execute_commits_nothing(
+    clean_test_db, test_db_url: str, tmp_path: Path
 ) -> None:
-    """One migration, success path: must roll back."""
-    (tmp_path / "20260527000001_create_widgets.up.sql").write_text(
-        "CREATE TABLE widgets (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL);\n"
+    migrations = _migrations(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "up",
+            "--dry-run-execute",
+            "--database-url",
+            test_db_url,
+            "--migrations-dir",
+            str(migrations),
+        ],
+        input="y\n",
     )
-    (tmp_path / "20260527000001_create_widgets.down.sql").write_text("DROP TABLE widgets;\n")
 
-    session = MigratorSession(
-        config=None, migrations_dir=tmp_path, database_url_override=dry_run_db
-    )
-    with session:
-        result = session.up(dry_run_execute=True)
-
-    assert result.success is True, f"errors: {result.errors}"
-    assert result.dry_run_execute is True
-
-    conn = psycopg.connect(dry_run_db)
-    try:
-        row = conn.execute("SELECT to_regclass('public.widgets')").fetchone()
-        assert row[0] is None, "widgets table must not persist after --dry-run-execute"
-    finally:
-        conn.close()
+    assert result.exit_code == 0, result.output
+    assert "rolled back" in result.output.lower()
+    assert _state(test_db_url) == (False, 0)
 
 
 @pytest.mark.integration
-def test_dry_run_execute_does_not_persist_multiple_successful_migrations(
-    dry_run_db: str, tmp_path
+def test_yes_skips_the_prompt_and_still_commits_nothing(
+    clean_test_db, test_db_url: str, tmp_path: Path
 ) -> None:
-    """Two migrations, both success: outer SAVEPOINT survives the second migration's
-    apply() too. Pins the regression to ensure the per-migration commit is suppressed
-    for every migration in the run, not just the last one."""
-    (tmp_path / "20260527000001_create_a.up.sql").write_text(
-        "CREATE TABLE alpha (id BIGSERIAL PRIMARY KEY);\n"
+    migrations = _migrations(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "up",
+            "--dry-run-execute",
+            "--yes",
+            "--database-url",
+            test_db_url,
+            "--migrations-dir",
+            str(migrations),
+        ],
     )
-    (tmp_path / "20260527000001_create_a.down.sql").write_text("DROP TABLE alpha;\n")
-    (tmp_path / "20260527000002_create_b.up.sql").write_text(
-        "CREATE TABLE beta (id BIGSERIAL PRIMARY KEY);\n"
-    )
-    (tmp_path / "20260527000002_create_b.down.sql").write_text("DROP TABLE beta;\n")
 
-    session = MigratorSession(
-        config=None, migrations_dir=tmp_path, database_url_override=dry_run_db
-    )
-    with session:
-        result = session.up(dry_run_execute=True)
-
-    assert result.success is True, f"errors: {result.errors}"
-
-    conn = psycopg.connect(dry_run_db)
-    try:
-        for table in ("alpha", "beta"):
-            row = conn.execute(f"SELECT to_regclass('public.{table}')").fetchone()
-            assert row[0] is None, f"{table} table must not persist"
-    finally:
-        conn.close()
-
-
-@pytest.mark.integration
-def test_dry_run_execute_tracking_table_not_populated(dry_run_db: str, tmp_path) -> None:
-    """A successful dry-run-execute must NOT leave rows in tb_confiture either —
-    those inserts happen inside _apply_transactional and must also roll back."""
-    (tmp_path / "20260527000001_create_widgets.up.sql").write_text(
-        "CREATE TABLE widgets (id BIGSERIAL PRIMARY KEY);\n"
-    )
-    (tmp_path / "20260527000001_create_widgets.down.sql").write_text("DROP TABLE widgets;\n")
-
-    session = MigratorSession(
-        config=None, migrations_dir=tmp_path, database_url_override=dry_run_db
-    )
-    with session:
-        result = session.up(dry_run_execute=True)
-
-    assert result.success is True, f"errors: {result.errors}"
-
-    conn = psycopg.connect(dry_run_db)
-    try:
-        # tb_confiture may not even exist (initialize() also rolls back) — that's fine.
-        row = conn.execute("SELECT to_regclass('public.tb_confiture')").fetchone()
-        if row[0] is not None:
-            cnt = conn.execute("SELECT COUNT(*) FROM tb_confiture").fetchone()[0]
-            assert cnt == 0, "tracking table must have no rows after dry-run-execute"
-    finally:
-        conn.close()
-
-
-@pytest.mark.integration
-def test_dry_run_execute_rolls_back_when_a_later_migration_fails(dry_run_db: str, tmp_path) -> None:
-    """Two migrations, second one fails: NEITHER persists."""
-    (tmp_path / "20260527000001_create_a.up.sql").write_text(
-        "CREATE TABLE alpha (id BIGSERIAL PRIMARY KEY);\n"
-    )
-    (tmp_path / "20260527000001_create_a.down.sql").write_text("DROP TABLE alpha;\n")
-    (tmp_path / "20260527000002_broken.up.sql").write_text("THIS IS NOT VALID SQL;\n")
-    (tmp_path / "20260527000002_broken.down.sql").write_text("SELECT 1;\n")
-
-    session = MigratorSession(
-        config=None, migrations_dir=tmp_path, database_url_override=dry_run_db
-    )
-    with session:
-        result = session.up(dry_run_execute=True)
-
-    assert result.success is False  # the second migration failed
-    conn = psycopg.connect(dry_run_db)
-    try:
-        row = conn.execute("SELECT to_regclass('public.alpha')").fetchone()
-        assert row[0] is None, "first migration must also have rolled back"
-    finally:
-        conn.close()
+    assert result.exit_code == 0, result.output
+    assert "Proceed with real execution" not in result.output
+    assert _state(test_db_url) == (False, 0)

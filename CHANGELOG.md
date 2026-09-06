@@ -18,8 +18,8 @@ engine; what it reports is what happened.
   the same pending set and race the ledger CREATE. The lock is now acquired
   first; discovery and `initialize()` run under it, and the ledger DDL is
   `IF NOT EXISTS`. A second concurrent `up()` returns `success=True` with
-  nothing applied. A lock that cannot be taken is a failed result, not an
-  exception.
+  nothing applied. A lock that cannot be taken raises `LockAcquisitionError`,
+  as before.
 - ⚠️ **`MigratorSession.up()` verifies checksums.** `verify_checksums=True`
   (the default) used to set `checksums_verified=True` on the result and never
   call the verifier — the library path had no checksum check at all. The
@@ -30,6 +30,40 @@ engine; what it reports is what happened.
   `checksums_verified` is `True` only when the verifier ran and found no
   mismatch. Library callers who edit applied migration files in place will now
   see the error the CLI has always reported.
+
+- ⚠️ **`confiture migrate up` and `migrate down` run the library session.** The
+  CLI carried its own apply loop (and `migrate down` its own rollback loop):
+  its own lock, its own discovery before the lock, its own checksum check —
+  and after the `--dry-run-execute` confirmation it fell through into that
+  loop and **committed**. Both commands now call `MigratorSession.up()` /
+  `down()` and render the result; live progress comes from the session's new
+  `on_event` observer. `--dry-run-execute` executes inside a SAVEPOINT that is
+  always rolled back — no table survives, no ledger row is written — and the
+  new `--yes` flag skips its confirmation prompt. Auto-baseline
+  (`--auto-detect-baseline`), strict mode and view-helper auto-install moved
+  into the session (`core/_migrator/policy.py`) as `up()` options, so the
+  library path applies them too: a session built from an `Environment` with
+  `migration.view_helpers: auto` (the default) now installs the helpers the
+  way the CLI always did. A guard test (`test_cli_has_no_apply_loop.py`) keeps
+  the lock, the migration loaders and the engine's `apply`/`rollback` out of
+  `confiture/cli/`.
+- ⚠️ **Exit code 5 for a missing or empty `--snapshots-dir`.** `--auto-detect-
+  baseline` used to exit 2 there; 2 is "tracking table absent" in the frozen
+  exit table, 5 is a configuration failure. Orphaned migration files are
+  reported before the database is touched; under strict mode they abort
+  (exit 1) even when nothing is pending, where they were previously only
+  checked once pending migrations existed.
+- ⚠️ **`Migrator.migrate_up()` is a thin call into the same session loop**
+  (`MigratorSession.attached(migrator, dir).up()`), so it now applies
+  `.up.sql` migrations, plans under the lock and re-raises the failing
+  migration's exception; `lock_config.lock_id`/`mode` and the mixed-mode
+  warning of the deleted engine loop are gone. `confiture migrate apply-as`
+  runs `MigratorSession.apply_one(version, applied_by=role)`.
+- **`MigrateUpResult.failure`** holds the exception behind `errors[0]` (not
+  serialized); `pending` is filled on a dry run. New
+  `confiture.core.connection.dsn_from_config()` is the one derivation of a
+  libpq connection string from a config (URL key, legacy `database:` block,
+  `DatabaseConfig`, `Environment`); `create_connection()` uses it.
 
 ### Fixed
 

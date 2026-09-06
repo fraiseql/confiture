@@ -68,6 +68,7 @@ def doubles(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     state: dict[str, Any] = {"elsewhere": [], "calls": [], "swept": []}
 
     migrator = MagicMock()
+    migrator.migration_table = "tb_confiture"
     migrator.tracking_table_exists.return_value = False
     migrator.initialize.side_effect = lambda *a, **k: state["calls"].append("initialize")
     migrator.baseline_through.side_effect = lambda *a, **k: state["calls"].append(

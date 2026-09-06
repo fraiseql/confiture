@@ -847,6 +847,9 @@ confiture migrate up [OPTIONS]
 | `--config` | `-c` | Path | `db/environments/local.yaml` | Configuration file with database credentials |
 | `--target` | `-t` | String | (none) | Target migration version (applies all if not specified) |
 | `--force` | - | Flag | `false` | Force migration application, skipping state checks |
+| `--dry-run` | - | Flag | `false` | Analyze pending migrations without executing |
+| `--dry-run-execute` | - | Flag | `false` | Execute every pending migration inside a SAVEPOINT, then roll back — nothing is committed, no ledger row is written |
+| `--yes` | `-y` | Flag | `false` | Skip the `--dry-run-execute` confirmation prompt (CI) |
 
 #### Examples
 

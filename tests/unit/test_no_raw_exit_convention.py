@@ -63,7 +63,7 @@ _ALLOWLIST: dict[str, int] = {
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.
-    "commands/migrate_core.py": 33,  # TODO(phase-02/03): mixed success-signal + debt
+    "commands/migrate_core.py": 29,  # TODO(phase-02/03): mixed success-signal + debt
     # ---- Cycle 1 conversion cohort (this phase) ----
     "seed.py": 14,  # success-signal: clean Exit(0) + "found issues/failed" Exit(1) gates
     # commands/migrate_state.py: fully converted (Cycle 1) — baseline/reinit/

@@ -17,15 +17,17 @@ if TYPE_CHECKING:
         MigrateRebuildResult,
         MigrateReinitResult,
         MigrateUpResult,
+        MigrationApplied,
         PreflightAgainstResult,
         PreflightResult,
         StatusResult,
     )
 
+from confiture.core._migrator import policy as _policy
+from confiture.core._migrator.events import UpObserver, emit
 from confiture.core.checksum import (
     ChecksumConfig,
     ChecksumMismatchBehavior,
-    ChecksumVerificationError,
     MigrationChecksumVerifier,
 )
 from confiture.core.locking import LockConfig, MigrationLock
@@ -53,6 +55,7 @@ class MigratorSession:
         *,
         database_url_override: str | None = None,
         migration_table_override: str | None = None,
+        command: str | None = None,
     ) -> None:
         self._config = config
         self._migrations_dir = migrations_dir
@@ -60,11 +63,37 @@ class MigratorSession:
         self._migrator: Migrator | None = None
         self._database_url_override = database_url_override
         self._migration_table_override = migration_table_override
+        self._command = command  # recorded in the lock-holder metadata (#147)
+        self._owns_connection = True
+
+    @classmethod
+    def attached(
+        cls,
+        migrator: Migrator,
+        migrations_dir: Path,
+        *,
+        config: Environment | None = None,
+        command: str | None = None,
+    ) -> MigratorSession:
+        """A session over an engine that already owns its connection.
+
+        The caller keeps ownership: leaving the ``with`` block does not close
+        the connection. This is how :meth:`Migrator.migrate_up` runs the one
+        apply loop without opening a second connection.
+        """
+        session = cls(config, migrations_dir, command=command)
+        session._conn = migrator.connection
+        session._migrator = migrator
+        session._owns_connection = False
+        return session
 
     def __enter__(self) -> MigratorSession:
         # Import through confiture.core.migrator so tests can patch
         # confiture.core.migrator.create_connection and have it intercepted here.
         import confiture.core.migrator as _m
+
+        if self._migrator is not None:  # attached to a live engine
+            return self
 
         if self._database_url_override is not None:
             url: str = self._database_url_override
@@ -84,7 +113,7 @@ class MigratorSession:
             )
 
         self._conn = _m.create_connection(url)
-        self._migrator = Migrator(
+        self._migrator = _m.Migrator(
             connection=self._conn,
             migration_table=migration_table,
         )
@@ -96,7 +125,7 @@ class MigratorSession:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        if self._conn is not None:
+        if self._conn is not None and self._owns_connection:
             self._conn.close()
             self._conn = None
 
@@ -312,6 +341,10 @@ class MigratorSession:
         lock_timeout: int = 30000,
         no_lock: bool = False,
         require_reversible: bool = False,
+        strict_mode: bool | None = None,
+        auto_baseline: Path | None = None,
+        install_view_helpers: bool | None = None,
+        on_event: UpObserver | None = None,
     ) -> MigrateUpResult:
         """Apply pending migrations up to target version.
 
@@ -339,6 +372,16 @@ class MigratorSession:
             no_lock: If True, skip distributed locking.
             require_reversible: If True, abort before applying any migration
                      if any pending migration lacks a ``.down.sql`` file.
+            strict_mode: Fail on warnings/notices. None (default) takes the
+                     environment's ``migration.strict_mode``.
+            auto_baseline: Snapshots directory for self-baselining a database
+                     whose ledger is missing (the CLI's ``--auto-detect-baseline``).
+                     None (default) never baselines.
+            install_view_helpers: Install the view helper functions before
+                     applying. None (default) follows ``migration.view_helpers: auto``.
+            on_event: Observer for live progress
+                     (:class:`~confiture.core.migrator.UpEvent`): lock acquired,
+                     each pending file, applying/applied/failed, the superuser halt.
 
         Returns:
             MigrateUpResult with:
@@ -351,9 +394,15 @@ class MigratorSession:
             - error_summary: Property — first error message or None
 
         Raises:
-            ConfigurationError: If used outside ``with`` context manager.
-            MigrationError: If a migration file cannot be loaded or executed.
+            ConfigurationError: If used outside ``with`` context manager, or
+                ``auto_baseline`` refuses (ledger elsewhere, snapshots missing).
             MigrationError: If the migrations directory does not exist.
+            ChecksumVerificationError: A tampered applied file under
+                ``on_checksum_mismatch="fail"``.
+            LockAcquisitionError: The migration lock could not be taken.
+
+        A failing migration is not an exception: the result has ``success=False``,
+        its message in ``errors`` and the exception itself in ``failure``.
 
         Example:
             >>> with Migrator.from_config("db/environments/prod.yaml") as m:
@@ -370,9 +419,6 @@ class MigratorSession:
         # Import through confiture.core.migrator so tests can patch
         # confiture.core.migrator.load_migration_class and confiture.core.migrator.MigrationLock.
         from confiture.exceptions import ConfigurationError
-        from confiture.models.results import (
-            MigrateUpResult,
-        )
 
         if self._migrator is None:
             raise ConfigurationError(
@@ -397,29 +443,25 @@ class MigratorSession:
         # deployer that waited for the lock finds nothing left to apply instead
         # of failing on what the first one just recorded — and two first-run
         # deployers cannot race the ledger CREATE.
-        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+        lock_config = _m.LockConfig(
+            enabled=not no_lock, timeout_ms=lock_timeout, command=self._command
+        )
         lock = _m.MigrationLock(self._conn, lock_config)
-        try:
-            with lock.acquire():
-                return self._up_under_lock(
-                    target=target,
-                    dry_run=dry_run,
-                    dry_run_execute=dry_run_execute,
-                    verify_checksums=verify_checksums,
-                    on_checksum_mismatch=on_checksum_mismatch,
-                    force=force,
-                    require_reversible=require_reversible,
-                )
-        except ChecksumVerificationError:
-            raise  # a tampered applied file is the caller's decision, not a result row
-        except Exception as exc:  # the lock could not be taken (timeout, contention)
-            return MigrateUpResult(
-                success=False,
-                migrations_applied=[],
-                total_execution_time_ms=0,
-                checksums_verified=False,
-                dry_run=False,
-                errors=[str(exc)],
+        with lock.acquire():
+            if not no_lock:
+                emit(on_event, "lock_acquired")
+            return self._up_under_lock(
+                target=target,
+                dry_run=dry_run,
+                dry_run_execute=dry_run_execute,
+                verify_checksums=verify_checksums,
+                on_checksum_mismatch=on_checksum_mismatch,
+                force=force,
+                require_reversible=require_reversible,
+                strict_mode=strict_mode,
+                auto_baseline=auto_baseline,
+                install_view_helpers=install_view_helpers,
+                on_event=on_event,
             )
 
     def _plan_under_lock(self, *, force: bool) -> tuple[list[Path], list[str]]:
@@ -484,6 +526,10 @@ class MigratorSession:
         on_checksum_mismatch: str,
         force: bool,
         require_reversible: bool,
+        strict_mode: bool | None = None,
+        auto_baseline: Path | None = None,
+        install_view_helpers: bool | None = None,
+        on_event: UpObserver | None = None,
     ) -> MigrateUpResult:
         """The body of :meth:`up`, run while the migration lock is held."""
         import time as _time
@@ -496,10 +542,28 @@ class MigratorSession:
         )
 
         assert self._migrator is not None
+        if auto_baseline is not None:
+            _policy.auto_baseline(
+                conn=self._conn,
+                migrator=self._migrator,
+                migrations_dir=self._migrations_dir,
+                snapshots_dir=auto_baseline,
+                on_event=on_event,
+            )
         pending_files, skipped_versions = self._plan_under_lock(force=force)
+        if _policy.wants_view_helpers(install_view_helpers, self._config):
+            _policy.install_view_helpers(self._conn, on_event)
         checksums_verified, checksum_warnings = self._verify_checksums(
             enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
         )
+        if checksums_verified:
+            emit(on_event, "checksums_verified")
+        effective_strict = _policy.resolve_strict_mode(strict_mode, self._config)
+        pending_versions: list[str] = []
+        for migration_file in pending_files:
+            version, name = _label(migration_file)
+            pending_versions.append(version)
+            emit(on_event, "pending", version=version, name=name)
 
         # Dry-run: return without applying
         if dry_run:
@@ -511,6 +575,7 @@ class MigratorSession:
                 dry_run=True,
                 skipped=skipped_versions,
                 warnings=checksum_warnings,
+                pending=pending_versions,
             )
 
         if not pending_files:
@@ -551,6 +616,8 @@ class MigratorSession:
                 checksums_verified=checksums_verified,
                 skipped_versions=skipped_versions,
                 checksum_warnings=checksum_warnings,
+                strict_mode=effective_strict,
+                on_event=on_event,
             )
 
         migrations_applied: list[MigrationApplied] = []
@@ -564,9 +631,11 @@ class MigratorSession:
             for idx, migration_file in enumerate(pending_files):
                 migration_class = _m.load_migration_class(migration_file)
                 migration = migration_class(connection=self._conn)
+                _apply_strict_mode(migration, effective_strict)
 
                 # Stop at target version
                 if target and migration.version > target:
+                    emit(on_event, "target_reached", version=migration.version, name=migration.name)
                     break
 
                 # Issue #137 — halt-at-first-skip for requires_superuser.
@@ -577,6 +646,7 @@ class MigratorSession:
                 # ``is True`` rather than truthiness so MagicMock-based
                 # test doubles don't accidentally trip the halt path.
                 if getattr(migration, "requires_superuser", False) is True:
+                    emit(on_event, "superuser_halt", version=migration.version, name=migration.name)
                     skipped_superuser.append(
                         SkippedMigration(
                             version=migration.version,
@@ -594,6 +664,7 @@ class MigratorSession:
                     halted = True
                     break
 
+                emit(on_event, "applying", version=migration.version, name=migration.name)
                 try:
                     start = _time.time()
                     self._migrator.apply(migration, force=force, migration_file=migration_file)
@@ -606,12 +677,27 @@ class MigratorSession:
                             execution_time_ms=elapsed,
                         )
                     )
+                    emit(
+                        on_event,
+                        "applied",
+                        version=migration.version,
+                        name=migration.name,
+                        elapsed_ms=elapsed,
+                    )
                 except Exception as exc:
                     failed_exception = exc
+                    emit(
+                        on_event,
+                        "failed",
+                        version=migration.version,
+                        name=migration.name,
+                        message=str(exc),
+                    )
                     break
         except Exception as exc:
             if failed_exception is None:
                 failed_exception = exc
+                emit(on_event, "failed", message=str(exc))
 
         if failed_exception is not None:
             return MigrateUpResult(
@@ -621,6 +707,7 @@ class MigratorSession:
                 checksums_verified=checksums_verified,
                 dry_run=False,
                 errors=[str(failed_exception)],
+                failure=failed_exception,
                 skipped=skipped_versions,
                 skipped_superuser=skipped_superuser,
                 pending=pending_after_halt,
@@ -647,6 +734,8 @@ class MigratorSession:
         checksums_verified: bool,
         skipped_versions: list[str],
         checksum_warnings: list[str],
+        strict_mode: bool = False,
+        on_event: UpObserver | None = None,
     ) -> MigrateUpResult:
         """Execute pending migrations inside a SAVEPOINT, then roll back.
 
@@ -676,10 +765,18 @@ class MigratorSession:
                 for migration_file in pending_files:
                     migration_class = _m.load_migration_class(migration_file)
                     migration = migration_class(connection=self._conn)
+                    _apply_strict_mode(migration, strict_mode)
 
                     if target and migration.version > target:
+                        emit(
+                            on_event,
+                            "target_reached",
+                            version=migration.version,
+                            name=migration.name,
+                        )
                         break
 
+                    emit(on_event, "applying", version=migration.version, name=migration.name)
                     try:
                         start = _time.time()
                         self._migrator.apply(
@@ -697,8 +794,22 @@ class MigratorSession:
                                 execution_time_ms=elapsed,
                             )
                         )
+                        emit(
+                            on_event,
+                            "applied",
+                            version=migration.version,
+                            name=migration.name,
+                            elapsed_ms=elapsed,
+                        )
                     except Exception as exc:
                         failed_exception = exc
+                        emit(
+                            on_event,
+                            "failed",
+                            version=migration.version,
+                            name=migration.name,
+                            message=str(exc),
+                        )
                         break
             finally:
                 self._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
@@ -716,6 +827,7 @@ class MigratorSession:
                 dry_run=True,
                 dry_run_execute=True,
                 errors=[str(failed_exception)],
+                failure=failed_exception,
                 skipped=skipped_versions,
             )
 
@@ -805,6 +917,75 @@ class MigratorSession:
                 reversible.add(version)
         return reversible
 
+    def apply_one(
+        self,
+        version: str,
+        *,
+        applied_by: str | None = None,
+        lock_timeout: int = 30000,
+        no_lock: bool = False,
+    ) -> MigrationApplied:
+        """Apply exactly one migration by version, under the migration lock.
+
+        The engine behind ``confiture migrate apply-as``: the operator applies
+        the migration :meth:`up` halted on (``requires_superuser=True``) through
+        a session opened on the privileged role's URL, then re-runs ``up()``.
+
+        Args:
+            version: The migration version to apply.
+            applied_by: Recorded in the ledger's ``applied_by`` column.
+            lock_timeout: Lock acquisition timeout in milliseconds.
+            no_lock: If True, skip distributed locking.
+
+        Raises:
+            MigrationError: ``MIGR_001`` if the version is already applied,
+                ``MIGR_100`` if no file carries it; whatever the migration raises.
+            LockAcquisitionError: The migration lock could not be taken.
+        """
+        import time as _time
+
+        import confiture.core.migrator as _m
+        from confiture.exceptions import ConfigurationError, MigrationError
+        from confiture.models.results import MigrationApplied
+
+        if self._migrator is None:
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        lock = _m.MigrationLock(
+            self._conn,
+            _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout, command=self._command),
+        )
+        with lock.acquire():
+            self._migrator.initialize()
+            if version in set(self._migrator.get_applied_versions()):
+                raise MigrationError(
+                    f"Migration {version} is already applied.",
+                    version=version,
+                    error_code="MIGR_001",
+                    context={"reason": "already_applied"},
+                    resolution_hint="Nothing to do — the version is already in the tracking table.",
+                )
+            files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
+            matches = [f for f in files if self._migrator._version_from_filename(f.name) == version]
+            if not matches:
+                raise MigrationError(
+                    f"No migration with version {version} in {self._migrations_dir}",
+                    version=version,
+                    error_code="MIGR_100",
+                    resolution_hint="Check the version and --migrations-dir.",
+                )
+            migration_file = sorted(matches)[0]
+            migration = _m.load_migration_class(migration_file)(connection=self._conn)
+            start = _time.time()
+            self._migrator.apply(migration, migration_file=migration_file, applied_by=applied_by)
+            return MigrationApplied(
+                version=migration.version,
+                name=migration.name,
+                execution_time_ms=int((_time.time() - start) * 1000),
+            )
+
     def down(
         self,
         *,
@@ -876,7 +1057,7 @@ class MigratorSession:
             rolled_back, total_ms = self._rollback_sequence(versions_to_rollback, dry_run=True)
         else:
             lock_config = _m.LockConfig(
-                enabled=not no_lock, timeout_ms=lock_timeout, command=command
+                enabled=not no_lock, timeout_ms=lock_timeout, command=command or self._command
             )
             lock = _m.MigrationLock(self._conn, lock_config)
             with lock.acquire():
@@ -988,7 +1169,9 @@ class MigratorSession:
         if dry_run:
             return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)
 
-        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout, command=command)
+        lock_config = _m.LockConfig(
+            enabled=not no_lock, timeout_ms=lock_timeout, command=command or self._command
+        )
         lock = _m.MigrationLock(self._conn, lock_config)
         with lock.acquire():
             self._rollback_sequence(to_execute, dry_run=False)
@@ -1331,3 +1514,20 @@ class MigratorSession:
 # Avoid circular import: Migrator is defined in engine.py but MigratorSession
 # references it. We import it here so the type annotation and runtime value work.
 from confiture.core._migrator.engine import Migrator  # noqa: E402
+
+
+def _label(migration_file: Path) -> tuple[str, str]:
+    """``(version, name)`` from a migration filename — ``.py`` or ``.up.sql``."""
+    stem = migration_file.name
+    for suffix in (".up.sql", ".py"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    version, _, name = stem.partition("_")
+    return version, name
+
+
+def _apply_strict_mode(migration: Any, strict: bool) -> None:
+    """Strict mode from the session/config, unless the class already pins it."""
+    if strict and not getattr(type(migration), "strict_mode", False):
+        migration.strict_mode = True

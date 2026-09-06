@@ -61,21 +61,38 @@ def builder_double(**returns: Any) -> MagicMock:
     return double
 
 
-def connection_double(dbname: str = "unit_test_db") -> MagicMock:
-    """A psycopg connection stand-in that answers ``SELECT current_database()``.
+def connection_double(
+    dbname: str = "confiture_test", *, view_helpers_installed: bool = True
+) -> MagicMock:
+    """A psycopg connection stand-in that answers the engine's bookkeeping queries.
 
-    ``MigrationLock`` derives its advisory-lock key from the database name, so
-    a session double has to carry one — a bare ``MagicMock`` makes the lock hash
-    a mock and fail with "object supporting the buffer API required".
+    The advisory lock asks ``SELECT current_database()``; the view-helper policy
+    counts functions in ``pg_proc``; the checksum verifier reads an (empty)
+    ledger with ``fetchall()``. Anything else fetches ``(dbname,)``.
     """
     conn = MagicMock(name="connection")
-    conn.info.dbname = dbname
-    row = (dbname,)
-    conn.execute.return_value.fetchone.return_value = row
-    conn.execute.return_value.fetchall.return_value = []  # an empty ledger
+    last: dict[str, str] = {"sql": ""}
+
+    def _fetchone() -> tuple[Any, ...]:
+        if "pg_proc" in last["sql"]:
+            return (2 if view_helpers_installed else 0,)
+        return (dbname,)
+
+    def _wire(cursor: MagicMock) -> None:
+        def _execute(sql: Any, *args: Any, **kwargs: Any) -> MagicMock:
+            last["sql"] = str(sql)
+            return cursor
+
+        cursor.execute.side_effect = _execute
+        cursor.fetchone.side_effect = _fetchone
+        cursor.fetchall.return_value = []  # an empty ledger
+
+    _wire(conn.execute.return_value)
+    conn.execute.side_effect = lambda sql, *a, **k: (
+        last.__setitem__("sql", str(sql)),
+        conn.execute.return_value,
+    )[1]
     cursor = conn.cursor.return_value
-    cursor.fetchone.return_value = row
-    cursor.fetchall.return_value = []
-    cursor.__enter__.return_value.fetchone.return_value = row
-    cursor.__enter__.return_value.fetchall.return_value = []
+    _wire(cursor)
+    _wire(cursor.__enter__.return_value)
     return conn

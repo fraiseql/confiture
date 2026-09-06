@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from tests.unit._doubles import migrator_double
+from tests.unit._doubles import connection_double, migrator_double
 
 runner = CliRunner()
 
@@ -217,7 +217,7 @@ class TestMigrateUpLockExitCodes:
             migrations_dir / "002_migration_2.up.sql",
         ]
 
-        mock_conn = MagicMock()
+        mock_conn = connection_double()
 
         lock_error = LockAcquisitionError("Could not acquire lock", timeout=5000)
 
@@ -262,7 +262,7 @@ class TestMigrateUpLockExitCodes:
             migrations_dir / "002_migration_2.up.sql",
         ]
 
-        mock_conn = MagicMock()
+        mock_conn = connection_double()
 
         lock_error = LockAcquisitionError("Lock already held")
 
@@ -316,7 +316,7 @@ class TestMigrateUpMigrationFailure:
         # apply() raises an exception for the migration
         mock_migrator.apply.side_effect = Exception("column 'foo' already exists")
 
-        mock_conn = MagicMock()
+        mock_conn = connection_double()
 
         # Mock load_migration_class to return a class that produces a proper migration
         mock_migration = MagicMock()

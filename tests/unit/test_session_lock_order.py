@@ -12,13 +12,13 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
-from tests.unit._doubles import migrator_double
+from tests.unit._doubles import connection_double, migrator_double
 
 
 def _env() -> Environment:
@@ -66,8 +66,8 @@ def _run_up(tmp_path: Path, events: list[str], **kwargs) -> None:
         events.append("find_migration_files") or []
     )
     with (
-        patch("confiture.core.migrator.create_connection", return_value=MagicMock()),
-        patch("confiture.core._migrator.session.Migrator", autospec=True, return_value=double),
+        patch("confiture.core.migrator.create_connection", return_value=connection_double()),
+        patch("confiture.core.migrator.Migrator", autospec=True, return_value=double),
         patch("confiture.core.migrator.MigrationLock", _RecordingLock),
     ):
         with MigratorSession(_env(), migrations) as session:

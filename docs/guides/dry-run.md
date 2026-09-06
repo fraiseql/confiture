@@ -12,9 +12,13 @@ Test migrations before execution using analysis or SAVEPOINT-based testing.
 # Analyze without executing
 confiture migrate up --dry-run
 
-# Execute in SAVEPOINT (guaranteed rollback)
-confiture migrate up --dry-run-execute
+# Execute in SAVEPOINT (guaranteed rollback); --yes skips the confirmation prompt
+confiture migrate up --dry-run-execute --yes
 ```
+
+Both modes run through the library's `MigratorSession` — the same lock, plan and
+checksum verification as a real `migrate up`. `--dry-run-execute` executes inside
+a SAVEPOINT that is always rolled back: no table survives, no ledger row is written.
 
 ---
 

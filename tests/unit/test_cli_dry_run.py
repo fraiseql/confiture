@@ -5,11 +5,21 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from tests.unit._doubles import connection_double
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real ``db/migrations`` under a scratch cwd — the session checks the directory exists."""
+    (tmp_path / "db" / "migrations").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
 
 
 class TestMigrateUpDryRun:
@@ -23,10 +33,11 @@ class TestMigrateUpDryRun:
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
                     # Setup mocks
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     mock_migrator.get_pending_migrations.return_value = [
                         Path("db/migrations/001_init.py"),
@@ -75,10 +86,11 @@ class TestMigrateUpDryRun:
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     mock_migrator.get_pending_migrations.return_value = [
                         Path("db/migrations/001_init.py"),
@@ -139,10 +151,11 @@ class TestMigrateUpDryRun:
                     with patch(
                         "confiture.core.migrator.Migrator", autospec=True
                     ) as mock_migrator_class:
-                        mock_conn = MagicMock()
+                        mock_conn = connection_double()
                         mock_conn_factory.return_value = mock_conn
 
                         mock_migrator = MagicMock()
+                        mock_migrator.migration_table = "tb_confiture"
                         mock_migrator_class.return_value = mock_migrator
                         mock_migrator.get_pending_migrations.return_value = [
                             Path("db/migrations/001_init.py"),
@@ -183,10 +196,11 @@ class TestMigrateUpDryRun:
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     mock_migrator.get_pending_migrations.return_value = [
                         Path("db/migrations/001_init.py"),
@@ -236,10 +250,11 @@ class TestMigrateDownDryRun:
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     mock_migrator.get_applied_versions.return_value = ["001", "002"]
                     mock_migrator.find_migration_files.return_value = [
@@ -281,10 +296,11 @@ class TestMigrateDownDryRun:
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     mock_migrator.get_applied_versions.return_value = ["001"]
                     mock_migrator.find_migration_files.return_value = [
@@ -386,10 +402,11 @@ class TestDryRunExecution:
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     mock_migrator.get_pending_migrations.return_value = [
                         Path("db/migrations/001_init.py"),
@@ -431,10 +448,11 @@ class TestDryRunExecution:
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
                 ) as mock_migrator_class:
-                    mock_conn = MagicMock()
+                    mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
                     mock_migrator = MagicMock()
+                    mock_migrator.migration_table = "tb_confiture"
                     mock_migrator_class.return_value = mock_migrator
                     # No pending migrations
                     mock_migrator.get_pending_migrations.return_value = []

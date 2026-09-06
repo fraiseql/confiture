@@ -20,17 +20,13 @@ from psycopg import sql as pgsql
 
 from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 from confiture.core.checksum import (
-    ChecksumConfig,
-    MigrationChecksumVerifier,
     compute_checksum,
 )
 from confiture.core.connection import get_migration_class, load_migration_module
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.hooks import HookError
 from confiture.core.hooks.phases import HookPhase
-from confiture.core.locking import LockConfig, MigrationLock
 from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
-from confiture.core.progress import ProgressManager
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 
@@ -466,104 +462,6 @@ def mark_applied(
     logger.info(f"Marked migration {migration.version} ({migration.name}) as applied ({reason})")
 
     return migration.version
-
-
-def migrate_up(
-    migrator: Migrator,
-    force: bool = False,
-    migrations_dir: Path | None = None,
-    target: str | None = None,
-    lock_config: LockConfig | None = None,
-    checksum_config: ChecksumConfig | None = None,
-    progress: ProgressManager | None = None,
-) -> list[str]:
-    """Apply pending migrations up to target version.
-
-    See :meth:`Migrator.migrate_up` for the full contract.
-    """
-    effective_migrations_dir = migrations_dir or Path("db/migrations")
-
-    verify_task = None
-    if progress:
-        verify_task = progress.add_task("Verifying checksums...", total=None)
-
-    # Verify checksums before running migrations (unless force mode)
-    if checksum_config is None:
-        checksum_config = ChecksumConfig()
-
-    if checksum_config.enabled and not force:
-        verifier = MigrationChecksumVerifier(
-            migrator.connection, checksum_config, migration_table=migrator.migration_table
-        )
-        verifier.verify_all(effective_migrations_dir)
-
-    if progress and verify_task is not None:
-        progress.finish_task(verify_task)
-
-    # Create lock manager
-    lock = MigrationLock(migrator.connection, lock_config)
-
-    # Acquire lock and run migrations
-    with lock.acquire():
-        return migrator._migrate_up_internal(force, migrations_dir, target, progress=progress)
-
-
-def migrate_up_internal(
-    migrator: Migrator,
-    force: bool = False,
-    migrations_dir: Path | None = None,
-    target: str | None = None,
-    progress: ProgressManager | None = None,
-) -> list[str]:
-    """Internal implementation of migrate_up (called within lock)."""
-    discover_task = None
-    if progress:
-        discover_task = progress.add_task("Discovering migrations...", total=None)
-
-    # Find migrations to apply
-    if force:
-        # In force mode, apply all migrations regardless of state
-        migrations_to_apply = migrator.find_migration_files(migrations_dir)
-    else:
-        # Normal mode: only apply pending migrations
-        migrations_to_apply = migrator.find_pending(migrations_dir)
-
-    if progress and discover_task is not None:
-        progress.update(discover_task, len(migrations_to_apply))
-
-    # Check for mixed transactional modes and warn
-    migrator._warn_mixed_transactional_modes(migrations_to_apply)
-
-    apply_task = None
-    if progress:
-        apply_task = progress.add_task("Applying migrations...", total=len(migrations_to_apply))
-
-    applied_versions = []
-
-    for migration_file in migrations_to_apply:
-        # Load migration module
-        module = load_migration_module(migration_file)
-        migration_class = get_migration_class(module)
-
-        # Create migration instance
-        migration = migration_class(connection=migrator.connection)
-
-        # Check target
-        if target and migration.version > target:
-            break
-
-        # Apply migration with file path for checksum computation
-        migrator.apply(migration, force=force, migration_file=migration_file)
-        applied_versions.append(migration.version)
-
-        # Update progress
-        if progress and apply_task is not None:
-            progress.update(apply_task, advance=1)
-
-    if progress and apply_task is not None:
-        progress.finish_task(apply_task)
-
-    return applied_versions
 
 
 def warn_mixed_transactional_modes(migration_files: list[Path]) -> None:
