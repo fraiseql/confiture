@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -361,7 +362,7 @@ def migrate_status(
                     find_rebuild_strategy_files as _json_find_rebuild,
                 )
 
-                _json_threshold = rebuild_threshold or 5
+                _json_threshold = _effective_rebuild_threshold(rebuild_threshold, config)
                 _json_reasons: list[str] = []
                 if len(pending_list) >= _json_threshold:
                     _json_reasons.append(
@@ -436,22 +437,7 @@ def migrate_status(
             if check_rebuild and pending_list:
                 from confiture.core.strategy import find_rebuild_strategy_files
 
-                threshold = rebuild_threshold
-                if threshold is None:
-                    # Try to read from config
-                    if config and config.exists():
-                        try:
-                            from confiture.core.connection import load_config as _rebuild_load
-
-                            _cfg = _rebuild_load(config)
-                            if hasattr(_cfg, "migration") and hasattr(
-                                _cfg.migration, "rebuild_threshold"
-                            ):
-                                threshold = _cfg.migration.rebuild_threshold
-                        except Exception:
-                            pass
-                    if threshold is None:
-                        threshold = 5
+                threshold = _effective_rebuild_threshold(rebuild_threshold, config)
 
                 rebuild_reasons: list[str] = []
 
@@ -875,18 +861,9 @@ def migrate_up(
 
         # Environment-level migration settings (strict mode, view helpers) come
         # from the environment config only when YAML is the DSN source.
-        env_cfg = None
-        if (
-            _db_url_override is None
-            and config.parent.name == "environments"
-            and config.parent.parent.name == "db"
-        ):
-            try:
-                from confiture.config.environment import Environment as _Env
-
-                env_cfg = _Env.load(config.stem, project_dir=config.parent.parent.parent)
-            except Exception:
-                env_cfg = None  # unparsable environment config: defaults apply
+        # An invalid environment file is an error (exit 5), not a silently
+        # non-strict run; only its absence leaves the defaults in place.
+        env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
         install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
 
@@ -1378,15 +1355,7 @@ def migrate_generate(
             )
             raise typer.Exit(2)
 
-        env_config = None
-        try:
-            from confiture.config.environment import Environment
-
-            env_name = config.stem
-            project_dir = config.parent.parent.parent
-            env_config = Environment.load(env_name, project_dir=project_dir)
-        except Exception:
-            pass
+        env_config = _load_environment_if_present(config)
 
         if env_config is None or generator not in env_config.migration.migration_generators:
             error_console.print(
@@ -1563,17 +1532,7 @@ class {class_name}(Migration):
 
         # Write schema history snapshot (non-fatal if it fails)
         _snapshot_path: Path | None = None
-        _snapshot_env_config = None
-        try:
-            from confiture.config.environment import Environment as _SnapshotEnv
-
-            _snapshot_env_name = config.stem
-            _snapshot_project_dir = config.parent.parent.parent
-            _snapshot_env_config = _SnapshotEnv.load(
-                _snapshot_env_name, project_dir=_snapshot_project_dir
-            )
-        except Exception:
-            pass
+        _snapshot_env_config = _load_environment_if_present(config)
 
         _should_snapshot = snapshot
         if _should_snapshot is None:
@@ -1950,3 +1909,72 @@ def _row_estimator(connection: Any) -> Any:
     from confiture.cli.dry_run_summary import row_estimator
 
     return row_estimator(connection)
+
+
+@dataclass(frozen=True)
+class _MigrationSettings:
+    """What ``migrate`` commands read from an environment file: its ``migration:`` block and DSN."""
+
+    migration: Any  # MigrationConfig
+    database_url: str | None
+
+
+def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
+    """The ``migration:`` settings behind ``db/environments/<name>.yaml``, or None if absent.
+
+    Absence is not an error — defaults apply. An invalid ``migration:`` block *is*
+    (``ConfigurationError`` ``CONFIG_002``, exit 5) instead of being swallowed into
+    "defaults apply", which made a malformed file a silently non-strict run.
+    Only the block these commands read is validated, so a minimal or legacy
+    (``database:`` block, no ``include_dirs``) file still works.
+    """
+    if not (
+        config.parent.name == "environments"
+        and config.parent.parent.name == "db"
+        and config.exists()
+    ):
+        return None
+    from pydantic import ValidationError as _PydanticValidationError
+
+    from confiture.config.environment import MigrationConfig
+    from confiture.core.connection import dsn_from_config, load_config
+    from confiture.exceptions import ConfigurationError
+
+    data = load_config(config) or {}
+    if not isinstance(data, dict):
+        # An already-built Environment (tests patch load_config to return one).
+        return _MigrationSettings(
+            migration=getattr(data, "migration", MigrationConfig()),
+            database_url=getattr(data, "database_url", None),
+        )
+    try:
+        migration = MigrationConfig.model_validate(data.get("migration") or {})
+    except _PydanticValidationError as e:
+        raise ConfigurationError(
+            f"Invalid `migration:` settings in {config}: {e}",
+            error_code="CONFIG_002",
+            context={"file_path": str(config)},
+            resolution_hint=f"Fix the `migration:` block in {config}.",
+        ) from e
+    try:
+        database_url: str | None = dsn_from_config(data)
+    except Exception:  # noqa: BLE001 — a file with no DSN at all still yields its settings
+        database_url = None
+    return _MigrationSettings(migration=migration, database_url=database_url)
+
+
+def _effective_rebuild_threshold(explicit: int | None, config: Path) -> int:
+    """``--rebuild-threshold``, else ``migration.rebuild_threshold`` from the config, else 5."""
+    if explicit is not None:
+        return explicit
+    env = _load_environment_if_present(config)
+    if env is not None:
+        return int(env.migration.rebuild_threshold)
+    if config.exists():
+        from confiture.core.connection import load_config
+
+        data = load_config(config) or {}
+        value = (data.get("migration") or {}).get("rebuild_threshold")
+        if value is not None:
+            return int(value)
+    return 5

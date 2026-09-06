@@ -19,6 +19,15 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
   nothing on stdout, before the command body runs. `migrate preflight` and
   `schema diff` no longer fall through to text on an unknown value.
+- ⚠️ **An invalid environment file is an error.** `migrate up`, `migrate
+  generate` and the snapshot step loaded `db/environments/<name>.yaml` inside
+  `except Exception: pass`, so a malformed `migration:` block meant a silently
+  non-strict run with the default view-helper and snapshot settings. The block is
+  now validated (`CONFIG_002`, exit 5) and only its *absence* leaves the
+  defaults in place; minimal and legacy (`database:` block) files still work.
+  `migrate status --check-rebuild` reads `migration.rebuild_threshold` in table
+  **and** JSON mode (table read it through a dict that never matched; JSON
+  hard-coded 5); `--rebuild-threshold` still overrides.
 - ⚠️ **No option that does nothing (D3).** `migrate up --batched --batch-size
   --batch-sleep` reach the session, which sets the `BatchConfig` on every
   migration as `batch_config` before it runs (a `.py` migration using
