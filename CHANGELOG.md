@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase 03 of the 2026-09-06 review: one apply loop. `MigratorSession.up()` is the
+engine; what it reports is what happened.
+
+### Changed
+
+- ⚠️ **`MigratorSession.up()` plans under the lock.** Migration discovery, the
+  ledger `CREATE TABLE` and the pending computation used to run *before* the
+  advisory lock was taken, so two deployers starting together could both see
+  the same pending set and race the ledger CREATE. The lock is now acquired
+  first; discovery and `initialize()` run under it, and the ledger DDL is
+  `IF NOT EXISTS`. A second concurrent `up()` returns `success=True` with
+  nothing applied. A lock that cannot be taken is a failed result, not an
+  exception.
+- ⚠️ **`MigratorSession.up()` verifies checksums.** `verify_checksums=True`
+  (the default) used to set `checksums_verified=True` on the result and never
+  call the verifier — the library path had no checksum check at all. The
+  session now runs `MigrationChecksumVerifier` under the lock, before anything
+  is applied. A modified applied file raises `ChecksumVerificationError` under
+  the new `on_checksum_mismatch="fail"` default; `"warn"` continues and lists
+  each mismatch in `result.warnings`; `force=True` skips the check.
+  `checksums_verified` is `True` only when the verifier ran and found no
+  mismatch. Library callers who edit applied migration files in place will now
+  see the error the CLI has always reported.
+
+### Fixed
+
+- **SQL-file migrations are checksum-verified.** The verifier looked up
+  applied migrations as `<version>_<name>.py` only, so every `.up.sql`
+  migration logged "migration file not found" and was skipped — `migrate up`'s
+  check and `confiture verify-checksums` never caught a tampered SQL file.
+  The lookup now sees `.up.sql` too (`.down.sql` is never checksummed).
+
 ## [0.47.0] - 2026-09-06
 
 The first two phases of the 2026-09-06 whole-repository review: the security

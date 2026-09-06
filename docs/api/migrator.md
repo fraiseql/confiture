@@ -109,6 +109,7 @@ def up(
     dry_run: bool = False,
     dry_run_execute: bool = False,
     verify_checksums: bool = True,
+    on_checksum_mismatch: str = "fail",
     force: bool = False,
     lock_timeout: int = 30000,
     no_lock: bool = False,
@@ -116,6 +117,14 @@ def up(
 ) -> "MigrateUpResult":
     """Apply pending migrations (atomically) up to an optional target."""
 ```
+
+`verify_checksums=True` (the default) checks every applied migration file —
+`.py` and `.up.sql` — against the ledger before anything is applied, under the
+migration lock. A modified file raises `confiture.core.checksum.ChecksumVerificationError`
+(`.mismatches` lists the versions) under `on_checksum_mismatch="fail"`;
+`"warn"` continues and reports each mismatch in `result.warnings`; `"ignore"`
+continues silently. `force=True` skips the check. `result.checksums_verified` is
+`True` only when the verifier ran and found no mismatch — never a copy of the flag.
 
 ```python
 with Migrator.from_config("db/environments/production.yaml") as session:
@@ -213,7 +222,7 @@ from confiture.models.results import MigrateUpResult
 #   success: bool
 #   migrations_applied: list[MigrationApplied]
 #   total_execution_time_ms: int
-#   checksums_verified: bool
+#   checksums_verified: bool   # the verifier ran and found no mismatch
 #   dry_run: bool
 #   dry_run_execute: bool
 #   warnings: list[str]

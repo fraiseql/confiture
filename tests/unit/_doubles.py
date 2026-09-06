@@ -72,7 +72,10 @@ def connection_double(dbname: str = "unit_test_db") -> MagicMock:
     conn.info.dbname = dbname
     row = (dbname,)
     conn.execute.return_value.fetchone.return_value = row
+    conn.execute.return_value.fetchall.return_value = []  # an empty ledger
     cursor = conn.cursor.return_value
     cursor.fetchone.return_value = row
+    cursor.fetchall.return_value = []
     cursor.__enter__.return_value.fetchone.return_value = row
+    cursor.__enter__.return_value.fetchall.return_value = []
     return conn

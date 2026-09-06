@@ -550,3 +550,33 @@ class TestChecksumMismatchBehavior:
         assert ChecksumMismatchBehavior("fail") == ChecksumMismatchBehavior.FAIL
         assert ChecksumMismatchBehavior("warn") == ChecksumMismatchBehavior.WARN
         assert ChecksumMismatchBehavior("ignore") == ChecksumMismatchBehavior.IGNORE
+
+
+class TestFindSqlMigrationFile:
+    """SQL-file migrations (``.up.sql``) carry checksums too; the finder must see them."""
+
+    def test_find_migration_file_sql_exact_match(self, tmp_path):
+        migration_file = tmp_path / "20260906000002_create_gadgets.up.sql"
+        migration_file.write_text("CREATE TABLE gadgets (id INT);")
+
+        verifier = MigrationChecksumVerifier(MagicMock())
+
+        assert (
+            verifier._find_migration_file(tmp_path, "20260906000002", "create_gadgets")
+            == migration_file
+        )
+
+    def test_find_migration_file_sql_pattern_match(self, tmp_path):
+        migration_file = tmp_path / "20260906000002_create_gadgets_table.up.sql"
+        migration_file.write_text("CREATE TABLE gadgets (id INT);")
+
+        verifier = MigrationChecksumVerifier(MagicMock())
+
+        assert verifier._find_migration_file(tmp_path, "20260906000002", "other") == migration_file
+
+    def test_down_file_is_never_the_checksummed_file(self, tmp_path):
+        (tmp_path / "20260906000002_create_gadgets.down.sql").write_text("DROP TABLE gadgets;")
+
+        verifier = MigrationChecksumVerifier(MagicMock())
+
+        assert verifier._find_migration_file(tmp_path, "20260906000002", "create_gadgets") is None

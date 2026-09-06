@@ -22,6 +22,12 @@ if TYPE_CHECKING:
         StatusResult,
     )
 
+from confiture.core.checksum import (
+    ChecksumConfig,
+    ChecksumMismatchBehavior,
+    ChecksumVerificationError,
+    MigrationChecksumVerifier,
+)
 from confiture.core.locking import LockConfig, MigrationLock
 from confiture.exceptions import MigrationError
 
@@ -301,6 +307,7 @@ class MigratorSession:
         dry_run: bool = False,
         dry_run_execute: bool = False,
         verify_checksums: bool = True,
+        on_checksum_mismatch: str = "fail",
         force: bool = False,
         lock_timeout: int = 30000,
         no_lock: bool = False,
@@ -320,7 +327,13 @@ class MigratorSession:
             dry_run_execute: If True, execute all SQL inside a SAVEPOINT then
                      roll back. Catches real SQL errors without persisting changes.
                      Mutually exclusive with ``dry_run``.
-            verify_checksums: If True, verify migration file checksums.
+            verify_checksums: If True, verify the checksums of every applied
+                     migration file against the ledger before applying anything
+                     (skipped under ``force``). A mismatch raises
+                     :class:`~confiture.core.checksum.ChecksumVerificationError`
+                     under the default ``on_checksum_mismatch="fail"``.
+            on_checksum_mismatch: ``"fail"`` (raise), ``"warn"`` (continue, report
+                     the mismatches in ``warnings``) or ``"ignore"``.
             force: If True, re-apply all migrations including already-applied ones.
             lock_timeout: Lock timeout in milliseconds (default: 30000).
             no_lock: If True, skip distributed locking.
@@ -393,15 +406,18 @@ class MigratorSession:
                     dry_run=dry_run,
                     dry_run_execute=dry_run_execute,
                     verify_checksums=verify_checksums,
+                    on_checksum_mismatch=on_checksum_mismatch,
                     force=force,
                     require_reversible=require_reversible,
                 )
+        except ChecksumVerificationError:
+            raise  # a tampered applied file is the caller's decision, not a result row
         except Exception as exc:  # the lock could not be taken (timeout, contention)
             return MigrateUpResult(
                 success=False,
                 migrations_applied=[],
                 total_execution_time_ms=0,
-                checksums_verified=verify_checksums,
+                checksums_verified=False,
                 dry_run=False,
                 errors=[str(exc)],
             )
@@ -432,6 +448,32 @@ class MigratorSession:
 
         return pending_files, skipped_versions
 
+    def _verify_checksums(self, *, enabled: bool, on_mismatch: str) -> tuple[bool, list[str]]:
+        """Check every applied migration file against the ledger — the caller holds the lock.
+
+        Returns:
+            ``(verified, warnings)``: *verified* is True only when the verifier
+            ran and found no mismatch; *warnings* carries the mismatches under
+            ``"warn"``. Under ``"fail"`` a mismatch raises
+            :class:`~confiture.core.checksum.ChecksumVerificationError`.
+        """
+        assert self._migrator is not None
+        if not enabled:
+            return False, []
+        behaviour = ChecksumMismatchBehavior(on_mismatch)
+        verifier = MigrationChecksumVerifier(
+            self._conn,
+            ChecksumConfig(enabled=True, on_mismatch=behaviour),
+            migration_table=self._migrator.migration_table,
+        )
+        mismatches = verifier.verify_all(self._migrations_dir)
+        if not mismatches:
+            return True, []
+        return False, [
+            f"Checksum mismatch: {m.version}_{m.name} was modified after it was applied"
+            for m in mismatches
+        ]
+
     def _up_under_lock(
         self,
         *,
@@ -439,6 +481,7 @@ class MigratorSession:
         dry_run: bool,
         dry_run_execute: bool,
         verify_checksums: bool,
+        on_checksum_mismatch: str,
         force: bool,
         require_reversible: bool,
     ) -> MigrateUpResult:
@@ -454,6 +497,9 @@ class MigratorSession:
 
         assert self._migrator is not None
         pending_files, skipped_versions = self._plan_under_lock(force=force)
+        checksums_verified, checksum_warnings = self._verify_checksums(
+            enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
+        )
 
         # Dry-run: return without applying
         if dry_run:
@@ -461,9 +507,10 @@ class MigratorSession:
                 success=True,
                 migrations_applied=[],
                 total_execution_time_ms=0,
-                checksums_verified=verify_checksums,
+                checksums_verified=checksums_verified,
                 dry_run=True,
                 skipped=skipped_versions,
+                warnings=checksum_warnings,
             )
 
         if not pending_files:
@@ -471,9 +518,10 @@ class MigratorSession:
                 success=True,
                 migrations_applied=[],
                 total_execution_time_ms=0,
-                checksums_verified=verify_checksums,
+                checksums_verified=checksums_verified,
                 dry_run=False,
                 skipped=skipped_versions,
+                warnings=checksum_warnings,
             )
 
         # Reversibility gate — check before any SQL execution
@@ -485,7 +533,7 @@ class MigratorSession:
                     success=False,
                     migrations_applied=[],
                     total_execution_time_ms=0,
-                    checksums_verified=verify_checksums,
+                    checksums_verified=checksums_verified,
                     dry_run=False,
                     errors=[
                         f"Irreversible migrations detected (missing .down.sql): {names}. "
@@ -500,8 +548,9 @@ class MigratorSession:
                 pending_files=pending_files,
                 target=target,
                 force=force,
-                verify_checksums=verify_checksums,
+                checksums_verified=checksums_verified,
                 skipped_versions=skipped_versions,
+                checksum_warnings=checksum_warnings,
             )
 
         migrations_applied: list[MigrationApplied] = []
@@ -569,7 +618,7 @@ class MigratorSession:
                 success=False,
                 migrations_applied=migrations_applied,
                 total_execution_time_ms=total_execution_time_ms,
-                checksums_verified=verify_checksums,
+                checksums_verified=checksums_verified,
                 dry_run=False,
                 errors=[str(failed_exception)],
                 skipped=skipped_versions,
@@ -581,9 +630,9 @@ class MigratorSession:
             success=not halted,
             migrations_applied=migrations_applied,
             total_execution_time_ms=total_execution_time_ms,
-            checksums_verified=verify_checksums,
+            checksums_verified=checksums_verified,
             dry_run=False,
-            warnings=["Force mode enabled"] if force else [],
+            warnings=(["Force mode enabled"] if force else []) + checksum_warnings,
             skipped=skipped_versions,
             skipped_superuser=skipped_superuser,
             pending=pending_after_halt,
@@ -595,8 +644,9 @@ class MigratorSession:
         pending_files: list[Path],
         target: str | None,
         force: bool,
-        verify_checksums: bool,
+        checksums_verified: bool,
         skipped_versions: list[str],
+        checksum_warnings: list[str],
     ) -> MigrateUpResult:
         """Execute pending migrations inside a SAVEPOINT, then roll back.
 
@@ -662,7 +712,7 @@ class MigratorSession:
                 success=False,
                 migrations_applied=migrations_tested,
                 total_execution_time_ms=total_time,
-                checksums_verified=verify_checksums,
+                checksums_verified=checksums_verified,
                 dry_run=True,
                 dry_run_execute=True,
                 errors=[str(failed_exception)],
@@ -673,11 +723,12 @@ class MigratorSession:
             success=True,
             migrations_applied=migrations_tested,
             total_execution_time_ms=total_time,
-            checksums_verified=verify_checksums,
+            checksums_verified=checksums_verified,
             dry_run=True,
             dry_run_execute=True,
             skipped=skipped_versions,
-            warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"],
+            warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"]
+            + checksum_warnings,
         )
 
     def _rollback_sequence(self, versions: list[str], *, dry_run: bool = False) -> tuple[list, int]:

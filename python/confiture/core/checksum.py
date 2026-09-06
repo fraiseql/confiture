@@ -292,14 +292,17 @@ class MigrationChecksumVerifier:
         Returns:
             Path to migration file, or None if not found
         """
-        # Try exact match first
-        exact_path = migrations_dir / f"{version}_{name}.py"
-        if exact_path.exists():
-            return exact_path
+        # Exact match first — Python module or SQL-file migration (the ``.up.sql``
+        # side carries the checksum; ``.down.sql`` is never checksummed).
+        for suffix in (".py", ".up.sql"):
+            exact_path = migrations_dir / f"{version}_{name}{suffix}"
+            if exact_path.exists():
+                return exact_path
 
-        # Try pattern match (in case name has slight differences)
-        for f in migrations_dir.glob(f"{version}_*.py"):
-            return f
+        # Then by version alone (in case the name has slight differences)
+        for pattern in (f"{version}_*.py", f"{version}_*.up.sql"):
+            for f in sorted(migrations_dir.glob(pattern)):
+                return f
 
         return None
 

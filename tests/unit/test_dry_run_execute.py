@@ -22,6 +22,7 @@ def _make_entered_session(migrations_dir: Path) -> MigratorSession:
     session = MigratorSession(config=env, migrations_dir=migrations_dir)
     session._conn = connection_double()
     session._migrator = MagicMock()
+    session._migrator.migration_table = "tb_confiture"
     return session
 
 
