@@ -21,6 +21,7 @@ from confiture.cli.helpers import (
 )
 from confiture.cli.options import format_option
 from confiture.core.connection import load_config
+from confiture.core.sql_lexer import split_statements
 
 
 def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
@@ -30,17 +31,14 @@ def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
     first one whose header matches ``[schema.]name(``.  Returns ``None`` when
     no matching statement is found.
     """
-    import sqlparse  # noqa: PLC0415
-
     # Pattern matches both qualified (schema.name) and unqualified (name) forms
     header_re = re.compile(
         r"CREATE\s+(?:OR\s+REPLACE\s+)?(?:FUNCTION|PROCEDURE)\s+"
         rf"(?:{re.escape(schema)}\.)?{re.escape(name)}\s*\(",
         re.IGNORECASE,
     )
-    for stmt in sqlparse.split(sql):
-        stripped = stmt.strip()
-        if stripped and header_re.search(stripped):
+    for stripped in split_statements(sql):
+        if header_re.search(stripped):
             return stripped
     return None
 

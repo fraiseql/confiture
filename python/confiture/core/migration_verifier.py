@@ -18,10 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-import sqlparse
-
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.migrator import _version_from_migration_filename
+from confiture.core.sql_lexer import split_statements, statement_type
 from confiture.exceptions import VerifyFileError
 
 
@@ -92,7 +91,7 @@ class MigrationVerifier:
         return result
 
     def validate_verify_sql(self, content: str) -> None:
-        """Reject DDL/DML using sqlparse statement type detection.
+        """Reject DDL/DML by the statement's verb (pglast).
 
         Args:
             content: SQL content from the verify file
@@ -100,10 +99,9 @@ class MigrationVerifier:
         Raises:
             VerifyFileError: If content contains forbidden SQL (DDL/DML)
         """
-        parsed = sqlparse.parse(content)
-        for stmt in parsed:
-            stype = stmt.get_type()
-            if stype and stype not in ("SELECT", "UNKNOWN"):
+        for stmt in split_statements(content):
+            stype = statement_type(stmt)
+            if stype not in ("SELECT", "UNKNOWN"):
                 raise VerifyFileError(
                     f"Verify file contains forbidden {stype} statement. "
                     "Only SELECT (or WITH ... SELECT) is allowed."

@@ -478,7 +478,7 @@ class TestSchemaDriftDetector:
         detector = SchemaDriftDetector(conn)
 
         # Simulate an (unknown/future) parser breakage: no statements extracted.
-        monkeypatch.setattr("confiture.core.drift.sqlparse.parse", lambda _sql: [])
+        monkeypatch.setattr("confiture.core.drift.split_statements", lambda _sql: [])
 
         with pytest.raises(SchemaError):
             detector._parse_schema_from_sql(

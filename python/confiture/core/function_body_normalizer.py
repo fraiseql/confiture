@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import re
 
+from confiture.core.sql_lexer import strip_comments
+
 
 class FunctionBodyNormalizer:
     """Normalise a raw PostgreSQL function body string into a canonical form.
@@ -24,23 +26,6 @@ class FunctionBodyNormalizer:
     so that changes inside quoted values are still detected as drift.
     """
 
-    # Matches — in priority order — single-quoted string, dollar-quoted string,
-    # line comment, block comment.  The dollar-quote tag is captured in group 1
-    # so that the back-reference \1 can close the matching delimiter.
-    _TOKENIZER = re.compile(
-        r"'(?:[^'\\]|\\.)*'"  # single-quoted string (preserves content)
-        r"|(\$[^$]*\$).*?\1"  # dollar-quoted string (group 1 = tag, e.g. $$ or $func$)
-        r"|--[^\n]*"  # line comment — strip
-        r"|/\*.*?\*/",  # block comment — strip
-        re.DOTALL,
-    )
-
-    def _replace_token(self, m: re.Match[str]) -> str:
-        text = m.group(0)
-        if text.startswith("--") or text.startswith("/*"):
-            return " "  # strip comments, replace with a space to avoid token merging
-        return text  # preserve string literals unchanged
-
     def normalize(self, body: str) -> str:
         """Return a canonical, lowercased representation of *body*.
 
@@ -48,7 +33,7 @@ class FunctionBodyNormalizer:
         will produce the same normalised string.  Bodies with different logic
         will produce different strings.
         """
-        stripped = self._TOKENIZER.sub(self._replace_token, body)
+        stripped = strip_comments(body, replace_with=" ")
         lowered = stripped.lower()
         collapsed = re.sub(r"\s+", " ", lowered).strip()
         return collapsed
@@ -64,7 +49,7 @@ class FunctionBodyNormalizer:
         that pure-formatting churn (re-indentation, added blank lines, casing)
         does not appear as diff noise — only genuine logic changes do.
         """
-        stripped = self._TOKENIZER.sub(self._replace_token, body)
+        stripped = strip_comments(body, replace_with=" ")
         lowered = stripped.lower()
         lines = []
         for raw_line in lowered.splitlines():

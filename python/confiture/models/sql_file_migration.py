@@ -39,6 +39,7 @@ import psycopg
 
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.preconditions import Precondition
+from confiture.core.sql_lexer import split_statements
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.models.migration import Migration
 
@@ -91,8 +92,6 @@ def _execute_sql_script(migration: Migration, sql: str) -> None:
     if getattr(migration, "transactional", True):
         migration.execute(sql)
         return
-    from confiture.core.sql_statements import split_statements
-
     for statement in split_statements(sql):
         migration.execute(statement)
 
@@ -156,11 +155,8 @@ class FileSQLMigration(Migration):
         Returns:
             List of SQL statements parsed from the file
         """
-        import sqlparse
-
         sql, _ = strip_transaction_wrappers(self.up_file.read_text(), return_changed=True)
-        statements = sqlparse.split(sql)
-        return [stmt.strip() for stmt in statements if stmt.strip()]
+        return split_statements(sql)
 
     def up(self) -> None:
         """Apply the migration by executing the .up.sql file."""

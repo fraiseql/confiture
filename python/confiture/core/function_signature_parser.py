@@ -103,6 +103,10 @@ class FunctionSignatureParser:
           'i'=IN, 'o'=OUT, 'b'=INOUT, 'v'=VARIADIC, 't'=TABLE, 'd'=DEFAULT(IN)
         We include IN ('i'), INOUT ('b'), DEFAULT ('d') and skip OUT/VARIADIC/TABLE.
         """
+        # ParseError propagates: the caller reports it.
+        return self._parse_pglast_nodes([stmt.stmt for stmt in pglast.parse_sql(sql) or []])
+
+    def _parse_pglast_nodes(self, nodes: list[Any]) -> list[FunctionSignature]:
         from pglast.enums.parsenodes import FunctionParameterMode  # noqa: PLC0415
 
         _SKIP_PARAM_MODES = {
@@ -110,13 +114,9 @@ class FunctionSignatureParser:
             FunctionParameterMode.FUNC_PARAM_TABLE,
             FunctionParameterMode.FUNC_PARAM_VARIADIC,
         }
-
         result = []
-        stmts = pglast.parse_sql(sql)  # ParseError propagates: the caller reports it
-
-        for stmt in stmts:
+        for node in nodes:
             try:
-                node = stmt.stmt
                 if node.__class__.__name__ != "CreateFunctionStmt":
                     continue
 
@@ -172,153 +172,22 @@ class FunctionSignatureParser:
 
         return result
 
-    @staticmethod
-    def _extract_balanced_args(sql: str, open_pos: int) -> str | None:
-        """Return the content inside the balanced parentheses starting at open_pos.
-
-        ``sql[open_pos]`` must be ``'('``.  Scans forward tracking depth;
-        returns the substring between the opening and matching closing paren,
-        or ``None`` if the parentheses are unbalanced.
-        """
-        depth = 0
-        for i in range(open_pos, len(sql)):
-            if sql[i] == "(":
-                depth += 1
-            elif sql[i] == ")":
-                depth -= 1
-                if depth == 0:
-                    return sql[open_pos + 1 : i]
-        return None
-
-    def _parse_args_regex(self, args_raw: str) -> list[str]:
-        """Parse a parameter list into normalised type strings.
-
-        Splits on commas only at paren-depth 0 so that complex DEFAULT
-        expressions containing nested parentheses (e.g.
-        ``DEFAULT ROW(NULL, NULL)::mytype``) are treated as a single
-        parameter token rather than multiple ones.
-        """
-        if not args_raw:
-            return []
-
-        # Depth-aware comma split
-        parts: list[str] = []
-        depth = 0
-        current: list[str] = []
-        for ch in args_raw:
-            if ch == "(":
-                depth += 1
-                current.append(ch)
-            elif ch == ")":
-                depth -= 1
-                current.append(ch)
-            elif ch == "," and depth == 0:
-                parts.append("".join(current))
-                current = []
-            else:
-                current.append(ch)
-        if current:
-            parts.append("".join(current))
-
-        param_types = []
-        for arg in parts:
-            arg = arg.strip()
-            if not arg:
-                continue
-
-            # Remove DEFAULT clause (including complex expressions with nested parens)
-            arg = re.sub(r"\s+DEFAULT\s+.*$", "", arg, flags=re.IGNORECASE | re.DOTALL).strip()
-            arg = re.sub(r"\s*=\s*.*$", "", arg, flags=re.DOTALL).strip()
-
-            # Skip OUT / VARIADIC / TABLE params
-            if _SKIP_MODES.match(arg):
-                continue
-
-            # Strip IN / INOUT prefix
-            arg = _MODE_PREFIXES.sub("", arg).strip()
-
-            tokens = arg.split()
-            if not tokens:
-                continue
-
-            type_str = self._extract_type_from_tokens(tokens)
-            if type_str:
-                param_types.append(self._normalise_type(type_str))
-
-        return param_types
-
-    def _extract_type_from_tokens(self, tokens: list[str]) -> str:
-        """Extract the type portion from a list of tokens (last word(s))."""
-        if len(tokens) >= 3 and " ".join(tokens[-3:]).lower() == "timestamp with time zone":
-            return "timestamp with time zone"
-        if len(tokens) >= 2 and " ".join(tokens[-2:]).lower() == "double precision":
-            return "double precision"
-        if len(tokens) >= 2 and " ".join(tokens[-2:]).lower() == "character varying":
-            return "character varying"
-        return tokens[-1]
-
-    # Matches a dollar-quoted body:  AS $tag$...$tag$
-    # Group 1 captures the opening delimiter (e.g. $$ or $func$) so that \1
-    # closes it exactly.  re.DOTALL lets .* span newlines.
-    _BODY_RE = re.compile(
-        r"AS\s+(\$[^$]*\$)(.*?)\1",
-        re.DOTALL | re.IGNORECASE,
-    )
-
     def parse_with_bodies(self, sql: str) -> list[tuple[FunctionSignature, str | None]]:
-        """Parse signatures and extract raw function bodies.
+        """Parse signatures and their bodies from the AST.
 
-        Returns a list of (FunctionSignature, body_or_None) pairs.
-        ``body`` is ``None`` when the body cannot be extracted — e.g. for
-        LANGUAGE C / LANGUAGE internal functions whose AS clause is a single-
-        quoted symbol rather than a dollar-quoted SQL body.
-
-        Uses the regex path only (not pglast), because pglast AST nodes do not
-        expose original source text, making dollar-quote body extraction
-        impractical via the AST.
+        ``body`` is the text between the dollar quotes exactly as written, or
+        ``None`` for ``LANGUAGE c`` / ``LANGUAGE internal`` functions whose
+        ``AS`` clause names a symbol, not SQL.
         """
         result: list[tuple[FunctionSignature, str | None]] = []
-
-        for match in _FUNC_HEADER_RE.finditer(sql):
-            schema_raw = match.group("schema")
-            schema = schema_raw.lower().strip('"') if schema_raw else "public"
-            name = match.group("name").lower().strip('"')
-
-            open_pos = match.end() - 1  # position of '('
-            args_raw = self._extract_balanced_args(sql, open_pos)
-            if args_raw is None:
+        for raw in pglast.parse_sql(sql) or []:
+            node = raw.stmt
+            if type(node).__name__ != "CreateFunctionStmt":
                 continue
-            param_types = self._parse_args_regex(args_raw.strip())
-            sig = FunctionSignature(
-                schema=schema,
-                name=name,
-                param_types=tuple(param_types),
-            )
-
-            # Position just after the closing ')' of the parameter list.
-            # Formula: open_pos + len(args_raw) + 2
-            #   open_pos         → '('
-            #   open_pos + 1     → start of args
-            #   open_pos + 1 + N → closing ')'  (N = len(args_raw))
-            #   open_pos + N + 2 → char after ')'
-            args_end = open_pos + len(args_raw) + 2
-
-            # Search for the dollar-quoted body that follows this function header.
-            body_match = self._BODY_RE.search(sql, args_end)
-
-            if body_match is not None:
-                # Guard: if another FUNCTION header appears before this body,
-                # the body belongs to that later function, not the current one.
-                next_fn = _FUNC_HEADER_RE.search(sql, args_end)
-                if next_fn is None or next_fn.start() > body_match.start():
-                    body: str | None = body_match.group(2)
-                else:
-                    body = None
-            else:
-                body = None
-
-            result.append((sig, body))
-
+            sigs = self._parse_pglast_nodes([node])
+            if not sigs:
+                continue
+            result.append((sigs[0], _function_body(node)))
         return result
 
     # Trailing array suffix: one or more '[]' groups, each optionally sized
@@ -356,3 +225,19 @@ class FunctionSignatureParser:
         clean = re.sub(r"\([^)]*\)", "", clean).strip()
         base = _TYPE_ALIASES.get(clean, clean)
         return base + "[]" * array_dims
+
+
+def _function_body(node: Any) -> str | None:
+    """The dollar-quoted body of a ``CreateFunctionStmt``, or ``None`` for C/internal."""
+    language = None
+    body = None
+    for opt in node.options or []:
+        args = opt.arg if isinstance(opt.arg, tuple | list) else [opt.arg]
+        values = [getattr(a, "sval", None) for a in args]
+        if opt.defname == "language":
+            language = values[0].lower() if values and values[0] else None
+        elif opt.defname == "as":
+            body = values[0] if values else None
+    if language in ("c", "internal"):
+        return None
+    return body

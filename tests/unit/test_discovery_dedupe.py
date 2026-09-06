@@ -43,9 +43,11 @@ def test_dry_run_returns_the_sql_files_statements(tmp_path: Path) -> None:
 
     result = Migrator(connection=conn).dry_run(migration)
 
+    # Statements come from the one lexer (pglast's scanner), which drops the
+    # terminating semicolon the old sqlparse split kept.
     assert [s.sql for s in result.statements] == [
-        "CREATE TABLE a (id int);",
-        "CREATE TABLE b (id int);",
+        "CREATE TABLE a (id int)",
+        "CREATE TABLE b (id int)",
     ]
 
 

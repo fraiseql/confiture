@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from confiture.core.sql_lexer import split_statements
+
 logger = logging.getLogger(__name__)
 
 
@@ -203,16 +205,8 @@ def generate_rollback_script(sql: str) -> list[RollbackSuggestion]:
     Returns:
         List of RollbackSuggestions in reverse order (for proper rollback)
     """
-    import sqlparse
-
     suggestions: list[RollbackSuggestion] = []
-    statements = sqlparse.parse(sql)
-
-    for stmt in statements:
-        stmt_str = str(stmt).strip()
-        if not stmt_str or stmt_str == ";":
-            continue
-
+    for stmt_str in split_statements(sql):
         suggestion = generate_rollback(stmt_str)
         if suggestion:
             suggestions.append(suggestion)

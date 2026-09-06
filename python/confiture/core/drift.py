@@ -13,9 +13,9 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import psycopg
-import sqlparse
 
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
+from confiture.core.sql_lexer import split_statements, strip_comments
 from confiture.exceptions import SchemaError
 
 if TYPE_CHECKING:
@@ -455,7 +455,7 @@ class SchemaDriftDetector:
 
         Comments are stripped up front: ``confiture build`` emits block-comment
         file separators by default (and real schemas carry ``--`` line comments,
-        some non-ASCII), and ``sqlparse`` keeps a leading comment attached to the
+        some non-ASCII), and a parser that keeps a leading comment attached to the
         statement that follows it — which the position-anchored ``CREATE TABLE``
         match then never sees, yielding zero tables and 100 % false ``extra_table``
         drift with exit 0 (issue #175).
@@ -475,13 +475,8 @@ class SchemaDriftDetector:
 
         # Strip comments before parsing so leading separators/comments can't hide
         # the statement that follows them.  Dollar-quoted bodies are preserved.
-        stripped = sqlparse.format(sql, strip_comments=True)
-
-        for stmt in sqlparse.parse(stripped):
-            stmt_str = str(stmt).strip()
-            if not stmt_str:
-                continue
-
+        stripped = strip_comments(sql)
+        for stmt_str in split_statements(stripped):
             # Anchored match (not search): after comment stripping each statement
             # starts with its keyword, so anchoring avoids matching a dynamic
             # `CREATE TABLE` embedded inside a function body.

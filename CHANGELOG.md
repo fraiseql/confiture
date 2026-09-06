@@ -12,6 +12,18 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- **One lexer, and `sqlparse` is gone.** Ten hand-written scanners split
+  statements, skipped comments and matched dollar tags across the codebase and
+  disagreed on `"a;b"` identifiers, `E'\';'` literals and nested tags.
+  `core/sql_lexer.py` is the one place now, built on libpg_query's own scanner
+  and parser: statement splitting (which works on SQL PostgreSQL would reject),
+  comment stripping, parsing with locations, and a statement's verb. The differ
+  reads indexes, enum types, sequences and `ALTER TABLE … ADD CONSTRAINT` from
+  the AST instead of regexes, so a commented-out `CREATE INDEX` or `CREATE TYPE`
+  is nothing, not a change; `ON DELETE SET NULL` is reported as such (the old
+  code map was wrong). Function bodies come from the AST too. `sqlparse` is no
+  longer a dependency. Dry-run statement text no longer carries the terminating
+  semicolon.
 - ⚠️ **One parser (D13).** The regex idempotency detector, the regex replica
   classifier, the regex change-set walker, the differ's sqlparse `CREATE TABLE`
   path, the signature parser's and analyzer's regex fallbacks and the grant

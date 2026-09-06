@@ -25,7 +25,8 @@ import re
 from dataclasses import dataclass, field
 
 import pglast.parser
-import sqlparse
+
+from confiture.core.sql_lexer import strip_comments
 
 # Every privilege a table can hold.  ``GRANT ALL`` expands to this set.
 # Order matters only for deterministic test output; storage uses frozenset.
@@ -345,8 +346,7 @@ class MigrationGrantExtractor:
         """
         # Strip comments before scanning so we don't false-positive on
         # examples inside documentation.
-        cleaned = sqlparse.format(sql, strip_comments=True)
-        return bool(_DYNAMIC_SQL_RE.search(cleaned))
+        return bool(_DYNAMIC_SQL_RE.search(strip_comments(sql)))
 
     def extract_grant_statements(self, sql: str) -> GrantExtraction:
         """Extract GRANT/REVOKE facts from *sql* for semantic matching (issue #162).

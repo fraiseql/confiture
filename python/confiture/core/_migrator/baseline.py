@@ -273,12 +273,11 @@ def apply_ddl_string(migrator: Migrator, ddl: str) -> tuple[int, list[str]]:
     Strips BEGIN/COMMIT wrappers, splits into statements, and executes each.
     CREATE EXTENSION failures are captured as warnings rather than raised.
     """
-    import sqlparse
-
+    from confiture.core.sql_lexer import split_statements
     from confiture.core.sql_utils import strip_transaction_wrappers
 
     cleaned = strip_transaction_wrappers(ddl)
-    statements = [s.strip() for s in sqlparse.split(cleaned) if s.strip()]
+    statements = split_statements(cleaned)
 
     if not statements:
         return 0, []
@@ -372,12 +371,11 @@ def rebuild(
 
     if dry_run:
         # Count what would be executed
-        import sqlparse
-
+        from confiture.core.sql_lexer import split_statements
         from confiture.core.sql_utils import strip_transaction_wrappers
 
         cleaned = strip_transaction_wrappers(ddl)
-        stmts = [s.strip() for s in sqlparse.split(cleaned) if s.strip()]
+        stmts = split_statements(cleaned)
         ddl_count = len(stmts)
 
         # Count migrations that would be marked

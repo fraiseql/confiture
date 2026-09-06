@@ -998,7 +998,6 @@ _AST_HANDLERS: Final[dict[str, Any]] = {
 # --------------------------------------------------------------------------- #
 
 _IDENT = r'(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))*'
-_DOLLAR_TAG = re.compile(r"\$(?:[A-Za-z_]\w*)?\$")
 
 # Statement heads that change neither schema nor data (the regex twin of _AST_SKIP).
 _RE_SKIP = re.compile(

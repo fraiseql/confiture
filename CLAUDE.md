@@ -98,7 +98,6 @@ pydantic = ">=2.5"        # Configuration validation
 pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
-sqlparse = ">=0.5"        # SQL parsing — fallback when pglast unavailable
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
 cryptography = ">=42.0"   # Encryption utilities
 

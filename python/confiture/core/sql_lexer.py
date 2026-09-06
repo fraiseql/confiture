@@ -70,13 +70,14 @@ def split_statements(sql: str) -> list[str]:
     return [s.strip() for s in pglast.split(sql, with_parser=False) if s.strip()]
 
 
-def strip_comments(sql: str) -> str:
+def strip_comments(sql: str, *, replace_with: str = "") -> str:
     """``sql`` with every ``--`` and ``/* */`` comment removed.
 
     Comment positions come from the scanner, so ``'a--b'``, ``"x--y"`` and
     ``$$ -- body $$`` are untouched. Line structure inside comments is dropped
     (the callers collapse whitespace); a line comment keeps the newline that
-    ended it.
+    ended it. ``replace_with`` stands in for each comment (the body normaliser
+    passes a space so tokens do not merge).
     """
     if "--" not in sql and "/*" not in sql:
         return sql
@@ -86,6 +87,7 @@ def strip_comments(sql: str) -> str:
         if token.name not in _COMMENT_TOKENS:
             continue
         out.append(sql[pos : token.start])
+        out.append(replace_with)
         pos = token.end + 1
     out.append(sql[pos:])
     return "".join(out)
