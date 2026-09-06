@@ -41,6 +41,22 @@ project asked for (#217, #218, #219, #226, #227).
   `baseline: {new, fixed, known}`. A missing or malformed file is `CONFIG_012`
   (exit 5). The conventional name is `.confiture-lint-baseline.json`.
 
+### Changed
+
+- ⚠️ **`confiture drift --schema` reads qualified DDL and every schema it
+  declares (#227).** The expected-schema parser is pglast now: `CREATE TABLE
+  tenant.tb_user` is the table `tenant.tb_user` with its columns (it used to be
+  recorded as a table called `tenant`, and every schema-qualified table went
+  unchecked while its schema name showed up as a critical `missing_table`);
+  `CREATE SCHEMA` declares a schema and no table; a `CREATE TABLE` inside a
+  function body is never a table; a `PARTITION OF` child inherits its parent's
+  columns. The live side reads exactly the schemas the file declares or
+  qualifies with, instead of `public` alone. **Contract change:** drift items
+  name tables `schema.table` and columns `schema.table.column`; an unqualified
+  `CREATE TABLE` resolves to `--default-schema` (`public`). `ignore_tables`
+  accepts qualified names and still matches bare names against the table part.
+  A file pglast rejects is `SCHEMA_202`, as before.
+
 ### Fixed
 
 - `confiture lint --format json` printed its "Linting schema" banner to stdout

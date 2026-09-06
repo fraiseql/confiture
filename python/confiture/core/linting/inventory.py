@@ -25,8 +25,10 @@ import pglast
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_walk import column_is_not_null
 
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
+_CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 _OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
 _OBJECT_FUNCTION = _pg_member("ObjectType", "OBJECT_FUNCTION")
 _OBJECT_PROCEDURE = _pg_member("ObjectType", "OBJECT_PROCEDURE")
@@ -59,11 +61,19 @@ _INPUT_MODES = frozenset({"d", "i", "b", "v"})
 
 @dataclass(frozen=True)
 class SchemaColumn:
-    """A column as written: ``name`` keeps the author's case and quoting is stripped."""
+    """A column as written: ``name`` keeps the author's case and quoting is stripped.
+
+    ``type_text`` is the type as written (``varchar(50)``), ``not_null`` covers
+    ``NOT NULL`` and ``PRIMARY KEY``, ``default`` is the default expression's
+    text or ``None``.
+    """
 
     name: str
     folded: str
     line: int
+    type_text: str | None = None
+    not_null: bool = False
+    default: str | None = None
 
 
 @dataclass
@@ -96,6 +106,7 @@ class SchemaObject:
     file: str | None = None
     replace: bool = False
     if_not_exists: bool = False
+    parent: str | None = None
 
     @property
     def qualified(self) -> str:
@@ -222,10 +233,31 @@ def _statement_offset(sql: str, raw: Any) -> int:
     return pos
 
 
+def _sql_type(type_node: Any) -> str | None:
+    """The column type spelled as SQL (``bigint``, ``varchar(255)``), not pglast's ``int8``."""
+    return RawStream()(type_node) if type_node is not None else None
+
+
+def _default_text(node: Any) -> str | None:
+    raw = getattr(node, "raw_default", None)
+    if raw is None:
+        for c in getattr(node, "constraints", None) or ():
+            if _enum_value(getattr(c, "contype", None)) == _CONSTR_DEFAULT:
+                raw = getattr(c, "raw_expr", None)
+                break
+    return RawStream()(raw) if raw is not None else None
+
+
 def _column(sql: str, node: Any) -> SchemaColumn:
     written = identifier_at(sql, getattr(node, "location", None), node.colname)[-1]
     return SchemaColumn(
-        name=written, folded=node.colname, line=_line_of(sql, getattr(node, "location", None))
+        name=written,
+        folded=node.colname,
+        line=_line_of(sql, getattr(node, "location", None)),
+        type_text=_sql_type(getattr(node, "typeName", None)),
+        not_null=column_is_not_null(node)
+        or _has_primary_constraint(getattr(node, "constraints", None)),
+        default=_default_text(node),
     )
 
 
@@ -288,6 +320,7 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         is_temporary=getattr(rv, "relpersistence", "p") == "t",
         offset=offset,
         if_not_exists=bool(getattr(stmt, "if_not_exists", False)),
+        parent=_parent_name(stmt),
     )
     for elt in stmt.tableElts or []:
         kind = type(elt).__name__
@@ -298,6 +331,18 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         elif kind == "Constraint" and _enum_value(elt.contype) == _CONSTR_PRIMARY:
             table.has_primary_key = True
     return table
+
+
+def _parent_name(stmt: Any) -> str | None:
+    """``schema.parent`` of a ``PARTITION OF`` child (folded, as pglast spells it)."""
+    if stmt.partbound is None:
+        return None
+    for rv in getattr(stmt, "inhRelations", None) or ():
+        name = getattr(rv, "relname", None)
+        if name:
+            schema = getattr(rv, "schemaname", None)
+            return f"{schema}.{name}" if schema else name
+    return None
 
 
 def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:

@@ -46,6 +46,11 @@ def drift(
         "--schema",
         help="Schema SQL file to compare against (optional when --check-acls is set)",
     ),
+    default_schema: str = typer.Option(
+        "public",
+        "--default-schema",
+        help="Schema an unqualified CREATE TABLE in --schema belongs to (#227)",
+    ),
     check_acls: bool = typer.Option(
         False,
         "--check-acls",
@@ -145,7 +150,9 @@ def drift(
         with open_connection(config_data) as conn:
             structural_report: DriftReport | None = None
             if schema is not None:
-                structural_report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema))
+                structural_report = SchemaDriftDetector(conn).compare_with_schema_file(
+                    str(schema), default_schema=default_schema
+                )
 
             drift_report: DriftReport | None = structural_report
             if check_acls:

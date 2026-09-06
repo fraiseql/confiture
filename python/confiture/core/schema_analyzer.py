@@ -6,6 +6,7 @@ issues before execution.
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -133,24 +134,35 @@ class SchemaAnalyzer:
         self.connection = connection
         self._schema_info: SchemaInfo | None = None
 
-    def get_schema_info(self, refresh: bool = False) -> SchemaInfo:
+    def get_schema_info(
+        self, refresh: bool = False, schemas: Sequence[str] | None = None
+    ) -> SchemaInfo:
         """Get current database schema information.
 
         Args:
             refresh: Force refresh of cached schema info
+            schemas: Read these schemas and key every table ``schema.table``
+                (#227). ``None`` keeps the historical shape: ``public`` only,
+                bare table names.
 
         Returns:
             SchemaInfo with current database state
         """
-        if self._schema_info is not None and not refresh:
+        if schemas is None and self._schema_info is not None and not refresh:
             return self._schema_info
 
         info = SchemaInfo()
+        wanted = list(schemas) if schemas is not None else ["public"]
+
+        def key(schema: str, name: str) -> str:
+            return f"{schema}.{name}" if schemas is not None else name
 
         # Get tables and columns
         with self.connection.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
+                    t.table_schema,
                     t.table_name,
                     c.column_name,
                     c.data_type,
@@ -163,13 +175,16 @@ class SchemaAnalyzer:
                 JOIN information_schema.columns c
                     ON t.table_name = c.table_name
                     AND t.table_schema = c.table_schema
-                WHERE t.table_schema = 'public'
+                WHERE t.table_schema = ANY(%s)
                 AND t.table_type = 'BASE TABLE'
-                ORDER BY t.table_name, c.ordinal_position
-            """)
+                ORDER BY t.table_schema, t.table_name, c.ordinal_position
+            """,
+                (wanted,),
+            )
 
             for row in cur.fetchall():
-                table_name = row[0]
+                table_name = key(row[0], row[1])
+                row = row[1:]
                 if table_name not in info.tables:
                     info.tables[table_name] = {}
                 info.tables[table_name][row[1]] = {
@@ -183,38 +198,50 @@ class SchemaAnalyzer:
 
         # Get indexes
         with self.connection.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
+                    schemaname,
                     tablename,
                     indexname,
                     indexdef
                 FROM pg_indexes
-                WHERE schemaname = 'public'
-            """)
+                WHERE schemaname = ANY(%s)
+            """,
+                (wanted,),
+            )
             for row in cur.fetchall():
-                if row[0] not in info.indexes:
-                    info.indexes[row[0]] = []
-                info.indexes[row[0]].append(row[1])
+                table_name = key(row[0], row[1])
+                if table_name not in info.indexes:
+                    info.indexes[table_name] = []
+                info.indexes[table_name].append(row[2])
 
         # Get constraints
         with self.connection.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
+                    tc.table_schema,
                     tc.table_name,
                     tc.constraint_name,
                     tc.constraint_type
                 FROM information_schema.table_constraints tc
-                WHERE tc.table_schema = 'public'
-            """)
+                WHERE tc.table_schema = ANY(%s)
+            """,
+                (wanted,),
+            )
             for row in cur.fetchall():
-                if row[0] not in info.constraints:
-                    info.constraints[row[0]] = []
-                info.constraints[row[0]].append(row[1])
+                table_name = key(row[0], row[1])
+                if table_name not in info.constraints:
+                    info.constraints[table_name] = []
+                info.constraints[table_name].append(row[2])
 
         # Get foreign keys
         with self.connection.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
+                    tc.table_schema,
                     tc.table_name,
                     kcu.column_name,
                     ccu.table_name AS foreign_table_name,
@@ -228,10 +255,13 @@ class SchemaAnalyzer:
                     ON ccu.constraint_name = tc.constraint_name
                     AND ccu.table_schema = tc.table_schema
                 WHERE tc.constraint_type = 'FOREIGN KEY'
-                AND tc.table_schema = 'public'
-            """)
+                AND tc.table_schema = ANY(%s)
+            """,
+                (wanted,),
+            )
             for row in cur.fetchall():
-                table_name = row[0]
+                table_name = key(row[0], row[1])
+                row = row[1:]
                 if table_name not in info.foreign_keys:
                     info.foreign_keys[table_name] = []
                 info.foreign_keys[table_name].append(
