@@ -338,6 +338,13 @@ def _create_global_registry() -> ErrorCodeRegistry:
     # ========== SCHEMA (200-299): Schema DDL and build errors → exit code 4 ==========
     schema_codes = [
         ErrorCodeDefinition(
+            code="DDL_001",
+            message_template="Destructive DDL operation refused without --force: {operation}",
+            severity=ErrorSeverity.ERROR,
+            exit_code=4,
+            resolution_hint="Re-run with --force if the destructive change is intended",
+        ),
+        ErrorCodeDefinition(
             code="SCHEMA_200",
             message_template="SQL syntax error in {file} at line {line}",
             severity=ErrorSeverity.ERROR,
@@ -936,6 +943,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "MIGR_107": 3,
     "MIGR_108": 3,
     # SCHEMA family → 4.
+    "DDL_001": 4,  # destructive DDL refused without --force (schema family)
     "SCHEMA_001": 4,
     "SCHEMA_200": 4,
     "SCHEMA_201": 4,

@@ -12,6 +12,8 @@ from typing import Any
 
 import pglast
 
+from confiture.models.introspection import JSONBKey
+
 
 @dataclasses.dataclass
 class CTENode:
@@ -23,15 +25,6 @@ class CTENode:
     is_recursive: bool = False
     is_materialized: bool | None = None
     is_writable: bool = False
-
-
-@dataclasses.dataclass
-class JSONBKey:
-    """A key detected in a jsonb_build_object() call."""
-
-    key: str
-    value_expr: str
-    inferred_type: str | None = None
 
 
 def _require_pglast() -> Any:
@@ -168,3 +161,6 @@ def parse_function_body(function_body: str) -> list[dict[str, Any]]:
     except pglast.Error as e:
         msg = f"Cannot parse function body: {e}"
         raise ValueError(msg) from e
+
+
+__all__ = ["JSONBKey"]

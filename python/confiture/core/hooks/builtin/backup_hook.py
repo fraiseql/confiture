@@ -10,7 +10,7 @@ from pathlib import Path
 
 from confiture.core.hooks.base import Hook, HookResult
 from confiture.core.hooks.context import ExecutionContext, HookContext
-from confiture.core.url_redaction import libpq_env, split_password
+from confiture.url_redaction import libpq_env, split_password
 
 logger = logging.getLogger(__name__)
 

@@ -53,6 +53,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_009` | 5 | error | Anonymization secret not set ({env_var}) | Export ANONYMIZATION_SECRET to a long random string kept out of version control before running an anonymizing sync or a keyed hash strategy |
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
 | `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=6.0, current major) |
+| `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
 | `DIFFER_401` | 5 | error | Schema comparison failed | Verify both schema definitions are valid |
@@ -122,7 +123,7 @@ resolution hint surfaced in the envelope.
 <!-- END GENERATED -->
 
 > The table above is generated from `ERROR_CODE_REGISTRY`. Regenerate with
-> `python -c "from confiture.core.error_codes import render_error_codebook;
+> `python -c "from confiture.error_codes import render_error_codebook;
 > print(render_error_codebook())"`; the codebook test
 > (`tests/unit/test_error_codebook.py`) fails if it drifts.
 

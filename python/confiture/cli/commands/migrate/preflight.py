@@ -29,8 +29,8 @@ from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import load_config
 from confiture.core.migrator import Migrator
 from confiture.core.schema_facts import SchemaFacts
-from confiture.core.url_redaction import redact_url
 from confiture.exceptions import ConfigurationError
+from confiture.url_redaction import redact_url
 
 _CHANGE_SET_TIER_COLOR = {
     "additive": "green",

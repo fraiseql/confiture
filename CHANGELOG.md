@@ -1188,7 +1188,7 @@ Machine-readable exit-code contract: confiture becomes the single source of trut
   `0..8` now carries a stable *semantic class* (`ok`, `internal_error`,
   `precondition_failed`, `db_unreachable`, `schema_error`, `invalid_config`,
   `lock_contention`, `git_error`, `irreversible_rollback`), exposed as
-  `EXIT_CODE_SEMANTIC_CLASS` in `confiture.core.error_codes` and emitted as JSON by
+  `EXIT_CODE_SEMANTIC_CLASS` in `confiture.error_codes` and emitted as JSON by
   a new hidden `confiture --exit-codes-json` flag (alongside the human
   `--exit-codes`). This is the single source of truth the FraiseQL `fraisier`
   migration adapters (Rust `fraisier-core` and Python `fraisier`) project onto

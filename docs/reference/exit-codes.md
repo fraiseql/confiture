@@ -7,7 +7,7 @@ contract](#stability-contract)).
 
 Every `confiture` command exits with one of the integer codes below. The
 authoritative source is the hand-authored `CANONICAL_EXIT_CODES` table in
-[`python/confiture/core/error_codes.py`](../../python/confiture/core/error_codes.py);
+[`python/confiture/error_codes.py`](../../python/confiture/error_codes.py);
 the runtime reads it through `ConfiturError.exit_code`. You can print this
 reference from the CLI with `confiture --exit-codes`.
 
@@ -41,7 +41,7 @@ reference from the CLI with `confiture --exit-codes`.
 - **3** — Database connection failed — host/auth/network unreachable
   - CONFIG_006, GEN_001, MIGR_001, MIGR_004, MIGR_010, MIGR_011, MIGR_100, MIGR_102, MIGR_103, MIGR_104, MIGR_106, MIGR_107, MIGR_108
 - **4** — Schema / DDL / build error
-  - REBUILD_001, SCHEMA_001, SCHEMA_200, SCHEMA_201, SCHEMA_202, SCHEMA_203, SCHEMA_204, SCHEMA_205
+  - DDL_001, REBUILD_001, SCHEMA_001, SCHEMA_200, SCHEMA_201, SCHEMA_202, SCHEMA_203, SCHEMA_204, SCHEMA_205
 - **5** — Configuration invalid, or validation / sync / lint / precondition failure
   - ANON_1400, ANON_1401, CONFIG_001, CONFIG_002, CONFIG_003, CONFIG_004, CONFIG_005, CONFIG_007, CONFIG_008, CONFIG_009, CONFIG_010, CONFIG_011, DIFFER_400, DIFFER_401, DIFF_001, LINT_1500, PRECON_1000, RESTORE_001, SEED_001, SYNC_001, SYNC_300, SYNC_301, SYNC_302, SYNC_303, VALID_001, VALID_500, VALID_501, VALID_502, VERIFY_001
 - **6** — Lock or connection-pool contention — another writer holds the lock
@@ -222,7 +222,7 @@ per exit code, from this fixed set.
 | 8 | `irreversible_rollback` |
 
 The authoritative source is `EXIT_CODE_SEMANTIC_CLASS` in
-[`error_codes.py`](../../python/confiture/core/error_codes.py). Emit the whole
+[`error_codes.py`](../../python/confiture/error_codes.py). Emit the whole
 contract as JSON with **`confiture --exit-codes-json`**:
 
 ```json

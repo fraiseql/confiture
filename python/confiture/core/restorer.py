@@ -21,8 +21,8 @@ from pathlib import Path
 
 import psycopg
 
-from confiture.core.url_redaction import libpq_env
 from confiture.exceptions import RestoreError
+from confiture.url_redaction import libpq_env
 
 _log = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.error_codes import (
+from confiture.error_codes import (
     CANONICAL_EXIT_CODES,
     ERROR_CODE_REGISTRY,
     EXIT_CODE_MEANINGS,

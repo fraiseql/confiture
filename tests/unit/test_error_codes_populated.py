@@ -17,7 +17,7 @@ from confiture.exceptions import (
 
 
 def test_migr_010_registered():
-    from confiture.core.error_codes import ERROR_CODE_REGISTRY
+    from confiture.error_codes import ERROR_CODE_REGISTRY
 
     definition = ERROR_CODE_REGISTRY.get("MIGR_010")
     assert definition.code == "MIGR_010"
@@ -25,7 +25,7 @@ def test_migr_010_registered():
 
 
 def test_migr_011_registered():
-    from confiture.core.error_codes import ERROR_CODE_REGISTRY
+    from confiture.error_codes import ERROR_CODE_REGISTRY
 
     definition = ERROR_CODE_REGISTRY.get("MIGR_011")
     assert definition.code == "MIGR_011"
@@ -33,7 +33,7 @@ def test_migr_011_registered():
 
 
 def test_config_010_registered():
-    from confiture.core.error_codes import ERROR_CODE_REGISTRY
+    from confiture.error_codes import ERROR_CODE_REGISTRY
 
     definition = ERROR_CODE_REGISTRY.get("CONFIG_010")
     assert definition.code == "CONFIG_010"

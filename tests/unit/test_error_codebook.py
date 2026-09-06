@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from confiture.core.error_codes import ERROR_CODE_REGISTRY, render_error_codebook
+from confiture.error_codes import ERROR_CODE_REGISTRY, render_error_codebook
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CODEBOOK_DOC = _REPO_ROOT / "docs" / "reference" / "error-codes.md"

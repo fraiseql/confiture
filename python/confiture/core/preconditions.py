@@ -28,58 +28,15 @@ from typing import TYPE_CHECKING
 
 from psycopg import sql as pgsql
 
+from confiture.exceptions import PreconditionError, PreconditionValidationError
+
 if TYPE_CHECKING:
     import psycopg
 
 
-class PreconditionError(Exception):
-    """Raised when a migration precondition fails.
-
-    Attributes:
-        precondition: The precondition that failed
-        message: Detailed error message
-        migration_version: Version of the migration (if available)
-        migration_name: Name of the migration (if available)
-    """
-
-    def __init__(
-        self,
-        precondition: "Precondition",
-        message: str,
-        migration_version: str | None = None,
-        migration_name: str | None = None,
-    ):
-        self.precondition = precondition
-        self.migration_version = migration_version
-        self.migration_name = migration_name
-        super().__init__(message)
-
-
-class PreconditionValidationError(Exception):
-    """Raised when multiple preconditions fail.
-
-    Attributes:
-        failures: List of (precondition, error_message) tuples
-        migration_version: Version of the migration
-        migration_name: Name of the migration
-    """
-
-    def __init__(
-        self,
-        failures: list[tuple["Precondition", str]],
-        migration_version: str | None = None,
-        migration_name: str | None = None,
-    ):
-        self.failures = failures
-        self.migration_version = migration_version
-        self.migration_name = migration_name
-
-        # Build detailed error message
-        lines = [f"Migration preconditions failed ({len(failures)} failures):"]
-        for precondition, error in failures:
-            lines.append(f"  - {precondition}: {error}")
-
-        super().__init__("\n".join(lines))
+# PreconditionError and PreconditionValidationError live in confiture.exceptions
+# (Phase 06: the exception hierarchy imports nothing from core); re-exported here
+# for `from confiture.core.preconditions import …`.
 
 
 @dataclass

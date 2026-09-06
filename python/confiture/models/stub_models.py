@@ -46,7 +46,7 @@ class StubFunction:
         """Extract JSONB keys from function source using regex (no pglast required)."""
         import re
 
-        from confiture.core.introspection.sql_ast import JSONBKey
+        from confiture.models.introspection import JSONBKey
 
         keys: list = []
         pattern = re.compile(r"jsonb_build_object\s*\((.*?)\)", re.DOTALL | re.IGNORECASE)

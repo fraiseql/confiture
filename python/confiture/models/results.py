@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from confiture.core.url_redaction import redact_url
+from confiture.url_redaction import redact_url
 
 if TYPE_CHECKING:
     from confiture.core.migration_verifier import VerifyResult

@@ -131,7 +131,7 @@ def version_callback(value: bool) -> None:
 def exit_codes_callback(value: bool) -> None:
     """Print the canonical exit-code reference and exit."""
     if value:
-        from confiture.core.error_codes import render_exit_codes_doc
+        from confiture.error_codes import render_exit_codes_doc
 
         console.print("confiture exit-code convention (#146):\n")
         console.print(render_exit_codes_doc())
@@ -147,7 +147,7 @@ def exit_codes_json_callback(value: bool) -> None:
     are not mistaken for markup and no soft-wrapping corrupts the payload.
     """
     if value:
-        from confiture.core.error_codes import render_exit_codes_json
+        from confiture.error_codes import render_exit_codes_json
 
         typer.echo(render_exit_codes_json())
         raise typer.Exit()

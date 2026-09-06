@@ -57,8 +57,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from confiture.config._env_vars import expand_env_vars
-from confiture.core.url_redaction import redact_url
 from confiture.exceptions import ConfigurationError
+from confiture.url_redaction import redact_url
 
 # Privileges that PostgreSQL's GRANT statement allows on tables.  Sequences,
 # functions, schemas, etc. use a different vocabulary and are out of scope

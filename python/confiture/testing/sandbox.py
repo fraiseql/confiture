@@ -31,22 +31,12 @@ from typing import TYPE_CHECKING
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.exceptions import PreStateSimulationError
+
 if TYPE_CHECKING:
     from confiture.models.migration import Migration
     from confiture.testing.fixtures.data_validator import DataBaseline, DataValidator
     from confiture.testing.fixtures.schema_snapshotter import SchemaSnapshotter
-
-
-class PreStateSimulationError(Exception):
-    """Raised when pre-state simulation fails.
-
-    This typically happens when:
-    - The DOWN migration fails
-    - The migration has no reversible DOWN implementation
-    - The database state doesn't support running DOWN
-    """
-
-    pass
 
 
 class MigrationSandbox:

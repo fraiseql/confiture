@@ -9,7 +9,7 @@ from confiture.cli.helpers import (
     console,
     is_json,
 )
-from confiture.core.url_redaction import redact_url as redact_url  # re-export (layering)
+from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
 
 
 def _fix_ownership(

@@ -359,7 +359,7 @@ Each exit integer maps to a stable **semantic class** (`ok`, `internal_error`,
 `lock_contention`, `git_error`, `irreversible_rollback`) — the taxonomy both
 fraisier adapters project onto their own error types. Confiture is the single
 source of truth: the table lives in `EXIT_CODE_SEMANTIC_CLASS`
-([`error_codes.py`](../../python/confiture/core/error_codes.py)) and is emitted as
+([`error_codes.py`](../../python/confiture/error_codes.py)) and is emitted as
 JSON by **`confiture --exit-codes-json`** (see
 [exit-codes.md](exit-codes.md#semantic-classes-machine-readable)). The Rust adapter
 vendors that JSON and diffs it against the live command in its own contract test;

@@ -6,7 +6,7 @@ error handling for agent workflows.
 
 import pytest
 
-from confiture.core.error_codes import (
+from confiture.error_codes import (
     ERROR_CODE_REGISTRY,
     ErrorCodeDefinition,
     ErrorCodeRegistry,
