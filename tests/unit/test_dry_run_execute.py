@@ -9,7 +9,7 @@ from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import MigrateUpResult
-from tests.unit._doubles import connection_double
+from tests.unit._doubles import connection_double, injected_loader
 
 
 def _make_entered_session(migrations_dir: Path) -> MigratorSession:
@@ -61,7 +61,7 @@ class TestDryRunExecute:
                 mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
                 MockLock.return_value = mock_lock
 
-                with patch.object(_m, "load_migration_class") as mock_load:
+                with injected_loader() as mock_load:
                     mock_cls = MagicMock()
                     mock_instance = MagicMock()
                     mock_instance.version = "001"
@@ -94,7 +94,7 @@ class TestDryRunExecute:
                 mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
                 MockLock.return_value = mock_lock
 
-                with patch.object(_m, "load_migration_class") as mock_load:
+                with injected_loader() as mock_load:
                     mock_cls = MagicMock()
                     mock_instance = MagicMock()
                     mock_instance.version = "001"
@@ -122,7 +122,7 @@ class TestDryRunExecute:
                 mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
                 MockLock.return_value = mock_lock
 
-                with patch.object(_m, "load_migration_class") as mock_load:
+                with injected_loader() as mock_load:
                     mock_cls = MagicMock()
                     mock_instance = MagicMock()
                     mock_instance.version = "001"
@@ -153,7 +153,7 @@ class TestDryRunExecute:
                 mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
                 MockLock.return_value = mock_lock
 
-                with patch.object(_m, "load_migration_class") as mock_load:
+                with injected_loader() as mock_load:
                     mock_cls = MagicMock()
                     mock_instance = MagicMock()
                     mock_instance.version = "001"
@@ -218,7 +218,7 @@ class TestDryRunExecute:
                     mock_cls.return_value = mock_instance
                     return mock_cls
 
-                with patch.object(_m, "load_migration_class", side_effect=make_migration_class):
+                with injected_loader(side_effect=make_migration_class):
                     result = session.up(dry_run_execute=True, target="002")
 
         assert result.success is True

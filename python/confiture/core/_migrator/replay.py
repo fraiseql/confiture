@@ -28,7 +28,6 @@ def run_against(
     """See :meth:`MigratorSession.run_against`."""
     import time as _time
 
-    import confiture.core.migrator as _m
     from confiture.exceptions import ConfigurationError
     from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
 
@@ -48,7 +47,7 @@ def run_against(
     session._conn.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(outer_sp)))
     try:
         for migration_file in pending_files:
-            migration_class = _m.load_migration_class(migration_file)
+            migration_class = session.migration_loader(migration_file)
             migration = migration_class(connection=session._conn)
 
             # Non-transactional migration: cannot run inside a SAVEPOINT.

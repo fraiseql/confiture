@@ -40,7 +40,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _dry_run(*extra: str):
     with (
-        patch("confiture.core.migrator.create_connection", return_value=connection_double()),
+        patch("confiture.cli.helpers.create_connection", return_value=connection_double()),
         patch(
             "confiture.core.connection.load_config",
             return_value={"database_url": "postgresql://x/y"},

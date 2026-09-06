@@ -10,7 +10,7 @@ import pytest
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateUpResult
-from tests.unit._doubles import connection_double
+from tests.unit._doubles import connection_double, injected_connection, injected_loader
 
 
 def _make_env() -> Environment:
@@ -26,7 +26,7 @@ def _make_env() -> Environment:
 
 def _make_session(env: Environment, migrations_dir: Path) -> tuple[MigratorSession, MagicMock]:
     mock_conn = connection_double()
-    with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
+    with injected_connection(mock_conn):
         session = MigratorSession(env, migrations_dir)
         session.__enter__()
     return session, mock_conn
@@ -84,7 +84,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator.apply = MagicMock()
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
-        with patch("confiture.core.migrator.load_migration_class", return_value=mock_class):
+        with injected_loader(return_value=mock_class):
             with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
@@ -122,7 +122,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator.apply = MagicMock()
         session._migrator._version_from_filename = MagicMock(side_effect=_ver_from_filename)
 
-        with patch("confiture.core.migrator.load_migration_class", return_value=mock_class):
+        with injected_loader(return_value=mock_class):
             with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
@@ -153,7 +153,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator.apply = MagicMock()
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
-        with patch("confiture.core.migrator.load_migration_class", return_value=mock_class):
+        with injected_loader(return_value=mock_class):
             result = session.up(dry_run=True)
 
         assert result.success is True
@@ -183,7 +183,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator.apply = MagicMock(side_effect=MigrationError("SQL failed"))
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
-        with patch("confiture.core.migrator.load_migration_class", return_value=mock_class):
+        with injected_loader(return_value=mock_class):
             with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
@@ -230,7 +230,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator.apply = MagicMock()
         session._migrator._version_from_filename = MagicMock(side_effect=lambda n: n.split("_")[0])
 
-        with patch("confiture.core.migrator.load_migration_class", side_effect=_load_class):
+        with injected_loader(side_effect=_load_class):
             with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock

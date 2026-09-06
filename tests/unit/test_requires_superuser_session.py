@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
+from tests.unit._doubles import injected_loader
 
 
 def _make_entered_session(migrations_dir: Path) -> MigratorSession:
@@ -65,7 +66,7 @@ def test_up_halts_at_first_requires_superuser_migration(tmp_path):
         mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
         MockLock.return_value = mock_lock
 
-        with patch.object(_m, "load_migration_class", side_effect=lambda f: classes[f]):
+        with injected_loader(side_effect=lambda f: classes[f]):
             result = session.up()
 
     # Migration a applied, b skipped, c reported pending.
@@ -102,7 +103,7 @@ def test_up_resumes_chain_after_apply_as_clears_skip(tmp_path):
         mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
         MockLock.return_value = mock_lock
 
-        with patch.object(_m, "load_migration_class", side_effect=lambda f: classes[f]):
+        with injected_loader(side_effect=lambda f: classes[f]):
             result = session.up()
 
     assert result.success is True
@@ -129,7 +130,7 @@ def test_skipped_superuser_appears_in_json_output(tmp_path):
         mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
         MockLock.return_value = mock_lock
 
-        with patch.object(_m, "load_migration_class", side_effect=lambda f: classes[f]):
+        with injected_loader(side_effect=lambda f: classes[f]):
             result = session.up()
 
     payload = result.to_dict()

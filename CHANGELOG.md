@@ -5,6 +5,24 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 08 of the 2026-09-06 review: the package boundaries say what the modules do.
+
+### Changed
+
+- ⚠️ **`confiture.core.migrator` is the public face only; the session takes its
+  factories as parameters.** The module used to re-export two call-time
+  wrappers, `create_connection` and `load_migration_class`, whose only purpose
+  was to give tests a name to patch. They are gone. `MigratorSession` (and
+  `Migrator.from_config`) take `connection_factory=` and `migration_loader=`;
+  without them a session reads the class-level defaults
+  `MigratorSession.default_connection_factory` / `default_migration_loader`
+  when it enters, which resolve to `confiture.core.connection` — so an
+  embedder or a test sets one attribute instead of patching a module. The
+  CLI's `migrate up`, `down`, `down-to`, `apply-as` and `preflight` hand the
+  session the CLI's one connection seam (`confiture.cli.helpers.create_connection`).
+
 ## [0.52.0] - 2026-09-07
 
 Phase 07 of the 2026-09-06 review: lint and drift capabilities the downstream

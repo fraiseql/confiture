@@ -7,6 +7,7 @@ import pytest
 
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
+from tests.unit._doubles import injected_connection
 
 
 @pytest.fixture()
@@ -18,7 +19,7 @@ def mock_env():
 
 
 def test_override_url_used(mock_env):
-    with patch("confiture.core.migrator.create_connection") as mock_cc:
+    with injected_connection(MagicMock()) as mock_cc:
         mock_cc.return_value = MagicMock()
         session = MigratorSession(
             mock_env,
@@ -32,7 +33,7 @@ def test_override_url_used(mock_env):
 
 def test_config_url_used_when_no_override(mock_env):
     mock_env.database_url = "postgresql://localhost/main"
-    with patch("confiture.core.migrator.create_connection") as mock_cc:
+    with injected_connection(MagicMock()) as mock_cc:
         mock_cc.return_value = MagicMock()
         with MigratorSession(mock_env, Path("db/migrations")):
             pass
@@ -47,7 +48,7 @@ def test_no_config_no_override_raises():
 
 def test_migration_table_override_used(mock_env):
     with (
-        patch("confiture.core.migrator.create_connection") as mock_cc,
+        injected_connection(MagicMock()) as mock_cc,
         patch("confiture.core.migrator.Migrator", autospec=True) as MockMigrator,
     ):
         mock_cc.return_value = MagicMock()
@@ -67,7 +68,7 @@ def test_migration_table_override_used(mock_env):
 
 def test_override_url_no_table_override_defaults_to_tb_confiture():
     with (
-        patch("confiture.core.migrator.create_connection") as mock_cc,
+        injected_connection(MagicMock()) as mock_cc,
         patch("confiture.core.migrator.Migrator", autospec=True) as MockMigrator,
     ):
         mock_cc.return_value = MagicMock()

@@ -18,6 +18,7 @@ from confiture.cli.helpers import (
     _get_tracking_table,
     _output_json,
     _resolve_config,
+    connect,
     console,
     error_console,
     is_json,
@@ -864,6 +865,7 @@ def _run_against(
             migrations_dir=migrations_dir,
             database_url_override=against,
             migration_table_override=tracking_table,
+            connection_factory=connect,
         )
         with session:
             # Snapshot whether the target's tracking table is empty BEFORE the

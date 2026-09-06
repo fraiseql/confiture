@@ -1,15 +1,18 @@
 """Migration executor — public re-exports.
 
 Detailed implementation lives in confiture.core._migrator.*
+
+This module is the public face only — it holds no patch seams. Tests and
+embedders inject through ``MigratorSession(connection_factory=..., migration_loader=...)``
+or the class-level ``MigratorSession.default_*`` attributes.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from psycopg import Connection
+    pass
 
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
@@ -24,21 +27,6 @@ from confiture.core._migrator.session import MigratorSession
 # module's attribute; the two function wrappers below honour both.
 from confiture.core.locking import LockConfig, MigrationLock
 
-
-def create_connection(config: Any) -> Connection:
-    """Open a connection — resolved through :mod:`confiture.core.connection` at call time."""
-    from confiture.core import connection as _connection
-
-    return _connection.create_connection(config)
-
-
-def load_migration_class(migration_file: Path) -> type:
-    """Load a migration class — resolved through :mod:`confiture.core.connection` at call time."""
-    from confiture.core import connection as _connection
-
-    return _connection.load_migration_class(migration_file)
-
-
 __all__ = [
     "UpEvent",
     "UpObserver",
@@ -46,8 +34,6 @@ __all__ = [
     "MigratorSession",
     "_version_from_migration_filename",
     "find_duplicate_migration_versions",
-    "create_connection",
-    "load_migration_class",
     "LockConfig",
     "MigrationLock",
 ]

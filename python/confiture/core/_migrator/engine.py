@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -856,6 +857,8 @@ class Migrator:
         config: Environment | Path | str,
         *,
         migrations_dir: Path | str = Path("db/migrations"),
+        connection_factory: Callable[[Any], Any] | None = None,
+        migration_loader: Callable[[Path], type] | None = None,
     ) -> MigratorSession:
         """Create a managed MigratorSession from an Environment config.
 
@@ -885,7 +888,12 @@ class Migrator:
             ...     if status.has_pending:
             ...         result = m.up()
         """
-        return factory.from_config(config, migrations_dir=migrations_dir)
+        return factory.from_config(
+            config,
+            migrations_dir=migrations_dir,
+            connection_factory=connection_factory,
+            migration_loader=migration_loader,
+        )
 
 
 def _progress_observer(progress: ProgressManager) -> Any:

@@ -8,6 +8,7 @@ imports the engine) — keeping the package free of an import cycle.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,8 @@ def from_config(
     config: Environment | Path | str,
     *,
     migrations_dir: Path | str = Path("db/migrations"),
+    connection_factory: Callable[[Any], Any] | None = None,
+    migration_loader: Callable[[Path], type] | None = None,
 ) -> MigratorSession:
     """Create a managed ``MigratorSession`` from an ``Environment`` config.
 
@@ -70,4 +73,9 @@ def from_config(
                 ) from e
             raise
 
-    return MigratorSession(env, Path(migrations_dir))
+    return MigratorSession(
+        env,
+        Path(migrations_dir),
+        connection_factory=connection_factory,
+        migration_loader=migration_loader,
+    )

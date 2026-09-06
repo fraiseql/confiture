@@ -90,7 +90,6 @@ def _up_under_lock(
     """See :meth:`MigratorSession._up_under_lock`."""
     import time as _time
 
-    import confiture.core.migrator as _m
     from confiture.models.results import (
         MigrateUpResult,
         MigrationApplied,
@@ -186,7 +185,7 @@ def _up_under_lock(
 
     try:
         for idx, migration_file in enumerate(pending_files):
-            migration_class = _m.load_migration_class(migration_file)
+            migration_class = session.migration_loader(migration_file)
             migration = migration_class(connection=session._conn)
             _apply_strict_mode(migration, effective_strict)
             _apply_batch(migration, batch)
@@ -300,7 +299,6 @@ def _up_dry_run_execute(
     """See :meth:`MigratorSession._up_dry_run_execute`."""
     import time as _time
 
-    import confiture.core.migrator as _m
     from confiture.models.results import MigrateUpResult, MigrationApplied
 
     # Invariant: this helper only runs inside an active session (callers guard).
@@ -315,7 +313,7 @@ def _up_dry_run_execute(
         session._conn.execute("SAVEPOINT dry_run_execute")
         try:
             for migration_file in pending_files:
-                migration_class = _m.load_migration_class(migration_file)
+                migration_class = session.migration_loader(migration_file)
                 migration = migration_class(connection=session._conn)
                 _apply_strict_mode(migration, strict_mode)
                 _apply_batch(migration, batch)
@@ -535,7 +533,7 @@ def apply_one(
                 resolution_hint="Check the version and --migrations-dir.",
             )
         migration_file = sorted(matches)[0]
-        migration = _m.load_migration_class(migration_file)(connection=session._conn)
+        migration = session.migration_loader(migration_file)(connection=session._conn)
         start = _time.time()
         session._migrator.apply(migration, migration_file=migration_file, applied_by=applied_by)
         return MigrationApplied(

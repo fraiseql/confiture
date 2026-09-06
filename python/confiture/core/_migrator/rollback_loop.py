@@ -26,7 +26,6 @@ def _rollback_sequence(
 
     # Import through confiture.core.migrator so tests can patch
     # confiture.core.migrator.load_migration_class.
-    import confiture.core.migrator as _m
     from confiture.models.results import MigrationApplied
 
     assert session._migrator is not None
@@ -42,7 +41,7 @@ def _rollback_sequence(
         if migration_file is None:
             continue
 
-        migration_class = _m.load_migration_class(migration_file)
+        migration_class = session.migration_loader(migration_file)
         migration = migration_class(connection=session._conn)
 
         if not dry_run:

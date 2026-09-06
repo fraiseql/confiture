@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -32,6 +33,13 @@ from confiture.core._migrator.events import UpObserver
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 
 
+def _core_connection():  # noqa: ANN202
+    """``confiture.core.connection``, imported when first needed (it imports psycopg)."""
+    from confiture.core import connection
+
+    return connection
+
+
 class MigratorSession:
     """Context manager that wraps Migrator with connection lifecycle management.
 
@@ -46,6 +54,16 @@ class MigratorSession:
                 m.up()
     """
 
+    #: What opens the connection when no ``connection_factory`` is given: core's
+    #: own factory, looked up when the session enters (never at import). Class
+    #: attributes so an embedder or a test can set them once for every session.
+    default_connection_factory: ClassVar[Callable[[Any], Connection]] = staticmethod(
+        lambda url: _core_connection().create_connection(url)
+    )
+    default_migration_loader: ClassVar[Callable[[Path], type]] = staticmethod(
+        lambda path: _core_connection().load_migration_class(path)
+    )
+
     def __init__(
         self,
         config: Environment | None,
@@ -54,8 +72,12 @@ class MigratorSession:
         database_url_override: str | None = None,
         migration_table_override: str | None = None,
         command: str | None = None,
+        connection_factory: Callable[[Any], Connection] | None = None,
+        migration_loader: Callable[[Path], type] | None = None,
     ) -> None:
         self._config = config
+        self._connection_factory = connection_factory
+        self._migration_loader = migration_loader
         self._migrations_dir = migrations_dir
         self._conn: Connection | None = None
         self._migrator: Migrator | None = None
@@ -63,6 +85,24 @@ class MigratorSession:
         self._migration_table_override = migration_table_override
         self._command = command  # recorded in the lock-holder metadata (#147)
         self._owns_connection = True
+
+    @property
+    def connection_factory(self) -> Callable[[Any], Connection]:
+        """What opens the connection: the injected factory, else the class default (read when used)."""
+        return self._connection_factory or type(self).default_connection_factory
+
+    @connection_factory.setter
+    def connection_factory(self, factory: Callable[[Any], Connection] | None) -> None:
+        self._connection_factory = factory
+
+    @property
+    def migration_loader(self) -> Callable[[Path], type]:
+        """What turns a migration file into a class: injected, else the class default."""
+        return self._migration_loader or type(self).default_migration_loader
+
+    @migration_loader.setter
+    def migration_loader(self, loader: Callable[[Path], type] | None) -> None:
+        self._migration_loader = loader
 
     @classmethod
     def attached(
@@ -110,7 +150,7 @@ class MigratorSession:
                 ),
             )
 
-        self._conn = _m.create_connection(url)
+        self._conn = self.connection_factory(url)
         try:
             self._migrator = _m.Migrator(
                 connection=self._conn,

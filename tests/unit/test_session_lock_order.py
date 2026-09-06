@@ -18,7 +18,7 @@ import pytest
 
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
-from tests.unit._doubles import connection_double, migrator_double
+from tests.unit._doubles import connection_double, injected_connection, migrator_double
 
 
 def _env() -> Environment:
@@ -66,7 +66,7 @@ def _run_up(tmp_path: Path, events: list[str], **kwargs) -> None:
         events.append("find_migration_files") or []
     )
     with (
-        patch("confiture.core.migrator.create_connection", return_value=connection_double()),
+        injected_connection(connection_double()),
         patch("confiture.core.migrator.Migrator", autospec=True, return_value=double),
         patch("confiture.core.migrator.MigrationLock", _RecordingLock),
     ):

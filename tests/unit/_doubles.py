@@ -17,8 +17,10 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 from confiture.core.builder import SchemaBuilder
 from confiture.core.migrator import Migrator, MigratorSession
@@ -104,3 +106,28 @@ def connection_double(
     _wire(cursor)
     _wire(cursor.__enter__.return_value)
     return conn
+
+
+@contextmanager
+def injected_connection(conn: Any) -> Iterator[MagicMock]:
+    """Every session entered inside the block opens ``conn`` (Phase 08: inject, don't patch).
+
+    Sets ``MigratorSession.default_connection_factory`` — the class-level default a
+    session reads when no ``connection_factory`` was passed — and yields the factory
+    mock so a test can assert what it was called with.
+    """
+    from confiture.core.migrator import MigratorSession
+
+    factory = MagicMock(name="connection_factory", return_value=conn)
+    with patch.object(MigratorSession, "default_connection_factory", staticmethod(factory)):
+        yield factory
+
+
+@contextmanager
+def injected_loader(**mock_kwargs: Any) -> Iterator[MagicMock]:
+    """The loader every session uses inside the block, as a mock (``return_value=`` / ``side_effect=``)."""
+    from confiture.core.migrator import MigratorSession
+
+    loader = MagicMock(name="migration_loader", **mock_kwargs)
+    with patch.object(MigratorSession, "default_migration_loader", staticmethod(loader)):
+        yield loader

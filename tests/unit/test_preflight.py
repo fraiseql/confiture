@@ -11,6 +11,7 @@ import pytest
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.preflight import run_preflight
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
+from tests.unit._doubles import injected_connection
 
 # ── Phase 1: Models ──────────────────────────────────────────────────────
 
@@ -387,7 +388,7 @@ class TestMigratorSessionPreflight:
         from confiture.core.migrator import MigratorSession
 
         mock_conn = MagicMock()
-        with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
+        with injected_connection(mock_conn):
             session = MigratorSession(env, migrations_dir)
             session.__enter__()
         return session, mock_conn

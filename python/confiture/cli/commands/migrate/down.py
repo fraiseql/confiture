@@ -19,7 +19,14 @@ from confiture.cli.dsn import (
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _get_tracking_table, _output_json, console, error_console, is_json
+from confiture.cli.helpers import (
+    _get_tracking_table,
+    _output_json,
+    connect,
+    console,
+    error_console,
+    is_json,
+)
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.locking import resolve_lock_settings
@@ -147,6 +154,7 @@ def migrate_down(
             database_url_override=dsn_from_config(config_data),
             migration_table_override=_get_tracking_table(config_data),
             command="confiture migrate down",
+            connection_factory=connect,
         ) as session:
             if session.current_revision() is None:
                 console.print("[yellow]⚠️  No applied migrations to rollback.[/yellow]")
@@ -273,9 +281,12 @@ def migrate_down_to(
                 config=None,
                 migrations_dir=migrations_dir,
                 database_url_override=override,
+                connection_factory=connect,
             )
         else:
-            session = Migrator.from_config(str(config), migrations_dir=migrations_dir)
+            session = Migrator.from_config(
+                str(config), migrations_dir=migrations_dir, connection_factory=connect
+            )
         with session as s:
             result = s.down_to(revision, dry_run=dry_run, command="confiture migrate down-to")
     except typer.Exit:

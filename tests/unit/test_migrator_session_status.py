@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
 from confiture.models.results import StatusResult
+from tests.unit._doubles import injected_connection
 
 
 def _make_env(tracking_table: str = "tb_confiture") -> Environment:
@@ -24,7 +25,7 @@ def _make_env(tracking_table: str = "tb_confiture") -> Environment:
 
 def _make_session(env: Environment, migrations_dir: Path, mock_conn: MagicMock) -> MigratorSession:
     """Create a MigratorSession with a mocked connection that has entered the context."""
-    with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
+    with injected_connection(mock_conn):
         session = MigratorSession(env, migrations_dir)
         session.__enter__()
     return session
