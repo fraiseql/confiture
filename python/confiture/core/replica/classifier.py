@@ -8,22 +8,30 @@ CONCURRENTLY, constraint kind/validation, type change).
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from typing import Any
 
-from confiture.core._pglast_enums import enums_are_usable
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.idempotency.ast_detector import is_pglast_available
-from confiture.core.sql_statements import split_statements
+from confiture.core.ddl_walk import (
+    column_has_default as _column_has_default,
+)
+from confiture.core.ddl_walk import (
+    column_is_not_null as _column_is_not_null,
+)
+from confiture.core.ddl_walk import (
+    enum_int as _enum_int,
+)
+from confiture.core.ddl_walk import (
+    name_parts as _name_parts,
+)
+from confiture.core.ddl_walk import (
+    qualified_relname as _relname,
+)
+from confiture.core.ddl_walk import (
+    type_name as _type_name,
+)
 from confiture.core.type_lattice import canonical_type
-
-# pglast availability, resolved at import (tests monkeypatch this to force the
-# regex backend, mirroring the idempotency CONFITURE_IDEMPOTENCY_FORCE_REGEX
-# escape hatch).
-_HAS_PGLAST = is_pglast_available()
-_FORCE_REGEX_ENV = "CONFITURE_REPLICA_FORCE_REGEX"
 
 # Resolved BY NAME, never by literal ordinal (#192): PG18 renumbered
 # AlterTableType, so pglast 8 shifted every member at index >= 13 down by one
@@ -274,15 +282,6 @@ class Other(DdlOperation):
     reason: str | None = None
 
 
-def _use_ast() -> bool:
-    if os.environ.get(_FORCE_REGEX_ENV, "").lower() in {"1", "true", "yes"}:
-        return False
-    # A half-resolvable enum surface (upstream removed a member we walk) means
-    # the elif chains below would silently drop operations — the #192 failure
-    # mode. Degrade to regex rather than emit a false window_safe verdict.
-    return _HAS_PGLAST and enums_are_usable()
-
-
 class OperationClassifier:
     """Parse migration SQL into a list of typed :class:`DdlOperation`."""
 
@@ -292,12 +291,9 @@ class OperationClassifier:
         Uses pglast when available, else a regex fallback; both backends are
         parity-tested for the supported operations.
         """
-        if _use_ast():
-            try:
-                return self._classify_ast(sql)
-            except Exception:  # noqa: BLE001 — fall back to regex on any parse hiccup
-                return self._classify_regex(sql)
-        return self._classify_regex(sql)
+        # pglast.parser.ParseError propagates: the caller reports the file as
+        # unclassifiable instead of reading a guess (ANA-02).
+        return self._classify_ast(sql)
 
     # ------------------------------------------------------------------ #
     # pglast backend
@@ -416,121 +412,6 @@ class OperationClassifier:
     # regex backend (fallback / parity)
     # ------------------------------------------------------------------ #
 
-    def _classify_regex(self, sql: str) -> list[DdlOperation]:
-        ops: list[DdlOperation] = []
-        for stmt in _split_statements(sql):
-            if not stmt.strip() or _RE_SKIP.match(stmt.strip()):
-                continue
-            op = self._regex_one(stmt)
-            ops.append(op if op is not None else self._regex_wider(stmt))
-        return ops
-
-    def _regex_wider(self, stmt: str) -> DdlOperation:
-        """The regex twin of :meth:`_ast_wider` — never returns ``None`` (#206)."""
-        s = stmt.strip()
-
-        m = _RE_DROP.match(s)
-        if m:
-            word = re.sub(r"\s+", " ", m.group("what")).lower()
-            name = _norm(_split_names(m.group("names"))[0])
-            if word == "table":
-                return DropTable(table=name)
-            if word in _DROP_UNSAFE_WORDS:
-                return DropObject(table=name, kind=word, name=name)
-            return Benign(table=name, kind=f"drop_{word.replace(' ', '_')}")
-        m = _RE_TRUNCATE.match(s)
-        if m:
-            return Truncate(table=_norm(_split_names(m.group("names"))[0]))
-        m = _RE_REVOKE.match(s)
-        if m:
-            target = _RE_GRANT_TARGET.search(s)
-            return Revoke(table=_norm(target.group("obj")) if target else None)
-        m = _RE_ALTER_ENUM.match(s)
-        if m:
-            type_name = _norm(m.group("type"))
-            if m.group("verb").lower() == "add":
-                return AddEnumValue(table=type_name, type_name=type_name, value=m.group("val"))
-            return RenameObject(table=type_name, kind="enum value", new=m.group("val"))
-        m = _RE_ALTER_TABLE_SUB.match(s)
-        if m:
-            return self._regex_alter_sub(_norm(m.group("table")), m.group("rest").strip())
-        m = _RE_REPLACE_OBJECT.match(s)
-        if m:
-            noun = re.sub(r"\s+", " ", m.group("what")).lower()
-            return ReplaceObject(
-                table=_norm(m.group("name")), kind=noun, name=_norm(m.group("name"))
-            )
-        for pattern, kind in _RE_BENIGN:
-            m = pattern.match(s)
-            if m:
-                return Benign(table=_norm(m.groupdict().get("name")), kind=kind)
-        return Other(reason=_command_head(s))
-
-    def _regex_alter_sub(self, table: str | None, rest: str) -> DdlOperation:
-        """An ALTER TABLE subcommand the matrix patterns did not match."""
-        low = rest.lower()
-        if _RE_AT_SET_NOT_NULL.match(rest):
-            m = _RE_AT_ALTER_COLUMN.match(rest)
-            return SetNotNull(table=table, column=_norm(m.group("col")) if m else None)
-        if _RE_AT_RENAME_TO.match(rest):
-            return RenameObject(table=table, kind="object", new=_norm(rest.split()[-1]))
-        for pattern, kind in _RE_AT_BENIGN:
-            if pattern.match(rest):
-                return Benign(table=table, kind=kind)
-        if low.startswith("owner to"):
-            return Benign(table=table, kind="change_owner")
-        return Other(table=table, reason="ALTER TABLE subcommand")
-
-    def _regex_one(self, stmt: str) -> DdlOperation | None:
-        s = stmt.strip()
-        if not s:
-            return None
-        lower = s.lower()
-
-        m = _RE_ADD_COLUMN.match(s)
-        if m:
-            rest = m.group("rest").lower()
-            return AddColumn(
-                table=_norm(m.group("table")),
-                column=_norm(m.group("col")),
-                nullable="not null" not in rest,
-                has_default="default" in rest,
-            )
-        m = _RE_DROP_COLUMN.match(s)
-        if m:
-            return DropColumn(table=_norm(m.group("table")), column=_norm(m.group("col")))
-        m = _RE_RENAME_COLUMN.match(s)
-        if m:
-            return RenameColumn(
-                table=_norm(m.group("table")),
-                old=_norm(m.group("old")),
-                new=_norm(m.group("new")),
-            )
-        m = _RE_ALTER_TYPE.match(s)
-        if m:
-            return ChangeColumnType(
-                table=_norm(m.group("table")),
-                column=_norm(m.group("col")),
-                new_type=canonical_type(_clean_type(m.group("newtype"))),
-            )
-        m = _RE_ADD_CONSTRAINT.match(s)
-        if m:
-            return AddConstraint(
-                table=_norm(m.group("table")),
-                kind=_constraint_kind_from_text(s),
-                not_valid="not valid" in lower,
-            )
-        m = _RE_CREATE_INDEX.match(s)
-        if m:
-            return CreateIndex(
-                table=_norm(m.group("table")),
-                concurrently=m.group("conc") is not None,
-            )
-        m = _RE_CREATE_TABLE.match(s)
-        if m:
-            return CreateTable(table=_norm(m.group("table")))
-        return None
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -540,41 +421,16 @@ _IDENT = r'(?P<{name}>"?[\w.]+"?)'
 
 
 def _norm(ident: str | None) -> str | None:
+    # pglast has already folded unquoted identifiers; a quoted name keeps its case.
     if ident is None:
         return None
-    return ident.strip().strip('"').lower()
-
-
-def _relname(relation: object) -> str | None:
-    if relation is None:
-        return None
-    relname = getattr(relation, "relname", None)
-    if not relname:
-        return None
-    schema = getattr(relation, "schemaname", None)
-    return f"{str(schema).lower()}.{str(relname).lower()}" if schema else str(relname).lower()
-
-
-def _enum_int(value: object) -> int | None:
-    if value is None:
-        return None
-    inner = getattr(value, "value", value)
-    try:
-        return int(inner)
-    except (TypeError, ValueError):
-        return None
+    return ident.strip().strip('"')
 
 
 def _readable_node(node_name: str) -> str:
     """`CreateStatsStmt` → `create stats statement`, for the finding's reason."""
     words = re.findall(r"[A-Z][a-z0-9]*|[a-z0-9]+", node_name)
     return " ".join(word.lower() for word in words) or node_name
-
-
-def _name_parts(raw: Any) -> str | None:
-    """Join a pglast list of ``String`` name parts into a dotted identifier."""
-    parts = [str(getattr(part, "sval", part)) for part in raw or ()]
-    return ".".join(part.lower() for part in parts if part) or None
 
 
 def _clean_type(raw: str | None) -> str | None:
@@ -584,30 +440,6 @@ def _clean_type(raw: str | None) -> str | None:
     text = re.sub(r"\s+", " ", raw).strip().rstrip(",;")
     text = re.split(r"\b(?:USING|COLLATE|NOT|NULL|DEFAULT)\b", text, flags=re.IGNORECASE)[0]
     return text.strip() or None
-
-
-def _type_name(type_node: Any) -> str | None:
-    """Render a pglast ``TypeName`` back to ``varchar(50)`` / ``numeric(10,2)``.
-
-    The ``pg_catalog`` qualifier the parser adds is dropped; the internal spelling
-    (``int8``) is left alone, since :mod:`confiture.core.type_lattice` aliases it.
-    """
-    if type_node is None:
-        return None
-    parts = [str(getattr(part, "sval", part)) for part in getattr(type_node, "names", None) or ()]
-    names = [part for part in parts if part and part != "pg_catalog"]
-    if not names:
-        return None
-    name = ".".join(names)
-    mods = [
-        str(ival)
-        for ival in (
-            getattr(getattr(mod, "val", None), "ival", None)
-            for mod in getattr(type_node, "typmods", None) or ()
-        )
-        if ival is not None
-    ]
-    return f"{name}({', '.join(mods)})" if mods else name
 
 
 def _first_relname(objects: Any) -> str | None:
@@ -659,47 +491,6 @@ def _replace_or_benign(node: object, noun: str, name: str | None) -> DdlOperatio
     if bool(getattr(node, "replace", False)):
         return ReplaceObject(table=name, kind=noun, name=name)
     return Benign(table=name, kind=f"create_{noun.replace(' ', '_')}")
-
-
-def _column_is_not_null(coldef: object) -> bool:
-    if bool(getattr(coldef, "is_not_null", False)):
-        return True
-    for c in getattr(coldef, "constraints", None) or ():
-        if _enum_int(getattr(c, "contype", None)) == _CONSTR_NOTNULL:
-            return True
-    return False
-
-
-def _column_has_default(coldef: object) -> bool:
-    if getattr(coldef, "raw_default", None) is not None:
-        return True
-    for c in getattr(coldef, "constraints", None) or ():
-        if _enum_int(getattr(c, "contype", None)) == _CONSTR_DEFAULT:
-            return True
-    return False
-
-
-def _constraint_kind_from_text(stmt: str) -> str | None:
-    low = stmt.lower()
-    if " check " in low or low.rstrip().endswith("check") or re.search(r"\bcheck\s*\(", low):
-        return "check"
-    if "primary key" in low:
-        return "primary_key"
-    if "unique" in low:
-        return "unique"
-    if "foreign key" in low or "references" in low:
-        return "foreign_key"
-    return None
-
-
-def _split_statements(sql: str) -> list[str]:
-    """Top-level split, shared with ``core/change_set.py``.
-
-    Must stay dollar-quote aware: a naive ``split(";")`` shreds a ``CREATE
-    FUNCTION`` body, and since #206 each fragment would surface as a spurious
-    UNCLASSIFIED finding rather than being silently dropped.
-    """
-    return split_statements(sql)
 
 
 _RE_ADD_COLUMN = re.compile(
@@ -893,33 +684,3 @@ _RE_BENIGN: tuple[tuple[re.Pattern[str], str], ...] = (
         "create_table_as",
     ),
 )
-
-
-def _split_names(raw: str) -> list[str]:
-    """Split `a, b.c` into names, dropping any argument list or trailing clause."""
-    names = []
-    for chunk in re.sub(
-        r"\b(?:CASCADE|RESTRICT)\b.*$", "", raw, flags=re.IGNORECASE | re.DOTALL
-    ).split(","):
-        name = chunk.strip().split("(")[0].strip()
-        name = name.split()[0] if name.split() else ""
-        if name:
-            names.append(name)
-    return names or [""]
-
-
-def _command_head(statement: str, *, words: int = 4) -> str:
-    """The leading keywords of a statement, with every literal stripped.
-
-    The reason reaches an operator, and an unclassified statement is exactly the
-    kind that might carry a credential (``CREATE USER … PASSWORD 'x'``). Only bare
-    word tokens survive.
-    """
-    tokens: list[str] = []
-    for token in statement.split():
-        if not re.fullmatch(r"[A-Za-z_][\w$.]*", token):
-            break
-        tokens.append(token.lower())
-        if len(tokens) >= words:
-            break
-    return " ".join(tokens) or "statement"

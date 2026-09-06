@@ -8,7 +8,6 @@ clean.
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -29,45 +28,19 @@ class TestBannerInTextMode:
     def test_ast_banner_when_pglast_available(self, tmp_path):
         migs = _migrations_dir(tmp_path)
         runner = CliRunner()
-        with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "validate",
-                    "--idempotent",
-                    "--migrations-dir",
-                    str(migs),
-                ],
-            )
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "validate",
+                "--idempotent",
+                "--migrations-dir",
+                str(migs),
+            ],
+        )
         out = _strip_ansi(result.output)
         assert "AST backend" in out
         assert "pglast" in out
-
-    def test_regex_banner_when_pglast_missing(self, tmp_path):
-        migs = _migrations_dir(tmp_path)
-        runner = CliRunner()
-        with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=False,
-        ):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "validate",
-                    "--idempotent",
-                    "--migrations-dir",
-                    str(migs),
-                ],
-            )
-        out = _strip_ansi(result.output)
-        assert "Regex fallback" in out
-        # The install hint must appear so the user knows what to do.
-        assert "fraiseql-confiture[ast]" in out
 
 
 class TestBannerInJsonMode:
@@ -96,43 +69,17 @@ class TestBannerInJsonMode:
     def test_json_mode_reports_ast_when_available(self, tmp_path):
         migs = _migrations_dir(tmp_path)
         runner = CliRunner()
-        with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "validate",
-                    "--idempotent",
-                    "--migrations-dir",
-                    str(migs),
-                    "--format",
-                    "json",
-                ],
-            )
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "validate",
+                "--idempotent",
+                "--migrations-dir",
+                str(migs),
+                "--format",
+                "json",
+            ],
+        )
         payload = json.loads(result.stdout)
         assert payload["meta"]["backend"] == "ast"
-
-    def test_json_mode_reports_regex_when_unavailable(self, tmp_path):
-        migs = _migrations_dir(tmp_path)
-        runner = CliRunner()
-        with patch(
-            "confiture.core.idempotency.patterns.is_pglast_available",
-            return_value=False,
-        ):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "validate",
-                    "--idempotent",
-                    "--migrations-dir",
-                    str(migs),
-                    "--format",
-                    "json",
-                ],
-            )
-        payload = json.loads(result.stdout)
-        assert payload["meta"]["backend"] == "regex"

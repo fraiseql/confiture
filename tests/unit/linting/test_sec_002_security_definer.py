@@ -325,11 +325,13 @@ def test_directive_only_suppresses_next_function(tmp_path: Path) -> None:
     assert violations[0].object_name == "public.not_allowed"
 
 
-def test_unparseable_file_skipped_gracefully(tmp_path: Path) -> None:
-    """Unparseable SQL yields no violations (no crash)."""
+def test_unparseable_file_is_reported_not_skipped(tmp_path: Path) -> None:
+    """Unparseable SQL is one UNPARSEABLE notice, never a clean result (ANA-02)."""
     f = _write(tmp_path, "bad.sql", "THIS IS NOT SQL $$$$$$$$;\n")
     violations = _make_rule().check([f])
-    assert violations == []
+    assert [(v.rule_id, v.severity.value, v.line_number) for v in violations] == [
+        ("UNPARSEABLE", "info", 1)
+    ]
 
 
 def test_missing_path_returns_empty() -> None:

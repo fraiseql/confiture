@@ -23,7 +23,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from confiture.config.environment import OwnershipExpectation
-from confiture.core.linting._ast_required import is_pglast_available
 from confiture.core.linting.libraries.ownership import Own001OwnershipCoverage
 
 # Map the per-relkind statement to the ALTER form that PostgreSQL accepts.
@@ -92,8 +91,6 @@ class OwnershipFixer:
 
     def iter_candidates(self, migrations_dir: Path) -> list[FixCandidate]:
         """Return one :class:`FixCandidate` per uncovered CREATE in *migrations_dir*."""
-        if not is_pglast_available():
-            return []
         candidates: list[FixCandidate] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
             text = migration.read_text()
@@ -110,8 +107,6 @@ class OwnershipFixer:
 
     def preview(self, migrations_dir: Path) -> list[FixPreview]:
         """Return one :class:`FixPreview` per file that would be modified."""
-        if not is_pglast_available():
-            return []
         previews: list[FixPreview] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
             original = migration.read_text()
@@ -126,8 +121,6 @@ class OwnershipFixer:
         Returns the list of files that were modified.  Files unchanged
         by the fix are not touched.
         """
-        if not is_pglast_available():
-            return []
         modified: list[Path] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
             original = migration.read_text()
@@ -144,8 +137,6 @@ class OwnershipFixer:
         no-op because re-detection sees the freshly-emitted ``ALTER``
         and skips the same line on the next pass.
         """
-        if not is_pglast_available():
-            return sql
         # The rule's AST walk gives us schema/relname/relkind/line for
         # every CREATE.  We sort top-down (largest line first) so we
         # can insert without invalidating earlier line numbers.

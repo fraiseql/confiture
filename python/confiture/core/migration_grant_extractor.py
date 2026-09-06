@@ -21,14 +21,12 @@ can emit an INFO note rather than silently miss the table.
 
 from __future__ import annotations
 
-import importlib.util
 import re
 from dataclasses import dataclass, field
 
-import sqlparse
+import pglast.parser
 
-# Optional dep — pglast lives behind the ``[ast]`` extra.
-_HAS_PGLAST: bool = importlib.util.find_spec("pglast") is not None
+from confiture.core.sql_lexer import strip_comments
 
 # Every privilege a table can hold.  ``GRANT ALL`` expands to this set.
 # Order matters only for deterministic test output; storage uses frozenset.
@@ -321,21 +319,11 @@ class MigrationGrantExtractor:
 
     def extract_creates(self, sql: str) -> list[tuple[str, str]]:
         """Return ``(schema, table)`` for every ``CREATE TABLE`` in *sql*."""
-        if _HAS_PGLAST:
-            try:
-                return self._creates_pglast(sql)
-            except Exception:
-                pass  # Fall through to sqlparse on any pglast hiccup.
-        return self._creates_sqlparse(sql)
+        return self._creates_pglast(sql)
 
     def extract_drops(self, sql: str) -> list[tuple[str, str]]:
         """Return ``(schema, table)`` for every ``DROP TABLE`` in *sql*."""
-        if _HAS_PGLAST:
-            try:
-                return self._drops_pglast(sql)
-            except Exception:
-                pass
-        return self._drops_sqlparse(sql)
+        return self._drops_pglast(sql)
 
     def extract_grants(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
         """Return ``(schema, table, role, privileges)`` for every ``GRANT``.
@@ -347,12 +335,7 @@ class MigrationGrantExtractor:
         stripped before parsing the role list — Confiture treats the
         grant itself, not its propagation flag, as the unit of coverage.
         """
-        if _HAS_PGLAST:
-            try:
-                return self._grants_pglast(sql)
-            except Exception:
-                pass
-        return self._grants_sqlparse(sql)
+        return self._grants_pglast(sql)
 
     def has_dynamic_sql(self, sql: str) -> bool:
         """Return ``True`` if *sql* contains ``EXECUTE format(…)`` patterns.
@@ -363,8 +346,7 @@ class MigrationGrantExtractor:
         """
         # Strip comments before scanning so we don't false-positive on
         # examples inside documentation.
-        cleaned = sqlparse.format(sql, strip_comments=True)
-        return bool(_DYNAMIC_SQL_RE.search(cleaned))
+        return bool(_DYNAMIC_SQL_RE.search(strip_comments(sql)))
 
     def extract_grant_statements(self, sql: str) -> GrantExtraction:
         """Extract GRANT/REVOKE facts from *sql* for semantic matching (issue #162).
@@ -396,25 +378,14 @@ class MigrationGrantExtractor:
                 )
             )
 
-        parsed = False
-        if _HAS_PGLAST:
-            try:
-                self._statements_pglast(sql, statements, unrepresentable)
-                parsed = True
-            except Exception:  # noqa: BLE001 — fall through to the regex backend
-                statements.clear()
-                parsed = False
-        if not parsed:
-            try:
-                self._statements_sqlparse(sql, statements, unrepresentable)
-                parsed = True
-            except Exception:  # noqa: BLE001 — report rather than raise
-                parsed = False
-        if not parsed:
+        try:
+            self._statements_pglast(sql, statements, unrepresentable)
+        except pglast.parser.ParseError as exc:
+            # Reported, never raised: the semantic engine degrades honestly (D9).
+            statements.clear()
             unrepresentable.append(
                 UnrepresentableGrant(
-                    reason="parse_error",
-                    detail="SQL could not be parsed by pglast or the regex fallback",
+                    reason="parse_error", detail=f"pglast could not parse the SQL: {exc}"
                 )
             )
 
@@ -711,185 +682,6 @@ class MigrationGrantExtractor:
     # ------------------------------------------------------------------ #
     # sqlparse fallback path                                              #
     # ------------------------------------------------------------------ #
-
-    def _creates_sqlparse(self, sql: str) -> list[tuple[str, str]]:
-        cleaned = sqlparse.format(sql, strip_comments=True)
-        out: list[tuple[str, str]] = []
-        for m in _CREATE_TABLE_RE.finditer(cleaned):
-            modifier = (m.group("modifier") or "").upper()
-            # TEMP tables don't persist; ACL coverage doesn't apply.
-            # UNLOGGED tables are permanent — keep them.
-            if modifier.startswith("TEMP"):
-                continue
-            # Partition children inherit grants from the parent.  Peek
-            # at the small window immediately after the qname for the
-            # ``PARTITION OF`` clause — same exclusion the pglast path
-            # applies via ``stmt.partbound``.
-            tail = cleaned[m.end() : m.end() + 32]
-            if _PARTITION_OF_RE.match(tail):
-                continue
-            out.append(_parse_qualified_name(m.group("qname")))
-        return out
-
-    def _drops_sqlparse(self, sql: str) -> list[tuple[str, str]]:
-        cleaned = sqlparse.format(sql, strip_comments=True)
-        out: list[tuple[str, str]] = []
-        for m in _DROP_TABLE_RE.finditer(cleaned):
-            for qname in _split_qname_list(m.group("qnames")):
-                out.append(_parse_qualified_name(qname))
-        return out
-
-    def _grants_sqlparse(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
-        cleaned = sqlparse.format(sql, strip_comments=True)
-        out: list[tuple[str, str, str, frozenset[str]]] = []
-        for m in _GRANT_RE.finditer(cleaned):
-            priv_text = m.group("privs").strip().upper()
-            if priv_text in ("ALL", "ALL PRIVILEGES"):
-                privs: frozenset[str] = _ALL_TABLE_PRIVILEGES
-            else:
-                privs = frozenset(p.strip() for p in priv_text.split(","))
-            # Strip ``WITH GRANT/HIERARCHY/ADMIN OPTION`` so the suffix
-            # doesn't leak into the role list.  pglast handles this in
-            # the AST via the ``grant_option`` flag.
-            roles_text = _WITH_OPTION_SUFFIX_RE.sub("", m.group("roles"))
-            qnames = _split_qname_list(m.group("qnames"))
-            for qname in qnames:
-                schema, table = _parse_qualified_name(qname)
-                for role_raw in roles_text.split(","):
-                    role = _normalize_grantee(role_raw.rstrip(";"))
-                    if role:
-                        out.append((schema, table, role, privs))
-        return out
-
-    def _statements_sqlparse(
-        self,
-        sql: str,
-        statements: list[GrantStatement],
-        unrepresentable: list[UnrepresentableGrant],
-    ) -> None:
-        """Regex fallback backend for :meth:`extract_grant_statements` (issue #162).
-
-        Intentionally weaker than pglast for non-table objects: function
-        signatures and exotic object classes are reported as unrepresentable
-        rather than guessed, leaning on the honest-degradation contract.
-        """
-        cleaned = sqlparse.format(sql, strip_comments=True)
-        for stmt_text in sqlparse.split(cleaned):
-            stmt_text = stmt_text.strip()
-            if not stmt_text:
-                continue
-            if _ALTER_DEFAULT_PRIVS_RE.match(stmt_text):
-                unrepresentable.append(
-                    UnrepresentableGrant(
-                        reason="alter_default_privileges",
-                        detail="ALTER DEFAULT PRIVILEGES affects future objects; not statically modeled",
-                    )
-                )
-                continue
-            m = _GRANT_REVOKE_STMT_RE.match(stmt_text)
-            if m is None:
-                continue
-
-            action = m.group("action").upper()
-            priv_text = m.group("privs").strip()
-            # Column-level privileges carry a parenthesised column list.
-            if "(" in priv_text:
-                unrepresentable.append(
-                    UnrepresentableGrant(
-                        reason="column_privileges",
-                        detail=f"{action} with a column-level privilege list is not modeled",
-                    )
-                )
-                continue
-
-            items, reason = self._classify_on_clause(m.group("onclause").strip())
-            if reason is not None:
-                unrepresentable.append(
-                    UnrepresentableGrant(
-                        reason=reason,
-                        detail=f"{action} on an object class outside table/schema/sequence/function",
-                    )
-                )
-                continue
-            if not items:
-                continue
-
-            objtype = items[0][0]
-            priv_upper = priv_text.upper()
-            if priv_upper in ("ALL", "ALL PRIVILEGES"):
-                privs = _ALL_PRIVILEGES_BY_OBJTYPE.get(objtype, _ALL_TABLE_PRIVILEGES)
-            else:
-                privs = frozenset(p.strip().upper() for p in priv_upper.split(",") if p.strip())
-
-            roles_text = m.group("roles")
-            grant_option = bool(m.group("go_for")) or bool(_WITH_GRANT_OPTION_RE.search(roles_text))
-            roles_text = _WITH_OPTION_SUFFIX_RE.sub("", roles_text)
-            grantees = [
-                _fold_grantee(r.rstrip(";")) for r in roles_text.split(",") if r.strip().rstrip(";")
-            ]
-            grantees = [g for g in grantees if g]
-
-            for objtype_i, target_kind, schema, obj in items:
-                self._emit_statements(
-                    statements,
-                    action,
-                    objtype_i,
-                    target_kind,
-                    schema,
-                    obj,
-                    grantees,
-                    privs,
-                    grant_option,
-                )
-
-    @staticmethod
-    def _classify_on_clause(
-        onclause: str,
-    ) -> tuple[list[tuple[str, str, str, str | None]], str | None]:
-        """Classify a regex-path ``ON`` clause into grant targets or a degrade reason.
-
-        Returns ``(items, reason)`` where each item is
-        ``(objtype, target_kind, schema, object)``. When ``reason`` is set the
-        item list is empty and the caller marks the statement unrepresentable.
-        """
-        onclause = onclause.strip()
-
-        all_match = _ALL_IN_SCHEMA_RE.match(onclause)
-        if all_match:
-            objtype = _ALL_IN_SCHEMA_PLURAL_TO_OBJTYPE[all_match.group("plural").upper()]
-            if objtype == "FUNCTION":
-                # Function/routine signatures are beyond the regex fallback.
-                return ([], "unmodeled_objtype")
-            schema = _strip_quotes(all_match.group("schema").strip())
-            return ([(objtype, "ALL_IN_SCHEMA", schema, None)], None)
-
-        upper = onclause.upper()
-        for keyword in _UNMODELED_ON_KEYWORDS:
-            if upper.startswith(keyword):
-                return ([], "unmodeled_objtype")
-
-        if upper.startswith(("FUNCTION", "ROUTINE", "PROCEDURE")):
-            # Signatures are too ambiguous for the regex fallback — degrade.
-            return ([], "unmodeled_objtype")
-
-        if upper.startswith("SCHEMA"):
-            names = _split_qname_list(onclause[len("SCHEMA") :].strip())
-            return ([("SCHEMA", "OBJECT", _strip_quotes(n), None) for n in names], None)
-
-        if upper.startswith("SEQUENCE"):
-            qnames = _split_qname_list(onclause[len("SEQUENCE") :].strip())
-            items = []
-            for qname in qnames:
-                schema, seq = _parse_qualified_name(qname)
-                items.append(("SEQUENCE", "OBJECT", schema, seq))
-            return (items, None)
-
-        rest = onclause[len("TABLE") :].strip() if upper.startswith("TABLE") else onclause
-        items = []
-        for qname in _split_qname_list(rest):
-            schema, table = _parse_qualified_name(qname)
-            items.append(("TABLE", "OBJECT", schema, table))
-        return (items, None)
 
 
 __all__ = [

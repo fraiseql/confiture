@@ -5,7 +5,11 @@
   "description": "Static ACL coverage report: every `CREATE TABLE` in db/migrations/ must have a matching `GRANT` in the same migration or in the configured grant-sweep directory.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["check", "violations", "hints"],
+  "required": [
+    "check",
+    "violations",
+    "hints"
+  ],
   "properties": {
     "check": {
       "type": "string",
@@ -16,19 +20,59 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["rule_id", "severity", "object_name", "message", "file_path"],
+        "required": [
+          "rule_id",
+          "severity",
+          "object_name",
+          "message",
+          "file_path"
+        ],
         "properties": {
-          "rule_id": { "type": "string" },
+          "rule_id": {
+            "type": "string"
+          },
           "severity": {
             "type": "string",
-            "enum": ["error", "warning", "info"]
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ]
           },
-          "object_name": { "type": "string" },
-          "message": { "type": "string" },
-          "file_path": { "type": ["string", "null"] }
+          "object_name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "file_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     },
-    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+    "hints": {
+      "$ref": "_common.schema.json#/$defs/HintsArray"
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
   }
 }

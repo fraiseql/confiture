@@ -4,7 +4,13 @@
   "title": "confiture validate-config --format json",
   "description": "Offline config + migrations-tree validation report (issue #144). Never connects to a database. Each issues[] element is the shared issue object.",
   "type": "object",
-  "required": ["valid", "config_source", "migrations_path", "migration_count", "issues"],
+  "required": [
+    "valid",
+    "config_source",
+    "migrations_path",
+    "migration_count",
+    "issues"
+  ],
   "additionalProperties": false,
   "properties": {
     "valid": {
@@ -13,7 +19,11 @@
     },
     "config_source": {
       "type": "string",
-      "enum": ["yaml-file", "flags", "env"],
+      "enum": [
+        "yaml-file",
+        "flags",
+        "env"
+      ],
       "description": "Where the validated config came from."
     },
     "migrations_path": {
@@ -27,7 +37,26 @@
     },
     "issues": {
       "type": "array",
-      "items": { "$ref": "issue-object.schema.json#" }
+      "items": {
+        "$ref": "issue-object.schema.json#"
+      }
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

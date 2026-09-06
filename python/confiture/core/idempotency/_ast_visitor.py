@@ -18,34 +18,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from confiture.core.sql_lexer import skip_leading_comments as _first_keyword_pos
+
 _SNIPPET_MAX_LENGTH = 80
 _SNIPPET_TRAILING_PAD = 50
-
-
-def _first_keyword_pos(sql: str, start: int) -> int:
-    """Skip whitespace and SQL comments from ``start`` to the first keyword.
-
-    Mirrors what a human would do reading the source: jump over leading
-    blanks, ``-- line comments``, and ``/* block comments */`` until a
-    real token appears.
-    """
-    i = start
-    n = len(sql)
-    while i < n:
-        c = sql[i]
-        if c in " \t\n\r\f\v":
-            i += 1
-            continue
-        if sql.startswith("--", i):
-            nl = sql.find("\n", i)
-            i = n if nl == -1 else nl + 1
-            continue
-        if sql.startswith("/*", i):
-            end = sql.find("*/", i + 2)
-            i = n if end == -1 else end + 2
-            continue
-        return i
-    return start
 
 
 def _line_for_stmt(sql: str, stmt_location: int) -> int:

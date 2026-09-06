@@ -17,8 +17,13 @@ Python **3.11, 3.12, or 3.13**. Older versions are not supported.
 Install with `uv` (recommended) or `pip`:
 
 ```bash
-uv pip install fraiseql-confiture          # core
-uv pip install "fraiseql-confiture[ast]"   # + pglast (recommended for large schemas)
+uv pip install fraiseql-confiture
+```
+
+`pglast` (PostgreSQL's own parser) is a dependency since 0.50.0; the `[ast]` extra is an
+empty alias kept for one release and removed in 1.0.0.
+
+```bash
 ```
 
 ## Required PostgreSQL role permissions

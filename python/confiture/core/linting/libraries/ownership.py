@@ -30,13 +30,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+import pglast.parser
+
 from confiture.config.environment import OwnershipExpectation
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting._ast_required import (
-    emit_skip_notice,
-    is_pglast_available,
-)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.linting.unparseable import unparseable_notice
 
 # Default schema for unqualified identifiers in PostgreSQL.
 _DEFAULT_SCHEMA = "public"
@@ -125,15 +124,12 @@ class Own001OwnershipCoverage:
             return []
         if not migrations_dir.exists():
             return []
-        if not is_pglast_available():
-            emit_skip_notice(
-                'own_001 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         violations: list[LintViolation] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
-            violations.extend(self._check_file(migration))
+            try:
+                violations.extend(self._check_file(migration))
+            except pglast.parser.ParseError as exc:
+                violations.append(unparseable_notice(migration, migration.read_text(), exc))
         return violations
 
     # ------------------------------------------------------------------ #
@@ -261,18 +257,11 @@ class Own001OwnershipCoverage:
         never appear as top-level statements, so an ``EXECUTE 'ALTER …
         OWNER TO …'`` wrapped in a DO block correctly does NOT count.
         """
-        import pglast  # local import — guarded by is_pglast_available() above
+        import pglast  # noqa: PLC0415
 
         creates: list[_CreateRecord] = []
         alters: list[_AlterOwnerRecord] = []
-        try:
-            tree = pglast.parse_sql(sql)
-        except Exception:
-            # Parse failures (templated SQL, exotic dialect quirks)
-            # should not crash the lint — just return no findings for
-            # this file.  The drift detector will catch real problems
-            # at runtime.
-            return creates, alters
+        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 
         for raw in tree or []:
             stmt = raw.stmt
@@ -392,15 +381,12 @@ class Own002BareAlterOwner:
     def check(self, migrations_dir: Path) -> list[LintViolation]:
         if not migrations_dir.exists():
             return []
-        if not is_pglast_available():
-            emit_skip_notice(
-                'own_002 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         violations: list[LintViolation] = []
         for migration in sorted(migrations_dir.rglob("*.up.sql")):
-            violations.extend(self._check_file(migration))
+            try:
+                violations.extend(self._check_file(migration))
+            except pglast.parser.ParseError as exc:
+                violations.append(unparseable_notice(migration, migration.read_text(), exc))
         return violations
 
     def _check_file(self, path: Path) -> list[LintViolation]:
@@ -459,10 +445,7 @@ class Own002BareAlterOwner:
 
         creates: list[_CreateRecord] = []
         alters: list[tuple[_AlterOwnerRecord, bool]] = []
-        try:
-            tree = pglast.parse_sql(sql)
-        except Exception:
-            return creates, alters
+        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 
         for raw in tree or []:
             stmt = raw.stmt

@@ -1,89 +1,89 @@
 """The test count means what it says: no test is parametrized over local artefacts (TST-01).
 
-``tests/unit/idempotency/test_ast_preprocess_parity.py`` parametrizes over the
-SQL fixtures it finds in the checkout. When that was every ``*.sql`` under the
-repo root, a developer machine contributed ~1,600 gitignored
-``db/schema_history/`` snapshots (written by the suite itself) and the local
-run collected ~3,000 more tests than CI — a gap that was carried for months as
-"cause unknown" (#207). A fixture is something the repository tracks; the
-parametrization has to be built from ``git ls-files``, so local and CI collect
-the same ids.
+A parity probe once parametrized over every ``*.sql`` under the repo root, so a
+developer machine contributed ~1,600 gitignored ``db/schema_history/`` snapshots
+(written by the suite itself) and the local run collected ~3,000 more tests
+than CI — a gap carried for months as "cause unknown" (#207). That probe is
+gone (pglast parses the raw file since Phase 05); what stays is the rule: a
+test module builds its parametrizations from files the repository tracks —
+paths under ``tests/`` — never from a filesystem walk of the repo root.
 """
 
 from __future__ import annotations
 
-import subprocess
+import ast
+import re
 from pathlib import Path
 
-import pytest
-
-from tests.unit.idempotency import test_ast_preprocess_parity as parity
-
-REPO_ROOT = parity.PROJECT_ROOT
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TESTS_ROOT = REPO_ROOT / "tests"
 
 
-def _git(*args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
+_CLIMBS_TO_REPO_ROOT = re.compile(r"parents\[[2-9]\]|(\.parent){3,}")
+# Trees the repository tracks in full; a walk that descends into one of them
+# sees the same files locally and in CI.
+_TRACKED_TREES = frozenset({"python", "tests", "docs", ".github"})
+_FIRST_SEGMENT = re.compile(r"/\s*['\"]([^'\"/]+)")
+
+
+def _walks_untracked_ground(expr: str) -> bool:
+    """A climb to the repo root that does not descend into a fully tracked tree."""
+    m = _CLIMBS_TO_REPO_ROOT.search(expr)
+    if not m:
+        return False
+    seg = _FIRST_SEGMENT.search(expr, m.end())
+    return seg is None or seg.group(1) not in _TRACKED_TREES
+
+
+def repo_root_walks(root: Path) -> list[str]:
+    """Module-level ``.rglob``/``.glob`` calls over the repo root or an untracked tree.
+
+    Walking tracked source (``ROOT / "python" / "confiture" / "cli"``) is fine —
+    every file there is tracked. Walking the root itself, or ``ROOT / "db"``, is
+    the #207 shape: whatever is on disk under the checkout, generated or not,
+    becomes a test id.
+    """
+    findings: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path.name == Path(__file__).name or "fixtures" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:  # a fixture that is deliberately not valid Python
+            continue
+        assigned = {
+            t.id: ast.unparse(node.value)
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for t in node.targets
+            if isinstance(t, ast.Name)
+        }
+        for node in tree.body:  # module level only: that is what parametrizes collection
+            for call in ast.walk(node):
+                if not (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr in ("rglob", "glob")
+                ):
+                    continue
+                receiver = ast.unparse(call.func.value)
+                # Resolve one level of naming: `X.rglob(...)` where `X = <climb> / ...`.
+                for name, value in assigned.items():
+                    receiver = receiver.replace(name, f"({value})")
+                if _walks_untracked_ground(receiver):
+                    findings.append(
+                        f"{path.relative_to(root.parent).as_posix()}:{call.lineno} {ast.unparse(call)}"
+                    )
+    return findings
+
+
+def test_no_test_module_parametrizes_over_a_repo_root_walk() -> None:
+    findings = repo_root_walks(TESTS_ROOT)
+    assert findings == [], (
+        "test collection depends on what happens to be on disk:\n  "
+        + "\n  ".join(findings)
+        + "\nBuild the parametrization from tracked fixtures under tests/."
     )
-    if result.returncode not in (0, 1):  # check-ignore exits 1 when nothing is ignored
-        pytest.skip(f"not a git checkout (git {args[0]} failed): {result.stderr.strip()}")
-    return result.stdout
-
-
-@pytest.fixture(scope="module")
-def tracked_sql() -> set[Path]:
-    out = _git("ls-files", "-z", "--", "*.sql")
-    return {REPO_ROOT / p for p in out.split("\0") if p}
-
-
-@pytest.fixture(scope="module")
-def fixtures() -> list[Path]:
-    assert parity.SQL_FIXTURES, "the parity probe must have fixtures"
-    return list(parity.SQL_FIXTURES)
-
-
-def test_every_fixture_is_tracked_by_git(fixtures: list[Path], tracked_sql: set[Path]) -> None:
-    untracked = sorted(str(p.relative_to(REPO_ROOT)) for p in fixtures if p not in tracked_sql)
-    assert untracked == [], (
-        f"{len(untracked)} parity fixtures are not tracked by git (first 5: {untracked[:5]}); "
-        "build SQL_FIXTURES from `git ls-files`, not from a filesystem glob."
-    )
-
-
-def test_no_fixture_is_gitignored(fixtures: list[Path]) -> None:
-    listing = "\n".join(str(p.relative_to(REPO_ROOT)) for p in fixtures)
-    result = subprocess.run(
-        ["git", "check-ignore", "--stdin"],
-        cwd=REPO_ROOT,
-        input=listing,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode not in (0, 1):
-        pytest.skip(f"git check-ignore unavailable: {result.stderr.strip()}")
-    ignored = result.stdout.split()
-    assert ignored == [], f"{len(ignored)} parity fixtures are gitignored (first 5: {ignored[:5]})"
-
-
-def test_no_fixture_comes_from_generated_or_history_dirs(fixtures: list[Path]) -> None:
-    offenders = [
-        str(p.relative_to(REPO_ROOT))
-        for p in fixtures
-        if {"generated", "schema_history"} & set(p.relative_to(REPO_ROOT).parts)
-    ]
-    assert offenders == [], f"{len(offenders)} fixtures come from build output or snapshots"
-
-
-def test_tracked_sql_files_are_all_fixtures(fixtures: list[Path], tracked_sql: set[Path]) -> None:
-    """The other direction: the probe sees every tracked fixture, nothing filtered by accident."""
-    missing = sorted(str(p.relative_to(REPO_ROOT)) for p in tracked_sql if p not in set(fixtures))
-    assert missing == [], f"tracked SQL files the parity probe skips: {missing}"
 
 
 LAYER_DIRS = frozenset({"unit", "integration", "e2e", "performance", "contract"})

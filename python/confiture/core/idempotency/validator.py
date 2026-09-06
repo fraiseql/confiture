@@ -6,10 +6,11 @@ and strings for non-idempotent patterns.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import pglast.parser
 
 from confiture.core.idempotency.models import (
     IdempotencyPattern,
@@ -19,6 +20,8 @@ from confiture.core.idempotency.models import (
 from confiture.core.idempotency.patterns import (
     detect_non_idempotent_patterns,
 )
+from confiture.core.idempotency.python_migration_extractor import ExtractionWarning, WarningKind
+from confiture.core.parser_info import parse_error_line
 
 if TYPE_CHECKING:
     from confiture.core.idempotency.python_migration_extractor import ExtractedSQL
@@ -145,25 +148,36 @@ class IdempotencyValidator:
         report = IdempotencyReport()
         report.add_file_scanned(file_path)
 
-        # Pre-process SQL to handle comments and strings
-        processed_sql = self._preprocess_sql(sql)
-
-        # Detect non-idempotent patterns
-        matches = detect_non_idempotent_patterns(processed_sql)
+        # The raw text goes to the parser: pglast handles comments, literals and
+        # dollar-quoted bodies itself, and its statement locations index this
+        # exact string (ANA-01).
+        try:
+            matches = detect_non_idempotent_patterns(sql)
+        except pglast.parser.ParseError as exc:
+            # What PostgreSQL's own parser rejects cannot be certified: one
+            # finding, counted as unanalyzed, so `--fail-on-unanalyzable`
+            # covers it and the verdict reads "unverified" (ANA-02).
+            report.warnings.append(
+                ExtractionWarning(
+                    kind=WarningKind.UNPARSEABLE_SQL,
+                    source_file=Path(file_path),
+                    source_line=parse_error_line(sql, exc),
+                    message=f"pglast could not parse {file_path}: {exc}",
+                    reason_code="IDEM_UNPARSEABLE",
+                    remedy="Fix the SQL syntax; confiture cannot check idempotency past a parse error.",
+                )
+            )
+            return report
 
         # Convert matches to violations, filtering ignored patterns
         for match in matches:
             if match.pattern in self.ignore_patterns:
                 continue
 
-            # Map line numbers from processed SQL back to original
-            # (for now they're the same since we preserve structure)
-            original_line = self._map_line_number(sql, processed_sql, match.line_number)
-
             violation = IdempotencyViolation(
                 pattern=match.pattern,
                 sql_snippet=match.sql_snippet,
-                line_number=original_line,
+                line_number=match.line_number,
                 file_path=file_path,
                 severity=match.severity,
                 suggestion=match.suggestion,
@@ -240,6 +254,7 @@ class IdempotencyValidator:
                 report.add_file_scanned(scanned)
             for violation in file_report.violations:
                 report.add_violation(violation)
+            report.warnings.extend(file_report.warnings)
 
         if include_python:
             py_iter = directory.rglob("*.py") if recursive else directory.glob("*.py")
@@ -252,6 +267,20 @@ class IdempotencyValidator:
                     continue
                 combined_sql, origins = _combine_python_snippets(extraction.snippets)
                 combined_report = self.validate_sql(combined_sql, file_path=str(py_path))
+                for warning in combined_report.warnings:
+                    origin = _map_combined_line_to_source(warning.source_line, origins)
+                    report.warnings.append(
+                        ExtractionWarning(
+                            kind=warning.kind,
+                            source_file=py_path,
+                            source_line=origin.source_line
+                            if origin is not None
+                            else warning.source_line,
+                            message=warning.message,
+                            reason_code=warning.reason_code,
+                            remedy=warning.remedy,
+                        )
+                    )
                 for violation in combined_report.violations:
                     origin = _map_combined_line_to_source(violation.line_number, origins)
                     if origin is not None:
@@ -266,86 +295,3 @@ class IdempotencyValidator:
                     report.add_violation(violation)
 
         return report
-
-    def _preprocess_sql(self, sql: str) -> str:
-        """Preprocess SQL to handle comments and string literals.
-
-        Removes or masks content that shouldn't be scanned for patterns:
-        - Single-line comments (-- ...)
-        - Multi-line comments (/* ... */)
-        - String literals that might contain SQL-like text
-
-        Args:
-            sql: Raw SQL content
-
-        Returns:
-            Preprocessed SQL with comments and problematic strings handled
-
-        Note:
-            We preserve line structure so line numbers remain accurate.
-        """
-        # Remove single-line comments but preserve line structure
-        # Replace comment content with spaces to maintain positions
-        result = re.sub(
-            r"--[^\n]*",
-            lambda m: " " * len(m.group()),
-            sql,
-        )
-
-        # Remove multi-line comments, preserving newlines
-        def replace_multiline_comment(match: re.Match[str]) -> str:
-            content = match.group()
-            # Count newlines and preserve them
-            newlines = content.count("\n")
-            return "\n" * newlines
-
-        result = re.sub(
-            r"/\*.*?\*/",
-            replace_multiline_comment,
-            result,
-            flags=re.DOTALL,
-        )
-
-        # Handle dollar-quoted strings (PostgreSQL function bodies)
-        # These might contain SQL-like text that shouldn't trigger detection
-        # We preserve the CREATE OR REPLACE FUNCTION header but mask the body
-        def mask_dollar_quoted(match: re.Match[str]) -> str:
-            content = match.group()
-            # Preserve newlines
-            newlines = content.count("\n")
-            # Keep the outer structure but mask inner content
-            return "$MASKED$" + "\n" * newlines + "$MASKED$"
-
-        # Match $tag$...$tag$ but be careful not to break pattern detection
-        # Only mask if this looks like a function body (has SQL keywords inside)
-        result = re.sub(
-            r"\$\w*\$.*?\$\w*\$",
-            mask_dollar_quoted,
-            result,
-            flags=re.DOTALL,
-        )
-
-        return result
-
-    def _map_line_number(
-        self,
-        _original_sql: str,
-        _processed_sql: str,
-        processed_line: int,
-    ) -> int:
-        """Map a line number from processed SQL back to original.
-
-        Since we preserve line structure during preprocessing, the line
-        numbers should be the same. This method exists for future cases
-        where that might change.
-
-        Args:
-            _original_sql: The original SQL content (unused, for future use)
-            _processed_sql: The preprocessed SQL content (unused, for future use)
-            processed_line: Line number in processed SQL
-
-        Returns:
-            Corresponding line number in original SQL
-        """
-        # Currently line numbers are preserved
-        return processed_line

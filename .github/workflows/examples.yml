@@ -51,7 +51,7 @@ jobs:
     - name: Install confiture
       run: |
         uv venv --python 3.11
-        uv sync --locked --extra dev --extra notifications --extra ast
+        uv sync --locked --extra dev --extra notifications
 
     - name: Run every example
       env:

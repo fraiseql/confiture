@@ -30,14 +30,8 @@ from confiture.core._pglast_enums import (
     REQUIRED_MEMBERS,
     enums_are_usable,
 )
-from confiture.core.idempotency.ast_detector import is_pglast_available
 
 _CONFITURE_SRC = Path(__file__).resolve().parents[2] / "python" / "confiture"
-
-pytestmark = pytest.mark.skipif(
-    not is_pglast_available(),
-    reason="the [ast] extra is not installed; the AST path is inert",
-)
 
 
 # ---------------------------------------------------------------------------

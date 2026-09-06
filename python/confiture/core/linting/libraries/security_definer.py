@@ -41,12 +41,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pglast.parser
+
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting._ast_required import (
-    emit_skip_notice,
-    is_pglast_available,
-)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.linting.unparseable import unparseable_notice
 
 _DEFAULT_SCHEMA = "public"
 _SYSTEM_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "information_schema"})
@@ -249,16 +248,14 @@ class Sec002SecurityDefinerSearchPath:
         Each path may be a directory (scanned recursively for ``*.sql``)
         or a single file.  Missing paths are silently ignored.
         """
-        if not is_pglast_available():
-            emit_skip_notice(
-                'sec_002 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         violations: list[LintViolation] = []
         for path in scan_paths:
             for sql_file in self._iter_sql_files(path):
-                violations.extend(self._extract_violations(sql_file.read_text(), sql_file))
+                text = sql_file.read_text()
+                try:
+                    violations.extend(self._extract_violations(text, sql_file))
+                except pglast.parser.ParseError as exc:
+                    violations.append(unparseable_notice(sql_file, text, exc))
         return violations
 
     # ------------------------------------------------------------------ #
@@ -289,12 +286,9 @@ class Sec002SecurityDefinerSearchPath:
     # ------------------------------------------------------------------ #
 
     def _extract_violations(self, sql: str, file_path: Path) -> list[LintViolation]:
-        import pglast  # guarded by is_pglast_available()
+        import pglast  # noqa: PLC0415
 
-        try:
-            tree = pglast.parse_sql(sql)
-        except Exception:
-            return []
+        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 
         allow_lines = _collect_allow_unpinned_lines(sql)
         violations: list[LintViolation] = []

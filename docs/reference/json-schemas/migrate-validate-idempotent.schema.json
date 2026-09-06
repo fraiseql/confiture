@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-idempotent.schema.json",
   "title": "confiture migrate validate --idempotent --format json",
-  "description": "Idempotency validation report — scans every migration file (SQL + Python) for non-idempotent SQL patterns. Empty-input shape (no migration files found) replaces the violations report with a `message` field.",
+  "description": "Idempotency validation report \u2014 scans every migration file (SQL + Python) for non-idempotent SQL patterns. Empty-input shape (no migration files found) replaces the violations report with a `message` field.",
   "oneOf": [
     {
       "type": "object",
@@ -85,7 +85,7 @@
             },
             "fail_on_unanalyzable": {
               "type": "boolean",
-              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213)."
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag \u2014 only the exit code does. Added in 0.46.0 (#213)."
             }
           }
         },
@@ -99,7 +99,24 @@
         "unanalyzed_count": {
           "type": "integer",
           "minimum": 0,
-          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read — equals len(warnings). Added in 0.46.0 (#213)."
+          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read \u2014 equals len(warnings). Added in 0.46.0 (#213)."
+        },
+        "parser": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pglast",
+            "pg_major"
+          ],
+          "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+          "properties": {
+            "pglast": {
+              "type": "string"
+            },
+            "pg_major": {
+              "type": "integer"
+            }
+          }
         }
       }
     },
@@ -144,7 +161,7 @@
             },
             "fail_on_unanalyzable": {
               "type": "boolean",
-              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag — only the exit code does. Added in 0.46.0 (#213)."
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag \u2014 only the exit code does. Added in 0.46.0 (#213)."
             }
           }
         },
@@ -159,8 +176,25 @@
         "unanalyzed_count": {
           "type": "integer",
           "minimum": 0,
-          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read — equals len(warnings). Added in 0.46.0 (#213).",
+          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read \u2014 equals len(warnings). Added in 0.46.0 (#213).",
           "const": 0
+        },
+        "parser": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pglast",
+            "pg_major"
+          ],
+          "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+          "properties": {
+            "pglast": {
+              "type": "string"
+            },
+            "pg_major": {
+              "type": "integer"
+            }
+          }
         }
       }
     }

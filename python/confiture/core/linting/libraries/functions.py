@@ -39,13 +39,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pglast.parser
+
 from confiture.config.environment import FunctionCoverage
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting._ast_required import (
-    emit_skip_notice,
-    is_pglast_available,
-)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.linting.unparseable import unparseable_notice
 
 # Default schema for unqualified callable names.
 _DEFAULT_SCHEMA = "public"
@@ -150,21 +149,17 @@ class Func001FunctionUniqueness:
         """
         if not self.coverage.enabled:
             return []
-        if not is_pglast_available():
-            emit_skip_notice(
-                'func_001 requires the [ast] extra: pip install "fraiseql-confiture[ast]"'
-            )
-            return []
-
         all_definitions: list[_CallableDefinition] = []
+        notices: list[LintViolation] = []
         for path in ddl_paths:
             for sql_file in self._iter_sql_files(path):
-                all_definitions.extend(
-                    self._extract_callable_signatures(sql_file.read_text(), sql_file)
-                )
-
+                text = sql_file.read_text()
+                try:
+                    all_definitions.extend(self._extract_callable_signatures(text, sql_file))
+                except pglast.parser.ParseError as exc:
+                    notices.append(unparseable_notice(sql_file, text, exc))
         if not all_definitions:
-            return []
+            return notices
 
         # Group by signature key, drop the unique ones, emit one
         # violation per duplicate cluster.
@@ -176,7 +171,7 @@ class Func001FunctionUniqueness:
                 continue
             clusters[defn.signature_key].append(defn)
 
-        violations: list[LintViolation] = []
+        violations: list[LintViolation] = list(notices)
         for key, defs in clusters.items():
             if len(defs) < 2:
                 continue
@@ -241,12 +236,9 @@ class Func001FunctionUniqueness:
         parse yields no definitions (the build-time gate would catch
         unparseable SQL separately).
         """
-        import pglast  # local import — guarded by is_pglast_available()
+        import pglast  # noqa: PLC0415
 
-        try:
-            tree = pglast.parse_sql(sql)
-        except Exception:
-            return []
+        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 
         skip_lines = self._collect_allow_duplicate_lines(sql)
         definitions: list[_CallableDefinition] = []

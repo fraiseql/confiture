@@ -2,9 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-verify.schema.json",
   "title": "confiture migrate verify --format json",
-  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads failed_count (ok ⇔ failed_count == 0) and each results[].{version,name,status,error}. A migration with no .verify.sql is reported with status \"no_file\" and counted in skipped_count, not failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
+  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads failed_count (ok \u21d4 failed_count == 0) and each results[].{version,name,status,error}. A migration with no .verify.sql is reported with status \"no_file\" and counted in skipped_count, not failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
   "type": "object",
-  "required": ["verified_count", "failed_count", "skipped_count", "total_applied", "results"],
+  "required": [
+    "verified_count",
+    "failed_count",
+    "skipped_count",
+    "total_applied",
+    "results"
+  ],
   "additionalProperties": false,
   "properties": {
     "verified_count": {
@@ -25,34 +31,75 @@
     },
     "ledger_present": {
       "type": "boolean",
-      "description": "Whether the migration ledger table (tracking_table, default tb_confiture) exists. False means the database has no recorded migrations at all — typically built from schema files rather than migrated — and is only emitted under --allow-uninitialized, since without that flag the absent ledger raises PRECON_1001 (exit 2). Distinct from a present-but-empty ledger, which reports true with total_applied 0. Added in 0.37.0; not required, so payloads from earlier versions remain valid."
+      "description": "Whether the migration ledger table (tracking_table, default tb_confiture) exists. False means the database has no recorded migrations at all \u2014 typically built from schema files rather than migrated \u2014 and is only emitted under --allow-uninitialized, since without that flag the absent ledger raises PRECON_1001 (exit 2). Distinct from a present-but-empty ledger, which reports true with total_applied 0. Added in 0.37.0; not required, so payloads from earlier versions remain valid."
     },
     "results": {
       "type": "array",
       "description": "Per-migration verification outcome.",
       "items": {
         "type": "object",
-        "required": ["version", "name", "status", "actual_value", "verify_file", "error"],
+        "required": [
+          "version",
+          "name",
+          "status",
+          "actual_value",
+          "verify_file",
+          "error"
+        ],
         "additionalProperties": false,
         "properties": {
-          "version": { "type": "string", "description": "Migration version identifier." },
-          "name": { "type": "string", "description": "Migration name (may equal the version when no name was recorded)." },
+          "version": {
+            "type": "string",
+            "description": "Migration version identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Migration name (may equal the version when no name was recorded)."
+          },
           "status": {
             "type": "string",
             "description": "Outcome: \"verified\", \"failed\", or \"no_file\" (no sidecar). The adapter treats anything other than \"failed\" as ok."
           },
           "actual_value": {
-            "type": ["string", "number", "boolean", "null"],
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
             "description": "First column of the first row the .verify.sql query returned; null when no file or no row."
           },
           "verify_file": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Path to the .verify.sql sidecar; null when none."
           },
           "error": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Failure detail when status is \"failed\"; null otherwise."
           }
+        }
+      }
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
         }
       }
     }

@@ -25,25 +25,41 @@
     },
     "applied": {
       "type": "array",
-      "description": "Migrations applied by this operation, oldest → newest.",
+      "description": "Migrations applied by this operation, oldest \u2192 newest.",
       "items": {
         "type": "object",
-        "required": ["version", "name", "duration_ms", "rows_affected"],
+        "required": [
+          "version",
+          "name",
+          "duration_ms",
+          "rows_affected"
+        ],
         "additionalProperties": false,
         "properties": {
           "version": {
             "type": "string",
             "description": "Version identifier of the applied migration (the adapter's head revision)."
           },
-          "name": { "type": "string", "description": "Human-readable migration name." },
-          "duration_ms": { "type": "integer", "description": "Apply time in milliseconds." },
-          "rows_affected": { "type": "integer", "description": "Rows affected by the migration." }
+          "name": {
+            "type": "string",
+            "description": "Human-readable migration name."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "description": "Apply time in milliseconds."
+          },
+          "rows_affected": {
+            "type": "integer",
+            "description": "Rows affected by the migration."
+          }
         }
       }
     },
     "skipped": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Versions already applied before this operation (no-op for them)."
     },
     "skipped_superuser": {
@@ -51,23 +67,37 @@
       "description": "Migrations halted because they declared requires_superuser=True (issue #137).",
       "items": {
         "type": "object",
-        "required": ["version", "name", "reason"],
+        "required": [
+          "version",
+          "name",
+          "reason"
+        ],
         "additionalProperties": false,
         "properties": {
-          "version": { "type": "string" },
-          "name": { "type": "string" },
-          "reason": { "type": "string" }
+          "version": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     "pending": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Versions left unapplied (e.g. everything after a superuser halt)."
     },
     "errors": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Human-readable failure messages when success=false; empty in the happy path."
     },
     "total_duration_ms": {
@@ -88,8 +118,27 @@
     },
     "warnings": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Non-fatal warning messages; empty if none."
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

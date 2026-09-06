@@ -19,6 +19,8 @@ import dataclasses
 import difflib
 from typing import TYPE_CHECKING
 
+import pglast.parser
+
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
 from confiture.core.function_signature_parser import FunctionSignatureParser
 from confiture.exceptions import GitError
@@ -183,6 +185,23 @@ class FunctionBodyChecker:
                 content = mig_path.read_text()
             except OSError:
                 continue
-            for sig, _body in self._parser.parse_with_bodies(content):
-                carried.add(sig.function_key())
+            for sql in _sql_units(mig_path, content):
+                try:
+                    pairs = self._parser.parse_with_bodies(sql)
+                except pglast.parser.ParseError:
+                    # A migration pglast rejects carries nothing here; the
+                    # migration's own checks report it as unparseable.
+                    continue
+                carried.update(sig.function_key() for sig, _body in pairs)
         return carried
+
+
+def _sql_units(path: Path, content: str) -> list[str]:
+    """The SQL a migration file carries: the file itself, or a ``.py`` file's snippets."""
+    if path.suffix != ".py":
+        return [content]
+    from confiture.core.idempotency.python_migration_extractor import (  # noqa: PLC0415
+        extract_sql_from_python_source,
+    )
+
+    return [snippet.sql for snippet in extract_sql_from_python_source(content, path=path).snippets]

@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from confiture.core.sql_lexer import strip_comments
+
 # ── Identifier pattern (bare or double-quoted, optionally schema-qualified) ──
 
 _IDENT = r'(?:"[^"]+"|[A-Za-z_]\w*)'
@@ -109,14 +111,8 @@ def _split_columns(cols: str) -> list[str]:
 
 
 def _strip_comments(line: str) -> str:
-    """Strip line comments and block comments from a line for matching purposes."""
-    # Remove block comments
-    result = re.sub(r"/\*.*?\*/", "", line)
-    # Remove line comments
-    idx = result.find("--")
-    if idx >= 0:
-        result = result[:idx]
-    return result
+    """Strip comments from a line for matching purposes (the one lexer)."""
+    return strip_comments(line)
 
 
 def _find_create_table_blocks(sql: str) -> list[tuple[int, int, str]]:

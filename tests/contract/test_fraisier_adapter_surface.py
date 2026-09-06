@@ -265,10 +265,14 @@ def test_version_output_shape_matches_adapter_parser() -> None:
     """`confiture --version` ends in the version token (adapter parse_version)."""
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0, result.output
-    # The adapter takes the last whitespace-separated token as the version.
-    tokens = _ANSI.sub("", result.output).split()
+    # The adapter (fraisier doctor) reads the first line only and takes its last
+    # whitespace-separated token as the version.
+    lines = _ANSI.sub("", result.output).strip().splitlines()
+    tokens = lines[0].split()
     assert tokens[0] == "confiture"
     assert tokens[-1][0].isdigit(), f"version token not numeric: {tokens[-1]!r}"
+    # 0.50.0 appends the parser line; the adapter never reads past line one.
+    assert lines[1].startswith("parser: pglast "), lines
 
 
 # ---------------------------------------------------------------------------

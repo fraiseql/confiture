@@ -86,20 +86,6 @@ def test_statement_safety(name: str) -> None:
     assert verdicts == {safety}, f"{name}: {verdicts} != {{{safety!r}}}"
 
 
-@pytest.mark.parametrize("name", list(COVERAGE))
-def test_backends_agree(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """pglast and regex reach the same verdict for every row."""
-    sql, _safety = COVERAGE[name]
-    ast_ops = OperationClassifier().classify(sql)
-
-    monkeypatch.setenv("CONFITURE_REPLICA_FORCE_REGEX", "1")
-    regex_ops = OperationClassifier().classify(sql)
-
-    assert [classify_replica_safety(op).safety for op in ast_ops] == [
-        classify_replica_safety(op).safety for op in regex_ops
-    ], name
-
-
 _PLPGSQL_BODY = """\
 CREATE OR REPLACE FUNCTION fn_user() RETURNS int AS $$
 BEGIN
@@ -110,8 +96,7 @@ $$ LANGUAGE plpgsql;
 """
 
 
-@pytest.mark.parametrize("force_regex", [False, True], ids=["ast", "regex"])
-def test_function_body_is_one_statement(force_regex: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_function_body_is_one_statement() -> None:
     """A dollar-quoted body is not split on its internal semicolons.
 
     The regex backend used to shred it and silently drop the fragments. Now that
@@ -119,8 +104,6 @@ def test_function_body_is_one_statement(force_regex: bool, monkeypatch: pytest.M
     UNCLASSIFIED finding for every function in a migration — trading #206's
     false-safe for exactly the false-unsafe wave it warned about.
     """
-    if force_regex:
-        monkeypatch.setenv("CONFITURE_REPLICA_FORCE_REGEX", "1")
 
     ops = OperationClassifier().classify(_PLPGSQL_BODY)
     assert len(ops) == 1, [type(op).__name__ for op in ops]

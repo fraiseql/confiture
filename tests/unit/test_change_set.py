@@ -74,27 +74,6 @@ def test_taxonomy_ast(sql: str, kind: str, tier: RiskTier) -> None:
     assert (entry.kind, entry.tier) == (kind, tier)
 
 
-@pytest.mark.parametrize(("sql", "kind", "tier"), _TAXONOMY)
-def test_taxonomy_regex_backend_agrees(sql: str, kind: str, tier: RiskTier, monkeypatch) -> None:
-    """An install without the [ast] extra must classify identically."""
-    monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
-    (entry,) = classify_statements(sql)
-    assert (entry.kind, entry.tier) == (kind, tier)
-
-
-@pytest.mark.parametrize("sql", [case[0] for case in _TAXONOMY])
-def test_the_two_backends_produce_identical_entries(sql: str, monkeypatch) -> None:
-    """Parity on the whole entry, not just the tier.
-
-    `object` and `detail` are what the operator reads; an install without the
-    [ast] extra must not render a different plan.
-    """
-    via_ast = classify_statements(sql, migration="20260806120000", source="m.up.sql")
-    monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
-    via_regex = classify_statements(sql, migration="20260806120000", source="m.up.sql")
-    assert via_ast == via_regex, sql
-
-
 def test_alter_column_type_is_deliberately_unclassified() -> None:
     """Narrowing is irreversible, widening is reversible, and preflight cannot tell.
 
@@ -107,60 +86,42 @@ def test_alter_column_type_is_deliberately_unclassified() -> None:
     assert entry.tier is None
 
 
-@pytest.mark.parametrize("force_regex", [False, True])
-def test_an_unrecognised_statement_still_produces_an_entry(force_regex, monkeypatch) -> None:
+def test_an_unrecognised_statement_still_produces_an_entry() -> None:
     """Silently dropping a statement would make a dangerous migration read as empty."""
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
     entries = classify_statements("DO $$ BEGIN NULL; END $$;")
     assert entries, "an unclassifiable statement must not vanish"
     assert all(e.tier is None for e in entries)
 
 
-@pytest.mark.parametrize("force_regex", [False, True])
 @pytest.mark.parametrize(
     "sql",
     ["BEGIN;", "COMMIT;", "SET search_path TO public;", "LOCK TABLE t;", "ANALYZE t;"],
 )
-def test_statements_that_change_nothing_are_not_entries(sql, force_regex, monkeypatch) -> None:
+def test_statements_that_change_nothing_are_not_entries(sql) -> None:
     """Transaction/session control is not a schema change; emitting it would deny every deploy."""
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
     assert classify_statements(sql) == []
 
 
-@pytest.mark.parametrize("force_regex", [False, True])
-def test_dollar_quoted_body_is_one_statement(force_regex, monkeypatch) -> None:
+def test_dollar_quoted_body_is_one_statement() -> None:
     """A `;` inside a function body must not split the statement (regex backend)."""
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
     sql = "CREATE OR REPLACE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql;"
     entries = classify_statements(sql)
     assert [(e.kind, e.tier) for e in entries] == [("replace_function", RiskTier.REVERSIBLE)]
 
 
-@pytest.mark.parametrize("force_regex", [False, True])
-def test_object_is_schema_qualified(force_regex, monkeypatch) -> None:
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
+def test_object_is_schema_qualified() -> None:
     (entry,) = classify_statements("ALTER TABLE tb_user ADD COLUMN nickname text;")
     assert entry.object == "public.tb_user.nickname"
     (qualified,) = classify_statements("ALTER TABLE app.tb_user DROP COLUMN x;")
     assert qualified.object == "app.tb_user.x"
 
 
-@pytest.mark.parametrize("force_regex", [False, True])
-def test_create_index_object_names_the_index(force_regex, monkeypatch) -> None:
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
+def test_create_index_object_names_the_index() -> None:
     (entry,) = classify_statements("CREATE INDEX idx_placed_at ON tb_order (placed_at);")
     assert entry.object == "public.tb_order.idx_placed_at"
 
 
-@pytest.mark.parametrize("force_regex", [False, True])
-def test_multiple_objects_in_one_drop_each_get_an_entry(force_regex, monkeypatch) -> None:
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
+def test_multiple_objects_in_one_drop_each_get_an_entry() -> None:
     entries = classify_statements("DROP TABLE a, b;")
     assert [e.object for e in entries] == ["public.a", "public.b"]
 
@@ -174,11 +135,8 @@ def test_multiple_objects_in_one_drop_each_get_an_entry(force_regex, monkeypatch
         ("DROP SCHEMA app;", "app"),
     ],
 )
-@pytest.mark.parametrize("force_regex", [False, True])
-def test_three_part_names_keep_their_schema(sql, expected, force_regex, monkeypatch) -> None:
+def test_three_part_names_keep_their_schema(sql, expected) -> None:
     """`schema.table.child` must not report the *table* as the schema."""
-    if force_regex:
-        monkeypatch.setattr("confiture.core.change_set._HAS_PGLAST", False)
     (entry,) = classify_statements(sql)
     assert entry.object == expected
 

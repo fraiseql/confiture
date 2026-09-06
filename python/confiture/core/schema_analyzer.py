@@ -11,7 +11,8 @@ from enum import Enum
 from typing import Any
 
 import psycopg
-import sqlparse
+
+from confiture.core.sql_lexer import split_statements, statement_type
 
 logger = logging.getLogger(__name__)
 
@@ -271,14 +272,7 @@ class SchemaAnalyzer:
         issues: list[ValidationIssue] = []
         schema_info = self.get_schema_info()
 
-        # Parse SQL into statements
-        statements = sqlparse.parse(sql)
-
-        for i, stmt in enumerate(statements, 1):
-            stmt_str = str(stmt).strip()
-            if not stmt_str or stmt_str == ";":
-                continue
-
+        for i, stmt_str in enumerate(split_statements(sql), 1):
             stmt_issues = self._validate_statement(stmt_str, schema_info, i)
             issues.extend(stmt_issues)
 
@@ -366,12 +360,10 @@ class SchemaAnalyzer:
         issues: list[ValidationIssue] = []
 
         # Parse SQL
-        parsed = sqlparse.parse(sql)
-        if not parsed:
+        if not sql.strip():
             return issues
 
-        stmt = parsed[0]
-        stmt_type = stmt.get_type()
+        stmt_type = statement_type(sql)
 
         if stmt_type == "CREATE":
             issues.extend(self._validate_create(sql, schema, line_num))

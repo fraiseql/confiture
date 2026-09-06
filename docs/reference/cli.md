@@ -1512,7 +1512,7 @@ result = m.preflight(versions=["20260301", "20260303"])
 | `VACUUM` | Cannot run inside transaction |
 | `CLUSTER` | Cannot run inside transaction |
 
-Detection uses **pglast** (PostgreSQL's C parser) when available, with a **regex fallback** for environments without the `[ast]` extra.
+Detection uses **pglast** (PostgreSQL's C parser), a dependency since 0.50.0; a file it cannot parse is reported as `IDEM_UNPARSEABLE` rather than scanned by anything less exact.
 
 #### CI/CD Integration
 

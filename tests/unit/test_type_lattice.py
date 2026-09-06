@@ -118,7 +118,6 @@ def test_narrowing_is_not_symmetric_with_widening() -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("force_regex", [False, True], ids=["ast", "regex"])
 @pytest.mark.parametrize(
     ("sql", "expected"),
     [
@@ -129,14 +128,9 @@ def test_narrowing_is_not_symmetric_with_widening() -> None:
         ("ALTER TABLE t ALTER COLUMN c TYPE integer USING c::integer;", "integer"),
     ],
 )
-def test_classifier_carries_new_type(
-    sql: str, expected: str, force_regex: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_classifier_carries_new_type(sql: str, expected: str) -> None:
     """Both backends record the target type; the parsed form must agree."""
     from confiture.core.replica.classifier import OperationClassifier
-
-    if force_regex:
-        monkeypatch.setenv("CONFITURE_REPLICA_FORCE_REGEX", "1")
 
     [op] = OperationClassifier().classify(sql)
     assert parse_type(op.new_type) == parse_type(expected)

@@ -338,29 +338,25 @@ wheels = [
 
 [[package]]
 name = "fraiseql-confiture"
-version = "0.49.0"
+version = "0.50.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
+    { name = "pglast" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "sqlglot" },
-    { name = "sqlparse" },
     { name = "typer" },
 ]
 
 [package.optional-dependencies]
-ast = [
-    { name = "pglast" },
-]
 dev = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "maturin" },
-    { name = "pglast" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -404,8 +400,7 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'notifications'", specifier = ">=3.1" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4" },
     { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.7.0" },
-    { name = "pglast", marker = "extra == 'ast'", specifier = ">=6.0" },
-    { name = "pglast", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pglast", specifier = ">=6.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.1.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
@@ -423,7 +418,6 @@ requires-dist = [
     { name = "rich", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
     { name = "sqlglot", specifier = ">=28.0" },
-    { name = "sqlparse", specifier = ">=0.5.0" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.7" },
     { name = "typer", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'mcp-http'", specifier = ">=0.29" },
@@ -1365,15 +1359,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/04/1d/b1380b3ee8fb63c50d7507e956a1228ddefff1a2601d79806c998ef6547b/sqlglot-30.9.0.tar.gz", hash = "sha256:20bed04b6482bf13560206cae517f451f46c321e04956ad71271ed1f12ce8802", size = 5885862, upload-time = "2026-06-04T15:33:52.268Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/4c/41b222c130950a077e1a0ba311df84a29b818db7c136ecc1aafbfad42e26/sqlglot-30.9.0-py3-none-any.whl", hash = "sha256:59b5f74f4d391e32e6980e8cd23cca8d47beac3c0140b711ead9ed05a824a8b5", size = 695762, upload-time = "2026-06-04T15:33:49.526Z" },
-]
-
-[[package]]
-name = "sqlparse"
-version = "0.5.5"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/90/76/437d71068094df0726366574cf3432a4ed754217b436eb7429415cf2d480/sqlparse-0.5.5.tar.gz", hash = "sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e", size = 120815, upload-time = "2025-12-19T07:17:45.073Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/4b/359f28a903c13438ef59ebeee215fb25da53066db67b305c125f1c6d2a25/sqlparse-0.5.5-py3-none-any.whl", hash = "sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba", size = 46138, upload-time = "2025-12-19T07:17:46.573Z" },
 ]
 
 [[package]]

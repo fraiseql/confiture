@@ -138,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv pip install --system "fraiseql-confiture[ast]"
+      - run: uv pip install --system fraiseql-confiture
       - name: Restore production snapshot to preflight DB
         run: ./scripts/restore-snapshot.sh   # your own; pg_restore from S3/GCS
       - name: Confiture preflight
@@ -161,7 +161,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv pip install --system "fraiseql-confiture[ast]"
+      - run: uv pip install --system fraiseql-confiture
       # No YAML needed in CI — the migrate family reads DATABASE_URL directly
       # (or pass --database-url "$DSN"). See the connection-source docs below.
       - run: confiture migrate up
@@ -183,13 +183,13 @@ Exit codes are a documented stability contract — see [the exit-code reference]
 
 ## Python project snippet
 
-Add Confiture as a dev dependency. The `[ast]` extra pulls in `pglast` for full PostgreSQL parsing — recommended for schemas with bulk seed data.
+Add Confiture as a dev dependency. `pglast` (PostgreSQL's own parser) comes with it since 0.50.0.
 
 ```toml
 # pyproject.toml
 [dependency-groups]
 dev = [
-  "fraiseql-confiture[ast]>=0.9",
+  "fraiseql-confiture>=0.50",
   "pytest>=8",
 ]
 ```

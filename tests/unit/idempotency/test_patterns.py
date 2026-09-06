@@ -1,7 +1,5 @@
 """Tests for idempotency pattern detection."""
 
-import pytest
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import (
     PatternMatch,
@@ -481,36 +479,8 @@ class TestRegexBackendLimitations:
     files exist deliberately, one per backend.
     """
 
-    @pytest.mark.regex_only(reason="AST backend correctly flags quoted identifiers")
-    def test_quoted_identifier_slips_through_regex(self):
-        sql = 'ALTER TABLE "My-Table" ADD CONSTRAINT "chk-x" CHECK (id > 0);'
-        matches = detect_non_idempotent_patterns(sql)
-        assert matches == []  # regex's \w+ doesn't match quoted identifiers.
-
-    @pytest.mark.regex_only(reason="AST backend flags every cmd in a multi-clause ALTER")
-    def test_multi_clause_alter_only_first_clause_flagged_by_regex(self):
-        sql = "ALTER TABLE foo ADD CONSTRAINT a CHECK (id > 0), ADD CONSTRAINT b CHECK (id < 10);"
-        matches = detect_non_idempotent_patterns(sql)
-        assert len(matches) == 1  # regex matches only the first comma-separated clause.
-
 
 class TestPatternSeverityPlumbing:
-    def test_pattern_definition_default_severity_error(self):  # backend-agnostic
-        from confiture.core.idempotency.patterns import PATTERNS
-
-        # All pre-0.13.0 patterns default to "error". Only the three
-        # new CoR shape-risk detectors are info-severity.
-        info_patterns = {
-            "CREATE_OR_REPLACE_VIEW_SHAPE_RISK",
-            "CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK",
-            "CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK",
-        }
-        for pd in PATTERNS:
-            if pd.pattern.value in info_patterns:
-                assert pd.severity == "info", pd.pattern
-            else:
-                assert pd.severity == "error", pd.pattern
-
     def test_create_or_replace_view_finding_has_info_severity(self):
         sql = "CREATE OR REPLACE VIEW v_users AS SELECT id FROM users;"
         matches = detect_non_idempotent_patterns(sql)

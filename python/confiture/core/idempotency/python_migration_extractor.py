@@ -95,6 +95,7 @@ class WarningKind(Enum):
     EXECUTE_FILE_MISSING = "execute_file_missing"
     EXECUTE_FILE_ESCAPED = "execute_file_escaped"
     SYNTAX_ERROR = "syntax_error"
+    UNPARSEABLE_SQL = "unparseable_sql"
 
 
 @dataclass(frozen=True)

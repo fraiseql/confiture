@@ -2,10 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-list-patterns.schema.json",
   "title": "confiture migrate validate --list-patterns --format json",
-  "description": "Machine-readable catalog of every idempotency detection pattern. Read-only — no DB connection, no config file, no migrations directory required. Stable contract: frozen at `version: \"1\"`.",
+  "description": "Machine-readable catalog of every idempotency detection pattern. Read-only \u2014 no DB connection, no config file, no migrations directory required. Stable contract: frozen at `version: \"1\"`.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "patterns", "hints"],
+  "required": [
+    "version",
+    "patterns",
+    "hints"
+  ],
   "properties": {
     "version": {
       "type": "string",
@@ -29,7 +33,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "IdempotencyPattern enum name. Stable identifier — safe to depend on."
+            "description": "IdempotencyPattern enum name. Stable identifier \u2014 safe to depend on."
           },
           "description": {
             "type": "string",
@@ -37,14 +41,20 @@
           },
           "severity": {
             "type": "string",
-            "enum": ["error", "info"]
+            "enum": [
+              "error",
+              "info"
+            ]
           },
           "has_skip_regex": {
             "type": "boolean",
             "description": "True when the validator recognises an idempotent form for this pattern (e.g. CREATE TABLE IF NOT EXISTS)."
           },
           "skip_hint": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Human-friendly text describing the idempotent form (e.g. \"CREATE TABLE IF NOT EXISTS\"). NULL when has_skip_regex is false."
           },
           "has_auto_fix": {
@@ -58,6 +68,25 @@
         }
       }
     },
-    "hints": { "$ref": "_common.schema.json#/$defs/HintsArray" }
+    "hints": {
+      "$ref": "_common.schema.json#/$defs/HintsArray"
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
   }
 }

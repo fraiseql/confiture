@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar
 
+import pglast
+
 
 class MigrationAnalyzer:
     """Analyzes migration SQL for non-transactional statements.
@@ -89,12 +91,7 @@ class MigrationAnalyzer:
 
         Returns empty list if all statements are transactional.
         """
-        try:
-            import pglast  # noqa: PLC0415
-
-            return self._analyze_pglast(sql, pglast)
-        except ImportError:
-            return self._analyze_regex(sql)
+        return self._analyze_pglast(sql, pglast)
 
     def _analyze_pglast(self, sql: str, pglast: Any) -> list[str]:
         """AST-based detection using PostgreSQL's own parser."""
@@ -137,20 +134,4 @@ class MigrationAnalyzer:
             elif node_type in self._NON_TXN_NODE_TYPES:
                 results.append(node_type.replace("Stmt", "").upper())
 
-        return results
-
-    def _analyze_regex(self, sql: str) -> list[str]:
-        """Regex-based fallback when pglast is unavailable.
-
-        Note: This path cannot distinguish statements inside dollar-quoted
-        function bodies from top-level statements. Use pglast for authoritative
-        results (install with ``pip install "fraiseql-confiture[ast]"``).
-        """
-        results: list[str] = []
-        for pattern, template in self._NON_TXN_PATTERNS:
-            for match in pattern.finditer(sql):
-                if "{0}" in template:
-                    results.append(template.format(match.group(1)))
-                else:
-                    results.append(template)
         return results

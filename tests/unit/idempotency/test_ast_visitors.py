@@ -5,7 +5,6 @@ behave identically across backends. This file holds tests for behaviors
 that are only correct on the AST backend — specifically the bugs and
 limitations issue #122 closes.
 
-Every test pins ``CONFITURE_IDEMPOTENCY_FORCE_REGEX=0`` (the default)
 and is skipped under the regex backend; the regex-only counterparts
 (in :class:`test_patterns.TestPhase03KnownLimitations`) document the
 opposite outcome.
@@ -13,16 +12,11 @@ opposite outcome.
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
 
 # These tests assert behavior that requires the AST backend; they skip
 # under the regex run instead of running with backwards assertions.
-pytestmark = pytest.mark.ast_only(
-    reason="AST-only behavior — regex backend has the documented limitation"
-)
 
 
 class TestIssue122Bug1:

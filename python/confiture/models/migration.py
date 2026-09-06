@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg
 
+from confiture.core.sql_lexer import split_statements
+
 if TYPE_CHECKING:
     from confiture.core.hooks import Hook
     from confiture.core.preconditions import Precondition
@@ -401,10 +403,7 @@ class SQLMigration(Migration):
         Returns:
             List of SQL statements parsed from up_sql
         """
-        import sqlparse
-
-        statements = sqlparse.split(self.up_sql)
-        return [stmt.strip() for stmt in statements if stmt.strip()]
+        return split_statements(self.up_sql)
 
     def up(self) -> None:
         """Apply the migration by executing up_sql."""

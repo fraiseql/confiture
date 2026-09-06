@@ -11,6 +11,7 @@ from typing import Literal
 from rich.console import Console
 from rich.table import Table
 
+from confiture.core.parser_info import parser_stamp
 from confiture.models.lint import LintReport, LintSeverity
 
 
@@ -146,6 +147,7 @@ def format_json(report: LintReport) -> str:
             ],
         },
     }
+    data["parser"] = parser_stamp()
     return json.dumps(data, indent=2)
 
 

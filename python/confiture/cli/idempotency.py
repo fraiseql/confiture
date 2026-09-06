@@ -52,6 +52,7 @@ def _collect_idempotency_report(
     """
     from confiture.core.idempotency.models import IdempotencyReport
     from confiture.core.idempotency.python_migration_extractor import (
+        ExtractionWarning,
         extract_sql_from_python_migration,
         extract_sql_from_python_source,
     )
@@ -70,6 +71,7 @@ def _collect_idempotency_report(
             combined.add_file_scanned(scanned)
         for violation in file_report.violations:
             combined.add_violation(violation)
+        combined.warnings.extend(file_report.warnings)
 
     for py_path in sorted(py_files):
         if py_path in staged_content:
@@ -87,6 +89,17 @@ def _collect_idempotency_report(
             for violation in snippet_report.violations:
                 violation.source_line = snippet.source_line
                 combined.add_violation(violation)
+            for warning in snippet_report.warnings:
+                combined.warnings.append(
+                    ExtractionWarning(
+                        kind=warning.kind,
+                        source_file=py_path,
+                        source_line=snippet.source_line,
+                        message=warning.message,
+                        reason_code=warning.reason_code,
+                        remedy=warning.remedy,
+                    )
+                )
 
     combined.scanned_files.sort()
     return combined
@@ -188,20 +201,11 @@ def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
         A ``meta`` dict the caller folds into its JSON payload. Always
         contains ``{"backend": "ast" | "regex"}``.
     """
-    from confiture.core.idempotency.patterns import is_pglast_available
-
-    backend = "ast" if is_pglast_available() else "regex"
+    # One parser (D13): the AST backend is the only backend. ``backend`` stays in
+    # ``meta`` because the payload contract carries it.
     if format_output == "text":
-        if backend == "ast":
-            console.print("[green]✓ AST backend (pglast)[/green]")
-        else:
-            # Escape the [ast] brackets so Rich doesn't read them as markup.
-            console.print(
-                "[yellow]⚠ Regex fallback — install with "
-                '`pip install "fraiseql-confiture\\[ast]"` '
-                "for AST-backed detection[/yellow]"
-            )
-    return {"backend": backend}
+        console.print("[green]✓ AST backend (pglast)[/green]")
+    return {"backend": "ast"}
 
 
 def _read_staged_content(paths: list[Path]) -> dict[Path, str]:

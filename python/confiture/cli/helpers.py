@@ -20,6 +20,7 @@ from confiture.core.linting.schema_linter import (
 from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
+from confiture.core.parser_info import parser_stamp
 from confiture.core.url_redaction import redact_url as redact_url  # re-export (layering)
 from confiture.exceptions import ConfigurationError
 from confiture.models.lint import LintReport, LintSeverity, Violation
@@ -297,7 +298,9 @@ def _output_json(data: dict[str, Any], output_file: Path | None, console: Consol
         output_file: Optional file to write to
         console: Console for output
     """
-    json_str = json.dumps(data, indent=2)
+    if isinstance(data, dict) and "parser" not in data:
+        data = {**data, "parser": parser_stamp()}
+    json_str = json.dumps(data, indent=2, default=str)
     if output_file:
         output_file.write_text(json_str)
         console.print(f"[green]✅ Output written to {output_file}[/green]")

@@ -5,6 +5,93 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.0] - 2026-09-06
+
+Phase 05 of the 2026-09-06 review: analyzer honesty and one parser. pglast is
+the parser; a file it cannot parse is a finding, never a clean result.
+
+### Changed
+
+- **Two modules become packages.** `core/idempotency/static_eval` (values,
+  scope, str_methods, file_io, evaluator) and `core/change_set` (models, naming,
+  walker), each module under 600 lines and every public name importable from
+  the package as before. The change set's leftover regex tables went with it.
+- **Quoted identifiers keep their case.** The change set and the replica
+  classifier lower-cased every name a second time, so `CREATE TABLE "MyTable"`
+  was reported as `public.mytable` — a different relation. pglast has already
+  folded unquoted identifiers; the analyzers now report a name exactly as it
+  parsed. A shape table (`tests/fixtures/sql_shapes/`) pins what every analyzer
+  says about quoted, spaced and semicolon-bearing names, unnamed indexes,
+  qualified names, DDL inside function bodies, nested dollar tags and literals
+  containing `--`.
+- **One lexer, and `sqlparse` is gone.** Ten hand-written scanners split
+  statements, skipped comments and matched dollar tags across the codebase and
+  disagreed on `"a;b"` identifiers, `E'\';'` literals and nested tags.
+  `core/sql_lexer.py` is the one place now, built on libpg_query's own scanner
+  and parser: statement splitting (which works on SQL PostgreSQL would reject),
+  comment stripping, parsing with locations, and a statement's verb. The differ
+  reads indexes, enum types, sequences and `ALTER TABLE … ADD CONSTRAINT` from
+  the AST instead of regexes, so a commented-out `CREATE INDEX` or `CREATE TYPE`
+  is nothing, not a change; `ON DELETE SET NULL` is reported as such (the old
+  code map was wrong). Function bodies come from the AST too. `sqlparse` is no
+  longer a dependency. Dry-run statement text no longer carries the terminating
+  semicolon.
+- ⚠️ **One parser (D13).** The regex idempotency detector, the regex replica
+  classifier, the regex change-set walker, the differ's sqlparse `CREATE TABLE`
+  path, the signature parser's and analyzer's regex fallbacks and the grant
+  extractor's sqlparse backend are deleted, with every switch that selected
+  them: the `CONFITURE_IDEMPOTENCY_FORCE_REGEX` and `CONFITURE_REPLICA_FORCE_REGEX`
+  environment variables, the module flags, and the `[ast]`-absent skip notices.
+  A guard test keeps the count at zero. Every DDL question now has one answer,
+  and a file pglast rejects is reported (see above) instead of being read by
+  something less exact. `migrate validate --list-patterns` publishes the same
+  catalog from a data table; `meta.backend` is always `"ast"`.
+- ⚠️ **The default lint rules see schema-qualified DDL (#216).** `naming_001`,
+  `naming_002`, `pk_001` and `doc_001` matched `CREATE TABLE (\w+)`, so on
+  `CREATE TABLE tenant.tb_x (…)` they captured the schema, found no body and
+  reported nothing — a clean report for a schema they had not read. The rules
+  now read a pglast-built inventory (`core/linting/inventory.py`): tables with
+  their columns as written, primary keys from column or table constraints and
+  from `ALTER TABLE … ADD PRIMARY KEY`, partitions (which inherit their key),
+  and `COMMENT ON TABLE` attached to the table it names — `COMMENT ON TABLE
+  tenant.tb_thing` no longer documents `tenant.tb_other`. `sec_001` reads
+  column names from the same inventory instead of scanning text near the words
+  `CREATE TABLE`. Quoted identifiers (`"UserAccounts"`) are judged as written.
+  Violations name the table as written (`tenant.tb_other`) and carry the line.
+- ⚠️ **Unparseable is a finding.** A file pglast rejected used to make the
+  idempotency check swap to its regex backend and report *ok*, made
+  `migrate preflight` crash, left `lint` and its AST-backed rules clean, and let
+  the change set read as "nothing changes". Each surface now says what happened:
+  `migrate validate --idempotent` records one `IDEM_UNPARSEABLE` warning with
+  the line (the verdict is `unverified`, and `--fail-on-unanalyzable` fails the
+  run), `migrate preflight` reports `PFLIGHT_UNPARSEABLE` and `window_safe` is
+  `false`, `lint` and the `func_001` / `sec_002` / `own_001` / `own_002` rules
+  emit an `UNPARSEABLE` notice, and the change set holds one unclassified entry
+  for the file. `confiture --version` prints a second line naming the parser —
+  `parser: pglast 8.4 (PostgreSQL 18 grammar)` — and every JSON payload and
+  error envelope carries `parser: {"pglast": "8.4", "pg_major": 18}` (the JSON
+  schemas declare it). Closes #210.
+- **pglast reads the raw file.** The idempotency validator blanked `--` to the
+  end of the line and masked `$tag$…$tag$` with a tag-blind regex before
+  parsing. `'a--b'` lost its closing quote, a `$q$` nested in a `$body$` was
+  cut in two, pglast failed on the corrupted text and the detector swapped to
+  the regex backend without a word — reporting a `CREATE TABLE` that lives
+  inside a function body, or missing one that followed a literal on the same
+  line. The validator now hands pglast the untouched text and takes line
+  numbers from its statement locations; the masking survives only inside the
+  `CONFITURE_IDEMPOTENCY_FORCE_REGEX` escape hatch, which goes with it.
+- ⚠️ **pglast is a dependency (D13).** A standard install classified migrations
+  with a regex backend while reporting a version indistinguishable from an
+  AST-capable one (#210), and fraisier's deploy-time `preflight` — the run that
+  decides `window_safe` — depended on `fraiseql-confiture` without `[ast]`.
+  `pglast>=6.0` is now in the package's dependencies (57 wheels across CPython
+  3.11–3.14, Linux x86_64/aarch64/musl, macOS and Windows); the `[ast]` extra
+  is an empty alias for one release and is removed in 1.0.0. No module guards
+  the import any more (a test scans for `try: import pglast` and
+  `find_spec("pglast")`), and a pglast whose enum surface confiture cannot
+  resolve raises `CONFIG_011` naming the installed version instead of silently
+  falling back to regexes.
+
 ## [0.49.0] - 2026-09-06
 
 Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
