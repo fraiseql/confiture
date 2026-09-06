@@ -310,7 +310,7 @@ class Migrator:
         ``applied_by`` defaults to the connection's ``current_user`` when None;
         pre-0.17.0 rows keep ``applied_by IS NULL`` as a documented invariant.
         """
-        apply_impl.record_migration(
+        apply_impl.record_applied(
             self, migration, execution_time_ms, migration_file, applied_by=applied_by
         )
 

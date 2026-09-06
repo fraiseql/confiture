@@ -20,6 +20,7 @@ from typing import Any, Literal
 
 import sqlparse
 
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.migrator import _version_from_migration_filename
 from confiture.exceptions import VerifyFileError
 
@@ -205,9 +206,7 @@ class MigrationVerifier:
         Returns:
             Human-readable name (everything after the version prefix)
         """
-        stem = path.name[: -len(".verify.sql")]
-        parts = stem.split("_", 1)
-        return parts[1] if len(parts) > 1 else stem
+        return parse_migration_filename(path.name)[1]
 
 
 def _is_truthy(value: Any) -> bool:

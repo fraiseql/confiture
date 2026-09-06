@@ -16,6 +16,7 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.introspector import SchemaIntrospector
 from confiture.models.introspection import IntrospectionResult
 
@@ -108,7 +109,7 @@ class BaselineDetector:
 
         snapshots = []
         for path in sorted(self.snapshots_dir.glob("*.sql"), reverse=True):
-            version = path.name.split("_")[0]
+            version = parse_migration_filename(path.name)[0]
             normalised = self.normalize_schema(path.read_text())
             snapshots.append((version, normalised))
         return snapshots

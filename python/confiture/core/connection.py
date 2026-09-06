@@ -196,7 +196,10 @@ def load_migration_module(migration_file: Path) -> ModuleType:
     """
     try:
         # Create module spec
-        spec = importlib.util.spec_from_file_location(migration_file.stem, migration_file)
+        # A namespaced module name: a migration called ``json.py`` must not
+        # replace the stdlib ``json`` in ``sys.modules``.
+        module_name = f"confiture_migration_{migration_file.stem}"
+        spec = importlib.util.spec_from_file_location(module_name, migration_file)
         if spec is None or spec.loader is None:
             raise MigrationError(
                 f"Cannot load migration: {migration_file}",
@@ -205,7 +208,7 @@ def load_migration_module(migration_file: Path) -> ModuleType:
 
         # Load module
         module = importlib.util.module_from_spec(spec)
-        sys.modules[migration_file.stem] = module
+        sys.modules[module_name] = module
         spec.loader.exec_module(module)
 
         return module

@@ -36,11 +36,17 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.preconditions import Precondition
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
+
+
+def _down_for(up_file: Path) -> Path:
+    """The ``.down.sql`` twin of an ``.up.sql`` path."""
+    return up_file.with_name(up_file.name[: -len(".up.sql")] + ".down.sql")
 
 
 def _detect_transactional(up_file: Path) -> bool:
@@ -104,53 +110,38 @@ class FileSQLMigration(Migration):
         To create a SQL migration, simply create the .up.sql and .down.sql files.
     """
 
+    # ``from_files`` subclasses set these at class level. The base class is only
+    # instantiated directly with explicit paths, which fill them per instance;
+    # the placeholders satisfy ``Migration.__init__``'s class-attribute check.
+    version: str = ""
+    name: str = ""
+    up_file: Path
+    down_file: Path
+
     def __init__(
         self,
         connection: psycopg.Connection,
-        up_file: Path,
-        down_file: Path,
+        up_file: Path | None = None,
+        down_file: Path | None = None,
     ):
-        """Initialize file-based SQL migration.
+        """Bind a connection; a subclass from :meth:`from_files` carries the files.
 
-        Args:
-            connection: psycopg3 database connection
-            up_file: Path to the .up.sql file
-            down_file: Path to the .down.sql file
+        Constructing ``FileSQLMigration`` directly with the two paths sets
+        version, name and the transactional flag on the instance from the
+        ``.up.sql`` file.
 
         Raises:
-            FileNotFoundError: If either SQL file doesn't exist
+            FileNotFoundError: If either file does not exist.
         """
-        # Extract version and name from filename before calling super().__init__
-        # Filename format: 20260228120532_move_catalog_tables.up.sql
-        base_name = up_file.name.replace(".up.sql", "")
-        parts = base_name.split("_", 1)
-
-        # Set class attributes dynamically for this instance
-        # We need to do this before super().__init__ because it validates version/name
-        self.__class__ = type(
-            f"FileSQLMigration_{base_name}",
-            (FileSQLMigration,),
-            {
-                "version": parts[0] if parts else "???",
-                "name": parts[1] if len(parts) > 1 else base_name,
-                "up_file": up_file,
-                "down_file": down_file,
-                # Issue #169 — auto-detect non-transactional SQL so the
-                # migration runs in autocommit instead of failing inside a
-                # SAVEPOINT.
-                "transactional": _detect_transactional(up_file),
-            },
-        )
-
-        self.up_file = up_file
-        self.down_file = down_file
-
-        # Validate files exist
-        if not up_file.exists():
-            raise FileNotFoundError(f"Migration up file not found: {up_file}")
-        if not down_file.exists():
-            raise FileNotFoundError(f"Migration down file not found: {down_file}")
-
+        if up_file is not None:
+            self.up_file = up_file
+            self.down_file = down_file if down_file is not None else _down_for(up_file)
+            self.version, self.name = parse_migration_filename(up_file.name)
+            self.transactional = _detect_transactional(up_file)
+        if not self.up_file.exists():
+            raise FileNotFoundError(f"Migration up file not found: {self.up_file}")
+        if not self.down_file.exists():
+            raise FileNotFoundError(f"Migration down file not found: {self.down_file}")
         super().__init__(connection)
 
     def get_up_sql_statements(self) -> list[str]:
@@ -224,61 +215,17 @@ class FileSQLMigration(Migration):
             >>> migration.up()
         """
         # Extract version and name from filename
-        base_name = up_file.name.replace(".up.sql", "")
-        parts = base_name.split("_", 1)
-        version = parts[0] if parts else "???"
-        name = parts[1] if len(parts) > 1 else base_name
+        version, name = parse_migration_filename(up_file.name)
 
-        # Load preconditions from YAML sidecar if it exists
         up_preconditions: list[Precondition] = []
         down_preconditions: list[Precondition] = []
-
         yaml_sidecar = find_yaml_sidecar(up_file)
         if yaml_sidecar:
             up_preconditions, down_preconditions = load_preconditions_from_yaml(yaml_sidecar)
 
-        # Create a new class dynamically
-        class_name = f"FileSQLMigration_{base_name}"
-
-        def init_method(self: "FileSQLMigration", connection: psycopg.Connection) -> None:
-            self.up_file = up_file
-            self.down_file = down_file
-            self.connection = connection
-
-            # Validate files exist
-            if not up_file.exists():
-                raise FileNotFoundError(f"Migration up file not found: {up_file}")
-            if not down_file.exists():
-                raise FileNotFoundError(f"Migration down file not found: {down_file}")
-
-        def up_method(self: "FileSQLMigration") -> None:
-            sql, changed = strip_transaction_wrappers(self.up_file.read_text(), return_changed=True)
-            if changed:
-                logger.warning(
-                    "Migration %s (%s): stripped BEGIN/COMMIT from .up.sql — "
-                    "confiture manages transactions; omit them from migration files.",
-                    version,
-                    self.up_file.name,
-                )
-            _execute_sql_script(self, sql)
-
-        def down_method(self: "FileSQLMigration") -> None:
-            sql, changed = strip_transaction_wrappers(
-                self.down_file.read_text(), return_changed=True
-            )
-            if changed:
-                logger.warning(
-                    "Migration %s (%s): stripped BEGIN/COMMIT from .down.sql — "
-                    "confiture manages transactions; omit them from migration files.",
-                    version,
-                    self.down_file.name,
-                )
-            _execute_sql_script(self, sql)
-
-        # Create the class
-        new_class = type(
-            class_name,
-            (Migration,),
+        return type(
+            f"FileSQLMigration_{version}_{name}",
+            (FileSQLMigration,),
             {
                 "version": version,
                 "name": name,
@@ -291,13 +238,8 @@ class FileSQLMigration(Migration):
                 # (same analyzer as the static preflight check) so `migrate up`
                 # applies it in autocommit and `preflight --against` skips it.
                 "transactional": _detect_transactional(up_file),
-                "__init__": init_method,
-                "up": up_method,
-                "down": down_method,
             },
         )
-
-        return new_class  # ty: ignore[invalid-return-type]
 
 
 def find_sql_migration_files(migrations_dir: Path) -> list[tuple[Path, Path]]:
@@ -352,9 +294,7 @@ def get_sql_migration_version(up_file: Path) -> str:
         >>> get_sql_migration_version(Path("003_move_tables.up.sql"))
         '003'
     """
-    base_name = up_file.name.replace(".up.sql", "")
-    parts = base_name.split("_", 1)
-    return parts[0] if parts else "???"
+    return parse_migration_filename(up_file.name)[0]
 
 
 def load_preconditions_from_yaml(

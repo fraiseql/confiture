@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from psycopg import sql as pgsql
 
 from confiture.core._migrator import policy as _policy
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
 from confiture.core.checksum import (
     ChecksumConfig,
@@ -221,8 +222,7 @@ class MigratorSession:
                 resolution_hint="Use: with Migrator.from_config(...) as m: ...",
             )
 
-        assert self._config is not None
-        tracking_table = self._config.migration.tracking_table
+        tracking_table = self._migrator.migration_table
 
         # Discover migration files (Python and SQL)
         if not self._migrations_dir.exists():
@@ -233,9 +233,7 @@ class MigratorSession:
                 summary={"applied": 0, "pending": 0, "total": 0},
             )
 
-        py_files = list(self._migrations_dir.glob("*.py"))
-        sql_files = list(self._migrations_dir.glob("*.up.sql"))
-        migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
+        migration_files = self._migrator.find_migration_files(migrations_dir=self._migrations_dir)
 
         if not migration_files:
             table_exists = self._migrator.tracking_table_exists()
@@ -268,12 +266,7 @@ class MigratorSession:
         # Build MigrationInfo list
         infos: list[MigrationInfo] = []
         for mf in migration_files:
-            base_name = mf.stem
-            if base_name.endswith(".up"):
-                base_name = base_name[:-3]
-            parts = base_name.split("_", 1)
-            version = parts[0] if parts else "???"
-            name = parts[1] if len(parts) > 1 else base_name
+            version, name = parse_migration_filename(mf.name)
 
             migration_status = (
                 "applied" if (table_exists and version in applied_versions) else "pending"
@@ -569,7 +562,7 @@ class MigratorSession:
         effective_strict = _policy.resolve_strict_mode(strict_mode, self._config)
         pending_versions: list[str] = []
         for migration_file in pending_files:
-            version, name = _label(migration_file)
+            version, name = parse_migration_filename(migration_file.name)
             pending_versions.append(version)
             emit(on_event, "pending", version=version, name=name)
 
@@ -1548,17 +1541,6 @@ class MigratorSession:
 # Avoid circular import: Migrator is defined in engine.py but MigratorSession
 # references it. We import it here so the type annotation and runtime value work.
 from confiture.core._migrator.engine import Migrator  # noqa: E402
-
-
-def _label(migration_file: Path) -> tuple[str, str]:
-    """``(version, name)`` from a migration filename — ``.py`` or ``.up.sql``."""
-    stem = migration_file.name
-    for suffix in (".up.sql", ".py"):
-        if stem.endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-    version, _, name = stem.partition("_")
-    return version, name
 
 
 def _apply_strict_mode(migration: Any, strict: bool) -> None:

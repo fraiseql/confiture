@@ -24,6 +24,7 @@ from confiture.cli.helpers import (
     is_json,
     resolve_database_url,
 )
+from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.exceptions import ValidationError
@@ -146,9 +147,7 @@ def migrate_status(
             return
 
         # Find migration files (both Python and SQL)
-        py_files = list(migrations_dir.glob("*.py"))
-        sql_files = list(migrations_dir.glob("*.up.sql"))
-        migration_files = sorted(py_files + sql_files, key=lambda f: f.name.split("_")[0])
+        migration_files = discover_migration_files(migrations_dir)
 
         # Check for orphaned SQL files that don't match the naming pattern
         orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
@@ -261,12 +260,7 @@ def migrate_status(
             # Extract version and name from filename
             # Python: "001_add_users.py" -> version="001", name="add_users"
             # SQL: "001_add_users.up.sql" -> version="001", name="add_users"
-            base_name = migration_file.stem
-            if base_name.endswith(".up"):
-                base_name = base_name[:-3]  # Remove ".up" suffix
-            parts = base_name.split("_", 1)
-            version = parts[0] if len(parts) > 0 else "???"
-            name = parts[1] if len(parts) > 1 else base_name
+            version, name = parse_migration_filename(migration_file.name)
 
             # Determine status
             if _db_source and not db_error:
@@ -1475,7 +1469,7 @@ def migrate_generate(
             console.print(f"  Found {len(migration_files)} migration files:")
 
             for f in migration_files:
-                version_str = f.name.split("_")[0]
+                version_str = parse_migration_filename(f.name)[0]
                 console.print(f"    - {f.name} (version: {version_str})")
 
         # Check for duplicate versions (covers both .py and .up.sql files)

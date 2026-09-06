@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
+    parse_migration_filename,
 )
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
 
@@ -100,8 +101,7 @@ def run_preflight(
         if versions is not None and version not in versions:
             continue
         base_name = up_file.name[: -len(".up.sql")]
-        parts = base_name.split("_", 1)
-        name = parts[1] if len(parts) > 1 else base_name
+        _, name = parse_migration_filename(up_file.name)
         down_file = up_file.parent / f"{base_name}.down.sql"
 
         # Analyze non-transactional statements
@@ -128,9 +128,7 @@ def run_preflight(
         version = _version_from_migration_filename(py_file.name)
         if versions is not None and version not in versions:
             continue
-        base_name = py_file.stem
-        parts = base_name.split("_", 1)
-        name = parts[1] if len(parts) > 1 else base_name
+        _, name = parse_migration_filename(py_file.name)
         # Python migrations define down() in-class — assumed reversible
         infos.append(
             MigrationPreflightInfo(

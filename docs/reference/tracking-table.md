@@ -30,7 +30,7 @@ CREATE INDEX idx_tb_confiture_applied_at   ON tb_confiture(applied_at DESC);
 |---|---|---|
 | `id` | `UUID` | External stable identifier. Survives backups, dumps, replication. |
 | `pk_confiture` | `BIGINT` (identity) | Sequential internal key. Use for joins inside the same database. |
-| `slug` | `TEXT` | Human-readable reference (e.g. `add_user_bio`). |
+| `slug` | `TEXT` | Human-readable reference: `<name>_<version>_<YYYYMMDD_HHMMSS>`, plus `_<reason>` for rows not applied by `up()` (`_baseline`, `_reinit`, `_0003_baseline_from_db`). Unique per row because the version is. |
 | `version` | `VARCHAR(255)` | Migration version — `YYYYMMDDHHMMSS` (e.g. `20260520143015`) or the legacy `001`-style. Unique. |
 | `name` | `VARCHAR(255)` | The descriptive part of the filename (the bit after the version). |
 | `applied_at` | `TIMESTAMPTZ` | When the migration was recorded. Defaults to `NOW()`. |

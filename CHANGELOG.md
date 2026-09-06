@@ -67,6 +67,23 @@ engine; what it reports is what happened.
 
 ### Fixed
 
+- **Two same-named migrations in one run are both recorded.** The ledger slug
+  was `<name>_<timestamp to the second>`, so two migrations sharing a name and
+  applied within the same second collided on `slug UNIQUE`. The slug is now
+  `<name>_<version>_<timestamp>[_<reason>]`, written by the one
+  `record_migration()` in `_migrator/apply.py` — `mark_applied`, `reinit` and
+  `baseline-from-db` no longer carry their own INSERTs.
+- **One filename parser, one discovery.** `discovery.parse_migration_filename()`
+  replaces the fourteen `split("_", 1)` copies across the engine, the models,
+  `preflight`, the verifier and the CLI; `session.status()` and the CLI's
+  `migrate status` list the same files `up()` applies (`__init__.py` and
+  `_helper.py` are no longer reported as migrations). `FileSQLMigration.from_files`
+  returns a real `FileSQLMigration` subclass instead of a closure-built class,
+  so `Migrator.dry_run` on a SQL-file migration returns its statements rather
+  than the "no statements" stub. A migration module is loaded as
+  `confiture_migration_<stem>`: a migration named `json.py` no longer replaces
+  the stdlib `json` in `sys.modules`. `SchemaBuilder` loses two unreachable
+  duplicate `include_dirs` branches.
 - **Hooks fire from async code and fail loudly.** `trigger_hook` skipped every
   hook when an event loop was already running, logged and swallowed every hook
   failure, and left a closed loop installed as the current one. Hooks now run

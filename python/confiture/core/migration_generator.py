@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.introspection.differ_sql import DifferSQLGenerator
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
@@ -95,7 +96,7 @@ class MigrationGenerator:
 
         for migration_file in self.migrations_dir.glob("*.py"):
             try:
-                version = migration_file.name.split("_")[0]
+                version = parse_migration_filename(migration_file.name)[0]
                 if version not in version_map:
                     version_map[version] = []
                 version_map[version].append(migration_file)

@@ -140,22 +140,6 @@ class SchemaBuilder:
                         "order": include.order,
                     }
                 )
-            elif isinstance(include, dict):
-                self.include_configs.append(
-                    {
-                        "path": Path(include["path"]),
-                        "recursive": include.get("recursive", True),
-                        "order": include.get("order", 0),
-                    }
-                )
-            elif hasattr(include, "path"):  # DirectoryConfig object
-                self.include_configs.append(
-                    {
-                        "path": Path(include.path),
-                        "recursive": include.recursive,
-                        "order": include.order,
-                    }
-                )
 
         # Sort by order
         self.include_configs.sort(key=lambda x: int(x["order"]))

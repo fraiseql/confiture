@@ -384,49 +384,62 @@ def rollback_to_savepoint(migrator: Migrator, name: str, *, commit: bool = True)
 
 def record_migration(
     migrator: Migrator,
+    *,
+    version: str,
+    name: str,
+    execution_time_ms: int = 0,
+    checksum: str | None = None,
+    applied_by: str | None = None,
+    applied_at: Any = None,
+    reason: str | None = None,
+) -> None:
+    """The one INSERT into the ledger.
+
+    ``slug`` is ``<name>_<version>_<timestamp>[_<reason>]`` — unique per row
+    because the version is, however many same-named migrations land in the
+    same second. ``reason`` marks rows that were not applied by ``up()``
+    (``baseline``, ``reinit``, ``0003_baseline_from_db``). ``applied_by``
+    defaults to the connection's ``current_user``; ``applied_at`` to ``now()``.
+    """
+    from datetime import datetime
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    slug = f"{name}_{version}_{timestamp}" + (f"_{reason}" if reason else "")
+    if applied_by is None:
+        row = migrator.connection.execute("SELECT current_user").fetchone()
+        applied_by = row[0] if row else None
+    with migrator.connection.cursor() as cursor:
+        cursor.execute(
+            pgsql.SQL("""
+            INSERT INTO {}
+                (id, slug, version, name, applied_at, execution_time_ms, checksum, applied_by)
+            VALUES (gen_random_uuid(), %s, %s, %s, COALESCE(%s, NOW()), %s, %s, %s)
+            """).format(migrator._table_ident),
+            (slug, version, name, applied_at, execution_time_ms, checksum, applied_by),
+        )
+
+
+def record_applied(
+    migrator: Migrator,
     migration: Migration,
     execution_time_ms: int,
     migration_file: Path | None = None,
     *,
     applied_by: str | None = None,
 ) -> None:
-    """Record migration in tracking table with checksum.
-
-    See :meth:`Migrator._record_migration` for the ``applied_by`` contract.
-    """
-    from datetime import datetime
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = f"{migration.name}_{timestamp}"
-
-    # Compute checksum if file path provided
+    """Record a migration ``up()`` just applied, with its file's checksum."""
     checksum = None
     if migration_file is not None and migration_file.exists():
         checksum = compute_checksum(migration_file)
         logger.debug(f"Computed checksum for {migration.version}: {checksum[:16]}...")
-
-    if applied_by is None:
-        # Capture the role that opened the connection.  Quoting
-        # is unnecessary — current_user is read-only on the server.
-        row = migrator.connection.execute("SELECT current_user").fetchone()
-        applied_by = row[0] if row else None
-
-    with migrator.connection.cursor() as cursor:
-        cursor.execute(
-            pgsql.SQL("""
-            INSERT INTO {}
-                (id, slug, version, name, execution_time_ms, checksum, applied_by)
-            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
-            """).format(migrator._table_ident),
-            (
-                slug,
-                migration.version,
-                migration.name,
-                execution_time_ms,
-                checksum,
-                applied_by,
-            ),
-        )
+    record_migration(
+        migrator,
+        version=migration.version,
+        name=migration.name,
+        execution_time_ms=execution_time_ms,
+        checksum=checksum,
+        applied_by=applied_by,
+    )
 
 
 def mark_applied(
@@ -438,8 +451,6 @@ def mark_applied(
 
     See :meth:`Migrator.mark_applied` for the full contract.
     """
-    from datetime import datetime
-
     from confiture.core.connection import load_migration_class
 
     # Load the migration class to get version and name
@@ -456,22 +467,18 @@ def mark_applied(
         return migration.version
 
     # Generate slug with reason marker
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = f"{migration.name}_{timestamp}_{reason}"
 
     # Compute checksum
     checksum = compute_checksum(migration_file)
 
     # Record in tracking table with execution_time_ms = 0 (not executed)
-    with migrator.connection.cursor() as cursor:
-        cursor.execute(
-            pgsql.SQL("""
-            INSERT INTO {}
-                (id, slug, version, name, execution_time_ms, checksum)
-            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s)
-            """).format(migrator._table_ident),
-            (slug, migration.version, migration.name, 0, checksum),
-        )
+    record_migration(
+        migrator,
+        version=migration.version,
+        name=migration.name,
+        checksum=checksum,
+        reason=reason,
+    )
 
     migrator.connection.commit()
     logger.info(f"Marked migration {migration.version} ({migration.name}) as applied ({reason})")

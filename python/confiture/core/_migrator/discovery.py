@@ -12,20 +12,50 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _version_from_migration_filename(filename: str) -> str:
-    """Extract version prefix from a migration filename.
+_MIGRATION_SUFFIXES = (".up.sql", ".down.sql", ".verify.sql", ".py", ".sql")
 
-    Args:
-        filename: Migration filename (e.g., "001_create_users.py")
 
-    Returns:
-        Version string (e.g., "001")
+def parse_migration_filename(filename: str) -> tuple[str, str]:
+    """``(version, name)`` from a migration filename — the one parser.
+
+    Accepts ``{version}_{name}.py``, ``.up.sql``, ``.down.sql``, ``.verify.sql``
+    and bare ``.sql`` (snapshots), a full path's ``name`` or an already
+    suffix-less stem. A file with no underscore has its whole stem as both
+    version and name.
+
+        >>> parse_migration_filename("20260101120000_add_users.up.sql")
+        ('20260101120000', 'add_users')
     """
-    if filename.endswith(".up.sql"):
-        filename = filename[:-7]
-    elif filename.endswith(".down.sql"):
-        filename = filename[:-9]
-    return filename.split("_")[0]
+    stem = Path(filename).name
+    for suffix in _MIGRATION_SUFFIXES:
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    version, sep, name = stem.partition("_")
+    return version, (name if sep else stem)
+
+
+def _version_from_migration_filename(filename: str) -> str:
+    """Version prefix of a migration filename — see :func:`parse_migration_filename`."""
+    return parse_migration_filename(filename)[0]
+
+
+def discover_migration_files(migrations_dir: Path) -> list[Path]:
+    """Every migration file in *migrations_dir*, sorted by version.
+
+    ``.py`` modules (except ``__init__.py`` and ``_``-prefixed helpers) and
+    ``.up.sql`` files. Every reader of the directory — ``up()``, ``status()``,
+    the CLI — goes through here so they agree on what exists.
+    """
+    if not migrations_dir.exists():
+        return []
+    py_files = [
+        f
+        for f in migrations_dir.glob("*.py")
+        if f.name != "__init__.py" and not f.name.startswith("_")
+    ]
+    sql_files = list(migrations_dir.glob("*.up.sql"))
+    return sorted(py_files + sql_files, key=lambda f: _version_from_migration_filename(f.name))
 
 
 def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Path]]:
@@ -41,19 +71,8 @@ def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Pa
         Dict mapping version strings to lists of conflicting file paths.
         Empty dict if no duplicates exist or directory doesn't exist.
     """
-    if not migrations_dir.exists():
-        return {}
-
-    py_files = [
-        f
-        for f in migrations_dir.glob("*.py")
-        if f.name != "__init__.py" and not f.name.startswith("_")
-    ]
-    sql_files = list(migrations_dir.glob("*.up.sql"))
-    all_files = py_files + sql_files
-
     version_map: dict[str, list[Path]] = {}
-    for f in all_files:
+    for f in discover_migration_files(migrations_dir):
         version = _version_from_migration_filename(f.name)
         version_map.setdefault(version, []).append(f)
 
@@ -70,25 +89,8 @@ def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Pa
 
 def find_migration_files(migrator: Migrator, migrations_dir: Path | None = None) -> list[Path]:
     """Find all migration files (``.py`` and ``.up.sql``), sorted by version."""
-    if migrations_dir is None:
-        migrations_dir = Path("db") / "migrations"
-
-    if not migrations_dir.exists():
-        return []
-
-    # Find all .py files (excluding __pycache__, __init__.py)
-    py_files = [
-        f
-        for f in migrations_dir.glob("*.py")
-        if f.name != "__init__.py" and not f.name.startswith("_")
-    ]
-
-    # Find all .up.sql files (SQL migrations)
-    sql_files = list(migrations_dir.glob("*.up.sql"))
-
-    # Combine and sort by version
-    all_files = py_files + sql_files
-    return sorted(all_files, key=lambda f: migrator._version_from_filename(f.name))
+    del migrator  # discovery does not depend on the engine
+    return discover_migration_files(migrations_dir or Path("db") / "migrations")
 
 
 def find_orphaned_sql_files(migrations_dir: Path | None = None) -> list[Path]:
