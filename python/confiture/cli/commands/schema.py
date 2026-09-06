@@ -738,7 +738,7 @@ def lint(
     """Validate schema against best practices.
 
     PROCESS:
-      Runs the default rule set — naming_001, naming_002, pk_001, doc_001,
+      Runs the default rule set — naming_001, naming_002, pk_001, doc_001–doc_004,
       sec_001 — plus whatever `--select` adds. `--list-rules` prints the full
       catalogue with codes and families. Results in table, JSON or CSV.
 
@@ -748,7 +748,7 @@ def lint(
       `--select default,replica` is the usual lint plus one opt-in family.
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
-      naming_001, naming_002, pk_001, doc_001, sec_001 — on by default.
+      naming_001, naming_002, pk_001, doc_001–doc_004, sec_001 — on by default.
       (LintConfig also carries check_indexes / check_constraints; neither has a
       rule behind it, so neither is listed or selectable.)
 
@@ -814,12 +814,14 @@ def lint(
             fail_on_warning=fail_on_warning,
             check_naming="naming_001" in selected or "naming_002" in selected,
             check_primary_keys="pk_001" in selected,
-            check_documentation="doc_001" in selected,
+            check_documentation=any(code.startswith("doc_") for code in selected),
             check_security="sec_001" in selected,
             check_tenant_isolation="tenant_001" in selected,
             check_acl_coverage="acl_001" in selected,
         )
-        console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
+        if format_type == "table":
+            # The banner is for humans; in json/csv mode stdout is the payload alone.
+            console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
         linter = SchemaLinter(env=env, config=config)
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
@@ -836,7 +838,9 @@ def lint(
                 save_report(report, output, format_type=fmt)
                 console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
-                console.print(formatted)
+                # print(), not console.print(): Rich wraps long lines at the
+                # terminal width, which breaks the JSON stream (see _output_json).
+                print(formatted)
 
         should_fail = (report.has_errors and fail_on_error) or (
             report.has_warnings and fail_on_warning

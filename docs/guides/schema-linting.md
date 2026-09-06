@@ -63,6 +63,7 @@ confiture lint
 | Category | Purpose | Examples |
 |----------|---------|----------|
 | **Naming** | Enforce conventions | Table names, column names |
+| **Documentation** | Every commentable object carries a `COMMENT` | `doc_001` tables, `doc_002` routines (per overload), `doc_003` views, `doc_004` types and domains — see [lint-rules.md](../reference/lint-rules.md) |
 | **Structure** | Best practices | Primary keys, timestamps |
 | **Security** | Prevent vulnerabilities | PII encryption, weak constraints |
 | **Performance** | Optimize queries | Missing indices, N+1 patterns |

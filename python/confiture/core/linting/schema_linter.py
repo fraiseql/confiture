@@ -348,21 +348,11 @@ class SchemaLinter:
             )
 
     def _check_documentation(self, report: LintReport) -> None:
-        """Every table carries a COMMENT — attached by qualified name, never by bare name."""
-        for table in self._inventory.tables:
-            if table.documented:
-                continue
-            report.add_violation(
-                LintViolation(
-                    rule_id="doc_001",
-                    rule_name="Missing Documentation",
-                    severity=RuleSeverity.INFO,
-                    object_type="table",
-                    object_name=table.qualified,
-                    message=f"Table '{table.qualified}' should have a COMMENT describing its purpose",
-                    line_number=table.line,
-                )
-            )
+        """The ``doc`` family: every commentable object carries a COMMENT (#217)."""
+        from confiture.core.linting.documentation import documentation_findings
+
+        for violation in documentation_findings(self._inventory):
+            report.add_violation(violation)
 
     def _check_indexes(self, _report: LintReport) -> None:
         """Check for indexes on foreign keys.
