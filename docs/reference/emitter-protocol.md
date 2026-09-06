@@ -209,6 +209,6 @@ If you need cross-language: file an issue with the concrete external generator y
 
 ## See also
 
-- [`examples/07-external-emitter/`](../../examples/07-external-emitter/) — a working minimal emitter you can copy.
+- [`examples/07-external-emitter/`](https://github.com/fraiseql/confiture/tree/main/examples/07-external-emitter) — a working minimal emitter you can copy.
 - [Generate command reference](cli.md) — `alloc`, `scaffold`, `renumber` CLI flags.
-- Source: [`python/confiture/core/scaffold/emitter.py`](../../python/confiture/core/scaffold/emitter.py), [`python/confiture/core/scaffold/orchestrator.py`](../../python/confiture/core/scaffold/orchestrator.py).
+- Source: [`python/confiture/core/scaffold/emitter.py`](https://github.com/fraiseql/confiture/blob/main/python/confiture/core/scaffold/emitter.py), [`python/confiture/core/scaffold/orchestrator.py`](https://github.com/fraiseql/confiture/blob/main/python/confiture/core/scaffold/orchestrator.py).

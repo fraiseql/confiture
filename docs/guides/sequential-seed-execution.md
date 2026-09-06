@@ -438,7 +438,7 @@ For very large datasets (>1 million rows), consider:
 
 ## See Also
 
-- [Medium 1: Build from DDL](./medium-1-build-from-ddl.md)
-- [Seed Data Validation](./seed-data-validation.md)
+- [Medium 1: Build from DDL](01-build-from-ddl.md)
+- [Seed Data Validation](seed-validation.md)
 - [CLI Reference](../reference/cli.md)
 - [Configuration Reference](../reference/configuration.md)

@@ -91,7 +91,7 @@ When you apply migrations, only 003 is applied, but your code expects changes fr
 - Add migration validation to your CI/CD pipeline
 - Use `confiture migrate validate` before committing
 
-**See**: [Migration Naming Best Practices](docs/guides/migration-naming-best-practices.md)
+**See**: [Migration Naming Best Practices](guides/migration-naming-best-practices.md)
 
 ---
 

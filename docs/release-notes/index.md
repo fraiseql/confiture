@@ -33,21 +33,21 @@ This directory contains detailed release notes for each version of Confiture.
   - Recursive directory support
   - Advanced file discovery
 
-- **[v0.2.0](./v0.2.0.md)** (November 9, 2025)
+- **[v0.2.0](https://github.com/fraiseql/confiture/blob/main/CHANGELOG.md)** (November 9, 2025)
   - Production-ready CI/CD workflows
   - Multi-platform wheel building
   - PyPI Trusted Publishing
 
 ## For Users
 
-- Start with **[README.md](../README.md)** for quick start
-- Check **[CHANGELOG.md](../CHANGELOG.md)** for complete changelog
+- Start with **[README.md](https://github.com/fraiseql/confiture/blob/main/README.md)** for quick start
+- Check **[CHANGELOG.md](https://github.com/fraiseql/confiture/blob/main/CHANGELOG.md)** for complete changelog
 - Read **[docs/guides/](../guides/)** for feature guides
 
 ## For Contributors
 
-- See **[DEVELOPMENT.md](../DEVELOPMENT.md)** for contribution workflow
-- See **[ARCHITECTURE.md](../ARCHITECTURE.md)** for system design
+- See **[DEVELOPMENT.md](../development.md)** for contribution workflow
+- See **[ARCHITECTURE.md](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md)** for system design
 
 ---
 

@@ -32,6 +32,18 @@ and the checks that caught this review's findings run in CI.
   anywhere and have one in their model docstring now. A test holds the block
   current, every YAML key in the reference a real field, and every field
   documented.
+- **Docs: the site builds strictly and the nav is generated** (Phase 10). `mkdocs.yml`'s `nav:` block is
+  rendered by `scripts/gen_mkdocs_nav.py` from the `docs/` tree (`--check`/`--write`; 106 pages) and
+  `tests/unit/docs/test_mkdocs_nav.py` fails when a nav entry has no file, a page is missing from the nav
+  without an explicit exclusion, or the block is stale. `mkdocs build --strict` runs in the quality-gate
+  Lint job (new `docs` extra: mkdocs, mkdocs-material, mkdocstrings), together with the three generator
+  `--check`s; 69 warnings fixed to reach zero — 10 pages that were not in the nav and ~45 broken relative
+  links (targets outside `docs/` now point at GitHub; links to pages that never existed re-targeted).
+- **Root guides moved under `docs/`**: `QUICKSTART.md` → `docs/quickstart.md`, `DEVELOPMENT.md` →
+  `docs/development.md`, `CONTRIBUTING.md` → `docs/contributing.md`, `DATABASE_SETUP.md` →
+  `docs/guides/database-setup.md`; the root files are one-line pointers. Their stale `mypy` /
+  `confiture_migrations` mentions are fixed (the docs fiction guard now covers them). The mkdocs PyPI
+  link pointed at the wrong package name.
 
 ## [0.53.0] - 2026-09-07
 

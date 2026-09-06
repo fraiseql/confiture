@@ -551,4 +551,4 @@ confiture migrate validate --fix-naming
 
 ---
 
-*Part of [Confiture](../../README.md) - PostgreSQL migrations, sweetly done 🍓*
+*Part of [Confiture](https://github.com/fraiseql/confiture/blob/main/README.md) - PostgreSQL migrations, sweetly done 🍓*

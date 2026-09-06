@@ -365,5 +365,5 @@ Only `MISSING_ON_CONFLICT` is auto-fixable.
 
 - [Seed Files Guide](../getting-started.md#seed-files)
 - [CLI Reference](../reference/cli.md#seed)
-- [Migration Validation](../guides/migration-validation.md)
+- [Migration Validation](migrate-validate.md)
 - [Prep-Seed Validation](./prep-seed-validation.md) - UUID to BIGINT transformation validation

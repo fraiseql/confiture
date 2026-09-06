@@ -691,4 +691,4 @@ done
 
 - [Seed Validation Guide](./seed-validation.md) - General seed validation
 - [Migration Strategies](./migration-decision-tree.md) - When to use prep-seed vs other patterns
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) - Technical design
+- [ARCHITECTURE.md](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md) - Technical design

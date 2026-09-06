@@ -1282,7 +1282,7 @@ include_dirs:
 - **[CLI Reference](./cli.md)** - Command-line usage
 - **[Getting Started](../getting-started.md)** - Project setup tutorial
 - **[Migration Decision Tree](../guides/migration-decision-tree.md)** - Choosing the right approach
-- **[API Reference](./api.md)** - Python API documentation
+- **[API Reference](../api/index.md)** - Python API documentation
 
 ---
 

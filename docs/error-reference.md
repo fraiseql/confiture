@@ -109,7 +109,7 @@ confiture migrate up --database-url postgresql://localhost:5433/mydb
 
 **Related**:
 - [PostgreSQL installation guide](https://www.postgresql.org/download/)
-- [Database connection troubleshooting](./guides/database-setup.md)
+- [Database connection troubleshooting](guides/database-setup.md)
 
 ---
 
@@ -157,7 +157,7 @@ confiture build --database-url postgresql://myuser:pass@localhost/mydb
 
 **Related**:
 - [PostgreSQL user management](https://www.postgresql.org/docs/current/sql-createrole.html)
-- [Database permissions guide](./guides/database-permissions.md)
+- [Database permissions guide](guides/database-setup.md)
 
 ---
 
@@ -651,7 +651,7 @@ psql -c "SELECT pg_terminate_backend(12345);"
 
 **Additional resources**:
 - [Troubleshooting Guide](./troubleshooting.md)
-- [Database Setup](./guides/database-setup.md)
+- [Database Setup](guides/database-setup.md)
 - [Migration Best Practices](./guides/02-incremental-migrations.md)
 - [Seed Data Guide](./guides/seed-validation.md)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)

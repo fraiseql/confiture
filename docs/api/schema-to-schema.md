@@ -147,5 +147,5 @@ else:
 ## See Also
 
 - [Medium 4: Schema-to-Schema Guide](../guides/04-schema-to-schema.md)
-- [Zero-Downtime Migration Example](../../examples/03-zero-downtime-migration/)
+- [Zero-Downtime Migration Example](https://github.com/fraiseql/confiture/tree/main/examples/03-zero-downtime-migration)
 - [CLI Reference](../reference/cli.md)

@@ -9,12 +9,12 @@
 ### "What is Confiture? Should I use it?"
 
 **Reading path**:
-1. **[Why Confiture?](../README.md#why-confiture)** (2 min)
+1. **[Why Confiture?](https://github.com/fraiseql/confiture/blob/main/README.md#why-confiture)** (2 min)
    - Understand the core philosophy: DDL-first vs migration history
    - Learn the performance advantage (50-700x faster)
    - See the key benefits
 
-2. **[The Four Mediums](../README.md#the-four-mediums)** (2 min)
+2. **[The Four Mediums](https://github.com/fraiseql/confiture/blob/main/README.md#the-four-mediums)** (2 min)
    - See the 4 strategies available
    - Understand when to use each
 
@@ -46,7 +46,7 @@
    - **[Medium 3: Production Data Sync](guides/03-production-sync.md)** - Copy production data locally
    - **[Medium 4: Zero-Downtime](guides/04-schema-to-schema.md)** - Large production changes
 
-**Hands-on next**: Try one of these [Examples](../examples/)
+**Hands-on next**: Try one of these [Examples](https://github.com/fraiseql/confiture/tree/main/examples)
 
 **Need help?** → See [Troubleshooting](troubleshooting.md)
 
@@ -58,11 +58,11 @@
 
 **Reading path**:
 
-1. **[Why Confiture?](../README.md#why-confiture)** (3 min)
+1. **[Why Confiture?](https://github.com/fraiseql/confiture/blob/main/README.md#why-confiture)** (3 min)
    - Understand the philosophy
    - Learn performance benefits
 
-2. **[Architecture](../ARCHITECTURE.md)** (10 min)
+2. **[Architecture](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md)** (10 min)
    - How Confiture works internally
    - Safety and transaction handling
    - Error recovery
@@ -81,7 +81,7 @@
    - Environment setup
    - Multi-database configuration
 
-**Hands-on**: Try [Zero-Downtime Example](../examples/03-zero-downtime-migration/)
+**Hands-on**: Try [Zero-Downtime Example](https://github.com/fraiseql/confiture/tree/main/examples/03-zero-downtime-migration)
 
 **Deployment questions?** → Check [Medium 4 troubleshooting](guides/04-schema-to-schema.md#troubleshooting)
 
@@ -118,12 +118,12 @@
 
 **Reading path**:
 
-1. **[Why Confiture?](../README.md#why-confiture)** (10 min)
+1. **[Why Confiture?](https://github.com/fraiseql/confiture/blob/main/README.md#why-confiture)** (10 min)
    - Understand DDL-first philosophy
    - Learn design principles
    - See core value proposition
 
-2. **[Architecture](../ARCHITECTURE.md)** (15 min)
+2. **[Architecture](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md)** (15 min)
    - Deep dive into how Confiture works
    - Design decisions explained
    - Performance optimizations
@@ -134,7 +134,7 @@
    - Trade-offs and design decisions
    - Migration path if switching
 
-4. **[The Four Mediums](../README.md#the-four-mediums)** (10 min)
+4. **[The Four Mediums](https://github.com/fraiseql/confiture/blob/main/README.md#the-four-mediums)** (10 min)
    - Understand all 4 strategies
    - When to use each
    - Design rationale
@@ -170,7 +170,7 @@
    - All 6 hook phases
    - Error handling
 
-4. **[Examples](../examples/)** (10+ min)
+4. **[Examples](https://github.com/fraiseql/confiture/tree/main/examples)** (10+ min)
    - Study real-world implementations
    - Learn patterns and best practices
 
@@ -199,7 +199,7 @@
 - **Performance**: [Performance Guide](performance.md)
 - **All commands**: [CLI Reference](reference/cli.md)
 - **Python API**: [API Reference](api/)
-- **Examples**: [Examples](../examples/)
+- **Examples**: [Examples](https://github.com/fraiseql/confiture/tree/main/examples)
 - **Definitions**: [Glossary](glossary.md)
 
 ---
@@ -257,8 +257,8 @@ Reference
 
 Help & Examples
 ├─ [Troubleshooting](troubleshooting.md)
-├─ [Examples](../examples/)
-└─ [Architecture](../ARCHITECTURE.md)
+├─ [Examples](https://github.com/fraiseql/confiture/tree/main/examples)
+└─ [Architecture](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md)
 ```
 
 ---
