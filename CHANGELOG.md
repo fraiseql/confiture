@@ -5,7 +5,7 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.52.0] - 2026-09-07
 
 Phase 07 of the 2026-09-06 review: lint and drift capabilities the downstream
 project asked for (#217, #218, #219, #226, #227).
