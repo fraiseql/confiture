@@ -24,6 +24,8 @@ jobs:
       postgres:
         image: postgres:15
         env:
+          # uv sync builds the native extension; the parity tests must run it, not skip it
+          CONFITURE_REQUIRE_NATIVE: "1"
           POSTGRES_USER: confiture
           POSTGRES_PASSWORD: confiture
           POSTGRES_DB: confiture_test
@@ -365,7 +367,15 @@ jobs:
     - name: Run cargo clippy
       # --locked: resolve from the committed Cargo.lock (#191), so an upstream
       # crate release cannot turn an unrelated PR red.
-      run: cargo clippy --locked -- -D warnings
+      run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+    - name: Set up Python (cargo test links libpython without the extension-module feature)
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Run cargo test
+      run: scripts/cargo-test.sh
 
   security:
     name: Security

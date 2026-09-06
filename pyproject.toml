@@ -123,7 +123,7 @@ build-backend = "maturin"
 [tool.maturin]
 python-source = "python"
 module-name = "confiture._core"
-features = ["pyo3/extension-module"]
+features = ["extension-module"]
 include = [
     { path = "python/confiture/schemas/*.json", format = "wheel" },
 ]

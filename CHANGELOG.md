@@ -42,6 +42,31 @@ Phase 08 of the 2026-09-06 review: the package boundaries say what the modules d
   that may only go down. `RUF100` is enforced: 202 `noqa` directives that
   silenced nothing are gone.
 
+Phase 09 of the 2026-09-06 review: the native extension does one thing, does
+it exactly like Python, and says whether it is there.
+
+### Changed
+
+- ⚠️ **The native hash equals the Python hash (D1).** `confiture._core.hash_files`
+  hashed each file separately and then hashed the digests, with paths relative
+  to the files' common parent, while the Python path streams one digest over
+  `(relative path \0 content \0)*` under `base_dir` — so a wheel install and an
+  editable install disagreed on whether a test-database template was stale.
+  The extension now takes `base_dir` and streams the same digest; a parity
+  test holds the two equal. A template built by a wheel install before 0.53.0
+  hashes differently once and is rebuilt.
+- **The Rust schema builder is gone.** It ran only under the `line_comment`
+  separator style and its output never differed from Python's except in the
+  embedded hash; `SchemaBuilder.build()` has one path. The crate keeps `pyo3`
+  and `sha2` only, `cargo test` links (the `extension-module` feature is on
+  only for maturin), the methodology's `[lints]` apply, and CI runs the tests.
+- A missing schema file makes the native hasher raise `OSError`, which
+  `compute_hash()` turns into the same `SchemaError` the Python path raises; it
+  used to panic, and a `PanicException` is a `BaseException` the fallback never
+  caught. When the extension is absent or fails, the Python path is used and
+  logged once per process at INFO. `confiture --version` prints
+  `native extension: yes|no` as its third line.
+
 ## [0.52.0] - 2026-09-07
 
 Phase 07 of the 2026-09-06 review: lint and drift capabilities the downstream

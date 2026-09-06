@@ -7,6 +7,7 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 """
 
 import hashlib
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -22,9 +23,25 @@ from confiture.core.validation.comment_validator import CommentValidator
 from confiture.exceptions import SchemaError
 from confiture.models.results import SplitBuildResult
 
-# Try to import Rust extension for 10-50x performance boost
+logger = logging.getLogger(__name__)
+
+# The native hasher (confiture._core.hash_files): the same digest as the Python
+# path, computed with a native SHA-256 and the GIL released. Absent on an sdist
+# or editable install without a Rust toolchain; the Python path is then used and
+# says so once per process at INFO.
 _core: Any = None
 HAS_RUST = False
+_fallback_noted = False
+
+
+def _note_fallback(reason: str) -> None:
+    """Log, once per process, that the Python hash path is in use and why."""
+    global _fallback_noted
+    if _fallback_noted:
+        return
+    _fallback_noted = True
+    logger.info("native extension %s: hashing schema files in Python", reason)
+
 
 if not TYPE_CHECKING:
     try:
@@ -531,9 +548,6 @@ class SchemaBuilder:
         Generates a complete schema file by concatenating all SQL files in
         deterministic order, with headers and file separators.
 
-        Performance: Uses Rust extension when available for 10-50x speedup.
-        Falls back gracefully to Python implementation if Rust unavailable.
-
         Args:
             output_path: Optional path to write schema file. If None, only returns content.
             schema_only: If True, exclude seed files. Default False (include all files).
@@ -588,25 +602,7 @@ class SchemaBuilder:
         if progress:
             process_task = progress.add_task("Processing files...", total=len(files))
 
-        # Use Rust extension if available (10-50x faster)
-        # Note: Rust extension uses line_comment separator style
-        # If a different style is configured, fall back to Python
-        use_rust = HAS_RUST and self.env_config.build.separators.style == "line_comment"
-
-        if use_rust:
-            try:
-                # Build file content using Rust
-                file_paths = [str(f) for f in files]
-                content: str = _core.build_schema(file_paths)
-
-                # Add headers and separators (Python side for flexibility)
-                schema = self._add_headers_and_separators(header, files, content)
-            except Exception:
-                # Fallback to Python if Rust fails
-                schema = self._build_python(header, files, progress=progress)
-        else:
-            # Pure Python implementation (fallback)
-            schema = self._build_python(header, files, progress=progress)
+        schema = self._build_python(header, files, progress=progress)
 
         # Two-pass FK processing: strip FK constraints from CREATE TABLE,
         # then emit ALTER TABLE ADD CONSTRAINT at the end (issue #94)
@@ -686,23 +682,6 @@ class SchemaBuilder:
                 raise SchemaError(f"Error reading {file}: {e}") from e
 
         return "".join(parts)
-
-    def _add_headers_and_separators(self, header: str, _files: list[Path], content: str) -> str:
-        """Add main header to Rust-built content
-
-        The Rust layer now includes file separators, so this function
-        only needs to prepend the main schema header.
-
-        Args:
-            header: Schema header
-            _files: List of SQL files (unused, kept for API compatibility)
-            content: Concatenated content from Rust (includes file separators)
-
-        Returns:
-            Content with main header
-        """
-        # Rust layer now includes file separators, just prepend main header
-        return header + content
 
     def _is_superuser_file(self, file_path: Path) -> bool:
         """Check if a file belongs to a superuser directory.
@@ -855,7 +834,8 @@ class SchemaBuilder:
         changing it does not invalidate caches or trigger unnecessary
         rebuilds (see issue #103).
 
-        Performance: Uses Rust extension when available for 30-60x speedup.
+        The native extension computes the same digest when it is installed;
+        otherwise the Python path does, and says so once per process at INFO.
 
         Returns:
             SHA256 hexadecimal digest
@@ -869,17 +849,19 @@ class SchemaBuilder:
         """
         files = self.find_sql_files()
 
-        # Use Rust extension if available (30-60x faster)
         if HAS_RUST:
             try:
-                file_paths = [str(f) for f in files]
-                hash_result: str = _core.hash_files(file_paths)
-                return hash_result
-            except Exception:
-                # Fallback to Python if Rust fails
-                pass
+                digest: str = _core.hash_files([str(f) for f in files], str(self.base_dir))
+            except OSError as e:
+                # The same failure the Python path reports: a file that cannot be read.
+                raise SchemaError(f"Error reading schema files for hash: {e}") from e
+            except Exception as e:
+                _note_fallback(f"failed ({type(e).__name__}: {e})")
+            else:
+                return digest
+        else:
+            _note_fallback("not installed")
 
-        # Pure Python implementation (fallback)
         hasher = hashlib.sha256()
 
         for file in files:

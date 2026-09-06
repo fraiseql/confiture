@@ -1,7 +1,8 @@
-"""Performance benchmarks for Rust extension vs Python implementation.
+"""Performance bounds for schema building and hashing.
 
-These tests verify that the Rust extension provides the expected 10-50x
-speedup over pure Python for file operations and hashing.
+Building is pure Python; hashing uses the native extension when it is bundled
+and the Python path otherwise. Every test asserts an upper bound that both
+paths must meet.
 """
 
 import time
@@ -139,9 +140,9 @@ def test_rust_extension_availability():
 
     assert isinstance(HAS_RUST, bool)
     if HAS_RUST:
-        print("\n✓ Rust extension is AVAILABLE - using 10-50x faster implementation")
+        print("\n✓ native hasher available")
     else:
-        print("\n⚠ Rust extension is NOT available - using Python fallback (slower but functional)")
+        print("\n⚠ native hasher not built — Python hash path in use")
 
 
 @pytest.mark.slow

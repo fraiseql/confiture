@@ -1,25 +1,36 @@
 [package]
 name = "confiture-core"
-version = "0.3.9"
+version = "0.4.0"
 edition = "2021"
 authors = ["Lionel Hamayon <lionel.hamayon@evolution-digitale.fr>"]
 license = "MIT"
 repository = "https://github.com/fraiseql/confiture"
 homepage = "https://github.com/fraiseql/confiture"
-description = "PostgreSQL Migrations, Sweetly Done 🍓 - Rust performance layer"
+description = "PostgreSQL Migrations, Sweetly Done 🍓 - native schema hasher"
 
 [lib]
 name = "confiture_core"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# maturin enables `extension-module` (pyproject `[tool.maturin] features`);
+# `cargo test` links against libpython instead, so the tests can run.
+default = []
+extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"] }
+pyo3 = { version = "0.23", default-features = false, features = ["macros"] }
 sha2 = "0.10"
-rayon = "1.10"
-walkdir = "2.5"
 
 [dev-dependencies]
 tempfile = "3.12"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "deny"
 
 [profile.release]
 opt-level = 3
