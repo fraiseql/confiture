@@ -96,6 +96,13 @@ so these paths previously failed on COPY-bearing reference data.)
   the same package the `pg_dump`/`pg_restore` paths already need). If `psql` is
   absent, provisioning raises a clear error; for a COPY-bearing schema it points
   you at the COPY-safe `--from-artifact` route (which restores via `pg_restore`).
+- **psql meta-commands are refused.** `psql` executes backslash commands — `\!`
+  runs a shell command, `\copy … TO PROGRAM` pipes data into one, `\i` reads any
+  file the operator can read — so every schema and seed file is scanned before
+  `psql` starts, and a backslash anywhere outside string literals, comments,
+  dollar-quoted bodies and `COPY … FROM stdin` data blocks fails the apply with
+  `SCHEMA_205`, naming the file and line. The `\.` COPY terminator is the one
+  backslash allowed. There is no warn-only mode.
 - **Ephemeral seed apply is per-file and fail-fast.** On the ephemeral paths each
   seed file is applied independently via `psql`, in order; a bad file aborts
   immediately and leaves earlier files committed (there is no per-file savepoint
