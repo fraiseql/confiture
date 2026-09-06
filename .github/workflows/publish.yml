@@ -72,8 +72,10 @@ jobs:
         echo "=== Verifying bundled Rust extension ==="
         # --no-sync throughout this job: `uv run` would otherwise reinstall the
         # project from source and silently replace the wheel we just built,
-        # which is the one thing this job exists to exercise.
-        uv run --no-sync python -c "from confiture.core.builder import HAS_RUST; print(f'Rust extension available: {HAS_RUST}')"
+        # which is the one thing this job exists to exercise. Run the check from
+        # outside the checkout so `python/confiture` cannot shadow the wheel, and
+        # FAIL when the extension is missing — this used to print False quietly.
+        (cd /tmp && uv run --no-sync --project "$GITHUB_WORKSPACE" python -c "import confiture, sys; from confiture.core.builder import HAS_RUST; print(confiture.__file__); print(f'native extension: {HAS_RUST}'); sys.exit(0 if HAS_RUST else 1)")
 
     - name: Create test databases
       run: |
@@ -112,8 +114,15 @@ jobs:
         echo "=== Running Core Tests for Release ==="
         # Run core tests against the BUILT WHEEL - MUST PASS for release.
         # --no-sync keeps the wheel installed (see the install step above).
-        # The wheel bundles the native extension; the parity tests must run it, not skip it.
-        CONFITURE_REQUIRE_NATIVE=1 uv run --no-sync pytest tests/ --cov=confiture --cov-report=xml --cov-report=term-missing -v
+        # The wheel bundles the native extension; the parity tests must run it, not
+        # skip it. pyproject sets `pythonpath = ["python"]` for pytest, which puts the
+        # SOURCE tree ahead of the installed wheel — the job then tested the source
+        # and never the artefact. `-o pythonpath=` clears that; `--import-mode=importlib`
+        # keeps pytest from inserting test dirs; PYTHONPATH exposes the `tests` package
+        # only (the package itself lives under python/, which is not on the path).
+        PYTHONPATH="$GITHUB_WORKSPACE" CONFITURE_REQUIRE_NATIVE=1 uv run --no-sync pytest tests/ \
+          -o pythonpath= --import-mode=importlib \
+          --cov=confiture --cov-report=xml --cov-report=term-missing -v
       env:
         # See quality-gate.yml: CONFITURE_TEST_DB_URL is the variable the
         # test fixtures read; without it the service container is unused and the
