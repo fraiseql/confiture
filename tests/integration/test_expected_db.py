@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import psycopg
 import pytest
+from tests.conftest import database_url_for
 
 from confiture.core.expected_db import ExpectedSchemaDB
 
@@ -23,12 +24,9 @@ def server_url(test_db_url: str) -> str:
 
 
 @pytest.fixture
-def _require_server(server_url: str) -> None:
-    """Skip the whole module cleanly when no server is reachable."""
-    try:
-        psycopg.connect(server_url.replace("/confiture_test", "/postgres"), autocommit=True).close()
-    except psycopg.OperationalError as exc:  # pragma: no cover - env dependent
-        pytest.skip(f"PostgreSQL not available: {exc}")
+def _require_server(maintenance_url: str) -> None:
+    """The maintenance database must accept connections (scratch DBs are created there)."""
+    psycopg.connect(maintenance_url, autocommit=True).close()
 
 
 _TWO_TABLES_ONE_VIEW = """
@@ -52,7 +50,7 @@ CREATE VIEW author_book_counts AS
 
 
 def _scratch_db_names(server_url: str) -> set[str]:
-    maint = server_url.replace("/confiture_test", "/postgres")
+    maint = database_url_for(server_url, "postgres")
     with psycopg.connect(maint, autocommit=True) as conn:
         rows = conn.execute(
             "SELECT datname FROM pg_database WHERE datname LIKE 'confiture_tmp_%'"

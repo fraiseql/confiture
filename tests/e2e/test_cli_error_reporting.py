@@ -10,8 +10,13 @@ from confiture.cli.main import app
 runner = CliRunner()
 
 
-def test_migrate_up_shows_detailed_error_on_sql_failure(test_db_url):
-    """CLI should show detailed error message when migration SQL fails"""
+def test_migrate_up_shows_detailed_error_on_sql_failure(test_db_url, clean_test_db):
+    """CLI should show detailed error message when migration SQL fails.
+
+    ``clean_test_db`` empties the database first: the migration's own
+    ``CREATE TABLE users`` must be the statement that succeeds, and the syntax
+    error the one that fails, whatever an earlier module left behind.
+    """
 
     with tempfile.TemporaryDirectory() as tmpdir:
         project_dir = Path(tmpdir)
