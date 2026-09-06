@@ -20,13 +20,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-try:
-    from pglast import ast as pglast_ast
-    from pglast import parse_sql
-except ImportError as exc:  # pragma: no cover - import-time error
-    raise ImportError(
-        "Dependent check requires pglast. Install with: pip install fraiseql-confiture[ast]"
-    ) from exc
+from pglast import ast as pglast_ast
+from pglast import parse_sql
 
 from confiture.models.preflight import CorTarget
 

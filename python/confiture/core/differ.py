@@ -10,7 +10,9 @@ import logging
 import re
 from typing import Any
 
+import pglast
 import sqlparse
+from pglast.enums.parsenodes import ConstrType
 from sqlparse.exceptions import SQLParseError as _SqlParseError
 from sqlparse.sql import Identifier, Parenthesis, Statement
 from sqlparse.tokens import Keyword, Name
@@ -244,14 +246,8 @@ class SchemaDiffer:
 
         result = ParsedSchema()
 
-        # Primary path: pglast — uses PostgreSQL's actual C parser, no token limits.
-        # Falls back to sqlparse when pglast is not installed (optional dependency).
-        try:
-            import pglast  # noqa: PLC0415
-
-            self._parse_create_tables_pglast(sql, result, pglast)
-        except ImportError:
-            self._parse_create_tables_sqlparse(sql, result)
+        # pglast — PostgreSQL's actual C parser, no token limits.
+        self._parse_create_tables_pglast(sql, result, pglast)
 
         # Regex pass: CREATE INDEX / TYPE AS ENUM / SEQUENCE / ALTER TABLE ADD CONSTRAINT.
         # These are more reliably matched by regex than by either AST parser, and regex
@@ -334,8 +330,6 @@ class SchemaDiffer:
     def _parse_create_table_pglast(self, stmt: Any) -> Table | None:
         """Build a Table model from a pglast CreateStmt node."""
         try:
-            from pglast.enums.parsenodes import ConstrType  # noqa: PLC0415
-
             table = Table(name=stmt.relation.relname)
 
             for elt in stmt.tableElts or []:

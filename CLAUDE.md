@@ -135,7 +135,7 @@ fallback** — so behavior stays consistent across the codebase:
 
 The two backends:
 
-1. **Primary — pglast** (`[ast]` extra, `pip install "fraiseql-confiture[ast]"`):
+1. **Primary — pglast** (a dependency since 0.50.0; the `[ast]` extra is an empty alias):
    Uses PostgreSQL's own C parser via `libpg_query`. No token/recursion limits,
    full PostgreSQL syntax support, handles schemas of any size including bulk seed data.
 

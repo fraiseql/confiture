@@ -37,10 +37,8 @@ statements at all.
 
 from __future__ import annotations
 
-import importlib.util
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from functools import cache
 from typing import TYPE_CHECKING
 
 from confiture.core._pglast_enums import member as _pg_member
@@ -58,14 +56,13 @@ if TYPE_CHECKING:
     from confiture.core.idempotency.patterns import PatternMatch
 
 
-@cache
 def is_pglast_available() -> bool:
-    """Return True when the ``pglast`` package is importable.
+    """Always True: pglast is a dependency (D13).
 
-    Cached because ``importlib.util.find_spec`` walks ``sys.path`` on every
-    call; the answer doesn't change at runtime in practice.
+    Kept as the dispatcher's switch until the regex backend is deleted
+    (Phase 05 Cycle 5).
     """
-    return importlib.util.find_spec("pglast") is not None
+    return True
 
 
 # ---------------------------------------------------------------------------

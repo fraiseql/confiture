@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar
 
+import pglast
+
 
 class MigrationAnalyzer:
     """Analyzes migration SQL for non-transactional statements.
@@ -89,12 +91,7 @@ class MigrationAnalyzer:
 
         Returns empty list if all statements are transactional.
         """
-        try:
-            import pglast  # noqa: PLC0415
-
-            return self._analyze_pglast(sql, pglast)
-        except ImportError:
-            return self._analyze_regex(sql)
+        return self._analyze_pglast(sql, pglast)
 
     def _analyze_pglast(self, sql: str, pglast: Any) -> list[str]:
         """AST-based detection using PostgreSQL's own parser."""

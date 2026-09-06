@@ -7,9 +7,6 @@ the dispatcher picks the right backend.
 
 from __future__ import annotations
 
-import sys
-from unittest.mock import patch
-
 import pytest
 
 from confiture.core.idempotency import patterns
@@ -84,44 +81,6 @@ def test_ast_parse_error_falls_through_to_regex(monkeypatch):
 
     patterns.detect_non_idempotent_patterns("malformed SQL")
     assert calls == ["ast", "regex"]
-
-
-def test_slim_install_falls_back_to_regex(monkeypatch):
-    """When pglast is not importable, dispatcher goes straight to regex.
-
-    Simulated by making ``importlib.util.find_spec`` return None for
-    pglast and clearing the cached availability check.
-    """
-    from confiture.core.idempotency import ast_detector
-
-    monkeypatch.delenv("CONFITURE_IDEMPOTENCY_FORCE_REGEX", raising=False)
-    ast_detector.is_pglast_available.cache_clear()
-
-    real_find_spec = sys.modules["importlib.util"].find_spec
-
-    def fake_find_spec(name, *a, **kw):
-        if name == "pglast":
-            return None
-        return real_find_spec(name, *a, **kw)
-
-    calls: list[str] = []
-
-    def stub_ast(_sql):
-        calls.append("ast")
-        return []
-
-    def stub_regex(_sql):
-        calls.append("regex")
-        return []
-
-    with patch("importlib.util.find_spec", fake_find_spec):
-        ast_detector.is_pglast_available.cache_clear()
-        monkeypatch.setattr(patterns, "_detect_via_ast", stub_ast)
-        monkeypatch.setattr(patterns, "_detect_via_regex", stub_regex)
-        patterns.detect_non_idempotent_patterns("CREATE TABLE foo (id INT);")
-
-    ast_detector.is_pglast_available.cache_clear()
-    assert calls == ["regex"]
 
 
 @pytest.mark.parametrize(

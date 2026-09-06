@@ -52,6 +52,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_008` | 5 | error | Invalid migration.tracking_table: {value} | Use letters, digits and underscores only, optionally schema-qualified (e.g. public.tb_confiture) |
 | `CONFIG_009` | 5 | error | Anonymization secret not set ({env_var}) | Export ANONYMIZATION_SECRET to a long random string kept out of version control before running an anonymizing sync or a keyed hash strategy |
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
+| `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=6.0, current major) |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
 | `DIFFER_401` | 5 | error | Schema comparison failed | Verify both schema definitions are valid |

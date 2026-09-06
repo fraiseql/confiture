@@ -21,14 +21,14 @@ can emit an INFO note rather than silently miss the table.
 
 from __future__ import annotations
 
-import importlib.util
 import re
 from dataclasses import dataclass, field
 
 import sqlparse
 
-# Optional dep — pglast lives behind the ``[ast]`` extra.
-_HAS_PGLAST: bool = importlib.util.find_spec("pglast") is not None
+# pglast is a dependency (D13). The flag survives only as the switch tests use
+# to exercise the sqlparse backend, which goes with it in Phase 05 Cycle 6.
+_HAS_PGLAST: bool = True
 
 # Every privilege a table can hold.  ``GRANT ALL`` expands to this set.
 # Order matters only for deterministic test output; storage uses frozenset.

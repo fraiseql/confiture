@@ -5,6 +5,25 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 05 of the 2026-09-06 review: analyzer honesty and one parser. pglast is
+the parser; a file it cannot parse is a finding, never a clean result.
+
+### Changed
+
+- ⚠️ **pglast is a dependency (D13).** A standard install classified migrations
+  with a regex backend while reporting a version indistinguishable from an
+  AST-capable one (#210), and fraisier's deploy-time `preflight` — the run that
+  decides `window_safe` — depended on `fraiseql-confiture` without `[ast]`.
+  `pglast>=6.0` is now in the package's dependencies (57 wheels across CPython
+  3.11–3.14, Linux x86_64/aarch64/musl, macOS and Windows); the `[ast]` extra
+  is an empty alias for one release and is removed in 1.0.0. No module guards
+  the import any more (a test scans for `try: import pglast` and
+  `find_spec("pglast")`), and a pglast whose enum surface confiture cannot
+  resolve raises `CONFIG_011` naming the installed version instead of silently
+  falling back to regexes.
+
 ## [0.49.0] - 2026-09-06
 
 Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one

@@ -342,6 +342,7 @@ version = "0.49.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
+    { name = "pglast" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -352,15 +353,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-ast = [
-    { name = "pglast" },
-]
 dev = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "maturin" },
-    { name = "pglast" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -404,8 +401,7 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'notifications'", specifier = ">=3.1" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4" },
     { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.7.0" },
-    { name = "pglast", marker = "extra == 'ast'", specifier = ">=6.0" },
-    { name = "pglast", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pglast", specifier = ">=6.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.1.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

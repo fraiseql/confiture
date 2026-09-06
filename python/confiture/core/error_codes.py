@@ -739,6 +739,13 @@ def _create_global_registry() -> ErrorCodeRegistry:
             exit_code=5,
             resolution_hint="Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable",
         ),
+        ErrorCodeDefinition(
+            code="CONFIG_011",
+            message_template="pglast {version} does not expose {members}; confiture cannot walk DDL with it",
+            severity=ErrorSeverity.ERROR,
+            exit_code=5,
+            resolution_hint="Install a pglast release confiture supports (pglast>=6.0, current major)",
+        ),
     ]
 
     for code in migr_extra_codes:
@@ -913,6 +920,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_008": 5,  # tracking_table is not a plain identifier
     "CONFIG_009": 5,  # ANONYMIZATION_SECRET unset (D8: the secret is mandatory)
     "CONFIG_010": 5,
+    "CONFIG_011": 5,  # installed pglast lacks enum members confiture walks (D13)
     # MIGR family → 3, with two success-with-signal carve-outs at 0.
     "MIGR_001": 3,
     "MIGR_004": 3,

@@ -65,7 +65,7 @@ jobs:
         # re-resolve. The [notifications] and [ast] extras are required —
         # tests/unit/hooks/notifications/ requires jinja2, and the SQL parsers
         # depend on pglast for the primary path.
-        uv sync --locked --extra dev --extra notifications --extra ast
+        uv sync --locked --extra dev --extra notifications
 
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv
@@ -196,7 +196,7 @@ jobs:
         # re-resolve. The [notifications] and [ast] extras are required —
         # tests/unit/hooks/notifications/ requires jinja2, and the SQL parsers
         # depend on pglast for the primary path.
-        uv sync --locked --extra dev --extra notifications --extra ast
+        uv sync --locked --extra dev --extra notifications
 
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv
@@ -251,8 +251,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The floor and the current major. Both are claimed by the `[ast]`
-        # extra's `pglast>=6.0`, so both are tested.
+        # The floor and the current major. Both are claimed by the
+        # `pglast>=6.0` dependency, so both are tested.
         pglast: ['>=6,<7', '>=8']
     steps:
     - uses: actions/checkout@v6
@@ -268,7 +268,7 @@ jobs:
         # Locked tree first (#191), then deliberately step pglast off the lock —
         # `uv pip install` does not touch uv.lock, so this overrides exactly one
         # package and leaves the rest reproducible.
-        uv sync --locked --no-install-project --extra dev --extra notifications --extra ast
+        uv sync --locked --no-install-project --extra dev --extra notifications
         uv pip install "pglast${{ matrix.pglast }}"
         uv run --no-sync python -c "import pglast; print('pglast', pglast.__version__)"
     - name: Run the AST-backed suites

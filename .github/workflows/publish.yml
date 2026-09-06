@@ -61,7 +61,7 @@ jobs:
         # resolve of the wheel's metadata, so the release gate tests the same
         # dependency set the quality gate did. [notifications] and [ast] give
         # the test gate jinja2 and pglast — matches quality-gate.yml.
-        uv sync --locked --no-install-project --extra dev --extra notifications --extra ast
+        uv sync --locked --no-install-project --extra dev --extra notifications
 
         echo "=== Installing built wheel (the artefact under test) ==="
         WHEEL=$(ls dist/fraiseql_confiture-*.whl)

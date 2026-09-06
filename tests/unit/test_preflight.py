@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -344,53 +343,6 @@ class TestMigrationAnalyzerPglast:
 
 
 # ── Phase 2: MigrationAnalyzer (regex fallback) ──────────────────────────
-
-
-class TestMigrationAnalyzerRegex:
-    @pytest.fixture(autouse=True)
-    def _block_pglast(self):
-        with patch.dict(sys.modules, {"pglast": None}):
-            yield
-
-    def test_create_index_concurrently(self):
-        sql = "CREATE INDEX CONCURRENTLY idx_users_email ON users(email);"
-        result = MigrationAnalyzer().analyze(sql)
-        assert result == ["CREATE INDEX CONCURRENTLY: idx_users_email"]
-
-    def test_alter_type_add_value(self):
-        sql = "ALTER TYPE status ADD VALUE 'archived';"
-        result = MigrationAnalyzer().analyze(sql)
-        assert len(result) == 1
-        assert "ALTER TYPE status ADD VALUE" in result[0]
-
-    def test_drop_index_concurrently(self):
-        sql = "DROP INDEX CONCURRENTLY idx_users_email;"
-        result = MigrationAnalyzer().analyze(sql)
-        assert result == ["DROP INDEX CONCURRENTLY"]
-
-    def test_no_false_positives_on_regular_ddl(self):
-        sql = """
-        CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
-        ALTER TABLE users ADD COLUMN email TEXT;
-        CREATE INDEX idx_users_name ON users(name);
-        """
-        result = MigrationAnalyzer().analyze(sql)
-        assert result == []
-
-    def test_create_unique_index_concurrently(self):
-        sql = "CREATE UNIQUE INDEX CONCURRENTLY idx_users_email ON users(email);"
-        result = MigrationAnalyzer().analyze(sql)
-        assert result == ["CREATE INDEX CONCURRENTLY: idx_users_email"]
-
-    def test_vacuum(self):
-        sql = "VACUUM ANALYZE users;"
-        result = MigrationAnalyzer().analyze(sql)
-        assert result == ["VACUUM"]
-
-    def test_create_database(self):
-        sql = "CREATE DATABASE mydb;"
-        result = MigrationAnalyzer().analyze(sql)
-        assert result == ["CREATE DATABASE"]
 
 
 # ── Phase 2: Integration with reversibility ───────────────────────────────

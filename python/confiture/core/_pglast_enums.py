@@ -17,14 +17,19 @@ Resolving by name makes the binding version-independent. The declarative
 declared, so ``tests/unit/test_pglast_enum_binding.py`` picks it up
 automatically rather than needing to be kept in sync by hand.
 
-The ``[ast]`` extra is optional, so nothing here may import pglast at module
+pglast is a dependency (D13, 0.50.0); this module imports it at module
 scope unconditionally — a regex-fallback install must still import cleanly.
 """
 
 from __future__ import annotations
 
 import itertools
+from importlib import metadata
 from typing import Final
+
+from pglast import enums
+
+from confiture.exceptions import ConfigurationError
 
 __all__ = [
     "MISSING_MEMBERS",
@@ -94,13 +99,6 @@ def member(enum_name: str, member_name: str) -> int:
     The latter case is also recorded in :data:`MISSING_MEMBERS`.
     """
     try:
-        from pglast import enums
-    except ImportError:
-        # Regex-fallback install: the AST path never runs, so the value is
-        # unobservable. Not a defect — do not record it as missing.
-        return next(_sentinels)
-
-    try:
         return int(getattr(getattr(enums, enum_name), member_name))
     except AttributeError:
         MISSING_MEMBERS.append(f"{enum_name}.{member_name}")
@@ -110,8 +108,18 @@ def member(enum_name: str, member_name: str) -> int:
 def enums_are_usable() -> bool:
     """True when every declared member resolved against the installed pglast.
 
-    A consumer whose AST path depends on these must check this before trusting
-    it. Half-resolved enums mean silently-dropped operations, which is what
-    #192 was.
+    Half-resolved enums mean silently-dropped operations, which is what #192
+    was — so a pglast that lacks a member confiture walks is a configuration
+    error naming the version, not a degrade.
+
+    Raises:
+        ConfigurationError: the installed pglast lacks declared members.
     """
-    return not MISSING_MEMBERS
+    if MISSING_MEMBERS:
+        raise ConfigurationError(
+            f"pglast {metadata.version('pglast')} does not expose "
+            f"{', '.join(MISSING_MEMBERS)}; confiture cannot walk DDL with it.",
+            error_code="CONFIG_011",
+            resolution_hint="Install a pglast release confiture supports (pglast>=6.0, current major).",
+        )
+    return True

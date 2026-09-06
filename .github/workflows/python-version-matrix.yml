@@ -81,7 +81,7 @@ jobs:
         # test suite has its optional dependencies satisfied.
         # Sync from the committed uv.lock (#191). uv resolves universally, so
         # one lock serves every Python in the matrix.
-        uv sync --locked --extra dev --extra notifications --extra ast
+        uv sync --locked --extra dev --extra notifications
 
         echo "=== Building Rust extension with maturin ==="
         uv run maturin develop --uv

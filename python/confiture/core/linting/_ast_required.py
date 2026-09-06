@@ -15,14 +15,7 @@ today; future AST-only rules import the same helpers.
 
 from __future__ import annotations
 
-import importlib.util
 import sys
-from functools import cache
-
-# Test seam: when True, :func:`is_pglast_available` reports unavailable
-# regardless of what's installed.  Tests flip this via monkeypatch — the
-# production path leaves it ``False`` and the ``importlib`` check decides.
-_force_unavailable: bool = False
 
 # Module-level guard so the skip notice fires once per process rather
 # than once per migration (a CI run with many migrations would otherwise
@@ -30,18 +23,13 @@ _force_unavailable: bool = False
 _skip_warned: bool = False
 
 
-@cache
 def is_pglast_available() -> bool:
-    """Return True when the ``pglast`` package is importable.
+    """Always True: pglast is a dependency (D13).
 
-    Cached because ``importlib.util.find_spec`` walks ``sys.path`` on
-    every call; the answer doesn't change at runtime in practice.  Tests
-    that need to force a False reading can ``monkeypatch.setattr`` the
-    module's ``_force_unavailable`` flag *and* clear this cache.
+    The ``not available`` branches it guards are deleted with the regex
+    backends (Phase 05 Cycle 5).
     """
-    if _force_unavailable:
-        return False
-    return importlib.util.find_spec("pglast") is not None
+    return True
 
 
 def emit_skip_notice(message: str) -> None:

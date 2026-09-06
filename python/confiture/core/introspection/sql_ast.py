@@ -10,6 +10,8 @@ import dataclasses
 import re
 from typing import Any
 
+import pglast
+
 
 @dataclasses.dataclass
 class CTENode:
@@ -33,14 +35,8 @@ class JSONBKey:
 
 
 def _require_pglast() -> Any:
-    """Import pglast or raise a clear error."""
-    try:
-        import pglast  # noqa: PLC0415
-
-        return pglast
-    except ImportError:
-        msg = "pglast is required for SQL AST operations. Install it with: uv add pglast"
-        raise ImportError(msg) from None
+    """The pglast module (a dependency since 0.50.0)."""
+    return pglast
 
 
 def extract_ctes(sql: str) -> list[CTENode]:

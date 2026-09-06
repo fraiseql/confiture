@@ -1,7 +1,5 @@
 """Unit tests for FunctionSignatureParser — both pglast and regex paths."""
 
-from unittest.mock import patch
-
 import pytest
 
 from confiture.core.function_signature_parser import FunctionSignature, FunctionSignatureParser
@@ -246,15 +244,3 @@ class TestFunctionSignatureKey:
     def test_signature_key_no_params(self):
         sig = FunctionSignature("public", "ping", ())
         assert sig.signature_key() == "public.ping()"
-
-
-class TestFunctionSignatureParserDispatch:
-    """Test that parse() routes to pglast when available, regex otherwise."""
-
-    def test_falls_back_to_regex_when_pglast_unavailable(self):
-        sql = "CREATE FUNCTION public.f(x INTEGER) RETURNS void AS $$ $$ LANGUAGE sql;"
-        with patch.dict("sys.modules", {"pglast": None}):
-            parser = FunctionSignatureParser()
-            sigs = parser.parse(sql)
-        assert len(sigs) == 1
-        assert sigs[0].param_types == ("integer",)

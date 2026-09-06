@@ -11,6 +11,8 @@ import dataclasses
 import re
 from typing import Any
 
+import pglast
+
 _FUNC_RE = re.compile(
     r"""
     CREATE \s+ (?:OR \s+ REPLACE \s+)?
@@ -91,12 +93,7 @@ class FunctionSignatureParser:
 
     def parse(self, sql: str) -> list[FunctionSignature]:
         """Return all function/procedure signatures found in sql."""
-        try:
-            import pglast  # noqa: PLC0415
-
-            return self._parse_pglast(sql, pglast)
-        except ImportError:
-            return self._parse_regex(sql)
+        return self._parse_pglast(sql, pglast)
 
     def _parse_pglast(self, sql: str, pglast: Any) -> list[FunctionSignature]:
         """Parse using pglast (PostgreSQL's C parser).

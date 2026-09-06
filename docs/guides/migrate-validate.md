@@ -120,17 +120,13 @@ The detector also recognizes cross-snippet DROP+CREATE pairs in
 followed by `CREATE VIEW v …` in the next is now treated as the
 idempotent DROP+CREATE pattern (pre-0.14.0 the second call was flagged).
 
-The regex backend is preserved as the slim-install fallback (installing
-`fraiseql-confiture` without the `[ast]` extra still works). It also
-serves as an escape hatch: set
-`CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` to pin the dispatcher to the
-regex path for one release if you hit an AST regression. The env var
-will be removed in a future release.
+`pglast` is a dependency since 0.50.0, so every install runs the AST
+detector. The regex backend still exists as an escape hatch for one
+release: set `CONFITURE_IDEMPOTENCY_FORCE_REGEX=1` to pin the dispatcher
+to it if you hit an AST regression. The env var is removed with the
+backend.
 
 ```bash
-# Install with the AST backend (recommended)
-pip install "fraiseql-confiture[ast]"
-
 # Pin to regex (one-release escape hatch)
 CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 confiture migrate validate --idempotent
 ```
@@ -232,9 +228,8 @@ absence of a preflight DB is something you should see). When `--against`
 is set but the live DB connection fails, the report status flips to
 `skipped` with a `connection_failed` reason.
 
-`--check-dependents` requires the `[ast]` extra
-(`pip install fraiseql-confiture[ast]`). Without pglast installed, the
-flag emits a clean install hint instead of silently passing.
+`--check-dependents` parses the migrations with `pglast`, a dependency
+since 0.50.0.
 
 **Object types covered**: views, materialized views, functions, and
 procedures referenced by CoR statements. Tables, composite types, and
