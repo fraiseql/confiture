@@ -82,7 +82,7 @@ class TestExitCode0AllApplied:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -128,7 +128,7 @@ class TestExitCode0AllApplied:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -146,7 +146,7 @@ class TestExitCode0AllApplied:
             )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["pending"] == []
 
 
@@ -168,7 +168,7 @@ class TestExitCode1PendingExist:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -195,7 +195,7 @@ class TestExitCode1PendingExist:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -222,7 +222,7 @@ class TestExitCode1PendingExist:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -240,7 +240,7 @@ class TestExitCode1PendingExist:
             )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["pending"]) == 2
         assert "warning" not in data
 
@@ -261,7 +261,7 @@ class TestExitCode2TrackingTableAbsent:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -288,7 +288,7 @@ class TestExitCode2TrackingTableAbsent:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -306,7 +306,7 @@ class TestExitCode2TrackingTableAbsent:
             )
 
         assert result.exit_code == 2
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "warning" in data
 
     def test_exit_2_not_3_when_table_absent(self, tmp_path):
@@ -319,7 +319,7 @@ class TestExitCode2TrackingTableAbsent:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -353,7 +353,7 @@ class TestExitCode3FatalError:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch(
-                "confiture.core.connection.create_connection",
+                "confiture.cli.helpers.create_connection",
                 side_effect=RuntimeError("Connection refused"),
             ),
         ):
@@ -380,7 +380,7 @@ class TestExitCode3FatalError:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch(
-                "confiture.core.connection.create_connection",
+                "confiture.cli.helpers.create_connection",
                 side_effect=OSError("Network unreachable"),
             ),
         ):

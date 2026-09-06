@@ -30,6 +30,7 @@ def print_json(data: dict[str, Any], console: Console) -> None:
         data: Dictionary to display as JSON
         console: Rich console for output (ignored for JSON to avoid formatting)
     """
+    del console  # JSON goes through print(): Rich would re-wrap and colour the payload
     # Print raw JSON without Rich formatting
     import sys
 

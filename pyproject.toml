@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "0.48.0"
+version = "0.49.0"
 description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -236,7 +236,6 @@ ignore = [
 # SIM105: try-except-pass is acceptable for "expected to fail" test scenarios
 "tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
 "python/tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
-"python/confiture/cli/*" = ["ARG001"]  # Allow unused args in CLI callbacks
 # Extractor-coverage fixtures pin argument *shapes*, some of them deliberately
 # wrong: an unbound name (F821) and %-formatting (UP031) are the shapes.
 "tests/fixtures/idempotency_shapes/*" = ["F821", "UP031"]

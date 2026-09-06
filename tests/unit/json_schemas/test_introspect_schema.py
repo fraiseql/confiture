@@ -66,7 +66,7 @@ def _invoke(cfg: Path, snapshots: Path):
     )
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch("confiture.core.migrator.Migrator", autospec=True)
 def test_missing_snapshots_dir_matches_schema(
     migrator_cls, _conn, cfg: Path, tmp_path: Path
@@ -81,7 +81,7 @@ def test_missing_snapshots_dir_matches_schema(
     assert payload["detected_version"] is None
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch("confiture.core.migrator.Migrator", autospec=True)
 @patch("confiture.core.baseline_detector.BaselineDetector")
 def test_exact_match_matches_schema(
@@ -104,7 +104,7 @@ def test_exact_match_matches_schema(
     assert payload["detected_version"] == "20260101000000"
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch("confiture.core.migrator.Migrator", autospec=True)
 @patch("confiture.core.baseline_detector.BaselineDetector")
 def test_no_match_with_closest_matches_schema(
@@ -129,7 +129,7 @@ def test_no_match_with_closest_matches_schema(
     assert payload["closest_similarity"] == pytest.approx(0.4213)
 
 
-@patch("confiture.core.connection.create_connection")
+@patch("confiture.cli.helpers.create_connection")
 @patch("confiture.core.migrator.Migrator", autospec=True)
 def test_deprecated_alias_is_gone(migrator_cls, _conn, cfg: Path, tmp_path: Path) -> None:
     """``tb_confiture_present`` was removed in 0.40.0 as announced (#186).

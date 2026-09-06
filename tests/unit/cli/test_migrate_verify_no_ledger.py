@@ -58,7 +58,7 @@ def _invoke(
 ):
     """Invoke `migrate verify` with the ledger probe forced to `ledger`."""
     with (
-        patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+        patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
         patch(
             "confiture.core.migrator.Migrator.tracking_table_exists",
             return_value=ledger,

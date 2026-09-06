@@ -68,21 +68,16 @@ class TestSeedApplyCommand:
         # Should accept the option
         assert "unrecognized arguments" not in result.stdout
 
-    def test_seed_apply_accepts_benchmark_flag(
+    def test_seed_apply_rejects_removed_benchmark_flag(
         self, cli_runner: CliRunner, temp_seed_file: Path
     ) -> None:
-        """Test that apply command accepts --benchmark flag."""
+        """``--benchmark`` was a dead option; `confiture seed benchmark` is the command."""
         result = cli_runner.invoke(
             seed_app,
-            [
-                "apply",
-                "--seeds-dir",
-                str(temp_seed_file.parent),
-                "--benchmark",
-            ],
+            ["apply", "--seeds-dir", str(temp_seed_file.parent), "--benchmark"],
         )
-        # Should accept the flag
-        assert "unrecognized arguments" not in result.stdout
+        assert result.exit_code == 2
+        assert "No such option" in result.output
 
 
 class TestSeedConvertCommand:

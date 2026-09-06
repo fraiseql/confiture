@@ -104,7 +104,7 @@ class TestDiffCommand:
         new = _write_sql(NEW_SQL)
         result = runner.invoke(app, ["diff", "--from", old, "--to", new, "--format", "json"])
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["has_changes"] is True
         assert any(c["type"] == "ADD_COLUMN" for c in data["changes"])
 
@@ -112,7 +112,7 @@ class TestDiffCommand:
         p = _write_sql(OLD_SQL)
         result = runner.invoke(app, ["diff", "--from", p, "--to", p, "--format", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["has_changes"] is False
 
     def test_diff_command_missing_file(self):
@@ -130,7 +130,7 @@ class TestDiffCommand:
             ["diff", "--from", "nonexistent.sql", "--to", "x.sql", "--format", "json"],
         )
         assert result.exit_code == 4
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["ok"] is False
         assert data["error"]["code"] == "SCHEMA_201"
         assert "not found" in data["error"]["message"]
@@ -230,7 +230,7 @@ class TestDiffCommandParseError:
         ):
             result = runner.invoke(app, ["diff", "--from", old, "--to", new, "--format", "json"])
         assert result.exit_code == 5
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["ok"] is False
         assert data["error"]["code"] == "DIFFER_400"
 
@@ -238,11 +238,12 @@ class TestDiffCommandParseError:
 class TestDiffCommandFormatFallthrough:
     """Gap J — unknown --format value falls through to text output."""
 
-    def test_diff_command_unknown_format_falls_through_to_text(self):
+    def test_diff_command_unknown_format_is_rejected(self):
         p = _write_sql(OLD_SQL)
         result = runner.invoke(app, ["diff", "--from", p, "--to", p, "--format", "csv"])
-        assert result.exit_code == 0
-        assert "No changes" in result.output
+        # One --format validator for every command: an unknown value exits 5 (ARC-02).
+        assert result.exit_code == 5, result.output
+        assert "Invalid --format" in result.output
 
 
 class TestDiffTextRenameOutput:

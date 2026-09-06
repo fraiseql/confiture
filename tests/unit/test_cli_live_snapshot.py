@@ -152,7 +152,7 @@ class TestMigrateGenerateLiveSnapshot:
             )
 
         assert result.exit_code == 0, result.output
-        output = json.loads(result.output)
+        output = json.loads(result.stdout)
         assert output["snapshot_mode"] == "live"
 
     def test_json_output_includes_snapshot_mode_static(self, tmp_path: Path) -> None:
@@ -181,7 +181,7 @@ class TestMigrateGenerateLiveSnapshot:
             )
 
         assert result.exit_code == 0, result.output
-        output = json.loads(result.output)
+        output = json.loads(result.stdout)
         assert output["snapshot_mode"] == "static"
 
     def test_config_live_snapshot_default(self, tmp_path: Path) -> None:

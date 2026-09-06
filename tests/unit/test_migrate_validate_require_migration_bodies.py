@@ -64,7 +64,7 @@ def test_require_bodies_violation_exits_1():
         ["--require-migration-bodies", "--format", "json"], _report(body_violations=[_violation()])
     )
     assert result.exit_code == 1
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["check"] == "accompaniment"
     assert data["is_valid"] is False
     assert data["body_violations"][0]["signature_key"] == "public.calc(integer)"
@@ -88,7 +88,7 @@ def test_list_unmigrated_bodies_reports_without_failing():
         ["--list-unmigrated-bodies", "--format", "json"], _report(body_violations=[_violation()])
     )
     assert result.exit_code == 0  # report-only never fails
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["check"] == "unmigrated_bodies"
     assert data["count"] == 1
     assert data["body_violations"][0]["signature_key"] == "public.calc(integer)"

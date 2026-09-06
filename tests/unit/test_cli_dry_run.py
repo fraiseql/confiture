@@ -34,7 +34,7 @@ class TestMigrateUpDryRun:
 
     def test_migrate_up_dry_run_analyzes_without_execution(self):
         """Test that --dry-run analyzes migrations without executing them."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
@@ -88,7 +88,7 @@ class TestMigrateUpDryRun:
 
     def test_migrate_up_dry_run_json_format(self):
         """Test --dry-run with JSON output format."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
@@ -153,7 +153,7 @@ class TestMigrateUpDryRun:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_file = Path(tmpdir) / "report.txt"
 
-            with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+            with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
                 with patch("confiture.core.connection.load_config"):
                     with patch(
                         "confiture.core.migrator.Migrator", autospec=True
@@ -198,7 +198,7 @@ class TestMigrateUpDryRun:
 
     def test_migrate_up_dry_run_execute_with_confirmation(self):
         """Test --dry-run-execute shows analysis then executes with confirmation."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
@@ -252,7 +252,7 @@ class TestMigrateDownDryRun:
 
     def test_migrate_down_dry_run_analyzes_without_rollback(self):
         """Test that --dry-run analyzes rollback without executing it."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
@@ -298,7 +298,7 @@ class TestMigrateDownDryRun:
 
     def test_migrate_down_dry_run_json_format(self):
         """Test --dry-run with JSON format for migrate down."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
@@ -385,7 +385,7 @@ class TestDryRunValidation:
         )
 
         # Should fail with validation error (exit 2)
-        assert result.exit_code == 2
+        assert result.exit_code == 5  # one --format validator (ARC-02)
 
     def test_migrate_down_invalid_format(self):
         """Test that invalid format is rejected in migrate down."""
@@ -396,7 +396,7 @@ class TestDryRunValidation:
         )
 
         # Should fail with validation error (exit 2)
-        assert result.exit_code == 2
+        assert result.exit_code == 5  # one --format validator (ARC-02)
 
 
 class TestDryRunExecution:
@@ -404,7 +404,7 @@ class TestDryRunExecution:
 
     def test_migrate_up_dry_run_execute_user_cancels(self):
         """Test that --dry-run-execute doesn't execute when user cancels."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True
@@ -450,7 +450,7 @@ class TestDryRunExecution:
 
     def test_migrate_up_no_pending_migrations_with_dry_run(self):
         """Test --dry-run when there are no pending migrations."""
-        with patch("confiture.core.connection.create_connection") as mock_conn_factory:
+        with patch("confiture.core.migrator.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
                 with patch(
                     "confiture.core.migrator.Migrator", autospec=True

@@ -258,7 +258,7 @@ class TestCheckSignaturesFlag:
         import json
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["check"] == "function_signature_drift"
         assert "has_drift" in data
 
@@ -429,7 +429,7 @@ class TestCheckBodyFlag:
             )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "body_drift" in data
         assert data["body_drift"]["has_drift"] is True
         assert len(data["body_drift"]["body_drifts"]) == 1
@@ -566,7 +566,7 @@ class TestCheckBodyFlag:
         result = self._run_show_diff(tmp_path, ["--show-diff", "--format", "json"])
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         entry = data["body_drift"]["body_drifts"][0]
         assert entry["expected_body"] == "SELECT $1 + 1;"
         assert entry["live_body"] == "SELECT $1 + 2;"
@@ -582,7 +582,7 @@ class TestCheckBodyFlag:
         result = self._run_show_diff(tmp_path, ["--format", "json"])
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         entry = data["body_drift"]["body_drifts"][0]
         assert set(entry) == {"schema", "name", "signature_key", "source_hash", "db_hash"}
         assert "expected_body" not in entry

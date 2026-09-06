@@ -400,7 +400,7 @@ class TestCoordinateCheckCommand:
             resolution_suggestions=["Coordinate with other agent"],
         )
         mock_detector.detect_conflicts.return_value = [conflict]
-        mock_registry._detector = mock_detector
+        mock_registry.detector = mock_detector
 
         result = runner.invoke(
             app,
@@ -874,7 +874,7 @@ class TestCoordinateJSONOutput:
         mock_registry.list_intents.return_value = []
         mock_detector = MagicMock()
         mock_detector.detect_conflicts.return_value = []
-        mock_registry._detector = mock_detector
+        mock_registry.detector = mock_detector
 
         result = runner.invoke(
             app,
@@ -932,7 +932,7 @@ class TestCoordinateJSONOutput:
 
         mock_detector = MagicMock()
         mock_detector.detect_conflicts.return_value = [mock_conflict]
-        mock_registry._detector = mock_detector
+        mock_registry.detector = mock_detector
 
         result = runner.invoke(
             app,

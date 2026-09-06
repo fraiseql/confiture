@@ -13,8 +13,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from confiture.cli.error_json import fail
-from confiture.cli.helpers import is_json
+from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.helpers import connect, is_json
+from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.core.seed_applier import SeedApplier
 from confiture.core.seed_validation import SeedFixer, SeedValidator
@@ -75,8 +76,6 @@ def _validate_prep_seed(
     database_url: str | None,
     format_: str,
     output: Path | None,
-    fix: bool,
-    dry_run: bool,
 ) -> None:
     """Handle prep-seed pattern validation."""
     # Determine max level to run
@@ -143,6 +142,7 @@ def _validate_prep_seed(
 
 
 @seed_app.command("validate")
+@cli_boundary
 def validate(
     seeds_dir: Path = typer.Option(
         Path("db/seeds"),
@@ -159,21 +159,12 @@ def validate(
         "--all",
         help="Validate all environments (default: off)",
     ),
-    mode: str = typer.Option(
-        "static",
-        "--mode",
-        help="Validation mode: static or database (default: static)",
-    ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
         help="Database URL for database mode validation (default: none)",
     ),
-    format_: str = typer.Option(
-        "text",
-        "--format",
-        help="Output format: text, json, csv (default: text)",
-    ),
+    format_: str = format_option("text", "json", "csv"),
     output: Path | None = typer.Option(
         None,
         "--output",
@@ -222,9 +213,9 @@ def validate(
 
     EXAMPLES:
       confiture seed validate
-        ↳ Validate default seed directory, static mode (no database needed)
+        ↳ Validate default seed directory (no database needed)
 
-      confiture seed validate --mode database --database-url postgresql://localhost/mydb
+      confiture seed validate --prep-seed --database-url postgresql://localhost/mydb
         ↳ Validate with database checks for schema compatibility
 
       confiture seed validate --fix --dry-run
@@ -248,7 +239,7 @@ def validate(
       📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
 
     OPTIONS:
-      CORE: --seeds-dir, --mode, --format, --output
+      CORE: --seeds-dir, --format, --output
         What to validate, how to validate, and how to report
 
       PREP-SEED: --prep-seed, --level, --static-only, --full-execution
@@ -272,8 +263,6 @@ def validate(
                 database_url=database_url,
                 format_=format_,
                 output=output,
-                fix=fix,
-                dry_run=dry_run,
             )
 
         # Determine which directories to validate
@@ -403,6 +392,7 @@ def validate(
 
 
 @seed_app.command("apply")
+@cli_boundary
 def apply(
     seeds_dir: Path = typer.Option(
         DEFAULT_SEEDS_DIR,
@@ -439,17 +429,7 @@ def apply(
         "--copy-threshold",
         help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
     ),
-    benchmark: bool = typer.Option(
-        False,
-        "--benchmark",
-        help="Show VALUES vs COPY performance comparison",
-    ),
-    format_type: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text, json, csv (default: text)",
-    ),
+    format_type: str = format_option("text", "json", "csv"),
     report_output: Path = typer.Option(
         None,
         "--output",
@@ -487,7 +467,7 @@ def apply(
     PERFORMANCE TIPS:
       • Use --sequential if any file has 650+ rows
       • Use --copy-format if total rows > 50,000
-      • Use --benchmark to see improvement
+      • Use `confiture seed benchmark` to compare VALUES vs COPY
 
     RELATED COMMANDS:
       confiture seed validate   - Check seed data quality
@@ -507,7 +487,7 @@ def apply(
       DATABASE: --env, --database-url
         Connection parameters (URL overrides environment)
 
-      PERFORMANCE: --copy-format, --copy-threshold, --benchmark
+      PERFORMANCE: --copy-format, --copy-threshold
         Format selection (2-10x faster for >50K rows)
 
       OUTPUT: --format, --report
@@ -543,10 +523,9 @@ def apply(
         # Get database connection
         if database_url:
             # Use provided URL directly
-            from confiture.core.connection import create_connection
 
             try:
-                connection = create_connection(database_url)
+                connection = connect(database_url)
             except Exception as e:
                 fail(
                     ConfigurationError(
@@ -562,9 +541,8 @@ def apply(
                 from confiture.config.environment import Environment
 
                 env_config = Environment.load(env)
-                from confiture.core.connection import create_connection
 
-                connection = create_connection(env_config.database_url)
+                connection = connect(env_config.database_url)
             except Exception as e:
                 fail(
                     ConfigurationError(
@@ -585,6 +563,8 @@ def apply(
                 env=env,
                 connection=connection,
                 console=console,
+                copy_format=copy_format,
+                copy_threshold=copy_threshold,
             )
 
             # Use progress manager for seed application
@@ -628,6 +608,7 @@ def apply(
 
 
 @seed_app.command("convert")
+@cli_boundary
 def convert(
     input_file: Path = typer.Option(
         ...,
@@ -822,6 +803,7 @@ def convert(
 
 
 @seed_app.command("benchmark")
+@cli_boundary
 def benchmark(
     seeds_dir: Path = typer.Option(
         DEFAULT_SEEDS_DIR,
@@ -928,6 +910,7 @@ def benchmark(
 
 
 @seed_app.command("generate")
+@cli_boundary
 def seed_generate(
     table: str = typer.Argument(..., help="Table name to generate seed data for"),
     database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
@@ -940,9 +923,7 @@ def seed_generate(
     overwrite: bool = typer.Option(
         False, "--overwrite", help="Overwrite existing seed file (default: off)"
     ),
-    format_type: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text, json (default: text)"
-    ),
+    format_type: str = format_option("text", "json"),
 ) -> None:
     """Generate a seed SQL stub for a PostgreSQL table.
 

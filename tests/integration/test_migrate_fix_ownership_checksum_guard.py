@@ -116,7 +116,8 @@ def test_refuses_to_rewrite_already_applied_migration(
             str(tmp_path / "db" / "migrations"),
         ],
     )
-    assert result.exit_code == 2, result.output
+    # A refused rewrite is a precondition failure: exit 5 (docs/reference/exit-codes.md).
+    assert result.exit_code == 5, result.output
     assert "Refused" in result.output
     assert path.read_text() == original  # unchanged
 

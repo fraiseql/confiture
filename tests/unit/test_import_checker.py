@@ -353,7 +353,7 @@ class TestCheckImportsCLI:
         )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["check"] == "imports"
         assert data["checked"] == 2
         assert data["passed"] == 1

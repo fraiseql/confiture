@@ -77,7 +77,7 @@ class TestAutoDetectBaselineMissingSnapshotsDir:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=connection_double()),
+            patch("confiture.core.migrator.create_connection", return_value=connection_double()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -116,7 +116,7 @@ class TestAutoDetectBaselineEmptySnapshotsDir:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=connection_double()),
+            patch("confiture.core.migrator.create_connection", return_value=connection_double()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(

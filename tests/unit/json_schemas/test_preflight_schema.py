@@ -111,7 +111,7 @@ def test_preflight_against_validates(tmp_path, schemas_dir):
 
     runner = CliRunner()
     with patch(
-        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        "confiture.cli.commands.migrate.preflight.MigratorSession",
         autospec=True,
         return_value=mock_session,
     ):
@@ -171,7 +171,7 @@ def test_preflight_against_replay_failure_validates(tmp_path, schemas_dir):
 
     runner = CliRunner()
     with patch(
-        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        "confiture.cli.commands.migrate.preflight.MigratorSession",
         autospec=True,
         return_value=mock_session,
     ):

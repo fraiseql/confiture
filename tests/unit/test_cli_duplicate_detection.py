@@ -48,7 +48,7 @@ class TestMigrateValidateDuplicates:
         )
 
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "duplicate_versions" in data
         assert "001" in data["duplicate_versions"]
 
@@ -105,7 +105,7 @@ class TestMigrateStatusDuplicates:
         )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "duplicate_versions" in data
         assert "001" in data["duplicate_versions"]
 

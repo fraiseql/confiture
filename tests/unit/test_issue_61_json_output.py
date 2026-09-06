@@ -52,7 +52,7 @@ class TestMigrateStatusJsonOutput:
                 "confiture.core.connection.load_config",
                 return_value=_make_env("myschema.my_migrations"),
             ),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -70,7 +70,7 @@ class TestMigrateStatusJsonOutput:
             )
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "tracking_table" in data
         assert data["tracking_table"] == "myschema.my_migrations"
 
@@ -99,7 +99,7 @@ class TestMigrateStatusJsonOutput:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -117,7 +117,7 @@ class TestMigrateStatusJsonOutput:
             )
 
         assert result.exit_code == 1, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         migrations = {m["version"]: m for m in data["migrations"]}
         assert "applied_at" in migrations["001"]
         assert migrations["001"]["applied_at"] == "2025-01-15T10:30:00+00:00"
@@ -146,7 +146,7 @@ class TestMigrateStatusJsonOutput:
 
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
-            patch("confiture.core.connection.create_connection", return_value=MagicMock()),
+            patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
             patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
@@ -164,7 +164,7 @@ class TestMigrateStatusJsonOutput:
             )
 
         assert result.exit_code == 1, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "summary" in data
         summary = data["summary"]
         assert "applied" in summary

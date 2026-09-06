@@ -18,8 +18,9 @@ from typing import TYPE_CHECKING, Any
 
 import typer
 
-from confiture.cli.error_json import fail
-from confiture.cli.helpers import console, is_json
+from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.helpers import connect, console, is_json
+from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ _TARGET_OPTION = typer.Option(
     "--target",
     help="Target (new) database: env name, config path, or DSN.",
 )
-_FORMAT_OPTION = typer.Option("text", "--format", "-f", help="Output format: text or json.")
+_FORMAT_OPTION = format_option("text", "json")
 
 
 def _resolve_connection(spec: str) -> psycopg.Connection:
@@ -48,7 +49,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
 
     Resolution order:
       1. Looks like a DSN (``postgres://`` / ``postgresql://``) → connect directly.
-      2. A ``.yaml`` path or existing file → ``load_config`` + ``create_connection``.
+      2. A ``.yaml`` path or existing file → ``load_config`` + the CLI connection seam.
       3. Otherwise treat as an environment name → ``db/environments/{name}.yaml``.
 
     Raises:
@@ -56,7 +57,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
     """
     import psycopg
 
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
 
     try:
         if spec.startswith(("postgres://", "postgresql://")):
@@ -71,7 +72,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
                 f"(db/environments/{spec}.yaml), a config path, or a DSN.",
                 error_code="CONFIG_004",
             )
-        return create_connection(load_config(candidate))
+        return connect(load_config(candidate))
     except ConfiturError:
         raise
     except Exception as exc:  # noqa: BLE001 — surfaced as a connection ConfigurationError
@@ -115,6 +116,7 @@ def _migrator(source: str, target: str):  # noqa: ANN202 — returns SchemaToSch
 
 
 @schema_to_schema_app.command("setup")
+@cli_boundary
 def s2s_setup(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -142,6 +144,7 @@ def s2s_setup(
 
 
 @schema_to_schema_app.command("analyze")
+@cli_boundary
 def s2s_analyze(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -171,6 +174,7 @@ def s2s_analyze(
 
 
 @schema_to_schema_app.command("migrate")
+@cli_boundary
 def s2s_migrate(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -216,6 +220,7 @@ def s2s_migrate(
 
 
 @schema_to_schema_app.command("migrate-table")
+@cli_boundary
 def s2s_migrate_table(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -254,6 +259,7 @@ def s2s_migrate_table(
 
 
 @schema_to_schema_app.command("verify")
+@cli_boundary
 def s2s_verify(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
@@ -299,6 +305,7 @@ def s2s_verify(
 
 
 @schema_to_schema_app.command("cleanup")
+@cli_boundary
 def s2s_cleanup(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from confiture.cli.commands.migrate_analysis import _extract_function_source
+from confiture.cli.commands.migrate.fix_signatures import _extract_function_source
 from confiture.cli.main import app
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport, StaleOverload
 from tests._helpers import strip_ansi as _strip_ansi
@@ -116,9 +116,12 @@ class TestFixSignaturesDryRun:
         schema.write_text(_SCHEMA_SQL)
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -149,9 +152,12 @@ class TestFixSignaturesDryRun:
         schema.write_text(_SCHEMA_SQL)
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -186,9 +192,12 @@ class TestFixSignaturesDryRun:
         schema.write_text(_SCHEMA_SQL)
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -212,7 +221,7 @@ class TestFixSignaturesDryRun:
                 ],
             )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["status"] == "dry_run"
         assert data["fixes_planned"] == 1
         assert "DROP FUNCTION" in data["sql"]
@@ -226,9 +235,12 @@ class TestFixSignaturesApply:
         schema.write_text(_SCHEMA_SQL)
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -261,9 +273,12 @@ class TestFixSignaturesApply:
         schema.write_text(_SCHEMA_SQL)
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -302,9 +317,12 @@ class TestFixSignaturesApply:
         cm.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()),
             patch(
-                "confiture.cli.commands.migrate_analysis.open_connection",
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 MagicMock(return_value=cm),
             ),
             patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
@@ -349,7 +367,9 @@ class TestFixSignaturesMissingConfig:
         config = tmp_path / "confiture.yaml"
         config.write_text("database:\n  url: postgresql://localhost/test\n")
 
-        with patch("confiture.cli.commands.migrate_analysis.load_config", return_value=MagicMock()):
+        with patch(
+            "confiture.cli.commands.migrate.fix_signatures.load_config", return_value=MagicMock()
+        ):
             result = runner.invoke(
                 app,
                 ["migrate", "fix-signatures", "--config", str(config)],

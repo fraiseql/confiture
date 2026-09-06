@@ -9,7 +9,7 @@ The `confiture seed validate` command checks seed files for common data consiste
 ### Validation Modes
 
 1. **Static Validation** (default) - Fast checks that don't require a database
-2. **Database Validation** (with `--mode database`) - Schema-aware checks against PostgreSQL
+2. **Database Validation** (`--prep-seed --database-url …`) - Schema-aware prep-seed checks against PostgreSQL (levels 4–5)
 
 ## Quick Start
 
@@ -119,7 +119,7 @@ This modifies files in place, adding `ON CONFLICT DO NOTHING` to INSERT statemen
 Validate against actual PostgreSQL schema (requires database connection).
 
 ```bash
-confiture seed validate --mode database --database-url postgresql://localhost/mydb
+confiture seed validate --prep-seed --database-url postgresql://localhost/mydb
 ```
 
 This checks:

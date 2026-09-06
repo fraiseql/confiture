@@ -81,7 +81,7 @@ class TestMigrateGenerateName:
             ],
         )
         assert result.exit_code == 5, result.output
-        payload = json.loads(result.stdout[result.stdout.index("{") :])
+        payload = json.loads(result.stdout)
         assert payload["ok"] is False
         assert payload["error"]["code"] == "VALID_001"
 

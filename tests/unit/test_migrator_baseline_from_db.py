@@ -160,7 +160,7 @@ class TestMigrateBaselineCliArgs:
         ``Migrator.baseline_from_db`` rather than the manual mark loop."""
         from typer.testing import CliRunner
 
-        from confiture.cli.commands import migrate_state
+        from confiture.cli.commands.migrate import baseline as migrate_state
         from confiture.cli.main import app
 
         captured: dict = {}

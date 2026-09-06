@@ -5,17 +5,17 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, resolve_database_url
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
-    DATABASE_URL_OPTION_HELP,
     _get_tracking_table,
     _output_json,
     console,
     error_console,
     is_json,
-    resolve_database_url,
+    open_connection,
 )
-from confiture.core.connection import create_connection
+from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error
 from confiture.exceptions import (
     ConfigurationError,
@@ -98,6 +98,7 @@ def _checksum_payload(
     return payload
 
 
+@cli_boundary
 def install_helpers(
     config: Path = typer.Option(
         None,
@@ -145,27 +146,23 @@ def install_helpers(
             environment = Environment.load(env)
             cfg = {"database": {"url": environment.database_url}}
 
-        conn = create_connection(cfg)
+        with open_connection(cfg) as conn:
+            if dry_run:
+                from importlib import resources
 
-        if dry_run:
-            from importlib import resources
+                sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
+                console.print("[bold]SQL that would be executed:[/bold]\n")
+                console.print(sql)
+                return
 
-            sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
-            console.print("[bold]SQL that would be executed:[/bold]\n")
-            console.print(sql)
-            conn.close()
-            return
+            vm = ViewManager(conn)
 
-        vm = ViewManager(conn)
+            if not force and vm.helpers_installed():
+                console.print("[green]✓[/green] View helpers already installed — nothing to do")
+                console.print("  Use [bold]--force[/bold] to reinstall")
+                return
 
-        if not force and vm.helpers_installed():
-            console.print("[green]✓[/green] View helpers already installed — nothing to do")
-            console.print("  Use [bold]--force[/bold] to reinstall")
-            conn.close()
-            return
-
-        vm.install_helpers()
-        conn.close()
+            vm.install_helpers()
 
         console.print("[green]✓[/green] Installed confiture view helper functions")
         console.print("  Schema: [bold]confiture[/bold]")
@@ -177,6 +174,7 @@ def install_helpers(
         raise typer.Exit(handle_cli_error(e)) from e
 
 
+@cli_boundary
 def validate_profile(
     path: Path = typer.Argument(
         ...,
@@ -250,6 +248,7 @@ def validate_profile(
         fail(e, json_mode=False)
 
 
+@cli_boundary
 def verify_checksums(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -272,12 +271,7 @@ def verify_checksums(
         "--allow-uninitialized",
         help=ALLOW_UNINITIALIZED_HELP,
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """Verify migration file integrity against stored checksums.
 
@@ -317,27 +311,13 @@ def verify_checksums(
         ChecksumMismatchBehavior,
         MigrationChecksumVerifier,
     )
-    from confiture.core.connection import create_connection, load_config
+    from confiture.core.connection import load_config
     from confiture.core.ledger import find_ledger_relations, notable_resolution, probe_ledger
 
-    if output_format not in ("text", "json"):
-        fail(
-            ConfigurationError(
-                f"Invalid format '{output_format}'. Use 'text' or 'json'.",
-                resolution_hint="Pass --format text or --format json.",
-            ),
-            json_mode=False,
-        )
     json_mode = is_json(output_format)
 
-    try:
-        # Load config and connect
-        config_data = load_config(config)
-        conn = create_connection(config_data)
-
-        # Probe before building the verifier: if verify_all() returned [] for
-        # "no table", that would be indistinguishable from "no mismatches" —
-        # the absent-vs-empty conflation this guard exists to prevent.
+    config_data = load_config(config)
+    with open_connection(config_data) as conn:
         tracking_table = _get_tracking_table(config_data)
         ledger = probe_ledger(conn, tracking_table)
         if not ledger.exists:
@@ -352,7 +332,6 @@ def verify_checksums(
                 if _elsewhere
                 else ""
             )
-            conn.close()
             if allow_uninitialized:
                 if json_mode:
                     # 0.37.0 turned this crash into a graceful exit but left it
@@ -411,7 +390,6 @@ def verify_checksums(
                 _read = notable_resolution(tracking_table, ledger.resolved_name)
                 _suffix = f" (read `{_read}`)" if _read else ""
                 console.print(f"[green]✅ All migration checksums verified!{_suffix}[/green]")
-            conn.close()
             return
 
         updated: int | None = None
@@ -448,18 +426,13 @@ def verify_checksums(
                     "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
                 )
 
-        conn.close()
-        if not fix:
-            # success-signal: verification ran and found mismatches (the CI gate
-            # this command exists to trip) — not a confiture-domain error.
-            raise typer.Exit(1)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        fail(e, json_mode=json_mode)
+    if not fix:
+        # success-signal: verification ran and found mismatches (the CI gate
+        # this command exists to trip) — not a confiture-domain error.
+        raise typer.Exit(1)
 
 
+@cli_boundary
 def verify_deprecated(
     migrations_dir: Path = typer.Option(
         Path("db/migrations"),
@@ -482,12 +455,7 @@ def verify_deprecated(
         "--allow-uninitialized",
         help=ALLOW_UNINITIALIZED_HELP,
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """[DEPRECATED] Alias for `confiture verify-checksums`.
 
@@ -513,6 +481,7 @@ def verify_deprecated(
     )
 
 
+@cli_boundary
 def validate_config(
     config: Path = typer.Option(
         None,
@@ -531,12 +500,7 @@ def validate_config(
         "--migrations-path",
         help="Migrations directory to validate (default: db/migrations)",
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text)",
-    ),
+    output_format: str = format_option("text", "json"),
     strict: bool = typer.Option(
         False,
         "--strict",
@@ -560,15 +524,6 @@ def validate_config(
     JSON output: {valid, config_source, migrations_path, migration_count, issues[]}.
     """
     from confiture.core.config_validator import ConfigValidator
-
-    if output_format not in ("text", "json"):
-        fail(
-            ConfigurationError(
-                f"Invalid format '{output_format}'. Use 'text' or 'json'.",
-                resolution_hint="Pass --format text or --format json.",
-            ),
-            json_mode=False,
-        )
 
     # Source selection: an explicit --config validates that YAML; a
     # --database-url flag is validated for *format* as an issue (not raised);
@@ -620,6 +575,7 @@ def validate_config(
         raise typer.Exit(exit_code)
 
 
+@cli_boundary
 def restore(
     backup_file: Path = typer.Argument(
         ...,

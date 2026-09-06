@@ -133,6 +133,30 @@ class MigratorSession:
             self._conn.close()
             self._conn = None
 
+    @property
+    def connection(self) -> Connection:
+        """The session's live connection (inside ``with``)."""
+        if self._conn is None:
+            from confiture.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        return self._conn
+
+    @property
+    def migrator(self) -> Migrator:
+        """The session's engine (inside ``with``, or when attached)."""
+        if self._migrator is None:
+            from confiture.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                "MigratorSession must be used as a context manager",
+                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+            )
+        return self._migrator
+
     # ------------------------------------------------------------------ #
     # Lock inspection                                                    #
     # ------------------------------------------------------------------ #
@@ -244,6 +268,7 @@ class MigratorSession:
         auto_baseline: Path | None = None,
         install_view_helpers: bool | None = None,
         on_event: UpObserver | None = None,
+        batch: Any | None = None,
     ) -> MigrateUpResult:
         """Apply pending migrations up to target version.
 
@@ -281,6 +306,9 @@ class MigratorSession:
             on_event: Observer for live progress
                      (:class:`~confiture.core.migrator.UpEvent`): lock acquired,
                      each pending file, applying/applied/failed, the superuser halt.
+            batch: A :class:`~confiture.core.large_tables.BatchConfig` set on every
+                     migration as ``batch_config`` before it runs (the CLI's
+                     ``--batched``). None leaves the class defaults.
 
         Returns:
             MigrateUpResult with:
@@ -327,6 +355,7 @@ class MigratorSession:
             auto_baseline=auto_baseline,
             install_view_helpers=install_view_helpers,
             on_event=on_event,
+            batch=batch,
         )
 
     def _plan_under_lock(self, *, force: bool) -> tuple[list[Path], list[str]]:
@@ -363,6 +392,7 @@ class MigratorSession:
         auto_baseline: Path | None = None,
         install_view_helpers: bool | None = None,
         on_event: UpObserver | None = None,
+        batch: Any | None = None,
     ) -> MigrateUpResult:
         """The body of :meth:`up`, run while the migration lock is held."""
         return _apply_loop._up_under_lock(
@@ -378,6 +408,7 @@ class MigratorSession:
             auto_baseline=auto_baseline,
             install_view_helpers=install_view_helpers,
             on_event=on_event,
+            batch=batch,
         )
 
     def _up_dry_run_execute(
@@ -391,6 +422,7 @@ class MigratorSession:
         checksum_warnings: list[str],
         strict_mode: bool = False,
         on_event: UpObserver | None = None,
+        batch: Any | None = None,
     ) -> MigrateUpResult:
         """Execute pending migrations inside a SAVEPOINT, then roll back.
 
@@ -411,6 +443,7 @@ class MigratorSession:
             checksum_warnings=checksum_warnings,
             strict_mode=strict_mode,
             on_event=on_event,
+            batch=batch,
         )
 
     def _rollback_sequence(self, versions: list[str], *, dry_run: bool = False) -> tuple[list, int]:

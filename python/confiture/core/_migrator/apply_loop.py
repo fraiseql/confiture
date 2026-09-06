@@ -85,6 +85,7 @@ def _up_under_lock(
     auto_baseline: Path | None = None,
     install_view_helpers: bool | None = None,
     on_event: UpObserver | None = None,
+    batch: Any | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession._up_under_lock`."""
     import time as _time
@@ -173,6 +174,7 @@ def _up_under_lock(
             checksum_warnings=checksum_warnings,
             strict_mode=effective_strict,
             on_event=on_event,
+            batch=batch,
         )
 
     migrations_applied: list[MigrationApplied] = []
@@ -187,6 +189,7 @@ def _up_under_lock(
             migration_class = _m.load_migration_class(migration_file)
             migration = migration_class(connection=session._conn)
             _apply_strict_mode(migration, effective_strict)
+            _apply_batch(migration, batch)
 
             # Stop at target version
             if target and migration.version > target:
@@ -292,6 +295,7 @@ def _up_dry_run_execute(
     checksum_warnings: list[str],
     strict_mode: bool = False,
     on_event: UpObserver | None = None,
+    batch: Any | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession._up_dry_run_execute`."""
     import time as _time
@@ -314,6 +318,7 @@ def _up_dry_run_execute(
                 migration_class = _m.load_migration_class(migration_file)
                 migration = migration_class(connection=session._conn)
                 _apply_strict_mode(migration, strict_mode)
+                _apply_batch(migration, batch)
 
                 if target and migration.version > target:
                     emit(
@@ -430,6 +435,7 @@ def up(
     auto_baseline: Path | None = None,
     install_view_helpers: bool | None = None,
     on_event: UpObserver | None = None,
+    batch: Any | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
 
@@ -481,6 +487,7 @@ def up(
             auto_baseline=auto_baseline,
             install_view_helpers=install_view_helpers,
             on_event=on_event,
+            batch=batch,
         )
 
 
@@ -536,3 +543,9 @@ def apply_one(
             name=migration.name,
             execution_time_ms=int((_time.time() - start) * 1000),
         )
+
+
+def _apply_batch(migration: Any, batch: Any | None) -> None:
+    """The operator's ``BatchConfig`` (``--batched``) reaches the migration."""
+    if batch is not None:
+        migration.batch_config = batch

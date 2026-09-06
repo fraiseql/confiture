@@ -185,7 +185,7 @@ def test_json_output_shape(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["status"] == "preview"
     assert len(payload["previews"]) == 1
     assert "ALTER TABLE public.foo OWNER TO migrator" in payload["previews"][0]["after"]

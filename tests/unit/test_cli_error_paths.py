@@ -197,7 +197,8 @@ class TestMigrateDiffCommand:
             app, ["migrate", "diff", str(tmp_path / "nonexistent.sql"), str(new_file)]
         )
 
-        assert result.exit_code == 1
+        # A missing input file is a validation failure: exit 5 (docs/reference/exit-codes.md).
+        assert result.exit_code == 5
         assert "not found" in result.output
 
     def test_migrate_diff_new_file_not_found(self, tmp_path):
@@ -209,7 +210,8 @@ class TestMigrateDiffCommand:
             app, ["migrate", "diff", str(old_file), str(tmp_path / "nonexistent.sql")]
         )
 
-        assert result.exit_code == 1
+        # A missing input file is a validation failure: exit 5 (docs/reference/exit-codes.md).
+        assert result.exit_code == 5
         assert "not found" in result.output
 
     def test_migrate_diff_no_changes(self, tmp_path):
@@ -268,5 +270,6 @@ class TestInitCommand:
         result = runner.invoke(app, ["init", str(tmp_path)], input="n\n")
 
         # Declining to overwrite an existing project is exit 1.
-        assert result.exit_code == 1, result.output
+        # Declining is not an error: `typer.Exit()` crosses the boundary intact (ENG-08).
+        assert result.exit_code == 0, result.output
         assert "already exists" in result.output

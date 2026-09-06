@@ -80,7 +80,7 @@ def test_check_emits_json(bootstrap_db: str, tmp_path: Path) -> None:
         app, ["bootstrap", "--check", "--config", str(cfg), "--format", "json"]
     )
     assert result.exit_code == 1, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["mode"] == "check"
     assert payload["drift"] is True
     assert any(s["label"] == "create_role" for s in payload["plan"]["steps"])

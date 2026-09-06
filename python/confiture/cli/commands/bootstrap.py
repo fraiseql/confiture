@@ -31,8 +31,9 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, is_json
+from confiture.cli.options import format_option
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
@@ -40,6 +41,7 @@ from confiture.core.validation.config_loaders import load_ownership_expectation
 from confiture.exceptions import BootstrapError, BootstrapScopeError, ConfigurationError
 
 
+@cli_boundary
 def bootstrap(
     config: Path = typer.Option(
         Path("confiture.yaml"),
@@ -79,12 +81,7 @@ def bootstrap(
             "exist in non-scoped schemas. Use during maintenance windows."
         ),
     ),
-    output_format: str = typer.Option(
-        "text",
-        "--format",
-        "-f",
-        help="Output format: text or json (default: text).",
-    ),
+    output_format: str = format_option("text", "json"),
 ) -> None:
     """One-shot environment ownership setup (idempotent).
 
@@ -133,6 +130,17 @@ def bootstrap(
     # Resolve mode: --apply and --dry-run override --check.
     if apply_mode and dry_run:
         fail(ConfigurationError("Cannot combine --apply with --dry-run"), json_mode=json_mode)
+    if not check and not apply_mode and not dry_run:
+        fail(
+            ConfigurationError(
+                "Nothing to do: --no-check without --dry-run or --apply.",
+                resolution_hint=(
+                    "Pass --check (the default) to report drift, --dry-run to print the "
+                    "plan, or --apply to execute it."
+                ),
+            ),
+            json_mode=json_mode,
+        )
     mode = "apply" if apply_mode else "dry-run" if dry_run else "check"
 
     config_data = load_config(config)

@@ -200,7 +200,7 @@ def test_check_ownership_json_output_shape(
         ["drift", "--check-ownership", "--format", "json", "--config", str(cfg)],
     )
     assert result.exit_code == 1, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["has_drift"] is True
     assert payload["expected_schema_source"] == "ownership"
     items = payload["drift_items"]

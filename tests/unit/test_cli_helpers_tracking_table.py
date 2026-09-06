@@ -111,7 +111,7 @@ class TestQueryAppliedVersionsUsesIdentifier:
             "database_url": "postgresql://localhost/x",
             "migration": {"tracking_table": tracking_table},
         }
-        with patch("confiture.core.connection.create_connection", return_value=conn):
+        with patch("confiture.cli.helpers.create_connection", return_value=conn):
             result = _query_applied_versions(config)
         return result, cursor, conn
 

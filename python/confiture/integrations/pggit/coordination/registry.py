@@ -57,6 +57,11 @@ class IntentRegistry:
         self._detector = ConflictDetector()
         self._ensure_tables()
 
+    @property
+    def detector(self) -> ConflictDetector:
+        """The conflict detector this registry consults."""
+        return self._detector
+
     def _ensure_tables(self) -> None:
         """Create registry tables if they don't exist."""
         with self._connection.cursor() as cursor:

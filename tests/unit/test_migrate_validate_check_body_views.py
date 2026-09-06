@@ -101,7 +101,7 @@ def test_drift_exits_1(tmp_path):
 def test_json_hash_only_by_default(tmp_path):
     result = _invoke(tmp_path, _drift_result(), ["--format", "json"])
     assert result.exit_code == 1
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["check"] == "view_body_drift"
     assert data["has_drift"] is True
     entry = data["body_drifts"][0]
@@ -112,7 +112,7 @@ def test_json_hash_only_by_default(tmp_path):
 def test_json_show_diff_includes_defs(tmp_path):
     result = _invoke(tmp_path, _drift_result(), ["--show-diff", "--format", "json"])
     assert result.exit_code == 1
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     entry = data["body_drifts"][0]
     assert entry["expected_def"].startswith("SELECT id")
     assert "max_volume_date + 1" in entry["live_def"]

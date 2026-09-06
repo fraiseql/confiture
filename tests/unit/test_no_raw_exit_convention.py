@@ -59,11 +59,21 @@ _ALLOWLIST: dict[str, int] = {
     # eleven per-check `Exit(1)` success-signals collapsed into the single
     # aggregated `Exit(aggregate_exit_code(...))` — a computed value, not a
     # literal, so it no longer appears here at all. 29 → 15.
-    "commands/migrate_analysis.py": 15,
+    # Phase 04 Cycle 8 split migrate_analysis.py (11) into per-command modules — same total.
+    "commands/migrate/diff.py": 1,
+    "commands/migrate/fix_signatures.py": 6,
+    "commands/migrate/introspect.py": 1,
+    "commands/migrate/preflight.py": 2,
+    "commands/migrate/verify.py": 1,
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.
-    "commands/migrate_core.py": 29,  # TODO(phase-02/03): mixed success-signal + debt
+    # Phase 04 Cycle 8 split migrate_core.py (22) into per-command modules — same total.
+    "commands/migrate/down.py": 1,
+    "commands/migrate/estimate.py": 2,
+    "commands/migrate/generate.py": 5,
+    "commands/migrate/status.py": 4,  # success-signal: pending → Exit(1), absent ledger → Exit(2), fatal → Exit(3)
+    "commands/migrate/up.py": 9,  # success-signal + flag-conflict Exit(2) gates
     # ---- Cycle 1 conversion cohort (this phase) ----
     "seed.py": 14,  # success-signal: clean Exit(0) + "found issues/failed" Exit(1) gates
     # commands/migrate_state.py: fully converted (Cycle 1) — baseline/reinit/

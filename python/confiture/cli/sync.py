@@ -35,9 +35,10 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import console, error_console, is_json
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.cli.options import format_option
+from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from confiture.config.environment import DatabaseConfig
@@ -144,6 +145,7 @@ def _split_csv(value: str | None) -> list[str] | None:
     return items or None
 
 
+@cli_boundary
 def sync(
     from_: str = typer.Option(..., "--from", help="Source database: env name or DSN."),
     to: str = typer.Option(..., "--to", help="Target database: env name or DSN."),
@@ -170,9 +172,7 @@ def sync(
     resume: bool = typer.Option(
         False, "--resume", help="Resume from --checkpoint, skipping completed tables."
     ),
-    format_output: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text or json."
-    ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Copy data from a production database to a local/staging target (Medium 3).
 
@@ -181,55 +181,48 @@ def sync(
     ``db/sync/anonymization.yaml``.
     """
     json_mode = is_json(format_output)
-    try:
-        from confiture.core.syncer import SyncConfig, TableSelection
+    from confiture.core.syncer import SyncConfig, TableSelection
 
-        source = _resolve_database(from_)
-        target = _resolve_database(to)
+    source = _resolve_database(from_)
+    target = _resolve_database(to)
 
-        anonymization: dict[str, list[AnonymizationRule]] | None = None
-        warnings: list[str] = []
-        if anonymize:
-            anonymization = _load_anonymization(anonymization_config)
-        else:
-            warnings.append(_PLAINTEXT_WARNING)
-            if not json_mode:
-                error_console.print(f"[yellow]⚠️  {_PLAINTEXT_WARNING}[/yellow]")
+    anonymization: dict[str, list[AnonymizationRule]] | None = None
+    warnings: list[str] = []
+    if anonymize:
+        anonymization = _load_anonymization(anonymization_config)
+    else:
+        warnings.append(_PLAINTEXT_WARNING)
+        if not json_mode:
+            error_console.print(f"[yellow]⚠️  {_PLAINTEXT_WARNING}[/yellow]")
 
-        config = SyncConfig(
-            tables=TableSelection(include=_split_csv(tables), exclude=_split_csv(exclude)),
-            anonymization=anonymization,
-            batch_size=batch_size,
-            resume=resume,
-            show_progress=not json_mode,
-            checkpoint_file=checkpoint,
+    config = SyncConfig(
+        tables=TableSelection(include=_split_csv(tables), exclude=_split_csv(exclude)),
+        anonymization=anonymization,
+        batch_size=batch_size,
+        resume=resume,
+        show_progress=not json_mode,
+        checkpoint_file=checkpoint,
+    )
+
+    with _build_syncer(source, target) as active:
+        results = active.sync(config)
+
+    total = sum(results.values())
+    if json_mode:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "command": "sync",
+                    "anonymized": anonymize,
+                    "tables": results,
+                    "total_rows": total,
+                    "warnings": warnings,
+                }
+            )
         )
-
-        with _build_syncer(source, target) as active:
-            results = active.sync(config)
-
-        total = sum(results.values())
-        if json_mode:
-            print(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "command": "sync",
-                        "anonymized": anonymize,
-                        "tables": results,
-                        "total_rows": total,
-                        "warnings": warnings,
-                    }
-                )
-            )
-        else:
-            for table, rows in results.items():
-                console.print(f"  • {table}: [green]{rows}[/green] rows")
-            mode = "anonymized" if anonymize else "verbatim"
-            console.print(
-                f"[green]✅ Synced {len(results)} table(s), {total} rows ({mode})[/green]"
-            )
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
+    else:
+        for table, rows in results.items():
+            console.print(f"  • {table}: [green]{rows}[/green] rows")
+        mode = "anonymized" if anonymize else "verbatim"
+        console.print(f"[green]✅ Synced {len(results)} table(s), {total} rows ({mode})[/green]")

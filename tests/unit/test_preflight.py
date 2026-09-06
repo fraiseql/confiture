@@ -631,7 +631,7 @@ class TestMigratePreflightCLI:
             app, ["migrate", "preflight", "--migrations-dir", str(mdir), "--format", "json"]
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["ok"] is True  # #148: structured report shape
         assert "summary" in data
         assert "issues" in data
@@ -651,7 +651,7 @@ class TestMigratePreflightCLI:
             app, ["migrate", "preflight", "--migrations-dir", str(mdir), "--format", "json"]
         )
         assert result.exit_code == 7  # #148: error → exit 7
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["ok"] is False
 
     def test_duplicates_in_output(self, tmp_path: Path):

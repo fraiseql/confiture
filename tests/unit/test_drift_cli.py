@@ -63,7 +63,7 @@ class TestDriftCommand:
             detection_time_ms=3,
         )
 
-    @patch("confiture.cli.commands.drift.create_connection")
+    @patch("confiture.cli.helpers.create_connection")
     @patch("confiture.cli.commands.drift.load_config")
     @patch("confiture.cli.commands.drift.SchemaDriftDetector")
     def test_drift_command_no_drift(
@@ -98,7 +98,7 @@ class TestDriftCommand:
         assert result.exit_code == 0
         assert "No schema drift detected" in result.stdout
 
-    @patch("confiture.cli.commands.drift.create_connection")
+    @patch("confiture.cli.helpers.create_connection")
     @patch("confiture.cli.commands.drift.load_config")
     @patch("confiture.cli.commands.drift.SchemaDriftDetector")
     def test_drift_command_critical_drift_exits_1(
@@ -132,7 +132,7 @@ class TestDriftCommand:
         assert result.exit_code == 1
         assert "Schema drift detected" in result.stdout
 
-    @patch("confiture.cli.commands.drift.create_connection")
+    @patch("confiture.cli.helpers.create_connection")
     @patch("confiture.cli.commands.drift.load_config")
     @patch("confiture.cli.commands.drift.SchemaDriftDetector")
     def test_drift_command_json_output(
@@ -172,7 +172,7 @@ class TestDriftCommand:
         assert "drift_items" in data
         assert data["has_drift"] is False
 
-    @patch("confiture.cli.commands.drift.create_connection")
+    @patch("confiture.cli.helpers.create_connection")
     @patch("confiture.cli.commands.drift.load_config")
     @patch("confiture.cli.commands.drift.SchemaDriftDetector")
     def test_drift_unparseable_schema_exits_4(

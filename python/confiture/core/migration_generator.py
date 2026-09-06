@@ -488,6 +488,27 @@ class {class_name}(Migration):
 
         return None
 
+    # Public spellings (Phase 04, Cycle 8): the CLI must not reach into private names.
+    def check_name_conflict(self, name: str) -> list[Path]:
+        """Public spelling of :meth:`_check_name_conflict`."""
+        return self._check_name_conflict(name)
+
+    def get_next_version(self) -> str:
+        """Public spelling of :meth:`_get_next_version`."""
+        return self._get_next_version()
+
+    def to_class_name(self, snake_case: str) -> str:
+        """Public spelling of :meth:`_to_class_name`."""
+        return self._to_class_name(snake_case)
+
+    def acquire_migration_lock(self) -> Any:
+        """Public spelling of :meth:`_acquire_migration_lock`."""
+        return self._acquire_migration_lock()
+
+    def release_migration_lock(self, lock_fd: Any) -> None:
+        """Public spelling of :meth:`_release_migration_lock`."""
+        return self._release_migration_lock(lock_fd)
+
 
 # Backward-compatible alias — logic lives in confiture.core.sql_utils
 def _strip_transaction_wrappers(sql: str) -> str:

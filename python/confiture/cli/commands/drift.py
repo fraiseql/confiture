@@ -5,11 +5,12 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.common import display_drift_report
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import console, is_json, open_connection
+from confiture.cli.options import format_option
 from confiture.config.environment import AclExpectation, OwnershipExpectation
-from confiture.core.connection import create_connection, load_config
+from confiture.core.connection import load_config
 from confiture.core.drift import (
     AclDriftDetector,
     DriftReport,
@@ -32,6 +33,7 @@ def _demote_missing_grant_warnings(report: DriftReport) -> None:
             item.severity = DriftSeverity.WARNING
 
 
+@cli_boundary
 def drift(
     config: Path = typer.Option(
         Path("confiture.yaml"),
@@ -59,12 +61,7 @@ def drift(
         "--warn-only",
         help="Demote MISSING_GRANT items from critical to warning (progressive rollout)",
     ),
-    format_output: str = typer.Option(
-        "table",
-        "--format",
-        "-f",
-        help="Output format: table or json (default: table)",
-    ),
+    format_output: str = format_option("table", "json"),
     fail_on_warning: bool = typer.Option(
         False,
         "--fail-on-warning",
@@ -114,15 +111,6 @@ def drift(
     """
     json_mode = is_json(format_output)
     try:
-        if format_output not in ("table", "json"):
-            fail(
-                ConfigurationError(
-                    f"Invalid format: {format_output}. Use 'table' or 'json'.",
-                    resolution_hint="Pass --format table or --format json.",
-                ),
-                json_mode=json_mode,
-            )
-
         if not config.exists():
             fail(
                 ConfigurationError(
@@ -154,9 +142,7 @@ def drift(
         if check_ownership:
             ownership_expectation = load_ownership_expectation(config_data, config, require=True)
 
-        conn = create_connection(config_data)
-
-        try:
+        with open_connection(config_data) as conn:
             structural_report: DriftReport | None = None
             if schema is not None:
                 structural_report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema))
@@ -178,8 +164,6 @@ def drift(
                     drift_report.drift_items.extend(own_report.drift_items)
 
             assert drift_report is not None  # guarded by the schema/--check-* check above
-        finally:
-            conn.close()
 
         if warn_only:
             _demote_missing_grant_warnings(drift_report)

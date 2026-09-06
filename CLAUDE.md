@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.48.0
+**Version**: 0.49.0
 **Last Updated**: 2026-09-06
 **Current Status**: Production-Ready
 
@@ -244,13 +244,21 @@ confiture/
 │   ├── exceptions.py            # Full exception hierarchy (ConfiturError tree)
 │   │
 │   ├── cli/
-│   │   ├── main.py              # Entry point: app setup + command registration (166 lines)
-│   │   ├── helpers.py           # Shared helpers: console, _output_json, _get_tracking_table, etc.
+│   │   ├── main.py              # Entry point: app setup + command registration
+│   │   ├── helpers.py           # Shared helpers: console, _output_json, _get_tracking_table, etc. (≤600 lines)
+│   │   ├── options.py           # format_option(*allowed): the one --format validator (exit 5)
+│   │   ├── error_json.py        # fail() + @cli_boundary: the one error boundary
+│   │   ├── dsn.py               # resolve_database_url + the #152 DSN precedence contract
+│   │   ├── idempotency.py       # migrate validate/fix --idempotent scoping, reporting, fixing
+│   │   ├── ownership.py         # migrate fix --ownership
+│   │   ├── dry_run_summary.py   # honest dry-run payload (real classification + row estimates)
 │   │   ├── commands/
 │   │   │   ├── schema.py        # init, build, lint, introspect
-│   │   │   ├── migrate_core.py  # migrate status/up/down/generate
-│   │   │   ├── migrate_state.py # migrate baseline/reinit/rebuild
-│   │   │   ├── migrate_analysis.py  # migrate diff/validate/fix/introspect/verify
+│   │   │   ├── migrate/         # one module per `migrate` command (≤150 body lines each)
+│   │   │   │   ├── up.py, down.py, status.py, generate.py, current.py, estimate.py
+│   │   │   │   ├── baseline.py, reinit.py, rebuild.py
+│   │   │   │   ├── diff.py, validate.py, fix.py, fix_signatures.py, introspect.py, verify.py, preflight.py
+│   │   │   │   └── _settings.py, _dry_run_render.py
 │   │   │   └── admin.py         # install-helpers, validate_profile, verify-checksums (+ deprecated `verify` alias), restore
 │   │   ├── formatters/
 │   │   │   ├── build_formatter.py
@@ -998,7 +1006,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-09-06
-**Version**: 0.48.0
+**Version**: 0.49.0
 
 ---
 

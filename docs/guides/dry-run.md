@@ -50,12 +50,10 @@ Migration Analysis Summary
 ================================================================================
 Migrations to apply: 2
 
-  001: create_initial_schema
-    Estimated time: 500ms | Disk: 1.0MB | CPU: 30%
-  002: add_user_table
-    Estimated time: 500ms | Disk: 1.0MB | CPU: 30%
+  001: create_initial_schema  [additive]  1 statement(s) | rows: unknown
+  002: add_user_table  [additive]  1 statement(s) | rows: unknown
 
-All migrations appear safe to execute
+✓ All migrations appear safe to execute
 ================================================================================
 ```
 

@@ -47,7 +47,7 @@ def _project(tmp_path: Path, *, profiles: bool = True) -> None:
 
 class TestSeedApplyProfile:
     @patch("confiture.cli.seed.SeedApplier")
-    @patch("confiture.core.connection.create_connection")
+    @patch("confiture.cli.helpers.create_connection")
     def test_profile_threaded_to_applier(self, _mock_conn, mock_applier_cls, tmp_path, monkeypatch):
         _project(tmp_path)
         monkeypatch.chdir(tmp_path)

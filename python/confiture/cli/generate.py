@@ -30,7 +30,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from confiture.cli.error_json import fail
+from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.helpers import connect
 from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.tree_allocator import TreeAllocator
@@ -75,6 +76,7 @@ generate_app = typer.Typer(
 
 
 @generate_app.command("alloc")
+@cli_boundary
 def alloc_filename(
     target_dir: Path = typer.Argument(
         ...,
@@ -154,6 +156,7 @@ def _load_emitter_callable(spec: str) -> Callable[[], list[EmittedFunction]]:
 
 
 @generate_app.command("scaffold")
+@cli_boundary
 def scaffold_functions(
     from_spec: str = typer.Option(
         ...,
@@ -225,6 +228,7 @@ def scaffold_functions(
 
 
 @generate_app.command("renumber")
+@cli_boundary
 def renumber_path(
     old_path: Path = typer.Argument(
         ...,
@@ -351,7 +355,6 @@ def _get_generator(config_path: Path):
     Raises:
         typer.Exit: If pgGit is not available
     """
-    from confiture.core.connection import create_connection
     from confiture.integrations.pggit import (
         MigrationGenerator,
         PgGitNotAvailableError,
@@ -359,7 +362,7 @@ def _get_generator(config_path: Path):
     )
 
     # Load config and create connection
-    conn = create_connection(config_path)
+    conn = connect(config_path)
 
     # Check if pgGit is available
     if not is_pggit_available(conn):
@@ -388,6 +391,7 @@ def _get_generator(config_path: Path):
 
 
 @generate_app.command("from-branch")
+@cli_boundary
 def generate_from_branch(
     branch: str = typer.Argument(..., help="Branch name to generate migrations from"),
     base: str = typer.Option(
@@ -458,6 +462,7 @@ def generate_from_branch(
 
 
 @generate_app.command("preview")
+@cli_boundary
 def preview_generation(
     branch: str = typer.Argument(..., help="Branch name to preview"),
     base: str = typer.Option(
@@ -532,6 +537,7 @@ def preview_generation(
 
 
 @generate_app.command("diff")
+@cli_boundary
 def show_diff(
     branch: str = typer.Argument(..., help="Branch name to diff"),
     base: str = typer.Option(
@@ -561,10 +567,9 @@ def show_diff(
         confiture generate diff feature/payments --show-sql
     """
     try:
-        from confiture.core.connection import create_connection
         from confiture.integrations.pggit import PgGitClient, is_pggit_available
 
-        conn = create_connection(config)
+        conn = connect(config)
 
         if not is_pggit_available(conn):
             conn.close()
@@ -611,6 +616,7 @@ def show_diff(
 
 
 @generate_app.command("pgtap")
+@cli_boundary
 def generate_pgtap(
     database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
@@ -660,6 +666,7 @@ def generate_pgtap(
 
 
 @generate_app.command("stubs")
+@cli_boundary
 def generate_stubs(
     database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),

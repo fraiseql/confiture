@@ -161,6 +161,11 @@ class Migration(ABC):
     # `MigratorSession.up()` halts at the first migration with this set;
     # the operator resolves with `confiture migrate apply-as <role>`.
     requires_superuser: bool = False
+    # ``confiture migrate up --batched --batch-size N --batch-sleep S`` hands the
+    # session a BatchConfig; the session sets it here before ``up()`` runs so a
+    # migration using ``BatchedMigration(self.connection, self.batch_config)``
+    # picks up the operator's sizing. None when the operator asked for nothing.
+    batch_config: Any | None = None
 
     # Precondition attributes (optional, default to empty lists)
     # Validated before migration execution - fail fast if not satisfied

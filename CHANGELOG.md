@@ -5,7 +5,109 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.49.0] - 2026-09-06
+
+Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
+`--format` validator, stdout reserved for the payload.
+
+### Changed
+
+- **Connections are injected.** `core.connection.open_connection(config,
+  factory=create_connection)` takes the connection factory as a keyword bound
+  at definition time, so replacing the module's `create_connection` afterwards
+  changes nothing; embedders and tests pass `factory=`. Every CLI command opens
+  its connection through one seam, `cli.helpers.open_connection` (or
+  `cli.helpers.connect` where the caller owns the lifetime), and no command
+  imports the factory inside a function any more. Nine commands that closed
+  their connection by hand — or forgot to, on an error path — now hold it in a
+  `with` block. A guard test fails any test that patches
+  `confiture.core.connection.create_connection`.
+- **No CLI function over 150 lines.** No function in `cli/` exceeds 150
+  body lines (an AST budget test enforces it): the 811-line `migrate up` is
+  options plus `session.up()` plus a reporter, and `migrate_core.py`,
+  `migrate_state.py` and `migrate_analysis.py` are split into one module per
+  command under `cli/commands/migrate/`. `build --sequential` delegates to
+  `core/seed/sequencer.apply_seed_files()`. No CLI module reaches into a
+  `_private` attribute of a core object any more (AST guard):
+  `Migrator.backup_tracking_table()`, `MigratorSession.migrator`,
+  `IntentRegistry.detector`, `SchemaBuilder.find_common_parent()` and
+  `is_seed_file()` are the public spellings, and filenames are parsed by the
+  one `parse_migration_filename()`. `cli/helpers.py` drops from 1442 to ~400
+  lines: DSN resolution lives in `cli/dsn.py`, the idempotency check and fixer
+  in `cli/idempotency.py`, the ownership fixer in `cli/ownership.py`. Thirty-three commands
+  carried an `except Exception: fail(e)` wrapper that `@cli_boundary` already
+  provides; they are gone, and the 67 broad handlers left in `cli/` are pinned
+  by a per-file baseline that may only shrink.
+- ⚠️ **One `--format` validator, exit 5.** Fourteen commands validated
+  `--format` by hand — each with its own message, stream and exit code (1, 2,
+  or a swallowed `typer.Exit`) — and thirty-two did not validate at all.
+  Every `--format` option is now `cli/options.format_option(*allowed)`: an
+  invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
+  nothing on stdout, before the command body runs. `migrate preflight` and
+  `schema diff` no longer fall through to text on an unknown value.
+- ⚠️ **An invalid environment file is an error.** `migrate up`, `migrate
+  generate` and the snapshot step loaded `db/environments/<name>.yaml` inside
+  `except Exception: pass`, so a malformed `migration:` block meant a silently
+  non-strict run with the default view-helper and snapshot settings. The block is
+  now validated (`CONFIG_002`, exit 5) and only its *absence* leaves the
+  defaults in place; minimal and legacy (`database:` block) files still work.
+  `migrate status --check-rebuild` reads `migration.rebuild_threshold` in table
+  **and** JSON mode (table read it through a dict that never matched; JSON
+  hard-coded 5); `--rebuild-threshold` still overrides.
+- ⚠️ **No option that does nothing (D3).** `migrate up --batched --batch-size
+  --batch-sleep` reach the session, which sets the `BatchConfig` on every
+  migration as `batch_config` before it runs (a `.py` migration using
+  `BatchedMigration(self.connection, self.batch_config)` picks up the operator's
+  sizing) — the flags were parsed and discarded. `migrate up/down --verbose`
+  turns on debug logging for `confiture`. `bootstrap --no-check` without
+  `--dry-run` or `--apply` is refused (exit 5) instead of silently running the
+  check. `seed apply --copy-format --copy-threshold N` converts INSERT files
+  with at least N rows to COPY through the existing converter before executing
+  them. `seed apply --benchmark` (use `confiture seed benchmark`) and
+  `seed validate --mode` (database-aware checks are `--prep-seed
+  --database-url`) are removed: passing them exits 2. A prep-seed table report
+  with `--output` is now written to the file. The `ARG001` lint ignore for the
+  CLI is gone: every declared argument is read.
+- **One definition of a seed path.** `core/seed/paths.is_seed_path()` — the
+  builder's whole-token rule (`30_seed_backend` is a seed directory,
+  `reseed_tools` is not) — now also drives `build --schema-only`'s include-dir
+  filtering and the `--sequential` file count, which used a substring match and
+  an exact-component match respectively. `build` validates `--format` and the
+  separator flags before any database or seed work.
+- ⚠️ **An honest `--dry-run`.** `migrate up --dry-run` printed
+  `Estimated time: 500ms | Disk: 1.0MB | CPU: 30%` for every migration,
+  classified each as `"warning"` whatever it contained, and always closed with
+  "All migrations appear safe to execute". The summary now carries, per
+  migration, the change-set classification of its SQL (`additive` …
+  `irreversible`, `null` for a `.py` migration), its statement count, the row
+  estimate PostgreSQL's statistics hold for the tables it touches (`null` when
+  unknown) and its findings; `summary.unsafe_count` counts migrations at
+  `lock_risky` or worse, and the "appear safe" line appears only when nothing is
+  unsafe or unclassified. The fabricated `estimated_*` keys are gone
+  (`migrate down --dry-run` likewise). `MigratorSession.connection` exposes the
+  live connection; the dry-run guide's example is rendered from a fixture and
+  kept in sync by a test.
+- ⚠️ **One envelope, pure stdout.** With `--format json`, stdout is the payload
+  and nothing else: `migrate up`'s advisory lines and `build`'s progress lines go
+  to stderr, `migrate status`'s "could not connect" warning goes to stderr in
+  table mode, and a `migrate status` without a migrations directory emits the
+  status payload (with a `warning`) instead of a hand-built `{"error": …}`.
+  Every error path is `fail()`: `migrate generate` on an existing file (exit 5,
+  was 1) or a generation failure, and `fix-ownership`'s refusal of already-applied
+  files (exit 5, was a raw `SystemExit(2)`) — no CLI module builds an error
+  envelope by hand or raises `SystemExit` (guard tests). Tests read JSON with
+  `json.loads(result.stdout)`; the first-`{` scraping is gone.
+- ⚠️ **`typer.Exit` crosses the error boundary.** `init`, `migrate status` and
+  `migrate diff` raised their own `typer.Exit` inside the `try` whose
+  `except Exception` was their boundary, which printed `Error: <code>` and exited
+  with a different code (a declined `init` exited 1 instead of 0; `migrate
+  status --format xml` exited 3; `migrate diff --format json` with a missing
+  file emitted a result whose error was the string `"1"`). The new
+  `cli/error_json.cli_boundary` decorator re-raises `typer.Exit` and sends every
+  other exception through `fail()`; missing `migrate diff` inputs and
+  `--generate` without `--name` are validation failures (exit 5).
+  The decorator wraps all 78 registered commands (a registry-driven guard
+  test keeps it that way).
 
 ## [0.48.0] - 2026-09-06
 
