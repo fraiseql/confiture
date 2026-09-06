@@ -61,6 +61,21 @@ def apply(
             resolution_hint="Use --force to re-apply this migration, or run 'confiture migrate status' to review applied migrations",
         )
 
+    if not migration.transactional and not commit:
+        # ``commit=False`` means "inside a SAVEPOINT — persist nothing". The
+        # non-transactional path commits the current transaction and runs in
+        # autocommit; it cannot honour that, so it must not be asked to.
+        raise MigrationError(
+            f"Migration {migration.version} ({migration.name}) is non-transactional and "
+            "cannot run with commit=False (inside a SAVEPOINT)",
+            version=migration.version,
+            error_code="MIGR_108",
+            resolution_hint=(
+                "Run it for real with `migrate up`, or exclude it from the dry run; "
+                "`session.up(dry_run_execute=True)` skips non-transactional migrations."
+            ),
+        )
+
     # Validate preconditions before applying
     if not skip_preconditions:
         migrator._validate_preconditions(

@@ -1871,6 +1871,11 @@ class _UpReporter:
             console.print("[red]❌[/red]")
         elif kind == "target_reached":
             console.print(f"[yellow]⏭️  Skipping {event.version} (after target)[/yellow]")
+        elif kind == "skipped_non_transactional":
+            console.print(
+                f"[yellow]⏭️  Skipping {event.label} (non-transactional — "
+                "cannot run inside a SAVEPOINT)[/yellow]"
+            )
         elif kind == "superuser_halt":
             self._announce()
             console.print(f"\n[yellow]⏸  Skipping migration {event.label}:[/yellow]")

@@ -67,6 +67,19 @@ engine; what it reports is what happened.
 
 ### Fixed
 
+- **Two `CREATE INDEX CONCURRENTLY` in one `.up.sql` apply.** A
+  non-transactional SQL-file migration was sent to the server as one
+  multi-statement string, which PostgreSQL wraps in an implicit transaction
+  block even under autocommit — so it failed. It is now split with the shared
+  statement splitter and executed one statement at a time (`.down.sql` too).
+- **`dry_run_execute` no longer commits through a non-transactional
+  migration.** The SAVEPOINT path handed such a migration to the autocommit
+  apply, which committed the transaction — and with it every migration tested
+  before. `session.up(dry_run_execute=True)` now skips non-transactional
+  migrations (listed in `skipped`, with a warning; the CLI prints a
+  `⏭️  Skipping … (non-transactional)` line), and
+  `Migrator.apply(..., commit=False)` on one is an error, new `MIGR_108`
+  (exit 3).
 - **SQL-file migrations are checksum-verified.** The verifier looked up
   applied migrations as `<version>_<name>.py` only, so every `.up.sql`
   migration logged "migration file not found" and was skipped — `migrate up`'s

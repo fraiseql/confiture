@@ -67,6 +67,24 @@ def _detect_transactional(up_file: Path) -> bool:
         return True
 
 
+def _execute_sql_script(migration: Migration, sql: str) -> None:
+    """Run a migration file's SQL through ``migration.execute``.
+
+    A transactional migration goes to the server as one script inside
+    confiture's transaction. A non-transactional one (``CREATE INDEX
+    CONCURRENTLY``, ``VACUUM``, …) runs under autocommit — but PostgreSQL
+    still wraps a multi-statement string in an implicit transaction block, so
+    it is split with the shared splitter and sent one statement at a time.
+    """
+    if getattr(migration, "transactional", True):
+        migration.execute(sql)
+        return
+    from confiture.core.sql_statements import split_statements
+
+    for statement in split_statements(sql):
+        migration.execute(statement)
+
+
 class FileSQLMigration(Migration):
     """Migration loaded from .up.sql/.down.sql file pair.
 
@@ -157,7 +175,7 @@ class FileSQLMigration(Migration):
                 self.version,
                 self.up_file.name,
             )
-        self.execute(sql)
+        self._execute_script(sql)
 
     def down(self) -> None:
         """Rollback the migration by executing the .down.sql file."""
@@ -169,7 +187,11 @@ class FileSQLMigration(Migration):
                 self.version,
                 self.down_file.name,
             )
-        self.execute(sql)
+        self._execute_script(sql)
+
+    def _execute_script(self, sql: str) -> None:
+        """Run the file's SQL — see :func:`_execute_sql_script`."""
+        _execute_sql_script(self, sql)
 
     @classmethod
     def from_files(
@@ -238,7 +260,7 @@ class FileSQLMigration(Migration):
                     version,
                     self.up_file.name,
                 )
-            self.execute(sql)
+            _execute_sql_script(self, sql)
 
         def down_method(self: "FileSQLMigration") -> None:
             sql, changed = strip_transaction_wrappers(
@@ -251,7 +273,7 @@ class FileSQLMigration(Migration):
                     version,
                     self.down_file.name,
                 )
-            self.execute(sql)
+            _execute_sql_script(self, sql)
 
         # Create the class
         new_class = type(

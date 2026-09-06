@@ -24,6 +24,7 @@ UpEventKind = Literal[
     "applied",
     "failed",
     "superuser_halt",
+    "skipped_non_transactional",
     "target_reached",
 ]
 

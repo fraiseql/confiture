@@ -776,6 +776,22 @@ class MigratorSession:
                         )
                         break
 
+                    if not getattr(migration, "transactional", True):
+                        # Cannot run inside the SAVEPOINT: the autocommit path
+                        # would commit everything tested so far.
+                        skipped_versions.append(migration.version)
+                        checksum_warnings = checksum_warnings + [
+                            f"dry_run_execute: skipped {migration.version}_{migration.name} — "
+                            "non-transactional migrations cannot run inside a SAVEPOINT"
+                        ]
+                        emit(
+                            on_event,
+                            "skipped_non_transactional",
+                            version=migration.version,
+                            name=migration.name,
+                        )
+                        continue
+
                     emit(on_event, "applying", version=migration.version, name=migration.name)
                     try:
                         start = _time.time()

@@ -67,15 +67,19 @@ def connection_double(
     """A psycopg connection stand-in that answers the engine's bookkeeping queries.
 
     The advisory lock asks ``SELECT current_database()``; the view-helper policy
-    counts functions in ``pg_proc``; the checksum verifier reads an (empty)
-    ledger with ``fetchall()``. Anything else fetches ``(dbname,)``.
+    counts functions in ``pg_proc``; ``COUNT(*)`` probes (is this version
+    applied?) answer 0; the checksum verifier reads an (empty) ledger with
+    ``fetchall()``. Anything else fetches ``(dbname,)``.
     """
     conn = MagicMock(name="connection")
     last: dict[str, str] = {"sql": ""}
 
     def _fetchone() -> tuple[Any, ...]:
-        if "pg_proc" in last["sql"]:
+        sql = last["sql"].lower()
+        if "pg_proc" in sql:
             return (2 if view_helpers_installed else 0,)
+        if "count(" in sql:
+            return (0,)  # nothing applied, nothing recorded
         return (dbname,)
 
     def _wire(cursor: MagicMock) -> None:
