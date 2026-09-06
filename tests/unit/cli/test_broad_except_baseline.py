@@ -22,8 +22,7 @@ CLI_ROOT = Path(confiture.cli.__file__).resolve().parent
 # Lower a number when you narrow or delete a handler. Never raise one; a file
 # that is not listed has a budget of zero.
 BASELINE: dict[str, int] = {
-    "branch.py": 10,
-    "commands/admin.py": 3,
+    "commands/admin.py": 2,
     "commands/debug.py": 1,
     "commands/diff.py": 1,
     "commands/drift.py": 1,
@@ -33,19 +32,15 @@ BASELINE: dict[str, int] = {
     "commands/migrate/diff.py": 1,
     "commands/migrate/down.py": 2,
     "commands/migrate/estimate.py": 1,
-    "commands/migrate/fix.py": 1,
     "commands/migrate/fix_signatures.py": 3,
     "commands/migrate/generate.py": 2,
-    "commands/migrate/introspect.py": 1,
     "commands/migrate/preflight.py": 5,
     "commands/migrate/rebuild.py": 1,
     "commands/migrate/status.py": 2,
     "commands/migrate/up.py": 1,
-    "commands/migrate/validate.py": 1,
-    "commands/migrate/verify.py": 1,
     "commands/schema.py": 10,
     "commands/validate_checks.py": 4,
-    "coordinate.py": 8,
+    "coordinate.py": 1,
     "dry_run_summary.py": 1,
     "dsn.py": 1,
     "error_json.py": 1,
@@ -53,8 +48,6 @@ BASELINE: dict[str, int] = {
     "helpers.py": 1,
     "schema_to_schema.py": 7,
     "seed.py": 10,
-    "sync.py": 1,
-    "test_db.py": 7,
 }
 
 

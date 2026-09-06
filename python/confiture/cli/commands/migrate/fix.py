@@ -9,12 +9,12 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import console, is_json
 from confiture.cli.idempotency import _fix_idempotency
 from confiture.cli.options import format_option
 from confiture.cli.ownership import _fix_ownership
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import ConfigurationError
 
 
 @cli_boundary
@@ -93,37 +93,27 @@ def migrate_fix(
       confiture migrate generate - Create new migration
     """
     json_mode = is_json(format_output)
-    try:
-        # Validate output format
+    if not migrations_dir.exists():
+        raise ConfigurationError(
+            f"Migrations directory not found: {migrations_dir.absolute()}",
+            error_code="CONFIG_004",
+        )
 
-        if not migrations_dir.exists():
-            raise ConfigurationError(
-                f"Migrations directory not found: {migrations_dir.absolute()}",
-                error_code="CONFIG_004",
-            )
+    if not idempotent and not ownership:
+        console.print(
+            "[yellow]⚠️  No fix type specified.  Use --idempotent and/or --ownership.[/yellow]"
+        )
+        return
 
-        if not idempotent and not ownership:
-            console.print(
-                "[yellow]⚠️  No fix type specified.  Use --idempotent and/or --ownership.[/yellow]"
-            )
-            return
+    if idempotent:
+        _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
 
-        if idempotent:
-            _fix_idempotency(migrations_dir, dry_run, format_output, output_file)
-
-        if ownership:
-            _fix_ownership(
-                migrations_dir=migrations_dir,
-                config_path=config_path,
-                dry_run=dry_run,
-                force=force,
-                format_output=format_output,
-                output_file=output_file,
-            )
-
-    except typer.Exit:
-        raise
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode, output_file=output_file)
-    except Exception as e:
-        fail(e, json_mode=json_mode, output_file=output_file)
+    if ownership:
+        _fix_ownership(
+            migrations_dir=migrations_dir,
+            config_path=config_path,
+            dry_run=dry_run,
+            force=force,
+            format_output=format_output,
+            output_file=output_file,
+        )

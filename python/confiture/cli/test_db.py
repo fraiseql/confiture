@@ -13,7 +13,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, console, is_json, redact_url
 from confiture.cli.options import format_option
 from confiture.config.environment import Environment
@@ -127,42 +127,35 @@ def provision_template(
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Build (or restore) a template database and stamp its db/ content hash."""
-    try:
-        builder = SchemaBuilder(env=env, project_dir=project_dir)
-        schema_hash = builder.compute_hash()
-        server_url = database_url or builder.env_config.database_url
-        provisioner = TestDbProvisioner(server_url)
+    builder = SchemaBuilder(env=env, project_dir=project_dir)
+    schema_hash = builder.compute_hash()
+    server_url = database_url or builder.env_config.database_url
+    provisioner = TestDbProvisioner(server_url)
 
-        if from_artifact is not None:
-            status = provisioner.provision_template(
-                template, schema_hash=schema_hash, from_artifact=from_artifact, force=force
-            )
-        else:
-            schema_sql = builder.build(schema_only=True)
-            _schema_files, seed_files = builder.categorize_sql_files()
-            if seed_profile is not None:
-                from confiture.core.seed_applier import _apply_profile_filter
+    if from_artifact is not None:
+        status = provisioner.provision_template(
+            template, schema_hash=schema_hash, from_artifact=from_artifact, force=force
+        )
+    else:
+        schema_sql = builder.build(schema_only=True)
+        _schema_files, seed_files = builder.categorize_sql_files()
+        if seed_profile is not None:
+            from confiture.core.seed_applier import _apply_profile_filter
 
-                profile_obj = builder.env_config.seed.get_profile(seed_profile)
-                seed_files = _apply_profile_filter(seed_files, profile_obj)
-            status = provisioner.provision_template(
-                template,
-                schema_hash=schema_hash,
-                schema_sql=schema_sql,
-                seed_files=seed_files or None,
-                force=force,
-            )
+            profile_obj = builder.env_config.seed.get_profile(seed_profile)
+            seed_files = _apply_profile_filter(seed_files, profile_obj)
+        status = provisioner.provision_template(
+            template,
+            schema_hash=schema_hash,
+            schema_sql=schema_sql,
+            seed_files=seed_files or None,
+            force=force,
+        )
 
-        if is_json(format_type):
-            _output_json(status.to_dict(), None, console)
-        else:
-            console.print(
-                f"[green]✅ Template '{template}' provisioned ({status.state.value})[/green]"
-            )
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - routed through the fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    if is_json(format_type):
+        _output_json(status.to_dict(), None, console)
+    else:
+        console.print(f"[green]✅ Template '{template}' provisioned ({status.state.value})[/green]")
 
 
 @test_db_app.command("clone")
@@ -187,24 +180,19 @@ def clone(
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Clone a template into a fresh database via CREATE DATABASE … WITH TEMPLATE."""
-    try:
-        provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        result = provisioner.clone(
-            template,
-            target,
-            sync_commit_off=sync_commit_off,
-            max_concurrency=max_clone_concurrency,
-        )
-        if is_json(format_type):
-            payload = result.to_dict()
-            payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs
-            _output_json(payload, None, console)
-        else:
-            console.print(f"[green]✅ Cloned '{template}' → '{target}'[/green]")
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
+    result = provisioner.clone(
+        template,
+        target,
+        sync_commit_off=sync_commit_off,
+        max_concurrency=max_clone_concurrency,
+    )
+    if is_json(format_type):
+        payload = result.to_dict()
+        payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs
+        _output_json(payload, None, console)
+    else:
+        console.print(f"[green]✅ Cloned '{template}' → '{target}'[/green]")
 
 
 @test_db_app.command("ram-setup")
@@ -235,32 +223,27 @@ def ram_setup(
     prepare the LOCATION dir, it prints the privileged command instead of failing
     silently (exit 5, action_required).
     """
-    try:
-        _guard_ram_location(location, force=force)
-        uid, gid = _resolve_owner(owner)
-        provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        prepared = _prepare_location_dir(location, uid, gid)
-        result = provisioner.setup_ram_tablespace(
-            tablespace, location, owner=owner, force=force, dir_prepared=prepared
-        )
-        guided_command = (
-            None if prepared else f"sudo install -d -o {owner} -g {owner} -m 700 {location}"
-        )
+    _guard_ram_location(location, force=force)
+    uid, gid = _resolve_owner(owner)
+    provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
+    prepared = _prepare_location_dir(location, uid, gid)
+    result = provisioner.setup_ram_tablespace(
+        tablespace, location, owner=owner, force=force, dir_prepared=prepared
+    )
+    guided_command = (
+        None if prepared else f"sudo install -d -o {owner} -g {owner} -m 700 {location}"
+    )
 
-        if is_json(format_type):
-            payload = result.to_dict()
-            if guided_command is not None:
-                payload["action_command"] = guided_command
-            _output_json(payload, None, console)
-        else:
-            _print_ram_setup_text(result, guided_command)
+    if is_json(format_type):
+        payload = result.to_dict()
+        if guided_command is not None:
+            payload["action_command"] = guided_command
+        _output_json(payload, None, console)
+    else:
+        _print_ram_setup_text(result, guided_command)
 
-        if result.action_required:
-            raise typer.Exit(_ACTION_REQUIRED_EXIT_CODE)
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    if result.action_required:
+        raise typer.Exit(_ACTION_REQUIRED_EXIT_CODE)
 
 
 @test_db_app.command("drop")
@@ -276,19 +259,14 @@ def drop(
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Drop a confiture-managed clone or template (terminating its backends)."""
-    try:
-        provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        dropped = provisioner.drop(target, force=force)
-        if is_json(format_type):
-            _output_json({"target": target, "dropped": dropped}, None, console)
-        elif dropped:
-            console.print(f"[green]✅ Dropped '{target}'[/green]")
-        else:
-            console.print(f"[yellow]ℹ '{target}' did not exist[/yellow]")
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
+    dropped = provisioner.drop(target, force=force)
+    if is_json(format_type):
+        _output_json({"target": target, "dropped": dropped}, None, console)
+    elif dropped:
+        console.print(f"[green]✅ Dropped '{target}'[/green]")
+    else:
+        console.print(f"[yellow]ℹ '{target}' did not exist[/yellow]")
 
 
 @test_db_app.command("status")
@@ -301,24 +279,19 @@ def status(
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Report template staleness vs the current db/ hash (exit 0 current, 1 stale/absent)."""
-    try:
-        builder = SchemaBuilder(env=env, project_dir=project_dir)
-        current_hash = builder.compute_hash()
-        server_url = database_url or builder.env_config.database_url
-        provisioner = TestDbProvisioner(server_url)
-        result = provisioner.template_status(template, current_hash)
+    builder = SchemaBuilder(env=env, project_dir=project_dir)
+    current_hash = builder.compute_hash()
+    server_url = database_url or builder.env_config.database_url
+    provisioner = TestDbProvisioner(server_url)
+    result = provisioner.template_status(template, current_hash)
 
-        if is_json(format_type):
-            _output_json(result.to_dict(), None, console)
-        else:
-            console.print(f"Template '{template}': [bold]{result.state.value}[/bold]")
+    if is_json(format_type):
+        _output_json(result.to_dict(), None, console)
+    else:
+        console.print(f"Template '{template}': [bold]{result.state.value}[/bold]")
 
-        if result.state is not TemplateState.CURRENT:
-            raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    if result.state is not TemplateState.CURRENT:
+        raise typer.Exit(1)
 
 
 @test_db_app.command("list")
@@ -330,20 +303,15 @@ def list_databases(
     format_type: str = format_option("text", "json"),
 ) -> None:
     """List confiture-managed templates and clones on the server."""
-    try:
-        provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        databases = provisioner.list_databases()
-        if is_json(format_type):
-            _output_json({"databases": [d.to_dict() for d in databases]}, None, console)
-        elif databases:
-            for db in databases:
-                console.print(f"  {db.kind:9} {db.name}  ({db.detail})")
-        else:
-            console.print("[yellow]ℹ No confiture-managed databases found[/yellow]")
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
+    databases = provisioner.list_databases()
+    if is_json(format_type):
+        _output_json({"databases": [d.to_dict() for d in databases]}, None, console)
+    elif databases:
+        for db in databases:
+            console.print(f"  {db.kind:9} {db.name}  ({db.detail})")
+    else:
+        console.print("[yellow]ℹ No confiture-managed databases found[/yellow]")
 
 
 @test_db_app.command("prune")
@@ -356,14 +324,9 @@ def prune(
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Drop every clone of a template (reaps clones leaked by crashed workers)."""
-    try:
-        provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
-        dropped = provisioner.prune(template)
-        if is_json(format_type):
-            _output_json({"template": template, "dropped": dropped}, None, console)
-        else:
-            console.print(f"[green]✅ Pruned {len(dropped)} clone(s) of '{template}'[/green]")
-    except typer.Exit:
-        raise
-    except Exception as e:  # noqa: BLE001 - fail() envelope boundary
-        fail(e, json_mode=is_json(format_type))
+    provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
+    dropped = provisioner.prune(template)
+    if is_json(format_type):
+        _output_json({"template": template, "dropped": dropped}, None, console)
+    else:
+        console.print(f"[green]✅ Pruned {len(dropped)} clone(s) of '{template}'[/green]")

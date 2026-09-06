@@ -11,10 +11,10 @@ from typing import Any
 import typer
 
 from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, NO_CONFIG_OPTION_HELP
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, console, is_json, open_connection
 from confiture.cli.options import format_option
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import ConfigurationError
 
 
 @cli_boundary
@@ -103,82 +103,70 @@ def migrate_verify(
     from confiture.models.results import VerifyAllResult
 
     json_mode = is_json(format_output)
-    try:
-        # Connection source (#152): a --database-url flag, --no-config, an
-        # explicit --config, or the canonical CONFITURE_DATABASE_URL. An ambient
-        # DATABASE_URL alone does NOT satisfy "config required"; two explicit
-        # sources fail loud (CONFIG_007).
-        config_data: Any = None
-        if has_intentional_dsn_source(ctx, database_url, no_config):
-            _db_url_override = resolve_database_url(
-                database_url,
-                config,
-                config_explicit=config_is_explicit(ctx),
-                no_config=no_config,
-            )
-            if _db_url_override is not None:
-                config_data = {"database_url": _db_url_override}
-            elif config and config.exists():
-                config_data = load_config(config)
-        if config_data is None:
-            raise ConfigurationError("Config file or --database-url required for migrate verify")
-        tracking_table = _get_tracking_table(config_data)
+    config_data: Any = None
+    if has_intentional_dsn_source(ctx, database_url, no_config):
+        _db_url_override = resolve_database_url(
+            database_url,
+            config,
+            config_explicit=config_is_explicit(ctx),
+            no_config=no_config,
+        )
+        if _db_url_override is not None:
+            config_data = {"database_url": _db_url_override}
+        elif config and config.exists():
+            config_data = load_config(config)
+    if config_data is None:
+        raise ConfigurationError("Config file or --database-url required for migrate verify")
+    tracking_table = _get_tracking_table(config_data)
 
-        with open_connection(config_data) as conn:
-            migrator = Migrator(connection=conn, migration_table=tracking_table)
+    with open_connection(config_data) as conn:
+        migrator = Migrator(connection=conn, migration_table=tracking_table)
 
-            # #182: get_applied_versions() raises psycopg's UndefinedTable on an
-            # absent ledger. Absent is a distinct state from "present but empty",
-            # so probe rather than swallowing the error into an empty result.
-            if not migrator.tracking_table_exists():
-                if not allow_uninitialized:
-                    raise DatabaseNotInitializedError(
-                        f"No migration ledger found: `{tracking_table}` is not present "
-                        "in this database",
-                        resolution_hint=_NO_LEDGER_HINT,
-                    )
-                empty = VerifyAllResult(
-                    results=[],
-                    verified_count=0,
-                    failed_count=0,
-                    skipped_count=0,
-                    total_applied=0,
-                    ledger_present=False,
+        # #182: get_applied_versions() raises psycopg's UndefinedTable on an
+        # absent ledger. Absent is a distinct state from "present but empty",
+        # so probe rather than swallowing the error into an empty result.
+        if not migrator.tracking_table_exists():
+            if not allow_uninitialized:
+                raise DatabaseNotInitializedError(
+                    f"No migration ledger found: `{tracking_table}` is not present "
+                    "in this database",
+                    resolution_hint=_NO_LEDGER_HINT,
                 )
-                if format_output == "json":
-                    _output_json(empty.to_dict(), output_file, console)
-                else:
-                    console.print(
-                        f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
-                        "present in this database) — 0 migrations recorded, nothing to "
-                        "verify.[/yellow]"
-                    )
-                return
-
-            applied_versions = migrator.get_applied_versions()
-
-            verifier = MigrationVerifier(connection=conn, migrations_dir=migrations_dir)
-            results = verifier.verify_all(applied_versions, target_version=version)
-
-            verify_result = VerifyAllResult(
-                results=results,
-                verified_count=sum(1 for r in results if r.status == "verified"),
-                failed_count=sum(1 for r in results if r.status == "failed"),
-                skipped_count=sum(1 for r in results if r.status == "no_file"),
-                total_applied=len(applied_versions),
+            empty = VerifyAllResult(
+                results=[],
+                verified_count=0,
+                failed_count=0,
+                skipped_count=0,
+                total_applied=0,
+                ledger_present=False,
             )
-
             if format_output == "json":
-                _output_json(verify_result.to_dict(), output_file, console)
+                _output_json(empty.to_dict(), output_file, console)
             else:
-                format_verify_results(verify_result, console)
+                console.print(
+                    f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
+                    "present in this database) — 0 migrations recorded, nothing to "
+                    "verify.[/yellow]"
+                )
+            return
 
-            if verify_result.failed_count > 0:
-                raise typer.Exit(1)
+        applied_versions = migrator.get_applied_versions()
 
-    except typer.Exit:
-        raise
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode, output_file=output_file)
-    except Exception as e:
-        fail(e, json_mode=json_mode, output_file=output_file)
+        verifier = MigrationVerifier(connection=conn, migrations_dir=migrations_dir)
+        results = verifier.verify_all(applied_versions, target_version=version)
+
+        verify_result = VerifyAllResult(
+            results=results,
+            verified_count=sum(1 for r in results if r.status == "verified"),
+            failed_count=sum(1 for r in results if r.status == "failed"),
+            skipped_count=sum(1 for r in results if r.status == "no_file"),
+            total_applied=len(applied_versions),
+        )
+
+        if format_output == "json":
+            _output_json(verify_result.to_dict(), output_file, console)
+        else:
+            format_verify_results(verify_result, console)
+
+        if verify_result.failed_count > 0:
+            raise typer.Exit(1)

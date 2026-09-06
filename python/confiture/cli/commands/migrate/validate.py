@@ -16,7 +16,7 @@ from confiture.cli.commands.validate_checks import (
     validate_flag_dependencies,
 )
 from confiture.cli.dsn import param_is_explicit
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, _resolve_config, console, is_json
 from confiture.cli.options import format_option
 from confiture.core.validation.context import ValidationContext
@@ -26,7 +26,7 @@ from confiture.core.validation.registry import (
     compose_payload,
     run_checks,
 )
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import ConfigurationError
 
 
 def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:  # noqa: ANN401
@@ -479,99 +479,82 @@ def migrate_validate(
       confiture migrate status   - View migration history
     """
     json_mode = is_json(format_output)
-    try:
-        # Validate output format
+    if not list_patterns:
+        config = _resolve_config(config, env)
 
-        # --list-patterns is a read-only catalog query with no config or
-        # migrations directory behind it, so its options are assembled without
-        # resolving either — projects with no confiture.yaml can still
-        # introspect the pattern catalog.
-        if not list_patterns:
-            config = _resolve_config(config, env)
+    # The git checks build the expected schema via GitSchemaBuilder(env),
+    # so --env must reach them: on projects whose `local` env includes
+    # seed data, pointing at a DDL-only env is the difference between a
+    # working gate and a silent no-op (#194). --config-only callers keep
+    # the historical "local" default.
+    opts = ValidateOptions(
+        format_output=format_output,
+        json_mode=json_mode,
+        migrations_dir=migrations_dir,
+        config=config,
+        git_env=env or "local",
+        schema_file=schema_file,
+        scratch_url=scratch_url,
+        schemas=check_signature_schemas,
+        ssh_via=ssh_via,
+        ddl_dir=list(ddl_dir) if ddl_dir else [],
+        list_patterns=list_patterns,
+        list_unmigrated_bodies=list_unmigrated_bodies,
+        check_drift=check_drift,
+        require_migration=require_migration,
+        require_migration_bodies=require_migration_bodies,
+        require_grant_migration=require_grant_migration,
+        check_acls=check_acls,
+        check_ownership_coverage=check_ownership_coverage,
+        check_function_uniqueness=check_function_uniqueness,
+        check_security_definer=check_security_definer,
+        check_imports=check_imports,
+        check_live_drift=check_live_drift,
+        check_signatures=check_signatures,
+        check_body_views=check_body_views,
+        check_body_replay=check_body_replay,
+        idempotent=idempotent,
+        allow_grant_only=allow_grant_only,
+        staged=staged,
+        check_body=check_body,
+        show_diff=show_diff,
+        strict_cor=strict_cor,
+        fail_on_unanalyzable=fail_on_unanalyzable,
+        secdef_against_db=secdef_against_db,
+        emit_remediation=emit_remediation,
+        fix_naming=fix_naming,
+        dry_run=dry_run,
+        # #181: --base-ref carries a truthy default ("origin/main"), so the
+        # value alone cannot say whether the operator asked for scoping.
+        # Gate on the parameter source; without this every unscoped run
+        # would silently scope, and a plain --idempotent in a non-git tree
+        # would exit 7.
+        idempotent_base_ref=(
+            (since or base_ref)
+            if (param_is_explicit(ctx, "base_ref", "since") and not staged)
+            else None
+        ),
+    )
 
-        # The git checks build the expected schema via GitSchemaBuilder(env),
-        # so --env must reach them: on projects whose `local` env includes
-        # seed data, pointing at a DDL-only env is the difference between a
-        # working gate and a silent no-op (#194). --config-only callers keep
-        # the historical "local" default.
-        opts = ValidateOptions(
-            format_output=format_output,
-            json_mode=json_mode,
-            migrations_dir=migrations_dir,
-            config=config,
-            git_env=env or "local",
-            schema_file=schema_file,
-            scratch_url=scratch_url,
-            schemas=check_signature_schemas,
-            ssh_via=ssh_via,
-            ddl_dir=list(ddl_dir) if ddl_dir else [],
-            list_patterns=list_patterns,
-            list_unmigrated_bodies=list_unmigrated_bodies,
-            check_drift=check_drift,
-            require_migration=require_migration,
-            require_migration_bodies=require_migration_bodies,
-            require_grant_migration=require_grant_migration,
-            check_acls=check_acls,
-            check_ownership_coverage=check_ownership_coverage,
-            check_function_uniqueness=check_function_uniqueness,
-            check_security_definer=check_security_definer,
-            check_imports=check_imports,
-            check_live_drift=check_live_drift,
-            check_signatures=check_signatures,
-            check_body_views=check_body_views,
-            check_body_replay=check_body_replay,
-            idempotent=idempotent,
-            allow_grant_only=allow_grant_only,
-            staged=staged,
-            check_body=check_body,
-            show_diff=show_diff,
-            strict_cor=strict_cor,
-            fail_on_unanalyzable=fail_on_unanalyzable,
-            secdef_against_db=secdef_against_db,
-            emit_remediation=emit_remediation,
-            fix_naming=fix_naming,
-            dry_run=dry_run,
-            # #181: --base-ref carries a truthy default ("origin/main"), so the
-            # value alone cannot say whether the operator asked for scoping.
-            # Gate on the parameter source; without this every unscoped run
-            # would silently scope, and a plain --idempotent in a non-git tree
-            # would exit 7.
-            idempotent_base_ref=(
-                (since or base_ref)
-                if (param_is_explicit(ctx, "base_ref", "since") and not staged)
-                else None
-            ),
-        )
+    validate_flag_dependencies(opts)
+    checks = build_registry(opts)
+    _reject_exclusive_composition(checks)
 
-        validate_flag_dependencies(opts)
-        checks = build_registry(opts)
-        _reject_exclusive_composition(checks)
+    with ValidationContext(
+        config_path=config,
+        ssh_via=ssh_via,
+        effective_base_ref=since or base_ref,
+        staged=staged,
+    ) as run_ctx:
+        outcomes = run_checks(checks, run_ctx)
 
-        with ValidationContext(
-            config_path=config,
-            ssh_via=ssh_via,
-            effective_base_ref=since or base_ref,
-            staged=staged,
-        ) as run_ctx:
-            outcomes = run_checks(checks, run_ctx)
+    payload = compose_payload(outcomes)
+    if payload is not None:
+        _output_json(payload, output_file, console)
 
-        payload = compose_payload(outcomes)
-        if payload is not None:
-            _output_json(payload, output_file, console)
-
-        exit_code = aggregate_exit_code(outcomes)
-        if exit_code:
-            raise typer.Exit(exit_code)  # success-signal: a check found something
-
-    except typer.Exit:
-        raise
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode, output_file=output_file)
-    except Exception as e:
-        # Unknown failures coerce to a generic ConfiturError (no registry code →
-        # exit 1), preserving the legacy catch-all exit code while emitting the
-        # #145 envelope in JSON mode.
-        fail(e, json_mode=json_mode, output_file=output_file)
+    exit_code = aggregate_exit_code(outcomes)
+    if exit_code:
+        raise typer.Exit(exit_code)  # success-signal: a check found something
 
 
 def _reject_exclusive_composition(checks: list[ValidationCheck]) -> None:
