@@ -16,7 +16,7 @@ from confiture.core.seed_applier import ApplyResult
 class TestSeedApplyFormatter:
     """Tests for seed apply result formatter."""
 
-    def test_format_apply_json_to_console(self):
+    def test_format_apply_json_to_console(self, capsys):
         """Test formatting apply result as JSON to console."""
         result = ApplyResult(
             total=5,
@@ -29,6 +29,8 @@ class TestSeedApplyFormatter:
 
         # Should not raise
         format_apply_result(result, "json", None, console)
+        output = capsys.readouterr().out
+        assert '"total": 5' in output
 
     def test_format_apply_json_to_file(self):
         """Test formatting apply result as JSON to file."""
@@ -75,7 +77,7 @@ class TestSeedApplyFormatter:
             # Should have data
             assert "5" in content  # total and succeeded
 
-    def test_format_apply_text_success(self):
+    def test_format_apply_text_success(self, capsys):
         """Test formatting successful apply result as text."""
         result = ApplyResult(
             total=3,
@@ -88,8 +90,10 @@ class TestSeedApplyFormatter:
 
         # Should not raise
         format_apply_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "3" in output
 
-    def test_format_apply_text_with_failures(self):
+    def test_format_apply_text_with_failures(self, capsys):
         """Test formatting apply result with failures as text."""
         result = ApplyResult(
             total=5,
@@ -102,6 +106,8 @@ class TestSeedApplyFormatter:
 
         # Should not raise
         format_apply_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "03_users.sql" in output
 
     def test_format_apply_json_all_failed(self):
         """Test formatting apply result where all files failed."""
@@ -122,7 +128,7 @@ class TestSeedApplyFormatter:
             assert data["failed"] == 2
             assert len(data["failed_files"]) == 2
 
-    def test_format_apply_text_no_seeds(self):
+    def test_format_apply_text_no_seeds(self, capsys):
         """Test formatting apply result with no seeds."""
         result = ApplyResult(
             total=0,
@@ -135,3 +141,5 @@ class TestSeedApplyFormatter:
 
         # Should not raise
         format_apply_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert output.strip(), "the formatter printed nothing"

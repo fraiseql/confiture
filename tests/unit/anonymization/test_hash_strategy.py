@@ -228,17 +228,17 @@ class TestDeterministicHashConfig:
     def test_validate_algorithm_sha256(self):
         """Test validate_algorithm accepts sha256."""
         config = DeterministicHashConfig(seed=12345, algorithm="sha256")
-        config.validate_algorithm()  # Should not raise
+        assert config.validate_algorithm() is None
 
     def test_validate_algorithm_sha1(self):
         """Test validate_algorithm accepts sha1."""
         config = DeterministicHashConfig(seed=12345, algorithm="sha1")
-        config.validate_algorithm()  # Should not raise
+        assert config.validate_algorithm() is None
 
     def test_validate_algorithm_md5(self):
         """Test validate_algorithm accepts md5."""
         config = DeterministicHashConfig(seed=12345, algorithm="md5")
-        config.validate_algorithm()  # Should not raise
+        assert config.validate_algorithm() is None
 
     def test_validate_algorithm_invalid(self):
         """Test validate_algorithm rejects invalid."""
@@ -295,8 +295,8 @@ class TestHashEdgeCases:
         strategy = DeterministicHashStrategy(config)
 
         result = strategy.anonymize("test")
-        # Should be valid hex
-        int(result, 16)  # Should not raise
+        assert int(result, 16) >= 0
+        assert len(result) == 64  # sha256 hex
 
     def test_truncation_longer_than_hash(self):
         """Test truncation longer than hash length."""

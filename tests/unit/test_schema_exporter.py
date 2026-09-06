@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 # ── B-1: generate_schema returns valid schema for each known model ────────────
 
 
@@ -37,11 +39,8 @@ def test_generate_schema_all_names():
 def test_generate_schema_unknown_raises():
     from confiture.core.schema_exporter import generate_schema
 
-    try:
+    with pytest.raises(KeyError):
         generate_schema("NonExistentModel")
-        raise AssertionError("Should have raised KeyError")
-    except KeyError:
-        pass
 
 
 # ── B-2: export_all writes expected files ─────────────────────────────────────

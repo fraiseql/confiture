@@ -92,10 +92,11 @@ def test_nested_payloads_still_match_their_own_schema(
         ["migrate", "validate", "--check-acls", "--check-imports", "--format", "json"],
     )
     nested = json.loads(result.stdout)["checks"]["acl_coverage"]
-    Draft202012Validator(
+    validator = Draft202012Validator(
         _load(schemas_dir, "migrate-validate-check-acl-coverage.schema.json"),
         registry=schema_registry,
-    ).validate(nested)
+    )
+    assert validator.validate(nested) is None  # jsonschema raises on mismatch
 
 
 def test_single_check_does_not_emit_the_wrapper(

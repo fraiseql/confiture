@@ -58,7 +58,7 @@ class TestMigrateStatusCSV:
             assert "version,name,status" in content
             assert "001,initial,applied" in content
 
-    def test_handle_output_csv_to_console(self):
+    def test_handle_output_csv_to_console(self, capsys):
         """Test handle_output with CSV format to console."""
         console = Console()
 
@@ -69,6 +69,9 @@ class TestMigrateStatusCSV:
 
         # Should not raise
         handle_output("csv", {}, csv_data, None, console)
+        output = capsys.readouterr().out
+        assert "001" in output
+        assert "initial" in output
 
     def test_csv_with_special_characters(self):
         """Test CSV escaping with special characters."""

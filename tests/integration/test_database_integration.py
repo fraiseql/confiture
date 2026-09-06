@@ -5,6 +5,7 @@ PostgreSQL instance with a ``confiture_test`` database.
 """
 
 import psycopg
+import psycopg.pq
 import pytest
 
 from confiture.core.drift import DriftReport, SchemaDriftDetector
@@ -79,6 +80,8 @@ class TestStrictModeIntegration:
 
         migration = WarningMigration(connection=test_db_connection)
         migration.up()
+        # A NOTICE is not an error: the transaction is still open and usable.
+        assert test_db_connection.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS
 
     def test_normal_mode_ignores_notices(self, test_db_connection):
         """Normal mode should ignore PostgreSQL notices."""
@@ -95,3 +98,4 @@ class TestStrictModeIntegration:
 
         migration = NoticeMigration(connection=test_db_connection)
         migration.up()
+        assert test_db_connection.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS

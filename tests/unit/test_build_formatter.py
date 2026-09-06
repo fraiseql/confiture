@@ -16,7 +16,7 @@ from confiture.models.results import BuildResult
 class TestBuildFormatter:
     """Tests for build result formatter."""
 
-    def test_format_build_result_json_to_console(self):
+    def test_format_build_result_json_to_console(self, capsys):
         """Test formatting build result as JSON to console."""
         result = BuildResult(
             success=True,
@@ -31,6 +31,9 @@ class TestBuildFormatter:
 
         # Should not raise
         format_build_result(result, "json", None, console)
+        output = capsys.readouterr().out
+        assert "abc123" in output
+        assert "5000" in output
 
     def test_format_build_result_json_to_file(self):
         """Test formatting build result as JSON to file."""
@@ -84,7 +87,7 @@ class TestBuildFormatter:
             # Should have file count
             assert "10" in content
 
-    def test_format_build_result_text_to_console(self):
+    def test_format_build_result_text_to_console(self, capsys):
         """Test formatting build result as text to console."""
         result = BuildResult(
             success=True,
@@ -97,6 +100,9 @@ class TestBuildFormatter:
 
         # Should not raise
         format_build_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "10" in output
+        assert "/tmp/schema.sql" in output
 
     def test_format_build_result_failure_json(self):
         """Test formatting failed build result as JSON."""

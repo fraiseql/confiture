@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from confiture.core.migrator import Migrator
+from tests.unit._doubles import migrator_double
 
 # ---------------------------------------------------------------------------
 # Migrator.__init__ — migration_table parameter
@@ -273,10 +274,9 @@ migration:
             mock_load_config.return_value = self._make_env("public.tb_confiture")
             mock_conn_factory.return_value = MagicMock()
 
-            mock_migrator_instance = MagicMock()
-            mock_migrator_instance.tracking_table_exists.return_value = True
-            mock_migrator_instance.get_applied_versions.return_value = []
-            mock_migrator_cls.return_value = mock_migrator_instance
+            mock_migrator_cls.return_value = migrator_double(
+                tracking_table_exists=True, get_applied_versions=[]
+            )
 
             runner.invoke(
                 app,
@@ -289,6 +289,7 @@ migration:
                     str(migrations_dir),
                 ],
             )
+            assert mock_migrator_cls.call_args.kwargs["migration_table"] == "public.tb_confiture"
 
 
 # ---------------------------------------------------------------------------

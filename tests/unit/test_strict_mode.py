@@ -44,12 +44,6 @@ class TestStrictMode:
         # Class attribute should be accessible
         assert migration.strict_mode is True
 
-    def test_cli_strict_flag_enables_strict_mode(self):
-        """CLI --strict flag should enable strict mode on migrations"""
-        # This test would verify CLI integration
-        # For now, it's a placeholder for the CLI test
-        pass
-
     def test_config_strict_mode_enables_strict_mode(self, tmp_path):
         """Configuration file strict_mode should enable strict mode on migrations"""
         from confiture.config.environment import Environment

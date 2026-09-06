@@ -159,16 +159,16 @@ class TestProgressManagerUpdate:
     def test_update_progress(self):
         """Verify progress can be updated."""
         manager = ProgressManager(show_progress=False)
-        # Should not raise when disabled
         manager.update(None, 1)
+        assert manager.progress is None  # disabled: nothing to update
 
     def test_update_with_task(self):
         """Verify update works with task."""
         manager = ProgressManager(show_progress=True)
         task = manager.add_task("Processing...", total=10)
-        # Should not raise
         manager.update(task, 1)
         manager.stop()
+        assert manager.progress.tasks[task].completed == 1
 
     def test_update_description(self):
         """Verify description can be updated."""
@@ -176,6 +176,7 @@ class TestProgressManagerUpdate:
         task = manager.add_task("Initial...", total=10)
         manager.update_description(task, "Updated...")
         manager.stop()
+        assert manager.progress.tasks[task].description == "Updated..."
 
     def test_finish_task(self):
         """Verify task can be finished."""
@@ -183,6 +184,7 @@ class TestProgressManagerUpdate:
         task = manager.add_task("Processing...", total=10)
         manager.finish_task(task, "Complete!")
         manager.stop()
+        assert manager.progress.tasks[task].description == "Complete!"
 
 
 class TestProgressManagerContext:
@@ -232,31 +234,31 @@ class TestProgressManagerRobustness:
     def test_update_none_task(self):
         """Verify update handles None task gracefully."""
         manager = ProgressManager(show_progress=True)
-        # Should not raise
         manager.update(None, 1)
         manager.stop()
+        assert manager.progress.tasks == []
 
     def test_update_description_none_task(self):
         """Verify update_description handles None task gracefully."""
         manager = ProgressManager(show_progress=True)
-        # Should not raise
         manager.update_description(None, "Updated")
         manager.stop()
+        assert manager.progress.tasks == []
 
     def test_finish_none_task(self):
         """Verify finish_task handles None task gracefully."""
         manager = ProgressManager(show_progress=True)
-        # Should not raise
         manager.finish_task(None, "Done")
         manager.stop()
+        assert manager.progress.tasks == []
 
     def test_double_stop(self):
         """Verify stop can be called multiple times."""
         manager = ProgressManager(show_progress=True)
         manager.start()
         manager.stop()
-        # Should not raise
         manager.stop()
+        assert manager.progress.live.is_started is False
 
     def test_multiple_context_entries(self):
         """Verify context manager can be used once."""
@@ -264,6 +266,7 @@ class TestProgressManagerRobustness:
         with manager:
             task = manager.add_task("Test", total=10)
             manager.update(task, 1)
+        assert manager.progress.tasks[task].completed == 1
 
 
 class TestProgressManagerIntegration:
@@ -275,6 +278,7 @@ class TestProgressManagerIntegration:
             task = manager.add_task("Processing items...", total=100)
             for _ in range(100):
                 manager.update(task, 1)
+        assert task is None and manager.progress is None
 
     def test_typical_workflow_enabled(self):
         """Test typical workflow with progress enabled."""
@@ -282,6 +286,7 @@ class TestProgressManagerIntegration:
             task = manager.add_task("Processing items...", total=10)
             for _ in range(10):
                 manager.update(task, 1)
+        assert manager.progress.tasks[task].finished
 
     def test_multiple_tasks_workflow(self):
         """Test workflow with multiple sequential tasks."""
@@ -293,6 +298,7 @@ class TestProgressManagerIntegration:
             task2 = manager.add_task("Phase 2...", total=3)
             for _ in range(3):
                 manager.update(task2, 1)
+        assert [t.completed for t in manager.progress.tasks] == [5, 3]
 
 
 class TestProgressManagerSchemaBuilder:

@@ -137,6 +137,7 @@ def test_rust_extension_availability():
     """Check if Rust extension is available and report status."""
     from confiture.core.builder import HAS_RUST
 
+    assert isinstance(HAS_RUST, bool)
     if HAS_RUST:
         print("\n✓ Rust extension is AVAILABLE - using 10-50x faster implementation")
     else:

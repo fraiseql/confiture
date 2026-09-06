@@ -316,7 +316,7 @@ class TestMigrationGenerator:
 
         # Try to compile the file
         content = migration_file.read_text()
-        compile(content, str(migration_file), "exec")  # Should not raise
+        assert compile(content, str(migration_file), "exec") is not None
 
     def test_get_next_version_empty_dir(self, tmp_path):
         """Should return timestamp version for empty migrations directory."""

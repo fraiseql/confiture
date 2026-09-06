@@ -358,8 +358,8 @@ class TestMigrationPerformanceProfiler:
         """Test record_operation when no profile active."""
         profiler = MigrationPerformanceProfiler(mock_connection)
 
-        # Should not raise error
         profiler.record_operation("op1", 0.1)
+        assert profiler.current_profile is None  # nothing to record into
 
     def test_get_profile(self, mock_connection):
         """Test get_profile method."""
@@ -437,6 +437,8 @@ class TestSectionTracker:
         with patch.dict("sys.modules", {"psutil": None}):
             with tracker:
                 pass
+        assert tracker.memory_before_mb is None
+        assert tracker.memory_after_mb is None
 
         # Should still complete without error
 

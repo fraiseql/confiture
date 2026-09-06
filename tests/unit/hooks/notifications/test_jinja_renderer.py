@@ -185,10 +185,11 @@ class TestJinjaFilterAllowlist:
 
     def test_allowed_filters_work(self) -> None:
         for filter_name in ["tojson", "upper", "lower", "length", "default"]:
-            JinjaRenderer(
+            renderer = JinjaRenderer(
                 template=f"{{{{ migration_name | {filter_name} }}}}",
                 allow_templated_renderers=True,
-            )  # must not raise
+            )
+            assert isinstance(renderer, JinjaRenderer)
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +287,7 @@ class TestJinjaSizeCap:
     def test_exactly_at_cap_accepted(self) -> None:
         # 16 KiB of ASCII text — must be accepted.
         ok = "x" * (16 * 1024)
-        JinjaRenderer(template=ok, allow_templated_renderers=True)  # must not raise
+        assert isinstance(JinjaRenderer(template=ok, allow_templated_renderers=True), JinjaRenderer)
 
 
 # ---------------------------------------------------------------------------

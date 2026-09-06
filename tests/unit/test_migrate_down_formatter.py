@@ -58,7 +58,7 @@ class TestMigrateDownFormatter:
             assert "version,name" in content
             assert "003" in content
 
-    def test_format_migrate_down_text_to_console(self):
+    def test_format_migrate_down_text_to_console(self, capsys):
         """Test formatting migrate down result as text to console."""
         migrations = [
             MigrationApplied("002", "add_users", 200),
@@ -73,8 +73,10 @@ class TestMigrateDownFormatter:
 
         # Should not raise
         format_migrate_down_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "add_users" in output
 
-    def test_format_migrate_down_failure(self):
+    def test_format_migrate_down_failure(self, capsys):
         """Test formatting failed migrate down result."""
         result = MigrateDownResult(
             success=False,
@@ -87,3 +89,5 @@ class TestMigrateDownFormatter:
 
         # Should not raise
         format_migrate_down_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "Rollback failed" in output

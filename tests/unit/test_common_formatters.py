@@ -156,41 +156,47 @@ class TestHandleOutput:
             content = output_path.read_text()
             assert "name,value" in content
 
-    def test_handle_output_csv_none_falls_back_to_json(self):
+    def test_handle_output_csv_none_falls_back_to_json(self, capsys):
         """Test handle_output with CSV format when csv_data is None."""
         with TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "output.csv"
             console = Console()
             data = {"test": "data"}
 
-            # Should not raise, just print warning
             handle_output("csv", data, None, output_path, console)
+            output = capsys.readouterr().out
+            assert "CSV output not supported" in output
+            assert not output_path.exists()
 
-    def test_handle_output_json_to_console(self):
+    def test_handle_output_json_to_console(self, capsys):
         """Test handle_output with JSON format to console (no file)."""
         console = Console()
         data = {"test": "data"}
 
         # Should not raise
         handle_output("json", data, None, None, console)
+        output = capsys.readouterr().out
+        assert '"test": "data"' in output
 
 
 class TestPrintJson:
     """Tests for print_json function."""
 
-    def test_print_json_valid_data(self):
+    def test_print_json_valid_data(self, capsys):
         """Test print_json with valid JSON data."""
         console = Console()
         data = {"key": "value"}
 
         # Should not raise
         print_json(data, console)
+        output = capsys.readouterr().out
+        assert '"key": "value"' in output
 
 
 class TestPrintCsv:
     """Tests for print_csv function."""
 
-    def test_print_csv_valid_data(self):
+    def test_print_csv_valid_data(self, capsys):
         """Test print_csv with valid CSV data."""
         console = Console()
         headers = ["name", "value"]
@@ -198,3 +204,6 @@ class TestPrintCsv:
 
         # Should not raise
         print_csv(headers, rows, console)
+        output = capsys.readouterr().out
+        assert "name,value" in output
+        assert "foo,1" in output
