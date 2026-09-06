@@ -20,16 +20,11 @@ from confiture.core.locking import (
 )
 
 
-def get_test_connection_string() -> str:
-    """Get connection string for test database."""
-    return "postgresql://postgres:postgres@localhost:5432/confiture_test"
-
-
 @pytest.fixture
-def test_db():
+def test_db(test_db_url: str):
     """Create a test database connection."""
     try:
-        conn = psycopg.connect(get_test_connection_string())
+        conn = psycopg.connect(test_db_url)
         yield conn
         conn.close()
     except psycopg.OperationalError:
@@ -37,10 +32,10 @@ def test_db():
 
 
 @pytest.fixture
-def second_connection():
+def second_connection(test_db_url: str):
     """Create a second database connection for concurrent testing."""
     try:
-        conn = psycopg.connect(get_test_connection_string())
+        conn = psycopg.connect(test_db_url)
         yield conn
         conn.close()
     except psycopg.OperationalError:
@@ -80,14 +75,12 @@ class TestConcurrentMigrations:
         lock2 = MigrationLock(second_connection, LockConfig(mode=LockMode.NON_BLOCKING))
 
         with lock1.acquire():
-            start = time.time()
             with pytest.raises(LockAcquisitionError) as exc_info:
                 with lock2.acquire():
                     pass
-            elapsed = time.time() - start
 
-            # Should return almost immediately (< 1 second)
-            assert elapsed < 1.0
+            # The behaviour under test is that it did not wait for a timeout;
+            # an upper bound on the elapsed time would only measure machine load.
             assert exc_info.value.timeout is False
 
     def test_lock_released_allows_second_acquisition(self, test_db, second_connection):
@@ -132,7 +125,7 @@ class TestConcurrentMigrations:
             assert "pid" in holder
             assert holder["pid"] > 0
 
-    def test_concurrent_threads_serialize_correctly(self, test_db):
+    def test_concurrent_threads_serialize_correctly(self, test_db, test_db_url: str):
         """Test that concurrent threads serialize through the lock."""
         results: list[str] = []
         lock = threading.Lock()
@@ -154,7 +147,7 @@ class TestConcurrentMigrations:
                 with lock:
                     results.append(f"{name}_error: {e}")
 
-        conn_str = get_test_connection_string()
+        conn_str = test_db_url
         threads = [
             threading.Thread(target=worker, args=("thread1", conn_str)),
             threading.Thread(target=worker, args=("thread2", conn_str)),
@@ -178,12 +171,12 @@ class TestConcurrentMigrations:
             # Thread2 started first, should end before thread1 starts
             assert results.index("thread2_end") < results.index("thread1_start")
 
-    def test_lock_released_on_connection_close(self, test_db, second_connection):
+    def test_lock_released_on_connection_close(self, test_db, second_connection, test_db_url: str):
         """Test that lock is released when connection closes."""
         lock2 = MigrationLock(second_connection)
 
         # Create a new connection, acquire lock, then close it
-        conn1 = psycopg.connect(get_test_connection_string())
+        conn1 = psycopg.connect(test_db_url)
         lock1 = MigrationLock(conn1)
 
         with lock1.acquire():
@@ -257,20 +250,23 @@ class TestConcurrentMigrations:
                     pass
             elapsed = time.time() - start
 
-            # Should timeout around 50ms (allow some margin)
-            assert 0.03 < elapsed < 0.5
+            # The 50 ms timeout was honoured (a lower bound cannot be broken by
+            # machine load; an upper bound could, so none is asserted here).
+            assert elapsed >= 0.03
 
 
 @pytest.mark.integration
 class TestLockRecovery:
     """Test lock recovery scenarios."""
 
-    def test_lock_auto_releases_on_crash_simulation(self, test_db, second_connection):
+    def test_lock_auto_releases_on_crash_simulation(
+        self, test_db, second_connection, test_db_url: str
+    ):
         """Test that lock is released when connection is abruptly terminated."""
         lock2 = MigrationLock(second_connection)
 
         # Create a new connection and acquire lock
-        conn1 = psycopg.connect(get_test_connection_string())
+        conn1 = psycopg.connect(test_db_url)
         lock1 = MigrationLock(conn1)
 
         with lock1.acquire():

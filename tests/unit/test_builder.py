@@ -328,6 +328,7 @@ database_url: postgresql://localhost/test
 class TestSchemaBuilderPerformance:
     """Test schema builder performance characteristics."""
 
+    @pytest.mark.benchmark
     def test_build_large_schema(self, tmp_path):
         """Should handle large schemas efficiently."""
         schema_dir = tmp_path / "db" / "schema"
@@ -376,6 +377,7 @@ database_url: postgresql://localhost/test
         assert "table_099" in schema
         assert schema.count("CREATE TABLE") == 100
 
+    @pytest.mark.benchmark
     def test_hash_computation_is_fast(self, tmp_path):
         """Should compute hashes quickly."""
         schema_dir = tmp_path / "db" / "schema"

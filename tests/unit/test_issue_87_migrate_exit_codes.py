@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from tests.unit._doubles import migrator_double
 
 runner = CliRunner()
 
@@ -56,14 +57,14 @@ def _make_migrator_mock(
     applied_versions: list[str] | None = None,
     pending_files: list[Path] | None = None,
 ) -> MagicMock:
-    mock = MagicMock()
-    mock.tracking_table_exists.return_value = tracking_table_exists
-    mock.initialize.return_value = None
-    mock.get_applied_versions.return_value = applied_versions or []
-    mock.get_applied_migrations_with_timestamps.return_value = []
-    mock.find_migration_files.return_value = []
-    mock.find_pending.return_value = pending_files or []
-    return mock
+    return migrator_double(
+        tracking_table_exists=tracking_table_exists,
+        initialize=None,
+        get_applied_versions=applied_versions or [],
+        get_applied_migrations_with_timestamps=[],
+        find_migration_files=[],
+        find_pending=pending_files or [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +224,7 @@ class TestMigrateUpLockExitCodes:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=mock_conn),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
             patch(
                 "confiture.core.locking.MigrationLock.acquire",
                 side_effect=lock_error,
@@ -268,7 +269,7 @@ class TestMigrateUpLockExitCodes:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=mock_conn),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
             patch(
                 "confiture.core.locking.MigrationLock.acquire",
                 side_effect=lock_error,
@@ -331,7 +332,7 @@ class TestMigrateUpMigrationFailure:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=mock_conn),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
             patch(
                 "confiture.core.connection.load_migration_class", return_value=mock_migration_class
             ),

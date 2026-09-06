@@ -72,7 +72,7 @@ class TestMigrateDiffFormatter:
             assert "ADD_TABLE" in content
             assert "users table" in content
 
-    def test_format_diff_text_no_changes(self):
+    def test_format_diff_text_no_changes(self, capsys):
         """Test formatting diff result with no changes."""
         result = MigrateDiffResult(
             success=True,
@@ -82,8 +82,10 @@ class TestMigrateDiffFormatter:
         console = Console()
         # Should not raise
         format_migrate_diff_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert output.strip(), "the formatter printed nothing"
 
-    def test_format_diff_text_with_changes(self):
+    def test_format_diff_text_with_changes(self, capsys):
         """Test formatting diff result with changes."""
         changes = [
             MigrateDiffChange("ADD_TABLE", "orders table"),
@@ -99,6 +101,9 @@ class TestMigrateDiffFormatter:
         console = Console()
         # Should not raise
         format_migrate_diff_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "orders table" in output
+        assert "004_add_orders.py" in output
 
 
 class TestMigrateValidateFormatter:
@@ -144,7 +149,7 @@ class TestMigrateValidateFormatter:
             assert "check,count" in content
             assert "orphaned_files" in content
 
-    def test_format_validate_text_success(self):
+    def test_format_validate_text_success(self, capsys):
         """Test formatting successful validation."""
         result = MigrateValidateResult(
             success=True,
@@ -156,8 +161,10 @@ class TestMigrateValidateFormatter:
         console = Console()
         # Should not raise
         format_migrate_validate_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert output.strip(), "the formatter printed nothing"
 
-    def test_format_validate_text_with_issues(self):
+    def test_format_validate_text_with_issues(self, capsys):
         """Test formatting validation with issues."""
         result = MigrateValidateResult(
             success=False,
@@ -170,3 +177,5 @@ class TestMigrateValidateFormatter:
         console = Console()
         # Should not raise
         format_migrate_validate_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "Validation failed" in output

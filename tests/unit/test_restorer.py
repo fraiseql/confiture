@@ -87,13 +87,13 @@ class TestDumpFormatValidation:
     def test_custom_format_file_is_accepted(self, tmp_path):
         dump = tmp_path / "dump.pgdump"
         dump.write_bytes(b"PGDMP\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
-        DatabaseRestorer()._validate_dump_format(dump)  # must not raise
+        assert DatabaseRestorer()._validate_dump_format(dump) is None
 
     def test_directory_format_is_accepted(self, tmp_path):
         dump_dir = tmp_path / "dump_dir"
         dump_dir.mkdir()
         (dump_dir / "toc.dat").write_bytes(b"PGDMP\x00\x00")
-        DatabaseRestorer()._validate_dump_format(dump_dir)  # must not raise
+        assert DatabaseRestorer()._validate_dump_format(dump_dir) is None
 
     def test_directory_without_toc_raises(self, tmp_path):
         dump_dir = tmp_path / "nodump"

@@ -7,58 +7,24 @@ verifies the post-state in pg_catalog.
 
 from __future__ import annotations
 
-import uuid
+from collections.abc import Generator
 
 import psycopg
 import pytest
+from tests.conftest import drop_roles
 
 from confiture.config.environment import OwnershipApplyTo, OwnershipExpectation
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 
 
-def _drop_test_roles() -> None:
-    """Best-effort cleanup of test roles; called pre- and post-test."""
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-    except psycopg.OperationalError:
-        return
-    try:
-        for role in ("bootstrap_migrator_test", "bootstrap_app_test"):
-            try:
-                admin.execute(f"DROP OWNED BY {role} CASCADE")
-            except psycopg.Error:
-                pass
-            try:
-                admin.execute(f'DROP ROLE IF EXISTS "{role}"')
-            except psycopg.Error:
-                pass
-    finally:
-        admin.close()
-
-
 @pytest.fixture()
-def bootstrap_db() -> str:
-    """Provision a throwaway database connected as superuser."""
-    _drop_test_roles()
-    db_name = f"confiture_bootstrap_test_{uuid.uuid4().hex[:8]}"
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'CREATE DATABASE "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"PostgreSQL not available: {exc}")
-
-    db_url = f"postgresql://localhost/{db_name}"
-    try:
-        yield db_url
-    finally:
-        _drop_test_roles()
-        try:
-            admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            admin.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            admin.close()
-        except psycopg.OperationalError:
-            pass
+def bootstrap_db(
+    superuser_db_url: str, fresh_database: str, maintenance_connection: psycopg.Connection
+) -> Generator[str, None, None]:
+    """Throwaway database, connected as a superuser: the executor creates roles."""
+    drop_roles(maintenance_connection, "bootstrap_migrator_test", "bootstrap_app_test")
+    yield fresh_database
+    drop_roles(maintenance_connection, "bootstrap_migrator_test", "bootstrap_app_test")
 
 
 def _role_exists(conn: psycopg.Connection, role: str) -> bool:

@@ -10,7 +10,7 @@ from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 class TestSchemaToSchemaFDW:
     """Integration tests for FDW-based schema-to-schema migration."""
 
-    def test_setup_fdw_connection(self, test_db_connection):
+    def test_setup_fdw_connection(self, clean_test_db):
         """Should setup FDW infrastructure (extension, server, user mapping).
 
         RED Phase Test - This test should FAIL initially.
@@ -27,8 +27,8 @@ class TestSchemaToSchemaFDW:
         """
         # Initialize migrator
         migrator = SchemaToSchemaMigrator(
-            source_connection=test_db_connection,
-            target_connection=test_db_connection,
+            source_connection=clean_test_db,
+            target_connection=clean_test_db,
             foreign_schema_name="old_schema",
         )
 
@@ -36,7 +36,7 @@ class TestSchemaToSchemaFDW:
         migrator.setup_fdw(skip_import=True)
 
         # Verify postgres_fdw extension exists
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT 1 FROM pg_extension WHERE extname = 'postgres_fdw'
@@ -46,7 +46,7 @@ class TestSchemaToSchemaFDW:
             assert fdw_exists is True, "postgres_fdw extension should be installed"
 
         # Verify foreign server exists
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("""
                 SELECT COUNT(*) FROM pg_foreign_server
                 WHERE srvname = 'confiture_source_server'
@@ -55,7 +55,7 @@ class TestSchemaToSchemaFDW:
             assert server_count == 1, "Foreign server should be created"
 
         # Verify user mapping exists
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("""
                 SELECT COUNT(*) FROM pg_user_mappings
                 WHERE srvname = 'confiture_source_server'
@@ -64,7 +64,7 @@ class TestSchemaToSchemaFDW:
             assert mapping_count == 1, "User mapping should be created"
 
         # Verify foreign schema was created
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT 1 FROM information_schema.schemata
@@ -75,15 +75,15 @@ class TestSchemaToSchemaFDW:
             assert schema_exists is True, "Foreign schema should be created"
 
         # Cleanup
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
             cursor.execute(
                 "DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER confiture_source_server"
             )
             cursor.execute("DROP SERVER IF EXISTS confiture_source_server CASCADE")
-        test_db_connection.commit()
+        clean_test_db.commit()
 
-    def test_migrate_table_with_column_mapping(self, test_db_connection):
+    def test_migrate_table_with_column_mapping(self, clean_test_db):
         """Should migrate data with column mapping (RED → GREEN test).
 
         Milestone 3.2: Data Migration with Column Mapping
@@ -99,7 +99,7 @@ class TestSchemaToSchemaFDW:
         queries from the foreign_schema which we create manually.
         """
         # Setup: Create old schema with data in foreign schema
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Create foreign schema and old table in it
             cursor.execute("CREATE SCHEMA IF NOT EXISTS old_schema")
 
@@ -127,12 +127,12 @@ class TestSchemaToSchemaFDW:
                     email TEXT UNIQUE
                 )
             """)
-        test_db_connection.commit()
+        clean_test_db.commit()
 
         # Create migrator (no FDW needed for this simplified test)
         migrator = SchemaToSchemaMigrator(
-            source_connection=test_db_connection,
-            target_connection=test_db_connection,
+            source_connection=clean_test_db,
+            target_connection=clean_test_db,
             foreign_schema_name="old_schema",
         )
 
@@ -151,7 +151,7 @@ class TestSchemaToSchemaFDW:
         assert rows_migrated == 3, f"Should return 3 rows migrated, got {rows_migrated}"
 
         # Verify data migrated correctly
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Check row count matches
             cursor.execute("SELECT COUNT(*) FROM old_schema.old_users")
             old_count = cursor.fetchone()[0]
@@ -171,13 +171,13 @@ class TestSchemaToSchemaFDW:
             assert rows[2] == ("Bob Wilson", None)
 
         # Cleanup
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("DROP TABLE IF EXISTS old_schema.old_users CASCADE")
             cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
             cursor.execute("DROP TABLE IF EXISTS new_users CASCADE")
-        test_db_connection.commit()
+        clean_test_db.commit()
 
-    def test_copy_strategy_for_large_table(self, test_db_connection):
+    def test_copy_strategy_for_large_table(self, clean_test_db):
         """COPY strategy should migrate large tables efficiently.
 
         Milestone 3.3: COPY Strategy (Large Tables)
@@ -192,7 +192,7 @@ class TestSchemaToSchemaFDW:
         COPY is 10-20x faster than FDW for large tables (>10M rows).
         """
         # Setup: Create old schema with larger dataset
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Cleanup any existing tables from previous runs
             cursor.execute("DROP TABLE IF EXISTS old_schema.large_events CASCADE")
             cursor.execute("DROP TABLE IF EXISTS events CASCADE")
@@ -232,12 +232,12 @@ class TestSchemaToSchemaFDW:
                     created_at TIMESTAMP
                 )
             """)
-        test_db_connection.commit()
+        clean_test_db.commit()
 
         # Create migrator
         migrator = SchemaToSchemaMigrator(
-            source_connection=test_db_connection,
-            target_connection=test_db_connection,
+            source_connection=clean_test_db,
+            target_connection=clean_test_db,
             foreign_schema_name="old_schema",
         )
 
@@ -257,7 +257,7 @@ class TestSchemaToSchemaFDW:
         assert rows_migrated == 100000, f"Should return 100000 rows migrated, got {rows_migrated}"
 
         # Verify data migrated correctly
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Check row count matches
             cursor.execute("SELECT COUNT(*) FROM old_schema.large_events")
             old_count = cursor.fetchone()[0]
@@ -279,13 +279,13 @@ class TestSchemaToSchemaFDW:
             assert non_null_timestamps == 100000, "All timestamps should be preserved"
 
         # Cleanup
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("DROP TABLE IF EXISTS old_schema.large_events CASCADE")
             cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
             cursor.execute("DROP TABLE IF EXISTS events CASCADE")
-        test_db_connection.commit()
+        clean_test_db.commit()
 
-    def test_analyze_tables_recommends_strategy(self, test_db_connection):
+    def test_analyze_tables_recommends_strategy(self, clean_test_db):
         """Should analyze table sizes and recommend optimal strategy.
 
         Milestone 3.4: Hybrid Strategy (Auto-Detection)
@@ -303,7 +303,7 @@ class TestSchemaToSchemaFDW:
         for speed, but verifies the threshold logic works correctly.
         """
         # Setup: Create tables with different sizes
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Cleanup from previous runs
             cursor.execute("DROP TABLE IF EXISTS small_users CASCADE")
             cursor.execute("DROP TABLE IF EXISTS medium_posts CASCADE")
@@ -331,17 +331,17 @@ class TestSchemaToSchemaFDW:
                 "INSERT INTO medium_posts (content) SELECT 'post' || i FROM generate_series(1, 1000000) i"
             )  # 1M rows
 
-        test_db_connection.commit()
+        clean_test_db.commit()
 
         # Update statistics to simulate larger table
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("ANALYZE small_users")
             cursor.execute("ANALYZE medium_posts")
 
         # Create migrator
         migrator = SchemaToSchemaMigrator(
-            source_connection=test_db_connection,
-            target_connection=test_db_connection,
+            source_connection=clean_test_db,
+            target_connection=clean_test_db,
         )
 
         # Analyze tables
@@ -369,12 +369,12 @@ class TestSchemaToSchemaFDW:
         assert (medium_rec["row_count"] < 10_000_000) == (medium_rec["strategy"] == "fdw")
 
         # Cleanup
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("DROP TABLE IF EXISTS small_users CASCADE")
             cursor.execute("DROP TABLE IF EXISTS medium_posts CASCADE")
-        test_db_connection.commit()
+        clean_test_db.commit()
 
-    def test_verify_migration_counts(self, test_db_connection):
+    def test_verify_migration_counts(self, clean_test_db):
         """Should verify row counts match between source and target.
 
         Milestone 3.5: Verification & Cutover
@@ -388,7 +388,7 @@ class TestSchemaToSchemaFDW:
         This is critical for ensuring data migration completeness.
         """
         # Setup: Create source and target tables with data
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Cleanup
             cursor.execute("DROP TABLE IF EXISTS old_schema.products CASCADE")
             cursor.execute("DROP TABLE IF EXISTS products CASCADE")
@@ -418,12 +418,12 @@ class TestSchemaToSchemaFDW:
                     price DECIMAL(10, 2)
                 )
             """)
-        test_db_connection.commit()
+        clean_test_db.commit()
 
         # Create migrator
         migrator = SchemaToSchemaMigrator(
-            source_connection=test_db_connection,
-            target_connection=test_db_connection,
+            source_connection=clean_test_db,
+            target_connection=clean_test_db,
             foreign_schema_name="old_schema",
         )
 
@@ -446,13 +446,13 @@ class TestSchemaToSchemaFDW:
         assert products_result["difference"] == 0
 
         # Cleanup
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("DROP TABLE IF EXISTS old_schema.products CASCADE")
             cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
             cursor.execute("DROP TABLE IF EXISTS products CASCADE")
-        test_db_connection.commit()
+        clean_test_db.commit()
 
-    def test_verify_migration_detects_mismatch(self, test_db_connection):
+    def test_verify_migration_detects_mismatch(self, clean_test_db):
         """Should detect count mismatches between source and target.
 
         Milestone 3.5: Verification & Cutover
@@ -461,7 +461,7 @@ class TestSchemaToSchemaFDW:
         which would indicate incomplete or failed migration.
         """
         # Setup: Create tables with intentional mismatch
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             # Cleanup
             cursor.execute("DROP TABLE IF EXISTS old_schema.orders CASCADE")
             cursor.execute("DROP TABLE IF EXISTS orders CASCADE")
@@ -494,12 +494,12 @@ class TestSchemaToSchemaFDW:
                 FROM old_schema.orders
                 WHERE id <= 900
             """)
-        test_db_connection.commit()
+        clean_test_db.commit()
 
         # Create migrator
         migrator = SchemaToSchemaMigrator(
-            source_connection=test_db_connection,
-            target_connection=test_db_connection,
+            source_connection=clean_test_db,
+            target_connection=clean_test_db,
             foreign_schema_name="old_schema",
         )
 
@@ -519,8 +519,8 @@ class TestSchemaToSchemaFDW:
         assert orders_result["difference"] == -100
 
         # Cleanup
-        with test_db_connection.cursor() as cursor:
+        with clean_test_db.cursor() as cursor:
             cursor.execute("DROP TABLE IF EXISTS old_schema.orders CASCADE")
             cursor.execute("DROP SCHEMA IF EXISTS old_schema CASCADE")
             cursor.execute("DROP TABLE IF EXISTS orders CASCADE")
-        test_db_connection.commit()
+        clean_test_db.commit()

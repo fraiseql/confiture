@@ -191,7 +191,8 @@ class TestResolveInboundFks:
             None,
         )
         introspector = SchemaIntrospector(MagicMock())
-        introspector._resolve_inbound_fks([tb_post])  # should not raise
+        assert introspector._resolve_inbound_fks([tb_post]) is None
+        assert tb_post.inbound_fks == []
 
     def test_no_fks_leaves_inbound_empty(self):
         """Tables with no outbound FKs keep empty inbound_fks."""

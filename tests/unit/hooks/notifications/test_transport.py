@@ -121,10 +121,10 @@ class TestHttpTransport:
     URL = "https://hooks.example.com/services/T1/B2/abc"
 
     def test_post_json_body_returns_on_2xx(self) -> None:
-        with mock.patch("urllib.request.urlopen", return_value=_mock_response(200)):
+        with mock.patch("urllib.request.urlopen", return_value=_mock_response(200)) as urlopen:
             t = HttpTransport(url=self.URL)
-            # Must not raise.
             t.send(TransportPayload(body=b'{"x":1}'))
+        urlopen.assert_called_once()
 
     def test_post_passes_body_and_content_type(self) -> None:
         with mock.patch("urllib.request.urlopen", return_value=_mock_response(200)) as urlopen:

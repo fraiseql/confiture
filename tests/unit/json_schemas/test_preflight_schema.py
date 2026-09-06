@@ -112,6 +112,7 @@ def test_preflight_against_validates(tmp_path, schemas_dir):
     runner = CliRunner()
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=mock_session,
     ):
         result = runner.invoke(
@@ -171,6 +172,7 @@ def test_preflight_against_replay_failure_validates(tmp_path, schemas_dir):
     runner = CliRunner()
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=mock_session,
     ):
         result = runner.invoke(
@@ -238,7 +240,7 @@ def test_an_absent_change_set_still_validates(schemas_dir):
     """A payload from confiture < 0.43.0 must stay valid — absence is meaningful."""
     payload = _payload_with(None)
     del payload["change_set"]
-    _validator(schemas_dir).validate(payload)
+    assert _validator(schemas_dir).validate(payload) is None  # jsonschema raises on mismatch
 
 
 @pytest.mark.parametrize(

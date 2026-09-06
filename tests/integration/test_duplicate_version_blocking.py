@@ -5,8 +5,6 @@ refuse to proceed when duplicate migration versions are detected.
 They require a database connection (integration tests).
 """
 
-import os
-
 import pytest
 from typer.testing import CliRunner
 
@@ -15,12 +13,11 @@ from confiture.cli.main import app
 runner = CliRunner()
 
 
-def _make_config_file(tmp_path):
+def _make_config_file(tmp_path, db_url):
     """Create a minimal config file pointing to test database."""
     config_dir = tmp_path / "db" / "environments"
     config_dir.mkdir(parents=True)
     config_file = config_dir / "local.yaml"
-    db_url = os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
     config_file.write_text(f"name: local\ndatabase_url: {db_url}\n")
     return config_file
 
@@ -47,9 +44,9 @@ class {class_name}(Migration):
 class TestMigrateUpDuplicateBlocking:
     """Test that migrate up refuses to run with duplicate versions."""
 
-    def test_migrate_up_blocks_on_duplicates(self, tmp_path):
+    def test_migrate_up_blocks_on_duplicates(self, tmp_path, test_db_url):
         """migrate up should exit 3 when duplicate versions exist."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 
@@ -73,9 +70,9 @@ class TestMigrateUpDuplicateBlocking:
         # The test verifies the correct exit code; the error message content
         # is verified in unit tests.
 
-    def test_migrate_up_proceeds_without_duplicates(self, tmp_path):
+    def test_migrate_up_proceeds_without_duplicates(self, tmp_path, test_db_url):
         """migrate up should not block with duplicate-version exit code when no duplicates exist."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 
@@ -107,9 +104,9 @@ class TestMigrateUpDuplicateBlocking:
 class TestMigrateBaselineDuplicateBlocking:
     """Test that migrate baseline refuses to run with duplicate versions."""
 
-    def test_baseline_blocks_on_duplicates(self, tmp_path):
+    def test_baseline_blocks_on_duplicates(self, tmp_path, test_db_url):
         """migrate baseline should exit 3 when duplicate versions exist."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
 

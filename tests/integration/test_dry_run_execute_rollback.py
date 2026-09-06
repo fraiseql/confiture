@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-import uuid
-from collections.abc import Generator
-
 import psycopg
 import pytest
 
@@ -13,32 +9,9 @@ from confiture.core._migrator.session import MigratorSession
 
 
 @pytest.fixture()
-def dry_run_db() -> Generator[str, None, None]:
-    """Throwaway DB for one test."""
-    db_name = f"confiture_dry_run_test_{uuid.uuid4().hex[:8]}"
-    use_subprocess = False
-    try:
-        subprocess.run(["createdb", db_name], check=True, capture_output=True)
-        use_subprocess = True
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        try:
-            conn = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            conn.execute(f'CREATE DATABASE "{db_name}"')
-            conn.close()
-        except psycopg.OperationalError as e:
-            pytest.skip(f"PostgreSQL not available: {e}")
-
-    yield f"postgresql://localhost/{db_name}"
-
-    if use_subprocess:
-        subprocess.run(["dropdb", db_name], capture_output=True)
-    else:
-        try:
-            conn = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            conn.close()
-        except psycopg.OperationalError:
-            pass
+def dry_run_db(fresh_database: str) -> str:
+    """Throwaway database for one test."""
+    return fresh_database
 
 
 @pytest.mark.integration

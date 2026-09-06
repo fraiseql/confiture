@@ -252,9 +252,9 @@ class TestDiffTextRenameOutput:
         old = _write_sql("CREATE TABLE user_accounts (id INT);")
         new = _write_sql("CREATE TABLE user_profiles (id INT);")
         result = runner.invoke(app, ["diff", "--from", old, "--to", new])
-        # rename detection may or may not be supported; at minimum it must not crash
-        assert result.exit_code in (0, 1)
-        assert result.exception is None or isinstance(result.exception, SystemExit)
+        # A table rename between two DDL files is a diff with changes: `diff` exits 1.
+        assert result.exit_code == 1, result.output
+        assert "1 change detected" in result.output
 
     def test_diff_text_rename_column_change_renders(self):
         import io  # noqa: PLC0415

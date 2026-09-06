@@ -5,6 +5,7 @@ PostgreSQL instance with a ``confiture_test`` database.
 """
 
 import psycopg
+import psycopg.pq
 import pytest
 
 from confiture.core.drift import DriftReport, SchemaDriftDetector
@@ -13,10 +14,10 @@ from confiture.models.migration import Migration
 
 
 @pytest.fixture
-def db_connection():
-    """Create test database connection if available."""
+def db_connection(test_db_url: str):
+    """Create test database connection."""
     try:
-        conn = psycopg.connect("postgresql://localhost/confiture_test")
+        conn = psycopg.connect(test_db_url)
         yield conn
         conn.close()
     except Exception:
@@ -43,7 +44,8 @@ class TestDriftDetectorIntegration:
         report = detector.compare_with_expected(expected)
 
         assert isinstance(report, DriftReport)
-        assert report.database_name == "confiture_test"
+        # Per-worker databases carry an xdist suffix; the report names the one we used.
+        assert report.database_name == db_connection.info.dbname
 
 
 class TestSchemaAnalyzerIntegration:
@@ -78,6 +80,8 @@ class TestStrictModeIntegration:
 
         migration = WarningMigration(connection=test_db_connection)
         migration.up()
+        # A NOTICE is not an error: the transaction is still open and usable.
+        assert test_db_connection.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS
 
     def test_normal_mode_ignores_notices(self, test_db_connection):
         """Normal mode should ignore PostgreSQL notices."""
@@ -94,3 +98,4 @@ class TestStrictModeIntegration:
 
         migration = NoticeMigration(connection=test_db_connection)
         migration.up()
+        assert test_db_connection.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS

@@ -6,31 +6,27 @@ expected side through Postgres' own deparser (``pg_get_viewdef``, ``prosrc``)
 instead of text-normalising source DDL.
 
 Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``
-(default ``postgresql://localhost/confiture_test``).
+(routing rule in ``tests/conftest.py``).
 """
 
 from __future__ import annotations
 
-import os
-
 import psycopg
 import pytest
+from tests.conftest import database_url_for
 
 from confiture.core.expected_db import ExpectedSchemaDB
 
 
 @pytest.fixture
-def server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+def server_url(test_db_url: str) -> str:
+    return test_db_url
 
 
 @pytest.fixture
-def _require_server(server_url: str) -> None:
-    """Skip the whole module cleanly when no server is reachable."""
-    try:
-        psycopg.connect(server_url.replace("/confiture_test", "/postgres"), autocommit=True).close()
-    except psycopg.OperationalError as exc:  # pragma: no cover - env dependent
-        pytest.skip(f"PostgreSQL not available: {exc}")
+def _require_server(maintenance_url: str) -> None:
+    """The maintenance database must accept connections (scratch DBs are created there)."""
+    psycopg.connect(maintenance_url, autocommit=True).close()
 
 
 _TWO_TABLES_ONE_VIEW = """
@@ -54,7 +50,7 @@ CREATE VIEW author_book_counts AS
 
 
 def _scratch_db_names(server_url: str) -> set[str]:
-    maint = server_url.replace("/confiture_test", "/postgres")
+    maint = database_url_for(server_url, "postgres")
     with psycopg.connect(maint, autocommit=True) as conn:
         rows = conn.execute(
             "SELECT datname FROM pg_database WHERE datname LIKE 'confiture_tmp_%'"
@@ -95,11 +91,12 @@ def test_from_source_yields_connection_with_expected_objects(
         # Capture the scratch DB name so we can assert it is gone afterwards.
         scratch_name = conn.execute("SELECT current_database()").fetchone()[0]
 
-    # The scratch DB is dropped on exit — no orphan left behind.
+    # The scratch DB is dropped on exit — no orphan left behind. Only *this*
+    # run's scratch name is asserted: under -n N other workers create and drop
+    # their own `confiture_tmp_*` databases concurrently.
     assert scratch_name.startswith("confiture_tmp_")
-    after = _scratch_db_names(server_url)
-    assert scratch_name not in after
-    assert after <= before  # created no net-new scratch DBs
+    assert scratch_name not in before
+    assert scratch_name not in _scratch_db_names(server_url)
 
 
 _BASE_SQL = """

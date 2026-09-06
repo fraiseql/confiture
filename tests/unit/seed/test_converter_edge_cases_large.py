@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 
@@ -100,6 +102,7 @@ class TestLargeFileEdgeCases:
         assert result.success is True, f"Failed: {result.reason}"
         assert result.rows_converted == 5000
 
+    @pytest.mark.benchmark
     def test_regex_catastrophic_backtracking_protection(self) -> None:
         """Test that converter doesn't suffer from catastrophic backtracking."""
         # Create a pathological case: string that looks like it might match

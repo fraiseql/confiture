@@ -546,9 +546,7 @@ class TestPreconditionValidator:
         validator = PreconditionValidator(mock_conn)
 
         preconditions = [TableExists("users")]
-
-        # Should not raise
-        validator.validate(preconditions)
+        assert validator.validate(preconditions) is None
 
     def test_validate_single_raises_precondition_error(self):
         """Validator validate_single() should raise PreconditionError."""

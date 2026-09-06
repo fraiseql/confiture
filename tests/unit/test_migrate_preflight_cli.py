@@ -102,7 +102,7 @@ def test_config_detects_pending(tmp_path):
         patch("confiture.cli.commands.migrate_analysis._resolve_config") as mock_rc,
         patch("confiture.cli.commands.migrate_analysis.load_config") as mock_lc,
         patch("confiture.cli.commands.migrate_analysis.create_connection") as mock_cc,
-        patch("confiture.cli.commands.migrate_analysis.Migrator") as MockMigrator,
+        patch("confiture.cli.commands.migrate_analysis.Migrator", autospec=True) as MockMigrator,
     ):
         mock_rc.return_value = Path("db/environments/prod.yaml")
         mock_lc.return_value = {"database_url": "postgresql://prod/db"}
@@ -138,6 +138,7 @@ def test_against_no_filter_runs_all(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -176,6 +177,7 @@ def test_against_failure_exits_7(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -220,6 +222,7 @@ def test_skipped_migration_exits_0(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -257,6 +260,7 @@ def test_allow_non_transactional_flag_passed(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=mock_instance,
     ):
         runner.invoke(
@@ -298,6 +302,7 @@ def test_against_json_is_unified_envelope(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -341,6 +346,7 @@ def test_against_json_replay_failure_is_issue(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -379,6 +385,7 @@ def test_against_static_error_exits_7(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -437,6 +444,7 @@ def test_against_unreachable_url_exits_3(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         side_effect=Exception("connection refused"),
     ):
         result = runner.invoke(
@@ -461,6 +469,7 @@ def test_against_unreachable_url_json_envelope_exits_3(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         side_effect=Exception("connection refused"),
     ):
         result = runner.invoke(
@@ -501,6 +510,7 @@ def test_db_consumed_warning_shown_in_text(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(
@@ -533,6 +543,7 @@ def test_db_consumed_in_json_envelope(runner, tmp_path):
 
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=_mock_session(against_result),
     ):
         result = runner.invoke(

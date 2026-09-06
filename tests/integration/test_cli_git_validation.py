@@ -143,7 +143,7 @@ class TestCliGitValidation:
 
                 # Should succeed - no drift when comparing to self
                 # Output should say no changes detected
-                assert result.exit_code == 0 or "no schema" in result.stdout.lower()
+                assert result.exit_code == 0, result.output
             finally:
                 os.chdir(old_cwd)
 

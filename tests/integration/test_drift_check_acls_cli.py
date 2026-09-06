@@ -6,7 +6,6 @@ Drives the Typer CLI end-to-end against a real Postgres instance.
 from __future__ import annotations
 
 import json
-import os
 import textwrap
 from collections.abc import Generator
 from pathlib import Path
@@ -22,8 +21,8 @@ _ROLES = ("acl_cli_app",)
 
 
 @pytest.fixture
-def pg_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+def pg_url(test_db_url: str) -> str:
+    return test_db_url
 
 
 @pytest.fixture
@@ -139,6 +138,8 @@ def test_check_acls_works_without_schema_flag(
         """,
     )
     result = CliRunner().invoke(app, ["drift", "--check-acls", "--config", str(cfg)])
+    # Either outcome is a real drift verdict; the point is that no --schema is
+    # not a usage error (2).
     assert result.exit_code in (0, 1), result.output
 
 

@@ -1,7 +1,5 @@
 """Integration tests for MigratorSession.run_against() against a real PostgreSQL database."""
 
-import uuid
-
 import psycopg
 import pytest
 
@@ -13,37 +11,9 @@ from confiture.core._migrator.session import MigratorSession
 
 
 @pytest.fixture()
-def preflight_db():
-    """Create and tear down a temporary PostgreSQL database."""
-    db_name = f"confiture_preflight_test_{uuid.uuid4().hex[:8]}"
-
-    # Try createdb; fall back to psycopg direct if unavailable.
-    import subprocess
-
-    try:
-        subprocess.run(["createdb", db_name], check=True, capture_output=True)
-        use_subprocess = True
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        try:
-            conn = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            conn.execute(f'CREATE DATABASE "{db_name}"')
-            conn.close()
-            use_subprocess = False
-        except psycopg.OperationalError as e:
-            pytest.skip(f"PostgreSQL not available: {e}")
-
-    db_url = f"postgresql://localhost/{db_name}"
-    yield db_url
-
-    if use_subprocess:
-        subprocess.run(["dropdb", db_name], capture_output=True)
-    else:
-        try:
-            conn = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            conn.close()
-        except psycopg.OperationalError:
-            pass  # best-effort cleanup
+def preflight_db(fresh_database: str) -> str:
+    """Throwaway database for one test."""
+    return fresh_database
 
 
 @pytest.fixture()

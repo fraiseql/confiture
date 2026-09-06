@@ -9,13 +9,13 @@ Requires a reachable local PostgreSQL (CONFITURE_TEST_DB_URL or localhost).
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
 import psycopg
 import psycopg.sql
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.restorer import DatabaseRestorer, RestoreOptions
 from confiture.core.schema_artifact import SchemaArtifactDumper, build_schema_artifact
@@ -33,7 +33,8 @@ CREATE INDEX idx_child_parent ON child (parent_id);
 
 
 def _server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 def _maintenance_url(server_url: str) -> str:

@@ -14,8 +14,6 @@ Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``.
 
 from __future__ import annotations
 
-import os
-
 import psycopg
 import pytest
 
@@ -25,16 +23,14 @@ from confiture.core.view_body_drift import ViewBodyDriftDetector
 
 
 @pytest.fixture
-def server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+def server_url(test_db_url: str) -> str:
+    return test_db_url
 
 
 @pytest.fixture
-def _require_server(server_url: str) -> None:
-    try:
-        psycopg.connect(server_url.replace("/confiture_test", "/postgres"), autocommit=True).close()
-    except psycopg.OperationalError as exc:  # pragma: no cover - env dependent
-        pytest.skip(f"PostgreSQL not available: {exc}")
+def _require_server(maintenance_url: str) -> None:
+    """The maintenance database must accept connections (scratch DBs are created there)."""
+    psycopg.connect(maintenance_url, autocommit=True).close()
 
 
 _BASE = "CREATE TABLE things (id bigint, name text, active boolean);\n"

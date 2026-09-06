@@ -53,7 +53,7 @@ def test_wait_for_port_succeeds_when_already_open() -> None:
         srv.bind(("localhost", 0))
         srv.listen(1)
         port = srv.getsockname()[1]
-        _wait_for_port(port, timeout=5)  # should not raise
+        assert _wait_for_port(port, timeout=5) is None
 
 
 # ---------------------------------------------------------------------------

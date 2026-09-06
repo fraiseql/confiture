@@ -15,13 +15,13 @@ Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``.
 
 from __future__ import annotations
 
-import os
 import uuid
 from collections.abc import Generator
 from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.validation.replay_drift import check_replay_drift
@@ -29,7 +29,8 @@ from confiture.exceptions import SchemaError
 
 
 def _server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 def _maint(url: str) -> str:

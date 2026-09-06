@@ -6,7 +6,6 @@ when no DATABASE_URL is available.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -15,11 +14,9 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def db_url() -> str:
-    url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        pytest.skip("DATABASE_URL not set — skipping integration tests")
-    return url
+def db_url(test_db_url: str) -> str:
+    """The shared test database (routing rule in tests/conftest.py)."""
+    return test_db_url
 
 
 @pytest.fixture
@@ -167,7 +164,9 @@ class TestBaselineDetectorLiveIntrospection:
 class TestAutoDetectBaselineCLI:
     """Integration test for migrate up --auto-detect-baseline CLI flag."""
 
-    def test_auto_detect_warns_when_no_snapshots_dir(self, clean_db, tmp_path: Path) -> None:
+    def test_auto_detect_warns_when_no_snapshots_dir(
+        self, clean_db, tmp_path: Path, test_db_url: str
+    ) -> None:
         """When schema_history/ is absent, warns and proceeds without baselining."""
         from typer.testing import CliRunner
 
@@ -176,7 +175,7 @@ class TestAutoDetectBaselineCLI:
         # Write a minimal config
         env_dir = tmp_path / "db" / "environments"
         env_dir.mkdir(parents=True)
-        db_url = os.environ.get("DATABASE_URL", "postgresql://localhost/test")
+        db_url = test_db_url
         (env_dir / "local.yaml").write_text(
             f"database_url: {db_url}\ninclude_dirs:\n  - {tmp_path / 'db' / 'schema'}\n"
         )
@@ -199,5 +198,7 @@ class TestAutoDetectBaselineCLI:
             ],
         )
 
-        # Should warn about missing snapshots dir, not crash
-        assert "schema_history" in result.output or result.exit_code in (0, 1)
+        # No matching snapshot: says so and proceeds with an empty baseline → exit 0.
+        assert result.exit_code == 0, result.output
+        assert "auto-detect baseline" in result.output
+        assert "empty baseline" in result.output

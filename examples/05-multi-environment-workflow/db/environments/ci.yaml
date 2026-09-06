@@ -1,11 +1,6 @@
 name: ci
 
-database:
-  host: localhost
-  port: 5432
-  database: confiture_ci
-  user: postgres
-  password: postgres  # GitHub Actions default
+database_url: postgresql://postgres:postgres@localhost:5432/confiture_ci
 
 # Which directories to include when building schema
 include_dirs:

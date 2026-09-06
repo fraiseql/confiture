@@ -1,7 +1,7 @@
 """Integration tests for the live sec_002 path (issue #161 Phase 03).
 
 Requires a running PostgreSQL instance at CONFITURE_TEST_DB_URL
-(default: postgresql://localhost/confiture_test). Skips automatically
+(see tests/conftest.py for the routing rule). Skips automatically
 when the database is not reachable.
 
 Tests create SECURITY DEFINER fixtures in a dedicated schema, assert
@@ -198,11 +198,8 @@ def test_check_live_from_current_is_pinned(clean_test_db: psycopg.Connection) ->
 # ---------------------------------------------------------------------------
 
 
-def _write_config(tmp_path: Path, security_lint_body: str = "") -> Path:
+def _write_config(tmp_path: Path, url: str, security_lint_body: str = "") -> Path:
     cfg = tmp_path / "confiture.yaml"
-    import os
-
-    url = os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
     body = textwrap.dedent(
         f"""\
         name: test
@@ -216,9 +213,12 @@ def _write_config(tmp_path: Path, security_lint_body: str = "") -> Path:
     return cfg
 
 
-def test_against_db_flag_runs_live(secdef_db: psycopg.Connection, tmp_path: Path) -> None:
+def test_against_db_flag_runs_live(
+    secdef_db: psycopg.Connection, tmp_path: Path, test_db_url: str
+) -> None:
     cfg = _write_config(
         tmp_path,
+        test_db_url,
         f"""
         security_lint:
           enabled: true
@@ -243,7 +243,9 @@ def test_against_db_flag_runs_live(secdef_db: psycopg.Connection, tmp_path: Path
     assert "sec_002" in result.output
 
 
-def test_against_db_clean_exits_0(clean_test_db: psycopg.Connection, tmp_path: Path) -> None:
+def test_against_db_clean_exits_0(
+    clean_test_db: psycopg.Connection, tmp_path: Path, test_db_url: str
+) -> None:
     """When no unpinned SECURITY DEFINER functions exist, exit 0."""
     schema = "confiture_sec002_clean"
     conn = clean_test_db
@@ -262,6 +264,7 @@ def test_against_db_clean_exits_0(clean_test_db: psycopg.Connection, tmp_path: P
 
         cfg = _write_config(
             tmp_path,
+            test_db_url,
             f"""
             security_lint:
               enabled: true
@@ -289,9 +292,12 @@ def test_against_db_clean_exits_0(clean_test_db: psycopg.Connection, tmp_path: P
         conn.commit()
 
 
-def test_live_error_severity_exit1(secdef_db: psycopg.Connection, tmp_path: Path) -> None:
+def test_live_error_severity_exit1(
+    secdef_db: psycopg.Connection, tmp_path: Path, test_db_url: str
+) -> None:
     cfg = _write_config(
         tmp_path,
+        test_db_url,
         f"""
         security_lint:
           enabled: true

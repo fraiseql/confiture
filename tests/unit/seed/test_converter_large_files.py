@@ -5,6 +5,8 @@ Tests converter performance and correctness on files with 5000+ records.
 
 from __future__ import annotations
 
+import pytest
+
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 
@@ -89,6 +91,7 @@ class TestLargeFileConversion:
         data_lines = len(lines) - 2  # Exclude COPY header and \. footer
         assert data_lines == 5000
 
+    @pytest.mark.benchmark
     def test_large_file_conversion_performance(self) -> None:
         """Test that large file conversion completes in reasonable time."""
         import time

@@ -1,6 +1,5 @@
 """Unit tests for confiture migrate fix-signatures command."""
 
-import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -8,12 +7,9 @@ from typer.testing import CliRunner
 from confiture.cli.commands.migrate_analysis import _extract_function_source
 from confiture.cli.main import app
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport, StaleOverload
+from tests._helpers import strip_ansi as _strip_ansi
 
 runner = CliRunner()
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 # ---------------------------------------------------------------------------

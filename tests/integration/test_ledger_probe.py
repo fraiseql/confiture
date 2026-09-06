@@ -22,12 +22,14 @@ from confiture.core.ledger import find_ledger_relations, probe_ledger
 
 
 @pytest.fixture
-def conn(test_db_url: str) -> Iterator[psycopg.Connection]:
-    """An autocommit connection; each test owns its own schemas."""
-    try:
-        connection = psycopg.connect(test_db_url, autocommit=True)
-    except psycopg.OperationalError as e:  # pragma: no cover - environment gate
-        pytest.skip(f"PostgreSQL not available: {e}")
+def conn(test_db_url: str, clean_test_db: psycopg.Connection) -> Iterator[psycopg.Connection]:
+    """An autocommit connection; each test owns its own schemas.
+
+    Depends on ``clean_test_db`` so the database starts empty: these tests
+    assert that a ledger is *absent* from ``public``, which a leftover
+    ``tb_confiture`` from an earlier module on the same worker would falsify.
+    """
+    connection = psycopg.connect(test_db_url, autocommit=True)
     try:
         yield connection
     finally:
@@ -293,12 +295,11 @@ class TestFindLedgerRelations:
 
 
 @pytest.fixture
-def migrator_conn(test_db_url: str) -> Iterator[psycopg.Connection]:
+def migrator_conn(
+    test_db_url: str, clean_test_db: psycopg.Connection
+) -> Iterator[psycopg.Connection]:
     """A second, transactional connection — the one a Migrator would hold."""
-    try:
-        connection = psycopg.connect(test_db_url)
-    except psycopg.OperationalError as e:  # pragma: no cover - environment gate
-        pytest.skip(f"PostgreSQL not available: {e}")
+    connection = psycopg.connect(test_db_url)
     try:
         yield connection
     finally:

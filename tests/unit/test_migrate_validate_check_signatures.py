@@ -7,7 +7,6 @@ handler calling its own. ``check_signature_drift`` still opens its own when
 called without a context, so the handler-level symbols remain real.
 """
 
-import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,11 +15,7 @@ from typer.testing import CliRunner
 from confiture.cli.main import app
 from confiture.core.function_body_drift import FunctionBodyDrift, FunctionBodyDriftReport
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport
-
-
-def _strip_ansi(text: str) -> str:
-    """Strip ANSI escape codes from text (needed when GITHUB_ACTIONS forces Rich colors)."""
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+from tests._helpers import strip_ansi as _strip_ansi
 
 
 def _empty_report() -> FunctionSignatureDriftReport:

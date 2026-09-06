@@ -35,7 +35,7 @@ def test_fail_on_unanalyzable_requires_idempotent() -> None:
 
 
 def test_fail_on_unanalyzable_with_idempotent_is_legal() -> None:
-    validate_flag_dependencies(_opts(fail_on_unanalyzable=True, idempotent=True))
+    assert validate_flag_dependencies(_opts(fail_on_unanalyzable=True, idempotent=True)) is None
 
 
 def test_check_body_still_requires_check_signatures() -> None:

@@ -4,8 +4,6 @@ These tests require a running PostgreSQL database.
 Set CONFITURE_TEST_DB_URL environment variable to configure.
 """
 
-import os
-
 import pytest
 from typer.testing import CliRunner
 
@@ -311,14 +309,13 @@ class TestReinit:
         test_db_connection.commit()
 
 
-def _make_config_file(tmp_path):
+def _make_config_file(tmp_path, db_url):
     """Create a minimal config file pointing to test database."""
     config_dir = tmp_path / "db" / "environments"
     config_dir.mkdir(parents=True)
     schema_dir = tmp_path / "db" / "schema"
     schema_dir.mkdir(parents=True)
     config_file = config_dir / "local.yaml"
-    db_url = os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
     config_file.write_text(
         f"name: local\ndatabase_url: {db_url}\ninclude_dirs:\n  - {schema_dir}\n"
     )
@@ -337,9 +334,9 @@ class TestMigrateReinitCLI:
             cursor.execute("DELETE FROM tb_confiture")
         conn.commit()
 
-    def test_cli_reinit_through_success(self, tmp_path, test_db_connection):
+    def test_cli_reinit_through_success(self, tmp_path, test_db_connection, test_db_url):
         """CLI reinit --through with --yes succeeds."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _make_migration_file(migrations_dir, "001_create_users.py", "001", "create_users")
@@ -367,9 +364,9 @@ class TestMigrateReinitCLI:
 
         self._clean_tracking(test_db_connection)
 
-    def test_cli_reinit_all_files(self, tmp_path, test_db_connection):
+    def test_cli_reinit_all_files(self, tmp_path, test_db_connection, test_db_url):
         """CLI reinit without --through marks all files."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _make_migration_file(migrations_dir, "001_create_users.py", "001", "create_users")
@@ -395,9 +392,9 @@ class TestMigrateReinitCLI:
 
         self._clean_tracking(test_db_connection)
 
-    def test_cli_reinit_dry_run(self, tmp_path, test_db_connection):
+    def test_cli_reinit_dry_run(self, tmp_path, test_db_connection, test_db_url):
         """CLI reinit --dry-run shows preview without changes."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _make_migration_file(migrations_dir, "001_create_users.py", "001", "create_users")
@@ -427,9 +424,9 @@ class TestMigrateReinitCLI:
             cursor.execute("SELECT COUNT(*) FROM tb_confiture")
             assert cursor.fetchone()[0] == 0
 
-    def test_cli_reinit_version_not_found(self, tmp_path, test_db_connection):
+    def test_cli_reinit_version_not_found(self, tmp_path, test_db_connection, test_db_url):
         """CLI reinit --through with unknown version exits 1."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _make_migration_file(migrations_dir, "001_create_users.py", "001", "create_users")
@@ -454,9 +451,9 @@ class TestMigrateReinitCLI:
         assert result.exit_code == 3
         assert "999" in result.output
 
-    def test_cli_reinit_confirmation_declined(self, tmp_path, test_db_connection):
+    def test_cli_reinit_confirmation_declined(self, tmp_path, test_db_connection, test_db_url):
         """CLI reinit without --yes prompts and respects decline."""
-        config_file = _make_config_file(tmp_path)
+        config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
         _make_migration_file(migrations_dir, "001_create_users.py", "001", "create_users")

@@ -5,12 +5,12 @@ Requires a reachable local PostgreSQL.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.config.environment import SeedProfile
 from confiture.core.seed_applier import SeedApplier
@@ -20,7 +20,8 @@ pytestmark = pytest.mark.integration
 
 
 def _server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 @pytest.fixture

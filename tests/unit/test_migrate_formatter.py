@@ -16,7 +16,7 @@ from confiture.models.results import MigrateUpResult, MigrationApplied
 class TestMigrateUpFormatter:
     """Tests for migrate up result formatter."""
 
-    def test_format_migrate_up_json_to_console(self):
+    def test_format_migrate_up_json_to_console(self, capsys):
         """Test formatting migrate up result as JSON to console."""
         migrations = [
             MigrationApplied("001", "initial", 100, 50),
@@ -32,6 +32,9 @@ class TestMigrateUpFormatter:
 
         # Should not raise
         format_migrate_up_result(result, "json", None, console)
+        output = capsys.readouterr().out
+        assert "initial" in output
+        assert "add_users" in output
 
     def test_format_migrate_up_json_to_file(self):
         """Test formatting migrate up result as JSON to file."""
@@ -85,7 +88,7 @@ class TestMigrateUpFormatter:
             assert "001" in content
             assert "initial" in content
 
-    def test_format_migrate_up_text_to_console(self):
+    def test_format_migrate_up_text_to_console(self, capsys):
         """Test formatting migrate up result as text to console."""
         migrations = [
             MigrationApplied("001", "initial", 100),
@@ -100,6 +103,8 @@ class TestMigrateUpFormatter:
 
         # Should not raise
         format_migrate_up_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "initial" in output
 
     def test_format_migrate_up_failure_json(self):
         """Test formatting failed migrate up result as JSON."""
@@ -122,7 +127,7 @@ class TestMigrateUpFormatter:
             assert "Lock timeout" in data["errors"]
             assert len(data["applied"]) == 0
 
-    def test_format_migrate_up_empty_migrations(self):
+    def test_format_migrate_up_empty_migrations(self, capsys):
         """Test formatting migrate up with no migrations applied."""
         result = MigrateUpResult(
             success=True,
@@ -134,6 +139,8 @@ class TestMigrateUpFormatter:
 
         # Should not raise
         format_migrate_up_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert output.strip(), "the formatter printed nothing"
 
     def test_format_migrate_up_with_warnings(self):
         """Test formatting migrate up with warnings."""
@@ -156,7 +163,7 @@ class TestMigrateUpFormatter:
             assert len(data["warnings"]) == 1
             assert "Checksum mismatch" in data["warnings"][0]
 
-    def test_format_migrate_up_dry_run(self):
+    def test_format_migrate_up_dry_run(self, capsys):
         """Test formatting migrate up in dry-run mode."""
         migrations = [
             MigrationApplied("001", "initial", 50),
@@ -172,3 +179,5 @@ class TestMigrateUpFormatter:
 
         # Should not raise
         format_migrate_up_result(result, "text", None, console)
+        output = capsys.readouterr().out
+        assert "initial" in output

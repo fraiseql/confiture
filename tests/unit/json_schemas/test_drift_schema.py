@@ -135,4 +135,5 @@ def test_drift_check_acls_includes_missing_grant_item(schemas_dir):
     payload = _emit_payload(report)
 
     registry = _build_registry(schemas_dir)
-    Draft202012Validator(_load(schemas_dir, ACL_SCHEMA), registry=registry).validate(payload)
+    validator = Draft202012Validator(_load(schemas_dir, ACL_SCHEMA), registry=registry)
+    assert validator.validate(payload) is None  # jsonschema raises on any mismatch

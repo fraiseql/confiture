@@ -59,6 +59,7 @@ def _emit(tmp_path: Path, versions: list[str]) -> dict:
         app,
         ["migrate", "preflight", "--migrations-dir", str(migrations), "--format", "json"],
     )
+    # 0 = clean, 7 = a preflight finding; the JSON payload is the subject here.
     assert result.exit_code in (0, 7), result.output
     return json.loads(result.stdout)
 

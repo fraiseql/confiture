@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import textwrap
-import uuid
 from pathlib import Path
 
 import psycopg
@@ -14,24 +13,9 @@ from confiture.cli.main import app
 
 
 @pytest.fixture()
-def workflow_db() -> str:
-    db_name = f"confiture_su_workflow_{uuid.uuid4().hex[:8]}"
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'CREATE DATABASE "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"PostgreSQL not available: {exc}")
-    db_url = f"postgresql://localhost/{db_name}"
-    try:
-        yield db_url
-    finally:
-        try:
-            admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            admin.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            admin.close()
-        except psycopg.OperationalError:
-            pass
+def workflow_db(superuser_db_url: str, fresh_database: str) -> str:
+    """Throwaway database for one test; the migrations under test need a superuser."""
+    return fresh_database
 
 
 def _write_chain(migrations_dir: Path) -> None:
@@ -102,7 +86,6 @@ def _write_config(tmp_path: Path, db_url: str) -> Path:
     return cfg
 
 
-@pytest.mark.integration
 def test_halt_apply_as_resume_workflow(workflow_db: str, tmp_path: Path) -> None:
     """The full workflow: up halts at #2, apply-as runs #2, up resumes at #3."""
     migrations_dir = tmp_path / "db" / "migrations"

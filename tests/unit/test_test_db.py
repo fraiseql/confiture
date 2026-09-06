@@ -184,7 +184,7 @@ class _SetupFakeConn:
 class TestValidateIdentifier:
     @pytest.mark.parametrize("name", ["t", "t_gw0", "confiture_template", "App_DB_1", "_x"])
     def test_accepts_valid(self, name: str) -> None:
-        _validate_identifier(name)  # does not raise
+        assert _validate_identifier(name) is None
 
     @pytest.mark.parametrize(
         "name",

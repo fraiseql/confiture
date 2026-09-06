@@ -18,7 +18,6 @@ failure — file a separate bug and do not paper over with doc edits.
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 import psycopg
@@ -32,26 +31,9 @@ from confiture.core._migrator.session import MigratorSession
 
 
 @pytest.fixture()
-def contract_db() -> str:
-    """Create and tear down a throwaway PostgreSQL database for one test."""
-    db_name = f"confiture_savepoint_contract_{uuid.uuid4().hex[:8]}"
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'CREATE DATABASE "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"PostgreSQL not available: {exc}")
-
-    db_url = f"postgresql://localhost/{db_name}"
-    try:
-        yield db_url
-    finally:
-        try:
-            admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            admin.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            admin.close()
-        except psycopg.OperationalError:
-            pass
+def contract_db(fresh_database: str) -> str:
+    """Throwaway database for one test."""
+    return fresh_database
 
 
 def _write_nested_savepoint_migration(tmp_path: Path) -> Path:

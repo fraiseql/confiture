@@ -10,6 +10,7 @@ import os
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from tests._helpers import strip_ansi as _strip_ansi
 
 runner = CliRunner()
 
@@ -29,6 +30,7 @@ def _make_migration_file(migrations_dir, filename, version, name):
     class_name = "".join(word.capitalize() for word in name.split("_"))
     (migrations_dir / filename).write_text(f"""
 from confiture.models.migration import Migration
+
 
 class {class_name}(Migration):
     version = "{version}"
@@ -101,13 +103,6 @@ class TestMigrateReinitValidation:
         )
         assert result.exit_code == 3
         assert "Duplicate migration versions" in result.output
-
-
-def _strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from text."""
-    import re
-
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestMigrateReinitHelp:

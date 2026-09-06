@@ -21,6 +21,11 @@ jobs:
   test-matrix:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    env:
+      # uv resolves the interpreter for `venv`, `sync` and `run` from UV_PYTHON
+      # first; without it, `uv sync`/`uv run` fall back to the project default
+      # (3.11) and silently rebuild the venv the previous step created (#209).
+      UV_PYTHON: ${{ matrix.python-version }}
 
     strategy:
       fail-fast: false  # Continue testing other versions even if one fails
@@ -67,8 +72,9 @@ jobs:
         echo "=== Python Version Info ==="
         python --version
 
-        # Create virtual environment with uv
-        uv venv
+        # Create the virtual environment ON THE MATRIX INTERPRETER. Without
+        # --python, uv picks its own and every leg runs the same Python (#209).
+        uv venv --python "${{ matrix.python-version }}"
 
         echo "=== Installing Confiture dependencies ==="
         # Include [notifications] (jinja2) and [ast] (pglast) so the full
@@ -83,6 +89,12 @@ jobs:
         echo "=== Verifying Installation ==="
         uv run python -c "import confiture; print(f'Confiture version: {confiture.__version__}')"
         uv run python -c "from confiture.core.builder import HAS_RUST; print(f'Rust extension loaded: {HAS_RUST}')"
+
+    - name: Verify the interpreter is the matrix entry
+      # The claim this workflow makes is "tested on 3.11, 3.12 and 3.13"; this
+      # step is what makes a leg that silently runs another version fail (#209).
+      run: |
+        uv run python -c "import sys; expected = tuple(int(p) for p in '${{ matrix.python-version }}'.split('.')); assert sys.version_info[:2] == expected, f'venv runs {sys.version}, matrix entry is ${{ matrix.python-version }}'; print('interpreter', sys.version)"
 
     - name: Verify Environment
       run: |
@@ -115,9 +127,6 @@ jobs:
         CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
         CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
         CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
-        DATABASE_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
-        SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
-        TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
         POSTGRES_USER: confiture

@@ -206,15 +206,15 @@ class TestRamSetupHelpers:
     """The pure CLI-layer helpers (allowlist, owner resolution, dir prep)."""
 
     def test_guard_allows_tmpfs_roots(self) -> None:
-        _guard_ram_location("/dev/shm/ram_ts", force=False)  # no raise
-        _guard_ram_location("/run/ram_ts", force=False)  # no raise
+        assert _guard_ram_location("/dev/shm/ram_ts", force=False) is None
+        assert _guard_ram_location("/run/ram_ts", force=False) is None
 
     def test_guard_rejects_non_tmpfs_without_force(self) -> None:
         with pytest.raises(ConfigurationError, match="Refusing"):
             _guard_ram_location("/var/lib/postgresql/data", force=False)
 
     def test_guard_bypassed_by_force(self) -> None:
-        _guard_ram_location("/var/lib/postgresql/data", force=True)  # no raise
+        assert _guard_ram_location("/var/lib/postgresql/data", force=True) is None
 
     def test_resolve_owner_unknown_user_raises(self) -> None:
         with pytest.raises(ConfigurationError, match="does not exist"):

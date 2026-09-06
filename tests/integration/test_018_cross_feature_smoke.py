@@ -17,11 +17,12 @@ Requires PostgreSQL on localhost as the `postgres` superuser.
 from __future__ import annotations
 
 import textwrap
-import uuid
+from collections.abc import Generator
 from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import drop_roles
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -31,56 +32,15 @@ from confiture.cli.main import app
 pytest.importorskip("pglast")
 
 
-def _provision_db() -> str:
-    db_name = f"confiture_018_{uuid.uuid4().hex[:8]}"
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'CREATE DATABASE "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"PostgreSQL not available: {exc}")
-    return f"postgresql://localhost/{db_name}"
-
-
-def _drop_db(db_url: str) -> None:
-    db_name = db_url.rsplit("/", 1)[-1]
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError:
-        pass
-
-
-def _drop_role(role: str) -> None:
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-    except psycopg.OperationalError:
-        return
-    try:
-        try:
-            admin.execute(f"DROP OWNED BY {role} CASCADE")
-        except psycopg.Error:
-            pass
-        try:
-            admin.execute(f'DROP ROLE IF EXISTS "{role}"')
-        except psycopg.Error:
-            pass
-    finally:
-        admin.close()
-
-
 @pytest.fixture()
-def smoke_env() -> tuple[str, str]:
-    """Throwaway DB plus a dedicated migrator role name."""
+def smoke_env(
+    superuser_db_url: str, fresh_database: str, maintenance_connection: psycopg.Connection
+) -> Generator[tuple[str, str], None, None]:
+    """Throwaway DB plus a dedicated migrator role name (bootstrap creates roles)."""
     role = "smoke_018_migrator"
-    _drop_role(role)
-    db_url = _provision_db()
-    try:
-        yield db_url, role
-    finally:
-        _drop_role(role)
-        _drop_db(db_url)
+    drop_roles(maintenance_connection, role)
+    yield fresh_database, role
+    drop_roles(maintenance_connection, role)
 
 
 def _write_config(tmp_path: Path, db_url: str, role: str) -> Path:

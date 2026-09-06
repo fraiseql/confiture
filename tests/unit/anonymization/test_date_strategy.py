@@ -306,8 +306,8 @@ class TestDateEdgeCases:
 
         # Date near year end
         result = strategy.anonymize("2020-12-31")
-        # Should be valid date
-        datetime.strptime(result, "%Y-%m-%d")
+        parsed = datetime.strptime(result, "%Y-%m-%d")
+        assert abs((parsed - datetime(2020, 12, 31)).days) <= 60
 
     def test_whitespace_around_date(self):
         """Test date with leading/trailing whitespace."""

@@ -24,7 +24,7 @@ def seeds_dir(tmp_path):
 
 
 @pytest.fixture
-def test_schema(test_db_connection):
+def seed_schema(test_db_connection):
     """Create test schema for seed data."""
     # Drop and recreate tables (fresh start)
     with test_db_connection.cursor() as cursor:
@@ -57,7 +57,7 @@ def test_schema(test_db_connection):
         test_db_connection.commit()
 
 
-def test_seed_apply_single_file(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_single_file(test_db_connection, seed_schema, seeds_dir):
     """Test applying a single seed file sequentially."""
     # Create seed file
     seed_file = seeds_dir / "01_users.sql"
@@ -82,7 +82,7 @@ def test_seed_apply_single_file(test_db_connection, test_schema, seeds_dir):
     assert count == 1
 
 
-def test_seed_apply_multiple_files(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_multiple_files(test_db_connection, seed_schema, seeds_dir):
     """Test applying multiple seed files sequentially."""
     # Create seed files
     (seeds_dir / "01_users.sql").write_text(
@@ -113,7 +113,7 @@ def test_seed_apply_multiple_files(test_db_connection, test_schema, seeds_dir):
     assert post_count == 2
 
 
-def test_seed_apply_file_order(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_file_order(test_db_connection, seed_schema, seeds_dir):
     """Test seed files are applied in sorted order."""
     # Create files in specific order (reverse of alphabetical)
     (seeds_dir / "03_final.sql").write_text("INSERT INTO users (name) VALUES ('Charlie');")
@@ -136,7 +136,7 @@ def test_seed_apply_file_order(test_db_connection, test_schema, seeds_dir):
     assert names == ["Alice", "Bob", "Charlie"]
 
 
-def test_seed_apply_error_rollback(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_error_rollback(test_db_connection, seed_schema, seeds_dir):
     """Test that failed seed file is rolled back (no partial data)."""
     # Create seed files - second one will fail
     (seeds_dir / "01_users.sql").write_text("INSERT INTO users (name) VALUES ('Alice');")
@@ -163,7 +163,7 @@ def test_seed_apply_error_rollback(test_db_connection, test_schema, seeds_dir):
     assert post_count == 0
 
 
-def test_seed_apply_continue_on_error(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_continue_on_error(test_db_connection, seed_schema, seeds_dir):
     """Test continue-on-error mode applies valid files and skips failed ones."""
     # Create seed files - second one will fail, third should succeed
     (seeds_dir / "01_users.sql").write_text("INSERT INTO users (name) VALUES ('Alice');")
@@ -198,7 +198,7 @@ def test_seed_apply_continue_on_error(test_db_connection, test_schema, seeds_dir
     assert titles == ["Valid Post"]
 
 
-def test_seed_apply_empty_directory(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_empty_directory(test_db_connection, seed_schema, seeds_dir):
     """Test applying from empty directory."""
     # seeds_dir is empty
     applier = SeedApplier(seeds_dir=seeds_dir, connection=test_db_connection)
@@ -209,7 +209,7 @@ def test_seed_apply_empty_directory(test_db_connection, test_schema, seeds_dir):
     assert result.failed == 0
 
 
-def test_seed_apply_large_batch(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_large_batch(test_db_connection, seed_schema, seeds_dir):
     """Test applying large seed file (650+ rows - parser limit test)."""
     # Create large seed file with 650 INSERT statements
     rows = "\n".join(f"INSERT INTO users (name) VALUES ('User{i}');" for i in range(1, 651))
@@ -232,7 +232,7 @@ def test_seed_apply_large_batch(test_db_connection, test_schema, seeds_dir):
     assert count == 650
 
 
-def test_seed_apply_with_complex_sql(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_with_complex_sql(test_db_connection, seed_schema, seeds_dir):
     """Test seed files with complex SQL (CTEs, subqueries, etc)."""
     # Create seed with CTE
     (seeds_dir / "01_users.sql").write_text(
@@ -260,7 +260,7 @@ def test_seed_apply_with_complex_sql(test_db_connection, test_schema, seeds_dir)
     assert count == 2
 
 
-def test_seed_apply_transaction_isolation(test_db_connection, test_schema, seeds_dir):
+def test_seed_apply_transaction_isolation(test_db_connection, seed_schema, seeds_dir):
     """Test that each seed file is isolated in its own savepoint."""
     # Create seed files that depend on each other's data
     (seeds_dir / "01_users.sql").write_text(

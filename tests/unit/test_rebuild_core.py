@@ -283,7 +283,7 @@ class TestRebuildOrchestrator:
         migrator = Migrator(connection=conn)
         return migrator
 
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_basic(self, MockBuilder):
         migrator = self._make_migrator()
         # Mock builder
@@ -316,7 +316,7 @@ class TestRebuildOrchestrator:
         migrator._drop_user_schemas.assert_called_once()
         migrator.initialize.assert_called_once()
 
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_without_drop(self, MockBuilder):
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value
@@ -339,7 +339,7 @@ class TestRebuildOrchestrator:
         migrator._discover_user_schemas.assert_not_called()
         migrator._drop_user_schemas.assert_not_called()
 
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_dry_run(self, MockBuilder):
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value
@@ -364,7 +364,7 @@ class TestRebuildOrchestrator:
         builder_instance.build.assert_called_once()
 
     @patch("confiture.core.seed_applier.SeedApplier")
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_with_seeds(self, MockBuilder, MockSeedApplier):
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value
@@ -390,7 +390,7 @@ class TestRebuildOrchestrator:
         assert result.seeds_applied == 3
         MockSeedApplier.assert_called_once()
 
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_with_backup_tracking(self, MockBuilder):
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value
@@ -412,7 +412,7 @@ class TestRebuildOrchestrator:
         assert result.success is True
         migrator._backup_tracking_table.assert_called_once()
 
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_error_on_build_failure(self, MockBuilder):
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value
@@ -424,7 +424,7 @@ class TestRebuildOrchestrator:
                 migrations_dir=Path("db/migrations"),
             )
 
-    @patch("confiture.core.builder.SchemaBuilder")
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
     def test_rebuild_collects_warnings(self, MockBuilder):
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value

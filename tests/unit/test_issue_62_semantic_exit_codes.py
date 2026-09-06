@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from tests.unit._doubles import migrator_double
 
 runner = CliRunner()
 
@@ -55,12 +56,12 @@ def _make_migrator_mock(
     tracking_table_exists: bool,
     applied_versions: list[str],
 ) -> MagicMock:
-    mock = MagicMock()
-    mock.tracking_table_exists.return_value = tracking_table_exists
-    mock.initialize.return_value = None
-    mock.get_applied_versions.return_value = applied_versions
-    mock.get_applied_migrations_with_timestamps.return_value = []
-    return mock
+    return migrator_double(
+        tracking_table_exists=tracking_table_exists,
+        initialize=None,
+        get_applied_versions=applied_versions,
+        get_applied_migrations_with_timestamps=[],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ class TestExitCode0AllApplied:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -128,7 +129,7 @@ class TestExitCode0AllApplied:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -168,7 +169,7 @@ class TestExitCode1PendingExist:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -195,7 +196,7 @@ class TestExitCode1PendingExist:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -222,7 +223,7 @@ class TestExitCode1PendingExist:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -261,7 +262,7 @@ class TestExitCode2TrackingTableAbsent:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -288,7 +289,7 @@ class TestExitCode2TrackingTableAbsent:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,
@@ -319,7 +320,7 @@ class TestExitCode2TrackingTableAbsent:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.core.connection.create_connection", return_value=MagicMock()),
-            patch("confiture.core.migrator.Migrator", return_value=mock_migrator),
+            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
         ):
             result = runner.invoke(
                 app,

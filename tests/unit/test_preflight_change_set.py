@@ -35,6 +35,7 @@ def _preflight_json(runner, migs, *extra: str) -> dict:
         runner_app(),
         ["migrate", "preflight", "--migrations-dir", str(migs), "--format", "json", *extra],
     )
+    # 0 = clean, 7 = a preflight finding; the JSON payload is the subject here.
     assert result.exit_code in (0, 7), result.output
     return json.loads(result.stdout)
 
@@ -189,7 +190,9 @@ def test_the_against_payload_carries_the_change_set_too(runner, tmp_path):
     session.run_against.return_value = against_result
 
     with patch(
-        "confiture.cli.commands.migrate_analysis.MigratorSession", return_value=session
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
+        return_value=session,
     ) as patched:
         result = runner.invoke(
             runner_app(),
@@ -208,6 +211,7 @@ def test_the_against_payload_carries_the_change_set_too(runner, tmp_path):
     # A stale patch target does not announce itself: the real session would have
     # tried a connection and the MagicMock would have read as a clean replay.
     assert patched.called, "the MigratorSession double was never used"
+    # 0 = clean, 7 = a preflight finding; the JSON payload is the subject here.
     assert result.exit_code in (0, 7), result.output
     payload = json.loads(result.stdout)
     (change,) = payload["change_set"]["changes"]

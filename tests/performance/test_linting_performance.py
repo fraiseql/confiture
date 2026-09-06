@@ -10,9 +10,15 @@ Tests measure:
 import re
 import time
 
+import pytest
+
 from confiture.core.linting import SchemaLinter
 
 # Pre-compiled regex patterns for performance testing
+# Every test here asserts an upper bound on a measured duration.
+pytestmark = pytest.mark.benchmark
+
+
 SNAKE_CASE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 CAMEL_TO_SNAKE_PATTERN1 = re.compile(r"(.)([A-Z][a-z]+)")
 CAMEL_TO_SNAKE_PATTERN2 = re.compile(r"([a-z0-9])([A-Z])")

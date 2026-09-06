@@ -22,6 +22,7 @@ class TestBasicBenchmarking:
         assert result.copy_time_ms >= 0
         assert result.speedup_factor >= 1.0
 
+    @pytest.mark.benchmark
     @pytest.mark.asyncio
     async def test_copy_is_faster_for_large_datasets(self) -> None:
         """Test that COPY is faster than VALUES for large datasets."""
@@ -34,6 +35,7 @@ class TestBasicBenchmarking:
         assert result.speedup_factor > 1.0
         assert result.copy_time_ms < result.values_time_ms
 
+    @pytest.mark.benchmark
     @pytest.mark.asyncio
     async def test_values_slower_for_all_datasets(self) -> None:
         """Test that VALUES is consistently slower than COPY."""
@@ -92,6 +94,7 @@ class TestBenchmarkMetrics:
         assert result.table_metrics["users"]["rows"] == 100
         assert result.table_metrics["posts"]["rows"] == 50
 
+    @pytest.mark.benchmark
     @pytest.mark.asyncio
     async def test_calculates_speedup_factor(self) -> None:
         """Test speedup factor calculation."""

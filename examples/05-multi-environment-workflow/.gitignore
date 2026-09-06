@@ -45,7 +45,6 @@ htmlcov/
 
 # Database backups
 backups/
-*.sql
 *.sql.gz
 
 # Environment files

@@ -229,6 +229,7 @@ def _preflight_payload(tmp_path: Path, up_sql: str, down_sql: str | None) -> dic
             str(md),
         ],
     )
+    # Any documented exit code is acceptable here; the payload shape is the subject.
     assert result.exit_code in EXIT_CODE_MEANINGS, result.output
     payload = json.loads(report.read_text())
     _schema("migrate-preflight.schema.json").validate(payload)
@@ -363,6 +364,7 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
         result = _adapter_invoke(
             subcommand, *extra, dsn=dsn, report=report, migrations_dir=migrations_dir
         )
+        # Any documented exit code is acceptable here; the payload shape is the subject.
         assert result.exit_code in EXIT_CODE_MEANINGS, (
             f"`migrate {subcommand}` exited {result.exit_code}, "
             f"outside the documented set {sorted(EXIT_CODE_MEANINGS)}"
@@ -393,6 +395,7 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
 
     # 4. verify → adapter reads failed_count + results[].{version,name,status,error}.
     result = invoke("verify")
+    # Any documented exit code is acceptable here; the payload shape is the subject.
     assert result.exit_code in EXIT_CODE_MEANINGS, result.output
     verify_payload = _read_report(result, report)
     _schema("migrate-verify.schema.json").validate(verify_payload)
@@ -402,6 +405,7 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
 
     # 5. preflight → {ok, summary, issues[]}; the --output path the adapter relies on.
     result = invoke("preflight")
+    # 0 = clean, 7 = a preflight finding; the payload shape is the subject here.
     assert result.exit_code in (0, 7), result.output
     preflight_payload = _read_report(result, report)
     _schema("migrate-preflight.schema.json").validate(preflight_payload)

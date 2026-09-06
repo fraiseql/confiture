@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import textwrap
-import uuid
 from pathlib import Path
 
 import psycopg
@@ -14,24 +13,9 @@ from confiture.cli.main import app
 
 
 @pytest.fixture()
-def apply_as_db() -> str:
-    db_name = f"confiture_apply_as_{uuid.uuid4().hex[:8]}"
-    try:
-        admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-        admin.execute(f'CREATE DATABASE "{db_name}"')
-        admin.close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"PostgreSQL not available: {exc}")
-    db_url = f"postgresql://localhost/{db_name}"
-    try:
-        yield db_url
-    finally:
-        try:
-            admin = psycopg.connect("postgresql://localhost/postgres", autocommit=True)
-            admin.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            admin.close()
-        except psycopg.OperationalError:
-            pass
+def apply_as_db(superuser_db_url: str, fresh_database: str) -> str:
+    """Throwaway database for one test; the migrations under test need a superuser."""
+    return fresh_database
 
 
 def _write_migration(migrations_dir: Path, version: str, *, requires_superuser: bool):

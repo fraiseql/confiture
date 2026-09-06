@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Security stragglers from the 2026-09-06 whole-repository review. One of them is a
-behaviour change for anyone relying on a default.
+## [0.47.0] - 2026-09-06
+
+The first two phases of the 2026-09-06 whole-repository review: the security
+stragglers, and a test ledger that means what it says. One entry is a behaviour
+change for anyone relying on a default.
 
 ### Changed
 
@@ -62,6 +65,44 @@ behaviour change for anyone relying on a default.
   ref confiture passes to a subprocess goes through one `core.git.validate_ref`
   (`git ls-tree` included), and squawk / `git diff` receive `--` before any
   file list.
+
+- **The test suite is honest about its size and runs where it matters.**
+  `tests/unit/idempotency/test_ast_preprocess_parity.py` parametrized over
+  every `*.sql` in the working tree, so a developer machine collected ~3,300
+  phantom cases from gitignored `db/schema_history/` snapshots and CI a few
+  dozen (#207); it now parametrizes over `git ls-files`. Every database test
+  reaches its server through `tests/conftest.py`: `CONFITURE_TEST_DB_URL`
+  set but unreachable is a **failure**, unset falls back to the local default
+  or skips saying so, and no test module carries a literal DSN — the fifty-odd
+  tests that hard-coded `postgresql://localhost/postgres` and could only skip in
+  CI now run there. Under pytest-xdist every worker gets its own databases
+  (`confiture_test_gw0`, …), `clean_test_db` resets the schema, modules stay on
+  one worker (`--dist=loadfile`), and a new `integration-parallel` CI leg runs
+  the database suites with `-n 4`. Layer markers (`unit`, `integration`,
+  `e2e`, `performance`, `contract`) come from the directory; tests that assert
+  an upper bound on a duration are marked `benchmark` and excluded from the
+  default gate (`-m "not benchmark"`; the performance workflow runs them).
+- **`tests/migration_testing/` is gone (D2).** Five modules exercised
+  PostgreSQL through raw psycopg, not confiture; the two framework smoke
+  modules were covered by 81 unit tests. Live integration tests now drive the
+  performance profiler and the mutation runner through a real `Migrator`, and
+  that exposed five default mutations that produced invalid SQL — a mutation
+  the parser kills measures nothing. Each is fixed and every default mutation
+  is held to "parseable output" with pglast. `migration-tests.yml` is retired;
+  the deployment-gates and performance workflows run confiture-level suites.
+- **Doubles carry a spec; every test asserts.** All 66 patches of `Migrator`,
+  `MigratorSession` and `SchemaBuilder` are autospecced (stand-ins come from
+  `tests/unit/_doubles.py`); 63 assertion-less tests gained a real assertion;
+  the twelve assertions that accepted several exit codes are pinned or carry
+  their reason, and the remaining uncommented `assert A or B` are a budget
+  that may only shrink. Guard tests hold each of these.
+- **CI tests the Python it names.** The version matrix built its venv with a
+  bare `uv venv`, so the 3.12 and 3.13 legs ran 3.11 (#209); it now passes
+  `--python ${{ matrix.python-version }}` and asserts `sys.version_info`. A new
+  `examples` workflow runs every `examples/*/run.sh` against a service database
+  — which found that one example's schema and seeds had been gitignored and
+  never committed, another's tables sorted before the table they reference,
+  and two configs used a `database:` block the config model rejects.
 
 ### Added
 

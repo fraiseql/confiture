@@ -31,6 +31,7 @@ import psycopg
 import psycopg.errors
 import psycopg.sql
 import pytest
+from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.temp_database import _maintenance_url
 from confiture.core.test_db import TestDbProvisioner
@@ -43,7 +44,8 @@ _RAMSETUP_LOCATION = "/dev/shm/confiture_ramsetup_it"
 
 
 def _ram_server_url() -> str:
-    return os.getenv("CONFITURE_TEST_DB_URL", "postgresql://localhost/confiture_test")
+    """The test database URL, under the routing rule in tests/conftest.py."""
+    return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
 def _is_superuser(conn: psycopg.Connection) -> bool:

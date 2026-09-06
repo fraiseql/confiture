@@ -31,11 +31,9 @@ runner = CliRunner()
 
 
 @pytest.fixture
-def db_url() -> str:
-    url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        pytest.skip("DATABASE_URL not set — skipping legacy-bootstrap integration test")
-    return url
+def db_url(test_db_url: str) -> str:
+    """The shared test database (routing rule in tests/conftest.py)."""
+    return test_db_url
 
 
 @pytest.fixture
