@@ -53,7 +53,7 @@ def initialize(migrator: Migrator) -> None:
             # Create new table with Trinity pattern
             migrator._execute_sql(
                 pgsql.SQL("""
-                CREATE TABLE {} (
+                CREATE TABLE IF NOT EXISTS {} (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
                     slug TEXT NOT NULL UNIQUE,
@@ -69,25 +69,25 @@ def initialize(migrator: Migrator) -> None:
 
             # Create indexes — index names use the validated _table_base
             migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX {} ON {}(pk_confiture)").format(
+                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(pk_confiture)").format(
                     pgsql.Identifier(f"idx_{migrator._table_base}_pk_confiture"),
                     migrator._table_ident,
                 )
             )
             migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX {} ON {}(slug)").format(
+                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(slug)").format(
                     pgsql.Identifier(f"idx_{migrator._table_base}_slug"),
                     migrator._table_ident,
                 )
             )
             migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX {} ON {}(version)").format(
+                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(version)").format(
                     pgsql.Identifier(f"idx_{migrator._table_base}_version"),
                     migrator._table_ident,
                 )
             )
             migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX {} ON {}(applied_at DESC)").format(
+                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(applied_at DESC)").format(
                     pgsql.Identifier(f"idx_{migrator._table_base}_applied_at"),
                     migrator._table_ident,
                 )

@@ -59,3 +59,20 @@ def builder_double(**returns: Any) -> MagicMock:
     for name, value in returns.items():
         getattr(double, name).return_value = value
     return double
+
+
+def connection_double(dbname: str = "unit_test_db") -> MagicMock:
+    """A psycopg connection stand-in that answers ``SELECT current_database()``.
+
+    ``MigrationLock`` derives its advisory-lock key from the database name, so
+    a session double has to carry one — a bare ``MagicMock`` makes the lock hash
+    a mock and fail with "object supporting the buffer API required".
+    """
+    conn = MagicMock(name="connection")
+    conn.info.dbname = dbname
+    row = (dbname,)
+    conn.execute.return_value.fetchone.return_value = row
+    cursor = conn.cursor.return_value
+    cursor.fetchone.return_value = row
+    cursor.__enter__.return_value.fetchone.return_value = row
+    return conn

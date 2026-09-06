@@ -9,6 +9,7 @@ from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import MigrateUpResult
+from tests.unit._doubles import connection_double
 
 
 def _make_entered_session(migrations_dir: Path) -> MigratorSession:
@@ -19,7 +20,7 @@ def _make_entered_session(migrations_dir: Path) -> MigratorSession:
     env.migration.tracking_table = "tb_confiture"
 
     session = MigratorSession(config=env, migrations_dir=migrations_dir)
-    session._conn = MagicMock()
+    session._conn = connection_double()
     session._migrator = MagicMock()
     return session
 

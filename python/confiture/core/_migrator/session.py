@@ -351,7 +351,6 @@ class MigratorSession:
             ...         for error in result.errors:
             ...             print(f"ERROR: {error}")
         """
-        import time as _time
 
         import confiture.core.migrator as _m
 
@@ -360,8 +359,6 @@ class MigratorSession:
         from confiture.exceptions import ConfigurationError
         from confiture.models.results import (
             MigrateUpResult,
-            MigrationApplied,
-            SkippedMigration,
         )
 
         if self._migrator is None:
@@ -382,6 +379,41 @@ class MigratorSession:
                 resolution_hint=f"Create the migrations directory at {self._migrations_dir} or run 'confiture migrate generate' to scaffold it",
             )
 
+        # Everything from here runs under the migration lock (ENG-03): the plan
+        # is made against the ledger as the lock holder sees it, so a second
+        # deployer that waited for the lock finds nothing left to apply instead
+        # of failing on what the first one just recorded — and two first-run
+        # deployers cannot race the ledger CREATE.
+        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
+        lock = _m.MigrationLock(self._conn, lock_config)
+        try:
+            with lock.acquire():
+                return self._up_under_lock(
+                    target=target,
+                    dry_run=dry_run,
+                    dry_run_execute=dry_run_execute,
+                    verify_checksums=verify_checksums,
+                    force=force,
+                    require_reversible=require_reversible,
+                )
+        except Exception as exc:  # the lock could not be taken (timeout, contention)
+            return MigrateUpResult(
+                success=False,
+                migrations_applied=[],
+                total_execution_time_ms=0,
+                checksums_verified=verify_checksums,
+                dry_run=False,
+                errors=[str(exc)],
+            )
+
+    def _plan_under_lock(self, *, force: bool) -> tuple[list[Path], list[str]]:
+        """Initialize the ledger and discover what to apply — the caller holds the lock.
+
+        Returns:
+            ``(pending_files, skipped_versions)``: the files to apply (every file
+            when *force*), and the versions the ledger already records.
+        """
+        assert self._migrator is not None
         self._migrator.initialize()
 
         # Resolve migrations to apply
@@ -397,6 +429,31 @@ class MigratorSession:
             for f in all_files
             if self._migrator._version_from_filename(f.name) not in apply_versions
         ]
+
+        return pending_files, skipped_versions
+
+    def _up_under_lock(
+        self,
+        *,
+        target: str | None,
+        dry_run: bool,
+        dry_run_execute: bool,
+        verify_checksums: bool,
+        force: bool,
+        require_reversible: bool,
+    ) -> MigrateUpResult:
+        """The body of :meth:`up`, run while the migration lock is held."""
+        import time as _time
+
+        import confiture.core.migrator as _m
+        from confiture.models.results import (
+            MigrateUpResult,
+            MigrationApplied,
+            SkippedMigration,
+        )
+
+        assert self._migrator is not None
+        pending_files, skipped_versions = self._plan_under_lock(force=force)
 
         # Dry-run: return without applying
         if dry_run:
@@ -444,14 +501,8 @@ class MigratorSession:
                 target=target,
                 force=force,
                 verify_checksums=verify_checksums,
-                lock_timeout=lock_timeout,
-                no_lock=no_lock,
                 skipped_versions=skipped_versions,
             )
-
-        # Apply with distributed lock
-        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
-        lock = _m.MigrationLock(self._conn, lock_config)
 
         migrations_applied: list[MigrationApplied] = []
         skipped_superuser: list[SkippedMigration] = []
@@ -461,55 +512,54 @@ class MigratorSession:
         halted = False
 
         try:
-            with lock.acquire():
-                for idx, migration_file in enumerate(pending_files):
-                    migration_class = _m.load_migration_class(migration_file)
-                    migration = migration_class(connection=self._conn)
+            for idx, migration_file in enumerate(pending_files):
+                migration_class = _m.load_migration_class(migration_file)
+                migration = migration_class(connection=self._conn)
 
-                    # Stop at target version
-                    if target and migration.version > target:
-                        break
+                # Stop at target version
+                if target and migration.version > target:
+                    break
 
-                    # Issue #137 — halt-at-first-skip for requires_superuser.
-                    # No dependency cascade exists in the model, so the safe
-                    # behavior is to stop the chain and surface a recovery
-                    # hint via the formatter.  Later migrations are reported
-                    # as pending rather than silently applied.
-                    # ``is True`` rather than truthiness so MagicMock-based
-                    # test doubles don't accidentally trip the halt path.
-                    if getattr(migration, "requires_superuser", False) is True:
-                        skipped_superuser.append(
-                            SkippedMigration(
-                                version=migration.version,
-                                name=migration.name,
-                                reason=(
-                                    "requires_superuser=True; resolve with "
-                                    f"`confiture migrate apply-as <role> {migration.version}`"
-                                ),
-                            )
+                # Issue #137 — halt-at-first-skip for requires_superuser.
+                # No dependency cascade exists in the model, so the safe
+                # behavior is to stop the chain and surface a recovery
+                # hint via the formatter.  Later migrations are reported
+                # as pending rather than silently applied.
+                # ``is True`` rather than truthiness so MagicMock-based
+                # test doubles don't accidentally trip the halt path.
+                if getattr(migration, "requires_superuser", False) is True:
+                    skipped_superuser.append(
+                        SkippedMigration(
+                            version=migration.version,
+                            name=migration.name,
+                            reason=(
+                                "requires_superuser=True; resolve with "
+                                f"`confiture migrate apply-as <role> {migration.version}`"
+                            ),
                         )
-                        pending_after_halt = [
-                            self._migrator._version_from_filename(f.name)
-                            for f in pending_files[idx + 1 :]
-                        ]
-                        halted = True
-                        break
+                    )
+                    pending_after_halt = [
+                        self._migrator._version_from_filename(f.name)
+                        for f in pending_files[idx + 1 :]
+                    ]
+                    halted = True
+                    break
 
-                    try:
-                        start = _time.time()
-                        self._migrator.apply(migration, force=force, migration_file=migration_file)
-                        elapsed = int((_time.time() - start) * 1000)
-                        total_execution_time_ms += elapsed
-                        migrations_applied.append(
-                            MigrationApplied(
-                                version=migration.version,
-                                name=migration.name,
-                                execution_time_ms=elapsed,
-                            )
+                try:
+                    start = _time.time()
+                    self._migrator.apply(migration, force=force, migration_file=migration_file)
+                    elapsed = int((_time.time() - start) * 1000)
+                    total_execution_time_ms += elapsed
+                    migrations_applied.append(
+                        MigrationApplied(
+                            version=migration.version,
+                            name=migration.name,
+                            execution_time_ms=elapsed,
                         )
-                    except Exception as exc:
-                        failed_exception = exc
-                        break
+                    )
+                except Exception as exc:
+                    failed_exception = exc
+                    break
         except Exception as exc:
             if failed_exception is None:
                 failed_exception = exc
@@ -546,8 +596,6 @@ class MigratorSession:
         target: str | None,
         force: bool,
         verify_checksums: bool,
-        lock_timeout: int,
-        no_lock: bool,
         skipped_versions: list[str],
     ) -> MigrateUpResult:
         """Execute pending migrations inside a SAVEPOINT, then roll back.
@@ -568,47 +616,43 @@ class MigratorSession:
         assert self._conn is not None
         assert self._migrator is not None
 
-        lock_config = _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout)
-        lock = _m.MigrationLock(self._conn, lock_config)
-
         migrations_tested: list[MigrationApplied] = []
         total_time = 0
         failed_exception: Exception | None = None
 
         try:
-            with lock.acquire():
-                self._conn.execute("SAVEPOINT dry_run_execute")
-                try:
-                    for migration_file in pending_files:
-                        migration_class = _m.load_migration_class(migration_file)
-                        migration = migration_class(connection=self._conn)
+            self._conn.execute("SAVEPOINT dry_run_execute")
+            try:
+                for migration_file in pending_files:
+                    migration_class = _m.load_migration_class(migration_file)
+                    migration = migration_class(connection=self._conn)
 
-                        if target and migration.version > target:
-                            break
+                    if target and migration.version > target:
+                        break
 
-                        try:
-                            start = _time.time()
-                            self._migrator.apply(
-                                migration,
-                                force=force,
-                                migration_file=migration_file,
-                                commit=False,
+                    try:
+                        start = _time.time()
+                        self._migrator.apply(
+                            migration,
+                            force=force,
+                            migration_file=migration_file,
+                            commit=False,
+                        )
+                        elapsed = int((_time.time() - start) * 1000)
+                        total_time += elapsed
+                        migrations_tested.append(
+                            MigrationApplied(
+                                version=migration.version,
+                                name=migration.name,
+                                execution_time_ms=elapsed,
                             )
-                            elapsed = int((_time.time() - start) * 1000)
-                            total_time += elapsed
-                            migrations_tested.append(
-                                MigrationApplied(
-                                    version=migration.version,
-                                    name=migration.name,
-                                    execution_time_ms=elapsed,
-                                )
-                            )
-                        except Exception as exc:
-                            failed_exception = exc
-                            break
-                finally:
-                    self._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
-                    self._conn.execute("RELEASE SAVEPOINT dry_run_execute")
+                        )
+                    except Exception as exc:
+                        failed_exception = exc
+                        break
+            finally:
+                self._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
+                self._conn.execute("RELEASE SAVEPOINT dry_run_execute")
         except Exception as exc:
             if failed_exception is None:
                 failed_exception = exc
