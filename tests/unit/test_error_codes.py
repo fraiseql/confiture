@@ -6,7 +6,7 @@ error handling for agent workflows.
 
 import pytest
 
-from confiture.core.error_codes import (
+from confiture.error_codes import (
     ERROR_CODE_REGISTRY,
     ErrorCodeDefinition,
     ErrorCodeRegistry,
@@ -241,29 +241,29 @@ class TestGlobalErrorCodeRegistry:
 
     def test_global_registry_has_schema_codes(self) -> None:
         """Test that SCHEMA category codes are registered."""
-        # SCHEMA_200 should be defined
-        definition = ERROR_CODE_REGISTRY.get("SCHEMA_200")
-        assert definition.code == "SCHEMA_200"
+        # SCHEMA_001 should be defined
+        definition = ERROR_CODE_REGISTRY.get("SCHEMA_001")
+        assert definition.code == "SCHEMA_001"
         assert definition.exit_code == 4  # Schema error exit code
 
     def test_global_registry_has_sql_codes(self) -> None:
         """Test that SQL category codes are registered."""
-        # SQL_700 should be defined
-        definition = ERROR_CODE_REGISTRY.get("SQL_700")
-        assert definition.code == "SQL_700"
+        # SQL_001 should be defined
+        definition = ERROR_CODE_REGISTRY.get("SQL_001")
+        assert definition.code == "SQL_001"
         assert definition.exit_code == 1  # General error exit code
 
     def test_global_registry_all_codes_have_templates(self) -> None:
         """Test that all registered codes have message templates."""
         # Sample some codes to verify
-        for code_name in ["CONFIG_001", "MIGR_100", "SCHEMA_200"]:
+        for code_name in ["CONFIG_001", "MIGR_100", "SCHEMA_001"]:
             definition = ERROR_CODE_REGISTRY.get(code_name)
             assert definition.message_template is not None
             assert len(definition.message_template) > 0
 
     def test_global_registry_all_codes_have_exit_codes(self) -> None:
         """Test that all registered codes have valid exit codes."""
-        for code_name in ["CONFIG_001", "MIGR_100", "SCHEMA_200"]:
+        for code_name in ["CONFIG_001", "MIGR_100", "SCHEMA_001"]:
             definition = ERROR_CODE_REGISTRY.get(code_name)
             assert isinstance(definition.exit_code, int)
             assert 0 <= definition.exit_code <= 10

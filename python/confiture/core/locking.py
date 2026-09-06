@@ -600,3 +600,25 @@ class MigrationLock:
             True if this instance holds the lock, False otherwise
         """
         return self._lock_held
+
+
+DEFAULT_LOCK_TIMEOUT_MS = 30000
+
+
+def resolve_lock_settings(
+    locking: Any, lock_timeout: int | None, no_lock: bool | None
+) -> tuple[int, bool]:
+    """``(timeout_ms, no_lock)``: an explicit value wins, then ``migration.locking``, then the defaults.
+
+    ``locking`` is the environment's ``LockingConfig`` (``enabled``, ``timeout_ms``)
+    or ``None`` when no environment file is in play.
+    """
+    if lock_timeout is None:
+        lock_timeout = (
+            int(getattr(locking, "timeout_ms", DEFAULT_LOCK_TIMEOUT_MS))
+            if locking is not None
+            else DEFAULT_LOCK_TIMEOUT_MS
+        )
+    if no_lock is None:
+        no_lock = (not bool(getattr(locking, "enabled", True))) if locking is not None else False
+    return lock_timeout, no_lock

@@ -60,7 +60,7 @@ def test_inner_object_always_has_all_keys() -> None:
 def test_file_and_line_promoted_from_context() -> None:
     err = ConfiturError(
         "bad",
-        error_code="LINT_1500",
+        error_code="SCHEMA_001",
         context={"file": "db/schema/10_tables/users.sql", "line": 42, "rule": "R1"},
     )
     inner = emit_error_json(err)["error"]

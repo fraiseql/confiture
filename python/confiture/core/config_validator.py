@@ -22,7 +22,7 @@ from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
-from confiture.core.url_redaction import redact_url
+from confiture.url_redaction import redact_url
 
 
 @dataclass(frozen=True)

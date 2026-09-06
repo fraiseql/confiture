@@ -5,6 +5,79 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.51.0] - 2026-09-06
+
+Phase 06 of the 2026-09-06 review: the public API and its contracts. The
+exported surface is exactly as wide as the code behind it.
+
+### Changed
+
+- ⚠️ **One schema source (ENG-10).** Two schema sets used to drift apart: the
+  seventeen hand-coded "model" schemas shipped in the package (which rejected
+  real `migrate up` output — no `pending`, no `skipped_superuser`) and the
+  hand-written CLI schemas in `docs/reference/json-schemas/`. The packaged
+  `confiture/schemas/*.schema.json` files are the source now (draft 2020-12,
+  `additionalProperties: false`); the docs directory is a byte-identical copy
+  written by `scripts/gen_schemas.py` and checked in CI; `confiture.export_all()`
+  and `generate_schema()` serve those files, and the old `*_result.json` names
+  are gone. For every result model that is a command's payload a test populates
+  the model and validates its `to_dict()`. `build`, `lint`, `introspect` and
+  `sync` gain schemas — `LintReport.to_dict()` is the lint payload and a
+  `SyncResult` model replaces `sync`'s inline dict — so the README's claim that
+  every machine-readable output has a schema is true.
+- ⚠️ **Every configuration field is read (ARC-03).** A guard test now fails on a
+  config field nothing consumes. Wired: `seed.continue_on_error` and
+  `seed.transaction_mode` (`"transaction"` commits after each seed file — the
+  documented "future" mode exists now) drive `build --sequential` and
+  `seed apply` when the flags are absent; `migration.locking.enabled` and
+  `migration.locking.timeout_ms` are the defaults behind `--no-lock` and
+  `--lock-timeout` and for the library session. Deleted with their
+  documentation, because nothing ever read them: `auto_backup`,
+  `require_confirmation`, and the whole `pggit:` block (`PgGitConfig`). A YAML
+  file that still sets them is accepted and the keys are ignored.
+- ⚠️ **`import confiture` is lazy, and two names are one.** The package imported
+  the schema linter eagerly, which loaded `confiture.core` and the whole rule
+  library on every `import confiture`; `SchemaLinter`, `ExternalGeneratorError`
+  and `__version__` now resolve on first use like the rest of the public API,
+  and the import stays under 30 ms (a test pins it). `export_all_schemas` (an
+  alias of `export_all`) is removed, and so is the `confiture verify` CLI alias
+  of `verify-checksums`, deprecated in 0.19.0.
+- **Every exception resolves to a registered code.** `UnsafeOperationError`
+  defaulted to `DDL_001`, which the registry did not know, so the error path
+  itself crashed on the way to the envelope; `DDL_001` is registered at exit 4
+  (the schema family). `PreconditionError` and `PreconditionValidationError`
+  were plain `Exception`s defined in `core/preconditions.py`; they are
+  `ConfiturError`s now (`PRECON_1000`, exit 5), defined in
+  `confiture.exceptions` and re-exported where they were. `PreStateSimulationError`
+  moves to `confiture.exceptions` too, so the exception module imports nothing
+  from `core/` or `testing/` (a guard test keeps it that way, together with
+  `models/`); `confiture.core.url_redaction` becomes `confiture.url_redaction`
+  and `confiture.core.error_codes` becomes `confiture.error_codes`.
+
+### Removed
+
+- ⚠️ **36 error codes that nothing could emit (D9).** The registry and the
+  published codebook listed 80 symbolic codes; 36 of them were referenced by no
+  exception default, no `fail()` call and no finding constructor, so a consumer
+  matching on one of them would have waited forever. They are gone from
+  `ERROR_CODE_REGISTRY`, `CANONICAL_EXIT_CODES`, `docs/reference/error-codes.md`
+  and `docs/reference/exit-codes.md`, and a guard test now fails on any
+  registered code the package never names. Removed: `ANON_1401`, `CONFIG_005`,
+  `DIFFER_401`, `DIFFER_402`, `GIT_800`, `GIT_801`, `GIT_802`, `HOOK_1100`,
+  `HOOK_1101`, `LINT_1500`, `LINT_1501`, `LOCK_1301`, `MIGR_010`, `MIGR_011`,
+  `MIGR_103`, `MIGR_104`, `MIGR_105`, `PGGIT_901`, `POOL_1200`, `POOL_1201`,
+  `ROLLBACK_601`, `ROLLBACK_602`, `SCHEMA_200`, `SCHEMA_203`, `SCHEMA_204`,
+  `SQL_700`, `SQL_701`, `SQL_702`, `SQL_703`, `SYNC_300`, `SYNC_301`,
+  `SYNC_302`, `SYNC_303`, `VALID_500`, `VALID_501`, `VALID_502`.
+  Two of them deserve a note. `MIGR_011` was documented as the checksum-mismatch
+  code, but `migrate up` never emitted it: a tampered applied file exits 1 with
+  the mismatch list, `verify-checksums` reports `CHECKSUM_MISMATCH` issue objects
+  and `migrate preflight` reports `PFLIGHT_CHECKSUM_MISMATCH` — none of those
+  change. `MIGR_010` (lock timeout) was a dead twin of `LOCK_1300`, which is
+  what a lock timeout actually produces. The integer exit codes, their meanings
+  and the nine semantic classes are unchanged; no code that was ever emitted is
+  renamed or renumbered.
+
 ## [0.50.0] - 2026-09-06
 
 Phase 05 of the 2026-09-06 review: analyzer honesty and one parser. pglast is
@@ -1188,7 +1261,7 @@ Machine-readable exit-code contract: confiture becomes the single source of trut
   `0..8` now carries a stable *semantic class* (`ok`, `internal_error`,
   `precondition_failed`, `db_unreachable`, `schema_error`, `invalid_config`,
   `lock_contention`, `git_error`, `irreversible_rollback`), exposed as
-  `EXIT_CODE_SEMANTIC_CLASS` in `confiture.core.error_codes` and emitted as JSON by
+  `EXIT_CODE_SEMANTIC_CLASS` in `confiture.error_codes` and emitted as JSON by
   a new hidden `confiture --exit-codes-json` flag (alongside the human
   `--exit-codes`). This is the single source of truth the FraiseQL `fraisier`
   migration adapters (Rust `fraisier-core` and Python `fraisier`) project onto

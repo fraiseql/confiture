@@ -37,8 +37,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from confiture.core.url_redaction import libpq_env, redact_url, split_password
 from confiture.exceptions import SchemaError
+from confiture.url_redaction import libpq_env, redact_url, split_password
 
 # An inline ``COPY … FROM stdin`` statement, tested against the code text of one
 # statement (comments, literals and quoted identifiers already blanked) when the

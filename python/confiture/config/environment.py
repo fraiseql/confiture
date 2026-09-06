@@ -57,8 +57,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from confiture.config._env_vars import expand_env_vars
-from confiture.core.url_redaction import redact_url
 from confiture.exceptions import ConfigurationError
+from confiture.url_redaction import redact_url
 
 # Privileges that PostgreSQL's GRANT statement allows on tables.  Sequences,
 # functions, schemas, etc. use a different vocabulary and are out of scope
@@ -178,14 +178,16 @@ class SeedConfig(BaseModel):
     Attributes:
         execution_mode: Execution strategy ("concatenate" | "sequential")
         continue_on_error: Continue applying files if one fails (default: False)
-        transaction_mode: Transaction isolation ("savepoint" | "transaction")
+        transaction_mode: "savepoint" (one transaction, a savepoint per file — a failure
+            rolls back that file only) or "transaction" (each file commits on its own,
+            so files before a failure stay applied)
         profiles: Named seed subsets (see :class:`SeedProfile`). Absent ⇒ today's
             apply-all behaviour is unchanged.
     """
 
     execution_mode: str = "concatenate"  # "concatenate" | "sequential"
     continue_on_error: bool = False
-    transaction_mode: str = "savepoint"  # "savepoint" | "transaction"
+    transaction_mode: Literal["savepoint", "transaction"] = "savepoint"
     profiles: dict[str, SeedProfile] = Field(default_factory=dict)
 
     def get_profile(self, name: str) -> SeedProfile:
@@ -367,32 +369,6 @@ class SshTunnelConfig(BaseModel):
     local_port: int = 0
     identity_file: str | None = None
     timeout_s: int = 10
-
-
-class PgGitConfig(BaseModel):
-    """pgGit integration configuration.
-
-    pgGit provides Git-like version control for PostgreSQL schemas.
-    This is intended for DEVELOPMENT and STAGING databases only.
-    Do NOT enable pgGit on production databases.
-
-    Attributes:
-        enabled: Whether pgGit integration is enabled (default: False)
-        auto_init: Automatically initialize pgGit if extension exists but not initialized
-        default_branch: Default branch name for new repositories (default: "main")
-        auto_commit: Automatically commit schema changes after migrations
-        commit_message_template: Template for auto-commit messages
-        require_branch: Require being on a branch before making schema changes
-        protected_branches: Branches that cannot be deleted or force-pushed
-    """
-
-    enabled: bool = False
-    auto_init: bool = True
-    default_branch: str = "main"
-    auto_commit: bool = False
-    commit_message_template: str = "Migration: {migration_name}"
-    require_branch: bool = False
-    protected_branches: list[str] = Field(default_factory=lambda: ["main", "master"])
 
 
 class DirectoryConfig(BaseModel):
@@ -716,11 +692,8 @@ class Environment(BaseModel):
         include_dirs: Directories to include when building schema (supports both string and dict formats)
         superuser_post_dirs: Directories routed to the post-schema superuser phase in build_split()
         exclude_dirs: Directories to exclude from schema build
-        auto_backup: Whether to automatically backup before migrations
-        require_confirmation: Whether to require user confirmation for risky operations
         build: Build configuration options
         migration: Migration configuration options (includes tracking_table)
-        pggit: pgGit integration configuration (development/staging only)
         seed: Seed data application configuration
     """
 
@@ -742,12 +715,9 @@ class Environment(BaseModel):
     superuser_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_post_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     exclude_dirs: list[str] = Field(default_factory=list)
-    auto_backup: bool = True
-    require_confirmation: bool = True
     build: BuildConfig = Field(default_factory=BuildConfig)
     migration: MigrationConfig = Field(default_factory=MigrationConfig)
     infrastructure: InfrastructureConfig = Field(default_factory=InfrastructureConfig)
-    pggit: PgGitConfig = Field(default_factory=PgGitConfig)
     seed: SeedConfig = Field(default_factory=SeedConfig)
     ssh_tunnel: SshTunnelConfig | None = None
     acls: list[AclExpectation] = Field(default_factory=list)

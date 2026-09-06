@@ -195,3 +195,29 @@ class LintReport:
             f"Time: {self.execution_time_ms}ms",
         ]
         return "\n".join(lines)
+
+    def to_dict(self) -> dict[str, Any]:
+        """The ``lint --format json`` payload (before the envelope adds ``parser``)."""
+        return {
+            "schema_name": self.schema_name,
+            "tables_checked": self.tables_checked,
+            "columns_checked": self.columns_checked,
+            "execution_time_ms": self.execution_time_ms,
+            "violations": {
+                "total": len(self.violations),
+                "errors": self.errors_count,
+                "warnings": self.warnings_count,
+                "info": self.info_count,
+                "items": [
+                    {
+                        "rule": v.rule_name,
+                        "rule_id": v.rule_id,
+                        "severity": v.severity.value,
+                        "location": v.location,
+                        "message": v.message,
+                        "suggested_fix": v.suggested_fix,
+                    }
+                    for v in self.violations
+                ],
+            },
+        }

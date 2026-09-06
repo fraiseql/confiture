@@ -21,9 +21,9 @@ from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
 from confiture.core.parser_info import parser_stamp
-from confiture.core.url_redaction import redact_url as redact_url  # re-export (layering)
 from confiture.exceptions import ConfigurationError
 from confiture.models.lint import LintReport, LintSeverity, Violation
+from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
 
 _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 

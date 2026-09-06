@@ -101,7 +101,7 @@ def test_converted_command_emits_valid_envelope(args: list[str], expected_code: 
 
 def test_envelope_exit_code_matches_registry() -> None:
     """The process exit code equals the registry exit code for the envelope's code."""
-    from confiture.core.error_codes import CANONICAL_EXIT_CODES
+    from confiture.error_codes import CANONICAL_EXIT_CODES
 
     result = runner.invoke(
         app, ["seed", "validate", "--seeds-dir", "/no/such-dir", "--format", "json"]

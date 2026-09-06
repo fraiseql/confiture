@@ -1,7 +1,7 @@
 """A DSN password never reaches argv, a log line or an error message (SEC-04).
 
 Four leaks, one rule: the only spelling of a connection URL that may leave the
-process is the one :func:`confiture.core.url_redaction.redact_url` produces, and
+process is the one :func:`confiture.url_redaction.redact_url` produces, and
 the only way a password reaches a libpq client is ``PGPASSWORD``.
 
 * the backup hook passed the full DSN to ``pg_dump`` on argv (``ps aux``);
@@ -23,8 +23,8 @@ from confiture.core.config_validator import ConfigValidator
 from confiture.core.hooks.builtin.backup_hook import BackupConfig, BackupHook
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.phases import HookPhase
-from confiture.core.url_redaction import redact_url, split_password
 from confiture.models.results import PreflightAgainstResult
+from confiture.url_redaction import redact_url, split_password
 
 PW = "s3cr3t-pw"
 

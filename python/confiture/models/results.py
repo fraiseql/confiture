@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from confiture.core.url_redaction import redact_url
+from confiture.url_redaction import redact_url
 
 if TYPE_CHECKING:
     from confiture.core.migration_verifier import VerifyResult
@@ -1099,4 +1099,27 @@ class PreflightAgainstResult:
             "skipped": len(self.skipped_migrations),
             "db_consumed": self.db_consumed,
             "migrations": [m.to_dict() for m in self.migrations],
+        }
+
+
+@dataclass
+class SyncResult:
+    """``confiture sync --format json``: rows copied per table."""
+
+    anonymized: bool
+    tables: dict[str, int] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def total_rows(self) -> int:
+        return sum(self.tables.values())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "command": "sync",
+            "anonymized": self.anonymized,
+            "tables": dict(self.tables),
+            "total_rows": self.total_rows,
+            "warnings": list(self.warnings),
         }

@@ -4,9 +4,36 @@ All exceptions raised by Confiture inherit from ConfiturError.
 This allows users to catch all Confiture-specific errors with a single except clause.
 """
 
-from typing import Any
+from __future__ import annotations
 
-from confiture.models.error import ErrorSeverity
+from enum import Enum
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from confiture.core.preconditions import Precondition
+
+
+class ErrorSeverity(str, Enum):
+    """Severity levels for errors.
+
+    Attributes:
+        INFO: Informational, no action needed
+        WARNING: Should investigate but not blocking
+        ERROR: Blocking issue, must fix
+        CRITICAL: Severe issue, potential data loss
+
+    Example:
+        >>> from confiture.models.error import ErrorSeverity
+        >>> ErrorSeverity.ERROR
+        <ErrorSeverity.ERROR: 'error'>
+        >>> ErrorSeverity.ERROR == "error"
+        True
+    """
+
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
 
 
 class ConfiturError(Exception):
@@ -149,7 +176,7 @@ class ConfiturError(Exception):
             Exit code (0-10)
         """
         if self.error_code:
-            from confiture.core.error_codes import ERROR_CODE_REGISTRY
+            from confiture.error_codes import ERROR_CODE_REGISTRY
 
             definition = ERROR_CODE_REGISTRY.get(self.error_code)
             return definition.exit_code
@@ -880,18 +907,88 @@ class BootstrapScopeError(BootstrapError):
     """
 
 
-# Re-export precondition exceptions for convenience
-# These are defined in confiture.core.preconditions but users may want to
-# import them from confiture.exceptions
-from confiture.core.preconditions import (  # noqa: E402
-    PreconditionError,
-    PreconditionValidationError,
-)
+class PreconditionError(ConfiturError):
+    """A migration precondition did not hold (``PRECON_1000``).
 
-# Re-export sandbox exceptions
-from confiture.testing.sandbox import PreStateSimulationError  # noqa: E402
+    Attributes:
+        precondition: The precondition that failed.
+        migration_version: Version of the migration, when known.
+        migration_name: Name of the migration, when known.
+    """
+
+    def __init__(
+        self,
+        precondition: Precondition | str,
+        message: str | None = None,
+        migration_version: str | None = None,
+        migration_name: str | None = None,
+        *,
+        error_code: str | None = None,
+        resolution_hint: str | None = None,
+    ) -> None:
+        self.precondition = precondition
+        self.migration_version = migration_version
+        self.migration_name = migration_name
+        super().__init__(
+            message if message is not None else str(precondition),
+            error_code=error_code or "PRECON_1000",
+            resolution_hint=resolution_hint,
+            context={
+                "precondition": str(precondition),
+                "migration_version": migration_version,
+                "migration_name": migration_name,
+            },
+        )
+
+
+class PreconditionValidationError(ConfiturError):
+    """Several migration preconditions did not hold (``PRECON_1000``).
+
+    Attributes:
+        failures: ``(precondition, error_message)`` pairs.
+        migration_version: Version of the migration, when known.
+        migration_name: Name of the migration, when known.
+    """
+
+    def __init__(
+        self,
+        failures: list[tuple[Precondition, str]],
+        migration_version: str | None = None,
+        migration_name: str | None = None,
+        *,
+        error_code: str | None = None,
+    ) -> None:
+        self.failures = failures
+        self.migration_version = migration_version
+        self.migration_name = migration_name
+        lines = [f"Migration preconditions failed ({len(failures)} failures):"]
+        for precondition, error in failures:
+            lines.append(f"  - {precondition}: {error}")
+        if migration_version:
+            lines.append(
+                f"Migration: {migration_version}"
+                + (f" ({migration_name})" if migration_name else "")
+            )
+        super().__init__(
+            "\n".join(lines),
+            error_code=error_code or "PRECON_1000",
+            context={
+                "failures": [(str(p), e) for p, e in failures],
+                "migration_version": migration_version,
+            },
+        )
+
+
+class PreStateSimulationError(Exception):
+    """Raised when the migration sandbox cannot simulate the pre-migration state.
+
+    Typically the DOWN migration failed, has no reversible implementation, or
+    the database state does not support running it.
+    """
+
 
 __all__ = [
+    "ErrorSeverity",
     "ConfiturError",
     "ConfigurationError",
     "MigrationError",

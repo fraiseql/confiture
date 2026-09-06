@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-grant.schema.json",
+  "title": "confiture migrate validate --require-grant-migration --format json",
+  "description": "Semantic grant-accompaniment report (issue #162). Emitted as a failure envelope when a changed GRANT/REVOKE in the grant directory is not carried by an accompanying migration, or could not be statically verified and no migration is present. NOTE: this is NOT part of the fraisier adapter contract (which covers current/up/down-to/verify/preflight) — it is provided for completeness.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "status",
+    "check",
+    "is_valid",
+    "has_grant_changes",
+    "has_migration_changes",
+    "grant_files_changed",
+    "migration_files_staged",
+    "unmatched_grants",
+    "unverifiable_notes"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["failed", "passed"]
+    },
+    "check": {
+      "type": "string",
+      "const": "grant_accompaniment"
+    },
+    "is_valid": { "type": "boolean" },
+    "has_grant_changes": { "type": "boolean" },
+    "has_migration_changes": { "type": "boolean" },
+    "grant_files_changed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "migration_files_staged": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "unmatched_grants": {
+      "type": "array",
+      "description": "Changed grants not carried by any migration — each is a hard failure.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "statement",
+          "action",
+          "objtype",
+          "target_kind",
+          "schema",
+          "object",
+          "grantee",
+          "privilege",
+          "changed_in",
+          "migrations_inspected"
+        ],
+        "properties": {
+          "statement": { "type": "string" },
+          "action": { "type": "string", "enum": ["GRANT", "REVOKE"] },
+          "objtype": {
+            "type": "string",
+            "enum": ["TABLE", "SEQUENCE", "FUNCTION", "SCHEMA"]
+          },
+          "target_kind": {
+            "type": "string",
+            "enum": ["OBJECT", "ALL_IN_SCHEMA"]
+          },
+          "schema": { "type": "string" },
+          "object": { "type": ["string", "null"] },
+          "grantee": { "type": "string" },
+          "privilege": { "type": "string" },
+          "changed_in": { "type": "string" },
+          "migrations_inspected": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "unverifiable_notes": {
+      "type": "array",
+      "description": "Human-readable notes for grants that degraded to a file-presence check (dynamic SQL, unmodeled object classes, removed grants, search_path-relative schemas, WITH GRANT OPTION-only changes).",
+      "items": { "type": "string" }
+    }
+  }
+}

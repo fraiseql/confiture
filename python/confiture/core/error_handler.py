@@ -213,7 +213,7 @@ def handle_cli_error(error: Exception) -> int:
     from confiture.core.locking import LockAcquisitionError
 
     if isinstance(error, LockAcquisitionError):
-        from confiture.core.error_codes import ERROR_CODE_REGISTRY
+        from confiture.error_codes import ERROR_CODE_REGISTRY
 
         return ERROR_CODE_REGISTRY.get("LOCK_1300").exit_code
 

@@ -130,22 +130,6 @@ class TestEnvironmentDefaults:
 
         assert env.exclude_dirs == []
 
-    def test_default_auto_backup_true(self, temp_project_dir: Path):
-        """Should enable auto-backup by default"""
-        (temp_project_dir / "db" / "schema").mkdir(parents=True, exist_ok=True)
-        env_file = temp_project_dir / "db" / "environments" / "backup.yaml"
-        env_file.parent.mkdir(parents=True, exist_ok=True)
-        config_data = {
-            "name": "backup",
-            "database_url": "postgresql://localhost/test",
-            "include_dirs": ["db/schema"],
-        }
-        env_file.write_text(yaml.dump(config_data))
-
-        env = Environment.load("backup", project_dir=temp_project_dir)
-
-        assert env.auto_backup is True
-
 
 class TestEnvironmentPaths:
     """Test path resolution in Environment"""

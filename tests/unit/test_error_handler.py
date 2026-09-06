@@ -136,13 +136,13 @@ class TestFormatErrorForCli:
         error_critical = ConfiturError(
             "Critical issue",
             severity=ErrorSeverity.CRITICAL,
-            error_code="ROLLBACK_602",
+            error_code="ROLLBACK_600",
         )
 
         formatted = format_error_for_cli(error_critical)
 
         # Should indicate severity somehow
-        assert "ROLLBACK_602" in formatted
+        assert "ROLLBACK_600" in formatted
         assert "Critical issue" in formatted
 
     def test_format_migration_error(self) -> None:
@@ -201,12 +201,12 @@ class TestHandleCliError:
         error = MigrationError(
             "Migration locked",
             version="001",
-            error_code="MIGR_104",
+            error_code="MIGR_100",
         )
 
         exit_code = handle_cli_error(error)
 
-        # MIGR_104 should map to exit code 3
+        # MIGR_100 should map to exit code 3
         assert exit_code == 3
 
     def test_handle_generic_exception(self) -> None:
@@ -223,7 +223,7 @@ class TestHandleCliError:
         test_cases = [
             ("CONFIG_001", 5),  # Configuration error (#146: config invalid → 5)
             ("MIGR_100", 3),  # Migration error
-            ("SCHEMA_200", 4),  # Schema error
+            ("SCHEMA_001", 4),  # Schema error
         ]
 
         for code, expected_exit in test_cases:

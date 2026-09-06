@@ -2,7 +2,7 @@
 
 A connection URL carries a password. The only spelling that may leave the
 process — into a log line, a console message, an exception text, JSON on
-stdout — is the one :func:`confiture.core.url_redaction.redact_url` produces.
+stdout — is the one :func:`confiture.url_redaction.redact_url` produces.
 
 This test walks every module under ``python/confiture`` and, for every output
 sink (``print``, ``*.print``, ``logger.<level>``, ``typer.echo``,
@@ -100,7 +100,7 @@ def test_no_sink_renders_a_raw_dsn() -> None:
     assert findings == [], (
         "connection URLs rendered without redact_url():\n  "
         + "\n  ".join(findings)
-        + "\nWrap the value in confiture.core.url_redaction.redact_url(...)."
+        + "\nWrap the value in confiture.url_redaction.redact_url(...)."
     )
 
 

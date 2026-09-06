@@ -238,11 +238,11 @@ class TestSQLErrorBackwardCompatibility:
             "SELECT 1",
             None,
             Exception("db error"),
-            error_code="SQL_700",
+            error_code="SQL_001",
         )
 
         assert error.sql == "SELECT 1"
-        assert error.error_code == "SQL_700"
+        assert error.error_code == "SQL_001"
 
     def test_sql_error_accepts_composable(self) -> None:
         """Test that SQLError handles psycopg.sql.Composable without crashing (issue #115)."""

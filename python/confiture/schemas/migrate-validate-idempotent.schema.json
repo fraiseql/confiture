@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-idempotent.schema.json",
+  "title": "confiture migrate validate --idempotent --format json",
+  "description": "Idempotency validation report \u2014 scans every migration file (SQL + Python) for non-idempotent SQL patterns. Empty-input shape (no migration files found) replaces the violations report with a `message` field.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "violations",
+        "violation_count",
+        "files_scanned",
+        "scanned_files",
+        "has_violations",
+        "has_blocking_violations",
+        "warnings",
+        "has_warnings",
+        "meta",
+        "hints",
+        "analysis_complete",
+        "unanalyzed_count"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "issues_found",
+            "unverified"
+          ],
+          "description": "`issues_found` when any violation exists (exit 1 for blocking ones); `unverified` when no violation exists but at least one execute/execute_file call could not be statically read (exit 0, or 1 under --fail-on-unanalyzable); `ok` only when every call was read and nothing was found. Added `unverified` in 0.46.0 (#213)."
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "$ref": "_common.schema.json#/$defs/Violation"
+          }
+        },
+        "violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scanned_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "has_violations": {
+          "type": "boolean"
+        },
+        "has_blocking_violations": {
+          "type": "boolean",
+          "description": "True when any violation has severity=error. info-only findings keep this false unless --strict-cor is passed."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "_common.schema.json#/$defs/ExtractorWarning"
+          }
+        },
+        "has_warnings": {
+          "type": "boolean"
+        },
+        "meta": {
+          "type": "object",
+          "required": [
+            "backend",
+            "fail_on_unanalyzable"
+          ],
+          "properties": {
+            "backend": {
+              "type": "string",
+              "enum": [
+                "ast",
+                "regex"
+              ],
+              "description": "Which detection backend ran. `ast` = pglast-backed AST (preferred); `regex` = fallback when pglast is missing or CONFITURE_IDEMPOTENCY_FORCE_REGEX=1 is set."
+            },
+            "fail_on_unanalyzable": {
+              "type": "boolean",
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag \u2014 only the exit code does. Added in 0.46.0 (#213)."
+            }
+          }
+        },
+        "hints": {
+          "$ref": "_common.schema.json#/$defs/HintsArray"
+        },
+        "analysis_complete": {
+          "type": "boolean",
+          "description": "True when every execute/execute_file call the run was asked about was actually read. False whenever `warnings` is non-empty. Added in 0.46.0 (#213)."
+        },
+        "unanalyzed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read \u2014 equals len(warnings). Added in 0.46.0 (#213)."
+        },
+        "parser": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pglast",
+            "pg_major"
+          ],
+          "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+          "properties": {
+            "pglast": {
+              "type": "string"
+            },
+            "pg_major": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "message",
+        "violations",
+        "meta",
+        "hints",
+        "analysis_complete",
+        "unanalyzed_count"
+      ],
+      "description": "Empty-input shape: no migration files found, or a git scope that selected none. Vacuously complete.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "message": {
+          "type": "string"
+        },
+        "violations": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "meta": {
+          "type": "object",
+          "required": [
+            "backend",
+            "fail_on_unanalyzable"
+          ],
+          "properties": {
+            "backend": {
+              "type": "string",
+              "enum": [
+                "ast",
+                "regex"
+              ]
+            },
+            "fail_on_unanalyzable": {
+              "type": "boolean",
+              "description": "Whether --fail-on-unanalyzable was passed. With it, status 'unverified' exits 1; without it, 0. The status never depends on the flag \u2014 only the exit code does. Added in 0.46.0 (#213)."
+            }
+          }
+        },
+        "hints": {
+          "$ref": "_common.schema.json#/$defs/HintsArray"
+        },
+        "analysis_complete": {
+          "type": "boolean",
+          "description": "True when every execute/execute_file call the run was asked about was actually read. False whenever `warnings` is non-empty. Added in 0.46.0 (#213).",
+          "const": true
+        },
+        "unanalyzed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of execute/execute_file *calls* (not statements) whose SQL was never read \u2014 equals len(warnings). Added in 0.46.0 (#213).",
+          "const": 0
+        },
+        "parser": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pglast",
+            "pg_major"
+          ],
+          "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+          "properties": {
+            "pglast": {
+              "type": "string"
+            },
+            "pg_major": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

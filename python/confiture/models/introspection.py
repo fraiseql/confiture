@@ -1,4 +1,5 @@
 """Data models for schema introspection output.
+from dataclasses import dataclass
 
 These models represent the structured output of the `confiture introspect`
 command: tables, columns, types, constraints, and the FK relationship graph.
@@ -102,3 +103,12 @@ class IntrospectionResult:
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict suitable for JSON/YAML output."""
         return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass
+class JSONBKey:
+    """A key detected in a jsonb_build_object() call."""
+
+    key: str
+    value_expr: str
+    inferred_type: str | None = None

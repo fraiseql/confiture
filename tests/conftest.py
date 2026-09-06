@@ -139,8 +139,6 @@ def local_env_config(temp_project_dir: Path, test_db_url: str) -> Path:
         "include_dirs": ["db/schema"],
         "exclude_dirs": ["db/schema/99_deprecated"],
         "migration_table": "tb_confiture",
-        "auto_backup": True,
-        "require_confirmation": False,
     }
 
     local_config.write_text(yaml.dump(config_data))

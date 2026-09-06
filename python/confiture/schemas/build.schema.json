@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.dev/schemas/build.schema.json",
+  "title": "confiture build --format json",
+  "description": "The result of `confiture build --format json`: what was assembled from the DDL tree and where it went. Payload = BuildResult.to_dict().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "success",
+    "files_processed",
+    "schema_size_bytes",
+    "output_path",
+    "hash",
+    "execution_time_ms",
+    "seed_files_applied",
+    "warnings",
+    "error"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "files_processed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "schema_size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "output_path": {
+      "type": "string"
+    },
+    "hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "execution_time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "seed_files_applied": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "artifact_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "artifact_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "seed_profile": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0).",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

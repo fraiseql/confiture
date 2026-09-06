@@ -7,7 +7,7 @@ moving it into the `PGPASSWORD` environment variable.
 
 from __future__ import annotations
 
-from confiture.core.url_redaction import libpq_env, redact_url, split_password
+from confiture.url_redaction import libpq_env, redact_url, split_password
 
 
 class TestRedactUrl:

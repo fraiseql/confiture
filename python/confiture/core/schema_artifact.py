@@ -20,8 +20,8 @@ from pathlib import Path
 
 from confiture.core.seed_applier import apply_seed_files
 from confiture.core.temp_database import TempDatabase
-from confiture.core.url_redaction import libpq_env, split_password
 from confiture.exceptions import SchemaError
+from confiture.url_redaction import libpq_env, split_password
 
 # Supported pg_dump archive formats → the format flag and on-disk extension.
 _DUMP_FORMAT_FLAG = {"custom": "-Fc", "directory": "-Fd"}

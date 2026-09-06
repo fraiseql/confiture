@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/error-envelope.schema.json",
+  "title": "Confiture structured error envelope",
+  "description": "Emitted on stdout by migrate-family commands in --format json mode on an error path (issue #145). The process exits with the error's exit code (see exit-codes.md). The `error` value is the shared issue object.",
+  "type": "object",
+  "required": [
+    "ok",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {
+      "const": false,
+      "description": "Always false for the error envelope."
+    },
+    "error": {
+      "$ref": "issue-object.schema.json#"
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload (0.50.0): the installed pglast release and the PostgreSQL grammar major it embeds.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

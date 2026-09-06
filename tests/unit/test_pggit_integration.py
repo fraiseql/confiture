@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from confiture.config.environment import PgGitConfig
 from confiture.integrations.pggit import (
     MIN_PGGIT_VERSION,
     PgGitBranchError,
@@ -74,42 +73,6 @@ class TestPgGitExceptions:
 
         # Should show first 5 and indicate more
         assert "+5 more" in str(error)
-
-
-class TestPgGitConfig:
-    """Test PgGitConfig Pydantic model."""
-
-    def test_default_config(self):
-        """PgGitConfig should have sensible defaults."""
-        config = PgGitConfig()
-
-        assert config.enabled is False
-        assert config.auto_init is True
-        assert config.default_branch == "main"
-        assert config.auto_commit is False
-        assert config.require_branch is False
-        assert "main" in config.protected_branches
-        assert "master" in config.protected_branches
-
-    def test_config_with_custom_values(self):
-        """PgGitConfig should accept custom values."""
-        config = PgGitConfig(
-            enabled=True,
-            default_branch="development",
-            auto_commit=True,
-            protected_branches=["main", "release"],
-        )
-
-        assert config.enabled is True
-        assert config.default_branch == "development"
-        assert config.auto_commit is True
-        assert config.protected_branches == ["main", "release"]
-
-    def test_commit_message_template(self):
-        """PgGitConfig should have configurable commit message template."""
-        config = PgGitConfig(commit_message_template="[AUTO] {migration_name}")
-
-        assert config.commit_message_template == "[AUTO] {migration_name}"
 
 
 class TestPgGitDetection:

@@ -8,8 +8,8 @@ from confiture.cli.helpers import _emit_hint, _output_json, console
 from confiture.core.idempotency.python_migration_extractor import (
     is_migration_file as _is_migration_file,
 )
-from confiture.core.url_redaction import redact_url as redact_url  # re-export (layering)
 from confiture.exceptions import ConfigurationError
+from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
 
 
 def _repo_root_for(path: Path) -> Path:

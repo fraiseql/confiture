@@ -69,10 +69,8 @@ migration:
   tracking_table: tb_confiture
 
 # Auto-backup before migrations (optional, default: true)
-auto_backup: true
 
 # Require confirmation for risky operations (optional, default: true)
-require_confirmation: true
 ```
 
 ---
@@ -406,30 +404,22 @@ See [Tracking Table](./tracking-table.md) for the full table schema and columns.
 
 ---
 
-### `auto_backup`
 
-**Type**: Boolean
-**Default**: `true`
-**Description**: Automatically backup database before applying migrations
+### `migration.locking`
+
+**Type**: Object (`enabled`, `timeout_ms`)
+**Default**: `enabled: true`, `timeout_ms: 30000`
+**Description**: The advisory lock every `migrate up` / `migrate down` / `migrate apply-as`
+takes so two deployments never apply concurrently. The CLI flags `--lock-timeout` and
+`--no-lock` override it for one run; the library reads it through
+`Migrator.from_config(...)`.
 
 ```yaml
-auto_backup: true
+migration:
+  locking:
+    enabled: true        # false = never lock (single-writer environments only)
+    timeout_ms: 30000    # how long to wait for the lock before exit 6
 ```
-
-**Behavior**:
-- **`true`**: Run `pg_dump` before each `confiture migrate up`
-- **`false`**: No automatic backups (you manage backups manually)
-
-**Backup location**: `db/backups/{env}_{timestamp}.sql`
-
-**Example backup**:
-
-```
-db/backups/
-└── production_20251012_143000.sql
-```
-
-**Production recommendation**: Use external backup systems (AWS RDS automated backups, pg_basebackup, etc.) and set `auto_backup: false`.
 
 ---
 
@@ -489,36 +479,6 @@ CREATE TABLE catalog.tb_audit_ledger ( ... );
 
 ---
 
-### `require_confirmation`
-
-**Type**: Boolean
-**Default**: `true`
-**Description**: Require user confirmation for risky operations
-
-```yaml
-require_confirmation: true
-```
-
-**Operations requiring confirmation**:
-- Applying migrations to production
-- Rolling back migrations
-- Dropping tables or columns
-
-**Behavior**:
-- **`true`**: Prompt user: "Apply 3 migrations to production? [y/N]"
-- **`false`**: Apply immediately without prompt
-
-**CI/CD usage**: Set to `false` for automated pipelines:
-
-```yaml
-# production.yaml (manual deployments)
-require_confirmation: true
-
-# ci.yaml (automated tests)
-require_confirmation: false
-```
-
----
 
 ## Environment Examples
 
@@ -540,8 +500,6 @@ exclude_dirs: []
 
 migration:
   tracking_table: tb_confiture
-auto_backup: false          # No backups needed locally
-require_confirmation: false # Fast iteration
 ```
 
 **Usage**:
@@ -571,8 +529,6 @@ exclude_dirs:
 
 migration:
   tracking_table: tb_confiture
-auto_backup: true           # Backup before migrations
-require_confirmation: false # Automated deployments OK
 ```
 
 **Usage** (CI/CD):
@@ -603,8 +559,6 @@ exclude_dirs: []
 
 migration:
   tracking_table: tb_confiture
-auto_backup: true               # Extra safety
-require_confirmation: true      # Manual approval required
 ```
 
 **Usage** (manual deployment):
@@ -634,8 +588,6 @@ exclude_dirs: []
 
 migration:
   tracking_table: tb_confiture
-auto_backup: false          # No backups in CI
-require_confirmation: false # Fully automated
 ```
 
 **Usage** (GitHub Actions):
@@ -702,7 +654,6 @@ env = Environment.load("production", project_dir=Path("/app"))
 
 # Modify for specific deployment
 env.database_url = get_secret("production/database_url")
-env.require_confirmation = False  # Override for automated deployment
 
 # Use modified config
 from confiture.core.builder import SchemaBuilder
@@ -780,15 +731,11 @@ export DATABASE_URL=postgresql://admin:secret@db.example.com/myapp
 
 ```yaml
 # local.yaml - Fast iteration, include seeds
-require_confirmation: false
-auto_backup: false
 include_dirs:
   - db/schema
   - db/seeds
 
 # production.yaml - Safety first, no seeds
-require_confirmation: true
-auto_backup: true
 include_dirs:
   - db/schema
 ```
@@ -869,8 +816,6 @@ include_dirs: array[string]     # Directories to include
 
 # Optional fields
 exclude_dirs: array[string]     # Directories to exclude (default: [])
-auto_backup: boolean            # Auto-backup before migrations (default: true)
-require_confirmation: boolean   # Require user confirmation (default: true)
 
 # Migration section (nested)
 migration:

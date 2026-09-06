@@ -124,29 +124,7 @@ def format_json(report: LintReport) -> str:
     Returns:
         JSON string representation
     """
-    data = {
-        "schema_name": report.schema_name,
-        "tables_checked": report.tables_checked,
-        "columns_checked": report.columns_checked,
-        "execution_time_ms": report.execution_time_ms,
-        "violations": {
-            "total": len(report.violations),
-            "errors": report.errors_count,
-            "warnings": report.warnings_count,
-            "info": report.info_count,
-            "items": [
-                {
-                    "rule": v.rule_name,
-                    "rule_id": v.rule_id,
-                    "severity": v.severity.value,
-                    "location": v.location,
-                    "message": v.message,
-                    "suggested_fix": v.suggested_fix,
-                }
-                for v in report.violations
-            ],
-        },
-    }
+    data = report.to_dict()
     data["parser"] = parser_stamp()
     return json.dumps(data, indent=2)
 

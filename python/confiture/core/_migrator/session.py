@@ -29,7 +29,7 @@ from confiture.core._migrator import replay as _replay
 from confiture.core._migrator import reporting as _reporting
 from confiture.core._migrator import rollback_loop as _rollback_loop
 from confiture.core._migrator.events import UpObserver
-from confiture.core.locking import LockConfig, MigrationLock
+from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 
 
 class MigratorSession:
@@ -157,6 +157,11 @@ class MigratorSession:
             )
         return self._migrator
 
+    def _lock_settings(self, lock_timeout: int | None, no_lock: bool | None) -> tuple[int, bool]:
+        """Explicit arguments win; otherwise the environment's ``migration.locking`` block."""
+        migration = getattr(self._config, "migration", None)
+        return resolve_lock_settings(getattr(migration, "locking", None), lock_timeout, no_lock)
+
     # ------------------------------------------------------------------ #
     # Lock inspection                                                    #
     # ------------------------------------------------------------------ #
@@ -261,8 +266,8 @@ class MigratorSession:
         verify_checksums: bool = True,
         on_checksum_mismatch: str = "fail",
         force: bool = False,
-        lock_timeout: int = 30000,
-        no_lock: bool = False,
+        lock_timeout: int | None = None,
+        no_lock: bool | None = None,
         require_reversible: bool = False,
         strict_mode: bool | None = None,
         auto_baseline: Path | None = None,
@@ -292,8 +297,10 @@ class MigratorSession:
             on_checksum_mismatch: ``"fail"`` (raise), ``"warn"`` (continue, report
                      the mismatches in ``warnings``) or ``"ignore"``.
             force: If True, re-apply all migrations including already-applied ones.
-            lock_timeout: Lock timeout in milliseconds (default: 30000).
-            no_lock: If True, skip distributed locking.
+            lock_timeout: Lock timeout in milliseconds; ``None`` reads
+                ``migration.locking.timeout_ms`` from the environment (else 30000).
+            no_lock: Skip distributed locking; ``None`` reads
+                ``migration.locking.enabled`` from the environment (else lock).
             require_reversible: If True, abort before applying any migration
                      if any pending migration lacks a ``.down.sql`` file.
             strict_mode: Fail on warnings/notices. None (default) takes the
@@ -340,6 +347,7 @@ class MigratorSession:
             ...         for error in result.errors:
             ...             print(f"ERROR: {error}")
         """
+        lock_timeout, no_lock = self._lock_settings(lock_timeout, no_lock)
         return _apply_loop.up(
             self,
             target=target,
@@ -475,8 +483,8 @@ class MigratorSession:
         version: str,
         *,
         applied_by: str | None = None,
-        lock_timeout: int = 30000,
-        no_lock: bool = False,
+        lock_timeout: int | None = None,
+        no_lock: bool | None = None,
     ) -> MigrationApplied:
         """Apply exactly one migration by version, under the migration lock.
 
@@ -487,14 +495,16 @@ class MigratorSession:
         Args:
             version: The migration version to apply.
             applied_by: Recorded in the ledger's ``applied_by`` column.
-            lock_timeout: Lock acquisition timeout in milliseconds.
-            no_lock: If True, skip distributed locking.
+            lock_timeout: Lock acquisition timeout in milliseconds; ``None`` reads
+                ``migration.locking`` from the environment.
+            no_lock: Skip distributed locking; ``None`` reads ``migration.locking``.
 
         Raises:
             MigrationError: ``MIGR_001`` if the version is already applied,
                 ``MIGR_100`` if no file carries it; whatever the migration raises.
             LockAcquisitionError: The migration lock could not be taken.
         """
+        lock_timeout, no_lock = self._lock_settings(lock_timeout, no_lock)
         return _apply_loop.apply_one(
             self, version, applied_by=applied_by, lock_timeout=lock_timeout, no_lock=no_lock
         )
@@ -504,8 +514,8 @@ class MigratorSession:
         *,
         steps: int = 1,
         dry_run: bool = False,
-        lock_timeout: int = 30000,
-        no_lock: bool = False,
+        lock_timeout: int | None = None,
+        no_lock: bool | None = None,
         command: str | None = None,
     ) -> MigrateDownResult:
         """Roll back applied migrations in reverse order.
@@ -544,6 +554,7 @@ class MigratorSession:
             ...     if result.success:
             ...         print(f"Rolled back {len(result.migrations_rolled_back)} migrations")
         """
+        lock_timeout, no_lock = self._lock_settings(lock_timeout, no_lock)
         return _rollback_loop.down(
             self,
             steps=steps,
@@ -558,8 +569,8 @@ class MigratorSession:
         target: str,
         *,
         dry_run: bool = False,
-        lock_timeout: int = 30000,
-        no_lock: bool = False,
+        lock_timeout: int | None = None,
+        no_lock: bool | None = None,
         command: str | None = None,
     ) -> DownToResult:
         """Roll back every migration newer than ``target`` (issue #142).
@@ -573,8 +584,9 @@ class MigratorSession:
         Args:
             target: The revision to roll back to (kept applied).
             dry_run: If True, compute + validate the plan but execute nothing.
-            lock_timeout: Lock acquisition timeout in milliseconds.
-            no_lock: If True, skip distributed locking.
+            lock_timeout: Lock acquisition timeout in milliseconds; ``None`` reads
+                ``migration.locking`` from the environment.
+            no_lock: Skip distributed locking; ``None`` reads ``migration.locking``.
 
         Returns:
             DownToResult with from/to/rolled_back/skipped/errors.
@@ -587,6 +599,7 @@ class MigratorSession:
                 current.
             LockAcquisitionError: If the migration lock cannot be acquired.
         """
+        lock_timeout, no_lock = self._lock_settings(lock_timeout, no_lock)
         return _rollback_loop.down_to(
             self,
             target,

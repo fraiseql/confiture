@@ -100,13 +100,3 @@ def test_present_but_empty_ledger_succeeds(
     assert result.exit_code == 0
     assert "All migration checksums verified" in result.output
     assert "no migration ledger" not in result.output.lower()
-
-
-def test_deprecated_alias_on_ledger_less_database(
-    clean_test_db: psycopg.Connection, cfg: Path, migrations_dir: Path
-) -> None:
-    result = runner.invoke(app, ["verify", "-c", str(cfg), "--migrations-dir", str(migrations_dir)])
-
-    assert result.exit_code == 2
-    assert "is not present in this database" in result.output
-    assert "deprecated" in result.output.lower()

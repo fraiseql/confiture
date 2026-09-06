@@ -18,7 +18,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from confiture.core.error_codes import EXIT_CODE_SEMANTIC_CLASS
+from confiture.error_codes import EXIT_CODE_SEMANTIC_CLASS
 
 if TYPE_CHECKING:
     from confiture.core.validation.context import ValidationContext

@@ -15,8 +15,8 @@ import psycopg
 import psycopg.sql
 
 from confiture.core.psql_applier import apply_sql_via_psql
-from confiture.core.url_redaction import libpq_env, split_password
 from confiture.exceptions import SchemaError, base_message
+from confiture.url_redaction import libpq_env, split_password
 
 
 def _rebuild_with_path(server_url: str, path: str) -> str:

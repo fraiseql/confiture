@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from confiture.core.error_codes import ERROR_CODE_REGISTRY, render_error_codebook
+from confiture.error_codes import ERROR_CODE_REGISTRY, render_error_codebook
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CODEBOOK_DOC = _REPO_ROOT / "docs" / "reference" / "error-codes.md"
@@ -20,7 +20,9 @@ REQUIRED_COMMON = {
     "ROLLBACK_600",  # irreversible / missing down
     "LOCK_1300",  # lock contention
     "CONFIG_006",  # connection failed
-    "MIGR_011",  # checksum mismatch
+    # checksum mismatch is a *report* finding, never an envelope code: `verify-checksums`
+    # emits `CHECKSUM_MISMATCH` issue objects and preflight `PFLIGHT_CHECKSUM_MISMATCH`;
+    # the registry's MIGR_011 was never emitted and was pruned in 0.51.0 (D9).
     "PRECON_1001",  # not initialized / no tracking table
 }
 

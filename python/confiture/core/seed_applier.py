@@ -178,8 +178,9 @@ class SeedApplier:
         continue_on_error: bool = False,
         progress: ProgressManager | None = None,
         profile: SeedProfile | None = None,
+        transaction_mode: str = "savepoint",
     ) -> ApplyResult:
-        """Apply seed files sequentially with savepoints.
+        """Apply seed files sequentially, one savepoint or one transaction per file.
 
         Each file executed in its own savepoint for isolation.
         Avoids PostgreSQL parser limits from concatenation.
@@ -188,6 +189,11 @@ class SeedApplier:
             continue_on_error: Continue applying files if one fails
             progress: Optional ProgressManager for displaying progress
             profile: Optional seed profile selecting a subset of files
+            transaction_mode: ``"savepoint"`` runs every file inside the caller's
+                transaction with a savepoint each (a failure rolls back that file
+                only); ``"transaction"`` commits after each file, so the files
+                before a failure stay applied (``seed.transaction_mode`` in the
+                environment YAML)
 
         Returns:
             ApplyResult with tracking info
@@ -230,6 +236,8 @@ class SeedApplier:
                     sql_content = InsertToCopyConverter().convert(sql_content)
                     self.console.print("[dim](COPY)[/dim]", end=" ")
                 executor.execute_sql(sql_content, savepoint_name, source=seed_file)
+                if transaction_mode == "transaction":
+                    self.connection.commit()
                 result.succeeded += 1
                 self.console.print("[green]✓[/green]")
 
@@ -238,6 +246,8 @@ class SeedApplier:
                     progress.update(apply_task, advance=1)
 
             except Exception as e:
+                if transaction_mode == "transaction":
+                    self.connection.rollback()
                 result.failed += 1
                 result.failed_files.append(seed_file.name)
                 self.console.print(f"[red]✗ {e}[/red]")

@@ -33,7 +33,7 @@ from referencing.jsonschema import DRAFT202012
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.core.error_codes import (
+from confiture.error_codes import (
     CANONICAL_EXIT_CODES,
     EXIT_CODE_MEANINGS,
     EXIT_CODE_SEMANTIC_CLASS,

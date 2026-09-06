@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.error_codes import (
+from confiture.error_codes import (
     CANONICAL_EXIT_CODES,
     ERROR_CODE_REGISTRY,
     EXIT_CODE_MEANINGS,
@@ -80,9 +80,6 @@ def test_canonical_table_covers_exactly_the_registry() -> None:
     ("code", "expected_exit"),
     [
         ("MIGR_101", 0),  # already applied — success-with-signal
-        ("MIGR_105", 0),  # no pending migrations — success-with-signal
-        ("LINT_1501", 0),  # lint warning — informational, non-blocking
-        ("DIFFER_402", 1),  # ambiguous-change advisory (DIFFER family is 5)
         ("PRECON_1001", 2),  # tracking table absent (PRECON family is 5)
         ("CONFIG_006", 3),  # DB connection failed (CONFIG family is 5)
     ],
