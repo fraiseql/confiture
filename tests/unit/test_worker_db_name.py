@@ -22,7 +22,10 @@ class TestResolveWorkerDbName:
     def test_gw11_appends_suffix(self) -> None:
         assert resolve_worker_db_name("app", worker_id="gw11") == "app_gw11"
 
-    def test_none_returns_base(self) -> None:
+    def test_none_returns_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # `worker_id=None` means "read the environment"; this test is about the
+        # no-worker path, so it must not inherit the xdist worker running it.
+        monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
         assert resolve_worker_db_name("app", worker_id=None) == "app"
 
     def test_master_returns_base(self) -> None:
@@ -54,7 +57,8 @@ class TestResolveWorkerDbUrl:
         url = resolve_worker_db_url("postgresql://u:p@host:5433/app", worker_id="gw0")
         assert url == "postgresql://u:p@host:5433/app_gw0"
 
-    def test_no_worker_keeps_url(self) -> None:
+    def test_no_worker_keeps_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
         assert (
             resolve_worker_db_url("postgresql://localhost/app", worker_id=None)
             == "postgresql://localhost/app"

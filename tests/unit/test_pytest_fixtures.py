@@ -101,6 +101,9 @@ class TestWorkerDbThreadsTablespace:
         return _StubProvisioner.clone_calls[-1]
 
     def test_passes_ram_tablespace_when_usable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The target name is asserted unsuffixed: this exercises the explicit-
+        # argument path, not the per-worker suffixing an xdist worker would add.
+        monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
         monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
         call = self._run(ram_tablespace="ram_tbl")
         assert call["tablespace"] == "ram_tbl"
