@@ -117,11 +117,11 @@ jobs:
         # The wheel bundles the native extension; the parity tests must run it, not
         # skip it. pyproject sets `pythonpath = ["python"]` for pytest, which puts the
         # SOURCE tree ahead of the installed wheel — the job then tested the source
-        # and never the artefact. `-o pythonpath=` clears that; `--import-mode=importlib`
-        # keeps pytest from inserting test dirs; PYTHONPATH exposes the `tests` package
-        # only (the package itself lives under python/, which is not on the path).
+        # and never the artefact. `-o pythonpath=` clears that; PYTHONPATH exposes the
+        # `tests` package only (the package itself lives under python/, which is not
+        # on the path). Verified locally: the wheel resolves from site-packages.
         PYTHONPATH="$GITHUB_WORKSPACE" CONFITURE_REQUIRE_NATIVE=1 uv run --no-sync pytest tests/ \
-          -o pythonpath= --import-mode=importlib \
+          -o pythonpath= \
           --cov=confiture --cov-report=xml --cov-report=term-missing -v
       env:
         # See quality-gate.yml: CONFITURE_TEST_DB_URL is the variable the
