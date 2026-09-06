@@ -23,6 +23,7 @@ from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import LintConfig as LinterConfig
 from confiture.core.linting.schema_linter import LintReport as LinterReport
 from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
+from confiture.core.seed.paths import is_seed_path
 from confiture.core.seed_applier import SeedApplier
 from confiture.exceptions import ConfigurationError, SchemaError, SeedError
 
@@ -421,9 +422,9 @@ def build(
 
         # Override to exclude seeds if --schema-only is specified
         if schema_only:
-            builder.include_dirs = [d for d in builder.include_dirs if "seed" not in str(d).lower()]
+            builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
             builder.include_configs = [
-                cfg for cfg in builder.include_configs if "seed" not in str(cfg["path"]).lower()
+                cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
             ]
             # Recalculate base_dir after filtering
             if builder.include_dirs:
@@ -459,13 +460,7 @@ def build(
                 # Build schema only, seeds will be applied separately
                 schema = builder.build(output_path=output, schema_only=True, progress=progress)
                 sql_files = builder.find_sql_files()
-                schema_file_count = len(
-                    [
-                        f
-                        for f in sql_files
-                        if not any(p.lower() in ("seed", "seeds") for p in f.parts)
-                    ]
-                )
+                schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
             else:
                 # Build schema with seeds
                 sql_files = builder.find_sql_files()

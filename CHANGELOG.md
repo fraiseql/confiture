@@ -19,6 +19,12 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
   nothing on stdout, before the command body runs. `migrate preflight` and
   `schema diff` no longer fall through to text on an unknown value.
+- **One definition of a seed path.** `core/seed/paths.is_seed_path()` — the
+  builder's whole-token rule (`30_seed_backend` is a seed directory,
+  `reseed_tools` is not) — now also drives `build --schema-only`'s include-dir
+  filtering and the `--sequential` file count, which used a substring match and
+  an exact-component match respectively. `build` validates `--format` and the
+  separator flags before any database or seed work.
 - ⚠️ **An honest `--dry-run`.** `migrate up --dry-run` printed
   `Estimated time: 500ms | Disk: 1.0MB | CPU: 30%` for every migration,
   classified each as `"warning"` whatever it contained, and always closed with

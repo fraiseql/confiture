@@ -7,22 +7,19 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 """
 
 import hashlib
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
 from confiture.core.progress import ProgressManager
+
+# The seed-path rule lives in core.seed.paths; re-exported for callers that
+# imported it from here.
+from confiture.core.seed.paths import _SEED_DIR_RE, is_seed_path  # noqa: F401
 from confiture.core.validators import CommentValidator
 from confiture.exceptions import SchemaError
 from confiture.models.results import SplitBuildResult
-
-# A path component is a seed dir when "seed"/"seeds" appears as a whole token,
-# delimited by start/end or a ``_`` / ``-`` separator. This recognises
-# ordering-prefixed layouts (``30_seed_backend``, ``seed_common``, ``10-seeds``)
-# while rejecting look-alikes (``seedling``, ``proceeds``, ``seeded``).
-_SEED_DIR_RE = re.compile(r"(?:^|[_-])seeds?(?:$|[_-])")
 
 # Try to import Rust extension for 10-50x performance boost
 _core: Any = None
@@ -421,15 +418,11 @@ class SchemaBuilder:
         Returns:
             True if a path component at/below the include root is a seed directory
         """
-        anchor = self.base_dir.parent
-        try:
-            components = file_path.relative_to(anchor).parts
-        except ValueError:
-            # Defensive: file is not under the include root (e.g. no common
-            # parent). Fall back to the full path so a genuine seed dir is never
-            # silently missed.
-            components = file_path.parts
-        return any(_SEED_DIR_RE.search(part.lower()) for part in components)
+        return is_seed_path(file_path, anchor=self.base_dir.parent)
+
+    def is_seed_file(self, file_path: Path) -> bool:
+        """Public spelling of :meth:`_is_seed_file`."""
+        return self._is_seed_file(file_path)
 
     def categorize_sql_files(self) -> tuple[list[Path], list[Path]]:
         """Categorize SQL files into schema and seed files.
