@@ -300,7 +300,7 @@ class OperationClassifier:
     # ------------------------------------------------------------------ #
 
     def _classify_ast(self, sql: str) -> list[DdlOperation]:
-        import pglast  # noqa: PLC0415
+        import pglast
 
         ops: list[DdlOperation] = []
         for raw in pglast.parse_sql(sql):

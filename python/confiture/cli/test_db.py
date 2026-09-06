@@ -140,10 +140,10 @@ def provision_template(
         schema_sql = builder.build(schema_only=True)
         _schema_files, seed_files = builder.categorize_sql_files()
         if seed_profile is not None:
-            from confiture.core.seed_applier import _apply_profile_filter
+            from confiture.core.seed.applier import apply_profile_filter
 
             profile_obj = builder.env_config.seed.get_profile(seed_profile)
-            seed_files = _apply_profile_filter(seed_files, profile_obj)
+            seed_files = apply_profile_filter(seed_files, profile_obj)
         status = provisioner.provision_template(
             template,
             schema_hash=schema_hash,

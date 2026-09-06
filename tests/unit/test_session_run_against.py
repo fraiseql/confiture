@@ -1,12 +1,13 @@
 """Unit tests for MigratorSession.run_against()."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
+from tests.unit._doubles import injected_loader
 
 
 def _sql_text(statement: object) -> str:
@@ -20,12 +21,13 @@ def _make_session(conn=None):
     """Return a MigratorSession wired to a mock connection."""
     if conn is None:
         conn = MagicMock()
-    session = MigratorSession.__new__(MigratorSession)
-    session._config = None
-    session._migrations_dir = Path("db/migrations")
-    session._database_url_override = "postgresql://localhost/preflight"
-    session._migration_table_override = "tb_confiture"
-    session._conn = conn
+    session = MigratorSession(
+        None,
+        Path("db/migrations"),
+        database_url_override="postgresql://localhost/preflight",
+        migration_table_override="tb_confiture",
+    )
+    session._conn = conn  # entered by hand: the tests drive run_against() directly
     session._migrator = MagicMock()
     return session, conn
 
@@ -61,7 +63,7 @@ def _mock_migration_class(
 
 def test_run_against_all_pass():
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(fail=False)
         result = session.run_against(
             [Path("db/migrations/20260428000000_a.up.sql")],
@@ -75,7 +77,7 @@ def test_run_against_all_pass():
 def test_run_against_no_commits():
     """up() is called directly; connection.commit() must never be called."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(fail=False)
         session.run_against(
             [Path("db/migrations/20260428000000_a.up.sql")],
@@ -87,7 +89,7 @@ def test_run_against_no_commits():
 def test_run_against_outer_rollback():
     """ROLLBACK TO SAVEPOINT preflight_run is called exactly once in finally."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(fail=False)
         session.run_against(
             [Path("db/migrations/20260428000000_a.up.sql")],
@@ -124,7 +126,7 @@ def test_run_against_continues_past_failure():
             fail=fail,
         )
 
-    with patch("confiture.core.migrator.load_migration_class", side_effect=lmc_side_effect):
+    with injected_loader(side_effect=lmc_side_effect):
         result = session.run_against(files, against_url="postgresql://localhost/preflight")
 
     assert result.all_passed is False
@@ -170,7 +172,7 @@ def test_run_against_outside_context_raises():
 def test_non_transactional_skipped_by_default():
     """Non-transactional migration is skipped when allow_non_transactional=False."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(
             version="20260428000000",
             name="add_idx",
@@ -194,7 +196,7 @@ def test_non_transactional_skipped_by_default():
 def test_missing_transactional_attr_treated_as_transactional():
     """Migration without transactional attribute defaults to True (safe path)."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(missing_transactional=True, fail=False)
         result = session.run_against(
             [Path("db/migrations/20260428000000_a.up.sql")],
@@ -214,7 +216,7 @@ def test_missing_transactional_attr_treated_as_transactional():
 def test_non_transactional_runs_when_allowed():
     """Non-transactional migration runs in autocommit when allow_non_transactional=True."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(
             version="20260428000000",
             name="add_idx",
@@ -244,7 +246,7 @@ def test_non_transactional_runs_when_allowed():
 def test_non_transactional_failure_when_allowed():
     """Non-transactional migration that fails is recorded; db_consumed still True."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(
             version="20260428000000",
             name="add_idx",
@@ -271,7 +273,7 @@ def test_non_transactional_failure_when_allowed():
 def test_per_migration_savepoint_set_and_released_on_success():
     """SAVEPOINT sp_{version} is set and RELEASED when migration succeeds."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(version="20260428000000", fail=False)
         session.run_against(
             [Path("db/migrations/20260428000000_a.up.sql")],
@@ -285,7 +287,7 @@ def test_per_migration_savepoint_set_and_released_on_success():
 def test_per_migration_savepoint_rolled_back_on_failure():
     """ROLLBACK TO SAVEPOINT + RELEASE are called when migration fails."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(version="20260428111111", fail=True)
         session.run_against(
             [Path("db/migrations/20260428111111_bad.up.sql")],
@@ -299,7 +301,7 @@ def test_per_migration_savepoint_rolled_back_on_failure():
 def test_outer_rollback_runs_even_on_first_migration_failure():
     """ROLLBACK TO SAVEPOINT preflight_run fires in finally even if first migration fails."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(fail=True)
         session.run_against(
             [Path("db/migrations/20260428000000_bad.up.sql")],
@@ -329,7 +331,7 @@ def test_up_called_not_apply():
         def up(self):
             up_called.append(True)
 
-    with patch("confiture.core.migrator.load_migration_class", return_value=_TrackedMigration):
+    with injected_loader(return_value=_TrackedMigration):
         session.run_against(
             [Path("db/migrations/20260428000000_tracked.up.sql")],
             against_url="postgresql://localhost/preflight",
@@ -343,7 +345,7 @@ def test_up_called_not_apply():
 def test_outer_sp_active_false_skips_rollback_in_finally():
     """When allow_non_transactional=True triggers a commit, no ROLLBACK TO preflight_run."""
     session, mock_conn = _make_session()
-    with patch("confiture.core.migrator.load_migration_class") as mock_lmc:
+    with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(transactional=False, fail=False)
         session.run_against(
             [Path("db/migrations/20260428000000_idx.up.sql")],

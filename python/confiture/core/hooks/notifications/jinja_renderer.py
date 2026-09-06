@@ -82,7 +82,10 @@ class JinjaRenderer(Renderer):
             )
 
         try:
+            # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
             import jinja2  # noqa: F401
+
+            # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
             from jinja2 import nodes as _nodes  # noqa: F401
         except ImportError as exc:
             raise ConfigurationError(
@@ -126,8 +129,13 @@ class JinjaRenderer(Renderer):
 
 def _build_sandbox_env():
     """Construct the SandboxedEnvironment with the v1 envelope."""
+    # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
     from jinja2 import Undefined
+
+    # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
     from jinja2.exceptions import SecurityError
+
+    # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
     from jinja2.sandbox import SandboxedEnvironment
 
     _SUSPICIOUS_NAMES = frozenset(
@@ -159,12 +167,12 @@ def _build_sandbox_env():
 
         __slots__ = ()
 
-        def __init__(  # noqa: D107
+        def __init__(
             self,
-            hint=None,  # noqa: ANN001
-            obj=None,  # noqa: ANN001
-            name=None,  # noqa: ANN001
-            exc=None,  # noqa: ANN001
+            hint=None,
+            obj=None,
+            name=None,
+            exc=None,
         ) -> None:
             if (
                 name
@@ -195,7 +203,7 @@ def _build_sandbox_env():
             }
         )
 
-        def is_safe_attribute(self, obj, attr, value) -> bool:  # noqa: ANN001
+        def is_safe_attribute(self, obj, attr, value) -> bool:
             attr_str = str(attr)
             if attr_str.startswith("_"):
                 return False
@@ -203,7 +211,7 @@ def _build_sandbox_env():
                 return False
             return super().is_safe_attribute(obj, attr, value)
 
-        def unsafe_undefined(self, obj, attribute):  # noqa: ANN001
+        def unsafe_undefined(self, obj, attribute):
             # Default behaviour returns an Undefined that renders to "".
             # That's a silent failure — we want loud failure so SSTI
             # attempts are caught at first read, not at deploy time.
@@ -211,7 +219,7 @@ def _build_sandbox_env():
                 f"access to attribute {attribute!r} on {type(obj).__name__} is forbidden"
             )
 
-        def call(self, __context, __obj, *args, **kwargs):  # noqa: ANN001, ANN204, ARG002
+        def call(self, __context, __obj, *args, **kwargs):  # noqa: ARG002
             # Belt-and-braces: ensure the only callables ever invoked from a
             # template are filters (which the AST validator already restricts).
             # User-context primitives are never callable, so any call() reaching
@@ -224,7 +232,7 @@ def _build_sandbox_env():
     return env
 
 
-def _validate_ast(ast) -> None:  # noqa: ANN001
+def _validate_ast(ast) -> None:
     """Refuse templates with block tags or unexpected node types.
 
     Allowed nodes:
@@ -246,6 +254,7 @@ def _validate_ast(ast) -> None:  # noqa: ANN001
         like ``default``)
       - ``Pair`` (dict-literal item)
     """
+    # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
     from jinja2 import nodes
 
     allowed = (
@@ -283,7 +292,7 @@ def _validate_ast(ast) -> None:  # noqa: ANN001
         _walk_and_validate(node, allowed)
 
 
-def _walk_and_validate(node, allowed: tuple) -> None:  # noqa: ANN001
+def _walk_and_validate(node, allowed: tuple) -> None:
     if not isinstance(node, allowed):
         raise ConfigurationError(
             f"JinjaRenderer template contains forbidden node {type(node).__name__}.  "
@@ -296,8 +305,9 @@ def _walk_and_validate(node, allowed: tuple) -> None:  # noqa: ANN001
         _walk_and_validate(child, allowed)
 
 
-def _validate_filters(ast) -> None:  # noqa: ANN001
+def _validate_filters(ast) -> None:
     """Refuse any filter not on the allow-list."""
+    # Reason: optional dependency — extra 'notifications'; imported where used so the core never requires it
     from jinja2 import nodes
 
     for node in ast.find_all(nodes.Filter):
@@ -346,7 +356,7 @@ def _assert_flat_primitives(d: dict) -> None:
             )
 
 
-def _render_with_timeout(template, ctx: dict, timeout_seconds: float) -> str:  # noqa: ANN001
+def _render_with_timeout(template, ctx: dict, timeout_seconds: float) -> str:
     """Render *template* with *ctx*, aborting after *timeout_seconds*.
 
     Uses a ``threading.Timer`` watchdog plus a cancellation event.  The

@@ -13,6 +13,7 @@ Library API example::
             result = m.up()
 """
 
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 __author__ = "Lionel Hamayon"
@@ -218,14 +219,14 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "MigrationVerifier": ("confiture.core.migration_verifier", "MigrationVerifier"),
     "VerifyResult": ("confiture.core.migration_verifier", "VerifyResult"),
     # Table/schema introspection
-    "SchemaIntrospector": ("confiture.core.introspector", "SchemaIntrospector"),
+    "SchemaIntrospector": ("confiture.core.introspection.tables", "SchemaIntrospector"),
     "IntrospectionResult": ("confiture.models.introspection", "IntrospectionResult"),
     "IntrospectedTable": ("confiture.models.introspection", "IntrospectedTable"),
     "IntrospectedColumn": ("confiture.models.introspection", "IntrospectedColumn"),
     "FKReference": ("confiture.models.introspection", "FKReference"),
     # Seed operations
-    "SeedApplier": ("confiture.core.seed_applier", "SeedApplier"),
-    "ApplyResult": ("confiture.core.seed_applier", "ApplyResult"),
+    "SeedApplier": ("confiture.core.seed.applier", "SeedApplier"),
+    "ApplyResult": ("confiture.core.seed.applier", "ApplyResult"),
     # Large table operations
     "BatchedMigration": ("confiture.core.large_tables", "BatchedMigration"),
     "BatchConfig": ("confiture.core.large_tables", "BatchConfig"),
@@ -300,7 +301,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
 
 
 def _installed_version() -> str:
-    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
 
     try:
         return version("fraiseql-confiture")

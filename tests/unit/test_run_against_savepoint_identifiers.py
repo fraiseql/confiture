@@ -8,21 +8,23 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from psycopg import sql as pgsql
 
 from confiture.core._migrator.session import MigratorSession
+from tests.unit._doubles import injected_loader
 
 
 def _session() -> tuple[MigratorSession, MagicMock]:
     conn = MagicMock()
-    session = MigratorSession.__new__(MigratorSession)
-    session._config = None
-    session._migrations_dir = Path("db/migrations")
-    session._database_url_override = "postgresql://localhost/preflight"
-    session._migration_table_override = "tb_confiture"
-    session._conn = conn
+    session = MigratorSession(
+        None,
+        Path("db/migrations"),
+        database_url_override="postgresql://localhost/preflight",
+        migration_table_override="tb_confiture",
+    )
+    session._conn = conn  # entered by hand: the test drives run_against() directly
     session._migrator = MagicMock()
     return session, conn
 
@@ -43,7 +45,7 @@ def _text(sql: Any) -> str:
 
 def test_savepoint_statements_are_composed() -> None:
     session, conn = _session()
-    with patch("confiture.core.migrator.load_migration_class", return_value=_Migration):
+    with injected_loader(return_value=_Migration):
         session.run_against(
             [Path("db/migrations/20260101120000_t.up.sql")],
             against_url="postgresql://localhost/preflight",

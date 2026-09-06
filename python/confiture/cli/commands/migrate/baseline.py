@@ -11,7 +11,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, open_connection
-from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.core.migrator import parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
 
 

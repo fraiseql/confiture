@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from confiture.core.seed_validation.prep_seed.level_4_runtime import (
+from confiture.core.seed.validation.prep_seed.level_4_runtime import (
     Level4RuntimeValidator,
 )
-from confiture.core.seed_validation.prep_seed.models import (
+from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
 )
 

@@ -17,14 +17,14 @@ from pathlib import Path
 import psycopg
 
 from confiture.core._migrator.discovery import parse_migration_filename
-from confiture.core.introspector import SchemaIntrospector
+from confiture.core.introspection.tables import SchemaIntrospector
 from confiture.models.introspection import IntrospectionResult
 
 
 class BaselineDetector:
     """Detects migration baseline by comparing live DB schema to snapshots.
 
-    Uses the existing :class:`~confiture.core.introspector.SchemaIntrospector`
+    Uses the existing :class:`~confiture.core.introspection.tables.SchemaIntrospector`
     (which queries ``pg_catalog``, not ``information_schema``) to reconstruct
     the live schema as SQL, then normalises and compares it against the
     snapshot files in ``snapshots_dir``.
@@ -163,7 +163,7 @@ class BaselineDetector:
         """Reconstruct the live database schema as SQL using pg_catalog.
 
         Delegates to the existing
-        :class:`~confiture.core.introspector.SchemaIntrospector` (which uses
+        :class:`~confiture.core.introspection.tables.SchemaIntrospector` (which uses
         ``pg_catalog``, not ``information_schema``) to guarantee accurate
         PostgreSQL type names.
 
@@ -230,7 +230,7 @@ class BaselineDetector:
 
         Args:
             result: :class:`~confiture.models.introspection.IntrospectionResult`
-                returned by :class:`~confiture.core.introspector.SchemaIntrospector`.
+                returned by :class:`~confiture.core.introspection.tables.SchemaIntrospector`.
 
         Returns:
             SQL string with one ``CREATE TABLE`` block per table.

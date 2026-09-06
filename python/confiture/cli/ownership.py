@@ -9,6 +9,7 @@ from confiture.cli.helpers import (
     console,
     is_json,
 )
+from confiture.exceptions import ConfigurationError, ValidationError
 from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
 
 
@@ -40,7 +41,6 @@ def _fix_ownership(
 
     if not config_path.exists():
         from confiture.cli.error_json import fail
-        from confiture.exceptions import ConfigurationError
 
         fail(
             ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004"),
@@ -90,7 +90,6 @@ def _fix_ownership(
 
     def _refuse() -> None:
         from confiture.cli.error_json import fail
-        from confiture.exceptions import ValidationError
 
         fail(
             ValidationError(

@@ -7,6 +7,7 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 """
 
 import hashlib
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,7 +18,7 @@ from confiture.core.progress import ProgressManager
 # The seed-path rule lives in core.seed.paths; re-exported for callers that
 # imported it from here.
 from confiture.core.seed.paths import _SEED_DIR_RE, is_seed_path  # noqa: F401
-from confiture.core.validators import CommentValidator
+from confiture.core.validation.comment_validator import CommentValidator
 from confiture.exceptions import SchemaError
 from confiture.models.results import SplitBuildResult
 
@@ -757,7 +758,6 @@ class SchemaBuilder:
         Raises:
             SchemaError: If schema build fails.
         """
-        import time
 
         output_dir = Path(output_dir)
 

@@ -192,7 +192,7 @@ def param_is_explicit(ctx: Any, *params: str) -> bool:
     for param in params:
         try:
             source = ctx.get_parameter_source(param)
-        except Exception:  # noqa: BLE001 — no/!click ctx → treat as default
+        except Exception:
             continue
         name = getattr(source, "name", None)
         if name is not None and name not in ("DEFAULT", "DEFAULT_MAP"):

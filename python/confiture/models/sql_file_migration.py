@@ -76,7 +76,7 @@ def _detect_transactional(up_file: Path) -> bool:
             # The statement is about to be executed: PostgreSQL will reject it
             # with its own error inside the transaction. Nothing to classify.
             return True
-    except Exception:  # noqa: BLE001 — never let detection break migration loading
+    except Exception:
         return True
 
 

@@ -10,7 +10,7 @@ Run with:
 import psycopg
 import pytest
 
-from confiture.core.introspector import SchemaIntrospector
+from confiture.core.introspection.tables import SchemaIntrospector
 
 
 @pytest.fixture

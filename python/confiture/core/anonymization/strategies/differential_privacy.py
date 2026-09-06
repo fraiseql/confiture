@@ -50,6 +50,7 @@ NOT suitable for:
     - High-accuracy requirements (inherent noise trade-off)
 """
 
+import math
 import random
 from dataclasses import dataclass
 from typing import Any
@@ -299,7 +300,6 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         elif self.config.mechanism == "gaussian":
             # Gaussian distribution: normal distribution
             # Variance = 2 * scale^2 / delta (for (ε, δ)-DP)
-            import math
 
             variance = 2 * (scale**2) / self.config.delta
             stddev = math.sqrt(variance)

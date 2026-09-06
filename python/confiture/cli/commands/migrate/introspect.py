@@ -18,7 +18,7 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.core.migrator import parse_migration_filename
 from confiture.exceptions import ConfigurationError
 
 

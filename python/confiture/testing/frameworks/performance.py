@@ -258,6 +258,7 @@ class _SectionTracker:
     def _get_memory_usage_mb(self) -> float | None:
         """Get current memory usage (best effort)."""
         try:
+            # Reason: optional dependency — extra 'psutil (undeclared, best-effort)'; imported where used so the core never requires it
             import psutil  # ty: ignore[unresolved-import]
 
             process = psutil.Process()

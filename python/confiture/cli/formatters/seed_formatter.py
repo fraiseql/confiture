@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
-from confiture.core.seed_applier import ApplyResult
+from confiture.core.seed.applier import ApplyResult
 
 
 def format_apply_result(

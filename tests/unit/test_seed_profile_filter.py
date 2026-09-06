@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from confiture.config.environment import SeedConfig, SeedProfile
-from confiture.core.seed_applier import SeedApplier
+from confiture.core.seed.applier import SeedApplier
 from confiture.exceptions import ConfigurationError
 
 

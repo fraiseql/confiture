@@ -17,6 +17,7 @@ genuine failures travel as ``ConfiturError`` to the ``fail()`` boundary.
 
 from __future__ import annotations
 
+from pathlib import Path as _Path
 from typing import Any
 
 from rich.markup import escape
@@ -140,7 +141,6 @@ def render_security_definer(report: Any, *, json_mode: bool) -> dict[str, Any] |
 
 def render_import_check(result: Any, *, json_mode: bool) -> dict[str, Any] | None:
     """Render the ``--check-imports`` ImportCheckResult."""
-    from pathlib import Path as _Path
 
     if json_mode:
         return {"check": "imports", **result.to_dict()}

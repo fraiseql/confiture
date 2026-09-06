@@ -16,18 +16,19 @@ if TYPE_CHECKING:
         DownToResult,
         MigrateDownResult,
     )
+import time as _time
+
+from confiture.exceptions import ConfigurationError, RollbackError
+from confiture.models.results import MigrationApplied
 
 
 def _rollback_sequence(
     session: MigratorSession, versions: list[str], *, dry_run: bool = False
 ) -> tuple[list, int]:
     """See :meth:`MigratorSession._rollback_sequence`."""
-    import time as _time
 
     # Import through confiture.core.migrator so tests can patch
     # confiture.core.migrator.load_migration_class.
-    import confiture.core.migrator as _m
-    from confiture.models.results import MigrationApplied
 
     assert session._migrator is not None
 
@@ -42,7 +43,7 @@ def _rollback_sequence(
         if migration_file is None:
             continue
 
-        migration_class = _m.load_migration_class(migration_file)
+        migration_class = session.migration_loader(migration_file)
         migration = migration_class(connection=session._conn)
 
         if not dry_run:
@@ -91,7 +92,6 @@ def down(
 ) -> MigrateDownResult:
     """See :meth:`MigratorSession.down`."""
     import confiture.core.migrator as _m
-    from confiture.exceptions import ConfigurationError
     from confiture.models.results import MigrateDownResult
 
     if session._migrator is None:
@@ -163,7 +163,6 @@ def _down_to_under_lock(session: MigratorSession, target: str, *, dry_run: bool)
         REASON_TARGET_NEWER,
         plan_down_to,
     )
-    from confiture.exceptions import RollbackError
     from confiture.models.results import DownToResult
 
     assert session._migrator is not None

@@ -12,7 +12,7 @@ from confiture.core.migration_verifier import MigrationVerifier
 from confiture.core.migrator import MigratorSession
 from confiture.core.syncer import ProductionSyncer
 from confiture.exceptions import ConfigurationError
-from tests.unit._doubles import connection_double
+from tests.unit._doubles import connection_double, injected_connection
 
 
 def test_syncer_closes_source_when_target_connect_fails() -> None:
@@ -38,7 +38,7 @@ def test_session_closes_connection_on_bad_tracking_table(tmp_path: Path) -> None
         migration_table_override="tb; DROP TABLE users",
     )
     with (
-        patch("confiture.core.migrator.create_connection", return_value=conn),
+        injected_connection(conn),
         pytest.raises((ValueError, ConfigurationError)),
     ):
         session.__enter__()

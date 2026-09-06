@@ -19,13 +19,13 @@ if TYPE_CHECKING:
         PreflightResult,
         StatusResult,
     )
+from confiture.exceptions import ConfigurationError
 
 
 def status(session: MigratorSession) -> StatusResult:
     """See :meth:`MigratorSession.status`."""
     from datetime import datetime
 
-    from confiture.exceptions import ConfigurationError
     from confiture.models.results import MigrationInfo, StatusResult
 
     if session._migrator is None:

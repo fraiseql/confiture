@@ -4,12 +4,14 @@ Extends SchemaBuilder and SchemaDiffer to work with git history.
 Enables schema validation against git refs for drift detection.
 """
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.git import GitRepository
+from confiture.exceptions import GitError
 from confiture.models.schema import SchemaDiff
 
 
@@ -141,10 +143,8 @@ class GitSchemaBuilder:
         Raises:
             GitError: If git command fails
         """
-        import subprocess
 
         from confiture.core.git import validate_ref
-        from confiture.exceptions import GitError
 
         # An option-shaped ref would be parsed by git as an option; refuse it
         # before anything is spawned. The `--` then ends option parsing so the

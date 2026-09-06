@@ -9,10 +9,10 @@ function was never updated.
 
 from __future__ import annotations
 
-from confiture.core.seed_validation.prep_seed.level_3_resolvers import (
+from confiture.core.seed.validation.prep_seed.level_3_resolvers import (
     Level3ResolutionValidator,
 )
-from confiture.core.seed_validation.prep_seed.models import (
+from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     ViolationSeverity,
 )

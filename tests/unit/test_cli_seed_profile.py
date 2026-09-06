@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.config.environment import SeedProfile
-from confiture.core.seed_applier import ApplyResult
+from confiture.core.seed.applier import ApplyResult
 from confiture.core.test_db import TemplateState, TemplateStatus
 
 runner = CliRunner()

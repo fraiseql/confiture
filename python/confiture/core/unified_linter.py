@@ -62,7 +62,8 @@ class SQLFluffRunner:
     def available(self) -> bool:
         """Whether sqlfluff is installed."""
         try:
-            import sqlfluff  # noqa: F401, PLC0415  # ty: ignore[unresolved-import]
+            # Reason: optional dependency — extra 'sqlfluff (undeclared, best-effort)'; imported where used so the core never requires it
+            import sqlfluff  # noqa: F401  # ty: ignore[unresolved-import]
 
             return True
         except ImportError:
@@ -72,7 +73,8 @@ class SQLFluffRunner:
         """Run sqlfluff on the given SQL files."""
         if not self.available or not files:
             return []
-        from sqlfluff.api import simple  # noqa: PLC0415  # ty: ignore[unresolved-import]
+        # Reason: optional dependency — extra 'sqlfluff (undeclared, best-effort)'; imported where used so the core never requires it
+        from sqlfluff.api import simple  # ty: ignore[unresolved-import]
 
         issues = []
         for f in files:
@@ -89,7 +91,7 @@ class SQLFluffRunner:
                             rule=violation.get("code"),
                         )
                     )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         return issues
 

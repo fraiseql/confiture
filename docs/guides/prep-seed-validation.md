@@ -250,7 +250,7 @@ For programmatic access to the validation system, use the `PrepSeedOrchestrator`
 
 ```python
 from pathlib import Path
-from confiture.core.seed_validation.prep_seed.orchestrator import (
+from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )

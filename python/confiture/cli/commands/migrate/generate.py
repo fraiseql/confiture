@@ -19,8 +19,8 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
-from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.core.migrator import parse_migration_filename
 from confiture.exceptions import ValidationError
 
 # A migration name becomes a filename and a class name. snake_case only: a `/`

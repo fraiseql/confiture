@@ -12,9 +12,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
 from confiture.core.change_set import ChangeEntry, build_change_set
 from confiture.core.ledger import split_qualified_table
+from confiture.core.migrator import discover_migration_files, parse_migration_filename
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.sql_lexer import split_statements
 
@@ -32,7 +32,7 @@ def row_estimator(connection: Any) -> RowEstimator:
     def estimate(table: str) -> int | None:
         try:
             value = estimator.get_row_count_estimate(split_qualified_table(table)[1])
-        except Exception:  # noqa: BLE001 — statistics are advisory
+        except Exception:
             return None
         return value if value > 0 else None
 

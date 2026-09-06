@@ -5,6 +5,43 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 08 of the 2026-09-06 review: the package boundaries say what the modules do.
+
+### Changed
+
+- ⚠️ **`confiture.core.migrator` is the public face only; the session takes its
+  factories as parameters.** The module used to re-export two call-time
+  wrappers, `create_connection` and `load_migration_class`, whose only purpose
+  was to give tests a name to patch. They are gone. `MigratorSession` (and
+  `Migrator.from_config`) take `connection_factory=` and `migration_loader=`;
+  without them a session reads the class-level defaults
+  `MigratorSession.default_connection_factory` / `default_migration_loader`
+  when it enters, which resolve to `confiture.core.connection` — so an
+  embedder or a test sets one attribute instead of patching a module. The
+  CLI's `migrate up`, `down`, `down-to`, `apply-as` and `preflight` hand the
+  session the CLI's one connection seam (`confiture.cli.helpers.create_connection`).
+- **One seed package.** `core/seed_applier.py`, `core/seed_executor.py`,
+  `core/seed_bridge.py` and `core/seed_validation/` (with `prep_seed`) moved
+  under `confiture.core.seed` as `applier`, `executor`, `bridge` and
+  `validation`. The old import paths keep working through thin shims that are
+  removed at 1.0.0; nothing inside the package uses them, and a test holds it.
+- **One validation package, one introspection package.** `core/validators/`
+  (the comment validator) and `core/config_validator.py` move into
+  `confiture.core.validation`; `core/introspector.py` becomes
+  `confiture.core.introspection.tables`; `introspection/differ_sql.py`, a
+  differ helper, becomes `confiture.core.differ_sql` beside `differ.py`. The
+  old paths are thin shims until 1.0.0.
+- **Function-level imports have a reason or a shrinking budget.** 68 imports
+  of the standard library, `confiture.exceptions` and `confiture.models` —
+  modules that can never form a cycle — are hoisted to module level; the 14
+  optional-dependency guards (jinja2, fastapi, uvicorn, sqlfluff, fraiseql,
+  psutil) say so in a `# Reason:` comment; the remaining in-function imports
+  (startup-cost deferrals and cycle breakers) count against a per-file budget
+  that may only go down. `RUF100` is enforced: 202 `noqa` directives that
+  silenced nothing are gone.
+
 ## [0.52.0] - 2026-09-07
 
 Phase 07 of the 2026-09-06 review: lint and drift capabilities the downstream

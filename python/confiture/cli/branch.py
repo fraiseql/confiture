@@ -9,6 +9,7 @@ Do NOT install pgGit on production databases.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -91,7 +92,6 @@ def branch_list(
         confiture branch list
         confiture branch list --format json
     """
-    import json
 
     client, conn = _get_pggit_client(config)
 

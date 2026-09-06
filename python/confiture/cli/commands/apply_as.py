@@ -22,7 +22,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _get_tracking_table, console, is_json
+from confiture.cli.helpers import _get_tracking_table, connect, console, is_json
 from confiture.cli.options import format_option
 from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError, MigrationError
@@ -151,6 +151,7 @@ def migrate_apply_as(
             database_url_override=raw_url,
             migration_table_override=tracking_table,
             command="confiture migrate apply-as",
+            connection_factory=connect,
         ) as session:
             try:
                 applied = session.apply_one(version, applied_by=role)

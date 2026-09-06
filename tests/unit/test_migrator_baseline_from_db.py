@@ -165,7 +165,7 @@ class TestMigrateBaselineCliArgs:
 
         captured: dict = {}
 
-        def _fake_flow(**kwargs) -> None:  # noqa: ANN003
+        def _fake_flow(**kwargs) -> None:
             captured.update(kwargs)
 
         monkeypatch.setattr(migrate_state, "_baseline_from_db_flow", _fake_flow)

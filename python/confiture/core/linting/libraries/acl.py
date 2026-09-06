@@ -259,13 +259,13 @@ class Acl001GrantCoverage:
         the rest of the lint).
         """
         if migration.name.endswith(".py"):
-            from confiture.core.idempotency.python_migration_extractor import (  # noqa: PLC0415
+            from confiture.core.idempotency.python_migration_extractor import (
                 extract_sql_from_python_migration,
             )
 
             try:
                 result = extract_sql_from_python_migration(migration)
-            except Exception:  # noqa: BLE001 — never let a migration break the lint
+            except Exception:
                 return ""
             return "\n".join(snippet.sql for snippet in result.snippets)
         return migration.read_text()

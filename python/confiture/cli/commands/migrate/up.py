@@ -24,6 +24,7 @@ from confiture.cli.helpers import (
     _find_orphaned_sql_files,
     _get_tracking_table,
     _print_orphaned_files_warning,
+    connect,
     console,
     error_console,
     is_json,
@@ -31,6 +32,7 @@ from confiture.cli.helpers import (
 from confiture.cli.options import format_option
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.locking import resolve_lock_settings
+from confiture.exceptions import MigrationConflictError
 
 
 @cli_boundary
@@ -294,6 +296,7 @@ def migrate_up(
             database_url_override=dsn_from_config(config_data),
             migration_table_override=_get_tracking_table(config_data),
             command="confiture migrate up",
+            connection_factory=connect,
         ) as session:
             if dry_run or dry_run_execute:
                 if not is_json(format_output):
@@ -354,8 +357,6 @@ def _refuse_duplicate_versions(
     duplicates: dict[str, list[Path]], format_output: str, output_file: Path | None
 ) -> None:
     if is_json(format_output):
-        from confiture.exceptions import MigrationConflictError
-
         fail(
             MigrationConflictError(
                 "Duplicate migration versions detected: " + ", ".join(sorted(duplicates)),

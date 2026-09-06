@@ -11,7 +11,7 @@ Tests with real PostgreSQL database to verify:
 
 import pytest
 
-from confiture.core.seed_applier import SeedApplier
+from confiture.core.seed.applier import SeedApplier
 from confiture.exceptions import SeedError
 
 

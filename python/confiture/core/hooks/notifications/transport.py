@@ -296,7 +296,7 @@ def _login_safely(server: smtplib.SMTP, cfg: SmtpConfig) -> None:
         raise
 
 
-def _scrub_password_from_traceback(tb, password: str) -> None:  # noqa: ANN001
+def _scrub_password_from_traceback(tb, password: str) -> None:
     """Truncate *tb* at the first frame whose locals contain *password*.
 
     ``f_locals`` mutation is unreliable on function frames in CPython 3.11+
@@ -325,7 +325,7 @@ def _scrub_password_from_traceback(tb, password: str) -> None:  # noqa: ANN001
         cur = cur.tb_next
 
 
-def _frame_locals_contain(frame, password: str) -> bool:  # noqa: ANN001
+def _frame_locals_contain(frame, password: str) -> bool:
     """Return True if *frame*'s locals or any of its argument-bound names
     contain the cleartext *password* as a str value."""
     try:

@@ -107,7 +107,7 @@ class FunctionSignatureParser:
         return self._parse_pglast_nodes([stmt.stmt for stmt in pglast.parse_sql(sql) or []])
 
     def _parse_pglast_nodes(self, nodes: list[Any]) -> list[FunctionSignature]:
-        from pglast.enums.parsenodes import FunctionParameterMode  # noqa: PLC0415
+        from pglast.enums.parsenodes import FunctionParameterMode
 
         _SKIP_PARAM_MODES = {
             FunctionParameterMode.FUNC_PARAM_OUT,

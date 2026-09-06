@@ -13,7 +13,7 @@ import pytest
 from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.config.environment import SeedProfile
-from confiture.core.seed_applier import SeedApplier
+from confiture.core.seed.applier import SeedApplier
 from confiture.core.temp_database import TempDatabase, _maintenance_url
 
 pytestmark = pytest.mark.integration

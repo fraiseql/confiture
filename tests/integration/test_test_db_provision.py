@@ -359,7 +359,7 @@ class TestConcurrencyAndPrune:
         def _clone(i: int) -> None:
             try:
                 provisioner.clone(_TEMPLATE, f"{_CLONE}_{i}")
-            except Exception as e:  # noqa: BLE001 - recorded for assertion
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=_clone, args=(i,)) for i in range(6)]
@@ -411,7 +411,7 @@ class TestBoundedCloneConcurrency:
             def _clone() -> None:
                 try:
                     provisioner.clone(_TEMPLATE, f"{_CLONE}_0", max_concurrency=cap, backoff=0)
-                except Exception as e:  # noqa: BLE001 - recorded for assertion
+                except Exception as e:
                     errors.append(e)
                 finally:
                     done.set()
@@ -438,7 +438,7 @@ class TestBoundedCloneConcurrency:
         def _clone(i: int) -> None:
             try:
                 provisioner.clone(_TEMPLATE, f"{_CLONE}_{i}", max_concurrency=2, backoff=0)
-            except Exception as e:  # noqa: BLE001 - recorded for assertion
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=_clone, args=(i,)) for i in range(6)]

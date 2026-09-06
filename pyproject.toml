@@ -208,6 +208,7 @@ select = [
     "UP",  # pyupgrade
     "ARG", # flake8-unused-arguments
     "SIM", # flake8-simplify
+    "RUF100",  # unused noqa directives (Phase 08): a noqa that silences nothing is noise
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)

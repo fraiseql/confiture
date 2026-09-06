@@ -195,7 +195,7 @@ class _FakeCtx:
     def __init__(self, sources: dict) -> None:
         self._sources = sources
 
-    def get_parameter_source(self, name: str):  # noqa: ANN201
+    def get_parameter_source(self, name: str):
         return self._sources.get(name)
 
 

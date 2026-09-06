@@ -8,7 +8,7 @@ from confiture.cli.helpers import _emit_hint, _output_json, console
 from confiture.core.idempotency.python_migration_extractor import (
     is_migration_file as _is_migration_file,
 )
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, NotAGitRepositoryError
 from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
 
 
@@ -138,8 +138,6 @@ def _scope_files_to_git(
 
     repo = GitRepository()
     if not repo.is_git_repo():
-        from confiture.exceptions import NotAGitRepositoryError
-
         raise NotAGitRepositoryError(
             f"Not a git repository: {Path.cwd()}",
             resolution_hint=(

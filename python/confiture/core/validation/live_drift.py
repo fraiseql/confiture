@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from confiture.core.validation.context import ValidationContext
 
 
-def check_live_drift(  # noqa: ANN201
+def check_live_drift(
     config_path: Path,
     schema_file: Path | None,
     ctx: ValidationContext | None = None,
@@ -79,7 +79,7 @@ def check_live_drift(  # noqa: ANN201
         conn.close()
 
 
-def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDriftDetector:  # noqa: ANN001
+def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDriftDetector:
     """A detector honouring the config's ``drift:`` block and the CLI flag (#226)."""
     from confiture.core.drift import drift_config_from
 

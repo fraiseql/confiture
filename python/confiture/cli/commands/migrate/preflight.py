@@ -5,6 +5,7 @@ Split out of the monolithic migrate command modules (Phase 04, Cycle 8).
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,18 +19,18 @@ from confiture.cli.helpers import (
     _get_tracking_table,
     _output_json,
     _resolve_config,
+    connect,
     console,
     error_console,
     is_json,
     open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core._migrator.discovery import parse_migration_filename
-from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import load_config
-from confiture.core.migrator import Migrator
+from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
 from confiture.core.schema_facts import SchemaFacts
 from confiture.exceptions import ConfigurationError
+from confiture.models.preflight import DependentAnalysisReport
 from confiture.url_redaction import redact_url
 
 _CHANGE_SET_TIER_COLOR = {
@@ -55,8 +56,8 @@ def _preflight_tracking_table(config: Path | None) -> str:
     if config is None or not Path(config).exists():
         return "tb_confiture"
 
-    from confiture.cli.helpers import _get_tracking_table  # noqa: PLC0415
-    from confiture.core.connection import load_config  # noqa: PLC0415
+    from confiture.cli.helpers import _get_tracking_table
+    from confiture.core.connection import load_config
 
     try:
         return _get_tracking_table(load_config(Path(config)))
@@ -83,11 +84,10 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
     database error still degrades to "absent and empty", because the worst case
     is one extra advisory hint.
     """
-    import contextlib
 
     from psycopg import sql as pgsql
 
-    from confiture.core.ledger import ledger_exists, table_identifier  # noqa: PLC0415
+    from confiture.core.ledger import ledger_exists, table_identifier
 
     conn = getattr(session, "_conn", None)
     if conn is None:
@@ -106,7 +106,7 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
         with contextlib.suppress(Exception):
             conn.rollback()
         return (True, row is None)
-    except Exception:  # noqa: BLE001 — best-effort: permission denied / connection drop
+    except Exception:
         with contextlib.suppress(Exception):
             conn.rollback()
         return (False, True)
@@ -126,14 +126,14 @@ def _collect_preflight_facts(session: MigratorSession) -> SchemaFacts:
     """
     import contextlib
 
-    from confiture.core.schema_facts import collect_schema_facts  # noqa: PLC0415
+    from confiture.core.schema_facts import collect_schema_facts
 
     conn = getattr(session, "_conn", None)
     if conn is None:
         return SchemaFacts()
     try:
         facts = collect_schema_facts(conn)
-    except Exception:  # noqa: BLE001 — best-effort; never fail preflight for a refinement
+    except Exception:
         facts = SchemaFacts()
     # Leave no aborted transaction behind for run_against.
     with contextlib.suppress(Exception):
@@ -160,7 +160,7 @@ def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tupl
         else:
             return False, False
         return bool(e.infrastructure.replicas), bool(e.migration.allow_unsafe_under_replication)
-    except Exception:  # noqa: BLE001 — policy degrades to warn-by-default
+    except Exception:
         return False, False
 
 
@@ -330,7 +330,6 @@ def _run_dependent_check(
     decides how to surface that. ``mode`` is ``"fail"`` (severity=error) or
     ``"warn"`` (severity=info).
     """
-    from confiture.models.preflight import DependentAnalysisReport
 
     try:
         from confiture.core.cor_extractor import find_cor_targets_in_file
@@ -815,7 +814,7 @@ def _against_pending_files(
             ),
         )
     except Exception as e:
-        from confiture.exceptions import ConfigurationError, ConfiturError  # noqa: PLC0415
+        from confiture.exceptions import ConfigurationError, ConfiturError
 
         # #152: a precedence conflict (CONFIG_007) or missing source (CONFIG_010)
         # — and any other ConfiturError — surfaces with its own exit code +
@@ -864,6 +863,7 @@ def _run_against(
             migrations_dir=migrations_dir,
             database_url_override=against,
             migration_table_override=tracking_table,
+            connection_factory=connect,
         )
         with session:
             # Snapshot whether the target's tracking table is empty BEFORE the
@@ -886,7 +886,7 @@ def _run_against(
     except Exception as e:
         # #151: an unreachable --against URL is a connection failure → exit 3
         # (CONFIG_006), with the shared {ok:false, error} envelope in JSON mode.
-        from confiture.exceptions import ConfigurationError  # noqa: PLC0415
+        from confiture.exceptions import ConfigurationError
 
         fail(
             ConfigurationError(

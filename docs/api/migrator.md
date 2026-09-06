@@ -331,6 +331,32 @@ config for you and guarantees cleanup.
 
 ---
 
+## Testing without a database — injected factories
+
+`MigratorSession` takes what it needs to open a connection and to turn a
+migration file into a class as parameters, so a test or an embedder injects
+instead of patching a module:
+
+```python
+from confiture.core.migrator import Migrator, MigratorSession
+
+session = MigratorSession(
+    None,
+    Path("db/migrations"),
+    database_url_override="postgresql://localhost/test",
+    connection_factory=my_pool.connection,      # called with the URL
+    migration_loader=my_loader,                 # called with the migration file path
+)
+with Migrator.from_config("db/environments/test.yaml", connection_factory=fake) as m:
+    m.status()
+```
+
+Without them a session reads the class-level defaults
+`MigratorSession.default_connection_factory` and `default_migration_loader`
+when it enters (they resolve to `confiture.core.connection`), so setting one
+attribute changes every session in a test block. `confiture.core.migrator`
+itself holds no patch seam.
+
 ## Error Handling
 
 ```python

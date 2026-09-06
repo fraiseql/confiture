@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -41,7 +42,7 @@ from confiture.core.ledger import (
 )
 from confiture.core.locking import LockConfig
 from confiture.core.progress import ProgressManager
-from confiture.exceptions import SQLError
+from confiture.exceptions import MigrationError, SQLError
 from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
@@ -129,7 +130,7 @@ class Migrator:
             if isinstance(query, pgsql.Composable):
                 try:
                     sql_text = query.as_string(self.connection)
-                except Exception:  # noqa: BLE001 — fall through to context-free render
+                except Exception:
                     sql_text = query.as_string(None)
             else:
                 sql_text = str(query)
@@ -779,7 +780,6 @@ class Migrator:
             >>> applied = migrator.migrate_up()
         """
         from confiture.core._migrator.session import MigratorSession  # session imports engine
-        from confiture.exceptions import MigrationError
 
         lock_config = lock_config or LockConfig()
         checksum_config = checksum_config or ChecksumConfig()
@@ -856,6 +856,8 @@ class Migrator:
         config: Environment | Path | str,
         *,
         migrations_dir: Path | str = Path("db/migrations"),
+        connection_factory: Callable[[Any], Any] | None = None,
+        migration_loader: Callable[[Path], type] | None = None,
     ) -> MigratorSession:
         """Create a managed MigratorSession from an Environment config.
 
@@ -885,7 +887,12 @@ class Migrator:
             ...     if status.has_pending:
             ...         result = m.up()
         """
-        return factory.from_config(config, migrations_dir=migrations_dir)
+        return factory.from_config(
+            config,
+            migrations_dir=migrations_dir,
+            connection_factory=connection_factory,
+            migration_loader=migration_loader,
+        )
 
 
 def _progress_observer(progress: ProgressManager) -> Any:

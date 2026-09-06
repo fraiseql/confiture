@@ -1,7 +1,7 @@
 """Sequential seed application for ``confiture build --sequential``.
 
 Owns the connection for the seed pass — open, apply every seed file in order
-through :class:`~confiture.core.seed_applier.SeedApplier`, close — and reports
+through :class:`~confiture.core.seed.applier.SeedApplier`, close — and reports
 the result; the CLI renders it.
 """
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from confiture.config.environment import SeedProfile
-    from confiture.core.seed_applier import ApplyResult
+    from confiture.core.seed.applier import ApplyResult
 
 
 def apply_seed_files(
@@ -36,7 +36,7 @@ def apply_seed_files(
         SeedError: A seed file failed and ``continue_on_error`` is False, or the
             pass failed outright.
     """
-    from confiture.core.seed_applier import SeedApplier
+    from confiture.core.seed.applier import SeedApplier
 
     if not database_url:
         raise ConfigurationError(

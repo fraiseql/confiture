@@ -83,9 +83,13 @@ compare Rich output.
 Connections are injected, never patched at the source. `core.connection.open_connection(config, factory=...)`
 takes the factory as a keyword (bound at definition time, so replacing the module's `create_connection`
 changes nothing). A CLI command test replaces the CLI's one seam, `confiture.cli.helpers.create_connection`
-(what `cli.helpers.open_connection` / `connect` call); a `migrate up`/`down` test replaces the session's
-seam, `confiture.core.migrator.create_connection`. `tests/unit/test_no_core_connection_patch.py` fails on
-any test that patches `confiture.core.connection.create_connection`.
+(what `cli.helpers.open_connection` / `connect` call) — `migrate up`/`down`/`apply-as`/`preflight` hand that
+same seam to their `MigratorSession` as `connection_factory=connect`. A library test injects:
+`MigratorSession(..., connection_factory=..., migration_loader=...)`, `Migrator.from_config(..., connection_factory=...)`,
+or the shared doubles `injected_connection(conn)` / `injected_loader(return_value=cls)` (context managers that set
+the class-level `MigratorSession.default_*` for the block). `confiture.core.migrator` holds no patch seam
+(`tests/unit/test_session_injection.py`); `tests/unit/test_no_core_connection_patch.py` fails on any test that
+patches `confiture.core.connection.create_connection`.
 
 ## Assertion discipline
 

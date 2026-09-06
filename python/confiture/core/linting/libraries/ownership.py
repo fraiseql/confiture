@@ -257,7 +257,7 @@ class Own001OwnershipCoverage:
         never appear as top-level statements, so an ``EXECUTE 'ALTER …
         OWNER TO …'`` wrapped in a DO block correctly does NOT count.
         """
-        import pglast  # noqa: PLC0415
+        import pglast
 
         creates: list[_CreateRecord] = []
         alters: list[_AlterOwnerRecord] = []

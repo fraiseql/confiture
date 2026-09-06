@@ -32,7 +32,7 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
+from confiture.core.migrator import discover_migration_files, parse_migration_filename
 
 
 @cli_boundary

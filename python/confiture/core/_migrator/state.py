@@ -19,6 +19,8 @@ from confiture.exceptions import MigrationError
 if TYPE_CHECKING:
     from confiture.core._migrator.engine import Migrator
     from confiture.models.migration import Migration
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -226,8 +228,6 @@ def _run_coroutine(coro: Any) -> Any:
     runs on a worker thread with its own loop, so hooks fire instead of being
     skipped. Hook failures propagate to the caller.
     """
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
 
     try:
         asyncio.get_running_loop()

@@ -146,7 +146,7 @@ class MigrationAccompanimentChecker:
                 return []
 
             from confiture.core.function_signature_checker import (
-                FunctionSignatureChecker,  # noqa: PLC0415
+                FunctionSignatureChecker,
             )
 
             checker = FunctionSignatureChecker(self.git_repo)
@@ -175,7 +175,7 @@ class MigrationAccompanimentChecker:
                 return []
 
             from confiture.core.function_body_checker import (
-                FunctionBodyChecker,  # noqa: PLC0415
+                FunctionBodyChecker,
             )
 
             checker = FunctionBodyChecker(self.git_repo)

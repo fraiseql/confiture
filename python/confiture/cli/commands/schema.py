@@ -1,5 +1,6 @@
 """Schema commands: init, build, lint, introspect."""
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -22,13 +23,16 @@ from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.options import format_option
 from confiture.core.builder import SchemaBuilder
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
-from confiture.core.introspector import SchemaIntrospector
+from confiture.core.introspection.tables import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.schema_linter import LintConfig as LinterConfig
 from confiture.core.linting.schema_linter import LintReport as LinterReport
 from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
 from confiture.core.seed.paths import is_seed_path
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
+from confiture.models.lint import LintSeverity
+from confiture.models.results import BuildResult
+from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
 
 # Valid output formats for linting (re-exported so main.py can keep LINT_FORMATS there)
 LINT_FORMATS = ("table", "json", "csv")
@@ -36,8 +40,6 @@ LINT_FORMATS = ("table", "json", "csv")
 
 def _violation_to_unified_issue(v, tool: str, file=None):
     """Convert a LintViolation to a UnifiedLintIssue."""
-    from confiture.models.lint import LintSeverity
-    from confiture.models.unified_lint import UnifiedLintIssue
 
     return UnifiedLintIssue(
         tool=tool,
@@ -529,7 +531,6 @@ def _duplicate_gate(
     payload = [duplicate.to_dict() for duplicate in duplicates]
     if fail:
         from confiture.cli.formatters.build_formatter import format_build_result
-        from confiture.models.results import BuildResult
 
         result = BuildResult(
             success=False,
@@ -712,9 +713,9 @@ def _write_dump_artifact(
     else:
         _schema_files, seed_paths = builder.categorize_sql_files()
         if seed_profile_obj is not None:
-            from confiture.core.seed_applier import _apply_profile_filter
+            from confiture.core.seed.applier import apply_profile_filter
 
-            seed_paths = _apply_profile_filter(seed_paths, seed_profile_obj)
+            seed_paths = apply_profile_filter(seed_paths, seed_profile_obj)
         artifact_seed_files = seed_paths or None
     artifact_result = build_schema_artifact(
         server_url=server_url,
@@ -998,7 +999,7 @@ def _replica_lint(
         _env = Environment.load(env, project_dir=project_dir)
         has_replicas = bool(_env.infrastructure.replicas)
         bypass = _env.migration.allow_unsafe_under_replication
-    except Exception:  # noqa: BLE001 — replica policy degrades to defaults
+    except Exception:
         pass
     violations = Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
         migrations_dir
@@ -1043,14 +1044,14 @@ def _security_definer_lint(
             sec_cfg = _lsl(_lc(cfg_path), cfg_path, require=False)
         if sec_cfg is not None and not sec_cfg.enabled:
             sec_cfg = None
-    except Exception:  # noqa: BLE001 — degrade gracefully
+    except Exception:
         sec_cfg = None
     if sec_cfg is None:
         return False
     severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
     try:
         ddl_paths = SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
-    except Exception:  # noqa: BLE001
+    except Exception:
         ddl_paths = sorted(Path("db/schema").rglob("*.sql")) if Path("db/schema").exists() else []
     violations = Sec002SecurityDefinerSearchPath(
         apply_to=sec_cfg.apply_to, ignore=sec_cfg.ignore, severity=severity
@@ -1321,13 +1322,9 @@ def lint_unified(
         except Exception as e:
             console.print(f"[yellow]Tree lint skipped: {e}[/yellow]")
 
-    from confiture.models.unified_lint import UnifiedLintResult
-
     unified_result = UnifiedLintResult(issues=all_issues)
 
     if format_type == "json":
-        import json
-
         print(json.dumps(unified_result.to_dict(), indent=2))
     else:
         if not unified_result.issues:

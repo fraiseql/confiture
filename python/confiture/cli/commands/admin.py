@@ -21,6 +21,7 @@ from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
     DatabaseNotInitializedError,
+    RestoreError,
 )
 
 #: Shared by `verify-checksums` and `migrate verify` — both hit the same state
@@ -474,7 +475,7 @@ def validate_config(
 
     JSON output: {valid, config_source, migrations_path, migration_count, issues[]}.
     """
-    from confiture.core.config_validator import ConfigValidator
+    from confiture.core.validation.config_validator import ConfigValidator
 
     # Source selection: an explicit --config validates that YAML; a
     # --database-url flag is validated for *format* as an issue (not raised);
@@ -627,7 +628,6 @@ def restore(
       confiture restore prod.pgdump --database staging --no-refresh-matviews
     """
     from confiture.core.restorer import DatabaseRestorer, RestoreOptions
-    from confiture.exceptions import RestoreError
 
     if not backup_file.exists():
         fail(

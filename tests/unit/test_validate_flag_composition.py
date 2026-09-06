@@ -107,7 +107,7 @@ def _invoke(*flags: str) -> object:
     ids=[f"{a[0]}+{b[0]}" for a, b in STATIC_PAIRS],
 )
 def test_static_flag_pairs_run_both_checks(
-    project: Path,  # noqa: ARG001 — fixture chdirs; the path itself is unused
+    project: Path,
     first: tuple[str, str],
     second: tuple[str, str],
 ) -> None:
@@ -122,7 +122,7 @@ def test_static_flag_pairs_run_both_checks(
     assert second_marker in result.output, f"{second_flag} did not run: {result.output!r}"
 
 
-def test_every_static_flag_runs_alone(project: Path) -> None:  # noqa: ARG001
+def test_every_static_flag_runs_alone(project: Path) -> None:
     """Sanity anchor: each marker is genuinely produced by its own flag.
 
     Without this the matrix could pass vacuously if a marker leaked from an
@@ -171,7 +171,7 @@ def test_failing_first_check_still_runs_the_second(project: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_single_check_json_shape_is_unchanged(project: Path) -> None:  # noqa: ARG001
+def test_single_check_json_shape_is_unchanged(project: Path) -> None:
     """One check still emits its own documented payload, not a wrapper."""
     result = _invoke("--check-acls", "--format", "json")
 
@@ -181,7 +181,7 @@ def test_single_check_json_shape_is_unchanged(project: Path) -> None:  # noqa: A
     assert "checks" not in payload
 
 
-def test_composed_json_is_one_document_keyed_by_check(project: Path) -> None:  # noqa: ARG001
+def test_composed_json_is_one_document_keyed_by_check(project: Path) -> None:
     """Two checks emit a single parseable envelope holding both payloads."""
     result = _invoke("--check-acls", "--check-imports", "--format", "json")
 
@@ -211,7 +211,7 @@ def test_composed_json_reports_failed_status(project: Path) -> None:
 
 
 @pytest.mark.parametrize("report_flag", ["--list-patterns", "--list-unmigrated-bodies"])
-def test_report_modes_reject_composition(project: Path, report_flag: str) -> None:  # noqa: ARG001
+def test_report_modes_reject_composition(project: Path, report_flag: str) -> None:
     result = _invoke(report_flag, "--check-acls")
 
     assert result.exit_code == 5, result.output
@@ -233,7 +233,7 @@ def test_report_modes_reject_composition(project: Path, report_flag: str) -> Non
         "--require-grant-migration",
     ],
 )
-def test_idempotent_no_longer_rejects_the_git_flags(project: Path, git_flag: str) -> None:  # noqa: ARG001
+def test_idempotent_no_longer_rejects_the_git_flags(project: Path, git_flag: str) -> None:
     """No usage error for a combination that composed since 0.40.0.
 
     This project is not a git repo, so the git group fails on its own terms

@@ -53,7 +53,7 @@ def schema_diff(
     try:
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         fail(
             DifferError(
                 f"Cannot parse schema: {exc}",
@@ -66,7 +66,7 @@ def schema_diff(
     result = DiffResult.from_schema_diff(diff)
 
     if format_type == "json":
-        print(json.dumps(result.to_dict(), indent=2))  # noqa: T201
+        print(json.dumps(result.to_dict(), indent=2))
     else:
         print_diff_text(result, console)
 

@@ -9,6 +9,7 @@ from typing import Any
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
+from confiture.exceptions import MigrationError, base_message
 from confiture.models.results import (
     MigrateDiffResult,
     MigrateDownResult,
@@ -342,7 +343,6 @@ def show_migration_error_details(
         applied_count: Number of migrations that succeeded before this one
         console: Rich Console to print to
     """
-    from confiture.exceptions import MigrationError, base_message
 
     console.print("\n[red]Failed Migration Details:[/red]")
     console.print(f"  Version: {failed_migration.version}")

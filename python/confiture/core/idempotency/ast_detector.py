@@ -242,7 +242,7 @@ def _make_match(
     sql: str,
     severity: str = "error",
 ) -> PatternMatch:
-    from confiture.core.idempotency.patterns import PatternMatch  # noqa: PLC0415
+    from confiture.core.idempotency.patterns import PatternMatch
 
     captures = captures_from_ast(pattern, ctx.stmt)
     return PatternMatch(
@@ -476,7 +476,7 @@ def _detect_via_ast(sql: str) -> list[PatternMatch]:
             The dispatcher in :mod:`patterns` catches this and falls
             through to the regex backend.
     """
-    import pglast  # noqa: PLC0415 — only imported when this backend is selected
+    import pglast
 
     statements = _iter_statements(sql, pglast)
     drops = _collect_pair_drops(statements)

@@ -15,7 +15,10 @@ Commands:
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
+from uuid import uuid4
 
 import psycopg
 import typer
@@ -47,7 +50,6 @@ def _output_json(data: dict | list, pretty: bool = True) -> None:
         data: Dictionary or list to output as JSON
         pretty: Whether to pretty-print (indent) the JSON
     """
-    import json
 
     indent = 2 if pretty else None
     print(json.dumps(data, indent=indent))
@@ -65,7 +67,6 @@ def _get_connection(database_url: str | None = None) -> psycopg.Connection:
     url = database_url
     if not url:
         # Try environment variable
-        import os
 
         url = os.getenv("DATABASE_URL") or os.getenv("CONFITURE_DB_URL")
     if not url:
@@ -306,7 +307,6 @@ def check(
         tables_list = [t.strip() for t in tables_affected.split(",")]
 
     # Create a temporary intent for checking
-    from uuid import uuid4
 
     from confiture.integrations.pggit.coordination import Intent
 

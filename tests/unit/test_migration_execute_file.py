@@ -239,7 +239,7 @@ class TestExecuteFileResolvesFromTheProjectRoot:
         monkeypatch.chdir(tmp_path)
         (tmp_path / "here.sql").write_text("SELECT 1;")
         namespace: dict[str, object] = {}
-        exec(  # noqa: S102 — building a class with no source file is the point
+        exec(
             "from confiture.models.migration import Migration\n"
             "class InMemory(Migration):\n"
             "    version = '20260101000001'\n"

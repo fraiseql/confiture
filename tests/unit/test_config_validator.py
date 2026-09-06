@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from confiture.core.config_validator import ConfigValidator
+from confiture.core.validation.config_validator import ConfigValidator
 
 
 def _project(

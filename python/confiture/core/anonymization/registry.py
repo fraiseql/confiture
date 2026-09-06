@@ -11,6 +11,7 @@ Features:
 """
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
@@ -75,7 +76,6 @@ class StrategyRegistry:
             >>> name = StrategyRegistry.register_from_file("custom_strategy.py")
             >>> strategy = StrategyRegistry.get(name)
         """
-        from pathlib import Path
 
         from confiture.core.anonymization.plugins.import_lint import load_strategy
 

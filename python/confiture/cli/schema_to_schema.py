@@ -25,6 +25,7 @@ from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
     import psycopg
+import contextlib
 
 schema_to_schema_app = typer.Typer(
     help="Medium 4: zero-downtime schema migration via Foreign Data Wrapper (FDW).",
@@ -75,7 +76,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
         return connect(load_config(candidate))
     except ConfiturError:
         raise
-    except Exception as exc:  # noqa: BLE001 — surfaced as a connection ConfigurationError
+    except Exception as exc:
         raise ConfigurationError(
             f"Could not connect to '{spec}': {exc}", error_code="CONFIG_006"
         ) from exc
@@ -109,7 +110,7 @@ def _load_mapping_file(path: Path) -> dict[str, dict[str, Any]]:
     return data
 
 
-def _migrator(source: str, target: str):  # noqa: ANN202 — returns SchemaToSchemaMigrator
+def _migrator(source: str, target: str):
     from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 
     return SchemaToSchemaMigrator(_resolve_connection(source), _resolve_connection(target))
@@ -329,9 +330,8 @@ def s2s_cleanup(
         _close(m)
 
 
-def _close(migrator: Any) -> None:  # noqa: ANN401 — best-effort connection cleanup
+def _close(migrator: Any) -> None:
     """Close both connections held by the migrator, ignoring teardown errors."""
-    import contextlib
 
     if migrator is None:
         return

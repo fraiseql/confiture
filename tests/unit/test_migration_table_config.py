@@ -222,7 +222,7 @@ migration:
         runner = CliRunner()
 
         with (
-            patch("confiture.core.migrator.create_connection") as mock_conn_factory,
+            patch("confiture.cli.helpers.create_connection") as mock_conn_factory,
             patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.connection.load_config") as mock_load_config,
         ):

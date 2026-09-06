@@ -130,7 +130,7 @@ confiture seed validate --consistency-check
 
 ### Build Scripts
 ```python
-from confiture.core.seed_validation.consistency_validator import ConsistencyValidator
+from confiture.core.seed.validation.consistency_validator import ConsistencyValidator
 validator = ConsistencyValidator()
 report = validator.validate(seed_data, schema_context)
 if report.has_violations:
@@ -161,9 +161,9 @@ if report.has_violations:
 
 ## See Also
 
-- [DataExtractor](../../python/confiture/core/seed_validation/data_extractor.py) - SQL parsing
-- [ForeignKeyDepthValidator](../../python/confiture/core/seed_validation/foreign_key_validator.py) - FK validation
-- [ConsistencyValidator](../../python/confiture/core/seed_validation/consistency_validator.py) - Orchestrator
+- [DataExtractor](../../python/confiture/core/seed/validation/data_extractor.py) - SQL parsing
+- [ForeignKeyDepthValidator](../../python/confiture/core/seed/validation/foreign_key_validator.py) - FK validation
+- [ConsistencyValidator](../../python/confiture/core/seed/validation/consistency_validator.py) - Orchestrator
 - [Phase 11 Plan](../../.phases/phase-11-data-consistency.md) - Implementation details
 
 ---

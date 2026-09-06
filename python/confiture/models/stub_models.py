@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from confiture.core.introspection.type_mapping import TypeMapper
     from confiture.models.function_info import FunctionInfo
+import re
+
+from confiture.models.introspection import JSONBKey
 
 
 def _to_pascal_case(name: str) -> str:
@@ -44,9 +47,6 @@ class StubFunction:
     @classmethod
     def _extract_jsonb_keys(cls, source: str) -> list:
         """Extract JSONB keys from function source using regex (no pglast required)."""
-        import re
-
-        from confiture.models.introspection import JSONBKey
 
         keys: list = []
         pattern = re.compile(r"jsonb_build_object\s*\((.*?)\)", re.DOTALL | re.IGNORECASE)

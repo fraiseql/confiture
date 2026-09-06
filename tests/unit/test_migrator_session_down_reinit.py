@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateDownResult, MigrateReinitResult, MigrationApplied
-from tests.unit._doubles import connection_double
+from tests.unit._doubles import connection_double, injected_connection, injected_loader
 
 
 def _make_env() -> Environment:
@@ -24,7 +24,7 @@ def _make_env() -> Environment:
 
 def _make_session(env: Environment, migrations_dir: Path) -> tuple[MigratorSession, MagicMock]:
     mock_conn = connection_double()
-    with patch("confiture.core.migrator.create_connection", return_value=mock_conn):
+    with injected_connection(mock_conn):
         session = MigratorSession(env, migrations_dir)
         session.__enter__()
     return session, mock_conn
@@ -67,7 +67,7 @@ class TestMigratorSessionDown:
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
         with (
-            patch("confiture.core.migrator.load_migration_class", return_value=mock_class),
+            injected_loader(return_value=mock_class),
             patch("confiture.core.migrator.MigrationLock"),  # #142: down() now locks
         ):
             result = session.down()
@@ -109,7 +109,7 @@ class TestMigratorSessionDown:
         session._migrator._version_from_filename = MagicMock(side_effect=lambda n: n.split("_")[0])
 
         with (
-            patch("confiture.core.migrator.load_migration_class", side_effect=_load_class),
+            injected_loader(side_effect=_load_class),
             patch("confiture.core.migrator.MigrationLock"),  # #142: down() now locks
         ):
             result = session.down(steps=2)
@@ -139,7 +139,7 @@ class TestMigratorSessionDown:
         session._migrator.rollback = MagicMock()
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
-        with patch("confiture.core.migrator.load_migration_class", return_value=mock_class):
+        with injected_loader(return_value=mock_class):
             result = session.down(dry_run=True)
 
         session._migrator.rollback.assert_not_called()
