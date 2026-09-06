@@ -11,6 +11,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from psycopg import sql as pgsql
+
 logger = logging.getLogger(__name__)
 
 
@@ -241,7 +243,23 @@ class BatchedMigration:
         where_clause: str = "TRUE",
         start_from: int = 0,
     ) -> BatchProgress:
-        """Backfill column values in batches.
+        """Backfill a column in batches, committing after each.
+
+        Termination contract: the table's block range is measured once, up
+        front (``pg_relation_size`` / block size), and each batch updates one
+        slice of ``ctid`` block ranges, ``WHERE ctid >= '(b,0)' AND ctid <
+        '(b+n,0)' AND (where_clause)``. The loop ends when the last block has
+        been visited — it never depends on *where_clause* becoming false, so
+        the default ``"TRUE"`` terminates. Blocks per batch is sized so a batch
+        holds about ``batch_size`` rows.
+
+        Each row is updated once: a rewritten row's new tuple version may land
+        in a block not yet visited, so every batch also excludes tuples created
+        after the backfill began (``xmin`` newer than the starting transaction).
+        Rows inserted concurrently, after the start, are therefore not visited.
+
+        ``expression`` and ``where_clause`` are SQL fragments supplied by the
+        migration author and are interpolated raw by documented contract.
 
         Example:
             >>> progress = batched.backfill_column(
@@ -254,43 +272,55 @@ class BatchedMigration:
         start_time = time.perf_counter()
 
         with self.connection.cursor() as cur:
-            # Get total rows
             cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")  # nosec B608 - table identifier supplied by the migration author via the library API, not user input
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
                 return BatchProgress(total_rows=0)
 
-            total_batches = (total_rows + self.config.batch_size - 1) // self.config.batch_size
+            cur.execute(
+                "SELECT pg_relation_size(%s::regclass) / current_setting('block_size')::int",
+                (table,),
+            )
+            blocks = max(1, int(cur.fetchone()[0]))
+            # Tuples this backfill writes carry a newer xmin than this
+            # transaction's id; excluding them keeps a rewritten row from being
+            # updated again when its new version lands in a later block.
+            cur.execute("SELECT txid_current() % 4294967296")
+            start_xid = int(cur.fetchone()[0])
+            rows_per_block = max(1, -(-total_rows // blocks))
+            blocks_per_batch = max(1, self.config.batch_size // rows_per_block)
+            total_batches = -(-blocks // blocks_per_batch)
+            first_block = min(blocks, start_from // rows_per_block)
+
             processed = start_from
             progress = BatchProgress(
                 total_rows=total_rows,
                 processed_rows=processed,
                 total_batches=total_batches,
             )
+            batch_num = first_block // blocks_per_batch
 
-            batch_num = start_from // self.config.batch_size
-
-            while True:
+            for block in range(first_block, blocks, blocks_per_batch):
                 batch_num += 1
-
                 cur.execute(
-                    f"""
-                    UPDATE {table}
-                    SET {column} = {expression}
-                    WHERE ctid IN (
-                        SELECT ctid FROM {table}
-                        WHERE {where_clause}
-                        LIMIT {self.config.batch_size}
+                    pgsql.SQL(
+                        "UPDATE {table} SET {column} = {expression} "
+                        "WHERE ctid >= {lower}::tid AND ctid < {upper}::tid "
+                        "AND xmin::text::bigint < {start_xid} AND ({where})"
+                    ).format(
+                        table=pgsql.SQL(table),
+                        column=pgsql.SQL(column),
+                        expression=pgsql.SQL(expression),
+                        lower=pgsql.Literal(f"({block},0)"),
+                        upper=pgsql.Literal(f"({block + blocks_per_batch},0)"),
+                        start_xid=pgsql.Literal(start_xid),
+                        where=pgsql.SQL(where_clause),
                     )
-                """  # nosec B608 - table/column identifiers supplied by the migration author via the library API, not user input
                 )
-
                 rows_affected = cur.rowcount
-                if rows_affected == 0:
-                    break
-
                 self.connection.commit()
+
                 processed += rows_affected
                 progress.processed_rows = processed
                 progress.current_batch = batch_num
@@ -303,10 +333,11 @@ class BatchedMigration:
                     self.config.checkpoint_callback(processed)
 
                 logger.info(
-                    f"Backfill batch {batch_num}: {progress.percent_complete:.1f}% complete"
+                    f"Backfill batch {batch_num}/{total_batches}: "
+                    f"{progress.percent_complete:.1f}% complete"
                 )
 
-                if self.config.sleep_between_batches > 0:
+                if self.config.sleep_between_batches > 0 and block + blocks_per_batch < blocks:
                     time.sleep(self.config.sleep_between_batches)
 
             progress.elapsed_seconds = time.perf_counter() - start_time

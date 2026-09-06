@@ -67,6 +67,13 @@ engine; what it reports is what happened.
 
 ### Fixed
 
+- **`BatchedMigration.backfill_column()` terminates.** Each batch used to
+  update `LIMIT batch_size` rows matching *where_clause* and stop when a batch
+  touched nothing — with the default `where_clause="TRUE"` that never happened
+  and the loop ran forever. Batches now walk the table's `ctid` block range as
+  measured at the start (`pg_relation_size`), sized to about `batch_size` rows,
+  and exclude tuples created after the backfill began (`xmin`), so every row is
+  rewritten exactly once and the loop ends when the last block is visited.
 - **Two `CREATE INDEX CONCURRENTLY` in one `.up.sql` apply.** A
   non-transactional SQL-file migration was sent to the server as one
   multi-statement string, which PostgreSQL wraps in an implicit transaction

@@ -168,6 +168,10 @@ def up(connection):
         where_clause="total_with_tax IS NULL",
     )
 
+    # backfill_column walks the table's ctid block range as measured at the
+    # start, so it terminates even with the default where_clause="TRUE", and
+    # skips tuples created after it began — each row is rewritten once.
+
     # Step 3: Add NOT NULL constraint
     connection.execute("""
         ALTER TABLE orders ALTER COLUMN total_with_tax SET NOT NULL
