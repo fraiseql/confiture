@@ -713,9 +713,9 @@ def _write_dump_artifact(
     else:
         _schema_files, seed_paths = builder.categorize_sql_files()
         if seed_profile_obj is not None:
-            from confiture.core.seed.applier import _apply_profile_filter
+            from confiture.core.seed.applier import apply_profile_filter
 
-            seed_paths = _apply_profile_filter(seed_paths, seed_profile_obj)
+            seed_paths = apply_profile_filter(seed_paths, seed_profile_obj)
         artifact_seed_files = seed_paths or None
     artifact_result = build_schema_artifact(
         server_url=server_url,

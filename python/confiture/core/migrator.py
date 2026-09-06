@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
+    discover_migration_files,
     find_duplicate_migration_versions,
+    parse_migration_filename,
 )
 from confiture.core._migrator.engine import Migrator
 from confiture.core._migrator.events import UpEvent, UpObserver
@@ -33,7 +35,9 @@ __all__ = [
     "Migrator",
     "MigratorSession",
     "_version_from_migration_filename",
+    "discover_migration_files",
     "find_duplicate_migration_versions",
+    "parse_migration_filename",
     "LockConfig",
     "MigrationLock",
 ]

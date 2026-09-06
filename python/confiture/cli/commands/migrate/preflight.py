@@ -26,10 +26,8 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core._migrator.discovery import parse_migration_filename
-from confiture.core._migrator.session import MigratorSession
 from confiture.core.connection import load_config
-from confiture.core.migrator import Migrator
+from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
 from confiture.core.schema_facts import SchemaFacts
 from confiture.exceptions import ConfigurationError
 from confiture.models.preflight import DependentAnalysisReport

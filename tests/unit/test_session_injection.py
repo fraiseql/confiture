@@ -29,6 +29,8 @@ DOCUMENTED = {
     "LockConfig",
     "MigrationLock",
     "find_duplicate_migration_versions",
+    "discover_migration_files",
+    "parse_migration_filename",
     "_version_from_migration_filename",
 }
 

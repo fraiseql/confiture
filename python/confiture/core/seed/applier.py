@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from confiture.config.environment import SeedProfile
 
 
-def _apply_profile_filter(files: list[Path], profile: SeedProfile) -> list[Path]:
+def apply_profile_filter(files: list[Path], profile: SeedProfile) -> list[Path]:
     """Filter *files* by a profile's include-then-exclude filename globs.
 
     Order is preserved. Empty ``include`` means "start from all files".
@@ -171,7 +171,7 @@ class SeedApplier:
         sql_files = sorted(self.seeds_dir.glob("*.sql"))
         if profile is None:
             return sql_files
-        return _apply_profile_filter(sql_files, profile)
+        return apply_profile_filter(sql_files, profile)
 
     def apply_sequential(
         self,
