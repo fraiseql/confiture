@@ -22,29 +22,22 @@ from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
 from confiture.cli.commands.hooks import hooks_app
 from confiture.cli.commands.mcp import mcp_app
-from confiture.cli.commands.migrate_analysis import (
-    migrate_diff,
-    migrate_fix,
-    migrate_fix_signatures,
-    migrate_introspect,
-    migrate_preflight,
-    migrate_validate,
-    migrate_verify,
-)
-from confiture.cli.commands.migrate_core import (
-    migrate_current,
-    migrate_down,
-    migrate_down_to,
-    migrate_estimate,
-    migrate_generate,
-    migrate_status,
-    migrate_up,
-)
-from confiture.cli.commands.migrate_state import (
-    migrate_baseline,
-    migrate_rebuild,
-    migrate_reinit,
-)
+from confiture.cli.commands.migrate.baseline import migrate_baseline
+from confiture.cli.commands.migrate.current import migrate_current
+from confiture.cli.commands.migrate.diff import migrate_diff
+from confiture.cli.commands.migrate.down import migrate_down, migrate_down_to
+from confiture.cli.commands.migrate.estimate import migrate_estimate
+from confiture.cli.commands.migrate.fix import migrate_fix
+from confiture.cli.commands.migrate.fix_signatures import migrate_fix_signatures
+from confiture.cli.commands.migrate.generate import migrate_generate
+from confiture.cli.commands.migrate.introspect import migrate_introspect
+from confiture.cli.commands.migrate.preflight import migrate_preflight
+from confiture.cli.commands.migrate.rebuild import migrate_rebuild
+from confiture.cli.commands.migrate.reinit import migrate_reinit
+from confiture.cli.commands.migrate.status import migrate_status
+from confiture.cli.commands.migrate.up import migrate_up
+from confiture.cli.commands.migrate.validate import migrate_validate
+from confiture.cli.commands.migrate.verify import migrate_verify
 from confiture.cli.commands.schema import build, init, introspect, lint, lint_unified
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
