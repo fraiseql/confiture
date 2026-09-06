@@ -4,9 +4,7 @@ This module provides functionality to sync data from production databases to
 local/staging environments with PII anonymization support.
 """
 
-import hashlib
 import json
-import random
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +16,7 @@ from psycopg import sql as pgsql
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from confiture.config.environment import DatabaseConfig
+from confiture.core.anonymization.pseudonymizer import Pseudonymizer
 from confiture.core.connection import create_connection
 
 
@@ -29,13 +28,18 @@ class TableSelection:
     exclude: list[str] | None = None  # Tables/patterns to exclude
 
 
+# Strategies whose output is a pseudonym derived from the value; these need the
+# per-deployment secret. `redact` (and any unknown strategy) does not.
+KEYED_STRATEGIES = frozenset({"email", "phone", "name", "hash"})
+
+
 @dataclass
 class AnonymizationRule:
     """Rule for anonymizing a specific column."""
 
     column: str
     strategy: str  # 'email', 'phone', 'name', 'redact', 'hash'
-    seed: int | None = None  # For reproducible anonymization
+    seed: int | None = None  # Domain separator: different seeds, unrelated pseudonyms
 
 
 @dataclass
@@ -102,6 +106,11 @@ class ProductionSyncer:
         self._completed_tables: set[str] = set()
         self._checkpoint_data: dict[str, Any] = {}
 
+        # Built on first keyed use; reading the secret is a configuration
+        # error that must surface before any row is fetched, so
+        # `_sync_with_anonymization` forces it up front when a keyed rule exists.
+        self._pseudonymizer_cache: Pseudonymizer | None = None
+
     def __enter__(self) -> "ProductionSyncer":
         """Context manager entry."""
         self._source_conn = create_connection(self.source_config)
@@ -156,55 +165,55 @@ class ProductionSyncer:
 
         return tables
 
+    def _pseudonymizer(self) -> Pseudonymizer:
+        """The keyed pseudonym source, reading ``ANONYMIZATION_SECRET`` once.
+
+        Raises:
+            ConfigurationError: ``CONFIG_009`` when the secret is unset.
+        """
+        if self._pseudonymizer_cache is None:
+            self._pseudonymizer_cache = Pseudonymizer()
+        return self._pseudonymizer_cache
+
     def _anonymize_value(self, value: Any, strategy: str, seed: int | None = None) -> Any:
         """Anonymize a single value based on strategy.
+
+        Every pseudonym is an HMAC under the deployment secret: stable within a
+        deployment, so relationships survive; unrelated across deployments, so
+        the anonymised copy cannot be matched back by hashing candidates.
 
         Args:
             value: Original value to anonymize
             strategy: Anonymization strategy ('email', 'phone', 'name', 'redact', 'hash')
-            seed: Optional seed for deterministic anonymization
+            seed: Optional domain separator; different seeds give unrelated pseudonyms
 
         Returns:
             Anonymized value
+
+        Raises:
+            ConfigurationError: A keyed strategy was asked for and
+                ``ANONYMIZATION_SECRET`` is not set.
         """
         if value is None:
             return None
 
-        # Set random seed for deterministic anonymization
-        if seed is not None:
-            random.seed(f"{seed}:{value}")
+        if strategy not in KEYED_STRATEGIES:
+            # `redact`, and the safe default for any strategy this path does not know.
+            return "[REDACTED]"
+
+        keyed = self._pseudonymizer()
 
         if strategy == "email":
-            # Generate deterministic fake email
-            hash_value = hashlib.sha256(str(value).encode()).hexdigest()[:8]
-            return f"user_{hash_value}@example.com"
+            return f"user_{keyed.hex(value, seed=seed, length=8)}@example.com"
 
-        elif strategy == "phone":
-            # Generate fake phone number
-            if seed is not None:
-                # Deterministic based on seed
-                hash_int = int(hashlib.sha256(str(value).encode()).hexdigest()[:8], 16)
-                number = hash_int % 10000
-            else:
-                number = random.randint(1000, 9999)
-            return f"+1-555-{number}"
+        if strategy == "phone":
+            return f"+1-555-{1000 + keyed.integer(value, 9000, seed=seed)}"
 
-        elif strategy == "name":
-            # Generate fake name
-            hash_str = hashlib.sha256(str(value).encode()).hexdigest()[:8]
-            return f"User {hash_str[:4].upper()}"
+        if strategy == "name":
+            return f"User {keyed.hex(value, seed=seed, length=4).upper()}"
 
-        elif strategy == "redact":
-            # Simply redact the value
-            return "[REDACTED]"
-
-        elif strategy == "hash":
-            # One-way hash (preserves uniqueness)
-            return hashlib.sha256(str(value).encode()).hexdigest()[:16]
-
-        else:
-            # Unknown strategy, redact by default
-            return "[REDACTED]"
+        # "hash": one-way, uniqueness-preserving
+        return keyed.hex(value, seed=seed, length=16)
 
     def sync_table(
         self,
@@ -363,6 +372,11 @@ class ProductionSyncer:
         # Get column names
         src_cursor.execute(pgsql.SQL("SELECT * FROM {} LIMIT 0").format(table_ident))
         column_names = [desc[0] for desc in src_cursor.description]
+
+        # Read the secret before the first row, not on it: an unset secret is a
+        # configuration error to report, not a mid-copy crash.
+        if any(rule.strategy in KEYED_STRATEGIES for rule in anonymization_rules):
+            self._pseudonymizer()
 
         # Build column index map for anonymization
         anonymize_map: dict[int, AnonymizationRule] = {}

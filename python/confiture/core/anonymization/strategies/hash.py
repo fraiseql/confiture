@@ -7,12 +7,10 @@ Uses HMAC-based hashing to provide:
     - Configurable length and prefix
 """
 
-import hashlib
-import hmac
-import os
 from dataclasses import dataclass
 from typing import Any
 
+from confiture.core.anonymization.pseudonymizer import Pseudonymizer
 from confiture.core.anonymization.strategy import (
     AnonymizationStrategy,
     StrategyConfig,
@@ -59,7 +57,7 @@ class DeterministicHashStrategy(AnonymizationStrategy):
 
     Security:
         - Uses HMAC-SHA256 by default (not plain SHA256)
-        - Secret key from ANONYMIZATION_SECRET env var or hardcoded
+        - Secret key from the ANONYMIZATION_SECRET env var — mandatory, no default
         - Prevents offline attacks even if seed is compromised
 
     Example:
@@ -95,6 +93,7 @@ class DeterministicHashStrategy(AnonymizationStrategy):
         config.validate_algorithm()
         super().__init__(config)
         self.config: DeterministicHashConfig = config
+        self._pseudonymizer: Pseudonymizer | None = None
 
     def anonymize(self, value: Any) -> Any:
         """Hash a value using HMAC.
@@ -104,6 +103,9 @@ class DeterministicHashStrategy(AnonymizationStrategy):
 
         Returns:
             Hashed value as string with optional prefix and truncation
+
+        Raises:
+            ConfigurationError: ``ANONYMIZATION_SECRET`` is not set (``CONFIG_009``).
 
         Example:
             >>> strategy = DeterministicHashStrategy(DeterministicHashConfig(seed=12345))
@@ -120,20 +122,13 @@ class DeterministicHashStrategy(AnonymizationStrategy):
         if isinstance(value, str) and value == "":
             return ""
 
-        # Convert to string for hashing
-        value_str = str(value)
+        if self._pseudonymizer is None:
+            self._pseudonymizer = Pseudonymizer(algorithm=self.config.algorithm)
 
-        # Get secret key (for HMAC)
-        secret = os.getenv("ANONYMIZATION_SECRET", "default-secret")
-
-        # Create HMAC hash
-        key = f"{self._seed}{secret}".encode()
-        hash_obj = hmac.new(key, value_str.encode(), getattr(hashlib, self.config.algorithm))
-        hash_value = hash_obj.hexdigest()
-
-        # Apply truncation if specified
-        if self.config.length:
-            hash_value = hash_value[: self.config.length]
+        # Key = f"{seed}{secret}", message = value — the derivation this strategy
+        # has always used, so anyone who already set a real secret sees the same
+        # output.
+        hash_value = self._pseudonymizer.hex(value, seed=self._seed, length=self.config.length)
 
         # Apply prefix if specified
         if self.config.prefix:

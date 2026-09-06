@@ -7,6 +7,8 @@ Tests verify that:
 - Proper seed precedence is maintained
 """
 
+import pytest
+
 from confiture.core.anonymization.profile import (
     AnonymizationProfile,
     AnonymizationRule,
@@ -22,6 +24,12 @@ from confiture.core.anonymization.strategies.hash import (
     DeterministicHashConfig,
     DeterministicHashStrategy,
 )
+
+
+@pytest.fixture(autouse=True)
+def _anonymization_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keyed strategies refuse to run without the per-deployment secret (D8)."""
+    monkeypatch.setenv("ANONYMIZATION_SECRET", "unit-test-secret")
 
 
 class TestGlobalSeedConsistency:
