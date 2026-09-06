@@ -12,6 +12,15 @@ the parser; a file it cannot parse is a finding, never a clean result.
 
 ### Changed
 
+- **pglast reads the raw file.** The idempotency validator blanked `--` to the
+  end of the line and masked `$tag$…$tag$` with a tag-blind regex before
+  parsing. `'a--b'` lost its closing quote, a `$q$` nested in a `$body$` was
+  cut in two, pglast failed on the corrupted text and the detector swapped to
+  the regex backend without a word — reporting a `CREATE TABLE` that lives
+  inside a function body, or missing one that followed a literal on the same
+  line. The validator now hands pglast the untouched text and takes line
+  numbers from its statement locations; the masking survives only inside the
+  `CONFITURE_IDEMPOTENCY_FORCE_REGEX` escape hatch, which goes with it.
 - ⚠️ **pglast is a dependency (D13).** A standard install classified migrations
   with a regex backend while reporting a version indistinguishable from an
   AST-capable one (#210), and fraisier's deploy-time `preflight` — the run that

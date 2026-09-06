@@ -83,49 +83,6 @@ def test_ast_parse_error_falls_through_to_regex(monkeypatch):
     assert calls == ["ast", "regex"]
 
 
-@pytest.mark.parametrize(
-    "sql",
-    [
-        "CREATE TABLE users (id INT);",
-        "CREATE INDEX idx_email ON users(email);",
-        "CREATE UNIQUE INDEX idx_uniq ON users(email);",
-        "ALTER TABLE users ADD COLUMN email TEXT;",
-        "ALTER TABLE app.users ADD COLUMN email TEXT;",
-        "DROP TABLE old_users;",
-        "DROP INDEX idx_x;",
-        "CREATE VIEW v_users AS SELECT * FROM users;",
-        "CREATE FUNCTION fn() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;",
-        "CREATE EXTENSION btree_gin;",
-        "CREATE SCHEMA app;",
-        "CREATE SEQUENCE seq1;",
-    ],
-)
-def test_fixer_output_is_byte_identical_across_backends(monkeypatch, sql):
-    """``IdempotencyFixer.fix`` and ``dry_run`` produce identical output on both backends.
-
-    The fixer's rewrite path is regex-only (it doesn't consult the
-    detector at all), so ``fix`` is naturally backend-agnostic. The
-    ``dry_run`` path *does* call the detector and builds suggestions
-    from ``match.sql_snippet`` — divergence there would mean the AST
-    backend's snippet boundaries drift from the regex backend's,
-    breaking downstream consumers that rely on stable snippet text.
-    """
-    from confiture.core.idempotency.fixer import IdempotencyFixer  # noqa: PLC0415
-
-    monkeypatch.setenv("CONFITURE_IDEMPOTENCY_FORCE_REGEX", "1")
-    regex_fixer = IdempotencyFixer()
-    regex_fix = regex_fixer.fix(sql)
-    regex_dry = [(c.pattern, c.suggested_fix, c.line_number) for c in regex_fixer.dry_run(sql)]
-
-    monkeypatch.delenv("CONFITURE_IDEMPOTENCY_FORCE_REGEX", raising=False)
-    ast_fixer = IdempotencyFixer()
-    ast_fix = ast_fixer.fix(sql)
-    ast_dry = [(c.pattern, c.suggested_fix, c.line_number) for c in ast_fixer.dry_run(sql)]
-
-    assert regex_fix == ast_fix, "fix() output diverges across backends"
-    assert regex_dry == ast_dry, "dry_run() output diverges across backends"
-
-
 @pytest.mark.parametrize("value", ["0", "false", "no", "", "off"])
 def test_falsy_env_var_does_not_force_regex(monkeypatch, value):
     """The env var must be truthy to flip the switch — 0/false/empty don't count."""

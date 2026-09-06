@@ -760,13 +760,77 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
     return _detect_via_regex(sql)
 
 
+def _mask_for_regex(sql: str) -> str:
+    """Mask comments and dollar-quoted bodies for the regex backend only.
+
+    The AST backend parses the raw text; this masking is the regex detector's
+    own pre-0.14.0 behaviour, kept bit-for-bit until the backend is deleted.
+
+    Removes or masks content that shouldn't be scanned for patterns:
+    - Single-line comments (-- ...)
+    - Multi-line comments (/* ... */)
+    - String literals that might contain SQL-like text
+
+    Args:
+        sql: Raw SQL content
+
+    Returns:
+        Preprocessed SQL with comments and problematic strings handled
+
+    Note:
+        We preserve line structure so line numbers remain accurate.
+    """
+    # Remove single-line comments but preserve line structure
+    # Replace comment content with spaces to maintain positions
+    result = re.sub(
+        r"--[^\n]*",
+        lambda m: " " * len(m.group()),
+        sql,
+    )
+
+    # Remove multi-line comments, preserving newlines
+    def replace_multiline_comment(match: re.Match[str]) -> str:
+        content = match.group()
+        # Count newlines and preserve them
+        newlines = content.count("\n")
+        return "\n" * newlines
+
+    result = re.sub(
+        r"/\*.*?\*/",
+        replace_multiline_comment,
+        result,
+        flags=re.DOTALL,
+    )
+
+    # Handle dollar-quoted strings (PostgreSQL function bodies)
+    # These might contain SQL-like text that shouldn't trigger detection
+    # We preserve the CREATE OR REPLACE FUNCTION header but mask the body
+    def mask_dollar_quoted(match: re.Match[str]) -> str:
+        content = match.group()
+        # Preserve newlines
+        newlines = content.count("\n")
+        # Keep the outer structure but mask inner content
+        return "$MASKED$" + "\n" * newlines + "$MASKED$"
+
+    # Match $tag$...$tag$ but be careful not to break pattern detection
+    # Only mask if this looks like a function body (has SQL keywords inside)
+    result = re.sub(
+        r"\$\w*\$.*?\$\w*\$",
+        mask_dollar_quoted,
+        result,
+        flags=re.DOTALL,
+    )
+
+    return result
+
+
 def _detect_via_regex(sql: str) -> list[PatternMatch]:
     """Regex-only implementation of :func:`detect_non_idempotent_patterns`.
 
-    Preserved unchanged from the pre-0.14.0 implementation so the slim
-    install path and the force-regex escape hatch keep their existing
-    behavior bit-for-bit.
+    Preserved unchanged from the pre-0.14.0 implementation so the force-regex
+    escape hatch keeps its existing behavior bit-for-bit (masking included).
     """
+    sql = _mask_for_regex(sql)
     matches: list[PatternMatch] = []
 
     # Find all DO blocks that provide idempotency protection
