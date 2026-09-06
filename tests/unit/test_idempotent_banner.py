@@ -8,16 +8,12 @@ clean.
 from __future__ import annotations
 
 import json
-import re
 from unittest.mock import patch
 
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+from tests._helpers import strip_ansi as _strip_ansi
 
 
 def _migrations_dir(tmp_path):

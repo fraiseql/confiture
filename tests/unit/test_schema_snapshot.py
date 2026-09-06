@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from confiture.core.schema_snapshot import SchemaSnapshotGenerator
+from tests.unit._doubles import builder_double
 
 
 class TestSchemaSnapshotGenerator:
@@ -15,8 +16,10 @@ class TestSchemaSnapshotGenerator:
         snapshots_dir = tmp_path / "schema_history"
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
 
-        with patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls:
-            mock_builder = MagicMock()
+        with patch(
+            "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+        ) as mock_builder_cls:
+            mock_builder = builder_double()
             mock_builder.build.return_value = "CREATE TABLE tb_users (id bigint);"
             mock_builder_cls.return_value = mock_builder
 
@@ -28,8 +31,10 @@ class TestSchemaSnapshotGenerator:
         snapshots_dir = tmp_path / "new" / "snapshots"
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
 
-        with patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls:
-            mock_builder = MagicMock()
+        with patch(
+            "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+        ) as mock_builder_cls:
+            mock_builder = builder_double()
             mock_builder.build.return_value = "-- schema"
             mock_builder_cls.return_value = mock_builder
 
@@ -42,8 +47,10 @@ class TestSchemaSnapshotGenerator:
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
         expected_sql = "CREATE TABLE tb_orders (id bigint NOT NULL);"
 
-        with patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls:
-            mock_builder = MagicMock()
+        with patch(
+            "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+        ) as mock_builder_cls:
+            mock_builder = builder_double()
             mock_builder.build.return_value = expected_sql
             mock_builder_cls.return_value = mock_builder
 
@@ -56,8 +63,10 @@ class TestSchemaSnapshotGenerator:
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
         project_dir = Path("/my/project")
 
-        with patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls:
-            mock_builder = MagicMock()
+        with patch(
+            "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+        ) as mock_builder_cls:
+            mock_builder = builder_double()
             mock_builder.build.return_value = "SELECT 1;"
             mock_builder_cls.return_value = mock_builder
 
@@ -73,8 +82,10 @@ class TestSchemaSnapshotGenerator:
         existing.write_text("old content")
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
 
-        with patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls:
-            mock_builder = MagicMock()
+        with patch(
+            "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+        ) as mock_builder_cls:
+            mock_builder = builder_double()
             mock_builder.build.return_value = "new content"
             mock_builder_cls.return_value = mock_builder
 
@@ -94,11 +105,13 @@ class TestSchemaSnapshotGeneratorLiveMode:
         pg_dump_output = "SET statement_timeout = 0;\nCREATE TABLE public.t (\n    id integer\n);\n"
 
         with (
-            patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls,
+            patch(
+                "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+            ) as mock_builder_cls,
             patch("confiture.core.temp_database.psycopg.connect") as mock_connect,
             patch("confiture.core.temp_database.subprocess.run") as mock_run,
         ):
-            mock_builder = MagicMock()
+            mock_builder = builder_double()
             mock_builder.build.return_value = schema_sql
             mock_builder_cls.return_value = mock_builder
 
@@ -136,11 +149,13 @@ class TestSchemaSnapshotGeneratorLiveMode:
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
 
         with (
-            patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls,
+            patch(
+                "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+            ) as mock_builder_cls,
             patch("confiture.core.temp_database.psycopg.connect") as mock_connect,
             patch("confiture.core.temp_database.subprocess.run") as mock_run,
         ):
-            mock_builder = MagicMock()
+            mock_builder = builder_double()
             mock_builder.build.return_value = "SELECT 1;"
             mock_builder_cls.return_value = mock_builder
 
@@ -172,8 +187,10 @@ class TestSchemaSnapshotGeneratorLiveMode:
         gen = SchemaSnapshotGenerator(snapshots_dir=snapshots_dir)
         expected = "CREATE TABLE t (id int);"
 
-        with patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls:
-            mock_builder = MagicMock()
+        with patch(
+            "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+        ) as mock_builder_cls:
+            mock_builder = builder_double()
             mock_builder.build.return_value = expected
             mock_builder_cls.return_value = mock_builder
 
@@ -200,11 +217,13 @@ class TestSchemaSnapshotGeneratorLiveMode:
         )
 
         with (
-            patch("confiture.core.schema_snapshot.SchemaBuilder") as mock_builder_cls,
+            patch(
+                "confiture.core.schema_snapshot.SchemaBuilder", autospec=True
+            ) as mock_builder_cls,
             patch("confiture.core.temp_database.psycopg.connect") as mock_connect,
             patch("confiture.core.temp_database.subprocess.run") as mock_run,
         ):
-            mock_builder = MagicMock()
+            mock_builder = builder_double()
             mock_builder.build.return_value = "SELECT 1;"
             mock_builder_cls.return_value = mock_builder
 

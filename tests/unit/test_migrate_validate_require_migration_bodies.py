@@ -6,7 +6,6 @@ codes, JSON shape, and the report-only (non-failing) backlog mode.
 """
 
 import json
-import re
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -14,12 +13,9 @@ from typer.testing import CliRunner
 from confiture.cli.main import app
 from confiture.core.function_body_checker import FunctionBodyViolation
 from confiture.models.git import MigrationAccompanimentReport
+from tests._helpers import strip_ansi as _strip_ansi
 
 runner = CliRunner()
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 def _violation() -> FunctionBodyViolation:

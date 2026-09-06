@@ -189,7 +189,9 @@ def test_the_against_payload_carries_the_change_set_too(runner, tmp_path):
     session.run_against.return_value = against_result
 
     with patch(
-        "confiture.cli.commands.migrate_analysis.MigratorSession", return_value=session
+        "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
+        return_value=session,
     ) as patched:
         result = runner.invoke(
             runner_app(),

@@ -222,7 +222,7 @@ migration:
 
         with (
             patch("confiture.core.connection.create_connection") as mock_conn_factory,
-            patch("confiture.core.migrator.Migrator") as mock_migrator_cls,
+            patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.connection.load_config") as mock_load_config,
         ):
             mock_load_config.return_value = self._make_env("public.tb_confiture")
@@ -267,7 +267,7 @@ migration:
 
         with (
             patch("confiture.core.connection.create_connection") as mock_conn_factory,
-            patch("confiture.core.migrator.Migrator") as mock_migrator_cls,
+            patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
             patch("confiture.core.connection.load_config") as mock_load_config,
         ):
             mock_load_config.return_value = self._make_env("public.tb_confiture")

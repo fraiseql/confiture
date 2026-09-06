@@ -1,7 +1,6 @@
 """Tests for ImportChecker — migration import validation."""
 
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,7 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.core.import_checker import ImportChecker
+from tests._helpers import strip_ansi as _strip_ansi
 
 # ---------------------------------------------------------------------------
 # Helpers: write migration .py files into a tmp directory
@@ -310,10 +310,6 @@ class TestLevel2Attributes:
 # ---------------------------------------------------------------------------
 
 runner = CliRunner()
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestCheckImportsCLI:
@@ -654,6 +650,7 @@ class DynamicPath(Migration):
 
 EXECUTE_FILE_FSTRING = """\
 from confiture.models.migration import Migration
+
 
 class FStringPath(Migration):
     version = "20260426140003"

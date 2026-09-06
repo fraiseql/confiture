@@ -68,3 +68,18 @@ worker suffix.
 
 CI runs the database suites both serially (the `Tests` job, with coverage) and with
 `-n 4` (the `Integration (parallel, -n 4)` job).
+
+## Test doubles
+
+`Migrator`, `MigratorSession` and `SchemaBuilder` are never patched with a bare mock:
+every `patch("….Migrator")` carries `autospec=True` (or a `spec`), and stand-in
+instances come from `tests/unit/_doubles.py` (`migrator_double()`, `session_double()`,
+`builder_double()`), which are autospecced and pre-populate the constructor-set
+attributes. A mock that answers every attribute agrees with any refactor; an
+autospecced one fails when a method is renamed. `tests/unit/test_double_discipline.py`
+enforces both rules. `tests/_helpers.py` holds `strip_ansi`, used by the CLI tests that
+compare Rich output.
+
+Still open: 59 tests patch `confiture.core.connection.create_connection`. Phase 04
+gives the CLI an injected connection factory and converts them (Cycle 9).
+

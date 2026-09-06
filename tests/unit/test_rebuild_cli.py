@@ -9,15 +9,9 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.models.results import MigrateRebuildResult, MigrationApplied
+from tests._helpers import strip_ansi as _strip_ansi
 
 runner = CliRunner()
-
-
-def _strip_ansi(text: str) -> str:
-    """Remove ANSI escape codes from text."""
-    import re
-
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestRebuildCLIHelp:

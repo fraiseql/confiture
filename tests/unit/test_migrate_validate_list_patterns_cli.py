@@ -7,16 +7,11 @@ directory. Mutually exclusive with check-mode flags (``--idempotent``).
 from __future__ import annotations
 
 import json
-import re
 
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-
-
-def _strip_ansi(text: str) -> str:
-    """Strip ANSI escape codes (Rich forces them under GITHUB_ACTIONS)."""
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+from tests._helpers import strip_ansi as _strip_ansi
 
 
 class TestListPatternsExitCode:

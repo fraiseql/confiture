@@ -1,7 +1,6 @@
 """Unit tests for fix-signatures --check-body body drift remediation."""
 
 import json
-import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -9,6 +8,7 @@ from typer.testing import CliRunner
 from confiture.cli.main import app
 from confiture.core.function_body_drift import FunctionBodyDrift, FunctionBodyDriftReport
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport
+from tests._helpers import strip_ansi as _strip_ansi
 
 runner = CliRunner()
 
@@ -16,10 +16,6 @@ SCHEMA_WITH_FN = (
     "CREATE OR REPLACE FUNCTION public.my_fn(y text) RETURNS text"
     " LANGUAGE sql AS $$ SELECT upper(y); $$;"
 )
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 def _clean_sig_report() -> FunctionSignatureDriftReport:

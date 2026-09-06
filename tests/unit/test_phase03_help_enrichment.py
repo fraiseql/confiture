@@ -6,15 +6,10 @@ will see in --help, not implementation details.
 
 from __future__ import annotations
 
-import re
-
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+from tests._helpers import strip_ansi as _strip_ansi
 
 
 def _help(*args: str) -> str:

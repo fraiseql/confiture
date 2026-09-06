@@ -112,6 +112,7 @@ def test_preflight_against_validates(tmp_path, schemas_dir):
     runner = CliRunner()
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=mock_session,
     ):
         result = runner.invoke(
@@ -171,6 +172,7 @@ def test_preflight_against_replay_failure_validates(tmp_path, schemas_dir):
     runner = CliRunner()
     with patch(
         "confiture.cli.commands.migrate_analysis.MigratorSession",
+        autospec=True,
         return_value=mock_session,
     ):
         result = runner.invoke(
