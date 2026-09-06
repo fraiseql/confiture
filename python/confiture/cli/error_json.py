@@ -180,13 +180,14 @@ def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     import functools
 
-    import click
-
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
-        except (typer.Exit, click.exceptions.Abort, click.exceptions.Exit):
+        except (
+            typer.Exit,
+            typer.Abort,
+        ):  # Click's Exit/Abort, re-exported — click itself is not a dependency
             raise
         except Exception as exc:
             fmt = next((kwargs[k] for k in _FORMAT_PARAMS if k in kwargs), None)

@@ -62,7 +62,7 @@ def migrate_introspect(
     from confiture.core.connection import load_config
     from confiture.core.migrator import Migrator
 
-    json_mode = is_json(format_output)
+    is_json(format_output)
     if not config.exists():
         raise ConfigurationError(f"Config file not found: {config}", error_code="CONFIG_004")
 

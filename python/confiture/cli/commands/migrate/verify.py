@@ -102,7 +102,7 @@ def migrate_verify(
     from confiture.exceptions import DatabaseNotInitializedError
     from confiture.models.results import VerifyAllResult
 
-    json_mode = is_json(format_output)
+    is_json(format_output)
     config_data: Any = None
     if has_intentional_dsn_source(ctx, database_url, no_config):
         _db_url_override = resolve_database_url(

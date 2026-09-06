@@ -92,7 +92,7 @@ def migrate_fix(
       confiture migrate up       - Apply migrations
       confiture migrate generate - Create new migration
     """
-    json_mode = is_json(format_output)
+    is_json(format_output)
     if not migrations_dir.exists():
         raise ConfigurationError(
             f"Migrations directory not found: {migrations_dir.absolute()}",
