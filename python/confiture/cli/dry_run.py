@@ -81,25 +81,6 @@ def ask_dry_run_execute_confirmation() -> bool:
     return typer.confirm("\n🔄 Proceed with real execution?", default=False)
 
 
-def extract_sql_statements_from_migration(migration_class) -> list[str]:
-    """Extract SQL statements from a migration's up() method.
-
-    This is a helper that attempts to extract SQL statements from migration
-    code by inspecting the migration object. This is limited and approximate
-    since migrations use self.execute() calls.
-
-    Args:
-        migration_class: Migration class (not instance)
-
-    Returns:
-        List of SQL statement strings (may be approximate/incomplete)
-    """
-    # SQL extraction from migration classes requires a mock connection
-    # that intercepts self.execute() calls to capture statements.
-    # Not yet implemented - returns empty list.
-    return []
-
-
 def display_dry_run_header(mode: str) -> None:
     """Display header for dry-run analysis.
 

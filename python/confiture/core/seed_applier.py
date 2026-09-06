@@ -7,6 +7,7 @@ sequentially (each in own savepoint) or concatenated (default behavior).
 from __future__ import annotations
 
 import fnmatch
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,6 +16,7 @@ from rich.console import Console
 
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
+from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 from confiture.core.seed_executor import SeedExecutor
 from confiture.exceptions import SchemaError, base_message
 
@@ -128,6 +130,8 @@ class SeedApplier:
         env: str | None = None,
         connection=None,
         console: Console | None = None,
+        copy_format: bool = False,
+        copy_threshold: int = 1000,
     ) -> None:
         """Initialize SeedApplier.
 
@@ -141,6 +145,10 @@ class SeedApplier:
         self.env = env or "local"
         self.connection = connection
         self.console = console or Console()
+        # ``seed apply --copy-format --copy-threshold N``: INSERT files with at
+        # least N rows are converted to COPY before execution.
+        self.copy_format = copy_format
+        self.copy_threshold = copy_threshold
 
     def find_seed_files(self, profile: SeedProfile | None = None) -> list[Path]:
         """Discover and return sorted seed files, optionally filtered by *profile*.
@@ -217,7 +225,11 @@ class SeedApplier:
 
             try:
                 self.console.print(f"[cyan]→ {seed_file.name}[/cyan]", end=" ")
-                executor.execute_file(seed_file, savepoint_name=savepoint_name)
+                sql_content = seed_file.read_text(encoding="utf-8")
+                if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
+                    sql_content = InsertToCopyConverter().convert(sql_content)
+                    self.console.print("[dim](COPY)[/dim]", end=" ")
+                executor.execute_sql(sql_content, savepoint_name, source=seed_file)
                 result.succeeded += 1
                 self.console.print("[green]✓[/green]")
 
@@ -249,3 +261,16 @@ class SeedApplier:
                 self.console.print(f"  - {failed_file}")
 
         return result
+
+
+_ROW_SEPARATOR = re.compile(r"\)\s*,\s*\(")
+_INSERT = re.compile(r"\bINSERT\s+INTO\b", re.IGNORECASE)
+
+
+def count_insert_rows(sql: str) -> int:
+    """Rows an INSERT script would write: one per statement plus one per ``), (``.
+
+    Lexical on purpose — it decides whether the COPY conversion is worth it,
+    nothing more.
+    """
+    return len(_INSERT.findall(sql)) + len(_ROW_SEPARATOR.findall(sql))

@@ -11,7 +11,6 @@ from unittest.mock import Mock, patch
 from confiture.cli.dry_run import (
     ask_dry_run_execute_confirmation,
     display_dry_run_header,
-    extract_sql_statements_from_migration,
     print_json_report,
     save_json_report,
     save_text_report,
@@ -261,29 +260,6 @@ class TestAskDryRunExecuteConfirmation:
             ask_dry_run_execute_confirmation()
             args, kwargs = mock_confirm.call_args
             assert "Proceed with real execution" in args[0]
-
-
-class TestExtractSqlStatementsFromMigration:
-    """Test extract_sql_statements_from_migration function."""
-
-    def test_extract_sql_empty_result(self):
-        """Test extraction returns empty list (placeholder)."""
-        mock_migration = Mock()
-        result = extract_sql_statements_from_migration(mock_migration)
-        assert result == []
-
-    def test_extract_sql_returns_list(self):
-        """Test that function returns a list."""
-        mock_migration = Mock()
-        result = extract_sql_statements_from_migration(mock_migration)
-        assert isinstance(result, list)
-
-    def test_extract_sql_various_migrations(self):
-        """Test extraction with various migration types."""
-        for _i in range(5):
-            mock_migration = Mock()
-            result = extract_sql_statements_from_migration(mock_migration)
-            assert isinstance(result, list)
 
 
 class TestDisplayDryRunHeader:

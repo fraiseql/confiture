@@ -57,8 +57,17 @@ class SeedExecutor:
                 seed_file=str(seed_file),
                 sql_error=e,
             ) from e
+        self.execute_sql(sql_content, savepoint_name, source=seed_file)
 
-        # Validate seed content (reject transaction commands)
+    def execute_sql(self, sql_content: str, savepoint_name: str, *, source: Path) -> None:
+        """Execute already-read seed SQL (possibly converted) inside a savepoint.
+
+        Args:
+            sql_content: The SQL to run.
+            savepoint_name: Savepoint isolating this file.
+            source: The file the SQL came from, for error context.
+        """
+        seed_file = source
         self._validate_seed_content(sql_content)
 
         try:

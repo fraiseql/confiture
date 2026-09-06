@@ -143,7 +143,6 @@ confiture build --sequential --copy-format \
 ```bash
 # Maximum speed for large datasets
 confiture build --sequential --copy-format \
-  --benchmark \
   --database-url postgresql://localhost/myapp
 
 # Output:
@@ -284,7 +283,6 @@ confiture build --sequential --database-url postgresql://localhost/myapp
 ```bash
 # Typical web app has 10-50K rows
 confiture build --sequential --copy-format \
-  --benchmark \
   --database-url postgresql://localhost/myapp
 
 # Files:
@@ -333,7 +331,7 @@ confiture build --sequential --database-url postgresql://localhost/myapp
 ### Step 2: Add COPY Format (when speed matters)
 ```bash
 # If builds are slow:
-confiture build --sequential --copy-format --benchmark \
+confiture build --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 

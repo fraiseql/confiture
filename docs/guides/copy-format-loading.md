@@ -109,7 +109,7 @@ Use COPY format when building fresh databases:
 confiture build --sequential --copy-format
 
 # With performance metrics
-confiture build --sequential --copy-format --benchmark
+confiture build --sequential --copy-format
 
 # Custom threshold
 confiture build --sequential --copy-format --copy-threshold 500
@@ -239,8 +239,7 @@ confiture seed benchmark --seeds-dir db/seeds
 confiture seed apply \
   --sequential \
   --copy-format \
-  --copy-threshold 2000 \
-  --benchmark
+  --copy-threshold 2000
 ```
 
 ### 5. Format Conversion Pipeline
@@ -293,7 +292,6 @@ confiture seed apply --sequential --copy-format [OPTIONS]
 
 --copy-format          # Enable COPY format conversion
 --copy-threshold N     # Row threshold for auto COPY (default: 1000)
---benchmark            # Show VALUES vs COPY comparison
 --sequential           # Required for COPY format
 --continue-on-error    # Skip failed files and continue
 --env ENV              # Environment name
@@ -427,7 +425,6 @@ confiture build \
   --sequential \
   --copy-format \
   --copy-threshold 500 \
-  --benchmark \
   --database-url postgresql://localhost/myapp_fresh
 ```
 
@@ -442,8 +439,7 @@ confiture seed benchmark --seeds-dir db/seeds
 confiture seed apply \
   --sequential \
   --copy-format \
-  --copy-threshold 500 \
-  --benchmark
+  --copy-threshold 500
 # OUTPUT: COPY 7.5x faster
 
 # Measure improvement
@@ -516,7 +512,6 @@ jobs:
           confiture build \
             --sequential \
             --copy-format \
-            --benchmark \
             --database-url postgresql://postgres:test@localhost/myapp_test
 ```
 

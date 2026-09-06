@@ -19,6 +19,20 @@ Phase 04 of the 2026-09-06 review: the CLI contract. One error boundary, one
   invalid value exits 5 with `Invalid --format '<value>': use …` on stderr and
   nothing on stdout, before the command body runs. `migrate preflight` and
   `schema diff` no longer fall through to text on an unknown value.
+- ⚠️ **No option that does nothing (D3).** `migrate up --batched --batch-size
+  --batch-sleep` reach the session, which sets the `BatchConfig` on every
+  migration as `batch_config` before it runs (a `.py` migration using
+  `BatchedMigration(self.connection, self.batch_config)` picks up the operator's
+  sizing) — the flags were parsed and discarded. `migrate up/down --verbose`
+  turns on debug logging for `confiture`. `bootstrap --no-check` without
+  `--dry-run` or `--apply` is refused (exit 5) instead of silently running the
+  check. `seed apply --copy-format --copy-threshold N` converts INSERT files
+  with at least N rows to COPY through the existing converter before executing
+  them. `seed apply --benchmark` (use `confiture seed benchmark`) and
+  `seed validate --mode` (database-aware checks are `--prep-seed
+  --database-url`) are removed: passing them exits 2. A prep-seed table report
+  with `--output` is now written to the file. The `ARG001` lint ignore for the
+  CLI is gone: every declared argument is read.
 - **One definition of a seed path.** `core/seed/paths.is_seed_path()` — the
   builder's whole-token rule (`30_seed_backend` is a seed directory,
   `reseed_tools` is not) — now also drives `build --schema-only`'s include-dir

@@ -1,6 +1,7 @@
 """Core migration commands: migrate status, up, down, generate."""
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -815,9 +816,13 @@ def migrate_up(
             )
             raise typer.Exit(2)
 
-        # --batched is accepted for compatibility; batch processing is an
-        # engine concern (`migrate estimate`, large_tables) — see Cycle 5.
-        del batched, batch_size, batch_sleep, verbose
+        if verbose:
+            logging.getLogger("confiture").setLevel(logging.DEBUG)
+        batch = None
+        if batched:
+            from confiture.core.large_tables import BatchConfig
+
+            batch = BatchConfig(batch_size=batch_size, sleep_between_batches=batch_sleep)
 
         # Check for duplicate migration versions (hard block, no DB needed)
         _up_duplicates = find_duplicate_migration_versions(migrations_dir)
@@ -923,6 +928,7 @@ def migrate_up(
             ),
             "install_view_helpers": install_helpers,
             "on_event": reporter,
+            "batch": batch,
         }
 
         with MigratorSession(
@@ -1096,7 +1102,8 @@ def migrate_down(
     from confiture.core.locking import LockAcquisitionError
     from confiture.core.migrator import MigratorSession
 
-    del verbose  # accepted for compatibility
+    if verbose:
+        logging.getLogger("confiture").setLevel(logging.DEBUG)
 
     try:
         _db_url_override = resolve_database_url(

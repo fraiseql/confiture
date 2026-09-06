@@ -52,9 +52,15 @@ def output_table(
 
     Args:
         report: Validation report
-        output: Optional file path (ignored for table format)
+        output: Optional file path; when given, the rendered report is also written there
         console: Rich console for output
     """
+    if output is not None:
+        from rich.console import Console as _Console
+
+        recorder = _Console(record=True, width=120)
+        output_table(report, None, recorder)
+        output.write_text(recorder.export_text())
     console.print("\nPrep-Seed Validation Report")
     console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     console.print(f"Files scanned: {len(report.scanned_files)}")

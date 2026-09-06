@@ -130,6 +130,17 @@ def bootstrap(
     # Resolve mode: --apply and --dry-run override --check.
     if apply_mode and dry_run:
         fail(ConfigurationError("Cannot combine --apply with --dry-run"), json_mode=json_mode)
+    if not check and not apply_mode and not dry_run:
+        fail(
+            ConfigurationError(
+                "Nothing to do: --no-check without --dry-run or --apply.",
+                resolution_hint=(
+                    "Pass --check (the default) to report drift, --dry-run to print the "
+                    "plan, or --apply to execute it."
+                ),
+            ),
+            json_mode=json_mode,
+        )
     mode = "apply" if apply_mode else "dry-run" if dry_run else "check"
 
     config_data = load_config(config)

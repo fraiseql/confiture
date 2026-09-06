@@ -76,8 +76,6 @@ def _validate_prep_seed(
     database_url: str | None,
     format_: str,
     output: Path | None,
-    fix: bool,
-    dry_run: bool,
 ) -> None:
     """Handle prep-seed pattern validation."""
     # Determine max level to run
@@ -161,11 +159,6 @@ def validate(
         "--all",
         help="Validate all environments (default: off)",
     ),
-    mode: str = typer.Option(
-        "static",
-        "--mode",
-        help="Validation mode: static or database (default: static)",
-    ),
     database_url: str | None = typer.Option(
         None,
         "--database-url",
@@ -220,9 +213,9 @@ def validate(
 
     EXAMPLES:
       confiture seed validate
-        ↳ Validate default seed directory, static mode (no database needed)
+        ↳ Validate default seed directory (no database needed)
 
-      confiture seed validate --mode database --database-url postgresql://localhost/mydb
+      confiture seed validate --prep-seed --database-url postgresql://localhost/mydb
         ↳ Validate with database checks for schema compatibility
 
       confiture seed validate --fix --dry-run
@@ -246,7 +239,7 @@ def validate(
       📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
 
     OPTIONS:
-      CORE: --seeds-dir, --mode, --format, --output
+      CORE: --seeds-dir, --format, --output
         What to validate, how to validate, and how to report
 
       PREP-SEED: --prep-seed, --level, --static-only, --full-execution
@@ -270,8 +263,6 @@ def validate(
                 database_url=database_url,
                 format_=format_,
                 output=output,
-                fix=fix,
-                dry_run=dry_run,
             )
 
         # Determine which directories to validate
@@ -438,11 +429,6 @@ def apply(
         "--copy-threshold",
         help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
     ),
-    benchmark: bool = typer.Option(
-        False,
-        "--benchmark",
-        help="Show VALUES vs COPY performance comparison",
-    ),
     format_type: str = format_option("text", "json", "csv"),
     report_output: Path = typer.Option(
         None,
@@ -481,7 +467,7 @@ def apply(
     PERFORMANCE TIPS:
       • Use --sequential if any file has 650+ rows
       • Use --copy-format if total rows > 50,000
-      • Use --benchmark to see improvement
+      • Use `confiture seed benchmark` to compare VALUES vs COPY
 
     RELATED COMMANDS:
       confiture seed validate   - Check seed data quality
@@ -501,7 +487,7 @@ def apply(
       DATABASE: --env, --database-url
         Connection parameters (URL overrides environment)
 
-      PERFORMANCE: --copy-format, --copy-threshold, --benchmark
+      PERFORMANCE: --copy-format, --copy-threshold
         Format selection (2-10x faster for >50K rows)
 
       OUTPUT: --format, --report
@@ -579,6 +565,8 @@ def apply(
                 env=env,
                 connection=connection,
                 console=console,
+                copy_format=copy_format,
+                copy_threshold=copy_threshold,
             )
 
             # Use progress manager for seed application
