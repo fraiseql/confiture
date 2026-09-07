@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
+from confiture.core.risk_tier import worst_tier
+from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff
@@ -24,6 +27,19 @@ def _execute_call(sql: str) -> str:
     if "\n" in sql or '"' in sql:
         return f'        self.execute("""{sql}""")'
     return f'        self.execute("{sql}")'
+
+
+def _with_tier(statement: str) -> str:
+    """Prefix ``statement`` with the tier directive the change-set classifier gives it.
+
+    The same classifier ``migrate preflight`` runs, so the file and the
+    preflight report never disagree. A statement it cannot tier (a bare
+    comment, SQL it cannot parse) gets no directive: five tiers, no "unknown".
+    """
+    tier = worst_tier(entry.tier for entry in classify_statements(statement))
+    if tier is None:
+        return statement
+    return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
 
 
 def _terminated(sql: str) -> str:
@@ -129,7 +145,7 @@ class MigrationGenerator:
             sql = render(change)
             if sql is None:
                 sql = f"-- WARNING: no SQL derived for: {change}. Edit this file before deploying."
-            statements.append(_terminated(sql))
+            statements.append(_with_tier(_terminated(sql)))
         return "\n\n".join(statements) + "\n"
 
     def _get_next_version(self) -> str:

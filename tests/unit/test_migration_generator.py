@@ -389,14 +389,14 @@ class TestGenerateSql:
         assert up.name == "20260101000000_add_profile.up.sql"
         assert up.read_text() == (
             "-- Migration: add_profile\n-- Version: 20260101000000\n\n"
-            "ALTER TABLE users ADD COLUMN bio TEXT;\n\n"
-            "ALTER TABLE users ADD COLUMN age INTEGER;\n"
+            "-- confiture:tier additive\nALTER TABLE users ADD COLUMN bio TEXT;\n\n"
+            "-- confiture:tier additive\nALTER TABLE users ADD COLUMN age INTEGER;\n"
         )
         down = up.with_name("20260101000000_add_profile.down.sql")
         assert down.read_text() == (
             "-- Migration: add_profile\n-- Version: 20260101000000\n\n"
-            "ALTER TABLE users DROP COLUMN age;\n\n"
-            "ALTER TABLE users DROP COLUMN bio;\n"
+            "-- confiture:tier irreversible\nALTER TABLE users DROP COLUMN age;\n\n"
+            "-- confiture:tier irreversible\nALTER TABLE users DROP COLUMN bio;\n"
         )
 
     def test_a_change_with_no_sql_leaves_a_warning_not_silence(self, tmp_path):

@@ -30,8 +30,10 @@ is the form every reader of a migration understands: `migrate preflight` classif
 and reports their risk tier (a Python migration is unclassified by contract), `migrate validate
 --idempotent` walks them. The up file carries one statement per change — `CREATE TABLE IF NOT
 EXISTS` for a new table (its columns from the artifact), `ALTER TABLE` for column changes — and the
-down file the reverse, in reverse order. A change the generator cannot express is written as a
-`-- WARNING:` comment rather than silently dropped. The positional form `migrate diff OLD NEW
+down file the reverse, in reverse order. Every statement is preceded by `-- confiture:tier <tier>`,
+the risk tier the change-set classifier behind `migrate preflight` assigns it (`additive`,
+`reversible`, `lock_risky`, `destructive`, `irreversible`), so the file says what preflight will say. A
+change the generator cannot express is written as a `-- WARNING:` comment rather than silently dropped. The positional form `migrate diff OLD NEW
 --generate` keeps writing a Python migration.
 
 The round trip closes with `drift`: `confiture drift --schema <dir>` accepts the same directory of

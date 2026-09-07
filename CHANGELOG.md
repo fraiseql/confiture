@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### Added
+
+- **Every generated statement carries its risk tier (#198).** `MigrationGenerator.generate_sql` writes
+  `-- confiture:tier <tier>` above each statement of the `.up.sql` / `.down.sql` pair — the tier the
+  change-set classifier behind `migrate preflight` assigns (a dropped table or column is
+  `irreversible`, a narrowing type change too), read from the same classifier so the file and the
+  preflight report cannot disagree. A statement the classifier cannot tier gets no directive. The
+  checked-in artifact → migration contract fixture gains the directives.
+
 ## [1.1.0] - 2026-09-07
 
 ### Added
