@@ -6,6 +6,7 @@ Split out of the monolithic migrate command modules.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -88,50 +89,55 @@ def _baseline_from_db_flow(
             )
 
 
-@cli_boundary
-def migrate_baseline(
-    through: str = typer.Option(
-        None,
+ThroughOpt = Annotated[
+    str,
+    typer.Option(
         "--through",
         "-t",
-        help=(
-            "Mark all migrations through this version as applied.  Required "
-            "unless --from-db is given."
-        ),
+        help="Mark all migrations through this version as applied.  Required "
+        "unless --from-db is given.",
     ),
-    from_db: str = typer.Option(
-        None,
+]
+FromDbOpt = Annotated[
+    str,
+    typer.Option(
         "--from-db",
-        help=(
-            "Source DSN to copy tb_confiture rows from.  When set, history "
-            "is copied from another database rather than marked manually.  "
-            "Combined with --through, the copy is capped at the named version."
-        ),
+        help="Source DSN to copy tb_confiture rows from.  When set, history "
+        "is copied from another database rather than marked manually.  "
+        "Combined with --through, the copy is capped at the named version.",
     ),
-    source_table: str = typer.Option(
-        None,
+]
+SourceTableOpt = Annotated[
+    str,
+    typer.Option(
         "--source-table",
-        help=(
-            "Override the source DB's tracking table name when it differs "
-            "from the target (default: same as target)."
-        ),
+        help="Override the source DB's tracking table name when it differs "
+        "from the target (default: same as target).",
     ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
+]
+MigrationsDirOpt = Annotated[
+    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
+]
+ConfigOpt = Annotated[
+    Path,
+    typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
+]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option(
+        "--dry-run", help="Show what would be marked without making changes (default: off)"
     ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Show what would be marked without making changes (default: off)",
-    ),
+]
+
+
+@cli_boundary
+def migrate_baseline(
+    through: ThroughOpt = None,
+    from_db: FromDbOpt = None,
+    source_table: SourceTableOpt = None,
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    config: ConfigOpt = Path("db/environments/local.yaml"),
+    dry_run: DryRunOpt = False,
 ) -> None:
     """Mark migrations as applied without running them.
 
