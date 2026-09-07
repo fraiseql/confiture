@@ -477,7 +477,7 @@ confiture migrate generate update_schema
 # (Edit db/schema files to match db/migrations/)
 ```
 
-For more details, see the [Git-Aware Schema Validation Guide](../guides/git-aware-validation.md).
+For more details, see the [Git-Aware Schema Validation Guide](guides/git-aware-validation.md).
 
 ---
 
@@ -890,7 +890,7 @@ confiture build --env local --schema-only
 - **[Organizing SQL Files](organizing-sql-files.md)** - Patterns for complex schemas
 - **[CLI Reference](reference/cli.md)** - Complete command documentation
 - **[Migration Decision Tree](guides/migration-decision-tree.md)** - Choose the right approach
-- **[Examples](../examples/)** - Sample projects
+- **[Examples](https://github.com/fraiseql/confiture/tree/main/examples)** - Sample projects
 
 ## Getting Help
 

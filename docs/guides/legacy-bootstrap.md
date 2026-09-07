@@ -171,6 +171,6 @@ See [the tracking-table reference](../reference/tracking-table.md) for what's in
 ## Verifying the recipe in CI
 
 The `migrate baseline` recipe above is exercised end-to-end in
-[`tests/integration/test_legacy_bootstrap_guide.py`](../../tests/integration/test_legacy_bootstrap_guide.py) — that test spins up a Postgres, applies migrations `001`-`004` directly with `psql`, then drives the exact CLI sequence shown above and asserts the resulting `migrate status` reports the right counts of applied vs pending.
+[`tests/integration/test_legacy_bootstrap_guide.py`](https://github.com/fraiseql/confiture/blob/main/tests/integration/test_legacy_bootstrap_guide.py) — that test spins up a Postgres, applies migrations `001`-`004` directly with `psql`, then drives the exact CLI sequence shown above and asserts the resulting `migrate status` reports the right counts of applied vs pending.
 
 If you change this guide, update that test (and vice versa).

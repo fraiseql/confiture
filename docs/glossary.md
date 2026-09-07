@@ -75,7 +75,7 @@ Data Definition Language - SQL commands that define database structure.
 
 **Contrast with**: [DML](#dml)
 
-**Related**: [Medium 1: Build from DDL](guides/01-build-from-ddl.md), [Why Confiture?](../README.md#why-confiture)
+**Related**: [Medium 1: Build from DDL](guides/01-build-from-ddl.md), [Why Confiture?](https://github.com/fraiseql/confiture/blob/main/README.md#why-confiture)
 
 ---
 
@@ -285,8 +285,8 @@ Schema change that doesn't interrupt database access or application traffic.
 ## 🔗 Related
 
 - **[Getting Started](getting-started.md)** - Learn basic concepts
-- **[Architecture](../ARCHITECTURE.md)** - How Confiture works
-- **[FAQ](../README.md)** - Common questions
+- **[Architecture](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md)** - How Confiture works
+- **[FAQ](https://github.com/fraiseql/confiture/blob/main/README.md)** - Common questions
 
 ---
 

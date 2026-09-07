@@ -138,17 +138,32 @@ confiture migrate up --dry-run --format json --output report.json
 {
   "migration_id": "dry_run_local",
   "mode": "analysis",
+  "statements_analyzed": 1,
   "migrations": [
     {
       "version": "001",
       "name": "create_initial_schema",
-      "estimated_duration_ms": 500
+      "classification": "additive",
+      "unsafe": false,
+      "statements": 1,
+      "estimated_rows": null,
+      "findings": [
+        {
+          "kind": "create_table",
+          "object": "public.users",
+          "migration": "001",
+          "tier": "additive",
+          "detail": "CREATE TABLE"
+        }
+      ]
     }
   ],
   "summary": {
     "unsafe_count": 0,
+    "unclassified_count": 0,
     "has_unsafe_statements": false
-  }
+  },
+  "warnings": []
 }
 ```
 

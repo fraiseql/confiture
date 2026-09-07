@@ -156,21 +156,18 @@ cd my-sync-project
 
 Edit `db/environments/production.yaml`:
 ```yaml
-host: prod-db.example.com
-port: 5432
-database: ecommerce_prod
-user: confiture_sync_user
-# Use environment variable for password
-password: ${PROD_DB_PASSWORD}
+name: production
+database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod?sslmode=require
+include_dirs: []
+exclude_dirs: []
 ```
 
 Edit `db/environments/staging.yaml`:
 ```yaml
-host: staging-db.example.com
-port: 5432
-database: ecommerce_staging
-user: confiture_sync_user
-password: ${STAGING_DB_PASSWORD}
+name: staging
+database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@staging-db.example.com:5432/ecommerce_staging?sslmode=prefer
+include_dirs: []
+exclude_dirs: []
 ```
 
 ### 3. Configure Anonymization
@@ -596,46 +593,18 @@ performance:
 
 **db/environments/production.yaml**:
 ```yaml
-# Production (source) configuration
-host: prod-db.example.com
-port: 5432
-database: ecommerce_prod
-user: confiture_sync_user
-password: ${PROD_DB_PASSWORD}      # From environment variable
-
-# Connection pooling
-pool_size: 5
-max_overflow: 10
-
-# SSL configuration
-ssl_mode: require
-ssl_cert: /path/to/client-cert.pem
-ssl_key: /path/to/client-key.pem
-ssl_root_cert: /path/to/ca-cert.pem
-
-# Read-only safety
-readonly: true                     # Prevent accidental writes
-
-# Connection timeout
-connect_timeout: 30
-statement_timeout: 3600            # 1 hour for long-running queries
+name: production
+database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod?sslmode=require
+include_dirs: []
+exclude_dirs: []
 ```
 
 **db/environments/staging.yaml**:
 ```yaml
-# Staging (target) configuration
-host: staging-db.example.com
-port: 5432
-database: ecommerce_staging
-user: confiture_sync_user
-password: ${STAGING_DB_PASSWORD}
-
-# Allow writes
-readonly: false
-
-# Disable connection pooling (direct connection)
-pool_size: 1
-max_overflow: 0
+name: staging
+database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@staging-db.example.com:5432/ecommerce_staging?sslmode=prefer
+include_dirs: []
+exclude_dirs: []
 ```
 
 ---

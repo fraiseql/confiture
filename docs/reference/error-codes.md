@@ -137,7 +137,7 @@ warnings → 0 unless `--strict`.
 ### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)
 
 The replica-aware forward-compatibility lint emits these (severity per the
-[policy](replica-safe-migrations.md#default-severity-policy): warning by
+[policy](../guides/replica-safe-migrations.md#default-severity-policy): warning by
 default, error when replicas are declared, downgraded by
 `allow_unsafe_under_replication`):
 
@@ -151,7 +151,7 @@ default, error when replicas are declared, downgraded by
 | `PFLIGHT_REPLICA_CREATE_INDEX` | non-concurrent `CREATE INDEX` | `CREATE INDEX CONCURRENTLY` |
 | `PFLIGHT_REPLICA_UNCLASSIFIED` | dynamic / unparseable DDL, or a non-SQL `.py` migration the classifier cannot read | review manually (always a warning) |
 
-See the [replica-safe migrations guide](replica-safe-migrations.md) for the full
+See the [replica-safe migrations guide](../guides/replica-safe-migrations.md) for the full
 rationale. This `PFLIGHT_REPLICA_*` set is also a **cross-repo wire contract**:
 fraisier's blue-green window-safety gate blocks on the presence of any of these
 codes in `migrate preflight`'s `issues[]`, so the set is pinned by the

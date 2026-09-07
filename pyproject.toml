@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "0.53.0"
+version = "0.54.0"
 description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -99,6 +99,12 @@ mcp-http = [
     "uvicorn[standard]>=0.29",
 ]
 
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+    "pymdown-extensions>=10.0",
+]
 notifications = [
     "jinja2>=3.1",
 ]

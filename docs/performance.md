@@ -484,9 +484,9 @@ print(f"Memory: {psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB")
 
 ## 📚 Additional Resources
 
-- [Production Sync Guide](./production-sync.md) - Complete guide to syncing production data
-- [Anonymization Strategies](./anonymization.md) - PII handling best practices
-- [Benchmarking Guide](../tests/performance/README.md) - How to run your own benchmarks
+- [Production Sync Guide](guides/03-production-sync.md) - Complete guide to syncing production data
+- [Anonymization Strategies](guides/anonymization.md) - PII handling best practices
+- [Benchmarking Guide](https://github.com/fraiseql/confiture/blob/main/tests/performance/README.md) - How to run your own benchmarks
 
 ---
 

@@ -1,6 +1,6 @@
 # Feature Overview
 
-The full feature laundry list — for the 30-second pitch and quick-start, see [the README](../../README.md).
+The full feature laundry list — for the 30-second pitch and quick-start, see [the README](https://github.com/fraiseql/confiture/blob/main/README.md).
 
 ## Migration Management
 - **`migrate preflight`** — pre-deploy safety gate: checks reversibility, non-transactional statements, duplicate versions, and checksum tampering. JSON output for CI/CD.

@@ -9,7 +9,7 @@ flags, JSON shapes, and exit codes the adapter depends on.
 
 Because the adapter lives in a separate repository, Confiture CI cannot see it
 directly. The contract is therefore enforced from Confiture's side by
-[`tests/contract/test_fraisier_adapter_surface.py`](../../tests/contract/test_fraisier_adapter_surface.py),
+[`tests/contract/test_fraisier_adapter_surface.py`](https://github.com/fraiseql/confiture/blob/main/tests/contract/test_fraisier_adapter_surface.py),
 which mirrors the adapter's argument construction and report parsing. A drift in
 any subcommand's flags, JSON shape, or exit code fails Confiture's own CI.
 
@@ -149,7 +149,7 @@ This set is a **stability commitment**: existing codes are **never renamed or
 removed** (that is a breaking change requiring a major version bump and a
 CHANGELOG note); **new codes may be added**. The set is the single value returned
 by `confiture.core.linting.libraries.replica.replica_lint_codes()`, and
-[`test_fraisier_adapter_surface.py`](../../tests/contract/test_fraisier_adapter_surface.py)
+[`test_fraisier_adapter_surface.py`](https://github.com/fraiseql/confiture/blob/main/tests/contract/test_fraisier_adapter_surface.py)
 pins it (`test_replica_code_namespace_is_a_stability_commitment`) against a
 hardcoded literal — so a rename fails Confiture's CI instead of silently
 disarming fraisier's gate. See the per-code remediation table in
@@ -329,7 +329,7 @@ is a `contract_version` conversation, not a silent addition — a consumer parse
 an unrecognised tier string to *unclassified*, never to a nearest match.
 
 Both repositories test against the same bytes:
-[`tests/fixtures/preflight-contract/`](../../tests/fixtures/preflight-contract/)
+[`tests/fixtures/preflight-contract/`](https://github.com/fraiseql/confiture/tree/main/tests/fixtures/preflight-contract)
 here, `crates/fraisier-adapter-confiture/tests/fixtures/preflight/` there.
 `change_set` is declared but **not required** in the published schema, so
 payloads from earlier Confiture stay valid and correctly read as "did not
@@ -359,14 +359,14 @@ Each exit integer maps to a stable **semantic class** (`ok`, `internal_error`,
 `lock_contention`, `git_error`, `irreversible_rollback`) — the taxonomy both
 fraisier adapters project onto their own error types. Confiture is the single
 source of truth: the table lives in `EXIT_CODE_SEMANTIC_CLASS`
-([`error_codes.py`](../../python/confiture/error_codes.py)) and is emitted as
+([`error_codes.py`](https://github.com/fraiseql/confiture/blob/main/python/confiture/error_codes.py)) and is emitted as
 JSON by **`confiture --exit-codes-json`** (see
 [exit-codes.md](exit-codes.md#semantic-classes-machine-readable)). The Rust adapter
 vendors that JSON and diffs it against the live command in its own contract test;
 the Python adapter reads it directly when the installed confiture is new enough.
 The class names are frozen — a rename is a breaking change requiring a major bump —
 and pinned from confiture's side by
-[`test_fraisier_adapter_surface.py`](../../tests/contract/test_fraisier_adapter_surface.py).
+[`test_fraisier_adapter_surface.py`](https://github.com/fraiseql/confiture/blob/main/tests/contract/test_fraisier_adapter_surface.py).
 
 ## Compatibility policy
 

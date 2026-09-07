@@ -237,21 +237,20 @@ class AddUserBio(Migration):
 
 ## Step 6: Apply the Migration
 
-Apply the migration to add the bio column:
+Look at `db/schema/10_tables/users.sql` again: the `bio` column is already there, with a comment
+naming the migration that introduced it. That is the build-from-DDL rule — **the schema directory
+carries every change; a migration is the delta for databases that already exist.** The database you
+built in Step 3 therefore already has the column, and the migration must be *recorded*, not run:
 
 ```bash
-# Check migration status first
+# Confiture does not know yet that 001's effect is already in place
 confiture migrate status --env local
 
 # Expected output:
 # ⏳ 001_add_user_bio (pending)
 
-# Apply the migration
-confiture migrate up --env local
-
-# Expected output:
-# Applying migration 001_add_user_bio...
-# ✅ Migration 001_add_user_bio applied successfully (45ms)
+# Record the migrations the schema already carries (no SQL is executed)
+confiture migrate baseline --through 001 --config db/environments/local.yaml --migrations-dir db/migrations
 
 # Check status again
 confiture migrate status --env local
@@ -259,6 +258,11 @@ confiture migrate status --env local
 # Expected output:
 # ✅ 001_add_user_bio (applied 2025-10-12 10:30:00)
 ```
+
+`confiture migrate up --env local` is what a database that predates the change runs — a staging or
+production database built before `bio` existed applies the migration for real. This is exactly what
+`run.sh` does: `build`, then `migrate baseline --through 001`, then `migrate status` must report
+`0 pending`.
 
 **Verify the column was added:**
 
@@ -280,7 +284,7 @@ psql confiture_tutorial -c "\d users"
 
 ## Step 7: Test Rollback
 
-Let's test rolling back the migration:
+The baseline recorded 001 as applied, so it can be rolled back and re-applied like any migration:
 
 ```bash
 # Rollback the migration
@@ -392,13 +396,7 @@ The `db/environments/local.yaml` file defines database connection settings:
 
 ```yaml
 name: local
-database:
-  host: localhost
-  port: 5432
-  database: confiture_tutorial
-  user: postgres
-  password: postgres
-
+database_url: postgresql://postgres:postgres@localhost:5432/confiture_tutorial
 include_dirs:
   - db/schema
 

@@ -490,7 +490,7 @@ class CheckPermissions(Hook[ExecutionContext]):
 
 1. **[Advanced Patterns](./advanced-patterns.md)** - Collaborative workflows
 2. **[CLI Reference](../reference/cli.md)** - Full wizard command documentation
-3. **[Examples](../../examples/)** - Production-ready wizard examples
+3. **[Examples](https://github.com/fraiseql/confiture/tree/main/examples)** - Production-ready wizard examples
 
 **Got questions?**
 - **[FAQ](../glossary.md)** - Glossary and definitions

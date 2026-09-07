@@ -7,7 +7,7 @@ contract](#stability-contract)).
 
 Every `confiture` command exits with one of the integer codes below. The
 authoritative source is the hand-authored `CANONICAL_EXIT_CODES` table in
-[`python/confiture/error_codes.py`](../../python/confiture/error_codes.py);
+[`python/confiture/error_codes.py`](https://github.com/fraiseql/confiture/blob/main/python/confiture/error_codes.py);
 the runtime reads it through `ConfiturError.exit_code`. You can print this
 reference from the CLI with `confiture --exit-codes`.
 
@@ -220,7 +220,7 @@ per exit code, from this fixed set.
 | 8 | `irreversible_rollback` |
 
 The authoritative source is `EXIT_CODE_SEMANTIC_CLASS` in
-[`error_codes.py`](../../python/confiture/error_codes.py). Emit the whole
+[`error_codes.py`](https://github.com/fraiseql/confiture/blob/main/python/confiture/error_codes.py). Emit the whole
 contract as JSON with **`confiture --exit-codes-json`**:
 
 ```json

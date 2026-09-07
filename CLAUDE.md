@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.53.0
+**Version**: 0.54.0
 **Last Updated**: 2026-09-06
 **Current Status**: Production-Ready
 
@@ -240,112 +240,226 @@ is on only for maturin); `[lints]` forbid `unsafe` and deny `clippy::all` + `ped
 
 ## 📁 Project Structure
 
+The tree below is generated from the repository by `scripts/gen_tree.py` (`--check` runs in CI;
+`--write` refreshes it). A module's comment is the first line of its docstring — write the docstring,
+not the tree.
+
+<!-- BEGIN GENERATED: tree -->
 ```
 confiture/
 ├── python/confiture/
-│   ├── __init__.py              # Public API (lazy imports via _LAZY_IMPORTS)
-│   ├── exceptions.py            # Full exception hierarchy (ConfiturError tree)
-│   │
+│   ├── __init__.py               # Confiture: PostgreSQL migrations, sweetly done 🍓
+│   ├── error_codes.py            # Error code registry and definitions for structured error handling
+│   ├── exceptions.py             # Confiture exception hierarchy
+│   ├── url_redaction.py          # DSN credential helpers (core-side, import-safe)
 │   ├── cli/
-│   │   ├── main.py              # Entry point: app setup + command registration
-│   │   ├── helpers.py           # Shared helpers: console, _output_json, _get_tracking_table, etc. (≤600 lines)
-│   │   ├── options.py           # format_option(*allowed): the one --format validator (exit 5)
-│   │   ├── error_json.py        # fail() + @cli_boundary: the one error boundary
-│   │   ├── dsn.py               # resolve_database_url + the #152 DSN precedence contract
-│   │   ├── idempotency.py       # migrate validate/fix --idempotent scoping, reporting, fixing
-│   │   ├── ownership.py         # migrate fix --ownership
-│   │   ├── dry_run_summary.py   # honest dry-run payload (real classification + row estimates)
-│   │   ├── commands/
-│   │   │   ├── schema.py        # init, build, lint, introspect
-│   │   │   ├── migrate/         # one module per `migrate` command (≤150 body lines each)
-│   │   │   │   ├── up.py, down.py, status.py, generate.py, current.py, estimate.py
-│   │   │   │   ├── baseline.py, reinit.py, rebuild.py
-│   │   │   │   ├── diff.py, validate.py, fix.py, fix_signatures.py, introspect.py, verify.py, preflight.py
-│   │   │   │   └── _settings.py, _dry_run_render.py
-│   │   │   └── admin.py         # install-helpers, validate_profile, verify-checksums (+ deprecated `verify` alias), restore
-│   │   ├── formatters/
-│   │   │   ├── build_formatter.py
-│   │   │   ├── migrate_formatter.py
-│   │   │   ├── seed_formatter.py
-│   │   │   └── common.py
-│   │   ├── branch.py            # branch subcommand group (pgGit)
-│   │   ├── coordinate.py        # coordinate subcommand group (multi-agent)
-│   │   ├── seed.py              # seed subcommand group
-│   │   ├── generate.py          # generate subcommand group
-│   │   ├── dry_run.py           # Dry-run UI helpers
-│   │   └── git_validation.py    # Pre-commit git validation helpers
-│   │
-│   ├── core/
-│   │   ├── builder.py           # SchemaBuilder — Medium 1: build from DDL
-│   │   ├── migrator.py          # Migrator + MigratorSession — Medium 2
-│   │   ├── differ.py            # SchemaDiffer — schema diff detection
-│   │   ├── differ_sql.py        # SQL rendering for schema changes
-│   │   ├── syncer.py            # Production sync — Medium 3
-│   │   ├── schema_to_schema.py  # FDW migration — Medium 4
-│   │   ├── migration_generator.py  # Migration file generation (+ external generators)
-│   │   ├── migration_verifier.py   # MigrationVerifier + VerifyResult
-│   │   ├── grant_accompaniment.py  # GrantAccompanimentChecker
-│   │   ├── baseline_detector.py    # BaselineDetector (fuzzy snapshot matching)
-│   │   ├── schema_snapshot.py      # SchemaSnapshotGenerator
-│   │   ├── introspection/          # Phase 6 introspection package
-│   │   │   ├── tables.py           # SchemaIntrospector (tables/columns/FKs)
-│   │   │   ├── functions.py        # FunctionIntrospector
-│   │   │   ├── type_mapping.py     # TypeMapper
-│   │   │   ├── dependency_graph.py # DependencyGraph
-│   │   │   └── sql_ast.py          # CTENode, JSONBKey
-│   │   ├── connection.py        # create_connection, load_config
-│   │   ├── validation/          # validate checks, comment_validator, config_validator
-│   │   ├── error_codes.py       # ErrorCodeDefinition, ErrorCodeRegistry
-│   │   ├── ledger.py            # ledger_exists() — shared migration-ledger probe
-│   │   ├── linting/             # SchemaLinter and rules
-│   │   ├── seed/                # One seed package: applier, executor, bridge, paths, validation/ (prep_seed, 5 levels)
-│   │   ├── anonymization/       # PII anonymization strategies
-│   │   ├── hooks/               # Migration lifecycle hooks
-│   │   └── idempotency/         # Idempotency analysis and fixing
-│   │
-│   ├── config/
-│   │   └── environment.py       # Environment + all nested Pydantic config models
-│   │
-│   └── models/
-│       ├── results.py           # MigrateUpResult, StatusResult, VerifyAllResult, etc.
-│       ├── function_info.py     # FunctionParam, FunctionInfo, FunctionCatalog
-│       ├── introspection.py     # IntrospectedTable, IntrospectedColumn, FKReference
-│       ├── git.py               # MigrationAccompanimentReport, GrantAccompanimentReport
-│       ├── lint.py              # LintReport, Violation, LintSeverity
-│       ├── error.py             # ErrorSeverity enum
-│       ├── migration.py         # Migration base class
-│       ├── schema.py            # Schema representation models
-│       └── sql_file_migration.py
+│   │   ├── __init__.py
+│   │   ├── branch.py             # CLI commands for pgGit branch operations
+│   │   ├── coordinate.py         # Multi-agent coordination CLI commands for pgGit
+│   │   ├── dry_run.py            # Dry-run mode helpers for CLI integration
+│   │   ├── dry_run_summary.py    # The ``--dry-run`` summary: what confiture knows about the pending migra…
+│   │   ├── dsn.py                # Database-URL resolution for the CLI (#152 precedence contract) and the…
+│   │   ├── error_json.py         # Structured error envelope + JSON-aware CLI error boundary (issue #145)
+│   │   ├── generate.py           # CLI commands for the `confiture generate` subcommand group
+│   │   ├── git_validation.py     # CLI helpers for git-aware schema validation
+│   │   ├── helpers.py            # Shared helpers for Confiture CLI commands
+│   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
+│   │   ├── lint_formatter.py     # Output formatting for linting results
+│   │   ├── main.py               # Main CLI entry point for Confiture
+│   │   ├── options.py            # Shared CLI option factories (ARC-02)
+│   │   ├── ownership.py          # ``migrate fix --ownership``: apply the ownership expectation to a live…
+│   │   ├── prep_seed_formatter.py # Formatter for prep-seed validation reports
+│   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI (issue ARCH…
+│   │   ├── seed.py               # CLI commands for seed data validation
+│   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
+│   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
+│   │   ├── commands/             # CLI command modules for Confiture (30 modules)
+│   │   └── formatters/           # (7 modules)
+│   ├── config/                   # Configuration module for Confiture
+│   │   ├── __init__.py           # Configuration module for Confiture
+│   │   ├── _env_vars.py          # Shared ``${VAR}`` expansion for Confiture YAML configuration
+│   │   └── environment.py        # Configuration models for Confiture
+│   ├── core/                     # Core migration execution and schema building components
+│   │   ├── __init__.py           # Core migration execution and schema building components
+│   │   ├── _pglast_enums.py      # Name-resolved PostgreSQL parse-node enum members (issue #192)
+│   │   ├── baseline_detector.py  # Baseline detector for auto-detecting migration level from a live databa…
+│   │   ├── blue_green.py         # Blue-green migration orchestration
+│   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
+│   │   ├── builder.py            # Schema builder - builds PostgreSQL schemas from DDL files
+│   │   ├── checksum.py           # Migration file checksum computation and verification
+│   │   ├── config_validator.py   # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.val…
+│   │   ├── connection.py         # Database connection management for CLI commands
+│   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
+│   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
+│   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL (Phase 05)
+│   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
+│   │   ├── differ.py             # Schema differ for detecting database schema changes
+│   │   ├── differ_sql.py         # Generate DDL SQL from SchemaChange objects
+│   │   ├── drift.py              # Schema drift detection for Confiture
+│   │   ├── dry_run.py            # SAVEPOINT-based dry-run execution with guaranteed rollback
+│   │   ├── error_context.py      # Enhanced error context system for user-friendly error messages
+│   │   ├── error_handler.py      # CLI error handler for structured error output
+│   │   ├── expected_db.py        # Build an "expected" schema into a throwaway database for pg-normalised…
+│   │   ├── fk_extractor.py       # Two-pass FK extraction for cross-schema build ordering
+│   │   ├── function_body_checker.py # Check that function/procedure body changes include an accompanying migr…
+│   │   ├── function_body_drift.py # Function body drift detection
+│   │   ├── function_body_normalizer.py # Normalise PostgreSQL function bodies for drift comparison
+│   │   ├── function_signature_checker.py # Check that function parameter type changes include DROP FUNCTION for ol…
+│   │   ├── function_signature_drift.py # Detect stale function overloads by comparing source signatures against…
+│   │   ├── function_signature_parser.py # Parse PostgreSQL function/procedure signatures from SQL text
+│   │   ├── git.py                # Git integration for schema validation
+│   │   ├── git_accompaniment.py  # Migration accompaniment validation
+│   │   ├── git_schema.py         # Schema building and comparison from git refs
+│   │   ├── grant_accompaniment.py # Grant accompaniment validation
+│   │   ├── import_checker.py     # Import-check validation for Python migration modules
+│   │   ├── introspector.py       # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.int…
+│   │   ├── large_tables.py       # Large table migration patterns
+│   │   ├── ledger.py             # Migration ledger existence probe
+│   │   ├── live_function_catalog.py # Adapter that converts FunctionIntrospector results to FunctionSignature…
+│   │   ├── live_view_catalog.py  # Query live view (and materialized-view) definitions from a database
+│   │   ├── lock_profile.py       # What lock a DDL operation takes, and whether it rewrites the heap (issu…
+│   │   ├── locking.py            # Distributed locking for migration coordination
+│   │   ├── mcp_http.py           # HTTP transport adapter for MCPServer using FastAPI
+│   │   ├── mcp_server.py         # MCPServer: exposes Confiture operations and PostgreSQL functions as MCP…
+│   │   ├── migration_analyzer.py # Analyze migration SQL for non-transactional statements
+│   │   ├── migration_generator.py # Migration file generator from schema diffs
+│   │   ├── migration_grant_extractor.py # Static extraction of ``CREATE TABLE`` and ``GRANT`` statements from a
+│   │   ├── migration_verifier.py # Migration verification using .verify.sql sidecar files
+│   │   ├── migrator.py           # Migration executor — public re-exports
+│   │   ├── ownership_fixer.py    # Auto-fixer for ownership coverage gaps in migration files (issue #124)
+│   │   ├── parser_info.py        # What parses the SQL: pglast's version and the PostgreSQL grammar it emb…
+│   │   ├── pg_version.py         # PostgreSQL version detection and feature flags
+│   │   ├── pgtap_generator.py    # Generate pgTAP test scaffolds from PostgreSQL functions
+│   │   ├── preconditions.py      # Migration preconditions for fail-fast validation
+│   │   ├── preflight.py          # Pre-flight migration checks
+│   │   ├── progress.py           # Progress tracking for long-running operations
+│   │   ├── psql_applier.py       # Shared COPY-aware SQL applier backed by ``psql``
+│   │   ├── restorer.py           # Three-phase pg_restore orchestrator
+│   │   ├── risk_tier.py          # Risk-tier taxonomy for the migration-adapter seam (issue #197)
+│   │   ├── rollback_generator.py # Auto-generate rollback SQL for simple operations
+│   │   ├── schema_analyzer.py    # Schema analysis and validation for dry-run mode
+│   │   ├── schema_artifact.py    # Cacheable schema-artifact dumper (Medium 1, CI provisioning)
+│   │   ├── schema_exporter.py    # The JSON schemas confiture publishes, and the one place they come from
+│   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
+│   │   ├── schema_snapshot.py    # Schema history snapshot writer
+│   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
+│   │   ├── seed_applier.py       # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
+│   │   ├── seed_bridge.py        # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
+│   │   ├── seed_executor.py      # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
+│   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…
+│   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
+│   │   ├── sql_utils.py          # Shared SQL utility functions
+│   │   ├── ssh_tunnel.py         # SSH tunnel context manager for remote database access
+│   │   ├── strategy.py           # Migration strategy header parser
+│   │   ├── stub_generator.py     # Generate typed Python wrapper stubs from PostgreSQL functions
+│   │   ├── syncer.py             # Production data synchronization
+│   │   ├── temp_database.py      # Temporary database lifecycle and pg_dump wrapper
+│   │   ├── test_db.py            # Test-database provisioning primitive (CI-path)
+│   │   ├── tree_allocator.py     # SQL function tree file allocation
+│   │   ├── tree_renumber.py      # SQL function tree renumber — safe file-move with cross-reference rewrit…
+│   │   ├── type_lattice.py       # Is an `ALTER COLUMN … TYPE` widening or narrowing (issue #199)?
+│   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
+│   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
+│   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
+│   │   ├── _migrator/            # (18 modules)
+│   │   ├── anonymization/        # PII anonymization framework (library API) (25 modules)
+│   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (4 modules)
+│   │   ├── hooks/                # Enhanced Hook System (18 modules)
+│   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
+│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (7 modules)
+│   │   ├── linting/              # Rule Library System (30 modules)
+│   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
+│   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
+│   │   ├── seed/                 # Seed data management and optimization (24 modules)
+│   │   ├── seed_validation/      # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see… (14 modules)
+│   │   ├── validation/           # Validation orchestration for ``confiture migrate validate`` modes (14 modules)
+│   │   └── validators/           # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.val… (2 modules)
+│   ├── integrations/
+│   │   ├── __init__.py
+│   │   └── pggit/                # pgGit integration module for Confiture (9 modules)
+│   ├── models/                   # Confiture migration models
+│   │   ├── __init__.py           # Confiture migration models
+│   │   ├── debug_models.py       # Data models for CTE step-through debugging
+│   │   ├── error.py              # Error models for structured error handling
+│   │   ├── function_info.py      # Data models for PostgreSQL function/procedure introspection
+│   │   ├── git.py                # Data models for git-based validation reports
+│   │   ├── introspection.py      # Data models for schema introspection output
+│   │   ├── lint.py               # Linting models for schema validation
+│   │   ├── mcp_models.py         # Data models for MCP (Model Context Protocol) server
+│   │   ├── migration.py          # Migration base class for database migrations
+│   │   ├── pgtap_models.py       # Data models for pgTAP test scaffold generation
+│   │   ├── preflight.py          # Models for the preflight dependent-objects check
+│   │   ├── results.py            # Command result models for structured output
+│   │   ├── schema.py             # Data models for schema representation
+│   │   ├── sql_file_migration.py # SQL file-based migrations
+│   │   ├── stub_models.py        # Data models for Python stub generation from PostgreSQL functions
+│   │   └── unified_lint.py       # Models for unified SQL linting results
+│   ├── schemas/                  # The JSON schemas confiture publishes: the one source (Phase 06, ENG-10)
+│   │   └── __init__.py           # The JSON schemas confiture publishes: the one source (Phase 06, ENG-10)
+│   ├── sql/
+│   │   └── __init__.py
+│   └── testing/                  # Confiture Migration Testing Framework
+│       ├── __init__.py           # Confiture Migration Testing Framework
+│       ├── loader.py             # Migration loader utility for testing
+│       ├── pytest_plugin.py      # Pytest plugin for confiture migration testing
+│       ├── sandbox.py            # Migration testing sandbox
+│       ├── worker_db.py          # Per-worker test-database name/URL resolution for pytest-xdist
+│       ├── fixtures/             # Test fixtures and utilities for Confiture migration testing (4 modules)
+│       ├── frameworks/           # Testing frameworks for Confiture migration validation (3 modules)
+│       └── pytest/               # Pytest integration for confiture migration testing (1 module)
 │
-├── tests/
-│   ├── unit/                    # Fast, isolated tests (no database required)
-│   ├── integration/             # Database-dependent tests
-│   ├── e2e/                     # Full CLI workflow tests
-│   ├── fixtures/                # SQL fixtures and migration stubs
-│   └── conftest.py              # Pytest configuration
+├── tests/                        # unit (no database), integration, e2e, contract, performance
+│   ├── contract/
+│   ├── e2e/
+│   ├── fixtures/
+│   ├── integration/
+│   ├── performance/
+│   └── unit/
 │
-├── db/
-│   ├── schema/                  # Source-of-truth DDL files
-│   ├── migrations/              # Migration files (YYYYMMDDHHMMSS_name.up.sql)
-│   └── schema_history/          # Schema snapshots after each migration
+├── db/                           # the repo's own schema, migrations and snapshots
+│   ├── environments/
+│   ├── schema/
+│   └── schema_history/
 │
-├── docs/
-│   ├── guides/                  # User guides per medium and feature
-│   ├── reference/               # CLI and configuration reference
-│   └── api/                     # API documentation
+├── docs/                         # the mkdocs site: guides, reference, api, features
+│   ├── api/
+│   ├── architecture/
+│   ├── features/
+│   ├── guides/
+│   ├── operations/
+│   ├── performance/
+│   ├── reference/
+│   ├── release-notes/
+│   ├── research/
+│   └── security/
 │
-├── .github/
-│   └── workflows/
-│       ├── quality-gate.yml     # Linting, type checking, unit tests
-│       └── release.yml          # Build wheels + publish
+├── examples/                     # runnable example projects (examples.yml runs them in CI)
+├── scripts/                      # generators (--check in CI) and developer helpers
+├── src/                          # the confiture._core extension (file hashing)
+├── ci/                           # local Dagger pipeline mirroring quality-gate.yml
 │
-├── pyproject.toml               # Python packaging (fraiseql-confiture)
-├── uv.lock                      # Dependency lock file
-├── ARCHITECTURE.md              # This document
-├── CLAUDE.md                    # AI-assisted development guide
-├── CHANGELOG.md                 # Release notes
+├── .github/workflows/
+│   ├── examples.yml
+│   ├── lockfile-bump.yml
+│   ├── migration-deployment-gates.yml
+│   ├── migration-performance.yml
+│   ├── publish.yml
+│   ├── python-version-matrix.yml
+│   └── quality-gate.yml
+│
+├── pyproject.toml
+├── uv.lock
+├── Cargo.toml
+├── Cargo.lock
+├── mkdocs.yml
+├── docker-compose.yml
+├── ARCHITECTURE.md
+├── PRD.md
+├── CLAUDE.md
+├── CHANGELOG.md
 └── README.md
 ```
+<!-- END GENERATED: tree -->
 
 ---
 
@@ -698,6 +812,16 @@ uv run ruff check .
 uv run ty check python/confiture/
 ```
 
+### Adding or changing a CLI option
+
+`docs/reference/cli.md` carries one generated block per command (usage,
+arguments, options) between `<!-- BEGIN GENERATED: cli confiture … -->` markers.
+After changing a Typer command run `python scripts/gen_cli_reference.py --write`
+and keep the hand prose around the block; `--check` (and
+`tests/unit/docs/test_doc_sync_cli.py`) fails on a stale block, an undocumented
+flag, an example using a flag the command has not got, or a section for a
+command that does not exist.
+
 ### Adding a `confiture lint` rule
 
 Register it in `python/confiture/core/linting/rule_registry.py` — **do not add a
@@ -1010,7 +1134,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-09-06
-**Version**: 0.53.0
+**Version**: 0.54.0
 
 ---
 

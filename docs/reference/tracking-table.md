@@ -37,7 +37,7 @@ CREATE INDEX idx_tb_confiture_applied_at   ON tb_confiture(applied_at DESC);
 | `execution_time_ms` | `INTEGER` | Wall-clock time spent running the migration's SQL. `NULL` for rows inserted by `migrate baseline`. |
 | `checksum` | `VARCHAR(64)` | SHA-256 of the migration file at apply time. Compared by `migrate validate` and `migrate preflight`. `NULL` for baselined rows. |
 
-> The three-key identity pattern (`id` / `pk_confiture` / `slug`) is the same Trinity pattern Confiture recommends for application tables. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for the rationale.
+> The three-key identity pattern (`id` / `pk_confiture` / `slug`) is the same Trinity pattern Confiture recommends for application tables. See [ARCHITECTURE.md](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md) for the rationale.
 
 ## Renaming the table
 

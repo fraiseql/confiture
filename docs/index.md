@@ -180,10 +180,10 @@ confiture migrate up
 
 ## Examples
 
-- [Multi-Agent Workflow](../examples/multi-agent-workflow/) - Coordination examples (NEW!)
-- [Basic Migration](../examples/01-basic-migration/) - Beginner tutorial
-- [Zero-Downtime Migration](../examples/03-zero-downtime-migration/) - Production scenario
-- [Production Sync](../examples/04-production-sync-anonymization/) - PII handling
+- [Multi-Agent Workflow](https://github.com/fraiseql/confiture/tree/main/examples/multi-agent-workflow) - Coordination examples (NEW!)
+- [Basic Migration](https://github.com/fraiseql/confiture/tree/main/examples/01-basic-migration) - Beginner tutorial
+- [Zero-Downtime Migration](https://github.com/fraiseql/confiture/tree/main/examples/03-zero-downtime-migration) - Production scenario
+- [Production Sync](https://github.com/fraiseql/confiture/tree/main/examples/04-production-sync-anonymization) - PII handling
 
 ---
 

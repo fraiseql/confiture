@@ -80,7 +80,7 @@ db/schema/
 - **Easy insertion** of new categories
 - **Deterministic sorting** across all locales
 
-**See [Hexadecimal Sorting](../features/hexadecimal-sorting.md)** for complete documentation.
+**See [Hexadecimal Sorting](features/hexadecimal-sorting.md)** for complete documentation.
 
 ---
 
@@ -626,7 +626,7 @@ db/schema/
 
 See working examples in the repository:
 
-- **[examples/basic/](../examples/basic/)**: Simple blog schema
+- **[examples/basic/](https://github.com/fraiseql/confiture/tree/main/examples/basic)**: Simple blog schema
 - **[examples/fraiseql/](../examples/fraiseql/)**: FraiseQL integration
 - **Complex projects**: Use three-level directory pattern (shown above)
 
@@ -647,10 +647,10 @@ See working examples in the repository:
 
 ## Related Documentation
 
-- **[Meaningful Test UUIDs](./meaningful-test-uuids.md)** - Generate debuggable UUIDs for seed data
+- **[Meaningful Test UUIDs](https://github.com/fraiseql/confiture/blob/main/docs/guides/seed-validation.md)** - Generate debuggable UUIDs for seed data
 - **[Getting Started Guide](./getting-started.md)** - First steps with Confiture
 - **[Migration Decision Tree](./guides/migration-decision-tree.md)** - When to use each approach
 
 ---
 
-*Part of [Confiture](../README.md) - PostgreSQL migrations, sweetly done 🍓*
+*Part of [Confiture](https://github.com/fraiseql/confiture/blob/main/README.md) - PostgreSQL migrations, sweetly done 🍓*

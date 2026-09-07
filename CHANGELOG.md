@@ -5,6 +5,77 @@ All notable changes to Confiture will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Backfill note (2026-09-07).** Before 0.12.0 the entries and the git tags diverged and the gaps are
+> recorded here rather than reconstructed: `0.0.1`, `0.3.8`, `0.6.1`, `0.8.10` and `0.11.0` have an
+> entry but were never tagged or published, and sixteen tags were published without an entry
+> (`0.2.0-alpha`, `0.3.1`, `0.3.4`, `0.3.5`, `0.3.12`, `0.4.2`, `0.4.3`, `0.4.3.1`, `0.4.4`, `0.5.1`,
+> `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
+> every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
+
+## [0.54.0] - 2026-09-07
+
+Phase 10 of the 2026-09-06 review: documentation truth — every documented
+command, flag, config field and output shape exists and behaves as written,
+and the checks that caught this review's findings run in CI.
+
+### Fixed
+
+- **`docs/reference/cli.md` documents the CLI that exists.** It described
+  `confiture admin install-helpers`, `coordinate init`, `coordinate complete`
+  and `coordinate list`, none of which are commands, and had no section for
+  fifty-six commands that are (`branch`, `generate`, `seed`, the `test-db` and
+  `schema-to-schema` subcommands, `bootstrap`, `restore`, `introspect`, …).
+  Every leaf command now has a section with a generated block — usage,
+  arguments, options — rendered from the live Typer app by
+  `scripts/gen_cli_reference.py` between named markers; the prose around it
+  is hand-written. A test holds every block current, every registered flag
+  documented, every example valid for its command, and every flag named
+  anywhere real.
+- **`docs/reference/configuration.md` documents exactly the fields on the
+  models.** A generated field reference — one table per model with type,
+  default and the model's own description, plus a complete YAML skeleton with
+  every field at its default — is rendered from `confiture.config.environment`
+  by `scripts/gen_config_reference.py`; thirty-two fields had no description
+  anywhere and have one in their model docstring now. A test holds the block
+  current, every YAML key in the reference a real field, and every field
+  documented.
+- **Docs: the site builds strictly and the nav is generated** (Phase 10). `mkdocs.yml`'s `nav:` block is
+  rendered by `scripts/gen_mkdocs_nav.py` from the `docs/` tree (`--check`/`--write`; 106 pages) and
+  `tests/unit/docs/test_mkdocs_nav.py` fails when a nav entry has no file, a page is missing from the nav
+  without an explicit exclusion, or the block is stale. `mkdocs build --strict` runs in the quality-gate
+  Lint job (new `docs` extra: mkdocs, mkdocs-material, mkdocstrings), together with the three generator
+  `--check`s; 69 warnings fixed to reach zero — 10 pages that were not in the nav and ~45 broken relative
+  links (targets outside `docs/` now point at GitHub; links to pages that never existed re-targeted).
+- **Root guides moved under `docs/`**: `QUICKSTART.md` → `docs/quickstart.md`, `DEVELOPMENT.md` →
+  `docs/development.md`, `CONTRIBUTING.md` → `docs/contributing.md`, `DATABASE_SETUP.md` →
+  `docs/guides/database-setup.md`; the root files are one-line pointers. Their stale `mypy` /
+  `confiture_migrations` mentions are fixed (the docs fiction guard now covers them). The mkdocs PyPI
+  link pointed at the wrong package name.
+- **CLAUDE.md's project tree is generated** (`scripts/gen_tree.py --check`/`--write`, in CI): the
+  `python/confiture` package two levels deep with each module's docstring first line as its comment,
+  the top-level directories, the workflows and the root files — no hand-maintained listing, no line
+  counts (`tests/unit/docs/test_claude_md_tree.py`).
+- **README: the JSON-schema sentence names exactly the schema-backed commands.** It claimed every
+  machine-readable output had a schema; 26 schemas cover 16 of the 52 commands that offer
+  `--format json`. `tests/unit/docs/test_readme_claims.py` derives both sets and pins the sentence.
+- **Guides and examples tell the truth** (Phase 10, Cycle 5). `docs/guides/dry-run.md`'s JSON sample is
+  the real `--dry-run --format json` payload for a one-migration project (it invented
+  `estimated_duration_ms` and omitted `statements_analyzed`, `classification`, `findings`, `warnings`);
+  `tests/unit/docs/test_doc_dry_run_json_shape.py` compares it with the builder's output. Six example
+  environment files still used the pre-0.10 `database:` block the model rejects (02, 04 ×2, 05 ×3) and
+  ten README snippets showed it; all are `database_url` now and `tests/unit/docs/test_example_configs.py`
+  loads every `examples/*/db/environments/*.yaml` through `Environment.load` and validates every README
+  snippet. The 01 and 05 READMEs described `build` followed by `migrate up` on the same fresh database,
+  which double-applies a change the schema already carries; they now record the baseline the way their
+  `run.sh` does. `examples/07-comment-validation` gains an asserting `run.sh` (CI runs it) in place of
+  the unasserted `test-scenarios.sh`. A backfill note at the top of this file records the pre-0.12
+  tag/entry gaps.
+- **Removed: `helm/` and `docker/`** (D4). The chart was unreleased and unreferenced; `docker/` held two
+  PostgreSQL config files that `docker-compose.yml` mounted (and a pgAdmin servers file it referenced
+  but that did not exist). Compose now runs the stock image with three development flags
+  (`fsync=off`, `synchronous_commit=off`, `full_page_writes=off`); the database-setup guide's
+  custom-image section no longer points at files that were never in the repo.
+
 ## [0.53.0] - 2026-09-07
 
 Phase 08 of the 2026-09-06 review: the package boundaries say what the modules do.

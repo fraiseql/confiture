@@ -1091,7 +1091,7 @@ The Multi-Agent Coordination system is designed for:
 **Related Documentation**:
 - [User Guide](../guides/multi-agent-coordination.md)
 - [API Reference](../api/)
-- [Examples](../../examples/multi-agent-workflow/)
+- [Examples](https://github.com/fraiseql/confiture/tree/main/examples/multi-agent-workflow)
 
 **Version**: 0.3.7
 **Last Updated**: January 2026

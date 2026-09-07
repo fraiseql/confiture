@@ -141,7 +141,13 @@ class BuildLintConfig(BaseModel):
 
 
 class BuildConfig(BaseModel):
-    """Build configuration options."""
+    """Build configuration options.
+
+    Attributes:
+        validate_comments: Block-comment validation before a build (``enabled``, ``fail_on_unclosed_blocks``, ``fail_on_spillover``).
+        separators: How file boundaries are marked in the built schema (``style``: block_comment, line_comment, mysql, custom; ``custom_template``).
+        lint: Lint run as part of ``confiture build`` (``enabled``, ``fail_on_error``, ``fail_on_warning``, ``rules``).
+    """
 
     sort_mode: str = "alphabetical"  # Options: alphabetical, hex
     two_pass: bool = False  # Two-pass FK emission (issue #94)
@@ -256,6 +262,9 @@ class MigrationConfig(BaseModel):
     """Migration configuration options.
 
     Attributes:
+        rebuild_threshold: Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50).
+        grant_dir: Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``).
+        allow_unsafe_under_replication: Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared.
         strict_mode: Whether to fail on warnings/notices (default: False)
         locking: Distributed locking configuration
         view_helpers: View helper installation mode ("auto", "manual", "off")
@@ -291,6 +300,9 @@ class InfrastructureConfig(BaseModel):
     (non-empty) makes the replica-safety lint error rather than warn — the
     project is telling confiture it runs under replication. The deploy tool
     (fraisier) owns the live topology; confiture only reads this declaration.
+
+    Attributes:
+        replicas: Read replicas of this environment (hostnames or DSNs); declaring any makes replica-unsafe DDL a preflight error.
     """
 
     replicas: list[str] = Field(default_factory=list)
@@ -372,7 +384,16 @@ class SshTunnelConfig(BaseModel):
 
 
 class DirectoryConfig(BaseModel):
-    """Directory configuration with pattern matching."""
+    """Directory configuration with pattern matching.
+
+    Attributes:
+        path: Directory to read, relative to the project root.
+        recursive: Descend into subdirectories (default: true).
+        include: Glob patterns a file must match to be built (default: ``**/*.sql``).
+        exclude: Glob patterns that remove files from the build.
+        auto_discover: Discover files by the include/exclude globs; ``false`` builds only what ``order`` and explicit names select.
+        order: Sort key among directories in the build; lower runs first (default: 0).
+    """
 
     path: str
     recursive: bool = True
@@ -450,6 +471,10 @@ class AclGrant(BaseModel):
     Privileges are normalized uppercase regardless of YAML casing; the
     PostgreSQL grant vocabulary is case-insensitive but mixing styles in
     config is noisy, so we pick one.
+
+    Attributes:
+        role: Database role the privileges are granted to.
+        privileges: Table privileges the role must hold (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL); case-insensitive in YAML.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -477,6 +502,12 @@ class AclTableExpectation(BaseModel):
     ``apply_to`` is either the literal string ``"ALL_TABLES"`` (every base
     table in the schema except those matching ``ignore``) or a list of
     ``fnmatch`` glob patterns evaluated against the bare relname.
+
+    Attributes:
+        schema_: Schema the entry applies to (YAML key ``schema``).
+        apply_to: ``ALL_TABLES`` or an explicit list of table names in that schema.
+        ignore: Table names in the schema that are exempt from the expectation.
+        grants: The roles and privileges every in-scope table must carry.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -511,6 +542,10 @@ class OwnershipApplyTo(BaseModel):
 
     ``relkinds`` accepts only ``r`` (regular table), ``S`` (sequence),
     ``v`` (view), or ``m`` (materialized view).  Default covers all four.
+
+    Attributes:
+        schema_: Schema the ownership expectation applies to (YAML key ``schema``).
+        relkinds: ``pg_class.relkind`` letters to check (default: r tables, S sequences, v views, m materialized views).
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -688,6 +723,10 @@ class DriftConfig(BaseModel):
     ``column_order_severity`` is ``warning`` (default, never fails a run on its
     own) or ``critical`` (fails like a missing column). ``--ignore-column-order``
     on either command wins over the file.
+
+    Attributes:
+        ignore_column_order: Never report ``column_order_mismatch`` (default: false).
+        column_order_severity: Severity of a ``column_order_mismatch`` item: ``warning`` (default) or ``critical`` (fails the run).
     """
 
     ignore_column_order: bool = False
@@ -700,6 +739,15 @@ class Environment(BaseModel):
     Loaded from db/environments/{env_name}.yaml files.
 
     Attributes:
+        superuser_dirs: Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash.
+        infrastructure: Deployment topology — the read replicas the replica-safety policy takes into account (``infrastructure.replicas``).
+        drift: How ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (``drift.ignore_column_order``, ``drift.column_order_severity``).
+        ssh_tunnel: SSH tunnel to reach a database that is not directly routable; ``null`` means connect directly.
+        acls: Expected table grants per schema for ``drift --check-acls`` and the ``acl_001`` lint (list of ``AclTableExpectation``).
+        acls_lint_enabled: Run the static ``acl_001`` grant-coverage lint over migrations; ``acls:`` alone only feeds ``drift --check-acls``.
+        ownership: Expected relation ownership per schema for ``drift --check-ownership`` and the ``own_001`` lint; ``null`` disables both.
+        function_coverage: Which schemas' functions the function-uniqueness check covers (``migrate validate --check-function-uniqueness``).
+        security_lint: The ``sec_002`` SECURITY DEFINER lint: enabled flag, schema scope, ignore globs and severity.
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
         include_dirs: Directories to include when building schema (supports both string and dict formats)

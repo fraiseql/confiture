@@ -667,7 +667,7 @@ linting:
 
 1. **[Advanced Patterns](./advanced-patterns.md)** - Custom validation rules
 2. **[CLI Reference](../reference/cli.md)** - Full lint command documentation
-3. **[Examples](../../examples/)** - Production linting examples
+3. **[Examples](https://github.com/fraiseql/confiture/tree/main/examples)** - Production linting examples
 
 **Got questions?**
 - **[FAQ](../glossary.md)** - Glossary and definitions

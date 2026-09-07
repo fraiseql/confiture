@@ -461,7 +461,7 @@ Otherwise → Use Medium 2
 - [Incremental Migrations](./02-incremental-migrations.md) - ALTER-based changes
 - [Production Data Sync](./03-production-sync.md) - Copy and anonymize data
 - [Schema-to-Schema](./04-schema-to-schema.md) - Zero-downtime migrations
-- [Examples](../../examples/) - Working examples for each strategy
+- [Examples](https://github.com/fraiseql/confiture/tree/main/examples) - Working examples for each strategy
 
 ---
 

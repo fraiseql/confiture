@@ -68,9 +68,7 @@ migration:
   # Tracking table name (optional, default: tb_confiture)
   tracking_table: tb_confiture
 
-# Auto-backup before migrations (optional, default: true)
 
-# Require confirmation for risky operations (optional, default: true)
 ```
 
 ---
@@ -494,6 +492,329 @@ CREATE TABLE catalog.tb_audit_ledger ( ... );
 
 ---
 
+
+## Field reference
+
+<!-- BEGIN GENERATED: config-fields -->
+
+### Every field, from the models
+
+Generated from `confiture.config.environment`; the description is the model's own.
+
+#### `Environment`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | str | `` | Environment name (e.g., "local", "production") |
+| `database_url` | str | **required** | PostgreSQL connection URL |
+| `include_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories to include when building schema (supports both string and dict formats) |
+| `superuser_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash. |
+| `superuser_post_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories routed to the post-schema superuser phase in build_split() |
+| `exclude_dirs` | list[str] | `[]` | Directories to exclude from schema build |
+| `build` | [BuildConfig](#buildconfig) | (nested) | Build configuration options |
+| `migration` | [MigrationConfig](#migrationconfig) | (nested) | Migration configuration options (includes tracking_table) |
+| `infrastructure` | [InfrastructureConfig](#infrastructureconfig) | (nested) | Deployment topology — the read replicas the replica-safety policy takes into account (``infrastructure.replicas``). |
+| `seed` | [SeedConfig](#seedconfig) | (nested) | Seed data application configuration |
+| `drift` | [DriftConfig](#driftconfig) | (nested) | How ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (``drift.ignore_column_order``, ``drift.column_order_severity``). |
+| `ssh_tunnel` | [SshTunnelConfig](#sshtunnelconfig) \| NoneType | - | SSH tunnel to reach a database that is not directly routable; ``null`` means connect directly. |
+| `acls` | list[[AclTableExpectation](#acltableexpectation)] | `[]` | Expected table grants per schema for ``drift --check-acls`` and the ``acl_001`` lint (list of ``AclTableExpectation``). |
+| `acls_lint_enabled` | bool | `false` | Run the static ``acl_001`` grant-coverage lint over migrations; ``acls:`` alone only feeds ``drift --check-acls``. |
+| `ownership` | [OwnershipExpectation](#ownershipexpectation) \| NoneType | - | Expected relation ownership per schema for ``drift --check-ownership`` and the ``own_001`` lint; ``null`` disables both. |
+| `function_coverage` | [FunctionCoverage](#functioncoverage) \| NoneType | - | Which schemas' functions the function-uniqueness check covers (``migrate validate --check-function-uniqueness``). |
+| `security_lint` | [SecurityLinting](#securitylinting) \| NoneType | - | The ``sec_002`` SECURITY DEFINER lint: enabled flag, schema scope, ignore globs and severity. |
+
+#### `DirectoryConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `path` | str | **required** | Directory to read, relative to the project root. |
+| `recursive` | bool | `true` | Descend into subdirectories (default: true). |
+| `include` | list[str] | `['**/*.sql']` | Glob patterns a file must match to be built (default: ``**/*.sql``). |
+| `exclude` | list[str] | `[]` | Glob patterns that remove files from the build. |
+| `auto_discover` | bool | `true` | Discover files by the include/exclude globs; ``false`` builds only what ``order`` and explicit names select. |
+| `order` | int | `0` | Sort key among directories in the build; lower runs first (default: 0). |
+
+#### `BuildConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `sort_mode` | str | `alphabetical` | Options: alphabetical, hex |
+| `two_pass` | bool | `false` | Two-pass FK emission (issue #94) |
+| `validate_comments` | [CommentValidationConfig](#commentvalidationconfig) | (nested) | Block-comment validation before a build (``enabled``, ``fail_on_unclosed_blocks``, ``fail_on_spillover``). |
+| `separators` | [SeparatorConfig](#separatorconfig) | (nested) | How file boundaries are marked in the built schema (``style``: block_comment, line_comment, mysql, custom; ``custom_template``). |
+| `lint` | [BuildLintConfig](#buildlintconfig) | (nested) | Lint run as part of ``confiture build`` (``enabled``, ``fail_on_error``, ``fail_on_warning``, ``rules``). |
+
+#### `CommentValidationConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Whether to validate comments (default: True) |
+| `fail_on_unclosed_blocks` | bool | `true` | Fail if unclosed block comments found (default: True) |
+| `fail_on_spillover` | bool | `true` | Fail if file ends inside unclosed comment (default: True) |
+
+#### `SeparatorConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `style` | str | `block_comment` | Separator style (block_comment, line_comment, mysql, custom) |
+| `custom_template` | str \| NoneType | - | Custom template for separators (only used if style=custom) |
+
+#### `BuildLintConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Whether to lint schema (default: False - disabled by default) |
+| `fail_on_error` | bool | `true` | Fail build if linting errors found (default: True) |
+| `fail_on_warning` | bool | `false` | Fail build if linting warnings found (default: False) |
+| `rules` | list[str] | `['naming_convention', 'primary_key', 'documentation', 'missing_index', 'security']` | List of linting rules to apply |
+
+#### `MigrationConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `strict_mode` | bool | `false` | Whether to fail on warnings/notices (default: False) |
+| `locking` | [LockingConfig](#lockingconfig) | (nested) | Distributed locking configuration |
+| `view_helpers` | `auto` \| `manual` \| `off` | `auto` | View helper installation mode ("auto", "manual", "off") |
+| `migration_generators` | dict[str, [MigrationGeneratorConfig](#migrationgeneratorconfig)] | `{}` | Named external generator commands |
+| `snapshot_history` | bool | `true` | Write schema snapshot alongside each generated migration (default: True) |
+| `snapshots_dir` | str | `db/schema_history` | Directory for schema history snapshots (default: db/schema_history) |
+| `live_snapshot` | bool | `false` | Use live-snapshot mode (temp DB + pg_dump) by default (default: False) |
+| `tracking_table` | str | `tb_confiture` | Name of the confiture tracking table, optionally schema-qualified (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``. |
+| `rebuild_threshold` | int | `5` | Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50). |
+| `grant_dir` | str | `db/7_grant` | Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``). |
+| `allow_unsafe_under_replication` | bool | `false` | Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared. |
+
+#### `LockingConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Whether locking is enabled (default: True) |
+| `timeout_ms` | int | `30000` | Lock acquisition timeout in milliseconds (default: 30000) |
+
+#### `MigrationGeneratorConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `command` | str | **required** | Shell command template with {from}, {to}, {output} placeholders |
+| `description` | str | `` | Human-readable label for the generator |
+
+#### `InfrastructureConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `replicas` | list[str] | `[]` | Read replicas of this environment (hostnames or DSNs); declaring any makes replica-unsafe DDL a preflight error. |
+
+#### `SeedConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `execution_mode` | str | `concatenate` | Execution strategy ("concatenate" \| "sequential") |
+| `continue_on_error` | bool | `false` | Continue applying files if one fails (default: False) |
+| `transaction_mode` | `savepoint` \| `transaction` | `savepoint` | "savepoint" (one transaction, a savepoint per file — a failure rolls back that file only) or "transaction" (each file commits on its own, so files before a failure stay applied) |
+| `profiles` | dict[str, [SeedProfile](#seedprofile)] | `{}` | Named seed subsets (see :class:`SeedProfile`). Absent ⇒ today's apply-all behaviour is unchanged. |
+
+#### `SeedProfile`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `include` | list[str] | `[]` | Globs a file must match to be included (empty = all files). |
+| `exclude` | list[str] | `[]` | Globs that remove an otherwise-included file. |
+
+#### `DriftConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `ignore_column_order` | bool | `false` | Never report ``column_order_mismatch`` (default: false). |
+| `column_order_severity` | `warning` \| `critical` | `warning` | Severity of a ``column_order_mismatch`` item: ``warning`` (default) or ``critical`` (fails the run). |
+
+#### `SshTunnelConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `host` | str | **required** | SSH server hostname (e.g. "printoptim.io") |
+| `user` | str \| NoneType | - | SSH username. Defaults to the current OS user if omitted. |
+| `remote_host` | str | `localhost` | PostgreSQL host on the remote side (default: localhost). Ignored when ``remote_socket`` is set. |
+| `remote_port` | int | `5432` | PostgreSQL port on the remote side (default: 5432). Ignored when ``remote_socket`` is set. |
+| `remote_socket` | str \| NoneType | - | Unix domain socket path on the remote side (e.g. ``/var/run/postgresql/.s.PGSQL.5432``). When set, the tunnel forwards a local TCP port to this socket instead of a TCP ``remote_host:remote_port`` pair. Requires OpenSSH ≥ 6.7. |
+| `local_port` | int | `0` | Local port to bind. 0 = pick a free port automatically (default: 0) |
+| `identity_file` | str \| NoneType | - | Path to SSH private key. If omitted, uses ssh-agent / default key. |
+| `timeout_s` | int | `10` | Seconds to wait for the tunnel to open (default: 10) |
+
+#### `AclTableExpectation`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `schema` | str | **required** | Schema the entry applies to (YAML key ``schema``). |
+| `apply_to` | `ALL_TABLES` \| list[str] | **required** | ``ALL_TABLES`` or an explicit list of table names in that schema. |
+| `ignore` | list[str] | `[]` | Table names in the schema that are exempt from the expectation. |
+| `grants` | list[[AclGrant](#aclgrant)] | **required** | The roles and privileges every in-scope table must carry. |
+
+#### `AclGrant`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `role` | str | **required** | Database role the privileges are granted to. |
+| `privileges` | list[`SELECT` \| `INSERT` \| `UPDATE` \| `DELETE` \| `TRUNCATE` \| `REFERENCES` \| `TRIGGER`] | **required** | Table privileges the role must hold (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL); case-insensitive in YAML. |
+
+#### `OwnershipExpectation`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `expected_owner` | str | **required** | Canonical role that should own every in-scope relation in the environment. |
+| `apply_to` | list[[OwnershipApplyTo](#ownershipapplyto)] | **required** | Per-schema scope entries (which relkinds to check). |
+| `ignore` | list[str] | `[]` | Object-path globs that opt specific relations out of both static lint and runtime drift detection. |
+| `lint_enabled` | bool | `true` | Master switch for the static ``own_001`` rule. |
+| `bootstrap_connection_url` | str \| NoneType | - | Optional superuser URL used by ``confiture bootstrap`` (issue #137). Required for ``--apply`` because ``CREATE ROLE`` and ``REASSIGN OWNED`` both need superuser. Falls back to the env's main URL only when the user passes the explicit override; we never guess. Supports ``${VAR}`` expansion at load time. |
+| `default_privileges` | dict[str, dict[str, list[str]]] \| NoneType | - | Mapping of ``schema -> role -> [PRIVILEGE, ...]`` used to plan ``ALTER DEFAULT PRIVILEGES`` statements in ``confiture bootstrap`` (issue #137 part 1). ``None`` means the bootstrap step is skipped with a one-line notice. Privilege strings are validated against the standard PostgreSQL allow-list. |
+
+#### `OwnershipApplyTo`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `schema` | str | **required** | Schema the ownership expectation applies to (YAML key ``schema``). |
+| `relkinds` | list[str] | `['r', 'S', 'v', 'm']` | ``pg_class.relkind`` letters to check (default: r tables, S sequences, v views, m materialized views). |
+
+#### `FunctionCoverage`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Master switch. When False the rule is a no-op even if scope-matching files contain duplicates. |
+| `apply_to` | list[str] | `['*']` | Schema-name patterns (``fnmatch``-style) that scope the check. ``["*"]`` covers every schema; ``["public", "stat_etl"]`` covers only those two. |
+| `ignore` | list[str] | `[]` | Object-path globs (``schema.name``) that opt specific callables out of detection regardless of how many files define them. |
+
+#### `SecurityLinting`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Master switch. |
+| `apply_to` | list[str] | `['*']` | Schema-name patterns (``fnmatch``-style) that scope the check. ``["*"]`` covers every schema. |
+| `ignore` | list[str] | `[]` | Object-path globs (``schema.name``) that opt specific callables out of detection for deliberate exceptions. |
+| `severity` | str | `warning` | Violation severity — ``"warning"`` (advisory, exit 0) or ``"error"`` (hard gate, exit 1). |
+
+### Complete skeleton (every field at its default)
+
+```yaml
+name: ''
+database_url: null
+include_dirs:
+  - path: null
+    recursive: true
+    include:
+      - '**/*.sql'
+    exclude: []
+    auto_discover: true
+    order: 0
+superuser_dirs:
+  - path: null
+    recursive: true
+    include:
+      - '**/*.sql'
+    exclude: []
+    auto_discover: true
+    order: 0
+superuser_post_dirs:
+  - path: null
+    recursive: true
+    include:
+      - '**/*.sql'
+    exclude: []
+    auto_discover: true
+    order: 0
+exclude_dirs: []
+build:
+  sort_mode: alphabetical
+  two_pass: false
+  validate_comments:
+    enabled: true
+    fail_on_unclosed_blocks: true
+    fail_on_spillover: true
+  separators:
+    style: block_comment
+    custom_template: null
+  lint:
+    enabled: false
+    fail_on_error: true
+    fail_on_warning: false
+    rules:
+      - naming_convention
+      - primary_key
+      - documentation
+      - missing_index
+      - security
+migration:
+  strict_mode: false
+  locking:
+    enabled: true
+    timeout_ms: 30000
+  view_helpers: auto
+  migration_generators:
+    <name>:
+      command: null
+      description: ''
+  snapshot_history: true
+  snapshots_dir: db/schema_history
+  live_snapshot: false
+  tracking_table: tb_confiture
+  rebuild_threshold: 5
+  grant_dir: db/7_grant
+  allow_unsafe_under_replication: false
+infrastructure:
+  replicas: []
+seed:
+  execution_mode: concatenate
+  continue_on_error: false
+  transaction_mode: savepoint
+  profiles:
+    <name>:
+      include: []
+      exclude: []
+drift:
+  ignore_column_order: false
+  column_order_severity: warning
+ssh_tunnel:
+  host: null
+  user: null
+  remote_host: localhost
+  remote_port: 5432
+  remote_socket: null
+  local_port: 0
+  identity_file: null
+  timeout_s: 10
+acls:
+  - schema: null
+    apply_to: null
+    ignore: []
+    grants:
+      - role: null
+        privileges: null
+acls_lint_enabled: false
+ownership:
+  expected_owner: null
+  apply_to:
+    - schema: null
+      relkinds:
+        - r
+        - S
+        - v
+        - m
+  ignore: []
+  lint_enabled: true
+  bootstrap_connection_url: null
+  default_privileges: null
+function_coverage:
+  enabled: false
+  apply_to:
+    - '*'
+  ignore: []
+security_lint:
+  enabled: false
+  apply_to:
+    - '*'
+  ignore: []
+  severity: warning
+```
+
+<!-- END GENERATED: config-fields -->
 
 ## Environment Examples
 
@@ -961,7 +1282,7 @@ include_dirs:
 - **[CLI Reference](./cli.md)** - Command-line usage
 - **[Getting Started](../getting-started.md)** - Project setup tutorial
 - **[Migration Decision Tree](../guides/migration-decision-tree.md)** - Choosing the right approach
-- **[API Reference](./api.md)** - Python API documentation
+- **[API Reference](../api/index.md)** - Python API documentation
 
 ---
 
