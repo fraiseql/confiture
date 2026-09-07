@@ -298,7 +298,6 @@ max-returns = 8
 "python/confiture/core/differ.py" = ["PLR0911", "PLR2004"]
 "python/confiture/core/dry_run.py" = ["PLR2004"]
 "python/confiture/core/error_handler.py" = ["PLR0911"]
-"python/confiture/core/fk_extractor.py" = ["C901", "PLR0912"]
 "python/confiture/core/git_accompaniment.py" = ["PLR2004"]
 "python/confiture/core/git_schema.py" = ["PLR2004"]
 "python/confiture/core/hooks/notifications/transport.py" = ["PLR2004"]

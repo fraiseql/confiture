@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from confiture.core import sql_lexer
 from confiture.core.sql_lexer import strip_comments
 
 # ── Identifier pattern (bare or double-quoted, optionally schema-qualified) ──
@@ -121,59 +122,43 @@ def _find_create_table_blocks(sql: str) -> list[tuple[int, int, str]]:
     Returns list of (start, end, table_name) tuples where start..end
     spans the full CREATE TABLE statement including the closing ;.
     """
-    blocks = []
+    parens = _ParenMatcher(sql)
+    blocks: list[tuple[int, int, str]] = []
     for m in _CREATE_TABLE_RE.finditer(sql):
-        table_name = m.group(1)
-        depth = 1
-        pos = m.end()
-        in_line_comment = False
-        in_block_comment = False
-        in_string = False
-        string_char = None
-
-        while pos < len(sql) and depth > 0:
-            ch = sql[pos]
-
-            if in_line_comment:
-                if ch == "\n":
-                    in_line_comment = False
-            elif in_block_comment:
-                if ch == "*" and pos + 1 < len(sql) and sql[pos + 1] == "/":
-                    in_block_comment = False
-                    pos += 1
-            elif in_string:
-                if ch == string_char:
-                    # Check for escaped quote ('' in SQL)
-                    if ch == "'" and pos + 1 < len(sql) and sql[pos + 1] == "'":
-                        pos += 1  # skip escaped quote
-                    else:
-                        in_string = False
-            elif ch == "-" and pos + 1 < len(sql) and sql[pos + 1] == "-":
-                in_line_comment = True
-                pos += 1
-            elif ch == "/" and pos + 1 < len(sql) and sql[pos + 1] == "*":
-                in_block_comment = True
-                pos += 1
-            elif ch in ("'",):
-                in_string = True
-                string_char = ch
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-
-            pos += 1
-
-        if depth == 0:
-            # Find the semicolon after the closing paren
-            end = pos
-            while end < len(sql) and sql[end] in (" ", "\t", "\n", "\r"):
-                end += 1
-            if end < len(sql) and sql[end] == ";":
-                end += 1
-            blocks.append((m.start(), end, table_name))
-
+        open_pos = sql.find("(", m.end() - 1)
+        close_pos = parens.close(open_pos) if open_pos != -1 else None
+        if close_pos is None:
+            continue
+        # Find the semicolon after the closing paren
+        end = close_pos + 1
+        while end < len(sql) and sql[end] in (" ", "\t", "\n", "\r"):
+            end += 1
+        if end < len(sql) and sql[end] == ";":
+            end += 1
+        blocks.append((m.start(), end, m.group(1)))
     return blocks
+
+
+class _ParenMatcher:
+    """Matching parentheses from the scanner's tokens: comments and literals never count."""
+
+    def __init__(self, sql: str) -> None:
+        self._parens = [
+            (t.start, t.name == "ASCII_40")
+            for t in sql_lexer.tokens(sql)
+            if t.name in ("ASCII_40", "ASCII_41")
+        ]
+
+    def close(self, open_pos: int) -> int | None:
+        """The offset of the ``)`` that closes the ``(`` at ``open_pos``, or ``None``."""
+        depth = 0
+        for pos, is_open in self._parens:
+            if pos < open_pos:
+                continue
+            depth += 1 if is_open else -1
+            if depth == 0:
+                return pos
+        return None
 
 
 def _line_has_data(line: str) -> bool:
@@ -388,49 +373,11 @@ def extract_and_strip_fks(sql: str) -> tuple[str, list[ForeignKeyInfo]]:
 
         block_text = sql[start:end]
 
-        # Find the opening paren position within the block
+        # The body is everything between the outer parens
         paren_pos = block_text.index("(")
-        # Find the body (everything between outer parens)
         header = block_text[: paren_pos + 1]
-
-        # Re-find the closing paren by tracking depth
-        depth = 1
-        pos = paren_pos + 1
-        in_line_comment = False
-        in_block_comment = False
-        in_string = False
-        string_char = None
-
-        while pos < len(block_text) and depth > 0:
-            ch = block_text[pos]
-            if in_line_comment:
-                if ch == "\n":
-                    in_line_comment = False
-            elif in_block_comment:
-                if ch == "*" and pos + 1 < len(block_text) and block_text[pos + 1] == "/":
-                    in_block_comment = False
-                    pos += 1
-            elif in_string:
-                if ch == string_char:
-                    if ch == "'" and pos + 1 < len(block_text) and block_text[pos + 1] == "'":
-                        pos += 1
-                    else:
-                        in_string = False
-            elif ch == "-" and pos + 1 < len(block_text) and block_text[pos + 1] == "-":
-                in_line_comment = True
-                pos += 1
-            elif ch == "/" and pos + 1 < len(block_text) and block_text[pos + 1] == "*":
-                in_block_comment = True
-                pos += 1
-            elif ch == "'":
-                in_string = True
-                string_char = ch
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-            pos += 1
-
+        close_abs = _ParenMatcher(block_text).close(paren_pos)
+        pos = (close_abs if close_abs is not None else len(block_text) - 1) + 1
         close_paren_pos = pos - 1
         body = block_text[paren_pos + 1 : close_paren_pos]
         footer = block_text[close_paren_pos:]

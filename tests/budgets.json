@@ -8,7 +8,6 @@
     "max_returns": 8
   },
   "complexity": {
-    "python/confiture/core/fk_extractor.py": 2,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 3,
     "python/confiture/core/idempotency/static_eval/scope.py": 3,
     "python/confiture/core/idempotency/static_eval/str_methods.py": 1,
@@ -43,7 +42,6 @@
     "python/confiture/cli/commands/migrate/baseline.py": 1,
     "python/confiture/cli/commands/migrate/introspect.py": 1,
     "python/confiture/core/builder.py": 1,
-    "python/confiture/core/fk_extractor.py": 2,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 2,
     "python/confiture/core/idempotency/static_eval/scope.py": 3,
     "python/confiture/core/idempotency/static_eval/str_methods.py": 1,
