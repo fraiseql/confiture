@@ -371,3 +371,43 @@ class TestMigrationGenerator:
 
         # Should have PascalCase class name
         assert "class AddUsersTable(Migration):" in content
+
+
+class TestGenerateSql:
+    """``generate_sql`` writes the pair every reader of a migration understands."""
+
+    def test_writes_an_up_and_a_down_file(self, tmp_path):
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(type="ADD_COLUMN", table="users", column="bio", new_value="TEXT"),
+                SchemaChange(type="ADD_COLUMN", table="users", column="age", new_value="INTEGER"),
+            ]
+        )
+        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+            diff, name="add_profile", version="20260101000000"
+        )
+        assert up.name == "20260101000000_add_profile.up.sql"
+        assert up.read_text() == (
+            "-- Migration: add_profile\n-- Version: 20260101000000\n\n"
+            "ALTER TABLE users ADD COLUMN bio TEXT;\n\n"
+            "ALTER TABLE users ADD COLUMN age INTEGER;\n"
+        )
+        down = up.with_name("20260101000000_add_profile.down.sql")
+        assert down.read_text() == (
+            "-- Migration: add_profile\n-- Version: 20260101000000\n\n"
+            "ALTER TABLE users DROP COLUMN age;\n\n"
+            "ALTER TABLE users DROP COLUMN bio;\n"
+        )
+
+    def test_a_change_with_no_sql_leaves_a_warning_not_silence(self, tmp_path):
+        diff = SchemaDiff(changes=[SchemaChange(type="RENAME_INDEX", table="users")])
+        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+            diff, name="rename", version="20260101000000"
+        )
+        body = up.read_text().splitlines()[-1]
+        assert body.startswith("-- WARNING: no SQL derived for: ")
+        assert body.endswith("Edit this file before deploying.")
+
+    def test_refuses_an_empty_diff(self, tmp_path):
+        with pytest.raises(ValueError, match="No changes"):
+            MigrationGenerator(migrations_dir=tmp_path).generate_sql(SchemaDiff(changes=[]), "x")

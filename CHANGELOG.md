@@ -31,9 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Generated: <timestamp>` line, and the differ walks table and column names in sorted order, so two
   runs — in two interpreters with different hash seeds — write byte-identical files.
   `tests/contract/test_desired_state_fixture.py` pins the checked-in artifact → migration pair.
+- **The ingest writes a SQL migration pair, and `drift` reads the artifact.** `migrate diff --from
+  … --to … --generate` writes `<version>_<name>.up.sql` / `.down.sql`
+  (`MigrationGenerator.generate_sql`), the form `migrate preflight` classifies — a Python migration
+  is `PFLIGHT_REPLICA_UNCLASSIFIED` by contract, so the pipeline's tiers were never reported. The
+  positional form keeps writing a Python migration. `drift --schema` accepts a directory of `.sql`
+  files, so the round trip artifact → migration → preflight → `migrate up` → `drift` closes with no
+  drift; an e2e test runs it against the local database.
 
 ### Fixed
 
+- **`drift` no longer reports confiture's own lock table.** `migrate up` creates
+  `confiture_lock_holder`; `drift` then reported it as an unexpected table. It joins the ledger in
+  the tables drift never compares.
 - **`pg_dump` 17.6+ output parses again.** Recent `pg_dump` wraps a dump in `\restrict <token>` /
   `\unrestrict` psql meta-commands; `clean_pg_dump_output` now drops them, so `migrate diff --from db`
   and every other consumer of the cleaned dump see SQL only.

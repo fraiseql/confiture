@@ -54,7 +54,7 @@ def migrate_diff(
     generate: bool = typer.Option(
         False,
         "--generate",
-        help="Generate migration from diff (default: off)",
+        help="Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files",
     ),
     name: str = typer.Option(
         None,
@@ -135,7 +135,12 @@ def migrate_diff(
 
             # Generate migration
             generator = MigrationGenerator(migrations_dir=migrations_dir)
-            migration_file = generator.generate(diff, name=name)
+            ingest = from_ is not None or to is not None
+            migration_file = (
+                generator.generate_sql(diff, name=name)
+                if ingest
+                else generator.generate(diff, name=name)
+            )
             migration_file_name = migration_file.name
 
         # Create result and format output
@@ -150,7 +155,7 @@ def migrate_diff(
 
         format_migrate_diff_result(result, format_type, report_file, console)
 
-    except typer.Exit:
+    except (typer.Exit, typer.BadParameter):
         raise
     # Reason: the diff result carries the failure so the formatter can render it in every format
     except Exception as e:
@@ -201,15 +206,12 @@ def _resolve_sides(
             )
         return from_, load_desired_state(to)
     if old_schema is None or new_schema is None:
-        fail(
-            ValidationError(
-                "Two schema files are required (or use --from/--to).",
-                resolution_hint="Usage: confiture migrate diff old.sql new.sql",
-            ),
-            json_mode=json_mode,
-            output_file=report,
+        # A missing positional is a usage error (exit 2), as it was when the
+        # arguments were required; the sides only became optional for --from/--to.
+        raise typer.BadParameter(
+            "Missing argument: give OLD_SCHEMA and NEW_SCHEMA, or --from/--to.",
+            param_hint="OLD_SCHEMA NEW_SCHEMA",
         )
-    assert old_schema is not None and new_schema is not None  # fail() exits above
     for label, schema_path in (("Old", old_schema), ("New", new_schema)):
         if not schema_path.exists():
             fail(

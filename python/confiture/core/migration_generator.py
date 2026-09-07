@@ -7,6 +7,7 @@ Each migration file contains up() and down() methods with the necessary SQL.
 import fcntl
 import shlex
 import subprocess
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,14 @@ def _execute_call(sql: str) -> str:
     if "\n" in sql or '"' in sql:
         return f'        self.execute("""{sql}""")'
     return f'        self.execute("{sql}")'
+
+
+def _terminated(sql: str) -> str:
+    """End a statement with a semicolon; leave a trailing comment line alone."""
+    sql = sql.rstrip()
+    if sql.endswith(";") or sql.rsplit("\n", 1)[-1].lstrip().startswith("--"):
+        return sql
+    return sql + ";"
 
 
 class MigrationGenerator:
@@ -76,6 +85,52 @@ class MigrationGenerator:
         filepath.write_text(code)
 
         return filepath
+
+    def generate_sql(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
+        """Write the migration as a ``.up.sql`` / ``.down.sql`` pair; return the up path.
+
+        SQL is the form every reader of a migration understands: ``migrate
+        preflight`` classifies its statements and reports their risk tier (a
+        Python migration is unclassified by contract) and ``--idempotent``
+        walks them. The down file undoes the changes in reverse; a change with
+        no derivable rollback leaves a comment saying so, for the deployer to
+        finish before shipping.
+
+        Args:
+            diff: Schema diff containing changes
+            name: Migration name (snake_case)
+            version: Version stamp; by default the next one, allocated from
+                the clock. Inject it to make two runs write the same files.
+
+        Returns:
+            Path to the ``.up.sql`` file
+
+        Raises:
+            ValueError: If diff has no changes
+        """
+        if not diff.has_changes():
+            raise ValueError("No changes to generate migration from")
+        version = version or self._get_next_version()
+        header = f"-- Migration: {name}\n-- Version: {version}\n\n"
+        up_path = self.migrations_dir / f"{version}_{name}.up.sql"
+        up_path.write_text(header + self._sql_statements(diff.changes, self._change_to_up_sql))
+        down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
+        down_path.write_text(
+            header + self._sql_statements(diff.changes[::-1], self._change_to_down_sql)
+        )
+        return up_path
+
+    def _sql_statements(
+        self, changes: list[SchemaChange], render: Callable[[SchemaChange], str | None]
+    ) -> str:
+        """One terminated statement per change; a change with no SQL leaves a warning."""
+        statements = []
+        for change in changes:
+            sql = render(change)
+            if sql is None:
+                sql = f"-- WARNING: no SQL derived for: {change}. Edit this file before deploying."
+            statements.append(_terminated(sql))
+        return "\n\n".join(statements) + "\n"
 
     def _get_next_version(self) -> str:
         """Generate a timestamp-based migration version (seconds precision).

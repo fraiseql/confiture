@@ -145,7 +145,7 @@ def drift(
     schema: Path | None = typer.Option(
         None,
         "--schema",
-        help="Schema SQL file to compare against (optional when --check-acls is set)",
+        help="Schema SQL file, or a directory of .sql files, to compare against (optional when --check-acls is set)",
     ),
     default_schema: str = typer.Option(
         "public",

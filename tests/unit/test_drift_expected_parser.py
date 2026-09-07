@@ -140,3 +140,11 @@ def test_confitures_own_ledger_is_ignored_in_any_schema() -> None:
     live = SchemaInfo(tables={"public.tb_confiture": {}, "tenant.tb_confiture": {}})
     report = _detector().compare_schemas(SchemaInfo(), live)
     assert report.drift_items == []
+
+
+def test_confitures_lock_table_is_not_drift() -> None:
+    # ``migrate up`` creates the lock-holder table; a deployer who then runs
+    # ``drift`` against the schema they just applied must see nothing.
+    live = SchemaInfo(tables={"public.confiture_lock_holder": {}})
+    report = _detector().compare_schemas(SchemaInfo(), live)
+    assert report.drift_items == []

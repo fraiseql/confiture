@@ -182,8 +182,9 @@ _OUTPUT_PARAMS = ("output_file", "report_file", "report_output")
 def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
     """The one error boundary for a CLI command.
 
-    ``typer.Exit`` and ``click.exceptions.Abort`` cross it untouched — a
-    command's own exit code is its own. A ``ConfiturError`` goes through
+    ``typer.Exit``, ``click.exceptions.Abort`` and a usage error
+    (``typer.BadParameter``, exit 2) cross it untouched — a command's own
+    exit code is its own. A ``ConfiturError`` goes through
     :func:`fail`; anything else is coerced first. JSON mode is read from the
     command's ``--format`` parameter so the envelope lands on stdout.
     """
@@ -195,7 +196,8 @@ def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
         except (
             typer.Exit,
             typer.Abort,
-        ):  # Click's Exit/Abort, re-exported — click itself is not a dependency
+            typer.BadParameter,
+        ):  # Click's Exit/Abort/usage error, re-exported — click itself is not a dependency
             raise
         # Reason: this IS the one error boundary
         except Exception as exc:

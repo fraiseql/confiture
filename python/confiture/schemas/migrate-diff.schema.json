@@ -56,7 +56,7 @@
         "string",
         "null"
       ],
-      "description": "The generated file's name under --migrations-dir, or null."
+      "description": "The generated file's name under --migrations-dir, or null: the .up.sql of the pair when the desired state came through --from/--to, the .py file for positional schema files."
     },
     "error": {
       "type": [

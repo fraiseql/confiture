@@ -23,7 +23,7 @@ VERSION = "20260101000000"
 def _generate(into: Path, current_sql: str) -> Path:
     diff = SchemaDiffer().compare(current_sql, load_desired_state(str(FIXTURE)).read())
     into.mkdir(parents=True, exist_ok=True)
-    return MigrationGenerator(migrations_dir=into).generate(
+    return MigrationGenerator(migrations_dir=into).generate_sql(
         diff, name="sync_from_spec", version=VERSION
     )
 
@@ -34,8 +34,10 @@ def test_two_runs_write_byte_identical_files(tmp_path: Path) -> None:
     first = _generate(tmp_path / "one", current)
     second = _generate(tmp_path / "two", current)
 
-    assert first.name == f"{VERSION}_sync_from_spec.py" == second.name
+    assert first.name == f"{VERSION}_sync_from_spec.up.sql" == second.name
     assert first.read_bytes() == second.read_bytes()
+    down = f"{VERSION}_sync_from_spec.down.sql"
+    assert (first.parent / down).read_bytes() == (second.parent / down).read_bytes()
 
 
 def test_the_body_carries_no_wall_clock(tmp_path: Path) -> None:
@@ -43,7 +45,7 @@ def test_the_body_carries_no_wall_clock(tmp_path: Path) -> None:
 
     body = generated.read_text()
     assert "Generated:" not in body
-    assert f'version = "{VERSION}"' in body
+    assert f"-- Version: {VERSION}" in body
 
 
 def test_change_order_does_not_depend_on_the_hash_seed() -> None:

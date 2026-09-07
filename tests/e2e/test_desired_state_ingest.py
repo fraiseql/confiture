@@ -50,7 +50,8 @@ def test_generate_from_an_emit_ddl_directory(tmp_path: Path) -> None:
     assert payload["source"] == {"kind": "sql", "path": str(FIXTURE)}
     assert payload["migration_generated"] is True
     generated = migrations / payload["migration_file"]
-    assert generated.exists()
+    assert generated.name.endswith(".up.sql") and generated.exists()
+    assert generated.with_name(generated.name.replace(".up.sql", ".down.sql")).exists()
     body = generated.read_text()
     assert "tb_post" in body and "tb_user" not in body
 

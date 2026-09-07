@@ -12,8 +12,8 @@ import io
 from pathlib import Path
 
 import pytest
-from confiture.core.desired_state import SqlFileSource, load_desired_state
 
+from confiture.core.desired_state import SqlFileSource, load_desired_state
 from confiture.exceptions import SchemaError
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "desired_state" / "emit_ddl"

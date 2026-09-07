@@ -24,10 +24,18 @@ confiture migrate up
 
 ## What the migration contains
 
-The differ compares tables, columns, indexes, constraints, enum types and sequences; the generator
-writes one `self.execute(...)` per change, a `CREATE TABLE IF NOT EXISTS` for a new table (its
-columns from the artifact), `ALTER TABLE` for column changes, and the reverse in `down()`. A change
-the generator cannot express is written as a `-- WARNING:` comment rather than silently dropped.
+The differ compares tables, columns, indexes, constraints, enum types and sequences. With
+`--from`/`--to`, `--generate` writes a SQL pair — `<version>_<name>.up.sql` and `.down.sql` — which
+is the form every reader of a migration understands: `migrate preflight` classifies its statements
+and reports their risk tier (a Python migration is unclassified by contract), `migrate validate
+--idempotent` walks them. The up file carries one statement per change — `CREATE TABLE IF NOT
+EXISTS` for a new table (its columns from the artifact), `ALTER TABLE` for column changes — and the
+down file the reverse, in reverse order. A change the generator cannot express is written as a
+`-- WARNING:` comment rather than silently dropped. The positional form `migrate diff OLD NEW
+--generate` keeps writing a Python migration.
+
+The round trip closes with `drift`: `confiture drift --schema <dir>` accepts the same directory of
+`.sql` files and reports nothing once the migration is applied.
 
 ## Output
 
