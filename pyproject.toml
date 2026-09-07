@@ -333,7 +333,6 @@ max-returns = 8
 "python/confiture/core/seed/validation/models.py" = ["PLR2004"]
 "python/confiture/core/seed/validation/prep_seed/level_1_seed_files.py" = ["PLR2004"]
 "python/confiture/core/seed/validation/prep_seed/orchestrator.py" = ["PLR2004"]
-"python/confiture/core/sql_utils.py" = ["C901", "PLR0912", "PLR0915"]
 "python/confiture/core/temp_database.py" = ["PLR2004"]
 "python/confiture/core/tree_allocator.py" = ["PLR2004"]
 "python/confiture/core/tree_renumber.py" = ["PLR2004"]

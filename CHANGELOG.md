@@ -41,6 +41,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a `RAISE NOTICE` literal is no longer an insert, an `EXECUTE 'INSERT …'` literal is read as dynamic
   SQL (`InsertStatement.is_dynamic`), a `LANGUAGE sql BEGIN ATOMIC` body is now read, and a function
   file pglast rejects is reported by `tenant_001` as an `UNPARSEABLE` notice instead of linting clean.
+- **`-- confiture:<name>` directives are comment tokens.** `sql_lexer.directives()` reads them for
+  `acl_001` (`owner-only`), `func_001` (`func-allow-duplicate`), `sec_002` (`secdef-allow-unpinned`)
+  and `own_001` (`owner-skip`, `run-as`); each rule's own line walker and regex are gone. A directive
+  attaches to the statement below it (blank lines and other comments in between do not detach it), and
+  one inside a dollar-quoted body or a COPY data row is body text, not a directive — the old walkers
+  disagreed on both. `-- Strategy:` headers, the baseline detector's comment stripping, the differ's
+  inline-COPY removal (`sql_lexer.strip_copy_blocks()`) and `generate renumber`'s literal-aware
+  reference rewrite read the same tokens; a `--` inside a literal or an apostrophe inside a comment no
+  longer confuses them.
+- **`strip_transaction_wrappers` decides "top-level" from `code_text`.** A `BEGIN;` or `COMMIT;`
+  line followed by a comment (`BEGIN; -- start`) is now stripped like a bare one; the module's own
+  line scanner and its two regexes are gone.
+- **Guard: `tests/unit/test_one_sql_lexer.py`** fails on any regex outside `core/sql_lexer.py` whose
+  pattern carries a lexical marker (a comment opener, a dollar quote, a literal, `stdin`, `\.`), with a
+  three-entry allow-list that states why each does not read SQL. Regexes that match a statement's shape
+  (`^CREATE\s+TABLE`) are counted by the new shrink-only `sql_keyword_regex` dimension of
+  `tests/budgets.json` (123 in 24 files today).
 
 ## [1.0.0] - 2026-09-07
 

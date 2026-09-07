@@ -14,10 +14,14 @@ literals and nested tags (ANA-05). Every consumer now goes through here:
   rows of a ``COPY … FROM stdin`` block (psql client protocol, not SQL).
 - :func:`code_text` — the text with everything that is not code blanked, line
   for line, for the applier's ``psql`` meta-command scan.
+- :func:`comments` / :func:`directives` — comment tokens, and the
+  ``-- confiture:<name>`` directives among them with the statement each attaches to.
+- :func:`strip_copy_blocks` — the text without its inline COPY blocks.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Any
@@ -33,6 +37,8 @@ _COMMENT_TOKENS = frozenset({"SQL_COMMENT", "C_COMMENT"})
 _STRING_TOKENS = frozenset({"SCONST", "USCONST", "BCONST", "XCONST"})
 _SEMICOLON = "ASCII_59"
 _COPY_TERMINATOR = "\\."
+#: What a comment must start with to be a directive: ``-- confiture:<name> [argument]``.
+DIRECTIVE_PREFIX = "confiture:"
 _WHITESPACE = " \t\n\r\f\v"
 
 # pglast statement node → the verb ``sqlparse``'s ``get_type`` used to report.
@@ -60,6 +66,31 @@ _VERB_BY_NODE: dict[str, str] = {
     "ExplainStmt": "EXPLAIN",
     "VacuumStmt": "VACUUM",
 }
+
+
+@dataclass(frozen=True)
+class Comment:
+    """A comment token: its inner text (stripped), 1-based line and kind (``line`` or ``block``)."""
+
+    text: str
+    line: int
+    kind: str
+
+
+@dataclass(frozen=True)
+class Directive:
+    """A ``-- confiture:<name> [argument]`` line comment and the statement it attaches to.
+
+    ``name`` is case-folded; ``argument`` is the rest of the comment, stripped,
+    or ``None``; ``statement_line`` is the line of the first code token after
+    the comment when only comments and whitespace lie between — the statement
+    the directive is written above — else ``None``.
+    """
+
+    name: str
+    argument: str | None
+    line: int
+    statement_line: int | None
 
 
 @dataclass(frozen=True)
@@ -335,3 +366,75 @@ def _resume_index(sql: str, toks: list[Any], base: int, data_end: int) -> int | 
     if j < len(toks) and base + toks[j].start == code_start:
         return j
     return None
+
+
+# ---------------------------------------------------------------------------
+# Comments and directives
+# ---------------------------------------------------------------------------
+
+
+def comments(sql: str) -> list[Comment]:
+    """Every comment of ``sql`` — a token, so nothing inside a literal or a COPY row counts."""
+    out: list[Comment] = []
+    for token, line in _tokens_with_lines(sql):
+        if token.name == "SQL_COMMENT":
+            out.append(
+                Comment(text=sql[token.start + 2 : token.end + 1].strip(), line=line, kind="line")
+            )
+        elif token.name == "C_COMMENT":
+            out.append(
+                Comment(text=sql[token.start + 2 : token.end - 1].strip(), line=line, kind="block")
+            )
+    return out
+
+
+def directives(sql: str) -> list[Directive]:
+    """The ``-- confiture:<name>`` line-comment directives of ``sql``, in order.
+
+    Each rule used to find its directive with its own regex over lines, so a
+    directive inside a dollar-quoted body or a COPY data row was one, and each
+    rule attached it to "the next line" by its own walk. Here a directive is a
+    comment *token*, and it attaches to the first statement after it (blank
+    lines and other comments in between do not detach it). Block comments are
+    not directives.
+    """
+    out: list[Directive] = []
+    pending: list[tuple[str, str | None, int]] = []
+    for token, line in _tokens_with_lines(sql):
+        if token.name == "C_COMMENT":
+            continue
+        if token.name != "SQL_COMMENT":
+            out.extend(Directive(n, a, at, line) for n, a, at in pending)
+            pending = []
+            continue
+        text = sql[token.start + 2 : token.end + 1].strip()
+        if text[: len(DIRECTIVE_PREFIX)].lower() != DIRECTIVE_PREFIX:
+            continue
+        parts = text[len(DIRECTIVE_PREFIX) :].split(None, 1)
+        if parts:
+            argument = parts[1].strip() if len(parts) > 1 else None
+            pending.append((parts[0].lower(), argument or None, line))
+    out.extend(Directive(n, a, at, None) for n, a, at in pending)
+    return out
+
+
+def _tokens_with_lines(sql: str) -> Iterator[tuple[Any, int]]:
+    line = 1
+    pos = 0
+    for token in tokens(sql):
+        line += sql.count("\n", pos, token.start)
+        pos = token.start
+        yield token, line
+
+
+def strip_copy_blocks(sql: str) -> str:
+    """``sql`` without its ``COPY … FROM stdin`` statements and their data rows.
+
+    The rows are psql client protocol, not SQL: pglast rejects them, and one
+    block anywhere in a concatenated schema used to fail the whole parse (#194).
+    Each block is removed from its ``COPY`` through the line after its ``\\.``.
+    """
+    _, blocks = _lex(sql)
+    for start, end in reversed(blocks):
+        sql = sql[:start] + sql[end:]
+    return sql

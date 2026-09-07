@@ -7,7 +7,11 @@ Three measurements over ``python/confiture``:
   (ruff's ``C901``, so the number is the one ruff will enforce when the rule is on);
 - ``function_length``: functions longer than ``thresholds.function_length`` lines;
 - ``broad_except``: ``except Exception``, ``except BaseException`` and bare ``except:``
-  handlers (``tests/unit/test_budgets.py`` is the one place this is counted).
+  handlers (``tests/unit/test_budgets.py`` is the one place this is counted);
+- ``sql_keyword_regex``: ``re`` calls whose pattern names a SQL statement keyword
+  (``CREATE``, ``INSERT``, ``COPY``, …) outside ``core/sql_lexer.py`` — shape matching on
+  statement text that pglast should do (``tests/unit/test_one_sql_lexer.py`` forbids the
+  lexical kind — comments, literals, dollar quotes — outright).
 
 ``tests/budgets.json`` records, per file, how many of each the file is allowed to have.
 A file over its recorded number fails; a file not listed has a budget of zero; an entry
@@ -52,7 +56,26 @@ RUFF_DIMENSIONS = {
     "too_many_returns": "PLR0911",
     "magic_values": "PLR2004",
 }
-DIMENSIONS = (*RUFF_DIMENSIONS, "function_length", "broad_except")
+DIMENSIONS = (*RUFF_DIMENSIONS, "function_length", "broad_except", "sql_keyword_regex")
+RE_FUNCTIONS = frozenset(
+    {"compile", "search", "match", "fullmatch", "finditer", "findall", "sub", "split"}
+)
+SQL_KEYWORDS = frozenset(
+    {
+        "COPY",
+        "BEGIN",
+        "COMMIT",
+        "CREATE",
+        "FUNCTION",
+        "INSERT",
+        "ALTER",
+        "DROP",
+        "GRANT",
+        "SELECT",
+        "TABLE",
+    }
+)
+SQL_LEXER = PACKAGE / "core" / "sql_lexer.py"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 BLOCK_BEGIN = "# BEGIN GENERATED: budget-ignores (scripts/budgets.py --update; do not edit)"
 BLOCK_END = "# END GENERATED: budget-ignores"
@@ -167,12 +190,81 @@ def measure_broad_except() -> dict[str, int]:
     return counts
 
 
+def regex_patterns(path: Path) -> list[tuple[int, str]]:
+    """``(line, pattern text)`` of every ``re.<function>(pattern, …)`` call in ``path``.
+
+    The pattern text is the literal parts of the first argument joined — a plain
+    string, an f-string's constant pieces, a concatenation — so a pattern built
+    from a name contributes only what is written at the call.
+    """
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "re"
+            and func.attr in RE_FUNCTIONS
+        ):
+            continue
+        pieces = [
+            n.value
+            for n in ast.walk(node.args[0])
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        ]
+        found.append((node.lineno, "".join(pieces)))
+    return found
+
+
+def _mentions_sql_keyword(pattern: str) -> bool:
+    words = {w.upper() for w in re_words(pattern)}
+    return bool(words & SQL_KEYWORDS)
+
+
+def re_words(pattern: str) -> list[str]:
+    """The alphabetic words of a regex pattern; an escape (``\\b``, ``\\s``) is a separator."""
+    words: list[str] = []
+    current: list[str] = []
+    i = 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "\\":
+            if current:
+                words.append("".join(current))
+                current = []
+            i += 2
+            continue
+        if ch.isalpha():
+            current.append(ch)
+        elif current:
+            words.append("".join(current))
+            current = []
+        i += 1
+    if current:
+        words.append("".join(current))
+    return words
+
+
+def measure_sql_keyword_regex() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        if path == SQL_LEXER:
+            continue
+        over = sum(1 for _, pattern in regex_patterns(path) if _mentions_sql_keyword(pattern))
+        if over:
+            counts[_rel(path)] = over
+    return counts
+
+
 def measure(thresholds: dict[str, int] | None = None) -> Counts:
     t = {**THRESHOLDS, **(thresholds or {})}
     return {
         **measure_ruff(t),
         "function_length": measure_function_length(t["function_length"]),
         "broad_except": measure_broad_except(),
+        "sql_keyword_regex": measure_sql_keyword_regex(),
     }
 
 
@@ -185,7 +277,10 @@ def compare(actual: Counts, budgets: dict) -> tuple[list[str], list[str]]:
     regressions: list[str] = []
     stale: list[str] = []
     for dimension in DIMENSIONS:
-        recorded: dict[str, int] = budgets.get(dimension, {})
+        if dimension not in budgets:
+            stale.append(f"{dimension}: not recorded yet")
+            continue
+        recorded: dict[str, int] = budgets[dimension]
         measured = actual[dimension]
         for rel, count in sorted(measured.items()):
             allowed = recorded.get(rel, 0)

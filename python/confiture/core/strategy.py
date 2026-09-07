@@ -6,18 +6,19 @@ The header must appear within the first 10 lines of the file.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-_STRATEGY_RE = re.compile(r"^--\s*Strategy:\s*(.+)$", re.IGNORECASE)
+from confiture.core.sql_lexer import comments
 
+_HEADER = "strategy:"
 _MAX_HEADER_LINES = 10
 
 
 def parse_migration_strategy(sql: str) -> str | None:
     """Extract strategy name from a SQL migration string.
 
-    Looks for ``-- Strategy: <name>`` in the first 10 lines.
+    Looks for a ``-- Strategy: <name>`` line comment in the first 10 lines —
+    a comment token, so the same text inside a dollar-quoted body is not one.
 
     Args:
         sql: Raw SQL content.
@@ -25,10 +26,13 @@ def parse_migration_strategy(sql: str) -> str | None:
     Returns:
         Lowercase strategy name, or None if no header found.
     """
-    for line in sql.splitlines()[:_MAX_HEADER_LINES]:
-        m = _STRATEGY_RE.match(line)
-        if m:
-            return m.group(1).strip().lower()
+    for comment in comments(sql):
+        if comment.line > _MAX_HEADER_LINES:
+            break
+        if comment.kind == "line" and comment.text[: len(_HEADER)].lower() == _HEADER:
+            value = comment.text[len(_HEADER) :].strip().lower()
+            if value:
+                return value
     return None
 
 

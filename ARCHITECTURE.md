@@ -485,16 +485,25 @@ pending` in `cli/`, and the function-length and complexity budgets in
 
 ### Decision 11: One SQL lexer, one parser
 
-**Choice**: `core/sql_lexer.py` is the single statement splitter (libpq_query's
-scanner, nothing hand-written), and pglast is the one parser, a hard dependency.
-There is no regex fallback and no switch to one.
+**Choice**: `core/sql_lexer.py` is the single tokeniser of SQL text
+(libpq_query's scanner, nothing hand-written): statement boundaries, comments,
+what is code on a line (`code_text`, the `psql` applier's meta-command scan),
+the data rows of an inline `COPY`, and the `-- confiture:<name>` directives the
+lint rules read. pglast is the one parser, a hard dependency. There is no regex
+fallback and no switch to one.
 
 **Rationale**: five splitters disagreed on `"a;b"` identifiers, `E'\';'`
-literals and dollar-quoted bodies; an analyzer that fell back to regex when
-pglast was absent reported a clean result it had not earned. A file pglast
-rejects is a *finding* (`IDEM_UNPARSEABLE`, `PFLIGHT_UNPARSEABLE`, lint's
-`UNPARSEABLE`, `DIFFER_400`), never a pass. `tests/unit/test_single_parser.py`
-fails on any `FORCE_REGEX`, `_HAS_PGLAST` or `is_pglast_available` probe.
+literals and dollar-quoted bodies, and four rules each walked lines for their
+own directive; an analyzer that fell back to regex when pglast was absent
+reported a clean result it had not earned. A file pglast rejects is a
+*finding* (`IDEM_UNPARSEABLE`, `PFLIGHT_UNPARSEABLE`, lint's `UNPARSEABLE`,
+`DIFFER_400`), never a pass. `tests/unit/test_single_parser.py` fails on any
+`FORCE_REGEX`, `_HAS_PGLAST` or `is_pglast_available` probe;
+`tests/unit/test_one_sql_lexer.py` fails on any regex outside the lexer whose
+pattern carries a lexical marker (a comment opener, a dollar quote, a literal
+shape, `stdin`, `\.`), and the regexes that match a statement's *shape*
+(`^CREATE\s+TABLE`) are the shrink-only `sql_keyword_regex` budget in
+`tests/budgets.json`.
 
 ---
 

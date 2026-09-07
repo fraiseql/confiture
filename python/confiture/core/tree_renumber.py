@@ -45,13 +45,11 @@ import re
 import subprocess
 from pathlib import Path
 
+from confiture.core import sql_lexer
 from confiture.core.tree_allocator import PrefixConfig, TreeAllocator
 
 # Matches a leading numeric (decimal or hex) prefix followed by "_".
 _PREFIX_RE = re.compile(r"^[0-9a-fA-F]+_")
-
-# Matches a single-quoted SQL string literal (handles escaped '' inside).
-_STRING_LITERAL_RE = re.compile(r"'[^']*(?:''[^']*)*'")
 
 
 def _stem_from_path(path: Path) -> str:
@@ -462,17 +460,27 @@ def _rewrite(content: str, old_name: str, new_name: str) -> str:
 
     String literals are preserved verbatim so that dynamic SQL strings
     (e.g. ``EXECUTE 'SELECT old_name()'``) are flagged as dangling refs
-    rather than silently mangled.
+    rather than silently mangled. A dollar-quoted body is code — its
+    references are rewritten, its own literals kept.
     """
     pattern = re.compile(rf"\b{re.escape(old_name)}\b")
+    return _rewrite_outside_literals(content, pattern, new_name)
+
+
+def _rewrite_outside_literals(text: str, pattern: re.Pattern[str], new_name: str) -> str:
     parts: list[str] = []
-    last_end = 0
-    for m in _STRING_LITERAL_RE.finditer(content):
-        # Non-string segment: apply substitution.
-        parts.append(pattern.sub(new_name, content[last_end : m.start()]))
-        # String literal segment: keep verbatim.
-        parts.append(m.group())
-        last_end = m.end()
-    # Trailing non-string segment.
-    parts.append(pattern.sub(new_name, content[last_end:]))
+    last = 0
+    for token in sql_lexer.tokens(text):
+        if token.name != "SCONST":
+            continue
+        parts.append(pattern.sub(new_name, text[last : token.start]))
+        literal = text[token.start : token.end + 1]
+        if literal.startswith("$"):
+            tag = literal[: literal.index("$", 1) + 1]
+            body = literal[len(tag) : len(literal) - len(tag)]
+            parts.append(tag + _rewrite_outside_literals(body, pattern, new_name) + tag)
+        else:
+            parts.append(literal)
+        last = token.end + 1
+    parts.append(pattern.sub(new_name, text[last:]))
     return "".join(parts)

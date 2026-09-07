@@ -33,6 +33,7 @@ from typing import ClassVar
 import pglast.parser
 
 from confiture.config.environment import OwnershipExpectation
+from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
@@ -40,14 +41,11 @@ from confiture.core.linting.unparseable import unparseable_notice
 # Default schema for unqualified identifiers in PostgreSQL.
 _DEFAULT_SCHEMA = "public"
 
-# Directive: opt the *next* CREATE statement out of the rule.  Lives on
-# its own ``-- confiture:owner-skip`` line; trailing characters are
-# tolerated so a follow-on comment still matches.
-_OWNER_SKIP_RE = re.compile(r"--\s*confiture:owner-skip\b", re.IGNORECASE)
-# Front-matter directive: declares the role the whole file is applied as.
-# When the declared role equals ``expected_owner`` the file is skipped
-# entirely.
-_RUN_AS_RE = re.compile(r"--\s*confiture:run-as\s+([A-Za-z_][A-Za-z0-9_]*)\b", re.IGNORECASE)
+# Directives (:func:`confiture.core.sql_lexer.directives`): ``-- confiture:owner-skip``
+# opts the statement below it out; ``-- confiture:run-as <role>`` declares the
+# role the whole file runs as.
+_OWNER_SKIP = "owner-skip"
+_RUN_AS = "run-as"
 
 # Maps the relkind characters declared on ``OwnershipApplyTo`` to the
 # pglast statement classes that introduce each relkind.  Used purely for
@@ -207,41 +205,32 @@ class Own001OwnershipCoverage:
     def _extract_run_as(text: str) -> str | None:
         """Return the declared role from a top-of-file ``-- confiture:run-as`` directive.
 
-        Scans the file for the directive; the first match wins.  The
-        directive may sit anywhere in the file but is typically used as
-        front-matter.  Inline trailing comments on a CREATE statement
-        are not recognized — the directive must be on its own line.
+        The first ``run-as`` directive whose argument is an identifier wins.
+        The directive may sit anywhere in the file but is typically used as
+        front-matter; it must be on its own ``--`` line
+        (:func:`confiture.core.sql_lexer.directives`).
         """
-        for line in text.splitlines():
-            m = _RUN_AS_RE.search(line)
-            if m:
-                return m.group(1)
+        for directive in sql_lexer.directives(text):
+            if directive.name != _RUN_AS or not directive.argument:
+                continue
+            role = directive.argument.split()[0]
+            if role.isidentifier():
+                return role
         return None
 
     @staticmethod
     def _collect_owner_skip_lines(text: str) -> set[int]:
         """Return the 1-indexed line numbers of CREATE statements opted out.
 
-        A ``-- confiture:owner-skip`` directive attaches to the *next*
-        non-blank non-comment line within the file.  This walker returns
-        the line numbers of those attached lines so the AST-walk can
-        match against ``create.line``.
+        A ``-- confiture:owner-skip`` directive attaches to the statement
+        below it (:func:`confiture.core.sql_lexer.directives`); the AST walk
+        matches these lines against ``create.line``.
         """
-        skipped: set[int] = set()
-        lines = text.splitlines()
-        pending_skip = False
-        for idx, raw in enumerate(lines, start=1):
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            if stripped.startswith("--"):
-                if _OWNER_SKIP_RE.search(stripped):
-                    pending_skip = True
-                continue
-            if pending_skip:
-                skipped.add(idx)
-                pending_skip = False
-        return skipped
+        return {
+            d.statement_line
+            for d in sql_lexer.directives(text)
+            if d.name == _OWNER_SKIP and d.statement_line is not None
+        }
 
     def _matches_ignore(self, qualified_name: str) -> bool:
         return any(fnmatch.fnmatchcase(qualified_name, p) for p in self.expectation.ignore)

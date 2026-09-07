@@ -33,7 +33,6 @@ the duplicate-detection map (mirrors ``-- confiture:owner-skip``).
 from __future__ import annotations
 
 import fnmatch
-import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +41,7 @@ from typing import Any, ClassVar
 import pglast.parser
 
 from confiture.config.environment import FunctionCoverage
+from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
@@ -52,7 +52,7 @@ _DEFAULT_SCHEMA = "public"
 # Directive: opt the *next* CREATE FUNCTION/PROCEDURE out of duplicate
 # detection.  Lives on its own ``-- confiture:func-allow-duplicate`` line;
 # trailing characters are tolerated so a follow-on comment still matches.
-_FUNC_ALLOW_DUPLICATE_RE = re.compile(r"--\s*confiture:func-allow-duplicate\b", re.IGNORECASE)
+_FUNC_ALLOW_DUPLICATE = "func-allow-duplicate"
 
 # Parameter modes that do NOT participate in overload resolution.  Per
 # PostgreSQL docs: only IN, INOUT, and VARIADIC are signature-significant.
@@ -317,25 +317,15 @@ class Func001FunctionUniqueness:
     def _collect_allow_duplicate_lines(text: str) -> set[int]:
         """Return 1-indexed line numbers of CREATE statements opted out.
 
-        ``-- confiture:func-allow-duplicate`` attaches to the *next*
-        non-blank non-comment line within the file.  This walker returns
-        the line numbers of those attached lines so the AST walk can
-        match against ``defn.line``.
+        ``-- confiture:func-allow-duplicate`` attaches to the statement
+        below it (:func:`confiture.core.sql_lexer.directives`); the AST walk
+        matches these lines against ``defn.line``.
         """
-        skipped: set[int] = set()
-        pending_skip = False
-        for idx, raw in enumerate(text.splitlines(), start=1):
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            if stripped.startswith("--"):
-                if _FUNC_ALLOW_DUPLICATE_RE.search(stripped):
-                    pending_skip = True
-                continue
-            if pending_skip:
-                skipped.add(idx)
-                pending_skip = False
-        return skipped
+        return {
+            d.statement_line
+            for d in sql_lexer.directives(text)
+            if d.name == _FUNC_ALLOW_DUPLICATE and d.statement_line is not None
+        }
 
 
 __all__ = ["Func001FunctionUniqueness"]
