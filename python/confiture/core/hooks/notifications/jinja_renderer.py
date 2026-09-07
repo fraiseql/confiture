@@ -374,7 +374,7 @@ def _render_with_timeout(template, ctx: dict, timeout_seconds: float) -> str:
         try:
             out = template.render(**ctx)
             result.append(out)
-        except Exception as exc:  # propagate any render error
+        except Exception as exc:  # Reason: the render error itself is the collected result for the caller to inspect
             result.append(exc)
         finally:
             done.set()

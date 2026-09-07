@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+import psycopg
+
 logger = logging.getLogger(__name__)
 
 
@@ -185,7 +187,7 @@ class BlueGreenOrchestrator:
         for callback in self._on_phase_change:
             try:
                 callback(old_phase, phase)
-            except Exception as e:
+            except Exception as e:  # Reason: phase callbacks are caller-supplied; a failing observer must not abort the migration
                 logger.warning(f"Phase callback failed: {e}")
 
     def execute(self) -> MigrationState:
@@ -332,7 +334,7 @@ class BlueGreenOrchestrator:
                     if not passed:
                         logger.warning(f"Health check '{name}' failed")
                         all_passed = False
-                except Exception as e:
+                except Exception as e:  # Reason: health checks are caller-supplied callables; any failure is a failed check
                     duration_ms = int((time.perf_counter() - start_time) * 1000)
                     results.append(
                         HealthCheckResult(
@@ -431,7 +433,7 @@ class BlueGreenOrchestrator:
             self.connection.commit()
             self._set_phase(MigrationPhase.ROLLED_BACK)
             logger.info(f"Rolled back: dropped {self.config.target_schema}")
-        except Exception as e:
+        except psycopg.Error as e:
             logger.error(f"Rollback failed: {e}")
             self.state.rollback_available = False
 
@@ -456,7 +458,7 @@ class BlueGreenOrchestrator:
             self.connection.commit()
             self._set_phase(MigrationPhase.ROLLED_BACK)
             logger.info("Rolled back: restored original schema")
-        except Exception as e:
+        except psycopg.Error as e:
             logger.error(f"Rollback failed: {e}")
             self.state.rollback_available = False
 
@@ -491,7 +493,7 @@ class BlueGreenOrchestrator:
             self.state.rollback_available = False
             logger.info(f"Cleaned up backup schema: {backup_schema}")
             return True
-        except Exception as e:
+        except psycopg.Error as e:
             logger.error(f"Cleanup failed: {e}")
             return False
 
@@ -675,7 +677,7 @@ class TrafficController:
                     cur.execute("SELECT pg_terminate_backend(%s)", (pid,))
                     terminated += 1
                     logger.info(f"Terminated connection: pid={pid}, app={app_name}")
-                except Exception as e:
+                except psycopg.Error as e:
                     logger.warning(f"Failed to terminate pid={pid}: {e}")
 
         connection.commit()

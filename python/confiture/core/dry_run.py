@@ -228,7 +228,7 @@ class DryRunExecutor:
                 execution_time_ms=elapsed,
                 rows_affected=cur.rowcount if cur.rowcount >= 0 else 0,
             )
-        except Exception as exc:
+        except psycopg.Error as exc:
             elapsed = (time.perf_counter() - start) * 1000
             return StatementResult(
                 sql=sql,

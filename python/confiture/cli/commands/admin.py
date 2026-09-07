@@ -245,8 +245,6 @@ def validate_profile(
             ConfiturError(f"Invalid profile: {e}", error_code="ANON_1400"),
             json_mode=False,
         )
-    except Exception as e:
-        fail(e, json_mode=False)
 
 
 @cli_boundary

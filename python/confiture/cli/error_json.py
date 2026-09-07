@@ -170,7 +170,7 @@ def fail(
 
 
 _FORMAT_PARAMS = ("format_output", "output_format", "format_type")
-_OUTPUT_PARAMS = ("output_file", "report_file")
+_OUTPUT_PARAMS = ("output_file", "report_file", "report_output")
 
 
 def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:

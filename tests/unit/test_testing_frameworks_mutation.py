@@ -13,6 +13,7 @@ Tests cover:
 import json
 from unittest.mock import MagicMock
 
+import psycopg
 import pytest
 
 from confiture.testing.frameworks.mutation import (
@@ -447,7 +448,7 @@ class TestMutationRunner:
 
         # Mock cursor to raise error
         mock_cursor = MagicMock()
-        mock_cursor.execute.side_effect = Exception("SQL Error")
+        mock_cursor.execute.side_effect = psycopg.OperationalError("SQL Error")
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=None)
 

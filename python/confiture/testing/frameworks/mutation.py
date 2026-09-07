@@ -545,7 +545,7 @@ class MutationRunner:
                     stderr="",
                 )
 
-            except Exception as e:
+            except psycopg.Error as e:
                 self.connection.rollback()
                 duration = time.time() - start_time
 
@@ -559,7 +559,7 @@ class MutationRunner:
                     error=e,
                 )
 
-        except Exception as e:
+        except (OSError, psycopg.Error) as e:
             return MutationResult(
                 mutation_id=mutation.id,
                 success=False,

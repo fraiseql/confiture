@@ -30,7 +30,7 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
-from confiture.core.error_handler import handle_cli_error, print_error_to_console
+from confiture.core.error_handler import print_error_to_console
 from confiture.core.locking import resolve_lock_settings
 from confiture.exceptions import MigrationConflictError
 
@@ -321,17 +321,10 @@ def migrate_up(
             else:
                 result = session.up(**options)
         _render_up_result(result, reporter, format_output, output_file, force=force)
-    except typer.Exit:
-        raise
     except ChecksumVerificationError as e:
         _report_checksum_failure(e, format_output, output_file)
     except LockAcquisitionError as e:
         _report_lock_failure(e, lock_timeout, format_output, output_file)
-    except Exception as e:
-        if is_json(format_output):
-            fail(e, json_mode=True, output_file=output_file)
-        print_error_to_console(e, error_console)
-        raise typer.Exit(handle_cli_error(e)) from e
 
 
 def _validate_up_flags(

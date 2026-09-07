@@ -159,7 +159,7 @@ class Level4RuntimeValidator:
 
             return violations
 
-        except Exception as e:
+        except Exception as e:  # Reason: executes a user resolution function under a savepoint; any failure is a reported violation
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,

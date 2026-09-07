@@ -60,14 +60,16 @@ class NotificationHook(Hook[ExecutionContext]):
 
         try:
             payload = self.renderer.render(notif_ctx)
-        except Exception as exc:
+        except Exception as exc:  # Reason: template rendering of caller-supplied templates; a failure is the hook's result, never the migration's
             logger.warning("NotificationHook %s render failed: %s", self.id, exc)
             return HookResult(success=False, error=str(exc))
 
         try:
             self.transport.send(payload)
             return HookResult(success=True)
-        except Exception as exc:
+        except (
+            Exception
+        ) as exc:  # Reason: transport failures of any kind never block a migration (documented)
             # Never block migrations on a notification failure.
             logger.warning(
                 "NotificationHook %s transport failed (swallowed): %s",

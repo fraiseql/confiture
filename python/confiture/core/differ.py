@@ -228,7 +228,7 @@ class SchemaDiffer:
                     self._parse_table_constraint_pglast(elt, table, ConstrType)
 
             return table
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             return None
 
     def _parse_column_pglast(self, col_def: Any, ConstrType: Any) -> Column | None:
@@ -280,7 +280,7 @@ class SchemaDiffer:
                 length=length,
                 raw_sql_type=raw_sql_type,
             )
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             return None
 
     def _parse_table_constraint_pglast(
@@ -318,7 +318,7 @@ class SchemaDiffer:
                 table.unique_constraints.append(
                     UniqueConstraint(name=name, table=table.name, columns=cols)
                 )
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
     def _render_default_pglast(self, raw_expr: Any) -> str | None:

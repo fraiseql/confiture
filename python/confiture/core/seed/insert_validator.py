@@ -7,6 +7,7 @@ of fragile regex patterns.
 
 from __future__ import annotations
 
+import sqlglot.errors
 from sqlglot import exp, parse_one
 
 
@@ -30,7 +31,7 @@ class InsertValidator:
         """
         try:
             ast = parse_one(insert_sql, dialect="postgres")
-        except Exception as e:
+        except sqlglot.errors.SqlglotError as e:
             return False, f"Parse error: {e!s}"
 
         # Must be INSERT statement
@@ -166,7 +167,7 @@ class InsertValidator:
         """
         try:
             ast = parse_one(insert_sql, dialect="postgres")
-        except Exception:
+        except sqlglot.errors.SqlglotError:
             return None
 
         if not isinstance(ast.expression, exp.Values):
@@ -235,7 +236,7 @@ class InsertValidator:
                 # Use SQL method to get qualified name (handles schema.table)
                 return table.sql(dialect="postgres")
             return None
-        except Exception:
+        except (sqlglot.errors.SqlglotError, AttributeError, IndexError):
             return None
 
     def extract_columns(self, insert_sql: str) -> list[str] | None:
@@ -267,5 +268,5 @@ class InsertValidator:
                     columns.append(str(col_expr))
 
             return columns
-        except Exception:
+        except (sqlglot.errors.SqlglotError, AttributeError, IndexError):
             return None

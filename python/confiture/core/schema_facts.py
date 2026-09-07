@@ -101,7 +101,7 @@ def _column_types(conn: Any) -> dict[str, str]:
         with conn.cursor() as cur:
             cur.execute(_COLUMN_TYPE_SQL)
             rows = cur.fetchall()
-    except Exception:
+    except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
         return {}
     types: dict[str, str] = {}
     for row in rows or ():
@@ -119,6 +119,6 @@ def _scalar(conn: Any, sql: str) -> object | None:
         with conn.cursor() as cur:
             cur.execute(sql)
             row = cur.fetchone()
-    except Exception:
+    except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
         return None
     return row[0] if row else None

@@ -130,7 +130,7 @@ class Migrator:
             if isinstance(query, pgsql.Composable):
                 try:
                     sql_text = query.as_string(self.connection)
-                except Exception:
+                except Exception:  # Reason: psycopg's as_string needs a live connection for some adapters; fall back to the unbound rendering
                     sql_text = query.as_string(None)
             else:
                 sql_text = str(query)

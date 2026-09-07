@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import psycopg
 import pytest
 
 from confiture.integrations.pggit import (
@@ -106,7 +107,7 @@ class TestPgGitDetection:
     def test_is_pggit_available_on_exception(self):
         """is_pggit_available should return False on database error."""
         mock_conn = MagicMock()
-        mock_conn.cursor.side_effect = Exception("Connection error")
+        mock_conn.cursor.side_effect = psycopg.OperationalError("Connection error")
 
         result = is_pggit_available(mock_conn)
 

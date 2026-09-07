@@ -12,6 +12,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+import psycopg
+
 from confiture.integrations.pggit.detection import require_pggit
 from confiture.integrations.pggit.exceptions import (
     PgGitBranchError,
@@ -162,7 +164,7 @@ class PgGitClient:
                 """)
                 result = cursor.fetchone()
                 return bool(result and result[0])
-        except Exception:
+        except psycopg.Error:
             return False
 
     def init(self) -> None:
@@ -293,7 +295,7 @@ class PgGitClient:
                 cursor.execute("SELECT current_setting('pggit.current_branch', true)")
                 result = cursor.fetchone()
                 return result[0] if result and result[0] else "main"
-        except Exception:
+        except psycopg.Error:
             return "main"
 
     def get_branch(self, name: str) -> Branch:
@@ -528,7 +530,7 @@ class PgGitClient:
                     }
                     for row in cursor.fetchall()
                 ]
-        except Exception:
+        except psycopg.Error:
             return []
 
     def resolve_conflict(

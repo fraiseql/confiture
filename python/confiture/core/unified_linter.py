@@ -91,7 +91,7 @@ class SQLFluffRunner:
                     )
                     for violation in result
                 )
-            except Exception:
+            except Exception:  # Reason: sqlfluff is an optional third-party linter; its failures never fail the unified lint
                 pass
         return issues
 

@@ -89,7 +89,7 @@ def run_against(
                             execution_time_ms=elapsed,
                         )
                     )
-                except Exception as exc:
+                except Exception as exc:  # Reason: replaying user migration code: any failure is the replay verdict for that version
                     results.append(
                         PreflightAgainstMigration(
                             version=migration.version,
@@ -120,7 +120,7 @@ def run_against(
                         execution_time_ms=elapsed,
                     )
                 )
-            except Exception as exc:
+            except Exception as exc:  # Reason: replaying user migration code under a savepoint: any failure is the verdict for that version
                 # ROLLBACK TO resets to before per_sp without destroying outer_sp.
                 session._conn.execute(
                     pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(per_sp))

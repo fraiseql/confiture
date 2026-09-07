@@ -28,7 +28,7 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
-from confiture.core.error_handler import handle_cli_error, print_error_to_console
+from confiture.core.error_handler import print_error_to_console
 from confiture.core.locking import resolve_lock_settings
 
 
@@ -187,8 +187,6 @@ def migrate_down(
 
         format_migrate_down_result(result, format_output, output_file, console)
 
-    except typer.Exit:
-        raise
     except LockAcquisitionError as e:
         if is_json(format_output):
             from confiture.cli.error_json import lock_error_to_confiture
@@ -196,11 +194,6 @@ def migrate_down(
             fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
         print_error_to_console(e, error_console)
         raise typer.Exit(6) from e
-    except Exception as e:
-        if is_json(format_output):
-            fail(e, json_mode=True, output_file=output_file)
-        print_error_to_console(e, error_console)
-        raise typer.Exit(handle_cli_error(e)) from e
 
 
 @cli_boundary
@@ -268,34 +261,26 @@ def migrate_down_to(
     """
     from confiture.core.migrator import Migrator, MigratorSession
 
-    try:
-        override = resolve_database_url(
-            database_url,
-            config,
-            config_explicit=config_is_explicit(ctx),
-            no_config=no_config,
-            require_intentional_source=True,
+    override = resolve_database_url(
+        database_url,
+        config,
+        config_explicit=config_is_explicit(ctx),
+        no_config=no_config,
+        require_intentional_source=True,
+    )
+    if override is not None:
+        session = MigratorSession(
+            config=None,
+            migrations_dir=migrations_dir,
+            database_url_override=override,
+            connection_factory=connect,
         )
-        if override is not None:
-            session = MigratorSession(
-                config=None,
-                migrations_dir=migrations_dir,
-                database_url_override=override,
-                connection_factory=connect,
-            )
-        else:
-            session = Migrator.from_config(
-                str(config), migrations_dir=migrations_dir, connection_factory=connect
-            )
-        with session as s:
-            result = s.down_to(revision, dry_run=dry_run, command="confiture migrate down-to")
-    except typer.Exit:
-        raise
-    except Exception as e:
-        if is_json(format_output):
-            fail(e, json_mode=True, output_file=output_file)
-        print_error_to_console(e, error_console)
-        raise typer.Exit(handle_cli_error(e)) from e
+    else:
+        session = Migrator.from_config(
+            str(config), migrations_dir=migrations_dir, connection_factory=connect
+        )
+    with session as s:
+        result = s.down_to(revision, dry_run=dry_run, command="confiture migrate down-to")
 
     if is_json(format_output):
         _output_json(result.to_dict(), output_file, console)

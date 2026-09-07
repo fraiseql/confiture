@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import psycopg
+
 from confiture.core.seed.validation.prep_seed.level_5_execution import (
     Level5ExecutionValidator,
 )
@@ -74,7 +76,7 @@ class TestLevel5ExecutionValidator:
 
         # Mock database that fails
         mock_conn = MagicMock()
-        mock_conn.execute.side_effect = Exception("Syntax error in seed file")
+        mock_conn.execute.side_effect = psycopg.ProgrammingError("Syntax error in seed file")
 
         violations = validator.load_seeds(
             connection=mock_conn,

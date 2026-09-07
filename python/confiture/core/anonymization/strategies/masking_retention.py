@@ -250,7 +250,7 @@ class MaskingRetentionStrategy(AnonymizationStrategy):
                     f"Column {table_name}.{column_name}: "
                     f"Empty string will be masked to empty string"
                 )
-        except Exception as e:
+        except (TypeError, ValueError, UnicodeError) as e:
             errors.append(f"Column {table_name}.{column_name}: Cannot convert to string: {e}")
 
         return len(errors) == 0, errors

@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import psycopg
 import pytest
 
 from confiture.core.migration_verifier import MigrationVerifier, _is_truthy
@@ -190,7 +191,7 @@ class TestRunVerify:
         """SQL execution error should return failed status, not raise."""
         conn, cursor = mock_connection
         # SAVEPOINT, the query (fails), ROLLBACK TO, RELEASE
-        cursor.execute.side_effect = [None, Exception("syntax error"), None, None]
+        cursor.execute.side_effect = [None, psycopg.ProgrammingError("syntax error"), None, None]
 
         verify_file = tmp_migrations / "001_foo.verify.sql"
         verify_file.write_text("SELECT true")

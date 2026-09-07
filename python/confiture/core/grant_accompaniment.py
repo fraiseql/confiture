@@ -269,7 +269,7 @@ class GrantAccompanimentChecker:
             result = extract_sql_from_python_source(
                 content, path=located, project_root=self.repo_path
             )
-        except Exception:
+        except Exception:  # Reason: the static evaluator refuses in many shapes; every one is 'could not statically extract', noted
             notes.append(f"{migration_file.as_posix()}: could not statically extract SQL")
             return covered, notes
 

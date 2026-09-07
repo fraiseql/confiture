@@ -108,7 +108,7 @@ class MigrationRunner:
                 stderr="",
             )
 
-        except Exception as e:
+        except (OSError, psycopg.Error) as e:
             duration = time.time() - start_time
             self.connection.rollback()
 

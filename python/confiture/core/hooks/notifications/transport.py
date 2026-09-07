@@ -330,7 +330,9 @@ def _frame_locals_contain(frame, password: str) -> bool:
     contain the cleartext *password* as a str value."""
     try:
         locals_view = frame.f_locals
-    except Exception:
+    except (
+        Exception
+    ):  # Reason: frame introspection on foreign frames; any failure means 'not our caller'
         return False
     return any(isinstance(value, str) and value == password for value in locals_view.values())
 

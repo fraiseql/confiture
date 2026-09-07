@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+import psycopg
+
 if TYPE_CHECKING:
     import psycopg
 
@@ -396,7 +398,7 @@ class MigrationLock:
                         f"Lock release returned false (id={lock_id}) - lock may not have been held"
                     )
 
-        except Exception as e:
+        except psycopg.Error as e:
             # Don't raise - lock will be released when connection closes
             logger.warning(f"Error releasing lock (id={lock_id}): {e}")
         finally:
@@ -448,7 +450,7 @@ class MigrationLock:
             # (idempotent) initialize + lock + this row is pending here. The
             # session-scoped advisory lock survives the commit.
             self.connection.commit()
-        except Exception as e:
+        except psycopg.Error as e:
             logger.warning(f"Could not write lock-holder metadata (id={lock_id}): {e}")
             with contextlib.suppress(Exception):
                 self.connection.rollback()
@@ -462,7 +464,7 @@ class MigrationLock:
                     (lock_id,),
                 )
             self.connection.commit()
-        except Exception as e:
+        except psycopg.Error as e:
             logger.debug(f"Could not clear lock-holder metadata (id={lock_id}): {e}")
             with contextlib.suppress(Exception):
                 self.connection.rollback()
@@ -471,7 +473,7 @@ class MigrationLock:
         """read_lock_holder() that never raises (used on the error path)."""
         try:
             return self.read_lock_holder()
-        except Exception as e:
+        except psycopg.Error as e:
             logger.debug(f"Could not read lock-holder metadata: {e}")
             with contextlib.suppress(Exception):
                 self.connection.rollback()

@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import psycopg
+
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
@@ -80,7 +82,7 @@ class Level5ExecutionValidator:
                 # Execute seed file
                 connection.execute(sql)
 
-            except Exception as e:
+            except (OSError, UnicodeDecodeError, psycopg.Error) as e:
                 violations.append(
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
@@ -116,7 +118,7 @@ class Level5ExecutionValidator:
                 func_call = f"SELECT {func_name}();"
                 connection.execute(func_call)
 
-            except Exception as e:
+            except Exception as e:  # Reason: executes a user resolution function; any failure is a reported violation
                 violations.append(
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
@@ -185,7 +187,7 @@ class Level5ExecutionValidator:
                             )
                         )
 
-            except Exception:
+            except psycopg.Error:
                 # Ignore query errors (table might not exist)
                 pass
 
@@ -236,7 +238,7 @@ class Level5ExecutionValidator:
                             )
                         )
 
-            except Exception:
+            except psycopg.Error:
                 # Ignore query errors (table might not exist)
                 pass
 
@@ -292,7 +294,7 @@ class Level5ExecutionValidator:
                             )
                         )
 
-            except Exception:
+            except psycopg.Error:
                 # Ignore query errors (table might not exist)
                 pass
 
@@ -348,7 +350,7 @@ class Level5ExecutionValidator:
                             )
                         )
 
-            except Exception:
+            except psycopg.Error:
                 # Ignore query errors (table might not exist)
                 pass
 
@@ -407,7 +409,7 @@ class Level5ExecutionValidator:
                             )
                         )
 
-            except Exception:
+            except psycopg.Error:
                 # Ignore query errors (table might not exist)
                 pass
 

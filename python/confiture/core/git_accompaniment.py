@@ -9,6 +9,7 @@ from pathlib import Path
 
 from confiture.core.git import GitRepository
 from confiture.core.git_schema import GitSchemaDiffer
+from confiture.exceptions import GitError
 from confiture.models.git import MigrationAccompanimentReport
 
 _FUNC_CONTENT_RE = re.compile(
@@ -96,7 +97,7 @@ class MigrationAccompanimentChecker:
         try:
             diff = self.differ.compare_refs(base_ref, target_ref)
             has_ddl_changes = self.differ.has_ddl_changes(diff)
-        except Exception as exc:
+        except Exception as exc:  # Reason: documented policy: a schema the parser cannot handle skips the check instead of failing CI
             # Schema was too large or complex to parse (e.g. sqlparse token limit,
             # pglast syntax error on non-PostgreSQL DDL).  Treat as "check skipped"
             # rather than a validation failure so CI is not blocked unnecessarily.
@@ -156,7 +157,9 @@ class MigrationAccompanimentChecker:
                 base_ref=base_ref,
                 target_ref=target_ref,
             )
-        except Exception:
+        except (
+            Exception
+        ):  # Reason: documented policy: the signature check is best-effort and never blocks CI
             # Signature check is best-effort — never block CI on unexpected errors
             return []
 
@@ -185,7 +188,9 @@ class MigrationAccompanimentChecker:
                 base_ref=base_ref,
                 target_ref=target_ref,
             )
-        except Exception:
+        except (
+            Exception
+        ):  # Reason: documented policy: the body check is best-effort and never blocks CI
             # Body check is best-effort — never block CI on unexpected errors.
             return []
 
@@ -200,7 +205,7 @@ class MigrationAccompanimentChecker:
                 continue
             try:
                 content = self.git_repo.show_file_at_ref(f, target_ref)
-            except Exception:
+            except GitError:
                 continue
             if content and _FUNC_CONTENT_RE.search(content):
                 result.append(f)

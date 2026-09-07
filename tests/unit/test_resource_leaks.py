@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psycopg
 import pytest
 
 from confiture.config.environment import DatabaseConfig
@@ -52,7 +53,9 @@ def _verifier(tmp_path: Path, *, fail: bool = False) -> tuple[MigrationVerifier,
     conn.cursor.return_value = cursor
     if fail:
         cursor.execute.side_effect = lambda sql, *a: (
-            (_ for _ in ()).throw(RuntimeError("boom")) if "SELECT" in str(sql) else None
+            (_ for _ in ()).throw(psycopg.ProgrammingError("boom"))
+            if "SELECT" in str(sql)
+            else None
         )
     else:
         cursor.fetchone.return_value = (True,)

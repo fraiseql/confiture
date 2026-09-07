@@ -20,6 +20,7 @@ import pglast.parser
 from confiture.config.environment import Environment
 from confiture.core.linting.inventory import Inventory, SchemaObject, build_inventory
 from confiture.core.parser_info import parse_error_line
+from confiture.exceptions import ConfiturError
 
 logger = logging.getLogger(__name__)
 
@@ -301,7 +302,7 @@ class SchemaLinter:
             builder = SchemaBuilder(env=self.env, project_dir=self.project_dir)
             self._schema_files = builder.find_sql_files()
             self._schema_sql = builder.build()
-        except Exception as e:
+        except (ConfiturError, OSError) as e:
             logger.error(f"Failed to load schema: {e}")
             self._schema_sql = ""
 

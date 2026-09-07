@@ -148,7 +148,7 @@ def fix_orphaned_sql_files(
                 logger.info(f"Renamed migration file: {old_name} -> {new_name}")
 
             renamed.append((old_name, new_name))
-        except Exception as e:
+        except OSError as e:
             errors.append((old_name, str(e)))
             logger.error(f"Failed to rename {old_name}: {e}")
 

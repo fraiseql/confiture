@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import typer
 
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import connect, console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
@@ -136,10 +136,6 @@ def s2s_setup(
             print(json.dumps({"ok": True, "command": "setup", "skip_import": skip_import}))
         else:
             console.print("[green]✅ FDW configured[/green] (target → source)")
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
     finally:
         _close(m)
 
@@ -166,10 +162,6 @@ def s2s_analyze(
                 strat = info.get("recommended_strategy", info.get("strategy", "?"))
                 rows = info.get("row_count", info.get("rows", "?"))
                 console.print(f"  • {table}: [bold]{strat}[/bold] ({rows} rows)")
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
     finally:
         _close(m)
 
@@ -212,10 +204,6 @@ def s2s_migrate(
             for table, rows in results.items():
                 console.print(f"  • {table}: [green]{rows}[/green] rows migrated")
             console.print(f"[green]✅ Migrated {len(results)} table(s) via {strategy}[/green]")
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
     finally:
         _close(m)
 
@@ -251,10 +239,6 @@ def s2s_migrate_table(
             )
         else:
             console.print(f"[green]✅ {target_table}: {rows} rows migrated[/green]")
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
     finally:
         _close(m)
 
@@ -295,12 +279,6 @@ def s2s_verify(
                 console.print("[green]✅ All tables match[/green]")
         if mismatches:
             raise typer.Exit(1)  # success-signal: verification found a mismatch
-    except typer.Exit:
-        raise
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
     finally:
         _close(m)
 
@@ -322,10 +300,6 @@ def s2s_cleanup(
             print(json.dumps({"ok": True, "command": "cleanup"}))
         else:
             console.print("[green]✅ FDW removed from target[/green]")
-    except ConfiturError as e:
-        fail(e, json_mode=json_mode)
-    except Exception as e:
-        fail(e, json_mode=json_mode)
     finally:
         _close(m)
 

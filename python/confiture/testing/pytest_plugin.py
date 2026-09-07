@@ -108,7 +108,9 @@ def confiture_sandbox(
             migrations_dir=tb_confiture_dir,
         ) as sandbox:
             yield sandbox
-    except Exception as e:
+    except (
+        Exception
+    ) as e:  # Reason: a fixture that cannot reach its database skips the test, whatever the failure
         pytest.skip(f"Database not available: {e}")
 
 

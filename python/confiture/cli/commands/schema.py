@@ -386,10 +386,7 @@ def build(
         # Resolve a named seed profile from env config (unknown → exit 5).
         seed_profile_obj = None
         if seed_profile is not None:
-            try:
-                seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
-            except Exception as e:
-                fail(e, json_mode=json_mode, output_file=report_output)
+            seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
         apply_sequential = sequential or (
             builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
         )
@@ -488,8 +485,6 @@ def build(
             json_mode=json_mode,
             output_file=report_output,
         )
-    except Exception as e:
-        fail(e, json_mode=json_mode, output_file=report_output)
 
 
 def _duplicate_gate(

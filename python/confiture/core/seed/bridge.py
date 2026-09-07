@@ -6,6 +6,8 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
+import psycopg
+
 
 @dataclasses.dataclass
 class SeedGenerationConfig:
@@ -137,7 +139,7 @@ class SeedBridge:
         """
         try:
             columns = self._get_table_columns(config.table, config.schema)
-        except Exception as e:
+        except psycopg.Error as e:
             return SeedGenerationResult(
                 table=config.table,
                 output_path=config.output_dir / f"{config.table}.sql",

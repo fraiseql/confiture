@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import psycopg
+
 from confiture.core.seed.bridge import SeedBridge, SeedGenerationConfig, SeedGenerationResult
 
 
@@ -106,7 +108,9 @@ def test_seed_bridge_generate_with_overwrite(tmp_path):
 def test_seed_bridge_generate_db_error(tmp_path):
     bridge = SeedBridge("postgresql://localhost/test")
 
-    with patch.object(bridge, "_get_table_columns", side_effect=Exception("Connection refused")):
+    with patch.object(
+        bridge, "_get_table_columns", side_effect=psycopg.OperationalError("Connection refused")
+    ):
         config = SeedGenerationConfig(table="users", output_dir=tmp_path)
         result = bridge.generate(config)
 

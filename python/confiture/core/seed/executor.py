@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import psycopg
+
 from confiture.exceptions import SeedError
 
 
@@ -142,6 +144,6 @@ class SeedExecutor:
             with self.connection.cursor() as cursor:
                 cursor.execute(f"ROLLBACK TO SAVEPOINT {name}")
             self.connection.commit()
-        except Exception:
+        except psycopg.Error:
             # Savepoint rollback failed, do full rollback
             self.connection.rollback()

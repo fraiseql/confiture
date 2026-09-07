@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+import psycopg
+
 from confiture.integrations.pggit.exceptions import (
     PgGitNotAvailableError,
     PgGitVersionError,
@@ -53,7 +55,7 @@ def is_pggit_available(connection: Connection) -> bool:
             """)
             result = cursor.fetchone()
             return bool(result and result[0])
-    except Exception:
+    except psycopg.Error:
         return False
 
 
@@ -92,7 +94,7 @@ def get_pggit_version(connection: Connection) -> tuple[int, int, int] | None:
                         int(match.group(2)),
                         int(match.group(3)),
                     )
-    except Exception:
+    except psycopg.Error:
         pass
 
     # Fallback: try to get version from extension metadata
@@ -112,7 +114,7 @@ def get_pggit_version(connection: Connection) -> tuple[int, int, int] | None:
                         int(match.group(2)),
                         int(match.group(3)),
                     )
-    except Exception:
+    except psycopg.Error:
         pass
 
     return None
@@ -203,7 +205,7 @@ def is_pggit_initialized(connection: Connection) -> bool:
             """)
             result = cursor.fetchone()
             return bool(result and result[0])
-    except Exception:
+    except psycopg.Error:
         return False
 
 
@@ -261,7 +263,7 @@ def get_pggit_info(connection: Connection) -> dict | None:
             """)
             result = cursor.fetchone()
             info["functions_count"] = result[0] if result else 0
-    except Exception:
+    except psycopg.Error:
         pass
 
     return info

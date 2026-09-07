@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import psycopg
 import pytest
 
 from confiture.core.hooks.builtin.audit_hook import AuditConfig, AuditHook
@@ -85,7 +86,7 @@ class TestAuditHook:
     ):
         """AuditHook should handle database failures gracefully."""
         # Mock database connection failure
-        mock_connect.side_effect = Exception("Connection failed")
+        mock_connect.side_effect = psycopg.OperationalError("Connection failed")
 
         hook = AuditHook(audit_config)
         result = await hook.execute(hook_context)
