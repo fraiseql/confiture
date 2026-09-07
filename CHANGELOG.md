@@ -12,6 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### ⚠️ BREAKING — 1.0.0 contract freeze
+
+- **Removed: the pre-1.0 import-path shims.** `confiture.core.seed_applier`, `seed_bridge`,
+  `seed_executor`, `seed_validation/` (all 14 modules), `validators/`, `config_validator`,
+  `introspector`, `introspection.differ_sql` and `anonymization.plugins.sandbox` no longer exist. Import
+  from their homes: `confiture.core.seed.{applier,bridge,executor,validation}`,
+  `confiture.core.validation.{comment_validator,config_validator}`, `confiture.core.introspection.tables`,
+  `confiture.core.differ_sql`, `confiture.core.anonymization.plugins.import_lint`. The layout guards
+  now assert the old paths do not resolve.
+
 ## [0.55.0] - 2026-09-07
 
 - **Dead declarations removed** (Phase 11). `cryptography` was a runtime dependency imported nowhere —

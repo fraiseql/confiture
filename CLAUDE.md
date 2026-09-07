@@ -287,7 +287,6 @@ confiture/
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
 │   │   ├── builder.py            # Schema builder - builds PostgreSQL schemas from DDL files
 │   │   ├── checksum.py           # Migration file checksum computation and verification
-│   │   ├── config_validator.py   # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.val…
 │   │   ├── connection.py         # Database connection management for CLI commands
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
@@ -312,7 +311,6 @@ confiture/
 │   │   ├── git_schema.py         # Schema building and comparison from git refs
 │   │   ├── grant_accompaniment.py # Grant accompaniment validation
 │   │   ├── import_checker.py     # Import-check validation for Python migration modules
-│   │   ├── introspector.py       # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.int…
 │   │   ├── large_tables.py       # Large table migration patterns
 │   │   ├── ledger.py             # Migration ledger existence probe
 │   │   ├── live_function_catalog.py # Adapter that converts FunctionIntrospector results to FunctionSignature…
@@ -343,9 +341,6 @@ confiture/
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
-│   │   ├── seed_applier.py       # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
-│   │   ├── seed_bridge.py        # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
-│   │   ├── seed_executor.py      # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…
 │   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
 │   │   ├── sql_utils.py          # Shared SQL utility functions
@@ -362,18 +357,16 @@ confiture/
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
 │   │   ├── _migrator/            # (18 modules)
-│   │   ├── anonymization/        # PII anonymization framework (library API) (25 modules)
+│   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (4 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
-│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (7 modules)
+│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)
 │   │   ├── linting/              # Rule Library System (30 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
-│   │   ├── seed_validation/      # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see… (14 modules)
-│   │   ├── validation/           # Validation orchestration for ``confiture migrate validate`` modes (14 modules)
-│   │   └── validators/           # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.val… (2 modules)
+│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (14 modules)
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   └── pggit/                # pgGit integration module for Confiture (9 modules)

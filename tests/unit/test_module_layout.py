@@ -53,25 +53,22 @@ def _public(module: object) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize(("old", "new"), sorted(_OLD_TO_NEW.items()))
-def test_the_old_path_is_a_shim_over_the_new_module(old: str, new: str) -> None:
-    shim = importlib.import_module(old)
-    home = importlib.import_module(new)
-    names = _public(home)
-    assert names, new
-    for name in names:
-        assert getattr(shim, name) is getattr(home, name), f"{old}.{name} is not {new}.{name}"
-    assert "shim" in (shim.__doc__ or "").lower() and "1.0.0" in (shim.__doc__ or ""), (
-        f"{old} must say it is a shim removed at 1.0.0"
-    )
+@pytest.mark.parametrize("old", sorted(_OLD_TO_NEW))
+def test_the_old_path_is_gone(old: str) -> None:
+    """The one-release shims left with 1.0.0; the old import paths no longer resolve."""
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(old)
+
+
+def test_no_shim_file_remains() -> None:
+    present = [rel for rel in sorted(_SHIM_FILES) if (_PACKAGE_ROOT / rel).exists()]
+    assert present == [], f"shim files still present: {present}"
 
 
 def test_nothing_in_the_package_imports_the_old_paths() -> None:
     offenders: list[str] = []
     for path in sorted(_PACKAGE_ROOT.rglob("*.py")):
         rel = path.relative_to(_PACKAGE_ROOT).as_posix()
-        if rel in _SHIM_FILES:
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             modules: list[str] = []
