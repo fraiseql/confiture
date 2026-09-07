@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pglast
+from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
@@ -163,6 +164,8 @@ class AddColumn(DdlOperation):
     column: str | None = None
     nullable: bool = True
     has_default: bool = False
+    type_sql: str | None = None  # the type as written, for a plan that re-adds the column
+    default_sql: str | None = None  # the DEFAULT expression as written, for a backfill
 
 
 @dataclass(frozen=True)
@@ -194,6 +197,10 @@ class ChangeColumnType(DdlOperation):
 class AddConstraint(DdlOperation):
     kind: str | None = None
     not_valid: bool = False
+    name: str | None = None
+    definition: str | None = (
+        None  # CHECK (…) / FOREIGN KEY (…) REFERENCES …, for NOT VALID → VALIDATE
+    )
 
 
 @dataclass(frozen=True)
@@ -368,7 +375,12 @@ class OperationClassifier:
                 has_default = _column_has_default(coldef)
                 ops.append(
                     AddColumn(
-                        table=table, column=column, nullable=nullable, has_default=has_default
+                        table=table,
+                        column=column,
+                        nullable=nullable,
+                        has_default=has_default,
+                        type_sql=_deparse(getattr(coldef, "typeName", None)),
+                        default_sql=_column_default_sql(coldef),
                     )
                 )
             elif subtype == _AT_DROP_COLUMN:
@@ -385,7 +397,15 @@ class OperationClassifier:
                 constraint = cmd.def_
                 kind = _CONSTR_KIND.get(_enum_int(getattr(constraint, "contype", None)) or -1)
                 not_valid = bool(getattr(constraint, "skip_validation", False))
-                ops.append(AddConstraint(table=table, kind=kind, not_valid=not_valid))
+                ops.append(
+                    AddConstraint(
+                        table=table,
+                        kind=kind,
+                        not_valid=not_valid,
+                        name=getattr(constraint, "conname", None),
+                        definition=_constraint_definition(constraint, kind),
+                    )
+                )
             elif subtype == _AT_SET_NOT_NULL:
                 ops.append(SetNotNull(table=table, column=cmd.name))
             elif subtype in _AT_BENIGN:
@@ -685,3 +705,35 @@ _RE_BENIGN: tuple[tuple[re.Pattern[str], str], ...] = (
         "create_table_as",
     ),
 )
+
+
+_CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
+
+
+def _deparse(node: object) -> str | None:
+    """A node as PostgreSQL would print it, or ``None`` for no node."""
+    return None if node is None else RawStream()(node)
+
+
+def _column_default_sql(coldef: object) -> str | None:
+    """The DEFAULT expression of a column definition, as written."""
+    for constraint in getattr(coldef, "constraints", None) or ():
+        if _enum_int(getattr(constraint, "contype", None)) == _CONSTR_DEFAULT:
+            return _deparse(getattr(constraint, "raw_expr", None))
+    return None
+
+
+def _constraint_definition(constraint: object, kind: str | None) -> str | None:
+    """The body of a CHECK or FOREIGN KEY constraint — the forms that accept NOT VALID."""
+    if kind == "check":
+        expr = _deparse(getattr(constraint, "raw_expr", None))
+        return f"CHECK ({expr})" if expr else None
+    if kind == "foreign_key":
+        cols = ", ".join(n.sval for n in (getattr(constraint, "fk_attrs", None) or ()))
+        ref = _relname(getattr(constraint, "pktable", None))
+        ref_cols = ", ".join(n.sval for n in (getattr(constraint, "pk_attrs", None) or ()))
+        if not (cols and ref):
+            return None
+        target = f"{ref} ({ref_cols})" if ref_cols else ref
+        return f"FOREIGN KEY ({cols}) REFERENCES {target}"
+    return None
