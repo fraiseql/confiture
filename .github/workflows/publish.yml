@@ -109,7 +109,7 @@ jobs:
 
         echo "✅ All databases ready for testing"
 
-    - name: Run core tests with coverage
+    - name: Run core tests against the built wheel
       run: |
         echo "=== Running Core Tests for Release ==="
         # Run core tests against the BUILT WHEEL - MUST PASS for release.
@@ -120,9 +120,12 @@ jobs:
         # and never the artefact. `-o pythonpath=` clears that; PYTHONPATH exposes the
         # `tests` package only (the package itself lives under python/, which is not
         # on the path). Verified locally: the wheel resolves from site-packages.
+        # No coverage here: this job tests the INSTALLED WHEEL, and coverage's source is the
+        # checkout's python/confiture — it would measure 0 % and trip the fail_under floor.
+        # Coverage (with its floors) is the quality-gate workflow's job.
         PYTHONPATH="$GITHUB_WORKSPACE" CONFITURE_REQUIRE_NATIVE=1 uv run --no-sync pytest tests/ \
           -o pythonpath= \
-          --cov=confiture --cov-report=xml --cov-report=term-missing -v
+          -v
       env:
         # See quality-gate.yml: CONFITURE_TEST_DB_URL is the variable the
         # test fixtures read; without it the service container is unused and the
