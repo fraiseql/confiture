@@ -10,7 +10,9 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.exceptions import ConfigurationError, ValidationError
-from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
+from confiture.url_redaction import (
+    redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
+)
 
 
 def _fix_ownership(

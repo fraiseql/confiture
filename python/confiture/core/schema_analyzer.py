@@ -183,9 +183,9 @@ class SchemaAnalyzer:
                 (wanted,),
             )
 
-            for row in cur.fetchall():
-                table_name = key(row[0], row[1])
-                row = row[1:]
+            for full_row in cur.fetchall():
+                table_name = key(full_row[0], full_row[1])
+                row = full_row[1:]
                 if table_name not in info.tables:
                     info.tables[table_name] = {}
                 info.tables[table_name][row[1]] = {
@@ -260,9 +260,9 @@ class SchemaAnalyzer:
             """,
                 (wanted,),
             )
-            for row in cur.fetchall():
-                table_name = key(row[0], row[1])
-                row = row[1:]
+            for full_row in cur.fetchall():
+                table_name = key(full_row[0], full_row[1])
+                row = full_row[1:]
                 if table_name not in info.foreign_keys:
                     info.foreign_keys[table_name] = []
                 info.foreign_keys[table_name].append(

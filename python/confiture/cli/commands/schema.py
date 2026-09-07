@@ -1330,17 +1330,16 @@ def lint_unified(
 
     if format_type == "json":
         print(json.dumps(unified_result.to_dict(), indent=2))
+    elif not unified_result.issues:
+        console.print("[green]No issues found.[/green]")
     else:
-        if not unified_result.issues:
-            console.print("[green]No issues found.[/green]")
-        else:
-            for tool, tool_issues in unified_result.by_tool.items():
-                console.print(f"\n[bold]{tool}[/bold] ({len(tool_issues)} issue(s)):")
-                for issue in tool_issues:
-                    sev = issue.severity.value.upper()
-                    loc = f"{issue.file}:{issue.line}" if issue.line else issue.file
-                    rule = f" [{issue.rule}]" if issue.rule else ""
-                    console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
+        for tool, tool_issues in unified_result.by_tool.items():
+            console.print(f"\n[bold]{tool}[/bold] ({len(tool_issues)} issue(s)):")
+            for issue in tool_issues:
+                sev = issue.severity.value.upper()
+                loc = f"{issue.file}:{issue.line}" if issue.line else issue.file
+                rule = f" [{issue.rule}]" if issue.rule else ""
+                console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
 
     if fail_on_error and unified_result.has_errors:
         raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found errors

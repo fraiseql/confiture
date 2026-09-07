@@ -17,7 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 import confiture
-import confiture.config.environment as environment
+from confiture.config import environment
 
 PACKAGE = Path(confiture.__file__).resolve().parent
 

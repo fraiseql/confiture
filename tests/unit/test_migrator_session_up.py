@@ -114,7 +114,7 @@ class TestMigratorSessionUpAppliesMigrations:
         mock_class = MagicMock(return_value=mock_migration)
 
         def _ver_from_filename(name: str) -> str:
-            return name.split("_")[0]
+            return name.split("_", maxsplit=1)[0]
 
         session._migrator.initialize = MagicMock()
         session._migrator.find_pending = MagicMock(return_value=[f2])

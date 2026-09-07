@@ -291,19 +291,18 @@ def validate(
                     json_mode=is_json(format_),
                     output_file=output,
                 )
+        # Validate provided directory
+        elif seeds_dir.exists():
+            dirs_to_validate.append((seeds_dir, "default"))
         else:
-            # Validate provided directory
-            if seeds_dir.exists():
-                dirs_to_validate.append((seeds_dir, "default"))
-            else:
-                fail(
-                    ConfigurationError(
-                        f"Seeds directory not found: {seeds_dir}",
-                        error_code="CONFIG_004",
-                    ),
-                    json_mode=is_json(format_),
-                    output_file=output,
-                )
+            fail(
+                ConfigurationError(
+                    f"Seeds directory not found: {seeds_dir}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=is_json(format_),
+                output_file=output,
+            )
 
         # Create validator
         validator = SeedValidator()
@@ -970,12 +969,11 @@ def seed_generate(
         import json
 
         console.print(json.dumps(result.to_dict(), indent=2))
+    elif result.success:
+        console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
+        console.print(
+            f"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
+        )
     else:
-        if result.success:
-            console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
-            console.print(
-                f"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
-            )
-        else:
-            console.print(f"[red]Error: {result.error}[/red]")
-            raise typer.Exit(1)
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise typer.Exit(1)

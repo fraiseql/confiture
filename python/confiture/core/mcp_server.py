@@ -315,8 +315,8 @@ class MCPServer:
     def serve_stdio(self) -> None:
         """Run the MCP server, reading JSON-RPC messages from stdin."""
         self.initialize()
-        for line in sys.stdin:
-            line = line.strip()
+        for raw_line in sys.stdin:
+            line = raw_line.strip()
             if not line:
                 continue
             try:

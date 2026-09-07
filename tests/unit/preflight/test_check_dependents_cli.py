@@ -159,11 +159,7 @@ class TestPglastMissing:
             return real_import(name, *args, **kwargs)
 
         for mod in list(sys.modules):
-            if (
-                mod == "confiture.core.cor_extractor"
-                or mod == "pglast"
-                or mod.startswith("pglast.")
-            ):
+            if mod in ("confiture.core.cor_extractor", "pglast") or mod.startswith("pglast."):
                 monkeypatch.delitem(sys.modules, mod, raising=False)
         monkeypatch.setattr(builtins, "__import__", fake_import)
 

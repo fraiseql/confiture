@@ -15,6 +15,7 @@ class TestCliExitCodes:
             ["confiture", "build", "--env", "nonexistent"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # Should exit with error code (not 0)
@@ -28,6 +29,7 @@ class TestCliExitCodes:
             ["confiture", "--help"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # Help should succeed
@@ -39,6 +41,7 @@ class TestCliExitCodes:
             ["confiture", "build", "--help"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         assert result.returncode == 0
@@ -54,6 +57,7 @@ class TestCliErrorMessages:
             ["confiture", "build", "--env", "nonexistent"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # Should have error output
@@ -66,6 +70,7 @@ class TestCliErrorMessages:
             ["confiture", "build", "--env", "invalid_env_that_does_not_exist"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         # Should fail

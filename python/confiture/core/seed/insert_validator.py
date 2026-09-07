@@ -174,10 +174,13 @@ class InsertValidator:
 
         rows = []
 
-        for row_expr in ast.expression.expressions:
-            if not isinstance(row_expr, exp.Tuple):
-                # Single value wrapped in Tuple
-                row_expr = exp.Tuple(expressions=[row_expr])
+        for raw_row_expr in ast.expression.expressions:
+            # A single value is wrapped in a Tuple
+            row_expr = (
+                raw_row_expr
+                if isinstance(raw_row_expr, exp.Tuple)
+                else exp.Tuple(expressions=[raw_row_expr])
+            )
 
             values = []
             for col_expr in row_expr.expressions:

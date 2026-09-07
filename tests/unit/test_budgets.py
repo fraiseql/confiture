@@ -53,7 +53,14 @@ def test_budget_file_is_current(budgets_module, measured) -> None:
 
 def test_budget_thresholds_are_the_plan_thresholds(measured) -> None:
     budgets, _actual = measured
-    assert budgets["thresholds"] == {"complexity": 15, "function_length": 150}
+    assert budgets["thresholds"] == {
+        "complexity": 15,
+        "function_length": 150,
+        "max_args": 8,
+        "max_branches": 15,
+        "max_statements": 60,
+        "max_returns": 8,
+    }
 
 
 def test_broad_except_total_is_under_the_phase_ceiling(measured) -> None:

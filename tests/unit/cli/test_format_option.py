@@ -53,7 +53,7 @@ def test_discovery_sees_the_known_surface() -> None:
     assert len(COMMANDS) >= 40, COMMANDS
 
 
-@pytest.mark.parametrize("path", COMMANDS, ids=lambda p: " ".join(p))
+@pytest.mark.parametrize("path", COMMANDS, ids=" ".join)
 def test_bogus_format_exits_5_on_stderr(path: tuple[str, ...]) -> None:
     result = runner.invoke(app, [*path, "--format", "bogus"])
 

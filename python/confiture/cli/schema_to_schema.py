@@ -85,8 +85,8 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
 def _parse_inline_mapping(mapping: str) -> dict[str, str]:
     """Parse a ``"a:b,c:d"`` inline column mapping into ``{"a": "b", "c": "d"}``."""
     result: dict[str, str] = {}
-    for pair in mapping.split(","):
-        pair = pair.strip()
+    for raw_pair in mapping.split(","):
+        pair = raw_pair.strip()
         if not pair:
             continue
         if ":" not in pair:

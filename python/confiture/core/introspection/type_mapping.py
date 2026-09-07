@@ -80,7 +80,7 @@ class TypeMapper:
             return f"list[{base_py}]"
 
         # Strip parameterization: "character varying(255)" -> "character varying"
-        base_type = pg_type.split("(")[0].strip()
+        base_type = pg_type.split("(", maxsplit=1)[0].strip()
 
         # Direct lookup
         if base_type in self._mappings:

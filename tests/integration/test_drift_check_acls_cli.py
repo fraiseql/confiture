@@ -171,6 +171,7 @@ def test_check_acls_without_acls_block_emits_helpful_message(
         ["confiture", "drift", "--check-acls", "--config", str(cfg)],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert completed.returncode == 5
     combined = completed.stdout + completed.stderr

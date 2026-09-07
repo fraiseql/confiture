@@ -338,20 +338,19 @@ def check(
             "conflicts": [c.to_dict() for c in all_conflicts],
         }
         _output_json(output_data)
+    elif not all_conflicts:
+        console.print("[green]✓ No conflicts detected![/green]")
     else:
-        if not all_conflicts:
-            console.print("[green]✓ No conflicts detected![/green]")
-        else:
-            console.print(f"\n[red]✗ Found {len(all_conflicts)} conflict(s):[/red]\n")
+        console.print(f"\n[red]✗ Found {len(all_conflicts)} conflict(s):[/red]\n")
 
-            for conflict in all_conflicts:
-                console.print(f"  Type: [yellow]{conflict.conflict_type.value}[/yellow]")
-                console.print(f"  Severity: [red]{conflict.severity.value}[/red]")
-                console.print(f"  Affected: {', '.join(conflict.affected_objects)}")
-                console.print("  Suggestions:")
-                for suggestion in conflict.resolution_suggestions:
-                    console.print(f"    - {suggestion}")
-                console.print()
+        for conflict in all_conflicts:
+            console.print(f"  Type: [yellow]{conflict.conflict_type.value}[/yellow]")
+            console.print(f"  Severity: [red]{conflict.severity.value}[/red]")
+            console.print(f"  Affected: {', '.join(conflict.affected_objects)}")
+            console.print("  Suggestions:")
+            for suggestion in conflict.resolution_suggestions:
+                console.print(f"    - {suggestion}")
+            console.print()
 
     conn.close()
 

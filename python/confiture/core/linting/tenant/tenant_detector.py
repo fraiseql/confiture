@@ -144,7 +144,7 @@ class TenantDetector:
             Table name without schema (e.g., "tb_item")
         """
         if "." in table_name:
-            return table_name.split(".")[-1]
+            return table_name.rsplit(".", maxsplit=1)[-1]
         return table_name
 
     def analyze_schema(

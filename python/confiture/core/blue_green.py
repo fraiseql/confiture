@@ -568,7 +568,7 @@ class TrafficController:
         """
         if self.redis:
             value = self.redis.get("confiture:read_only")
-            return value == "1" or value == b"1"
+            return value in ("1", b"1")
         return self._read_only
 
     def get_active_connections(self, connection: Any) -> list[dict[str, Any]]:

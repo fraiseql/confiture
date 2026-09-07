@@ -69,7 +69,7 @@ def _default(param: Any) -> str:
     if _is_option(param) and getattr(param, "is_flag", False) and not param.secondary_opts:
         return "on" if param.default else "off"
     value = param.default
-    if value is None or value == () or value == []:
+    if value is None or value in ((), []):
         return "-"
     if isinstance(value, bool):
         return "on" if value else "off"

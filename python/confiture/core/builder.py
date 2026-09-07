@@ -31,15 +31,14 @@ logger = logging.getLogger(__name__)
 # says so once per process at INFO.
 _core: Any = None
 HAS_RUST = False
-_fallback_noted = False
+_FALLBACK_NOTED: list[str] = []  # the first reason logged; empty until the fallback is used
 
 
 def _note_fallback(reason: str) -> None:
     """Log, once per process, that the Python hash path is in use and why."""
-    global _fallback_noted
-    if _fallback_noted:
+    if _FALLBACK_NOTED:
         return
-    _fallback_noted = True
+    _FALLBACK_NOTED.append(reason)
     logger.info("native extension %s: hashing schema files in Python", reason)
 
 

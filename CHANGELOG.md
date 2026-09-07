@@ -42,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pathlib (`Path.cwd()`, `Path(...).open()`, `.mkdir(parents=True)`, `.stat()`, `Path()` for `Path(".")`).
 - **`PERF` family enabled.** 61 single-`append` loops became `extend(...)` over a generator (an AST rewrite
   from ruff's findings, reviewed), three dict iterations use `.values()`/keys directly.
+- **`PL` and `C901` enabled with thresholds and a shrink-only baseline.** McCabe 15, max-args 8,
+  max-branches 15, max-statements 60, max-returns 8. The package files that exceed one today are listed
+  in a generated `per-file-ignores` block in `pyproject.toml` rendered from `tests/budgets.json`
+  (`scripts/budgets.py --update`, numbers only go down; `--check` fails when the block or a count is
+  stale), so every new file is held to the thresholds. Test bodies, examples and scripts ignore the
+  size and magic-value rules by design. Hand fixes: 19 `subprocess.run` calls say `check=False`
+  explicitly, 8 loops no longer rebind their loop variable, NaN check via `math.isnan`, explicit
+  `__hash__ = None` on two structurally-equal dataclasses, the builder's fallback flag is a module
+  list instead of a `global`. `PLC0415` (function-level imports) stays governed by the Phase 08 budget.
 
 ## [0.54.0] - 2026-09-07
 

@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from confiture.exceptions import ConfigurationError
-from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
+from confiture.url_redaction import (
+    redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
+)
 
 # The two recognized DSN env vars, treated *differently* by intent (#152):
 #   - CONFITURE_DATABASE_URL: canonical, confiture-specific, set on purpose.

@@ -8,6 +8,7 @@ Usage:
     python validate_static.py
 """
 
+import sys
 from pathlib import Path
 
 from confiture.core.seed.validation.prep_seed.models import ViolationSeverity
@@ -92,4 +93,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

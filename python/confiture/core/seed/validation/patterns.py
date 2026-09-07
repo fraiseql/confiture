@@ -130,10 +130,9 @@ def _preprocess_sql(sql: str) -> str:
     """
     # Remove single-line comments but preserve newlines
     lines = []
-    for line in sql.split("\n"):
+    for raw_line in sql.split("\n"):
         # Remove everything after -- but keep the newline
-        if "--" in line:
-            line = line[: line.index("--")]
+        line = raw_line[: raw_line.index("--")] if "--" in raw_line else raw_line
         lines.append(line)
 
     return "\n".join(lines)

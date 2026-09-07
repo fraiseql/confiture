@@ -161,6 +161,7 @@ class GitSchemaBuilder:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError(f"Git command timed out listing files at '{ref}': {e}") from e

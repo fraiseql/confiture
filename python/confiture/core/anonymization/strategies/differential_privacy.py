@@ -352,7 +352,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         # Check numeric
         try:
             numeric_value = float(value)
-            if numeric_value != numeric_value:  # NaN check
+            if math.isnan(numeric_value):
                 errors.append(f"Column {table_name}.{column_name}: NaN value cannot be anonymized")
         except (TypeError, ValueError):
             errors.append(

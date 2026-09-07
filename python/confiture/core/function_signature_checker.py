@@ -163,8 +163,8 @@ class FunctionSignatureChecker:
         if not args_raw.strip():
             return ()
         types = []
-        for arg in args_raw.split(","):
-            arg = arg.strip()
+        for raw_arg in args_raw.split(","):
+            arg = raw_arg.strip()
             if not arg:
                 continue
             # DROP FUNCTION takes type-only args (no names), but may have schema: public.integer

@@ -56,7 +56,7 @@ def test_schema_to_schema_group_is_reachable() -> None:
     assert s2s == {"setup", "analyze", "migrate", "migrate-table", "verify", "cleanup"}, s2s
 
 
-@pytest.mark.parametrize("path", ALL_COMMAND_PATHS, ids=lambda p: " ".join(p))
+@pytest.mark.parametrize("path", ALL_COMMAND_PATHS, ids=" ".join)
 def test_command_help_is_reachable(path: tuple[str, ...]) -> None:
     """`<command> --help` exits 0 — the command is registered and imports cleanly."""
     result = runner.invoke(app, [*path, "--help"])

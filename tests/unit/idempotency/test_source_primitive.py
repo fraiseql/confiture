@@ -74,8 +74,8 @@ def test_staged_content_reads_relative_to_the_real_migration(tmp_path: Path, mon
 
 def test_no_caller_materializes_a_temp_file_any_more() -> None:
     """The primitive exists so nothing needs to; a temp file re-creates the bug."""
-    import confiture.cli.helpers as helpers
     import confiture.core.grant_accompaniment as grants
+    from confiture.cli import helpers
 
     for module in (helpers, grants):
         source = Path(module.__file__).read_text(encoding="utf-8")  # type: ignore[arg-type]
@@ -90,7 +90,7 @@ def test_no_caller_materializes_a_temp_file_any_more() -> None:
 
 def test_the_evaluator_never_imports_or_executes() -> None:
     """The module's whole promise, pinned: no eval, exec, importlib or __import__."""
-    import confiture.core.idempotency.static_eval as static_eval
+    from confiture.core.idempotency import static_eval
 
     package = Path(static_eval.__file__).parent  # type: ignore[arg-type]
     source = "\n".join(p.read_text(encoding="utf-8") for p in sorted(package.glob("*.py")))

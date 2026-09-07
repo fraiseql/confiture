@@ -148,20 +148,19 @@ def _find_create_table_blocks(sql: str) -> list[tuple[int, int, str]]:
                         pos += 1  # skip escaped quote
                     else:
                         in_string = False
-            else:
-                if ch == "-" and pos + 1 < len(sql) and sql[pos + 1] == "-":
-                    in_line_comment = True
-                    pos += 1
-                elif ch == "/" and pos + 1 < len(sql) and sql[pos + 1] == "*":
-                    in_block_comment = True
-                    pos += 1
-                elif ch in ("'",):
-                    in_string = True
-                    string_char = ch
-                elif ch == "(":
-                    depth += 1
-                elif ch == ")":
-                    depth -= 1
+            elif ch == "-" and pos + 1 < len(sql) and sql[pos + 1] == "-":
+                in_line_comment = True
+                pos += 1
+            elif ch == "/" and pos + 1 < len(sql) and sql[pos + 1] == "*":
+                in_block_comment = True
+                pos += 1
+            elif ch in ("'",):
+                in_string = True
+                string_char = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
 
             pos += 1
 
@@ -417,20 +416,19 @@ def extract_and_strip_fks(sql: str) -> tuple[str, list[ForeignKeyInfo]]:
                         pos += 1
                     else:
                         in_string = False
-            else:
-                if ch == "-" and pos + 1 < len(block_text) and block_text[pos + 1] == "-":
-                    in_line_comment = True
-                    pos += 1
-                elif ch == "/" and pos + 1 < len(block_text) and block_text[pos + 1] == "*":
-                    in_block_comment = True
-                    pos += 1
-                elif ch == "'":
-                    in_string = True
-                    string_char = ch
-                elif ch == "(":
-                    depth += 1
-                elif ch == ")":
-                    depth -= 1
+            elif ch == "-" and pos + 1 < len(block_text) and block_text[pos + 1] == "-":
+                in_line_comment = True
+                pos += 1
+            elif ch == "/" and pos + 1 < len(block_text) and block_text[pos + 1] == "*":
+                in_block_comment = True
+                pos += 1
+            elif ch == "'":
+                in_string = True
+                string_char = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
             pos += 1
 
         close_paren_pos = pos - 1

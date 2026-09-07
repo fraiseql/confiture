@@ -58,7 +58,7 @@ class TestValidateIdempotentZeroFiles:
     ) -> None:
         empty_dir = _make_empty_dir(tmp_path)
 
-        import confiture.cli.helpers as helpers
+        from confiture.cli import helpers
 
         err_buf = io.StringIO()
         monkeypatch.setattr(helpers, "error_console", Console(file=err_buf))
@@ -87,7 +87,7 @@ class TestValidateIdempotentZeroFiles:
         # Patch the module-level error_console to capture into a buffer
         # — CliRunner's stderr redirect doesn't catch Rich's direct
         # writes to sys.stderr.
-        import confiture.cli.helpers as helpers
+        from confiture.cli import helpers
 
         err_buf = io.StringIO()
         monkeypatch.setattr(helpers, "error_console", Console(file=err_buf))

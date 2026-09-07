@@ -148,7 +148,7 @@ def test_the_fallback_to_python_is_logged_once(
     )
     builder = SchemaBuilder(env="local", project_dir=tmp_path)
     monkeypatch.setattr(builder_module, "HAS_RUST", False)
-    builder_module._fallback_noted = False
+    builder_module._FALLBACK_NOTED.clear()
     with caplog.at_level(logging.INFO, logger="confiture.core.builder"):
         builder.compute_hash()
         builder.compute_hash()

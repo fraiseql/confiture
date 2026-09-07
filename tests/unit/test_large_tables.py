@@ -169,7 +169,7 @@ class TestBatchedMigration:
         # Set up rowcount to return 50 first, then 0
         cursor.rowcount = 50
 
-        with patch.object(cursor, "rowcount", new_callable=lambda: Mock()):
+        with patch.object(cursor, "rowcount", new_callable=Mock):
             cursor.rowcount = 50
             batched.add_column_with_default(
                 table="users", column="status", column_type="TEXT", default="'active'"
