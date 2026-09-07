@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 import typer
@@ -44,63 +44,72 @@ def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
     return None
 
 
-@cli_boundary
-def migrate_fix_signatures(
-    config: Path = typer.Option(
-        Path("confiture.yaml"),
+ConfigOpt = Annotated[
+    Path,
+    typer.Option(
         "-c",
         "--config",
         help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
     ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        help="Environment name — shortcut for --config db/environments/{name}.yaml.",
+]
+EnvOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--env", help="Environment name — shortcut for --config db/environments/{name}.yaml."
     ),
-    schema_file: Path | None = typer.Option(
-        None,
+]
+SchemaFileOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--schema",
-        help=(
-            "Schema SQL file containing the authoritative function definitions. "
-            "If omitted, schema is auto-built from DDL files."
-        ),
+        help="Schema SQL file containing the authoritative function definitions. "
+        "If omitted, schema is auto-built from DDL files.",
     ),
-    check_signature_schemas: str = typer.Option(
-        "public",
-        "--schemas",
-        help="Comma-separated list of schemas to inspect (default: public).",
-    ),
-    ssh_via: str | None = typer.Option(
-        None,
+]
+CheckSignatureSchemasOpt = Annotated[
+    str,
+    typer.Option("--schemas", help="Comma-separated list of schemas to inspect (default: public)."),
+]
+SshViaOpt = Annotated[
+    str | None,
+    typer.Option(
         "--ssh",
-        help=(
-            "Open an SSH tunnel before connecting: user@host or host. "
-            "Overrides the ssh_tunnel block in the config file."
-        ),
+        help="Open an SSH tunnel before connecting: user@host or host. "
+        "Overrides the ssh_tunnel block in the config file.",
     ),
-    apply: bool = typer.Option(
-        False,
+]
+ApplyOpt = Annotated[
+    bool,
+    typer.Option(
         "--apply",
-        help=(
-            "Execute the fixes in a single transaction. "
-            "Default is dry-run: print the SQL and exit without changing the DB."
-        ),
+        help="Execute the fixes in a single transaction. "
+        "Default is dry-run: print the SQL and exit without changing the DB.",
     ),
-    format_output: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout).",
-    ),
-    check_body: bool = typer.Option(
-        False,
+]
+OutputFileOpt = Annotated[
+    Path | None, typer.Option("--output", "-o", help="Save output to file (default: stdout).")
+]
+CheckBodyOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-body",
-        help=(
-            "Also detect and fix function body drift (same signature, different body). "
-            "Runs CREATE OR REPLACE from source for each drifted function — no DROP needed."
-        ),
+        help="Also detect and fix function body drift (same signature, different body). "
+        "Runs CREATE OR REPLACE from source for each drifted function — no DROP needed.",
     ),
+]
+
+
+@cli_boundary
+def migrate_fix_signatures(
+    config: ConfigOpt = Path("confiture.yaml"),
+    env: EnvOpt = None,
+    schema_file: SchemaFileOpt = None,
+    check_signature_schemas: CheckSignatureSchemasOpt = "public",
+    ssh_via: SshViaOpt = None,
+    apply: ApplyOpt = False,
+    format_output: str = format_option("text", "json"),
+    output_file: OutputFileOpt = None,
+    check_body: CheckBodyOpt = False,
 ) -> None:
     """Fix stale function overloads: DROP old signature + re-apply source definition.
 
