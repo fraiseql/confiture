@@ -436,6 +436,18 @@ def _report_lock_failure(
     raise typer.Exit(6) from error
 
 
+# Live lines that carry nothing from the event but its kind.
+_FIXED_LINES: dict[str, str] = {
+    "lock_acquired": "[cyan]🔒 Acquired migration lock[/cyan]\n",
+    "view_helpers_installed": (
+        "[cyan]🔧 Auto-installed view helper functions (migration.view_helpers: auto)[/cyan]\n"
+    ),
+    "checksums_verified": "[cyan]🔐 Checksum verification passed[/cyan]\n",
+    "applied": "[green]✅[/green]",
+    "failed": "[red]❌[/red]",
+}
+
+
 class _UpReporter:
     """Turns ``MigratorSession.up()`` events into the console lines of ``migrate up``.
 
@@ -473,8 +485,8 @@ class _UpReporter:
             self.failed = event
         if not self.live:
             return
-        if kind == "lock_acquired":
-            console.print("[cyan]🔒 Acquired migration lock[/cyan]\n")
+        if kind in _FIXED_LINES:
+            console.print(_FIXED_LINES[kind])
         elif kind == "baseline_probe":
             console.print(f"[cyan]🔍 {event.message}[/cyan]")
         elif kind == "baseline_detected":
@@ -482,20 +494,9 @@ class _UpReporter:
             console.print(f"[green]✅ Auto-baselined through {event.version}[/green]")
         elif kind == "baseline_missed":
             console.print(f"[yellow]⚠️  {event.message}[/yellow]")
-        elif kind == "view_helpers_installed":
-            console.print(
-                "[cyan]🔧 Auto-installed view helper functions "
-                "(migration.view_helpers: auto)[/cyan]\n"
-            )
-        elif kind == "checksums_verified":
-            console.print("[cyan]🔐 Checksum verification passed[/cyan]\n")
         elif kind == "applying":
             self._announce()
             console.print(f"[cyan]⚡ Applying {event.label}...[/cyan]", end=" ")
-        elif kind == "applied":
-            console.print("[green]✅[/green]")
-        elif kind == "failed":
-            console.print("[red]❌[/red]")
         elif kind == "target_reached":
             console.print(f"[yellow]⏭️  Skipping {event.version} (after target)[/yellow]")
         elif kind == "skipped_non_transactional":

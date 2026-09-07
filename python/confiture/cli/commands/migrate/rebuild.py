@@ -8,7 +8,7 @@ from __future__ import annotations
 import json as json_module
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -38,6 +38,57 @@ DryRunOpt = Annotated[
     bool, typer.Option("--dry-run", help="Show what would happen without making changes")
 ]
 YesOpt = Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")]
+
+
+def _rebuild_preconditions(
+    config: Path, migrations_dir: Path, find_duplicates: Any, json_mode: bool
+) -> None:
+    """Config file, migrations directory and unique versions — checked before any DB work."""
+    if not config.exists():
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Specify config with --config path/to/config.yaml.",
+            ),
+            json_mode=json_mode,
+        )
+
+    if not migrations_dir.exists():
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=json_mode,
+        )
+
+    duplicates = find_duplicates(migrations_dir)
+    if duplicates:
+        for version, files in sorted(duplicates.items()):
+            console.print(f"  Version {version}:")
+            for f in files:
+                console.print(f"    • {f.name}")
+        fail(
+            MigrationError(
+                "Duplicate migration versions detected — refusing to proceed.",
+                error_code="MIGR_106",
+            ),
+            json_mode=json_mode,
+        )
+
+
+def _write_tracking_backup(rows: Any, tracking_table: str, format_output: str) -> None:
+    """Dump the ledger rows next to the cwd, named after the table they came from (#190)."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # A file called tb_confiture_backup_*.json containing audit.tb_migrations
+    # rows is actively misleading during a restore. "." is not portable in a
+    # filename component, so a qualified name is flattened.
+    ledger_name = tracking_table.replace(".", "_")
+    backup_path = Path(f"{ledger_name}_backup_{timestamp}.json")
+    backup_path.write_text(json_module.dumps(rows, indent=2, default=str))
+    if format_output == "text":
+        console.print(f"[cyan]📦 Tracking table backed up to {backup_path}[/cyan]\n")
 
 
 @cli_boundary
@@ -89,43 +140,7 @@ def migrate_rebuild(
 
     json_mode = is_json(format_output)
 
-    # Pre-flight: validate config
-    if not config.exists():
-        fail(
-            ConfigurationError(
-                f"Config file not found: {config}",
-                error_code="CONFIG_004",
-                resolution_hint="Specify config with --config path/to/config.yaml.",
-            ),
-            json_mode=json_mode,
-        )
-
-    # Pre-flight: validate migrations dir
-    if not migrations_dir.exists():
-        fail(
-            ConfigurationError(
-                f"Migrations directory not found: {migrations_dir}",
-                error_code="CONFIG_004",
-            ),
-            json_mode=json_mode,
-        )
-
-    # Pre-flight: validate format
-
-    # Pre-flight: check for duplicate versions
-    duplicates = find_duplicate_migration_versions(migrations_dir)
-    if duplicates:
-        for version, files in sorted(duplicates.items()):
-            console.print(f"  Version {version}:")
-            for f in files:
-                console.print(f"    • {f.name}")
-        fail(
-            MigrationError(
-                "Duplicate migration versions detected — refusing to proceed.",
-                error_code="MIGR_106",
-            ),
-            json_mode=json_mode,
-        )
+    _rebuild_preconditions(config, migrations_dir, find_duplicate_migration_versions, json_mode)
 
     try:
         with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
@@ -159,20 +174,8 @@ def migrate_rebuild(
                 backup_tracking=False,  # already handled above
             )
 
-            # Write tracking backup to file
             if tracking_backup_data is not None:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # Name the backup after the table it holds (#190): a file called
-                # tb_confiture_backup_*.json containing audit.tb_migrations rows
-                # is actively misleading during a restore. "." is not portable
-                # in a filename component, so a qualified name is flattened.
-                _ledger_name = tracking_backup_table.replace(".", "_")
-                backup_path = Path(f"{_ledger_name}_backup_{timestamp}.json")
-                backup_path.write_text(
-                    json_module.dumps(tracking_backup_data, indent=2, default=str)
-                )
-                if format_output == "text":
-                    console.print(f"[cyan]📦 Tracking table backed up to {backup_path}[/cyan]\n")
+                _write_tracking_backup(tracking_backup_data, tracking_backup_table, format_output)
 
             # Post-rebuild verification
             if verify and not dry_run:
