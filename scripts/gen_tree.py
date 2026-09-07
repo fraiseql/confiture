@@ -4,8 +4,10 @@
 The block between ``<!-- BEGIN GENERATED: tree -->`` and ``<!-- END GENERATED: tree -->``
 is what this script prints: the ``python/confiture`` package two levels deep (a module's
 comment is the first line of its docstring), the top-level directories that matter to a
-contributor, the workflows, and the root files. ``--check`` exits 1 when CLAUDE.md is
-stale; ``--write`` refreshes the block in place.
+contributor, the workflows, and the root files. Only paths git tracks are listed, so a
+local build artefact (``db/generated/``, a stray ``__pycache__``) never reaches the tree
+and a CI checkout renders exactly what a developer checkout renders. ``--check`` exits 1
+when CLAUDE.md is stale; ``--write`` refreshes the block in place.
 
 Usage:
     uv run python scripts/gen_tree.py            # print the tree
@@ -16,7 +18,9 @@ Usage:
 from __future__ import annotations
 
 import ast
+import subprocess
 import sys
+from functools import cache
 from pathlib import Path
 
 BEGIN = "<!-- BEGIN GENERATED: tree -->"
@@ -25,6 +29,25 @@ PACKAGE = Path("python/confiture")
 COMMENT_COLUMN = 34
 COMMENT_WIDTH = 72
 SKIP_DIRS = frozenset({"__pycache__", ".venv", "node_modules", "htmlcov", "target", "site"})
+
+
+@cache
+def _tracked(root: Path) -> frozenset[Path]:
+    """Every tracked file and every directory above one, as absolute paths."""
+    out = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True
+    ).stdout.decode()
+    paths: set[Path] = set()
+    for rel in filter(None, out.split("\0")):
+        path = root / rel
+        paths.add(path)
+        paths.update(path.parents)
+    return frozenset(paths)
+
+
+def _is_tracked(root: Path, path: Path) -> bool:
+    return path.resolve() in _tracked(root.resolve())
+
 
 # Directories rendered below the package, with a one-line note each. A directory that
 # disappears is dropped from the tree by the generator; a note for a missing directory
@@ -66,12 +89,8 @@ def _docstring_line(path: Path) -> str:
     return first
 
 
-def _count_modules(directory: Path) -> int:
-    return sum(
-        1
-        for p in directory.rglob("*.py")
-        if not any(part in SKIP_DIRS for part in p.relative_to(directory).parts)
-    )
+def _count_modules(root: Path, directory: Path) -> int:
+    return sum(1 for p in directory.rglob("*.py") if _is_tracked(root, p))
 
 
 def _line(prefix: str, name: str, comment: str) -> str:
@@ -82,16 +101,17 @@ def _line(prefix: str, name: str, comment: str) -> str:
     return f"{entry}{' ' * pad}# {comment}"
 
 
-def _children(directory: Path) -> tuple[list[Path], list[Path]]:
-    dirs = sorted(p for p in directory.iterdir() if p.is_dir() and p.name not in SKIP_DIRS)
-    files = sorted(p for p in directory.iterdir() if p.is_file() and p.suffix == ".py")
+def _children(root: Path, directory: Path) -> tuple[list[Path], list[Path]]:
+    entries = [p for p in directory.iterdir() if _is_tracked(root, p)]
+    dirs = sorted(p for p in entries if p.is_dir() and p.name not in SKIP_DIRS)
+    files = sorted(p for p in entries if p.is_file() and p.suffix == ".py")
     return dirs, files
 
 
 def _render_package(root: Path, out: list[str], paths: list[str]) -> None:
     package = root / PACKAGE
     out.append(_line("├── ", f"{PACKAGE.as_posix()}/", ""))
-    subpackages, modules = _children(package)
+    subpackages, modules = _children(root, package)
     entries: list[tuple[str, Path, bool]] = [(m.name, m, False) for m in modules]
     entries += [(f"{d.name}/", d, True) for d in subpackages]
     for index, (name, path, is_dir) in enumerate(entries):
@@ -104,14 +124,14 @@ def _render_package(root: Path, out: list[str], paths: list[str]) -> None:
         init = path / "__init__.py"
         out.append(_line(f"│   {branch}", name, _docstring_line(init) if init.exists() else ""))
         inner_prefix = "│       " if last else "│   │   "
-        inner_dirs, inner_files = _children(path)
+        inner_dirs, inner_files = _children(root, path)
         inner: list[tuple[str, Path, bool]] = [(f.name, f, False) for f in inner_files]
         inner += [(f"{d.name}/", d, True) for d in inner_dirs]
         for j, (iname, ipath, idir) in enumerate(inner):
             ibranch = "└── " if j == len(inner) - 1 else "├── "
             paths.append(ipath.relative_to(root).as_posix())
             if idir:
-                count = _count_modules(ipath)
+                count = _count_modules(root, ipath)
                 iinit = ipath / "__init__.py"
                 note = _docstring_line(iinit) if iinit.exists() else ""
                 suffix = f"{count} modules" if count != 1 else "1 module"
@@ -129,7 +149,11 @@ def _render_top_level(root: Path, out: list[str], paths: list[str]) -> None:
             raise SystemExit(f"gen_tree: TOP_LEVEL names {name}/, which does not exist")
         paths.append(name)
         out.append(_line("├── ", f"{name}/", note))
-        subdirs = [p for p in sorted(directory.iterdir()) if p.is_dir() and p.name not in SKIP_DIRS]
+        subdirs = [
+            p
+            for p in sorted(directory.iterdir())
+            if p.is_dir() and p.name not in SKIP_DIRS and _is_tracked(root, p)
+        ]
         if name in {"examples", "scripts", "src"}:
             continue
         for k, sub in enumerate(subdirs):
@@ -137,7 +161,9 @@ def _render_top_level(root: Path, out: list[str], paths: list[str]) -> None:
             paths.append(sub.relative_to(root).as_posix())
             out.append(_line(f"│   {branch}", f"{sub.name}/", ""))
         out.append("│")
-    workflows = sorted((root / ".github" / "workflows").glob("*.yml"))
+    workflows = sorted(
+        p for p in (root / ".github" / "workflows").glob("*.yml") if _is_tracked(root, p)
+    )
     out.append(_line("├── ", ".github/workflows/", ""))
     for k, wf in enumerate(workflows):
         branch = "└── " if k == len(workflows) - 1 else "├── "

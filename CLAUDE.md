@@ -413,13 +413,11 @@ confiture/
 │   ├── e2e/
 │   ├── fixtures/
 │   ├── integration/
-│   ├── migration_testing/
 │   ├── performance/
 │   └── unit/
 │
 ├── db/                           # the repo's own schema, migrations and snapshots
 │   ├── environments/
-│   ├── generated/
 │   ├── schema/
 │   └── schema_history/
 │
