@@ -36,13 +36,13 @@ authoritative for this case and will correctly report it as pinned.
 from __future__ import annotations
 
 import fnmatch
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
 import pglast.parser
 
+from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
@@ -51,7 +51,7 @@ _DEFAULT_SCHEMA = "public"
 _SYSTEM_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "information_schema"})
 
 # Directive: opt the *next* CREATE FUNCTION/PROCEDURE out of sec_002.
-_SECDEF_ALLOW_RE = re.compile(r"--\s*confiture:secdef-allow-unpinned\b", re.IGNORECASE)
+_SECDEF_ALLOW = "secdef-allow-unpinned"
 
 # pglast VariableSetKind integer values.
 # VAR_SET_VALUE(0): SET search_path = a, b
@@ -175,22 +175,14 @@ def _make_alter_sql(schema: str, name: str, param_list: str) -> str:
 def _collect_allow_unpinned_lines(text: str) -> set[int]:
     """Return 1-indexed line numbers of statements opted out via directive.
 
-    The directive attaches to the *next* non-blank, non-comment line.
+    The directive attaches to the statement below it
+    (:func:`confiture.core.sql_lexer.directives`).
     """
-    skipped: set[int] = set()
-    pending = False
-    for idx, raw in enumerate(text.splitlines(), start=1):
-        stripped = raw.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("--"):
-            if _SECDEF_ALLOW_RE.search(stripped):
-                pending = True
-            continue
-        if pending:
-            skipped.add(idx)
-            pending = False
-    return skipped
+    return {
+        d.statement_line
+        for d in sql_lexer.directives(text)
+        if d.name == _SECDEF_ALLOW and d.statement_line is not None
+    }
 
 
 class Sec002SecurityDefinerSearchPath:

@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pglast.parser
+
 from confiture.core.linting.schema_linter import LintReport, LintViolation, RuleSeverity
 from confiture.core.linting.tenant.function_parser import FunctionParser
 from confiture.core.linting.tenant.tenant_detector import TenantDetector
+from confiture.core.linting.unparseable import unparseable_notice
 
 
 class TenantIsolationRule:
@@ -63,11 +66,14 @@ class TenantIsolationRule:
             report: LintReport to add violations to
             file_path: Optional file path for violation reporting
         """
-        # Parse functions to extract INSERT statements
+        # Parse functions to extract INSERT statements; a file pglast rejects is
+        # reported, never read as "no functions".
         functions = []
         for sql in function_sqls:
-            parsed = self.function_parser.extract_functions(sql)
-            functions.extend(parsed)
+            try:
+                functions.extend(self.function_parser.extract_functions(sql))
+            except pglast.parser.ParseError as exc:
+                report.add_violation(unparseable_notice(Path(file_path or "<inline>"), sql, exc))
 
         # Analyze schema for violations
         violations = self.detector.analyze_schema(

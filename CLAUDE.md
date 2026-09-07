@@ -145,6 +145,16 @@ The consumers, all on `pglast.parser.parse_sql`:
 `confiture --version` names the parser on its second line and every JSON payload
 carries `parser: {"pglast": "8.4", "pg_major": 18}` (`core/parser_info.py`).
 
+**One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
+(`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
+`directives`, `strip_copy_blocks`). A regex outside it whose pattern carries a
+lexical marker — `--`, `/*`, a dollar quote, a `'…'` shape, `stdin`, `\.` — fails
+`tests/unit/test_one_sql_lexer.py` (allow-list entries state why the text is not
+SQL); a regex that matches a statement's shape (`^CREATE\s+TABLE`) counts against
+the shrink-only `sql_keyword_regex` dimension of `tests/budgets.json`. Read a
+`-- confiture:<name>` directive through `sql_lexer.directives()`, never with a
+line walker of your own.
+
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 
 The SQL a `.py` migration hands to `self.execute(...)` / `self.execute_file(...)`

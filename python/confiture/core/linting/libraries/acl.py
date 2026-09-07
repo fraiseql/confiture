@@ -21,17 +21,14 @@ import re
 from pathlib import Path
 
 from confiture.config.environment import AclExpectation, AclGrant
+from confiture.core import sql_lexer
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.migration_grant_extractor import (
     MigrationGrantExtractor,
     _parse_qualified_name,
 )
 
-# Directive marker: a single-line comment whose first non-whitespace
-# tokens are ``confiture:owner-only``.  Trailing characters on the line
-# are ignored so a follow-on comment ("-- confiture:owner-only — audit
-# table") still matches.
-_OWNER_ONLY_RE = re.compile(r"--\s*confiture:owner-only\b", re.IGNORECASE)
+_OWNER_ONLY = "owner-only"
 # Capture the relname from the line that starts a CREATE TABLE.  Anchored
 # to the start of line so we can pair each match with its line number for
 # the directive walk-back.
@@ -52,30 +49,14 @@ def _has_owner_only_directive(text: str, table_line: int) -> bool:
     """Return ``True`` if a ``-- confiture:owner-only`` directive sits in the
     contiguous comment block immediately preceding ``table_line``.
 
-    The check walks backwards from ``table_line - 1`` (1-indexed), skipping
-    blank lines and lines that start with ``--``.  As soon as it hits a
-    non-comment non-blank line, it stops.  Any owner-only directive found
-    along the way opts the table out.
-
-    Line-based scan (not AST) because pglast doesn't preserve comment
-    proximity reliably and ``pg_format`` re-indents in ways that would
-    break a strict "literally the previous line" rule.
+    The directive is a comment token (:func:`confiture.core.sql_lexer.directives`),
+    so one inside a dollar-quoted body or a COPY row does not count, and it
+    attaches to the first statement after it: blank lines and further comments
+    between the two do not detach it, any other statement does.
     """
-    lines = text.splitlines()
-    i = table_line - 2  # 0-indexed, line above the CREATE TABLE
-    while i >= 0:
-        stripped = lines[i].strip()
-        if not stripped:
-            i -= 1
-            continue
-        if stripped.startswith("--"):
-            if _OWNER_ONLY_RE.search(stripped):
-                return True
-            i -= 1
-            continue
-        # Non-comment, non-blank → contiguous block ended.
-        return False
-    return False
+    return any(
+        d.name == _OWNER_ONLY and d.statement_line == table_line for d in sql_lexer.directives(text)
+    )
 
 
 def _collect_owner_only_relnames(text: str) -> set[tuple[str, str]]:
@@ -88,14 +69,16 @@ def _collect_owner_only_relnames(text: str) -> set[tuple[str, str]]:
 
     The directive applies only to the CREATE TABLE on the line directly
     after the comment block — adjacent or substring-prefix relnames are
-    correctly distinguished.  Inline directives (``-- confiture:owner-only``
-    on the same line as the CREATE TABLE) and block-comment forms
-    (``/* confiture:owner-only */``) are NOT recognized — the directive
-    must be on its own ``--`` line above the statement.
+    correctly distinguished.  Block-comment forms (``/* confiture:owner-only */``)
+    are NOT recognized — the directive must be on its own ``--`` line above
+    the statement.
     """
     opted_out: set[tuple[str, str]] = set()
     for m in _CREATE_TABLE_STMT_RE.finditer(text):
-        line_no = text.count("\n", 0, m.start()) + 1
+        # The match may start on the blank line above (``^\s*``); the statement's
+        # line is where CREATE itself sits.
+        statement_start = m.start() + len(m.group(0)) - len(m.group(0).lstrip())
+        line_no = text.count("\n", 0, statement_start) + 1
         if _has_owner_only_directive(text, table_line=line_no):
             opted_out.add(_parse_qualified_name(m.group("qname")))
     return opted_out

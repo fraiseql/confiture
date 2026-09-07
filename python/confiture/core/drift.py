@@ -525,17 +525,23 @@ class SchemaDriftDetector:
         actual: SchemaInfo,
         report: DriftReport,
     ) -> None:
-        """Compare indexes between schemas."""
-        for table in expected.indexes:
+        """Compare the declared indexes of every expected table with the live ones.
+
+        A live index that backs a constraint (``actual.constraint_indexes``)
+        is PostgreSQL's, not the DDL's: it is never *extra*. It still matches
+        a declared index by name, so ``UNIQUE USING INDEX`` reports nothing.
+        """
+        for table in sorted(set(expected.tables) | set(expected.indexes)):
             if self._ignored(table):
                 continue
 
             exp_indexes = set(expected.indexes.get(table, []))
             act_indexes = set(actual.indexes.get(table, []))
+            backing = actual.constraint_indexes.get(table, set())
+            report.indexes_checked += len(exp_indexes | (act_indexes - backing))
 
             # Missing indexes
             for idx in sorted(exp_indexes - act_indexes):
-                report.indexes_checked += 1
                 report.drift_items.append(
                     DriftItem(
                         drift_type=DriftType.MISSING_INDEX,
@@ -548,8 +554,7 @@ class SchemaDriftDetector:
                 )
 
             # Extra indexes
-            for idx in sorted(act_indexes - exp_indexes):
-                report.indexes_checked += 1
+            for idx in sorted(act_indexes - backing - exp_indexes):
                 report.drift_items.append(
                     DriftItem(
                         drift_type=DriftType.EXTRA_INDEX,

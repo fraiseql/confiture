@@ -309,6 +309,19 @@ def test_directive_suppresses_violation(tmp_path: Path) -> None:
     assert violations == []
 
 
+def test_directive_inside_a_dollar_body_does_not_suppress(tmp_path: Path) -> None:
+    """A directive line inside a DO body is body text, not a comment above the CREATE."""
+    sql = (
+        "DO $$\n"
+        "-- confiture:secdef-allow-unpinned $$;\n"
+        "CREATE FUNCTION public.not_allowed() RETURNS void LANGUAGE plpgsql "
+        "SECURITY DEFINER AS $$ BEGIN END $$;\n"
+    )
+    f = _write(tmp_path, "f.sql", sql)
+    violations = _make_rule().check([f])
+    assert [v.object_name for v in violations] == ["public.not_allowed"]
+
+
 def test_directive_only_suppresses_next_function(tmp_path: Path) -> None:
     """Directive attached to one CREATE does not suppress a later CREATE."""
     sql = (

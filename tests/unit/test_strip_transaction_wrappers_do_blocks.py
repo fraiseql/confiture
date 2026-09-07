@@ -82,3 +82,7 @@ class TestDoBlockPreservation:
         assert "COMMIT" not in result
         assert "CREATE TABLE" in result
         assert changed is True
+
+    def test_wrapper_with_a_trailing_comment_is_stripped(self):
+        sql = "BEGIN; -- start\nCREATE TABLE t (id INT);\nCOMMIT; -- end\n"
+        assert strip_transaction_wrappers(sql) == "CREATE TABLE t (id INT);\n"

@@ -12,6 +12,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.0.1] - 2026-09-07
+
+### Fixed
+
+- **`confiture drift` no longer reports constraint-backed indexes as `extra_index`.** The index
+  PostgreSQL creates for a `PRIMARY KEY`, `UNIQUE` or `EXCLUDE` constraint (`t_pkey`, `t_code_key`, or
+  the constraint's name) is never declared by the DDL, so every such table produced one info-level item
+  per constraint. `SchemaAnalyzer.get_schema_info` now records those indexes separately
+  (`SchemaInfo.constraint_indexes`, from `pg_constraint.conindid`) and the comparison subtracts them; an
+  index the DDL declares that also backs a constraint (`UNIQUE USING INDEX`) still matches by name.
+- **`confiture drift` compares the indexes of every table the DDL declares**, not only the tables with a
+  `CREATE INDEX` of their own: a free-standing index the live database grew on an index-less table is
+  now an `extra_index` item. `indexes_checked` counts the indexes compared rather than the items found.
+
+### Changed
+
+- **One SQL lexer.** `core/sql_lexer.py` gains `tokens()` (libpg_query's scanner with absolute
+  offsets, the data rows of a `COPY … FROM stdin` block skipped up to their `\.` line, a scanner error
+  ending the code) and `code_text()` (the text with everything that is not code blanked, line for line).
+  The `psql` applier's meta-command and inline-COPY scan runs on them; its hand-written line lexer and
+  its two regexes are gone. Behaviour is unchanged: every pinned meta-command and COPY case passes as
+  before.
+- **The tenant-isolation function parser reads through pglast and the scanner.** `CREATE FUNCTION`
+  statements come from `parse_sql` (name, `AS` body or a deparsed `BEGIN ATOMIC` body, statement
+  source) and the `INSERT INTO` statements in a body from the scanner's tokens; the five regexes are
+  gone. What changes: a commented-out function is no longer a function, an `INSERT` inside a comment or
+  a `RAISE NOTICE` literal is no longer an insert, an `EXECUTE 'INSERT …'` literal is read as dynamic
+  SQL (`InsertStatement.is_dynamic`), a `LANGUAGE sql BEGIN ATOMIC` body is now read, and a function
+  file pglast rejects is reported by `tenant_001` as an `UNPARSEABLE` notice instead of linting clean.
+- **`-- confiture:<name>` directives are comment tokens.** `sql_lexer.directives()` reads them for
+  `acl_001` (`owner-only`), `func_001` (`func-allow-duplicate`), `sec_002` (`secdef-allow-unpinned`)
+  and `own_001` (`owner-skip`, `run-as`); each rule's own line walker and regex are gone. A directive
+  attaches to the statement below it (blank lines and other comments in between do not detach it), and
+  one inside a dollar-quoted body or a COPY data row is body text, not a directive — the old walkers
+  disagreed on both. `-- Strategy:` headers, the baseline detector's comment stripping, the differ's
+  inline-COPY removal (`sql_lexer.strip_copy_blocks()`) and `generate renumber`'s literal-aware
+  reference rewrite read the same tokens; a `--` inside a literal or an apostrophe inside a comment no
+  longer confuses them.
+- **`strip_transaction_wrappers` decides "top-level" from `code_text`.** A `BEGIN;` or `COMMIT;`
+  line followed by a comment (`BEGIN; -- start`) is now stripped like a bare one; the module's own
+  line scanner and its two regexes are gone.
+- **Guard: `tests/unit/test_one_sql_lexer.py`** fails on any regex outside `core/sql_lexer.py` whose
+  pattern carries a lexical marker (a comment opener, a dollar quote, a literal, `stdin`, `\.`), with a
+  three-entry allow-list that states why each does not read SQL. Regexes that match a statement's shape
+  (`^CREATE\s+TABLE`) are counted by the new shrink-only `sql_keyword_regex` dimension of
+  `tests/budgets.json` (123 in 24 files today).
+
 ## [1.0.0] - 2026-09-07
 
 Confiture 1.0.0 freezes its contracts. What is frozen, and where each is pinned:

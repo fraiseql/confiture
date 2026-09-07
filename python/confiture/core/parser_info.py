@@ -38,14 +38,20 @@ def parser_line() -> str:
     return f"parser: pglast {pglast_version()} (PostgreSQL {pg_grammar_major()} grammar)"
 
 
-def parse_error_line(sql: str, exc: BaseException) -> int:
-    """The 1-based line of a :class:`pglast.parser.ParseError` in ``sql``.
+def parse_error_index(exc: BaseException) -> int | None:
+    """The character offset a :class:`pglast.parser.ParseError` points at, if it says.
 
-    pglast reports the character offset in the message (``… at index 7``); the
-    ``location`` attribute is not populated by every build.
+    pglast reports it in the message (``… at index 7``); the ``location``
+    attribute is not populated by every build.
     """
     index = getattr(exc, "location", None)
-    if not isinstance(index, int) or index < 0:
-        m = _INDEX_RE.search(str(exc))
-        index = int(m.group(1)) if m else 0
+    if isinstance(index, int) and index >= 0:
+        return index
+    m = _INDEX_RE.search(str(exc))
+    return int(m.group(1)) if m else None
+
+
+def parse_error_line(sql: str, exc: BaseException) -> int:
+    """The 1-based line of a :class:`pglast.parser.ParseError` in ``sql``."""
+    index = parse_error_index(exc) or 0
     return sql.count("\n", 0, min(index, len(sql))) + 1

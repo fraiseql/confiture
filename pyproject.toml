@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "1.0.0"
+version = "1.0.1"
 description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -324,7 +324,7 @@ max-returns = 8
 "python/confiture/core/lock_profile.py" = ["PLR0911"]
 "python/confiture/core/migration_generator.py" = ["PLR0911"]
 "python/confiture/core/migration_grant_extractor.py" = ["C901", "PLR0912", "PLR0913", "PLR2004"]
-"python/confiture/core/psql_applier.py" = ["C901", "PLR0912", "PLR0915", "PLR2004"]
+"python/confiture/core/psql_applier.py" = ["PLR2004"]
 "python/confiture/core/replica/classifier.py" = ["PLR0911"]
 "python/confiture/core/replica/safety.py" = ["C901", "PLR0911", "PLR0912"]
 "python/confiture/core/schema_facts.py" = ["PLR2004"]
@@ -333,7 +333,6 @@ max-returns = 8
 "python/confiture/core/seed/validation/models.py" = ["PLR2004"]
 "python/confiture/core/seed/validation/prep_seed/level_1_seed_files.py" = ["PLR2004"]
 "python/confiture/core/seed/validation/prep_seed/orchestrator.py" = ["PLR2004"]
-"python/confiture/core/sql_utils.py" = ["C901", "PLR0912", "PLR0915"]
 "python/confiture/core/temp_database.py" = ["PLR2004"]
 "python/confiture/core/tree_allocator.py" = ["PLR2004"]
 "python/confiture/core/tree_renumber.py" = ["PLR2004"]

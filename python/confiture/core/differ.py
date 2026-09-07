@@ -7,7 +7,6 @@ This module provides functionality to:
 """
 
 import logging
-import re
 from collections.abc import Callable
 from typing import Any
 
@@ -16,6 +15,7 @@ from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.sql_lexer import strip_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
     Column,
@@ -102,16 +102,6 @@ _DDL_PREFIXES = ("CREATE", "ALTER", "DROP", "TRUNCATE", "COMMENT")
 
 logger = logging.getLogger(__name__)
 
-# ``COPY … FROM stdin;`` + inline rows + ``\.`` terminator is psql client
-# protocol, not SQL — pglast rejects the data lines, and one such block
-# anywhere in a concatenated schema used to kill the whole pglast pass (#194).
-# The data lines are free-form text (semicolons, quotes, SQL-looking noise),
-# so the block is stripped wholesale, COPY statement through terminator.
-_COPY_STDIN_RE = re.compile(
-    r"^COPY\s.*?\bFROM\s+stdin\b.*?;.*?^\\\.[ \t]*$\n?",
-    re.IGNORECASE | re.MULTILINE | re.DOTALL,
-)
-
 # pglast reports internal type aliases rather than the SQL keyword the user wrote.
 # Map them back to the canonical names in _COLUMN_TYPE_MAP.
 _PGLAST_TYPE_ALIASES: dict[str, str] = {
@@ -185,7 +175,7 @@ class SchemaDiffer:
         # Strip inline-COPY data blocks before ANY parser or regex pass sees
         # the text: pglast rejects them outright (#194), and the free-form data
         # lines could false-match the regex passes below.
-        sql = _COPY_STDIN_RE.sub("", sql)
+        sql = strip_copy_blocks(sql)
 
         result = ParsedSchema()
 

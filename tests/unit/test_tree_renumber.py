@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.tree_renumber import RenumberPlan, RenumberResult, TreeRenumber, _stem_from_path
+from confiture.core.tree_renumber import (
+    RenumberPlan,
+    RenumberResult,
+    TreeRenumber,
+    _rewrite,
+    _stem_from_path,
+)
 
 # ---------------------------------------------------------------------------
 # _stem_from_path helper
@@ -620,3 +626,17 @@ class TestRenumberCrossRepoReferences:
         assert not old.exists()
         assert new.exists()
         assert isinstance(result.cross_repo_refs, list)
+
+
+class TestRewriteOutsideLiterals:
+    def test_an_apostrophe_in_a_comment_does_not_hide_a_reference(self) -> None:
+        content = "-- it's the caller\nSELECT fn_old();\n-- don't rename\n"
+        assert _rewrite(content, "fn_old", "fn_new") == (
+            "-- it's the caller\nSELECT fn_new();\n-- don't rename\n"
+        )
+
+    def test_literals_inside_a_dollar_body_are_kept_and_its_code_is_rewritten(self) -> None:
+        content = "CREATE FUNCTION f() RETURNS void AS $$\n  EXECUTE 'SELECT fn_old()';\n  PERFORM fn_old();\n$$ LANGUAGE plpgsql;\n"
+        assert _rewrite(content, "fn_old", "fn_new") == (
+            "CREATE FUNCTION f() RETURNS void AS $$\n  EXECUTE 'SELECT fn_old()';\n  PERFORM fn_new();\n$$ LANGUAGE plpgsql;\n"
+        )

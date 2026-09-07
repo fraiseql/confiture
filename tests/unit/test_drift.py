@@ -513,3 +513,50 @@ class TestSchemaDriftDetector:
         info = detector._parse_schema_from_sql(sql)  # must not raise
 
         assert info.tables == {}
+
+
+class TestConstraintBackedIndexes:
+    """A live index that backs a constraint is never an ``extra_index``."""
+
+    @pytest.fixture
+    def mock_connection(self):
+        conn = Mock()
+        cursor = MagicMock()
+        conn.cursor.return_value.__enter__ = Mock(return_value=cursor)
+        conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        cursor.fetchone.return_value = ("test_db",)
+        cursor.fetchall.return_value = []
+        return conn, cursor
+
+    def test_constraint_backed_live_index_is_not_extra(self, mock_connection):
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        actual = SchemaInfo(
+            tables={"users": {"id": {"type": "integer"}}},
+            indexes={"users": ["users_pkey", "users_email_key", "idx_users_tmp"]},
+            constraint_indexes={"users": {"users_pkey", "users_email_key"}},
+        )
+
+        report = detector.compare_schemas(expected, actual)
+
+        extra = [d for d in report.drift_items if d.drift_type == DriftType.EXTRA_INDEX]
+        assert [d.object_name for d in extra] == ["users.idx_users_tmp"]
+
+    def test_declared_index_that_backs_a_constraint_is_matched_by_name(self, mock_connection):
+        conn, _ = mock_connection
+        detector = SchemaDriftDetector(conn)
+        expected = SchemaInfo(
+            tables={"users": {"id": {"type": "integer"}}},
+            indexes={"users": ["users_email_uq"]},
+        )
+        actual = SchemaInfo(
+            tables={"users": {"id": {"type": "integer"}}},
+            indexes={"users": ["users_pkey", "users_email_uq"]},
+            constraint_indexes={"users": {"users_pkey", "users_email_uq"}},
+        )
+
+        report = detector.compare_schemas(expected, actual)
+
+        assert [d for d in report.drift_items if d.drift_type == DriftType.MISSING_INDEX] == []
+        assert [d for d in report.drift_items if d.drift_type == DriftType.EXTRA_INDEX] == []

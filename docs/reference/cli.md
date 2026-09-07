@@ -2902,6 +2902,12 @@ confiture lint [OPTIONS]
 
 Compare the live database schema against expected DDL and/or the configured `acls:` block.
 
+Structural drift compares tables, columns (type, nullability, order) and indexes. Only the indexes the
+DDL declares with `CREATE INDEX` are compared: the index PostgreSQL creates to back a `PRIMARY KEY`,
+`UNIQUE` or `EXCLUDE` constraint (`t_pkey`, `t_code_key`, or the constraint's name) is never reported
+as `extra_index`, while a free-standing index the live database has and the DDL does not is — on every
+table the DDL declares, whether or not that table declares an index of its own.
+
 ### Exit Codes
 
 | Code | Meaning |

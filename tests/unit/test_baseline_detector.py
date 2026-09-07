@@ -35,6 +35,11 @@ class TestNormalizeSchema:
         assert "block comment" not in result
         assert "create table tb_x" in result
 
+    def test_a_comment_opener_inside_a_literal_is_kept(self) -> None:
+        sql = "CREATE TABLE tb_x (sep text DEFAULT '--');"
+        result = self.detector.normalize_schema(sql)
+        assert "default '--'" in result
+
     def test_removes_if_not_exists(self) -> None:
         sql = "CREATE TABLE IF NOT EXISTS tb_users (id bigint);"
         result = self.detector.normalize_schema(sql)

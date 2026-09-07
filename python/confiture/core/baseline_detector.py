@@ -18,6 +18,7 @@ import psycopg
 
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.introspection.tables import SchemaIntrospector
+from confiture.core.sql_lexer import strip_comments
 from confiture.models.introspection import IntrospectionResult
 
 
@@ -82,10 +83,8 @@ class BaselineDetector:
         Returns:
             Normalised SQL string suitable for equality comparison.
         """
-        # Remove block comments
-        sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
-        # Remove line comments
-        sql = re.sub(r"--[^\n]*", " ", sql)
+        # Remove comments (a ``--`` inside a literal is not one)
+        sql = strip_comments(sql, replace_with=" ")
         # Lowercase
         sql = sql.lower()
         # Remove IF NOT EXISTS / IF EXISTS
