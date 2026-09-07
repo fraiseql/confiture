@@ -22,7 +22,7 @@ class LintSeverity(Enum):
 class RuleVersion:
     """Semantic version for rules."""
 
-    __hash__ = None  # type: ignore[assignment]  # mutable; equality is structural
+    __hash__ = None  # mutable; equality is structural
 
     major: int
     minor: int

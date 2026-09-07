@@ -152,7 +152,7 @@ def _load_emitter_callable(spec: str) -> Callable[[], list[EmittedFunction]]:
         raise ValueError(f"Cannot import emitter module '{module_path}': {exc}") from exc
     if not hasattr(module, callable_name):
         raise ValueError(f"Module '{module_path}' has no attribute '{callable_name}'")
-    return getattr(module, callable_name)  # type: ignore[no-any-return]
+    return getattr(module, callable_name)
 
 
 @generate_app.command("scaffold")

@@ -33,7 +33,7 @@ def _find_free_port() -> int:
     """Bind to port 0 and let the OS choose a free port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("localhost", 0))
-        return s.getsockname()[1]  # type: ignore[no-any-return]
+        return s.getsockname()[1]
 
 
 def _wait_for_port(port: int, timeout: int) -> None:

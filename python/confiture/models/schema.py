@@ -217,7 +217,7 @@ class Table:
         """Check if table has column."""
         return self.get_column(name) is not None
 
-    __hash__ = None  # type: ignore[assignment]  # mutable; equality is structural
+    __hash__ = None  # mutable; equality is structural
 
     def __eq__(self, other: object) -> bool:
         """Compare tables for equality."""

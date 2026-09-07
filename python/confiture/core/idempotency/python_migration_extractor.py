@@ -142,7 +142,7 @@ def _first_sql_argument(call: ast.Call, *, kwarg_name: str) -> ast.expr | None:
     return None
 
 
-def _snippet(value: Str, *, arg: ast.expr, call: ast.Call, path: Path, trace) -> ExtractedSQL:  # type: ignore[no-untyped-def]
+def _snippet(value: Str, *, arg: ast.expr, call: ast.Call, path: Path, trace) -> ExtractedSQL:
     if value.from_file is not None:
         kind = ExtractionKind.FILE
     elif value.is_fstring or isinstance(arg, ast.JoinedStr):

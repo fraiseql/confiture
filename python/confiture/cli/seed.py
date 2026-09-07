@@ -41,7 +41,7 @@ DEFAULT_COPY_THRESHOLD = 1000
 DEFAULT_ENV = "local"
 
 
-def _format_benchmark_output(result: Any) -> None:  # type: ignore[no-untyped-def]
+def _format_benchmark_output(result: Any) -> None:
     """Format and display benchmark results.
 
     Args:

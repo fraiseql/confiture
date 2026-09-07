@@ -72,7 +72,7 @@ def debug_cte(
             )
         query = file.read_text()
     else:
-        query = sql  # type: ignore[assignment]
+        query = sql
 
     try:
         conn = psycopg.connect(database_url)

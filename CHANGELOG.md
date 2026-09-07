@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicitly, 8 loops no longer rebind their loop variable, NaN check via `math.isnan`, explicit
   `__hash__ = None` on two structurally-equal dataclasses, the builder's fallback flag is a module
   list instead of a `global`. `PLC0415` (function-level imports) stays governed by the Phase 08 budget.
+- **No mypy-style `type: ignore[...]` codes.** All 14 were stripped and ty is clean without them — none was
+  suppressing anything; `tests/unit/test_no_mypy_ignore_codes.py` forbids the form (and bare `# type: ignore`).
 
 ## [0.54.0] - 2026-09-07
 

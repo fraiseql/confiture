@@ -274,7 +274,7 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
         @property
         def database_url(self) -> str:
             if hasattr(self._base, "database_url"):
-                return self._base.database_url  # type: ignore[no-any-return]
+                return self._base.database_url
             return self._base.get("database_url", "")
 
         def get(self, key: str, default: Any = None) -> Any:

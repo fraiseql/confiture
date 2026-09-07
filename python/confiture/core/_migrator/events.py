@@ -61,4 +61,4 @@ UpObserver = Callable[[UpEvent], None]
 def emit(observer: UpObserver | None, kind: UpEventKind, **fields: object) -> None:
     """Deliver ``UpEvent(kind, **fields)`` to *observer* if there is one."""
     if observer is not None:
-        observer(UpEvent(kind, **fields))  # type: ignore[arg-type]
+        observer(UpEvent(kind, **fields))
