@@ -40,7 +40,6 @@ dependencies = [
     "pyyaml>=6.0.1",
     "psycopg[binary,pool]>=3.1.0",
     "sqlglot>=28.0",
-    "cryptography>=42.0.0",
     # PostgreSQL's own parser (libpg_query) — the one parser since 0.50.0 (D13).
     # Uncapped since 0.39.0 (#192): enum members are resolved by name through
     # `core/_pglast_enums.py`, `tests/unit/test_pglast_enum_binding.py` guards the
@@ -135,7 +134,7 @@ include = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "python/tests"]
+testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"

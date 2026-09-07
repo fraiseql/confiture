@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+- **Dead declarations removed** (Phase 11). `cryptography` was a runtime dependency imported nowhere —
+  dropped from `[project.dependencies]` and the lockfile; `tests/unit/test_declared_dependencies_used.py`
+  fails on any declared runtime dependency the package never imports. `test-output.log`,
+  `RELEASE_COMMANDS.sh` and the stray `python/db/` sample tree are untracked (`.gitignore` now covers
+  `*.log`), `testpaths` names only `tests/`; `tests/unit/test_tracked_files_hygiene.py` holds the line.
+  `scripts/gen_mkdocs_nav.py` renders tracked pages only, like the tree generator.
+
 ## [0.54.0] - 2026-09-07
 
 Phase 10 of the 2026-09-06 review: documentation truth — every documented

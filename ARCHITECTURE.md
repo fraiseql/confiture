@@ -327,7 +327,6 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 | `pyyaml` | >=6.0 | YAML parsing |
 | `psycopg[binary,pool]` | >=3.1 | PostgreSQL driver (sync + pool) |
 | `sqlglot` | >=28.0 | SQL dialect-aware parsing and transformation |
-| `cryptography` | >=42.0 | Encryption utilities |
 
 ### Optional Dependencies
 
