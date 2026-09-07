@@ -173,6 +173,9 @@ omit = [
 ]
 
 [tool.coverage.report]
+# Package-level floor (Phase 11); per-file floors live in tests/coverage_floors.json and
+# are checked by scripts/coverage_floors.py from the JSON report CI writes.
+fail_under = 80
 precision = 2
 show_missing = true
 skip_covered = false

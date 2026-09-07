@@ -96,17 +96,17 @@ def branch_list(
     client, conn = _get_pggit_client(config)
 
     branches = client.list_branches()
-    current = client.get_branch()
+    current_name = client.get_current_branch()
 
     if format_output == "json":
         output = {
-            "current": current.name if current else None,
+            "current": current_name,
             "branches": [
                 {
                     "name": b.name,
-                    "created_at": b.created_at.isoformat() if b.created_at else None,
+                    "created_at": b.last_commit.isoformat() if b.last_commit else None,
                     "commit_count": b.commit_count,
-                    "is_current": b.name == (current.name if current else None),
+                    "is_current": b.name == current_name,
                 }
                 for b in branches
             ],
@@ -121,9 +121,8 @@ def branch_list(
         table.add_column("Commits", style="yellow", justify="right")
 
         for branch in branches:
-            is_current = branch.name == (current.name if current else None)
-            marker = "*" if is_current else ""
-            created = branch.created_at.strftime("%Y-%m-%d") if branch.created_at else "-"
+            marker = "*" if branch.name == current_name else ""
+            created = branch.last_commit.strftime("%Y-%m-%d") if branch.last_commit else "-"
 
             table.add_row(
                 marker,
@@ -133,9 +132,7 @@ def branch_list(
             )
 
         console.print(table)
-
-        if current:
-            console.print(f"\n[dim]Current branch: {current.name}[/dim]")
+        console.print(f"\n[dim]Current branch: {current_name}[/dim]")
 
     conn.close()
 
@@ -182,8 +179,8 @@ def branch_create(
     # Create branch
     console.print(f"[cyan]Creating branch '{name}'...[/cyan]")
     branch = client.create_branch(
-        name=name,
-        parent_branch=from_branch,
+        name,
+        from_branch or client.get_current_branch(),
         copy_data=copy_data,
     )
 
@@ -255,8 +252,7 @@ def branch_delete(
     client, conn = _get_pggit_client(config)
 
     # Check if trying to delete current branch
-    current = client.get_branch()
-    if current and current.name == name:
+    if client.get_current_branch() == name:
         conn.close()
         raise ConfiturError(
             "Cannot delete the current branch.",
@@ -301,23 +297,17 @@ def branch_status(
     # Display current branch
     console.print(f"[cyan]On branch:[/cyan] {status.current_branch or '(detached)'}")
 
-    # Display changes
-    if status.has_changes:
-        console.print(f"\n[yellow]Uncommitted changes ({status.change_count}):[/yellow]")
-
-        for change in status.changes:
-            if change.change_type == "added":
-                console.print(f"  [green]+ {change.object_type}: {change.object_name}[/green]")
-            elif change.change_type == "modified":
-                console.print(f"  [yellow]~ {change.object_type}: {change.object_name}[/yellow]")
-            elif change.change_type == "deleted":
-                console.print(f"  [red]- {change.object_type}: {change.object_name}[/red]")
-            else:
-                console.print(f"  [dim]? {change.object_type}: {change.object_name}[/dim]")
-
-        console.print("\n[dim]Use 'confiture branch commit' to commit changes.[/dim]")
-    else:
-        console.print("\n[green]Working tree clean - no uncommitted changes.[/green]")
+    # Display what pgGit reports about itself (StatusInfo carries no change list)
+    console.print(
+        f"[cyan]Tracking:[/cyan] {'enabled' if status.tracking_enabled else 'disabled'}"
+        + ("  [yellow](deployment mode)[/yellow]" if status.deployment_mode else "")
+    )
+    if status.components:
+        console.print("\n[cyan]Components:[/cyan]")
+        for component, facts in sorted(status.components.items()):
+            details = ", ".join(f"{k}={v}" for k, v in sorted(facts.items()))
+            console.print(f"  {component}: {details}")
+    console.print("\n[dim]Use 'confiture branch commit' to record the current schema state.[/dim]")
 
     conn.close()
 
@@ -344,14 +334,7 @@ def branch_commit(
     """
     client, conn = _get_pggit_client(config)
 
-    # Check for changes
-    status = client.status()
-    if not status.has_changes:
-        console.print("[yellow]No changes to commit.[/yellow]")
-        conn.close()
-        return
-
-    console.print(f"[cyan]Committing {status.change_count} change(s)...[/cyan]")
+    console.print(f"[cyan]Committing on '{client.get_current_branch()}'...[/cyan]")
     commit = client.commit(message)
 
     console.print(f"[green]Created commit {commit.hash[:8]}[/green]")
@@ -439,7 +422,7 @@ def branch_merge(
     """
     client, conn = _get_pggit_client(config)
 
-    target_branch = target or (client.get_branch().name if client.get_branch() else "main")
+    target_branch = target or client.get_current_branch()
 
     if dry_run:
         console.print(f"[cyan]Dry run: merge '{source}' into '{target_branch}'[/cyan]")
@@ -448,7 +431,7 @@ def branch_merge(
         if diff:
             console.print(f"\n[yellow]Changes to be merged ({len(diff)}):[/yellow]")
             for entry in diff:
-                console.print(f"  {entry.change_type}: {entry.object_type} {entry.object_name}")
+                console.print(f"  {entry.operation}: {entry.object_type} {entry.object_name}")
         else:
             console.print("[green]No changes to merge - branches are identical.[/green]")
         conn.close()
@@ -459,8 +442,7 @@ def branch_merge(
 
     if result.success:
         console.print(f"[green]Successfully merged '{source}' into '{target_branch}'[/green]")
-        if result.commit_hash:
-            console.print(f"[dim]Merge commit: {result.commit_hash[:8]}[/dim]")
+        console.print(f"[dim]Merged objects: {result.merged_objects}[/dim]")
     else:
         console.print(f"[red]Merge failed: {result.message}[/red]")
 
@@ -534,8 +516,7 @@ def branch_diff(
     client, conn = _get_pggit_client(config)
 
     # Resolve branch names
-    current = client.get_branch()
-    source_branch = source or (current.name if current else "main")
+    source_branch = source or client.get_current_branch()
     target_branch = target or "main"
 
     console.print(f"[cyan]Comparing '{source_branch}' to '{target_branch}'...[/cyan]\n")
@@ -547,10 +528,10 @@ def branch_diff(
         conn.close()
         return
 
-    # Group by change type
-    added = [d for d in diff if d.change_type == "added"]
-    modified = [d for d in diff if d.change_type == "modified"]
-    deleted = [d for d in diff if d.change_type == "deleted"]
+    # Group by operation (pgGit reports CREATE / ALTER / DROP)
+    added = [d for d in diff if d.operation.upper() == "CREATE"]
+    modified = [d for d in diff if d.operation.upper() == "ALTER"]
+    deleted = [d for d in diff if d.operation.upper() == "DROP"]
 
     if added:
         console.print(f"[green]Added ({len(added)}):[/green]")

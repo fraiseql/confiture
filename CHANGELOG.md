@@ -65,6 +65,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   model validation → `TypeError`/`ValueError`, files → `OSError`) or given a `# Reason:`; a guard now fails
   on any broad handler without one. Two tests that passed for the wrong reason surfaced: a mocked ledger
   row of the wrong shape had been swallowed into "Failed to initialize".
+- **Coverage floors.** `[tool.coverage.report] fail_under = 80` (the full suite measures 85.7 %), and
+  `tests/coverage_floors.json` holds per-file floors of 70 % for the review's lowest modules, checked in
+  CI by `scripts/coverage_floors.py` from the JSON report. Three of them were raised by behaviour tests:
+  the hook context payloads, the confiture pytest plugin (an inner pytest session run in-process through
+  `pytester`, against the real test server) and `confiture branch`.
+- **Fixed: `confiture branch` was broken against its own pgGit client.** `list`, `delete`, `merge` and
+  `diff` called `get_branch()` without a name, `create` passed a `parent_branch=` the client does not
+  accept, `status` and `commit` read change lists `StatusInfo` never had, `diff`/`merge --dry-run` read
+  `change_type` where the client reports `operation`, and a successful merge dereferenced a `commit_hash`
+  that does not exist. Found by tests that drive the commands with a fake carrying the real client's
+  signatures; the commands now use `get_current_branch()`, `from_branch`, `operation`, and render the
+  status facts pgGit actually reports.
+- **`import confiture.testing` no longer imports the core.** pytest loads the confiture plugin through its
+  `pytest11` entry point at the start of every session; the package's eager re-exports made that import
+  the whole of `confiture.core`. The names resolve lazily now (PEP 562), pinned by a fresh-interpreter test.
+  This also fixed coverage measurement: under `pytest --cov` the package was imported before recording
+  started, so module-level lines read as missed — CI now starts `coverage run` before pytest.
 
 ## [0.54.0] - 2026-09-07
 

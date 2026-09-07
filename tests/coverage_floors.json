@@ -1,0 +1,13 @@
+{
+  "_comment": "Per-file line-coverage floors (percent) checked by scripts/coverage_floors.py against the full-suite report CI writes. Floors only rise.",
+  "files": {
+    "cli/branch.py": 70,
+    "cli/commands/bootstrap.py": 70,
+    "cli/schema_to_schema.py": 70,
+    "config/environment.py": 70,
+    "core/hooks/context.py": 70,
+    "core/linting/composer.py": 70,
+    "core/schema_to_schema.py": 70,
+    "testing/pytest_plugin.py": 70
+  }
+}
