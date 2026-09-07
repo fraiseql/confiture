@@ -10,8 +10,6 @@
   "complexity": {
     "python/confiture/cli/formatters/migrate_formatter.py": 1,
     "python/confiture/cli/formatters/validate_formatter.py": 1,
-    "python/confiture/cli/idempotency.py": 1,
-    "python/confiture/cli/ownership.py": 1,
     "python/confiture/core/builder.py": 1,
     "python/confiture/core/fk_extractor.py": 2,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 3,
@@ -51,8 +49,6 @@
     "python/confiture/cli/commands/migrate/introspect.py": 1,
     "python/confiture/cli/formatters/migrate_formatter.py": 1,
     "python/confiture/cli/formatters/validate_formatter.py": 1,
-    "python/confiture/cli/idempotency.py": 1,
-    "python/confiture/cli/ownership.py": 1,
     "python/confiture/core/builder.py": 2,
     "python/confiture/core/fk_extractor.py": 2,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 2,

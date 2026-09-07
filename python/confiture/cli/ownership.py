@@ -1,6 +1,8 @@
 """``migrate fix --ownership``: apply the ownership expectation to a live database."""
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from confiture.cli.helpers import (
     _extract_version,
@@ -13,6 +15,61 @@ from confiture.exceptions import ConfigurationError, ValidationError
 from confiture.url_redaction import (
     redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
 )
+
+
+def _partition_refused(
+    previews: list[Any], config_data: Any, *, dry_run: bool, force: bool
+) -> tuple[list[Any], list[tuple[Path, str]]]:
+    """Checksum-drift guard: previews of already-applied versions are refused unless ``--force``.
+
+    Returns:
+        ``(applicable, refused)``; under ``dry_run`` nothing is refused because
+        nothing is written.
+    """
+    refused: list[tuple[Path, str]] = []
+    if dry_run or not previews:
+        return previews, refused
+    # Ask the local DB which migration versions are already recorded.
+    applied_versions = _query_applied_versions(config_data)
+    if not applied_versions:
+        return previews, refused
+    safe: list[Any] = []
+    for preview in previews:
+        version = _extract_version(preview.file.name)
+        if version and version in applied_versions and not force:
+            refused.append((preview.file, "already applied locally"))
+        else:
+            safe.append(preview)
+    return safe, refused
+
+
+def _render_ownership_fix_text(
+    previews: list[Any],
+    refused: list[tuple[Path, str]],
+    *,
+    dry_run: bool,
+    force: bool,
+    refuse: Callable[[], None],
+) -> None:
+    """The text report of ``migrate fix --ownership``; ``refuse`` exits when a refusal stands."""
+    if not previews:
+        console.print("[green]✅ All migrations have ownership coverage[/green]")
+        return
+
+    label = "Would insert" if dry_run else "Inserted"
+    console.print(f"[green]{label} `ALTER … OWNER TO` in:[/green]")
+    for preview in previews:
+        console.print(f"  [green]✓[/green] {preview.file.name}")
+
+    if refused:
+        console.print(
+            f"\n[red]Refused {len(refused)} file(s) "
+            f"(already applied — pass --force to rewrite anyway):[/red]"
+        )
+        for file_path, reason in refused:
+            console.print(f"  [red]✗[/red] {file_path.name}: {reason}")
+        if not force:
+            refuse()
 
 
 def _fix_ownership(
@@ -68,21 +125,9 @@ def _fix_ownership(
     fixer = OwnershipFixer(expectation=expectation)
     previews = fixer.preview(migrations_dir)
 
-    refused: list[tuple[Path, str]] = []
-    applicable_previews = previews
-    if not dry_run and previews:
-        # Checksum-drift guard: ask the local DB which migration versions
-        # are already recorded.  Refuse to rewrite those unless --force.
-        applied_versions = _query_applied_versions(config_data)
-        if applied_versions:
-            safe: list = []
-            for preview in previews:
-                version = _extract_version(preview.file.name)
-                if version and version in applied_versions and not force:
-                    refused.append((preview.file, "already applied locally"))
-                else:
-                    safe.append(preview)
-            applicable_previews = safe
+    applicable_previews, refused = _partition_refused(
+        previews, config_data, dry_run=dry_run, force=force
+    )
 
     modified: list[Path] = []
     if not dry_run:
@@ -125,21 +170,4 @@ def _fix_ownership(
         )
         return
 
-    if not previews:
-        console.print("[green]✅ All migrations have ownership coverage[/green]")
-        return
-
-    label = "Would insert" if dry_run else "Inserted"
-    console.print(f"[green]{label} `ALTER … OWNER TO` in:[/green]")
-    for preview in previews:
-        console.print(f"  [green]✓[/green] {preview.file.name}")
-
-    if refused:
-        console.print(
-            f"\n[red]Refused {len(refused)} file(s) "
-            f"(already applied — pass --force to rewrite anyway):[/red]"
-        )
-        for file_path, reason in refused:
-            console.print(f"  [red]✗[/red] {file_path.name}: {reason}")
-        if not force:
-            _refuse()
+    _render_ownership_fix_text(previews, refused, dry_run=dry_run, force=force, refuse=_refuse)
