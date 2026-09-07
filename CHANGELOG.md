@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The `psql` applier's meta-command and inline-COPY scan runs on them; its hand-written line lexer and
   its two regexes are gone. Behaviour is unchanged: every pinned meta-command and COPY case passes as
   before.
+- **The tenant-isolation function parser reads through pglast and the scanner.** `CREATE FUNCTION`
+  statements come from `parse_sql` (name, `AS` body or a deparsed `BEGIN ATOMIC` body, statement
+  source) and the `INSERT INTO` statements in a body from the scanner's tokens; the five regexes are
+  gone. What changes: a commented-out function is no longer a function, an `INSERT` inside a comment or
+  a `RAISE NOTICE` literal is no longer an insert, an `EXECUTE 'INSERT …'` literal is read as dynamic
+  SQL (`InsertStatement.is_dynamic`), a `LANGUAGE sql BEGIN ATOMIC` body is now read, and a function
+  file pglast rejects is reported by `tenant_001` as an `UNPARSEABLE` notice instead of linting clean.
 
 ## [1.0.0] - 2026-09-07
 
