@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 
@@ -34,127 +34,141 @@ from confiture.core.error_handler import print_error_to_console
 from confiture.core.locking import resolve_lock_settings
 from confiture.exceptions import MigrationConflictError
 
+MigrationsDirOpt = Annotated[
+    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
+]
+ConfigOpt = Annotated[
+    Path,
+    typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
+]
+DatabaseUrlOpt = Annotated[str, typer.Option("--database-url", "-d", help=DATABASE_URL_OPTION_HELP)]
+NoConfigOpt = Annotated[bool, typer.Option("--no-config", help=NO_CONFIG_OPTION_HELP)]
+TargetOpt = Annotated[
+    str,
+    typer.Option("--target", "-t", help="Target migration version (default: applies all pending)"),
+]
+StrictOpt = Annotated[
+    bool, typer.Option("--strict", help="Enable strict mode, fail on warnings (default: off)")
+]
+ForceOpt = Annotated[
+    bool, typer.Option("--force", help="Force application, skip state checks (default: off)")
+]
+LockTimeoutOpt = Annotated[
+    int | None,
+    typer.Option(
+        "--lock-timeout",
+        help="Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000)",
+    ),
+]
+NoLockOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--no-lock",
+        help="Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod)",
+    ),
+]
+DryRunOpt = Annotated[
+    bool, typer.Option("--dry-run", help="Analyze without executing (default: off)")
+]
+DryRunExecuteOpt = Annotated[
+    bool,
+    typer.Option(
+        "--dry-run-execute",
+        help="Execute in SAVEPOINT for testing (default: off, guaranteed rollback)",
+    ),
+]
+VerifyChecksumsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--verify-checksums/--no-verify-checksums",
+        help="Verify migration checksums before running (default: on)",
+    ),
+]
+OnChecksumMismatchOpt = Annotated[
+    str,
+    typer.Option(
+        "--on-checksum-mismatch",
+        help="Checksum mismatch behavior: fail, warn, ignore (default: fail)",
+    ),
+]
+VerboseOpt = Annotated[
+    bool, typer.Option("--verbose", "-v", help="Show detailed analysis in dry-run (default: off)")
+]
+OutputFileOpt = Annotated[
+    Path | None, typer.Option("--output", "-o", help="Save report to file (default: stdout)")
+]
+AutoDetectBaselineOpt = Annotated[
+    bool,
+    typer.Option(
+        "--auto-detect-baseline",
+        help="Introspect DB and self-baseline if tb_confiture is missing (default: off)",
+    ),
+]
+SnapshotsDirUpOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--snapshots-dir",
+        help="Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history)",
+    ),
+]
+RequireReversibleOpt = Annotated[
+    bool,
+    typer.Option(
+        "--require-reversible",
+        help="Abort if any pending migration lacks a .down.sql file (guarantees rollback capability).",
+    ),
+]
+BatchedOpt = Annotated[
+    bool,
+    typer.Option(
+        "--batched", help="Use batch processing for large-table operations (default: off)"
+    ),
+]
+BatchSizeOpt = Annotated[
+    int,
+    typer.Option("--batch-size", help="Rows per batch when --batched is active (default: 10000)"),
+]
+BatchSleepOpt = Annotated[
+    float,
+    typer.Option(
+        "--batch-sleep",
+        help="Seconds to sleep between batches to reduce lock pressure (default: 0.1)",
+    ),
+]
+YesOpt = Annotated[
+    bool,
+    typer.Option(
+        "--yes", "-y", help="Skip the --dry-run-execute confirmation prompt (default: off)"
+    ),
+]
+
 
 @cli_boundary
 def migrate_up(
     ctx: typer.Context,
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
-    database_url: str = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
-    no_config: bool = typer.Option(
-        False,
-        "--no-config",
-        help=NO_CONFIG_OPTION_HELP,
-    ),
-    target: str = typer.Option(
-        None,
-        "--target",
-        "-t",
-        help="Target migration version (default: applies all pending)",
-    ),
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Enable strict mode, fail on warnings (default: off)",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Force application, skip state checks (default: off)",
-    ),
-    lock_timeout: int | None = typer.Option(
-        None,
-        "--lock-timeout",
-        help="Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000)",
-    ),
-    no_lock: bool | None = typer.Option(
-        None,
-        "--no-lock",
-        help="Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod)",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Analyze without executing (default: off)",
-    ),
-    dry_run_execute: bool = typer.Option(
-        False,
-        "--dry-run-execute",
-        help="Execute in SAVEPOINT for testing (default: off, guaranteed rollback)",
-    ),
-    verify_checksums: bool = typer.Option(
-        True,
-        "--verify-checksums/--no-verify-checksums",
-        help="Verify migration checksums before running (default: on)",
-    ),
-    on_checksum_mismatch: str = typer.Option(
-        "fail",
-        "--on-checksum-mismatch",
-        help="Checksum mismatch behavior: fail, warn, ignore (default: fail)",
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show detailed analysis in dry-run (default: off)",
-    ),
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    config: ConfigOpt = Path("db/environments/local.yaml"),
+    database_url: DatabaseUrlOpt = None,
+    no_config: NoConfigOpt = False,
+    target: TargetOpt = None,
+    strict: StrictOpt = False,
+    force: ForceOpt = False,
+    lock_timeout: LockTimeoutOpt = None,
+    no_lock: NoLockOpt = None,
+    dry_run: DryRunOpt = False,
+    dry_run_execute: DryRunExecuteOpt = False,
+    verify_checksums: VerifyChecksumsOpt = True,
+    on_checksum_mismatch: OnChecksumMismatchOpt = "fail",
+    verbose: VerboseOpt = False,
     format_output: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save report to file (default: stdout)",
-    ),
-    auto_detect_baseline: bool = typer.Option(
-        False,
-        "--auto-detect-baseline",
-        help="Introspect DB and self-baseline if tb_confiture is missing (default: off)",
-    ),
-    snapshots_dir_up: Path | None = typer.Option(
-        None,
-        "--snapshots-dir",
-        help="Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history)",
-    ),
-    require_reversible: bool = typer.Option(
-        False,
-        "--require-reversible",
-        help="Abort if any pending migration lacks a .down.sql file (guarantees rollback capability).",
-    ),
-    batched: bool = typer.Option(
-        False,
-        "--batched",
-        help="Use batch processing for large-table operations (default: off)",
-    ),
-    batch_size: int = typer.Option(
-        10000,
-        "--batch-size",
-        help="Rows per batch when --batched is active (default: 10000)",
-    ),
-    batch_sleep: float = typer.Option(
-        0.1,
-        "--batch-sleep",
-        help="Seconds to sleep between batches to reduce lock pressure (default: 0.1)",
-    ),
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        help="Skip the --dry-run-execute confirmation prompt (default: off)",
-    ),
+    output_file: OutputFileOpt = None,
+    auto_detect_baseline: AutoDetectBaselineOpt = False,
+    snapshots_dir_up: SnapshotsDirUpOpt = None,
+    require_reversible: RequireReversibleOpt = False,
+    batched: BatchedOpt = False,
+    batch_size: BatchSizeOpt = 10000,
+    batch_sleep: BatchSleepOpt = 0.1,
+    yes: YesOpt = False,
 ) -> None:
     """Apply pending migrations to the database.
 
