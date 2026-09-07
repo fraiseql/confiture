@@ -153,3 +153,53 @@ def test_the_two_flags_cannot_mix(tmp_path: Path) -> None:
     code, payload = _diff(tmp_path, "--allow-destructive", "--forbid-destructive")
     assert code == 5, payload
     assert payload["error"]["code"] == "VALID_001"
+
+
+def test_round_trip_restores_the_column_on_down(
+    clean_test_db: psycopg.Connection, test_db_url: str, tmp_path: Path
+) -> None:
+    """generate → preflight (tier, gate) → up refused → up with the flag → down brings the column back."""
+    with clean_test_db.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE tb_user (id integer NOT NULL, display_name text DEFAULT 'anon' NOT NULL)"
+        )
+    clean_test_db.commit()
+    config = tmp_path / "local.yaml"
+    config.write_text(f"name: test\ndatabase_url: {test_db_url}\n")
+    (tmp_path / "desired.sql").write_text("CREATE TABLE tb_user (id integer NOT NULL);\n")
+    migrations = tmp_path / "migrations"
+    common = ["--migrations-dir", str(migrations), "--config", str(config)]
+
+    generated = runner.invoke(
+        app,
+        ["migrate", "diff", "--from", "db", "--to", str(tmp_path / "desired.sql"),
+         "--generate", "--name", "drop_display_name", "--format", "json", *common],
+    )  # fmt: skip
+    assert generated.exit_code == 0, generated.output
+    payload = json.loads(generated.output)
+    assert payload["destructive_gate"] == "gated"
+    assert [(c["type"], c["irreversible_reason"]) for c in payload["changes"]] == [
+        ("DROP_COLUMN", "data")
+    ]
+
+    preflight = runner.invoke(app, ["migrate", "preflight", "--format", "json", *common])
+    assert preflight.exit_code == 0, preflight.output
+    report = json.loads(preflight.output)
+    assert [c["tier"] for c in report["change_set"]["changes"]] == ["irreversible"]
+    gated = [i for i in report["issues"] if i["code"] == "PFLIGHT_DESTRUCTIVE_GATED"]
+    assert gated[0]["details"] == {"irreversible": ["data"]}, report["issues"]
+
+    refused = runner.invoke(app, ["migrate", "up", *common])
+    assert refused.exit_code == 5, refused.output
+    applied = runner.invoke(app, ["migrate", "up", "--allow-destructive", *common])
+    assert applied.exit_code == 0, applied.output
+    assert not _has_display_name(clean_test_db)
+
+    down = runner.invoke(app, ["migrate", "down", *common])
+    assert down.exit_code == 0, down.output
+    with clean_test_db.cursor() as cur:
+        cur.execute(
+            "SELECT data_type, is_nullable, column_default FROM information_schema.columns "
+            "WHERE table_name = 'tb_user' AND column_name = 'display_name'"
+        )
+        assert cur.fetchone() == ("text", "NO", "'anon'::text")

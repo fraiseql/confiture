@@ -37,6 +37,10 @@
             "type": "string",
             "description": "The change kind (`ADD_TABLE`, `DROP_COLUMN`, `CHANGE_COLUMN_TYPE`, ...)."
           },
+          "irreversible_reason": {
+            "type": ["string", "null"],
+            "description": "`data` when the change drops a table or a column: the generated down file recreates the object, never its rows. Null otherwise."
+          },
           "details": {
             "type": "string",
             "description": "The change as one line (`ADD TABLE tb_post`)."

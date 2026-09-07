@@ -41,7 +41,6 @@
     "python/confiture/cli/seed.py": 1
   },
   "too_many_returns": {
-    "python/confiture/core/differ.py": 1,
     "python/confiture/core/error_handler.py": 1,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 3,
     "python/confiture/core/idempotency/static_eval/scope.py": 1,

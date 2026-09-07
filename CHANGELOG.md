@@ -32,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PFLIGHT_DESTRUCTIVE_GATED` (warning). `migrate diff --format json` gains `destructive_gate`, the
   policy the file was written under. The two codes are additions to the frozen codebook; no existing
   code or exit changes. New module `core/destructive.py`; `Migration.destructive` attribute.
+- **Down-migrations for what can be undone, and a word for what cannot (#198).** The differ now
+  carries the dropped column's definition and the dropped table's columns on the change, so the
+  generated down file writes `ADD COLUMN … <type> [NOT NULL] [DEFAULT …]` and the table's
+  `CREATE TABLE` back; a narrowed type widens back. Data loss is declared on the up statement as
+  `-- confiture:irreversible data`; a change with no derivable rollback is written as
+  `-- confiture:irreversible no rollback derived for …` in the down file and its up statement is
+  tiered `irreversible`. The `# WARNING: Cannot auto-generate down migration` lines — Python comments
+  that landed in SQL files — are gone, and a guard test keeps them out. `migrate diff --format json`
+  gains `irreversible_reason` per change; `PFLIGHT_DESTRUCTIVE_GATED` carries `details.irreversible`.
+- **Column definitions are real.** `ADD_COLUMN` from the differ carried no definition, so the
+  generator wrote `TEXT` for every added column; it now carries the column's type, nullability and
+  default. A default that is a cast, a column reference or a call with arguments was flattened to the
+  word `expression` (or lost its arguments); it is now rendered by pglast's deparser.
 
 ## [1.1.0] - 2026-09-07
 

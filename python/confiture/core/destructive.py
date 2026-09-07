@@ -22,6 +22,7 @@ from typing import Literal
 from confiture.core.risk_tier import RiskTier
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX, directives
 from confiture.exceptions import ValidationError
+from confiture.models.schema import SchemaChange
 
 Policy = Literal["gated", "allow", "forbid"]
 
@@ -58,3 +59,45 @@ def gates(tier: RiskTier | None) -> bool:
 def is_gated(sql: str) -> bool:
     """Whether a SQL migration carries the ``-- confiture:destructive`` directive."""
     return any(d.name == GATE_DIRECTIVE for d in directives(sql))
+
+
+IRREVERSIBLE_DIRECTIVE = "irreversible"
+DATA_LOSS_TYPES = frozenset({"DROP_TABLE", "DROP_COLUMN"})
+
+
+def irreversible_line(reason: str) -> str:
+    """The ``-- confiture:irreversible <reason>`` directive line."""
+    return f"-- {DIRECTIVE_PREFIX}{IRREVERSIBLE_DIRECTIVE} {reason}"
+
+
+def no_rollback(change: SchemaChange) -> str:
+    """The reason written when no down statement can be derived for ``change``."""
+    target = ".".join(part for part in (change.table, change.column) if part)
+    return f"no rollback derived for {change.type} {target}".rstrip()
+
+
+def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
+    """Why ``change`` cannot be fully undone, or ``None`` when it can.
+
+    ``data``: the down file recreates the table or column, never its rows.
+    Otherwise, the down file has nothing for it at all.
+    """
+    if (reason := data_loss_reason(change)) is not None:
+        return reason
+    if not has_down:
+        return no_rollback(change)
+    return None
+
+
+def data_loss_reason(change: SchemaChange) -> str | None:
+    """``data`` for a change whose rows no down file can bring back; ``None`` otherwise."""
+    return "data" if change.type in DATA_LOSS_TYPES else None
+
+
+def irreversible_reasons(sql: str) -> list[str]:
+    """The distinct ``-- confiture:irreversible <reason>`` reasons a SQL migration declares, in order."""
+    seen: list[str] = []
+    for d in directives(sql):
+        if d.name == IRREVERSIBLE_DIRECTIVE and d.argument and d.argument not in seen:
+            seen.append(d.argument)
+    return seen

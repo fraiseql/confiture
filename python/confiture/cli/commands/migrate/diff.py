@@ -19,7 +19,7 @@ from confiture.cli.options import format_option
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core.desired_state import DesiredStateSource, load_desired_state
-from confiture.core.destructive import resolve_policy
+from confiture.core.destructive import data_loss_reason, resolve_policy
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
@@ -125,7 +125,14 @@ def migrate_diff(
 
         # Convert changes to SchemaChange objects
 
-        changes = [MigrateDiffChange(change.type, str(change)) for change in diff.changes]
+        changes = [
+            MigrateDiffChange(
+                change.type,
+                str(change),
+                irreversible_reason=data_loss_reason(change),
+            )
+            for change in diff.changes
+        ]
         migration_file_name = None
         policy: str | None = None
 

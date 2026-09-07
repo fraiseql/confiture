@@ -519,12 +519,14 @@ class MigrateDiffChange:
 
     change_type: str
     details: str
+    irreversible_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "type": self.change_type,
             "details": self.details,
+            "irreversible_reason": self.irreversible_reason,
         }
 
 
@@ -777,9 +779,9 @@ class MigrationPreflightInfo:
     filename: str | None = None  # source filename, for issue attribution (#148)
     parse_error: str | None = None  # pglast rejected the file (PFLIGHT_UNPARSEABLE)
     parse_error_line: int | None = None
-    destructive: bool = (
-        False  # carries the -- confiture:destructive gate (PFLIGHT_DESTRUCTIVE_GATED)
-    )
+    # -- confiture:destructive gate (PFLIGHT_DESTRUCTIVE_GATED) and its -- confiture:irreversible reasons
+    destructive: bool = False
+    irreversible_reasons: list[str] = field(default_factory=list)
 
     @property
     def reversible(self) -> bool:
@@ -917,6 +919,7 @@ class PreflightResult:
                 f"data is lost when it applies.",
                 migration=m.version,
                 file=m.filename,
+                details={"irreversible": list(m.irreversible_reasons)},
             )
             for m in self.migrations
             if m.destructive

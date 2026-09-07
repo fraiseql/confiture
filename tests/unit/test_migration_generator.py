@@ -91,7 +91,7 @@ class TestMigrationGenerator:
 
         # Down would need to recreate it (but we don't have the schema)
         assert (
-            "# WARNING: Cannot auto-generate down migration" in content
+            "# irreversible: no rollback derived for" in content
             or "CREATE TABLE old_table" in content
         )
 
@@ -149,7 +149,7 @@ class TestMigrationGenerator:
 
         # Down would need to recreate it (but we don't have the schema)
         assert (
-            "# WARNING: Cannot auto-generate down migration" in content
+            "# irreversible: no rollback derived for" in content
             or "ADD COLUMN old_field" in content
         )
 
