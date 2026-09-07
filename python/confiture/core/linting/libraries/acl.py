@@ -157,7 +157,33 @@ class Acl001GrantCoverage:
         if not migrations_dir.exists():
             return []
 
-        # Build the index of (schema, table) → grants seen in any migration.
+        covered, created, owner_only = self._index_migrations(migrations_dir)
+
+        # Now compare each created (in-scope) table against expectations.
+        violations: list[LintViolation] = []
+        for schema, table, migration in created:
+            if (schema, table) in owner_only:
+                continue
+            violations.extend(
+                self._violations_for(schema, table, migration, covered.get((schema, table), set()))
+            )
+        return violations
+
+    def _index_migrations(
+        self, migrations_dir: Path
+    ) -> tuple[
+        dict[tuple[str, str], set[tuple[str, str]]],
+        list[tuple[str, str, Path]],
+        set[tuple[str, str]],
+    ]:
+        """What the migrations and the global grant sweep say.
+
+        Returns:
+            ``(covered, created, owner_only)``: the ``(role, privilege)`` pairs
+            granted per ``(schema, table)``, every table created (with the file
+            that created it, net of same-file drops), and the tables opted out
+            with ``-- confiture:owner-only``.
+        """
         covered: dict[tuple[str, str], set[tuple[str, str]]] = {}
         created: list[tuple[str, str, Path]] = []  # (schema, table, migration file)
         owner_only: set[tuple[str, str]] = set()
@@ -184,33 +210,30 @@ class Acl001GrantCoverage:
         # Layer in the global grant sweep (db/7_grant/*.sql).
         for schema, table, role, privs in _load_global_grants(self.grant_dir, self._extractor):
             covered.setdefault((schema, table), set()).update((role, p) for p in privs)
+        return covered, created, owner_only
 
-        # Now compare each created (in-scope) table against expectations.
+    def _violations_for(
+        self, schema: str, table: str, migration: Path, granted: set[tuple[str, str]]
+    ) -> list[LintViolation]:
+        """One violation per expected grant the table's ``granted`` pairs do not cover."""
         violations: list[LintViolation] = []
-        for schema, table, migration in created:
-            if (schema, table) in owner_only:
+        for expectation in self.expectations:
+            if expectation.schema_ != schema:
                 continue
-            for expectation in self.expectations:
-                if expectation.schema_ != schema:
-                    continue
-                if not _matches_apply_to(table, expectation.apply_to, expectation.ignore):
-                    continue
-                for grant in expectation.grants:
-                    missing = [
-                        p
-                        for p in grant.privileges
-                        if (grant.role, p) not in covered.get((schema, table), set())
-                    ]
-                    if missing:
-                        violations.append(
-                            self._format_violation(
-                                schema=schema,
-                                table=table,
-                                grant=grant,
-                                missing=missing,
-                                migration=migration,
-                            )
+            if not _matches_apply_to(table, expectation.apply_to, expectation.ignore):
+                continue
+            for grant in expectation.grants:
+                missing = [p for p in grant.privileges if (grant.role, p) not in granted]
+                if missing:
+                    violations.append(
+                        self._format_violation(
+                            schema=schema,
+                            table=table,
+                            grant=grant,
+                            missing=missing,
+                            migration=migration,
                         )
+                    )
         return violations
 
     # ------------------------------------------------------------------ #
