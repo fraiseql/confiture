@@ -782,6 +782,10 @@ class MigrationPreflightInfo:
     # -- confiture:destructive gate (PFLIGHT_DESTRUCTIVE_GATED) and its -- confiture:irreversible reasons
     destructive: bool = False
     irreversible_reasons: list[str] = field(default_factory=list)
+    online_available: bool = (
+        False  # every statement has an expand/contract plan (migrate up --online)
+    )
+    online_stages: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def reversible(self) -> bool:
@@ -803,6 +807,8 @@ class MigrationPreflightInfo:
             "fully_transactional": self.fully_transactional,
             "non_transactional_statements": self.non_transactional_statements,
             "checksum": self.checksum,
+            "online_available": self.online_available,
+            "online_stages": self.online_stages,
         }
 
 

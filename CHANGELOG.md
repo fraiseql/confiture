@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkpoint's block instead of the start. `migration.backfill.max_lock_ms` (and `--max-lock-ms` on
   `migrate steps --resume`) pauses between batches while another session waits for a lock on the
   table. `BatchedMigration.backfill_column` gains `start_block` and `BatchConfig.block_callback`.
+- **`migrate up --online`.** A pending `.up.sql` whose every statement has a staged plan applies as
+  expand → backfill → contract through the step runner (`--max-lock-ms` for the waiter guard;
+  `--allow-destructive` for a contract stage that drops the old column); any other migration applies
+  the classic way. `migrate preflight` reports `online_available` and `online_stages` per migration
+  (schema updated; `window_safe` is untouched). New guide `docs/guides/zero-downtime.md`. e2e: a type
+  change on 200 000 rows runs online with the longest ACCESS EXCLUSIVE hold on the table, sampled from a
+  second connection, under 100 ms and below the classic rewrite's; a run that dies mid-backfill is
+  resumed by `migrate steps --resume` with every row accounted for.
 
 ## [1.2.0] - 2026-09-07
 

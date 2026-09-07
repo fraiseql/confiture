@@ -35,8 +35,10 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
+from confiture.config.environment import BackfillConfig
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
+from confiture.core.backfill import BackfillSettings
 from confiture.core.checksum import ChecksumVerificationError
 from confiture.core.error_handler import print_error_to_console
 from confiture.core.large_tables import BatchConfig
@@ -137,6 +139,20 @@ AllowDestructiveOpt = Annotated[
         help="Apply migrations gated as destructive (data is lost): the generator's -- confiture:destructive directive, or destructive = True on a Python migration.",
     ),
 ]
+OnlineOpt = Annotated[
+    bool,
+    typer.Option(
+        "--online",
+        help="Apply a migration the classifier marks multi-step as expand → backfill → contract stages with a checkpoint each (see migrate steps); other migrations apply the classic way.",
+    ),
+]
+MaxLockMsOpt = Annotated[
+    int | None,
+    typer.Option(
+        "--max-lock-ms",
+        help="With --online: pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms).",
+    ),
+]
 BatchedOpt = Annotated[
     bool,
     typer.Option(
@@ -185,6 +201,8 @@ def migrate_up(
     snapshots_dir_up: SnapshotsDirUpOpt = None,
     require_reversible: RequireReversibleOpt = False,
     allow_destructive: AllowDestructiveOpt = False,
+    online: OnlineOpt = False,
+    max_lock_ms: MaxLockMsOpt = None,
     batched: BatchedOpt = False,
     batch_size: BatchSizeOpt = 10000,
     batch_sleep: BatchSleepOpt = 0.1,
@@ -306,6 +324,8 @@ def migrate_up(
             "no_lock": no_lock,
             "require_reversible": require_reversible,
             "allow_destructive": allow_destructive,
+            "online": online,
+            "backfill": _backfill_settings(env_cfg, max_lock_ms),
             "strict_mode": effective_strict_mode,
             "auto_baseline": (
                 (snapshots_dir_up or Path("db/schema_history")) if auto_detect_baseline else None
@@ -580,3 +600,12 @@ class _FailedMigration:
     def __init__(self, *, version: str, name: str) -> None:
         self.version = version
         self.name = name
+
+
+def _backfill_settings(settings: Any, max_lock_ms: int | None) -> BackfillSettings:
+    """``migration.backfill`` from the environment (defaults when none), the flag winning."""
+    backfill = settings.migration.backfill if settings is not None else BackfillConfig()
+    return BackfillSettings(
+        batch_size=backfill.batch_size,
+        max_lock_ms=max_lock_ms if max_lock_ms is not None else backfill.max_lock_ms,
+    )

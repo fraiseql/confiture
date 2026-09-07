@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pglast.parser
 
@@ -20,6 +20,7 @@ from confiture.core._migrator.discovery import (
     parse_migration_filename,
 )
 from confiture.core.destructive import irreversible_reasons, is_gated
+from confiture.core.expand_contract import StagedPlan, plannable
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
@@ -118,8 +119,10 @@ def run_preflight(
         parse_error: str | None = None
         parse_error_line: int | None = None
         sql_content = up_file.read_text(encoding="utf-8")
+        plans = None
         try:
             non_txn = MigrationAnalyzer().analyze(sql_content)
+            plans = plannable(sql_content)
         except pglast.parser.ParseError as exc:
             # A file PostgreSQL's parser rejects is a finding (PFLIGHT_UNPARSEABLE),
             # never an empty analysis (ANA-02).
@@ -137,6 +140,8 @@ def run_preflight(
                 parse_error_line=parse_error_line,
                 destructive=is_gated(sql_content),
                 irreversible_reasons=irreversible_reasons(sql_content),
+                online_available=plans is not None,
+                online_stages=_online_stages(plans),
             )
         )
 
@@ -163,3 +168,20 @@ def run_preflight(
         migrations=infos,
         duplicate_versions=dup_dict,
     )
+
+
+def _online_stages(plans: list[StagedPlan] | None) -> list[dict[str, Any]]:
+    """What ``migrate up --online`` would do: each stage's name and its longest exclusive hold."""
+    if not plans:
+        return []
+    return [
+        {
+            "pattern": staged.pattern,
+            "table": staged.table,
+            "stage": stage.name,
+            "exclusive_hold": None if stage.exclusive_hold is None else stage.exclusive_hold.value,
+            "destructive": stage.destructive,
+        }
+        for staged in plans
+        for stage in staged.stages
+    ]
