@@ -9,7 +9,6 @@
   },
   "complexity": {
     "python/confiture/cli/commands/migrate/rebuild.py": 1,
-    "python/confiture/cli/commands/migrate/reinit.py": 1,
     "python/confiture/cli/commands/migrate/up.py": 1,
     "python/confiture/cli/formatters/migrate_formatter.py": 1,
     "python/confiture/cli/formatters/validate_formatter.py": 1,
@@ -52,7 +51,6 @@
     "python/confiture/cli/commands/debug.py": 1,
     "python/confiture/cli/commands/migrate/baseline.py": 1,
     "python/confiture/cli/commands/migrate/introspect.py": 1,
-    "python/confiture/cli/commands/migrate/reinit.py": 1,
     "python/confiture/cli/formatters/migrate_formatter.py": 1,
     "python/confiture/cli/formatters/validate_formatter.py": 1,
     "python/confiture/cli/idempotency.py": 1,

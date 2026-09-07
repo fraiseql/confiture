@@ -6,6 +6,7 @@ Split out of the monolithic migrate command modules.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -13,6 +14,89 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console
 from confiture.core.migrator import parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
+
+
+def _reinit_preconditions(config: Path, migrations_dir: Path, find_duplicates: Any) -> None:
+    """Config file, migrations directory and unique versions — all checked before any DB work."""
+    if not config.exists():
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Specify config with --config path/to/config.yaml.",
+            ),
+            json_mode=False,
+        )
+
+    if not migrations_dir.exists():
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=False,
+        )
+
+    duplicates = find_duplicates(migrations_dir)
+    if duplicates:
+        console.print("[red]Multiple migration files share the same version number:[/red]\n")
+        for version, files in sorted(duplicates.items()):
+            console.print(f"  Version {version}:")
+            for f in files:
+                console.print(f"    • {f.name}")
+        console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+        console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
+        fail(
+            MigrationError(
+                "Duplicate migration versions detected — refusing to proceed.",
+                error_code="MIGR_106",
+            ),
+            json_mode=False,
+        )
+
+
+def _migrations_through(all_migrations: list[Path], through: str | None) -> list[Path]:
+    """The files to re-mark: everything, or up to and including ``through`` (else exit 1)."""
+    if through is None:
+        return list(all_migrations)
+    migrations_to_mark: list[Path] = []
+    for migration_file in all_migrations:
+        version = parse_migration_filename(migration_file.name)[0]
+        migrations_to_mark.append(migration_file)
+        if version == through:
+            return migrations_to_mark
+    console.print("[yellow]Available versions:[/yellow]")
+    for mf in all_migrations[:10]:
+        v = parse_migration_filename(mf.name)[0]
+        console.print(f"  • {v}")
+    if len(all_migrations) > 10:
+        console.print(f"  ... and {len(all_migrations) - 10} more")
+    fail(
+        MigrationError(
+            f"Migration version '{through}' not found",
+            version=through,
+            error_code="MIGR_100",
+        ),
+        json_mode=False,
+    )
+    return migrations_to_mark  # unreachable: fail() exits
+
+
+def _print_reinit_plan(
+    migrations_to_mark: list[Path], *, through: str | None, current_count: int
+) -> None:
+    target_desc = f"through {through}" if through else "all files on disk"
+    console.print(
+        f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
+    )
+    console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
+    console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
+
+    for migration_file in migrations_to_mark:
+        version, name = parse_migration_filename(migration_file.name)
+        console.print(f"  [dim]•[/dim] {version} {name}")
+
+    console.print()
 
 
 @cli_boundary
@@ -73,42 +157,7 @@ def migrate_reinit(
     """
     from confiture.core.migrator import Migrator, find_duplicate_migration_versions
 
-    # Pre-flight validations (no DB needed)
-    if not config.exists():
-        fail(
-            ConfigurationError(
-                f"Config file not found: {config}",
-                error_code="CONFIG_004",
-                resolution_hint="Specify config with --config path/to/config.yaml.",
-            ),
-            json_mode=False,
-        )
-
-    if not migrations_dir.exists():
-        fail(
-            ConfigurationError(
-                f"Migrations directory not found: {migrations_dir}",
-                error_code="CONFIG_004",
-            ),
-            json_mode=False,
-        )
-
-    duplicates = find_duplicate_migration_versions(migrations_dir)
-    if duplicates:
-        console.print("[red]Multiple migration files share the same version number:[/red]\n")
-        for version, files in sorted(duplicates.items()):
-            console.print(f"  Version {version}:")
-            for f in files:
-                console.print(f"    • {f.name}")
-        console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-        console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
-        fail(
-            MigrationError(
-                "Duplicate migration versions detected — refusing to proceed.",
-                error_code="MIGR_106",
-            ),
-            json_mode=False,
-        )
+    _reinit_preconditions(config, migrations_dir, find_duplicate_migration_versions)
 
     with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
         migrator = m.migrator
@@ -119,46 +168,9 @@ def migrate_reinit(
             console.print("[yellow]No migrations found.[/yellow]")
             return
 
-        # Determine which migrations will be marked
-        if through is not None:
-            migrations_to_mark: list[Path] = []
-            for migration_file in all_migrations:
-                version = parse_migration_filename(migration_file.name)[0]
-                migrations_to_mark.append(migration_file)
-                if version == through:
-                    break
-            else:
-                console.print("[yellow]Available versions:[/yellow]")
-                for mf in all_migrations[:10]:
-                    v = parse_migration_filename(mf.name)[0]
-                    console.print(f"  • {v}")
-                if len(all_migrations) > 10:
-                    console.print(f"  ... and {len(all_migrations) - 10} more")
-                fail(
-                    MigrationError(
-                        f"Migration version '{through}' not found",
-                        version=through,
-                        error_code="MIGR_100",
-                    ),
-                    json_mode=False,
-                )
-        else:
-            migrations_to_mark = list(all_migrations)
-
+        migrations_to_mark = _migrations_through(all_migrations, through)
         current_count = len(migrator.get_applied_versions())
-        target_desc = f"through {through}" if through else "all files on disk"
-        console.print(
-            f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
-        )
-        console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
-        console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
-
-        for migration_file in migrations_to_mark:
-            version = parse_migration_filename(migration_file.name)[0]
-            _, name = parse_migration_filename(migration_file.name)
-            console.print(f"  [dim]•[/dim] {version} {name}")
-
-        console.print()
+        _print_reinit_plan(migrations_to_mark, through=through, current_count=current_count)
 
         if dry_run:
             console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
