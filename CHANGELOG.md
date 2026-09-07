@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ADD_TABLE`, which raised "write the migration manually". The differ now attaches the new table's
   columns to the change and the generator writes `CREATE TABLE IF NOT EXISTS … (columns)` (multi-line
   DDL rides in a triple-quoted `execute`), with `DROP TABLE` in `down()`.
+- **Same artifact, same migration.** `MigrationGenerator.generate(..., version=)` takes the version
+  stamp from the caller (the clock only when none is given), the generated body no longer carries a
+  `Generated: <timestamp>` line, and the differ walks table and column names in sorted order, so two
+  runs — in two interpreters with different hash seeds — write byte-identical files.
+  `tests/contract/test_desired_state_fixture.py` pins the checked-in artifact → migration pair.
 
 ### Fixed
 

@@ -44,12 +44,14 @@ class MigrationGenerator:
         # Non-destructive generator — destructive ops emit warning comments instead of raising
         self._sql_gen = DifferSQLGenerator(force_destructive=False)
 
-    def generate(self, diff: SchemaDiff, name: str) -> Path:
+    def generate(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
         """Generate migration file from schema diff.
 
         Args:
             diff: Schema diff containing changes
             name: Name for the migration (snake_case)
+            version: The version stamp to use (``YYYYMMDDHHMMSS``); ``None`` takes
+                the clock. Inject it to make two runs write the same file.
 
         Returns:
             Path to generated migration file
@@ -61,7 +63,7 @@ class MigrationGenerator:
             raise ValueError("No changes to generate migration from")
 
         # Get next version number
-        version = self._get_next_version()
+        version = version or self._get_next_version()
 
         # Generate file path
         filename = f"{version}_{name}.py"
@@ -191,7 +193,6 @@ class MigrationGenerator:
             Python code as string
         """
         class_name = self._to_class_name(name)
-        timestamp = datetime.now().isoformat()
 
         # Generate up and down statements
         up_statements = self._generate_up_statements(diff.changes)
@@ -200,7 +201,6 @@ class MigrationGenerator:
         template = '''"""Migration: {name}
 
 Version: {version}
-Generated: {timestamp}
 """
 
 from confiture.models.migration import Migration
@@ -227,7 +227,6 @@ class {class_name}(Migration):
             class_name=class_name,
             up_statements=up_statements,
             down_statements=down_statements,
-            timestamp=timestamp,
         )
 
     def _to_class_name(self, snake_case: str) -> str:
