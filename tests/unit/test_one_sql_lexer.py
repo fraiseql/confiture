@@ -20,10 +20,10 @@ from pathlib import Path
 
 import pytest
 
-import confiture
-
 REPO = Path(__file__).resolve().parents[2]
-PACKAGE = Path(confiture.__file__).resolve().parent
+# The source tree, not the imported package: the Publish workflow runs this suite
+# against the built wheel, where ``confiture.__file__`` lives in the virtualenv.
+PACKAGE = REPO / "python" / "confiture"
 LEXER = PACKAGE / "core" / "sql_lexer.py"
 
 # Substrings of a regex pattern's text that mean it lexes SQL: a line or block
