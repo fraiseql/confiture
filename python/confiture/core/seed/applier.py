@@ -228,50 +228,50 @@ class SeedApplier:
 
         # Apply each file
         for i, seed_file in enumerate(files, 1):
-            savepoint_name = f"sp_seed_{i:03d}"
-
             try:
-                self.console.print(f"[cyan]→ {seed_file.name}[/cyan]", end=" ")
-                sql_content = seed_file.read_text(encoding="utf-8")
-                if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
-                    sql_content = InsertToCopyConverter().convert(sql_content)
-                    self.console.print("[dim](COPY)[/dim]", end=" ")
-                executor.execute_sql(sql_content, savepoint_name, source=seed_file)
-                if transaction_mode == "transaction":
-                    self.connection.commit()
+                self._apply_seed_file(executor, seed_file, f"sp_seed_{i:03d}", transaction_mode)
                 result.succeeded += 1
-                self.console.print("[green]✓[/green]")
-
-                # Update progress
-                if progress and apply_task is not None:
-                    progress.update(apply_task, advance=1)
-
             except (OSError, UnicodeDecodeError, psycopg.Error, ConfiturError) as e:
                 if transaction_mode == "transaction":
                     self.connection.rollback()
                 result.failed += 1
                 result.failed_files.append(seed_file.name)
                 self.console.print(f"[red]✗ {e}[/red]")
-
-                # Still update progress on failure
-                if progress and apply_task is not None:
-                    progress.update(apply_task, advance=1)
-
                 if not continue_on_error:
+                    if progress and apply_task is not None:
+                        progress.update(apply_task, advance=1)
                     raise
+            if progress and apply_task is not None:
+                progress.update(apply_task, advance=1)
 
         if progress and apply_task is not None:
             progress.finish_task(apply_task)
 
-        # Summary
+        self._print_seed_summary(result)
+        return result
+
+    def _apply_seed_file(
+        self, executor: SeedExecutor, seed_file: Path, savepoint_name: str, transaction_mode: str
+    ) -> None:
+        """Run one seed file (as COPY when large enough); commit in transaction mode."""
+        assert self.connection is not None
+        self.console.print(f"[cyan]→ {seed_file.name}[/cyan]", end=" ")
+        sql_content = seed_file.read_text(encoding="utf-8")
+        if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
+            sql_content = InsertToCopyConverter().convert(sql_content)
+            self.console.print("[dim](COPY)[/dim]", end=" ")
+        executor.execute_sql(sql_content, savepoint_name, source=seed_file)
+        if transaction_mode == "transaction":
+            self.connection.commit()
+        self.console.print("[green]✓[/green]")
+
+    def _print_seed_summary(self, result: ApplyResult) -> None:
         self.console.print("\n" + "=" * 50)
         self.console.print(f"Applied {result.succeeded}/{result.total} seed files")
         if result.failed > 0:
             self.console.print(f"[yellow]⚠ {result.failed} files failed[/yellow]")
             for failed_file in result.failed_files:
                 self.console.print(f"  - {failed_file}")
-
-        return result
 
 
 _ROW_SEPARATOR = re.compile(r"\)\s*,\s*\(")

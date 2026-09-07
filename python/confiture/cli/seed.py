@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 import typer
@@ -143,68 +143,171 @@ def _validate_prep_seed(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
+SeedsDirOpt = Annotated[
+    Path, typer.Option("--seeds-dir", help="Directory containing seed files (default: db/seeds)")
+]
+EnvOpt = Annotated[
+    str | None,
+    typer.Option("--env", help="Environment name for multi-env validation (default: none)"),
+]
+AllEnvsOpt = Annotated[bool, typer.Option("--all", help="Validate all environments (default: off)")]
+DatabaseUrlOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--database-url", help="Database URL for database mode validation (default: none)"
+    ),
+]
+OutputOpt = Annotated[
+    Path | None, typer.Option("--output", help="Output file path (default: stdout)")
+]
+FixOpt = Annotated[
+    bool, typer.Option("--fix", help="Automatically fix issues where possible (default: off)")
+]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option("--dry-run", help="Show what would be fixed without modifying (default: off)"),
+]
+PrepSeedOpt = Annotated[
+    bool, typer.Option("--prep-seed", help="Enable prep-seed pattern validation (default: off)")
+]
+PrepSeedLevelOpt = Annotated[
+    int,
+    typer.Option("--level", "-l", help="Prep-seed validation level 1-5 (default: 3)", min=1, max=5),
+]
+StaticOnlyOpt = Annotated[
+    bool, typer.Option("--static-only", help="Run only Levels 1-3, no database (default: off)")
+]
+FullExecutionOpt = Annotated[
+    bool,
+    typer.Option("--full-execution", help="Run all levels 1-5, requires database (default: off)"),
+]
+
+
+def _seed_dirs_to_validate(
+    seeds_dir: Path, *, env: str | None, all_envs: bool, json_mode: bool, output: Path | None
+) -> list[tuple[Path, str]]:
+    """The ``(directory, environment)`` pairs ``seed validate`` scans; exit 5 when none exists."""
+    dirs_to_validate: list[tuple[Path, str]] = []
+    if all_envs:
+        # Validate all environment seed directories
+        env_dir = Path("db/environments")
+        if env_dir.exists():
+            for env_file in env_dir.glob("*.yaml"):
+                env_name = env_file.stem
+                env_seeds = Path("db/seeds") / env_name
+                if env_seeds.exists():
+                    dirs_to_validate.append((env_seeds, env_name))
+    elif env:
+        # Validate specific environment
+        env_seeds = Path("db/seeds") / env
+        if env_seeds.exists():
+            dirs_to_validate.append((env_seeds, env))
+        else:
+            fail(
+                ConfigurationError(
+                    f"Environment seeds not found: {env_seeds}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=json_mode,
+                output_file=output,
+            )
+    # Validate provided directory
+    elif seeds_dir.exists():
+        dirs_to_validate.append((seeds_dir, "default"))
+    else:
+        fail(
+            ConfigurationError(
+                f"Seeds directory not found: {seeds_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=json_mode,
+            output_file=output,
+        )
+    return dirs_to_validate
+
+
+def _fix_seed_files(scanned_files: list[str], *, dry_run: bool) -> None:
+    """``--fix``: rewrite each scanned file, or say what would change under ``--dry-run``."""
+    fixer = SeedFixer()
+    for file_path in scanned_files:
+        fix_result = fixer.fix_file(Path(file_path), dry_run=dry_run)
+        if fix_result.fixes_applied > 0:
+            if dry_run:
+                console.print(
+                    f"[yellow]~ Would fix {fix_result.fixes_applied} issues in {file_path}[/yellow]"
+                )
+            else:
+                console.print(
+                    f"[green]✓ Fixed {fix_result.fixes_applied} issues in {file_path}[/green]"
+                )
+
+
+def _render_seed_validation(
+    all_violations: list[Any], all_files: list[str], *, format_: str, output: Path | None
+) -> None:
+    """The validation report: JSON (to ``output`` when given) or the text table."""
+    if format_ == "json":
+        report_dict = {
+            "violations": [v.to_dict() for v in all_violations],
+            "violation_count": len(all_violations),
+            "files_scanned": len(all_files),
+            "has_violations": len(all_violations) > 0,
+        }
+        json_output = json.dumps(report_dict, indent=2)
+
+        if output:
+            output.write_text(json_output)
+            console.print(f"[green]✓ Report saved to {output}[/green]")
+        else:
+            console.print(json_output)
+        return
+
+    # Text format (default)
+    console.print("\nSeed Validation Report")
+    console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.print(f"Files scanned: {len(all_files)}")
+    console.print(f"Violations found: {len(all_violations)}")
+
+    if all_violations:
+        console.print("\n[red]Issues found:[/red]")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("File", style="cyan")
+        table.add_column("Line", style="magenta")
+        table.add_column("Issue", style="yellow")
+        table.add_column("Suggestion", style="green")
+
+        for violation in sorted(all_violations, key=lambda v: (v.file_path, v.line_number)):
+            table.add_row(
+                violation.file_path,
+                str(violation.line_number),
+                violation.pattern.name,
+                violation.suggestion,
+            )
+
+        console.print(table)
+    else:
+        console.print("[green]✓ All seed files are valid![/green]")
+        console.print("\n💡 Next steps:")
+        console.print("  • Load data: confiture seed apply")
+        console.print("  • Show performance: confiture seed benchmark")
+        console.print("  • Convert format: confiture seed convert")
+
+
 @seed_app.command("validate")
 @cli_boundary
 def validate(
-    seeds_dir: Path = typer.Option(
-        Path("db/seeds"),
-        "--seeds-dir",
-        help="Directory containing seed files (default: db/seeds)",
-    ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        help="Environment name for multi-env validation (default: none)",
-    ),
-    all_envs: bool = typer.Option(
-        False,
-        "--all",
-        help="Validate all environments (default: off)",
-    ),
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        help="Database URL for database mode validation (default: none)",
-    ),
+    seeds_dir: SeedsDirOpt = Path("db/seeds"),
+    env: EnvOpt = None,
+    all_envs: AllEnvsOpt = False,
+    database_url: DatabaseUrlOpt = None,
     format_: str = format_option("text", "json", "csv"),
-    output: Path | None = typer.Option(
-        None,
-        "--output",
-        help="Output file path (default: stdout)",
-    ),
-    fix: bool = typer.Option(
-        False,
-        "--fix",
-        help="Automatically fix issues where possible (default: off)",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Show what would be fixed without modifying (default: off)",
-    ),
-    prep_seed: bool = typer.Option(
-        False,
-        "--prep-seed",
-        help="Enable prep-seed pattern validation (default: off)",
-    ),
-    prep_seed_level: int = typer.Option(
-        3,
-        "--level",
-        "-l",
-        help="Prep-seed validation level 1-5 (default: 3)",
-        min=1,
-        max=5,
-    ),
-    static_only: bool = typer.Option(
-        False,
-        "--static-only",
-        help="Run only Levels 1-3, no database (default: off)",
-    ),
-    full_execution: bool = typer.Option(
-        False,
-        "--full-execution",
-        help="Run all levels 1-5, requires database (default: off)",
-    ),
+    output: OutputOpt = None,
+    fix: FixOpt = False,
+    dry_run: DryRunOpt = False,
+    prep_seed: PrepSeedOpt = False,
+    prep_seed_level: PrepSeedLevelOpt = 3,
+    static_only: StaticOnlyOpt = False,
+    full_execution: FullExecutionOpt = False,
 ) -> None:
     """Validate seed files for data consistency and quality.
 
@@ -267,118 +370,21 @@ def validate(
                 output=output,
             )
 
-        # Determine which directories to validate
-        dirs_to_validate: list[tuple[Path, str]] = []
+        dirs_to_validate = _seed_dirs_to_validate(
+            seeds_dir, env=env, all_envs=all_envs, json_mode=is_json(format_), output=output
+        )
 
-        if all_envs:
-            # Validate all environment seed directories
-            env_dir = Path("db/environments")
-            if env_dir.exists():
-                for env_file in env_dir.glob("*.yaml"):
-                    env_name = env_file.stem
-                    env_seeds = Path("db/seeds") / env_name
-                    if env_seeds.exists():
-                        dirs_to_validate.append((env_seeds, env_name))
-        elif env:
-            # Validate specific environment
-            env_seeds = Path("db/seeds") / env
-            if env_seeds.exists():
-                dirs_to_validate.append((env_seeds, env))
-            else:
-                fail(
-                    ConfigurationError(
-                        f"Environment seeds not found: {env_seeds}",
-                        error_code="CONFIG_004",
-                    ),
-                    json_mode=is_json(format_),
-                    output_file=output,
-                )
-        # Validate provided directory
-        elif seeds_dir.exists():
-            dirs_to_validate.append((seeds_dir, "default"))
-        else:
-            fail(
-                ConfigurationError(
-                    f"Seeds directory not found: {seeds_dir}",
-                    error_code="CONFIG_004",
-                ),
-                json_mode=is_json(format_),
-                output_file=output,
-            )
-
-        # Create validator
         validator = SeedValidator()
-
-        # Collect all reports
-        all_violations = []
-        all_files = []
-
+        all_violations: list[Any] = []
+        all_files: list[str] = []
         for dir_path, _env_name in dirs_to_validate:
             report = validator.validate_directory(dir_path, recursive=True)
             all_violations.extend(report.violations)
             all_files.extend(report.scanned_files)
-
-            # Auto-fix if requested
             if fix:
-                fixer = SeedFixer()
-                for file_path in report.scanned_files:
-                    file_path_obj = Path(file_path)
-                    fix_result = fixer.fix_file(file_path_obj, dry_run=dry_run)
-                    if fix_result.fixes_applied > 0:
-                        if dry_run:
-                            console.print(
-                                f"[yellow]~ Would fix {fix_result.fixes_applied} issues in {file_path}[/yellow]"
-                            )
-                        else:
-                            console.print(
-                                f"[green]✓ Fixed {fix_result.fixes_applied} issues in {file_path}[/green]"
-                            )
+                _fix_seed_files(report.scanned_files, dry_run=dry_run)
 
-        # Output report
-        if format_ == "json":
-            report_dict = {
-                "violations": [v.to_dict() for v in all_violations],
-                "violation_count": len(all_violations),
-                "files_scanned": len(all_files),
-                "has_violations": len(all_violations) > 0,
-            }
-            json_output = json.dumps(report_dict, indent=2)
-
-            if output:
-                output.write_text(json_output)
-                console.print(f"[green]✓ Report saved to {output}[/green]")
-            else:
-                console.print(json_output)
-        else:
-            # Text format (default)
-            console.print("\nSeed Validation Report")
-            console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            console.print(f"Files scanned: {len(all_files)}")
-            console.print(f"Violations found: {len(all_violations)}")
-
-            if all_violations:
-                console.print("\n[red]Issues found:[/red]")
-                table = Table(show_header=True, header_style="bold")
-                table.add_column("File", style="cyan")
-                table.add_column("Line", style="magenta")
-                table.add_column("Issue", style="yellow")
-                table.add_column("Suggestion", style="green")
-
-                for violation in sorted(all_violations, key=lambda v: (v.file_path, v.line_number)):
-                    table.add_row(
-                        violation.file_path,
-                        str(violation.line_number),
-                        violation.pattern.name,
-                        violation.suggestion,
-                    )
-
-                console.print(table)
-            else:
-                console.print("[green]✓ All seed files are valid![/green]")
-                console.print("\n💡 Next steps:")
-                console.print("  • Load data: confiture seed apply")
-                console.print("  • Show performance: confiture seed benchmark")
-                console.print("  • Convert format: confiture seed convert")
+        _render_seed_validation(all_violations, all_files, format_=format_, output=output)
 
         # Exit with appropriate code
         if all_violations:
@@ -393,60 +399,63 @@ def validate(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
-@seed_app.command("apply")
-@cli_boundary
-def apply(
-    seeds_dir: Path = typer.Option(
-        DEFAULT_SEEDS_DIR,
-        "--seeds-dir",
-        help="Directory containing seed files (default: db/seeds)",
+ApplyEnvOpt = Annotated[
+    str, typer.Option("--env", help="Environment name for database URL lookup (default: local)")
+]
+SequentialOpt = Annotated[
+    bool,
+    typer.Option("--sequential", help="Apply files sequentially, solves 650+ row parser limits"),
+]
+ContinueOnErrorOpt = Annotated[
+    bool,
+    typer.Option(
+        "--continue-on-error", help="Continue if file fails (--sequential only, useful for CI/CD)"
     ),
-    env: str = typer.Option(
-        DEFAULT_ENV,
-        "--env",
-        help="Environment name for database URL lookup (default: local)",
-    ),
-    sequential: bool = typer.Option(
-        False,
-        "--sequential",
-        help="Apply files sequentially, solves 650+ row parser limits",
-    ),
-    continue_on_error: bool = typer.Option(
-        False,
-        "--continue-on-error",
-        help="Continue if file fails (--sequential only, useful for CI/CD)",
-    ),
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        help="Database URL (overrides environment config)",
-    ),
-    copy_format: bool = typer.Option(
-        False,
-        "--copy-format",
-        help="Use COPY format (2-10x faster for large datasets)",
-    ),
-    copy_threshold: int = typer.Option(
-        DEFAULT_COPY_THRESHOLD,
+]
+ApplyDatabaseUrlOpt = Annotated[
+    str | None, typer.Option("--database-url", help="Database URL (overrides environment config)")
+]
+CopyFormatOpt = Annotated[
+    bool, typer.Option("--copy-format", help="Use COPY format (2-10x faster for large datasets)")
+]
+CopyThresholdOpt = Annotated[
+    int,
+    typer.Option(
         "--copy-threshold",
         help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
     ),
-    format_type: str = format_option("text", "json", "csv"),
-    report_output: Path = typer.Option(
-        None,
+]
+ReportOutputOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--output",
         "-o",
         "--report",
-        help=(
-            "Save structured output (JSON/CSV) to file. --report is a "
-            "back-compat alias for --output/-o (DOCS-M2)."
-        ),
+        help="Save structured output (JSON/CSV) to file. --report is a "
+        "back-compat alias for --output/-o (DOCS-M2).",
     ),
-    profile: str | None = typer.Option(
-        None,
-        "--profile",
-        help="Apply only the named seed profile (seed.profiles.<name> in env config).",
+]
+ProfileOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--profile", help="Apply only the named seed profile (seed.profiles.<name> in env config)."
     ),
+]
+
+
+@seed_app.command("apply")
+@cli_boundary
+def apply(
+    seeds_dir: SeedsDirOpt = DEFAULT_SEEDS_DIR,
+    env: ApplyEnvOpt = DEFAULT_ENV,
+    sequential: SequentialOpt = False,
+    continue_on_error: ContinueOnErrorOpt = False,
+    database_url: ApplyDatabaseUrlOpt = None,
+    copy_format: CopyFormatOpt = False,
+    copy_threshold: CopyThresholdOpt = DEFAULT_COPY_THRESHOLD,
+    format_type: str = format_option("text", "json", "csv"),
+    report_output: ReportOutputOpt = None,
+    profile: ProfileOpt = None,
 ) -> None:
     """Load seed data into the database.
 

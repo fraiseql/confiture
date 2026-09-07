@@ -36,6 +36,37 @@ from confiture.core.idempotency.static_eval.values import (
 )
 
 
+def _scope_body(node: ast.AST, collector: _BindingCollector) -> list[ast.AST]:
+    """Collect ``node``'s own bindings into ``collector``; the expressions/statements to walk."""
+    if isinstance(node, ast.Module):
+        collector.statements(node.body, top_level=True)
+        return list(node.body)
+    if isinstance(node, ast.ClassDef):
+        collector.statements(node.body, top_level=True)
+        return list(node.body)
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        collector.parameters(node.args, node.lineno)
+        collector.statements(node.body, top_level=True)
+        return list(node.body)
+    if isinstance(node, ast.Lambda):
+        collector.parameters(node.args, node.lineno)
+        return [node.body]
+    if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+        body: list[ast.AST] = []
+        for index, generator in enumerate(node.generators):
+            for name in _store_names(generator.target):
+                collector.add(name.id, "comprehension", node.lineno, top_level=True)
+            if index > 0:
+                body.append(generator.iter)
+            body.extend(generator.ifs)
+        if isinstance(node, ast.DictComp):
+            body.extend([node.key, node.value])
+        else:
+            body.append(node.elt)
+        return body
+    raise _ScopeMismatch(type(node).__name__)  # pragma: no cover — every scope node is listed above
+
+
 class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
     """One parsed migration: its scopes, its bindings, and an evaluator over them.
 
@@ -81,35 +112,8 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
 
     def _build(self, scope: _Scope) -> None:
         """Collect this scope's bindings and calls; pair its nested scopes with symtable's."""
-        node = scope.node
         collector = _BindingCollector()
-        if isinstance(node, ast.Module):
-            body: list[ast.AST] = list(node.body)
-            collector.statements(node.body, top_level=True)
-        elif isinstance(node, ast.ClassDef):
-            body = list(node.body)
-            collector.statements(node.body, top_level=True)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            body = list(node.body)
-            collector.parameters(node.args, node.lineno)
-            collector.statements(node.body, top_level=True)
-        elif isinstance(node, ast.Lambda):
-            body = [node.body]
-            collector.parameters(node.args, node.lineno)
-        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
-            body = []
-            for index, generator in enumerate(node.generators):
-                for name in _store_names(generator.target):
-                    collector.add(name.id, "comprehension", node.lineno, top_level=True)
-                if index > 0:
-                    body.append(generator.iter)
-                body.extend(generator.ifs)
-            if isinstance(node, ast.DictComp):
-                body.extend([node.key, node.value])
-            else:
-                body.append(node.elt)
-        else:  # pragma: no cover — every scope node is listed above
-            raise _ScopeMismatch(type(node).__name__)
+        body = _scope_body(scope.node, collector)
         scope.bindings = collector.bindings
         self._attribute_stores |= collector.attribute_stores
         self._setattr_on_self = self._setattr_on_self or collector.setattr_on_self
@@ -118,18 +122,34 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
         for child in body:
             self._walk(child, scope, nested)
 
+        for child_node, table in self._pair_nested(scope, nested):
+            kind = "class" if isinstance(child_node, ast.ClassDef) else "function"
+            child_scope = _Scope(kind, child_node, table, scope)
+            self._scope_of[id(child_node)] = child_scope
+            self._build(child_scope)
+
+    def _pair_nested(
+        self, scope: _Scope, nested: list[ast.stmt | ast.expr]
+    ) -> list[tuple[ast.stmt | ast.expr, symtable.SymbolTable | None]]:
+        """Each nested scope node with the symtable it pairs with (the enclosing one when inlined).
+
+        A pairing failure turns ``scopes_ok`` off: from there on every name
+        lookup refuses (SCOPE_UNAVAILABLE), but the walk continues so that
+        every call is still found — an unpaired file must never become a
+        silent pass.
+        """
         children = (
             list(scope.table.get_children()) if self.scopes_ok and scope.table is not None else []
         )
         with_own_table = [n for n in nested if not isinstance(n, _INLINED_COMPREHENSIONS)]
         if self.scopes_ok and len(children) != len(with_own_table):
             self.scopes_ok = False
+        paired: list[tuple[ast.stmt | ast.expr, symtable.SymbolTable | None]] = []
         index = 0
         for child_node in nested:
             table: symtable.SymbolTable | None = scope.table
             if isinstance(child_node, _INLINED_COMPREHENSIONS):
-                # Inlined (PEP 709): its names live in the enclosing table.
-                pass
+                pass  # Inlined (PEP 709): its names live in the enclosing table.
             elif self.scopes_ok:
                 candidate = children[index]
                 index += 1
@@ -137,15 +157,33 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
                 if candidate.get_name() == expected and candidate.get_lineno() == child_node.lineno:
                     table = candidate
                 else:
-                    # Pairing failed: from here on every name lookup refuses
-                    # (SCOPE_UNAVAILABLE), but the walk continues so that every
-                    # call is still found — an unpaired file must never become
-                    # a silent pass.
                     self.scopes_ok = False
-            kind = "class" if isinstance(child_node, ast.ClassDef) else "function"
-            child_scope = _Scope(kind, child_node, table, scope)
-            self._scope_of[id(child_node)] = child_scope
-            self._build(child_scope)
+            paired.append((child_node, table))
+        return paired
+
+    def _walk_signature(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        scope: _Scope,
+        nested: list[ast.stmt | ast.expr],
+    ) -> None:
+        """Defaults, annotations, the return annotation and decorators — in the enclosing scope."""
+        for expr in (*node.args.defaults, *node.args.kw_defaults):
+            if expr is not None:
+                self._walk(expr, scope, nested)
+        for arg in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+            node.args.vararg,
+            node.args.kwarg,
+        ):
+            if arg is not None and arg.annotation is not None:
+                self._walk(arg.annotation, scope, nested)
+        if node.returns is not None:
+            self._walk(node.returns, scope, nested)
+        for expr in node.decorator_list:
+            self._walk(expr, scope, nested)
 
     def _walk(self, node: ast.AST, scope: _Scope, nested: list[ast.stmt | ast.expr]) -> None:
         """Visit ``node`` in ``scope``, registering nested scopes in symtable's order.
@@ -156,22 +194,7 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
         so their nested scopes precede the block's own table.
         """
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for expr in (*node.args.defaults, *node.args.kw_defaults):
-                if expr is not None:
-                    self._walk(expr, scope, nested)
-            for arg in (
-                *node.args.posonlyargs,
-                *node.args.args,
-                *node.args.kwonlyargs,
-                node.args.vararg,
-                node.args.kwarg,
-            ):
-                if arg is not None and arg.annotation is not None:
-                    self._walk(arg.annotation, scope, nested)
-            if node.returns is not None:
-                self._walk(node.returns, scope, nested)
-            for expr in node.decorator_list:
-                self._walk(expr, scope, nested)
+            self._walk_signature(node, scope, nested)
             nested.append(node)
             return
         if isinstance(node, ast.ClassDef):
@@ -339,80 +362,20 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
     def _eval_call(self, node: ast.Call, scope: _Scope, ctx: _Context) -> Value:
         func = node.func
         if _is_path_constructor(func):
-            parts = self._eval_args(node, scope, ctx)
-            if isinstance(parts, Unknown):
-                return parts
-            if not parts:
-                return Unknown(Refusal.UNSUPPORTED, "`Path()` with no arguments")
-            joined: Path | None = None
-            for part in parts:
-                if isinstance(part, Str):
-                    segment = Path(part.text)
-                elif isinstance(part, PathV):
-                    segment = part.path
-                else:
-                    return Unknown(
-                        Refusal.UNSUPPORTED, "`Path(...)` argument is not a string or path"
-                    )
-                joined = segment if joined is None else joined / segment
-            assert joined is not None
-            return PathV(joined)
+            return self._eval_path_call(node, scope, ctx)
         if isinstance(func, ast.Name) and func.id == "str" and len(node.args) == 1:
-            inner = self._eval(node.args[0], scope, ctx)
-            if isinstance(inner, Unknown):
-                return inner
-            if isinstance(inner, PathV):
-                return Str(str(inner.path))
-            if isinstance(inner, Str):
-                return inner
-            return Unknown(Refusal.UNSUPPORTED, "`str()` of something that is not a string or path")
+            return self._eval_str_call(node, scope, ctx)
         if _is_dedent(func):
-            if len(node.args) != 1 or node.keywords:
-                return Unknown(Refusal.UNSUPPORTED_CALL, "`dedent()` takes exactly one argument")
-            inner = self._eval(node.args[0], scope, ctx)
-            if isinstance(inner, Unknown):
-                return inner
-            if not isinstance(inner, Str):
-                return Unknown(
-                    Refusal.UNSUPPORTED_CALL, "`dedent()` of something that is not a string"
-                )
-            return Str(textwrap.dedent(inner.text), inner.from_file, inner.is_fstring)
+            return self._eval_dedent_call(node, scope, ctx)
         if isinstance(func, ast.Attribute):
             if func.attr == "read_text":
                 return self._eval_read_text(node, func, scope, ctx)
             if func.attr in _PURE_STR_METHODS:
                 return self._eval_str_method(node, func, scope, ctx)
             if func.attr in {"resolve", "absolute"} and not node.args and not node.keywords:
-                base = self._eval(func.value, scope, ctx)
-                if isinstance(base, Unknown):
-                    return base
-                if isinstance(base, PathV):
-                    return base
-                return Unknown(
-                    Refusal.UNSUPPORTED, f"`.{func.attr}()` on something that is not a path"
-                )
+                return self._eval_path_identity(func, scope, ctx)
             if func.attr == "joinpath":
-                base = self._eval(func.value, scope, ctx)
-                if isinstance(base, Unknown):
-                    return base
-                parts = self._eval_args(node, scope, ctx)
-                if isinstance(parts, Unknown):
-                    return parts
-                if not isinstance(base, PathV):
-                    return Unknown(
-                        Refusal.UNSUPPORTED, "`.joinpath()` on something that is not a path"
-                    )
-                joined = base.path
-                for part in parts:
-                    if isinstance(part, Str):
-                        joined = joined / part.text
-                    elif isinstance(part, PathV):
-                        joined = joined / part.path
-                    else:
-                        return Unknown(
-                            Refusal.UNSUPPORTED, "`.joinpath()` argument is not a string or path"
-                        )
-                return PathV(joined)
+                return self._eval_joinpath(node, func, scope, ctx)
         if isinstance(func, ast.Name) or (
             isinstance(func, ast.Attribute)
             and isinstance(func.value, ast.Name)
@@ -423,6 +386,80 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
             Refusal.UNSUPPORTED_CALL,
             f"`{ast.unparse(func)}(...)` is not in the static grammar",
         )
+
+    def _eval_path_call(self, node: ast.Call, scope: _Scope, ctx: _Context) -> Value:
+        """``Path(a, b, …)``: every argument a string or a path."""
+        parts = self._eval_args(node, scope, ctx)
+        if isinstance(parts, Unknown):
+            return parts
+        if not parts:
+            return Unknown(Refusal.UNSUPPORTED, "`Path()` with no arguments")
+        joined: Path | None = None
+        for part in parts:
+            if isinstance(part, Str):
+                segment = Path(part.text)
+            elif isinstance(part, PathV):
+                segment = part.path
+            else:
+                return Unknown(Refusal.UNSUPPORTED, "`Path(...)` argument is not a string or path")
+            joined = segment if joined is None else joined / segment
+        assert joined is not None
+        return PathV(joined)
+
+    def _eval_str_call(self, node: ast.Call, scope: _Scope, ctx: _Context) -> Value:
+        """``str(x)`` of a path or a string."""
+        inner = self._eval(node.args[0], scope, ctx)
+        if isinstance(inner, Unknown):
+            return inner
+        if isinstance(inner, PathV):
+            return Str(str(inner.path))
+        if isinstance(inner, Str):
+            return inner
+        return Unknown(Refusal.UNSUPPORTED, "`str()` of something that is not a string or path")
+
+    def _eval_dedent_call(self, node: ast.Call, scope: _Scope, ctx: _Context) -> Value:
+        """``textwrap.dedent(s)`` of a string."""
+        if len(node.args) != 1 or node.keywords:
+            return Unknown(Refusal.UNSUPPORTED_CALL, "`dedent()` takes exactly one argument")
+        inner = self._eval(node.args[0], scope, ctx)
+        if isinstance(inner, Unknown):
+            return inner
+        if not isinstance(inner, Str):
+            return Unknown(Refusal.UNSUPPORTED_CALL, "`dedent()` of something that is not a string")
+        return Str(textwrap.dedent(inner.text), inner.from_file, inner.is_fstring)
+
+    def _eval_path_identity(self, func: ast.Attribute, scope: _Scope, ctx: _Context) -> Value:
+        """``p.resolve()`` / ``p.absolute()``: the path itself."""
+        base = self._eval(func.value, scope, ctx)
+        if isinstance(base, Unknown):
+            return base
+        if isinstance(base, PathV):
+            return base
+        return Unknown(Refusal.UNSUPPORTED, f"`.{func.attr}()` on something that is not a path")
+
+    def _eval_joinpath(
+        self, node: ast.Call, func: ast.Attribute, scope: _Scope, ctx: _Context
+    ) -> Value:
+        """``p.joinpath(a, b, …)``: every argument a string or a path."""
+        base = self._eval(func.value, scope, ctx)
+        if isinstance(base, Unknown):
+            return base
+        parts = self._eval_args(node, scope, ctx)
+        if isinstance(parts, Unknown):
+            return parts
+        if not isinstance(base, PathV):
+            return Unknown(Refusal.UNSUPPORTED, "`.joinpath()` on something that is not a path")
+        joined = base.path
+        for part in parts:
+            if isinstance(part, Str):
+                joined = joined / part.text
+            elif isinstance(part, PathV):
+                joined = joined / part.path
+            else:
+                return Unknown(
+                    Refusal.UNSUPPORTED, "`.joinpath()` argument is not a string or path"
+                )
+        return PathV(joined)
 
     # -- reader helpers -------------------------------------------------------
 

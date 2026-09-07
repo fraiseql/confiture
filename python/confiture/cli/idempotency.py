@@ -544,47 +544,9 @@ def _render_extractor_warnings(report: Any) -> None:
     console.print()
 
 
-def _fix_idempotency(
-    migrations_dir: Path,
-    dry_run: bool,
-    format_output: str,
-    output_file: Path | None,
-) -> None:
-    """Fix idempotency issues in SQL migration files.
-
-    Python migrations are never rewritten — unparsing the AST would lose
-    comments and formatting. Any violations in ``.py`` files are surfaced
-    under ``manual_fix_required`` so users know to edit them by hand.
-
-    Args:
-        migrations_dir: Directory containing migration files
-        dry_run: If True, preview changes without modifying files
-        format_output: Output format (text or json)
-        output_file: Optional file to save output to
-    """
-    from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
-
-    fixer = IdempotencyFixer()
-    validator = IdempotencyValidator()
-
-    sql_files = sorted(migrations_dir.glob("*.up.sql"))
-    py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
-
-    if not sql_files and not py_files:
-        if format_output == "json":
-            result: dict[str, Any] = {
-                "status": "ok",
-                "message": "No migration files found",
-                "files": [],
-                "hints": [],
-            }
-            _output_json(result, output_file, console)
-        else:
-            console.print("[green]✅ No migration files found to fix[/green]")
-        return
-
+def _fix_sql_files(sql_files: list[Path], fixer: Any, *, dry_run: bool) -> list[dict[str, Any]]:
+    """Rewrite each ``.up.sql`` the fixer changes (or only describe it under ``dry_run``)."""
     files_changed: list[dict[str, Any]] = []
-
     for sql_file in sql_files:
         original_content = sql_file.read_text()
         fixed_content = fixer.fix(original_content)
@@ -608,34 +570,18 @@ def _fix_idempotency(
             files_changed.append(file_info)
             if not dry_run:
                 sql_file.write_text(fixed_content)
+    return files_changed
 
-    # Surface .py violations without rewriting the source.
-    manual_report = _collect_idempotency_report([], py_files, validator)
-    py_violations_by_file: dict[str, list[Any]] = {}
-    for violation in manual_report.violations:
-        py_violations_by_file.setdefault(violation.file_path, []).append(violation)
-    manual_fix_required = sorted(py_violations_by_file.keys())
 
-    if format_output == "json":
-        status = (
-            "fixed"
-            if not dry_run and (files_changed or manual_fix_required)
-            else "preview"
-            if dry_run
-            else "ok"
-        )
-        result = {
-            "status": status,
-            "files": files_changed,
-            "total_files_changed": len(files_changed),
-            "manual_fix_required": manual_fix_required,
-            "hints": [],
-        }
-        if manual_report.has_warnings:
-            result["warnings"] = manual_report.to_dict()["warnings"]
-        _output_json(result, output_file, console)
-        return
-
+def _render_fix_text(
+    files_changed: list[dict[str, Any]],
+    manual_fix_required: list[str],
+    py_violations_by_file: dict[str, list[Any]],
+    manual_report: Any,
+    *,
+    dry_run: bool,
+) -> None:
+    """The text report of ``migrate fix --idempotent``: applied fixes, manual work, warnings."""
     if not files_changed and not manual_fix_required:
         if manual_report.analysis_complete:
             console.print("[green]✅ All migrations are already idempotent[/green]")
@@ -682,3 +628,80 @@ def _fix_idempotency(
         console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
     elif files_changed:
         console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
+
+
+def _fix_idempotency(
+    migrations_dir: Path,
+    dry_run: bool,
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Fix idempotency issues in SQL migration files.
+
+    Python migrations are never rewritten — unparsing the AST would lose
+    comments and formatting. Any violations in ``.py`` files are surfaced
+    under ``manual_fix_required`` so users know to edit them by hand.
+
+    Args:
+        migrations_dir: Directory containing migration files
+        dry_run: If True, preview changes without modifying files
+        format_output: Output format (text or json)
+        output_file: Optional file to save output to
+    """
+    from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
+
+    fixer = IdempotencyFixer()
+    validator = IdempotencyValidator()
+
+    sql_files = sorted(migrations_dir.glob("*.up.sql"))
+    py_files = sorted(p for p in migrations_dir.glob("*.py") if _is_migration_file(p))
+
+    if not sql_files and not py_files:
+        if format_output == "json":
+            result: dict[str, Any] = {
+                "status": "ok",
+                "message": "No migration files found",
+                "files": [],
+                "hints": [],
+            }
+            _output_json(result, output_file, console)
+        else:
+            console.print("[green]✅ No migration files found to fix[/green]")
+        return
+
+    files_changed = _fix_sql_files(sql_files, fixer, dry_run=dry_run)
+
+    # Surface .py violations without rewriting the source.
+    manual_report = _collect_idempotency_report([], py_files, validator)
+    py_violations_by_file: dict[str, list[Any]] = {}
+    for violation in manual_report.violations:
+        py_violations_by_file.setdefault(violation.file_path, []).append(violation)
+    manual_fix_required = sorted(py_violations_by_file.keys())
+
+    if format_output == "json":
+        status = (
+            "fixed"
+            if not dry_run and (files_changed or manual_fix_required)
+            else "preview"
+            if dry_run
+            else "ok"
+        )
+        result = {
+            "status": status,
+            "files": files_changed,
+            "total_files_changed": len(files_changed),
+            "manual_fix_required": manual_fix_required,
+            "hints": [],
+        }
+        if manual_report.has_warnings:
+            result["warnings"] = manual_report.to_dict()["warnings"]
+        _output_json(result, output_file, console)
+        return
+
+    _render_fix_text(
+        files_changed,
+        manual_fix_required,
+        py_violations_by_file,
+        manual_report,
+        dry_run=dry_run,
+    )

@@ -165,7 +165,26 @@ class SchemaAnalyzer:
         def key(schema: str, name: str) -> str:
             return f"{schema}.{name}" if schemas is not None else name
 
-        # Get tables and columns
+        self._read_columns(info, wanted, key)
+        self._read_indexes(info, wanted, key)
+        self._read_constraints(info, wanted, key)
+        self._read_foreign_keys(info, wanted, key)
+        with self.connection.cursor() as cur:
+            cur.execute("SELECT extname FROM pg_extension")
+            info.extensions = [row[0] for row in cur.fetchall()]
+        with self.connection.cursor() as cur:
+            cur.execute("""
+                SELECT sequence_name
+                FROM information_schema.sequences
+                WHERE sequence_schema = 'public'
+            """)
+            info.sequences = [row[0] for row in cur.fetchall()]
+
+        self._schema_info = info
+        return info
+
+    def _read_columns(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
+        """Tables and their columns, from ``information_schema``."""
         with self.connection.cursor() as cur:
             cur.execute(
                 """
@@ -189,7 +208,6 @@ class SchemaAnalyzer:
             """,
                 (wanted,),
             )
-
             for full_row in cur.fetchall():
                 table_name = key(full_row[0], full_row[1])
                 row = full_row[1:]
@@ -204,7 +222,8 @@ class SchemaAnalyzer:
                     "scale": row[7],
                 }
 
-        # Get indexes
+    def _read_indexes(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
+        """Every index per table, and which of them back a constraint."""
         with self.connection.cursor() as cur:
             cur.execute(
                 """
@@ -241,7 +260,8 @@ class SchemaAnalyzer:
             for row in cur.fetchall():
                 info.constraint_indexes.setdefault(key(row[0], row[1]), set()).add(row[2])
 
-        # Get constraints
+    def _read_constraints(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
+        """Constraint names per table."""
         with self.connection.cursor() as cur:
             cur.execute(
                 """
@@ -261,7 +281,8 @@ class SchemaAnalyzer:
                     info.constraints[table_name] = []
                 info.constraints[table_name].append(row[2])
 
-        # Get foreign keys
+    def _read_foreign_keys(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
+        """Foreign keys per table: column, referenced table and column, constraint name."""
         with self.connection.cursor() as cur:
             cur.execute(
                 """
@@ -297,23 +318,6 @@ class SchemaAnalyzer:
                         "constraint_name": row[4],
                     }
                 )
-
-        # Get extensions
-        with self.connection.cursor() as cur:
-            cur.execute("SELECT extname FROM pg_extension")
-            info.extensions = [row[0] for row in cur.fetchall()]
-
-        # Get sequences
-        with self.connection.cursor() as cur:
-            cur.execute("""
-                SELECT sequence_name
-                FROM information_schema.sequences
-                WHERE sequence_schema = 'public'
-            """)
-            info.sequences = [row[0] for row in cur.fetchall()]
-
-        self._schema_info = info
-        return info
 
     def validate_sql(self, sql: str) -> list[ValidationIssue]:
         """Validate a SQL string against current schema.

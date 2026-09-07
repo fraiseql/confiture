@@ -57,7 +57,15 @@ class MigrationInfo:
 
 @dataclass
 class StatusResult:
-    """Result of migrate status operation."""
+    """Result of migrate status operation.
+
+    Attributes:
+        migrations: List of MigrationInfo (version, name, status, applied_at)
+        applied/pending: Shortcut properties for version lists
+        has_pending: True if any migrations need applying
+        summary: {"applied": N, "pending": N, "total": N}
+        tracking_table_exists: Whether tracking table is present
+    """
 
     migrations: list[MigrationInfo]
     tracking_table_exists: bool
@@ -360,6 +368,12 @@ class MigrateReinitResult:
 
     Tracks how many tracking entries were deleted, which migrations
     were re-marked as applied, and any warnings or errors.
+
+    Attributes:
+        success: True if reinit succeeded
+        deleted_count: Number of tracking entries removed
+        migrations_marked: List of MigrationApplied (serialized as "marked")
+        total_duration_ms: Total time (serialized as "total_duration_ms")
     """
 
     success: bool
@@ -393,6 +407,12 @@ class MigrateDownResult:
 
     Tracks which migrations were rolled back, total execution time,
     and any warnings or errors that occurred.
+
+    Attributes:
+        success: True if all rollbacks succeeded
+        migrations_rolled_back: List of MigrationApplied (serialized as "rolled_back")
+        total_duration_ms: Total time (serialized as "total_duration_ms")
+        error: Error message if success=False
     """
 
     success: bool
@@ -453,6 +473,14 @@ class MigrateRebuildResult:
 
     Tracks schema cleanup, DDL application, tracking bootstrap,
     optional seed application, and post-rebuild verification.
+
+    Attributes:
+        success: True if rebuild completed
+        schemas_dropped: List of dropped schema names
+        ddl_statements_executed: Number of DDL statements applied
+        migrations_marked: Migrations marked as applied
+        verified: True/False/None — post-rebuild verification result
+        seeds_applied: Number of seed files applied (None if not requested)
     """
 
     success: bool

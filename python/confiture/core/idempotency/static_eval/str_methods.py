@@ -12,6 +12,62 @@ if TYPE_CHECKING:
     from confiture.core.idempotency.static_eval.evaluator import ModuleModel
 
 
+def _apply_str_method(
+    method: str, text: str, args: list[Value], kwargs: dict[str, str], count: int | None
+) -> tuple[str, bool] | Unknown:
+    """``text.<method>(*args, **kwargs)`` for the whitelisted methods.
+
+    Returns:
+        ``(result, any argument was an f-string)`` or the refusal.
+    """
+    if method == "join":
+        return _join(text, args, kwargs)
+    texts: list[str] = []
+    fstring = False
+    for value in args:
+        if not isinstance(value, Str):
+            return Unknown(Refusal.UNSUPPORTED_CALL, f"`.{method}()` argument is not a string")
+        texts.append(value.text)
+        fstring = fstring or value.is_fstring
+    try:
+        if method == "replace":
+            if len(texts) != 2:
+                return Unknown(Refusal.UNSUPPORTED_CALL, "`.replace()` takes two strings")
+            result = (
+                text.replace(texts[0], texts[1])
+                if count is None
+                else text.replace(texts[0], texts[1], count)
+            )
+        elif method in {"strip", "lstrip", "rstrip"}:
+            if len(texts) > 1 or kwargs:
+                return Unknown(Refusal.UNSUPPORTED_CALL, f"`.{method}()` takes at most one string")
+            result = getattr(text, method)(*texts)
+        elif method in {"upper", "lower"}:
+            if texts or kwargs:
+                return Unknown(Refusal.UNSUPPORTED_CALL, f"`.{method}()` takes no arguments")
+            result = getattr(text, method)()
+        else:  # format
+            result = text.format(*texts, **kwargs)
+    except (IndexError, KeyError, ValueError) as exc:
+        return Unknown(
+            Refusal.UNSUPPORTED_CALL, f"`.{method}()` arguments do not fit the template: {exc}"
+        )
+    return result, fstring
+
+
+def _join(text: str, args: list[Value], kwargs: dict[str, str]) -> tuple[str, bool] | Unknown:
+    if len(args) != 1 or kwargs or not isinstance(args[0], Seq):
+        return Unknown(Refusal.UNSUPPORTED_CALL, "`.join()` needs one static sequence of strings")
+    parts: list[str] = []
+    fstring = False
+    for item in args[0].items:
+        if not isinstance(item, Str):
+            return Unknown(Refusal.UNSUPPORTED_CALL, "`.join()` sequence holds a non-string")
+        parts.append(item.text)
+        fstring = fstring or item.is_fstring
+    return text.join(parts), fstring
+
+
 class _StrMethodsMixin:
     """Methods :class:`~confiture.core.idempotency.static_eval.evaluator.ModuleModel` mixes in."""
 
@@ -63,6 +119,21 @@ class _StrMethodsMixin:
             return Unknown(
                 Refusal.UNSUPPORTED_CALL, f"`.{method}()` on something that is not a string"
             )
+        arguments = self._str_method_arguments(node, method, scope, ctx)
+        if isinstance(arguments, Unknown):
+            return arguments
+        args, kwargs, count = arguments
+        applied = _apply_str_method(method, receiver.text, args, kwargs, count)
+        if isinstance(applied, Unknown):
+            return applied
+        result, fstring = applied
+        return Str(result, receiver.from_file, receiver.is_fstring or fstring)
+
+    def _str_method_arguments(
+        self: ModuleModel, node: ast.Call, method: str, scope: _Scope, ctx: _Context
+    ) -> tuple[list[Value], dict[str, str], int | None] | Unknown:
+        """The call's positional values (starred sequences spread), string keywords, and
+        ``.replace()``'s count literal."""
         count: int | None = None
         positional = list(node.args)
         if method == "replace" and len(positional) == 3:
@@ -97,57 +168,4 @@ class _StrMethodsMixin:
                     f"`.{method}()` keyword `{keyword.arg}` is not a string",
                 )
             kwargs[keyword.arg] = value.text
-
-        text = receiver.text
-        fstring = receiver.is_fstring
-        try:
-            if method == "join":
-                if len(args) != 1 or kwargs or not isinstance(args[0], Seq):
-                    return Unknown(
-                        Refusal.UNSUPPORTED_CALL, "`.join()` needs one static sequence of strings"
-                    )
-                parts: list[str] = []
-                for item in args[0].items:
-                    if not isinstance(item, Str):
-                        return Unknown(
-                            Refusal.UNSUPPORTED_CALL, "`.join()` sequence holds a non-string"
-                        )
-                    parts.append(item.text)
-                    fstring = fstring or item.is_fstring
-                result = text.join(parts)
-            else:
-                texts: list[str] = []
-                for value in args:
-                    if not isinstance(value, Str):
-                        return Unknown(
-                            Refusal.UNSUPPORTED_CALL, f"`.{method}()` argument is not a string"
-                        )
-                    texts.append(value.text)
-                    fstring = fstring or value.is_fstring
-                if method == "replace":
-                    if len(texts) != 2:
-                        return Unknown(Refusal.UNSUPPORTED_CALL, "`.replace()` takes two strings")
-                    result = (
-                        text.replace(texts[0], texts[1])
-                        if count is None
-                        else text.replace(texts[0], texts[1], count)
-                    )
-                elif method in {"strip", "lstrip", "rstrip"}:
-                    if len(texts) > 1 or kwargs:
-                        return Unknown(
-                            Refusal.UNSUPPORTED_CALL, f"`.{method}()` takes at most one string"
-                        )
-                    result = getattr(text, method)(*texts)
-                elif method in {"upper", "lower"}:
-                    if texts or kwargs:
-                        return Unknown(
-                            Refusal.UNSUPPORTED_CALL, f"`.{method}()` takes no arguments"
-                        )
-                    result = getattr(text, method)()
-                else:  # format
-                    result = text.format(*texts, **kwargs)
-        except (IndexError, KeyError, ValueError) as exc:
-            return Unknown(
-                Refusal.UNSUPPORTED_CALL, f"`.{method}()` arguments do not fit the template: {exc}"
-            )
-        return Str(result, receiver.from_file, fstring)
+        return args, kwargs, count

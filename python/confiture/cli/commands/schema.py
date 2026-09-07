@@ -1,8 +1,9 @@
 """Schema commands: init, build, lint, introspect."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 import typer
@@ -200,120 +201,153 @@ Documentation: https://github.com/evoludigit/confiture
         raise typer.Exit(handle_cli_error(e)) from e
 
 
-@cli_boundary
-def build(
-    env: str = typer.Option(
-        "local",
-        "--env",
-        "-e",
-        help="Environment to build (default: local)",
+EnvOpt = Annotated[str, typer.Option("--env", "-e", help="Environment to build (default: local)")]
+OutputOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--output", "-o", help="Output file path (default: db/generated/schema_{env}.sql)"
     ),
-    output: Path = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Output file path (default: db/generated/schema_{env}.sql)",
-    ),
-    project_dir: Path = typer.Option(
-        Path(),
-        "--project-dir",
-        help="Project directory (default: current directory)",
-    ),
-    show_hash: bool = typer.Option(
-        False,
-        "--show-hash",
-        help="Display schema hash after build (default: off)",
-    ),
-    schema_only: bool = typer.Option(
-        False,
-        "--schema-only",
-        help="Build schema only, exclude seed data (default: off)",
-    ),
-    validate_comments: bool | None = typer.Option(
-        None,
+]
+ProjectDirOpt = Annotated[
+    Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
+]
+ShowHashOpt = Annotated[
+    bool, typer.Option("--show-hash", help="Display schema hash after build (default: off)")
+]
+SchemaOnlyOpt = Annotated[
+    bool, typer.Option("--schema-only", help="Build schema only, exclude seed data (default: off)")
+]
+ValidateCommentsOpt = Annotated[
+    bool | None,
+    typer.Option(
         "--validate-comments/--no-validate-comments",
         help="Enable/disable comment validation (default: from config)",
     ),
-    fail_on_unclosed: bool | None = typer.Option(
-        None,
+]
+FailOnUnclosedOpt = Annotated[
+    bool | None,
+    typer.Option(
         "--fail-on-unclosed/--no-fail-on-unclosed",
         help="Fail on unclosed block comments (default: from config)",
     ),
-    fail_on_spillover: bool | None = typer.Option(
-        None,
+]
+FailOnSpilloverOpt = Annotated[
+    bool | None,
+    typer.Option(
         "--fail-on-spillover/--no-fail-on-spillover",
         help="Fail on comment spillover into next file (default: from config)",
     ),
-    two_pass: bool | None = typer.Option(
-        None,
+]
+TwoPassOpt = Annotated[
+    bool | None,
+    typer.Option(
         "--two-pass/--no-two-pass",
         help="Two-pass FK emission: strip REFERENCES from CREATE TABLE, emit ALTER TABLE after (default: from config)",
     ),
-    separator_style: str | None = typer.Option(
-        None,
+]
+SeparatorStyleOpt = Annotated[
+    str | None,
+    typer.Option(
         "--separator-style",
         help="Separator style: block_comment, line_comment, mysql, custom (default: from config)",
     ),
-    separator_template: str | None = typer.Option(
-        None,
+]
+SeparatorTemplateOpt = Annotated[
+    str | None,
+    typer.Option(
         "--separator-template",
         help="Custom separator template with {file_path} placeholder (default: none)",
     ),
-    sequential: bool = typer.Option(
-        False,
-        "--sequential",
-        help="Apply seed files sequentially after build (default: off)",
-    ),
-    database_url: str | None = typer.Option(
-        None,
+]
+SequentialOpt = Annotated[
+    bool,
+    typer.Option("--sequential", help="Apply seed files sequentially after build (default: off)"),
+]
+DatabaseUrlOpt = Annotated[
+    str | None,
+    typer.Option(
         "--database-url",
         help="Database connection URL (required for --sequential, default: from config)",
     ),
-    continue_on_error: bool = typer.Option(
-        False,
+]
+ContinueOnErrorOpt = Annotated[
+    bool,
+    typer.Option(
         "--continue-on-error",
         help="Continue applying seed files if one fails (only with --sequential)",
     ),
-    warn_duplicates: bool = typer.Option(
-        False,
+]
+WarnDuplicatesOpt = Annotated[
+    bool,
+    typer.Option(
         "--warn-duplicates",
         help="Report objects defined more than once across the build's files (build_001/build_002), then build",
     ),
-    fail_on_duplicates: bool = typer.Option(
-        False,
-        "--fail-on-duplicates",
-        help="Report duplicate definitions and exit 1 without building",
+]
+FailOnDuplicatesOpt = Annotated[
+    bool,
+    typer.Option(
+        "--fail-on-duplicates", help="Report duplicate definitions and exit 1 without building"
     ),
-    format_type: str = format_option("text", "json", "csv"),
-    report_output: Path = typer.Option(
-        None,
+]
+ReportOutputOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--report",
-        help=(
-            "Save structured build report (JSON/CSV) to file (default: stdout). "
-            "Distinct from --output/-o, which is the generated *schema* file."
-        ),
+        help="Save structured build report (JSON/CSV) to file (default: stdout). "
+        "Distinct from --output/-o, which is the generated *schema* file.",
     ),
-    dump: Path = typer.Option(
-        None,
+]
+DumpOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--dump",
-        help=(
-            "Also emit a content-addressed pg_dump -Fc artifact restorable by "
-            "'confiture restore'. Pass a file path, or an existing directory to "
-            "auto-name 'schema_{env}.{profile}.{hash}.pgdump' inside it (cache by db/ hash)."
-        ),
+        help="Also emit a content-addressed pg_dump -Fc artifact restorable by "
+        "'confiture restore'. Pass a file path, or an existing directory to "
+        "auto-name 'schema_{env}.{profile}.{hash}.pgdump' inside it (cache by db/ hash).",
     ),
-    dump_format: str = typer.Option(
-        "custom",
+]
+DumpFormatOpt = Annotated[
+    str,
+    typer.Option(
         "--dump-format",
         help="Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). "
         "Default: custom.",
     ),
-    seed_profile: str | None = typer.Option(
-        None,
+]
+SeedProfileOpt = Annotated[
+    str | None,
+    typer.Option(
         "--seed-profile",
         help="Apply only the named seed profile (seed.profiles.<name>) during "
         "--sequential seed application and --dump. Unknown name → exit 5.",
     ),
+]
+
+
+@cli_boundary
+def build(
+    env: EnvOpt = "local",
+    output: OutputOpt = None,
+    project_dir: ProjectDirOpt = Path(),
+    show_hash: ShowHashOpt = False,
+    schema_only: SchemaOnlyOpt = False,
+    validate_comments: ValidateCommentsOpt = None,
+    fail_on_unclosed: FailOnUnclosedOpt = None,
+    fail_on_spillover: FailOnSpilloverOpt = None,
+    two_pass: TwoPassOpt = None,
+    separator_style: SeparatorStyleOpt = None,
+    separator_template: SeparatorTemplateOpt = None,
+    sequential: SequentialOpt = False,
+    database_url: DatabaseUrlOpt = None,
+    continue_on_error: ContinueOnErrorOpt = False,
+    warn_duplicates: WarnDuplicatesOpt = False,
+    fail_on_duplicates: FailOnDuplicatesOpt = False,
+    format_type: str = format_option("text", "json", "csv"),
+    report_output: ReportOutputOpt = None,
+    dump: DumpOpt = None,
+    dump_format: DumpFormatOpt = "custom",
+    seed_profile: SeedProfileOpt = None,
 ) -> None:
     """Build complete schema from DDL files in one fast operation.
 
@@ -372,33 +406,23 @@ def build(
             json_mode=json_mode,
             report_output=report_output,
         )
-        if schema_only:
-            builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
-            builder.include_configs = [
-                cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
-            ]
-            if builder.include_dirs:
-                builder.base_dir = builder.find_common_parent(builder.include_dirs)
-        if output is None:
-            output_dir = project_dir / "db" / "generated"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output = output_dir / f"schema_{env}.sql"
-
-        # Resolve a named seed profile from env config (unknown → exit 5).
-        seed_profile_obj = None
-        if seed_profile is not None:
-            seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
-        apply_sequential = sequential or (
-            builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
+        output, seed_profile_obj, apply_sequential = _build_settings(
+            builder,
+            schema_only=schema_only,
+            output=output,
+            project_dir=project_dir,
+            env=env,
+            seed_profile=seed_profile,
+            sequential=sequential,
         )
-
-        out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
-        from confiture.core.progress import ProgressManager
-
-        with ProgressManager() as progress:
-            sql_files = builder.find_sql_files()
-            duplicates = _duplicate_gate(
-                sql_files,
+        schema, schema_file_count, duplicates = _run_build(
+            builder,
+            out,
+            env=env,
+            output=output,
+            apply_sequential=apply_sequential,
+            duplicate_gate=lambda files: _duplicate_gate(
+                files,
                 project_dir=project_dir,
                 output=output,
                 warn=warn_duplicates,
@@ -406,14 +430,8 @@ def build(
                 out=out,
                 json_mode=json_mode,
                 report_output=report_output,
-            )
-            if apply_sequential:
-                schema = builder.build(output_path=output, schema_only=True, progress=progress)
-                schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
-            else:
-                schema = builder.build(output_path=output, progress=progress)
-                schema_file_count = len(sql_files)
-        out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+            ),
+        )
 
         seed_files_applied = 0
         if apply_sequential:
@@ -543,6 +561,74 @@ def _duplicate_gate(
 
 
 _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
+
+
+def _build_settings(
+    builder: SchemaBuilder,
+    *,
+    schema_only: bool,
+    output: Path | None,
+    project_dir: Path,
+    env: str,
+    seed_profile: str | None,
+    sequential: bool,
+) -> tuple[Path, Any, bool]:
+    """Trim seeds under ``--schema-only``, default the output path, resolve the seed profile and mode.
+
+    Returns:
+        ``(output, seed_profile_obj, apply_sequential)``.
+    """
+    if schema_only:
+        builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
+        builder.include_configs = [
+            cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
+        ]
+        if builder.include_dirs:
+            builder.base_dir = builder.find_common_parent(builder.include_dirs)
+    if output is None:
+        output_dir = project_dir / "db" / "generated"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output = output_dir / f"schema_{env}.sql"
+
+    # Resolve a named seed profile from env config (unknown → exit 5).
+    seed_profile_obj = None
+    if seed_profile is not None:
+        seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
+    apply_sequential = sequential or (
+        builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
+    )
+    return output, seed_profile_obj, bool(apply_sequential)
+
+
+def _run_build(
+    builder: SchemaBuilder,
+    out: Any,
+    *,
+    env: str,
+    output: Path,
+    apply_sequential: bool,
+    duplicate_gate: Callable[[list[Path]], Any],
+) -> tuple[str, int, Any]:
+    """Concatenate the schema under a progress bar, after ``duplicate_gate`` saw the files.
+
+    Returns:
+        ``(schema, schema_file_count, duplicates)``; the seed files are left
+        to the sequential applier when ``apply_sequential``.
+    """
+    out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
+    from confiture.core.progress import ProgressManager
+
+    with ProgressManager() as progress:
+        sql_files = builder.find_sql_files()
+        duplicates = duplicate_gate(sql_files)
+        if apply_sequential:
+            schema = builder.build(output_path=output, schema_only=True, progress=progress)
+            schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
+        else:
+            schema = builder.build(output_path=output, progress=progress)
+            schema_file_count = len(sql_files)
+    out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+    return schema, schema_file_count, duplicates
 
 
 def _apply_build_overrides(
@@ -730,85 +816,87 @@ def _write_dump_artifact(
     return path_str, artifact_result.artifact_hash
 
 
-@cli_boundary
-def lint(
-    env: str = typer.Option(
-        "local",
-        "--env",
-        "-e",
-        help="Environment to lint (default: local)",
+EnvOpt = Annotated[str, typer.Option("--env", "-e", help="Environment to lint (default: local)")]
+ProjectDirOpt = Annotated[
+    Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
+]
+OutputOpt = Annotated[
+    Path | None,
+    typer.Option("--output", "-o", help="Output file path (default: stdout, only with json/csv)"),
+]
+FailOnErrorOpt = Annotated[
+    bool, typer.Option("--fail-on-error", help="Exit with code 1 if errors found (default: on)")
+]
+FailOnWarningOpt = Annotated[
+    bool,
+    typer.Option(
+        "--fail-on-warning", help="Exit with code 1 if warnings found (default: off, stricter)"
     ),
-    project_dir: Path = typer.Option(
-        Path(),
-        "--project-dir",
-        help="Project directory (default: current directory)",
-    ),
-    format_type: str = format_option("table", "json", "csv"),
-    output: Path = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Output file path (default: stdout, only with json/csv)",
-    ),
-    fail_on_error: bool = typer.Option(
-        True,
-        "--fail-on-error",
-        help="Exit with code 1 if errors found (default: on)",
-    ),
-    fail_on_warning: bool = typer.Option(
-        False,
-        "--fail-on-warning",
-        help="Exit with code 1 if warnings found (default: off, stricter)",
-    ),
-    select: list[str] = typer.Option(
-        None,
+]
+SelectOpt = Annotated[
+    list[str] | None,
+    typer.Option(
         "--select",
         help="Rules or families to run, comma-separated (#150). `default` means "
         "the rules a plain lint runs, so `--select default,replica` is the "
         "defaults plus one family. Omit to run the defaults. "
         "See `--list-rules`.",
     ),
-    ignore: list[str] = typer.Option(
-        None,
+]
+IgnoreOpt = Annotated[
+    list[str] | None,
+    typer.Option(
         "--ignore",
         help="Rules or families to skip, comma-separated. Applied after --select, "
         "so --ignore always wins.",
     ),
-    baseline: Path | None = typer.Option(
-        None,
+]
+BaselineOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--baseline",
         help="Baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear",
     ),
-    write_baseline: bool = typer.Option(
-        False,
-        "--write-baseline",
-        help="Create or reset the --baseline file from the current findings",
+]
+WriteBaselineOpt = Annotated[
+    bool,
+    typer.Option(
+        "--write-baseline", help="Create or reset the --baseline file from the current findings"
     ),
-    list_rules: bool = typer.Option(
-        False,
+]
+ListRulesOpt = Annotated[
+    bool,
+    typer.Option(
         "--list-rules",
         help="Print the rule catalogue (code, family, severity, default/opt-in) "
         "and exit 0. Honours --format json.",
     ),
-    replica_safe: bool = typer.Option(
-        False,
+]
+ReplicaSafeOpt = Annotated[
+    bool,
+    typer.Option(
         "--replica-safe",
         help="Deprecated alias for `--select default,replica` (#139). Still "
         "supported; new rules register instead of adding a flag.",
     ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory for --replica-safe (default: db/migrations)",
+]
+MigrationsDirOpt = Annotated[
+    Path,
+    typer.Option(
+        "--migrations-dir", help="Migrations directory for --replica-safe (default: db/migrations)"
     ),
-    check_tenant_isolation: bool = typer.Option(
-        False,
+]
+CheckTenantIsolationOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-tenant-isolation",
         help="Deprecated alias for `--select default,tenant` (tenant_001): flag "
         "function INSERTs missing the FK column a tenant-scoped view requires.",
     ),
-    check_security_definer: bool = typer.Option(
-        False,
+]
+CheckSecurityDefinerOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-security-definer",
         help="Deprecated alias for `--select default,security-definer`. Runs "
         "sec_002 over the env's schema DDL: flag SECURITY DEFINER "
@@ -820,6 +908,26 @@ def lint(
         "--format json` instead of `lint --format json`, which does not include "
         "sec_002 findings in its JSON report.",
     ),
+]
+
+
+@cli_boundary
+def lint(
+    env: EnvOpt = "local",
+    project_dir: ProjectDirOpt = Path(),
+    format_type: str = format_option("table", "json", "csv"),
+    output: OutputOpt = None,
+    fail_on_error: FailOnErrorOpt = True,
+    fail_on_warning: FailOnWarningOpt = False,
+    select: SelectOpt = None,
+    ignore: IgnoreOpt = None,
+    baseline: BaselineOpt = None,
+    write_baseline: WriteBaselineOpt = False,
+    list_rules: ListRulesOpt = False,
+    replica_safe: ReplicaSafeOpt = False,
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    check_tenant_isolation: CheckTenantIsolationOpt = False,
+    check_security_definer: CheckSecurityDefinerOpt = False,
 ) -> None:
     """Validate schema against best practices.
 

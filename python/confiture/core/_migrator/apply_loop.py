@@ -6,6 +6,8 @@ Split out of ``session.py``. Every function takes the
 
 from __future__ import annotations
 
+import time as _time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,21 +19,20 @@ from confiture.core.checksum import (
     ChecksumMismatchBehavior,
     MigrationChecksumVerifier,
 )
-from confiture.exceptions import MigrationError
+from confiture.exceptions import ConfigurationError, MigrationError
+from confiture.models.results import MigrateUpResult, MigrationApplied, SkippedMigration
 
 if TYPE_CHECKING:
     from confiture.core._migrator.session import MigratorSession
-    from confiture.models.results import (
-        MigrateUpResult,
-        MigrationApplied,
-    )
-import time as _time
-
-from confiture.exceptions import ConfigurationError
 
 
 def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Path], list[str]]:
-    """See :meth:`MigratorSession._plan_under_lock`."""
+    """Initialize the ledger and discover what to apply — the caller holds the lock.
+
+    Returns:
+        ``(pending_files, skipped_versions)``: the files to apply (every file
+        when *force*), and the versions the ledger already records.
+    """
     assert session._migrator is not None
     session._migrator.initialize()
 
@@ -55,7 +56,14 @@ def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Pat
 def _verify_checksums(
     session: MigratorSession, *, enabled: bool, on_mismatch: str
 ) -> tuple[bool, list[str]]:
-    """See :meth:`MigratorSession._verify_checksums`."""
+    """Check every applied migration file against the ledger — the caller holds the lock.
+
+    Returns:
+        ``(verified, warnings)``: *verified* is True only when the verifier
+        ran and found no mismatch; *warnings* carries the mismatches under
+        ``"warn"``. Under ``"fail"`` a mismatch raises
+        :class:`~confiture.core.checksum.ChecksumVerificationError`.
+    """
     assert session._migrator is not None
     if not enabled:
         return False, []
@@ -74,6 +82,30 @@ def _verify_checksums(
     ]
 
 
+@dataclass
+class _Plan:
+    """What ``up`` decided before applying anything, under the lock."""
+
+    pending_files: list[Path]
+    skipped_versions: list[str]
+    pending_versions: list[str]
+    checksums_verified: bool
+    checksum_warnings: list[str]
+    strict: bool
+
+
+@dataclass
+class _Applied:
+    """What the apply loop did: the migrations it ran and how it stopped."""
+
+    migrations: list[MigrationApplied] = field(default_factory=list)
+    skipped_superuser: list[SkippedMigration] = field(default_factory=list)
+    pending_after_halt: list[str] = field(default_factory=list)
+    total_duration_ms: int = 0
+    failure: Exception | None = None
+    halted: bool = False
+
+
 def _up_under_lock(
     session: MigratorSession,
     *,
@@ -90,14 +122,51 @@ def _up_under_lock(
     on_event: UpObserver | None = None,
     batch: Any | None = None,
 ) -> MigrateUpResult:
-    """See :meth:`MigratorSession._up_under_lock`."""
-
-    from confiture.models.results import (
-        MigrateUpResult,
-        MigrationApplied,
-        SkippedMigration,
+    """The body of :meth:`MigratorSession.up`, run while the migration lock is held."""
+    plan = _plan(
+        session,
+        force=force,
+        verify_checksums=verify_checksums,
+        on_checksum_mismatch=on_checksum_mismatch,
+        strict_mode=strict_mode,
+        auto_baseline=auto_baseline,
+        install_view_helpers=install_view_helpers,
+        on_event=on_event,
     )
+    early = _before_apply(session, plan, dry_run=dry_run, require_reversible=require_reversible)
+    if early is not None:
+        return early
+    if dry_run_execute:
+        return _up_dry_run_execute(
+            session,
+            pending_files=plan.pending_files,
+            target=target,
+            force=force,
+            checksums_verified=plan.checksums_verified,
+            skipped_versions=plan.skipped_versions,
+            checksum_warnings=plan.checksum_warnings,
+            strict_mode=plan.strict,
+            on_event=on_event,
+            batch=batch,
+        )
+    applied = _apply_pending(
+        session, plan, target=target, force=force, on_event=on_event, batch=batch
+    )
+    return _up_result(plan, applied, force=force)
 
+
+def _plan(
+    session: MigratorSession,
+    *,
+    force: bool,
+    verify_checksums: bool,
+    on_checksum_mismatch: str,
+    strict_mode: bool | None,
+    auto_baseline: Path | None,
+    install_view_helpers: bool | None,
+    on_event: UpObserver | None,
+) -> _Plan:
+    """Baseline, plan, view helpers, checksums and strict mode — the lock is held."""
     assert session._migrator is not None
     if auto_baseline is not None:
         _policy.auto_baseline(
@@ -107,45 +176,54 @@ def _up_under_lock(
             snapshots_dir=auto_baseline,
             on_event=on_event,
         )
-    pending_files, skipped_versions = session._plan_under_lock(force=force)
+    pending_files, skipped_versions = _plan_under_lock(session, force=force)
     if _policy.wants_view_helpers(install_view_helpers, session._config):
         _policy.install_view_helpers(session._conn, on_event)
-    checksums_verified, checksum_warnings = session._verify_checksums(
-        enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
+    checksums_verified, checksum_warnings = _verify_checksums(
+        session, enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
     )
     if checksums_verified:
         emit(on_event, "checksums_verified")
-    effective_strict = _policy.resolve_strict_mode(strict_mode, session._config)
     pending_versions: list[str] = []
     for migration_file in pending_files:
         version, name = parse_migration_filename(migration_file.name)
         pending_versions.append(version)
         emit(on_event, "pending", version=version, name=name)
+    return _Plan(
+        pending_files=pending_files,
+        skipped_versions=skipped_versions,
+        pending_versions=pending_versions,
+        checksums_verified=checksums_verified,
+        checksum_warnings=checksum_warnings,
+        strict=_policy.resolve_strict_mode(strict_mode, session._config),
+    )
 
-    # Dry-run: return without applying
+
+def _before_apply(
+    session: MigratorSession, plan: _Plan, *, dry_run: bool, require_reversible: bool
+) -> MigrateUpResult | None:
+    """The result ``up`` returns without applying anything, or ``None`` to go on."""
     if dry_run:
         return MigrateUpResult(
             success=True,
             migrations_applied=[],
             total_duration_ms=0,
-            checksums_verified=checksums_verified,
+            checksums_verified=plan.checksums_verified,
             dry_run=True,
-            skipped=skipped_versions,
-            warnings=checksum_warnings,
-            pending=pending_versions,
+            skipped=plan.skipped_versions,
+            warnings=plan.checksum_warnings,
+            pending=plan.pending_versions,
         )
-
-    if not pending_files:
+    if not plan.pending_files:
         return MigrateUpResult(
             success=True,
             migrations_applied=[],
             total_duration_ms=0,
-            checksums_verified=checksums_verified,
+            checksums_verified=plan.checksums_verified,
             dry_run=False,
-            skipped=skipped_versions,
-            warnings=checksum_warnings,
+            skipped=plan.skipped_versions,
+            warnings=plan.checksum_warnings,
         )
-
     # Reversibility gate — check before any SQL execution
     if require_reversible:
         preflight_result = session.preflight()
@@ -155,41 +233,34 @@ def _up_under_lock(
                 success=False,
                 migrations_applied=[],
                 total_duration_ms=0,
-                checksums_verified=checksums_verified,
+                checksums_verified=plan.checksums_verified,
                 dry_run=False,
                 errors=[
                     f"Irreversible migrations detected (missing .down.sql): {names}. "
                     f"Use require_reversible=False or add .down.sql files."
                 ],
-                skipped=skipped_versions,
+                skipped=plan.skipped_versions,
             )
+    return None
 
-    # SAVEPOINT-based dry-run execution
-    if dry_run_execute:
-        return session._up_dry_run_execute(
-            pending_files=pending_files,
-            target=target,
-            force=force,
-            checksums_verified=checksums_verified,
-            skipped_versions=skipped_versions,
-            checksum_warnings=checksum_warnings,
-            strict_mode=effective_strict,
-            on_event=on_event,
-            batch=batch,
-        )
 
-    migrations_applied: list[MigrationApplied] = []
-    skipped_superuser: list[SkippedMigration] = []
-    pending_after_halt: list[str] = []
-    total_duration_ms = 0
-    failed_exception: Exception | None = None
-    halted = False
-
+def _apply_pending(
+    session: MigratorSession,
+    plan: _Plan,
+    *,
+    target: str | None,
+    force: bool,
+    on_event: UpObserver | None,
+    batch: Any | None,
+) -> _Applied:
+    """Apply the pending files in order; stop at the target, a superuser halt or a failure."""
+    assert session._migrator is not None
+    applied = _Applied()
     try:
-        for idx, migration_file in enumerate(pending_files):
+        for idx, migration_file in enumerate(plan.pending_files):
             migration_class = session.migration_loader(migration_file)
             migration = migration_class(connection=session._conn)
-            _apply_strict_mode(migration, effective_strict)
+            _apply_strict_mode(migration, plan.strict)
             _apply_batch(migration, batch)
 
             # Stop at target version
@@ -206,7 +277,7 @@ def _up_under_lock(
             # test doubles don't accidentally trip the halt path.
             if getattr(migration, "requires_superuser", False) is True:
                 emit(on_event, "superuser_halt", version=migration.version, name=migration.name)
-                skipped_superuser.append(
+                applied.skipped_superuser.append(
                     SkippedMigration(
                         version=migration.version,
                         name=migration.name,
@@ -216,11 +287,11 @@ def _up_under_lock(
                         ),
                     )
                 )
-                pending_after_halt = [
+                applied.pending_after_halt = [
                     session._migrator._version_from_filename(f.name)
-                    for f in pending_files[idx + 1 :]
+                    for f in plan.pending_files[idx + 1 :]
                 ]
-                halted = True
+                applied.halted = True
                 break
 
             emit(on_event, "applying", version=migration.version, name=migration.name)
@@ -228,8 +299,8 @@ def _up_under_lock(
                 start = _time.time()
                 session._migrator.apply(migration, force=force, migration_file=migration_file)
                 elapsed = int((_time.time() - start) * 1000)
-                total_duration_ms += elapsed
-                migrations_applied.append(
+                applied.total_duration_ms += elapsed
+                applied.migrations.append(
                     MigrationApplied(
                         version=migration.version,
                         name=migration.name,
@@ -244,7 +315,7 @@ def _up_under_lock(
                     elapsed_ms=elapsed,
                 )
             except Exception as exc:  # Reason: a migration's up() is user code and may raise anything; the failure is recorded and reported
-                failed_exception = exc
+                applied.failure = exc
                 emit(
                     on_event,
                     "failed",
@@ -254,34 +325,37 @@ def _up_under_lock(
                 )
                 break
     except Exception as exc:  # Reason: loader/constructor of a user migration module may raise anything; recorded and reported
-        if failed_exception is None:
-            failed_exception = exc
+        if applied.failure is None:
+            applied.failure = exc
             emit(on_event, "failed", message=str(exc))
+    return applied
 
-    if failed_exception is not None:
+
+def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResult:
+    """The :class:`MigrateUpResult` for what the loop did."""
+    if applied.failure is not None:
         return MigrateUpResult(
             success=False,
-            migrations_applied=migrations_applied,
-            total_duration_ms=total_duration_ms,
-            checksums_verified=checksums_verified,
+            migrations_applied=applied.migrations,
+            total_duration_ms=applied.total_duration_ms,
+            checksums_verified=plan.checksums_verified,
             dry_run=False,
-            errors=[str(failed_exception)],
-            failure=failed_exception,
-            skipped=skipped_versions,
-            skipped_superuser=skipped_superuser,
-            pending=pending_after_halt,
+            errors=[str(applied.failure)],
+            failure=applied.failure,
+            skipped=plan.skipped_versions,
+            skipped_superuser=applied.skipped_superuser,
+            pending=applied.pending_after_halt,
         )
-
     return MigrateUpResult(
-        success=not halted,
-        migrations_applied=migrations_applied,
-        total_duration_ms=total_duration_ms,
-        checksums_verified=checksums_verified,
+        success=not applied.halted,
+        migrations_applied=applied.migrations,
+        total_duration_ms=applied.total_duration_ms,
+        checksums_verified=plan.checksums_verified,
         dry_run=False,
-        warnings=(["Force mode enabled"] if force else []) + checksum_warnings,
-        skipped=skipped_versions,
-        skipped_superuser=skipped_superuser,
-        pending=pending_after_halt,
+        warnings=(["Force mode enabled"] if force else []) + plan.checksum_warnings,
+        skipped=plan.skipped_versions,
+        skipped_superuser=applied.skipped_superuser,
+        pending=applied.pending_after_halt,
     )
 
 
@@ -298,11 +372,12 @@ def _up_dry_run_execute(
     on_event: UpObserver | None = None,
     batch: Any | None = None,
 ) -> MigrateUpResult:
-    """See :meth:`MigratorSession._up_dry_run_execute`."""
-    import time as _time
+    """Execute pending migrations inside a SAVEPOINT, then roll back.
 
-    from confiture.models.results import MigrateUpResult, MigrationApplied
-
+    This catches real SQL errors (syntax, constraints, type mismatches)
+    without persisting any changes. Non-transactional DDL (e.g. ``CREATE
+    INDEX CONCURRENTLY``) cannot run inside a SAVEPOINT and is skipped.
+    """
     # Invariant: this helper only runs inside an active session (callers guard).
     assert session._conn is not None
     assert session._migrator is not None
@@ -477,7 +552,8 @@ def up(
     with lock.acquire():
         if not no_lock:
             emit(on_event, "lock_acquired")
-        return session._up_under_lock(
+        return _up_under_lock(
+            session,
             target=target,
             dry_run=dry_run,
             dry_run_execute=dry_run_execute,
@@ -502,11 +578,7 @@ def apply_one(
     no_lock: bool = False,
 ) -> MigrationApplied:
     """See :meth:`MigratorSession.apply_one`."""
-    import time as _time
-
     import confiture.core.migrator as _m
-    from confiture.exceptions import ConfigurationError, MigrationError
-    from confiture.models.results import MigrationApplied
 
     if session._migrator is None:
         raise ConfigurationError(

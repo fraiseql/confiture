@@ -63,6 +63,17 @@ def test_budget_thresholds_are_the_plan_thresholds(measured) -> None:
     }
 
 
+def test_size_budgets_are_zero(measured) -> None:
+    """No function over 150 lines of code or McCabe 15 remains; the empty state is pinned."""
+    budgets, _actual = measured
+    over = {
+        dimension: budgets[dimension]
+        for dimension in ("function_length", "complexity")
+        if budgets[dimension]
+    }
+    assert over == {}, "size budgets are not empty:\n" + json.dumps(over, indent=2)
+
+
 def test_broad_except_total_is_under_the_phase_ceiling(measured) -> None:
     """The whole-package count came down in steps (207 → 137 → 94) and may only fall further."""
     _budgets, actual = measured

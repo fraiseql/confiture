@@ -8,7 +8,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 import typer
@@ -407,94 +407,100 @@ def _display_dependent_analysis(report: Any, cons: Any) -> None:
             cons.print(f"      - {dep.kind} [cyan]{dep.schema}.{dep.name}[/cyan]{cols}")
 
 
+MigrationsDirOpt = Annotated[
+    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
+]
+OutputFileOpt = Annotated[
+    Path | None, typer.Option("--output", "-o", help="Save output to file (default: stdout)")
+]
+AgainstOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--against",
+        help="PostgreSQL URL of the preflight database to test migrations against. "
+        "Typically seeded from pg_dump --schema-only. "
+        "Migrations are executed inside a transaction that is always rolled back.",
+    ),
+]
+ConfigOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--config",
+        "-c",
+        help="Config file for pending-migration detection. "
+        "Connects to the configured database to read the tracking table.",
+    ),
+]
+DatabaseUrlOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--database-url",
+        "-d",
+        help="PostgreSQL DSN of the tracking database for pending-migration "
+        "detection (distinct from --against, which is the throwaway target). "
+        "Takes precedence over --config / --env and the CONFITURE_DATABASE_URL "
+        "/ DATABASE_URL env vars.",
+    ),
+]
+EnvOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--env", help="Environment shortcut — db/environments/{name}.yaml (e.g. --env production)."
+    ),
+]
+NoConfigOpt = Annotated[bool, typer.Option("--no-config", help=NO_CONFIG_OPTION_HELP)]
+SinceOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--since",
+        help="Test migrations with version >= SINCE (e.g. --since 20260428000000). "
+        "Inclusive. Alternative to --config when no second DB connection is available.",
+    ),
+]
+AllowNonTransactionalOpt = Annotated[
+    bool,
+    typer.Option(
+        "--allow-non-transactional",
+        help="Run non-transactional migrations (CREATE INDEX CONCURRENTLY, etc.) "
+        "outside the rollback SAVEPOINT in autocommit mode. "
+        "The preflight DB will be permanently modified (db_consumed=True). "
+        "By default such migrations are skipped.",
+    ),
+]
+CheckDependentsOpt = Annotated[
+    str,
+    typer.Option(
+        "--check-dependents",
+        help="Enumerate live dependents of CREATE OR REPLACE targets via "
+        "pg_depend on the --against preflight DB. "
+        "'off' (default), 'fail' (exit 1 on dependents found), or "
+        "'warn' (render dependents as informational, exit code unchanged). "
+        "Requires the [ast] extra (pglast).",
+    ),
+]
+StrictOpt = Annotated[
+    bool,
+    typer.Option(
+        "--strict", help="Treat warnings as errors for exit purposes (warnings → exit 7)."
+    ),
+]
+
+
 @cli_boundary
 def migrate_preflight(
     ctx: typer.Context,
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
     format_type: str = format_option("table", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout)",
-    ),
-    against: str | None = typer.Option(
-        None,
-        "--against",
-        help=(
-            "PostgreSQL URL of the preflight database to test migrations against. "
-            "Typically seeded from pg_dump --schema-only. "
-            "Migrations are executed inside a transaction that is always rolled back."
-        ),
-    ),
-    config: Path | None = typer.Option(
-        None,
-        "--config",
-        "-c",
-        help=(
-            "Config file for pending-migration detection. "
-            "Connects to the configured database to read the tracking table."
-        ),
-    ),
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=(
-            "PostgreSQL DSN of the tracking database for pending-migration "
-            "detection (distinct from --against, which is the throwaway target). "
-            "Takes precedence over --config / --env and the CONFITURE_DATABASE_URL "
-            "/ DATABASE_URL env vars."
-        ),
-    ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        help="Environment shortcut — db/environments/{name}.yaml (e.g. --env production).",
-    ),
-    no_config: bool = typer.Option(
-        False,
-        "--no-config",
-        help=NO_CONFIG_OPTION_HELP,
-    ),
-    since: str | None = typer.Option(
-        None,
-        "--since",
-        help=(
-            "Test migrations with version >= SINCE (e.g. --since 20260428000000). "
-            "Inclusive. Alternative to --config when no second DB connection is available."
-        ),
-    ),
-    allow_non_transactional: bool = typer.Option(
-        False,
-        "--allow-non-transactional",
-        help=(
-            "Run non-transactional migrations (CREATE INDEX CONCURRENTLY, etc.) "
-            "outside the rollback SAVEPOINT in autocommit mode. "
-            "The preflight DB will be permanently modified (db_consumed=True). "
-            "By default such migrations are skipped."
-        ),
-    ),
-    check_dependents: str = typer.Option(
-        "off",
-        "--check-dependents",
-        help=(
-            "Enumerate live dependents of CREATE OR REPLACE targets via "
-            "pg_depend on the --against preflight DB. "
-            "'off' (default), 'fail' (exit 1 on dependents found), or "
-            "'warn' (render dependents as informational, exit code unchanged). "
-            "Requires the [ast] extra (pglast)."
-        ),
-    ),
-    strict: bool = typer.Option(
-        False,
-        "--strict",
-        help="Treat warnings as errors for exit purposes (warnings → exit 7).",
-    ),
+    output_file: OutputFileOpt = None,
+    against: AgainstOpt = None,
+    config: ConfigOpt = None,
+    database_url: DatabaseUrlOpt = None,
+    env: EnvOpt = None,
+    no_config: NoConfigOpt = False,
+    since: SinceOpt = None,
+    allow_non_transactional: AllowNonTransactionalOpt = False,
+    check_dependents: CheckDependentsOpt = "off",
+    strict: StrictOpt = False,
 ) -> None:
     """Check if pending migrations are safe to deploy.
 
