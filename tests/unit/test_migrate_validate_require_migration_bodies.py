@@ -50,7 +50,7 @@ def _invoke(args, report):
 
 
 # ---------------------------------------------------------------------------
-# --require-migration-bodies (enforce)
+# `--require-migration-bodies` in enforcing mode
 # ---------------------------------------------------------------------------
 
 

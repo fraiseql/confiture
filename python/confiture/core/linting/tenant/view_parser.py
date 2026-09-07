@@ -250,12 +250,12 @@ class ViewParser:
 
         for join in joins:
             if join.right_alias == tenant_source_alias:
-                # Found: main_table.fk_col = tenant_table.pk_col
+                # Found the join of main_table.fk_col to tenant_table.pk_col.
                 required_fk = join.left_column
                 source_alias = join.left_alias
                 break
             elif join.left_alias == tenant_source_alias:
-                # Found: tenant_table.pk_col = main_table.fk_col
+                # Found the join of tenant_table.pk_col to main_table.fk_col.
                 required_fk = join.right_column
                 source_alias = join.right_alias
                 break

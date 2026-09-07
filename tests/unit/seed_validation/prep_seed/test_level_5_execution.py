@@ -259,7 +259,7 @@ class TestLevel5ConstraintValidation:
         # Mock database with NOT NULL violations
         mock_conn = MagicMock()
         mock_result = MagicMock()
-        # Returns: (table, column, count_nulls)
+        # Each returned row is table, column, count_nulls.
         mock_result.fetchall.return_value = [
             ("tb_product", "name", 3),  # 3 NULL values in required field
             ("tb_product", "created_at", 1),  # 1 NULL in created_at
@@ -284,7 +284,7 @@ class TestLevel5ConstraintValidation:
         # Mock database with CHECK constraint violations
         mock_conn = MagicMock()
         mock_result = MagicMock()
-        # Returns: (table, constraint, count_violations)
+        # Each returned row is table, constraint, count_violations.
         mock_result.fetchall.return_value = [
             ("tb_product", "price_positive", 5),  # 5 rows with price <= 0
             ("tb_order", "qty_gt_zero", 2),  # 2 rows with qty <= 0
@@ -308,7 +308,7 @@ class TestLevel5ConstraintValidation:
         # Mock database with FK violations (pointing to non-existent rows)
         mock_conn = MagicMock()
         mock_result = MagicMock()
-        # Returns: (table, fk_column, referenced_table, count_violations)
+        # Each returned row is table, fk_column, referenced_table, count_violations.
         mock_result.fetchall.return_value = [
             ("tb_product", "fk_manufacturer", "tb_manufacturer", 3),
             ("tb_order", "fk_customer", "tb_customer", 1),

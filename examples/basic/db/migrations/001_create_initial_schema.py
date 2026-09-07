@@ -93,5 +93,5 @@ class CreateInitialSchema(Migration):
         self.execute("DROP TABLE IF EXISTS posts CASCADE")
         self.execute("DROP TABLE IF EXISTS users CASCADE")
 
-        # Drop extension (optional - may be used by other tables)
-        # self.execute('DROP EXTENSION IF EXISTS "uuid-ossp"')
+        # Dropping the extension is optional — other tables may use it. If nothing
+        # else does, execute `DROP EXTENSION IF EXISTS "uuid-ossp"` here as well.

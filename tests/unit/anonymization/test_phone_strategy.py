@@ -75,7 +75,7 @@ class TestPhoneMaskingStrategy:
     def test_number_suffix_is_4_digits(self, strategy_default):
         """Test number suffix is exactly 4 digits."""
         result = strategy_default.anonymize("+1-202-555-0123")
-        # Format is +1-555-{number}
+        # The result has the form `+1-555-<number>`.
         suffix = result.split("-")[-1]
         assert len(suffix) == 4
         assert suffix.isdigit()

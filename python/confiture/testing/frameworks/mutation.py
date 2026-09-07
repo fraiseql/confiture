@@ -115,7 +115,7 @@ class Mutation:
             return self.apply_fn(sql)
         elif self.apply_regex:
             # Simple regex-based mutations
-            # Format: "pattern=>replacement"
+            # Written as `pattern=>replacement`.
             parts = self.apply_regex.split("=>")
             if len(parts) == 2:
                 pattern, replacement = parts

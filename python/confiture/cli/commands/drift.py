@@ -187,7 +187,7 @@ def drift(
         if format_output == "json":
             payload = drift_report.to_dict()
             # `hints` is pre-allocated per the documented JSON-schema contract
-            # (docs/reference/json-schemas/drift.schema.json). Currently
+            # — see docs/reference/json-schemas/drift.schema.json. Currently
             # always empty; the contract guarantees the key exists so
             # agents can read `payload["hints"]` without a defensive get().
             payload["hints"] = []

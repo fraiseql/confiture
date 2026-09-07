@@ -214,6 +214,7 @@ select = [
     "ARG", # flake8-unused-arguments
     "SIM", # flake8-simplify
     "RUF",  # ruff-specific rules (Phase 11, D6); RUF100 alone since Phase 08
+    "ERA",  # commented-out code (Phase 11, D6): prose comments that parse as code are reworded
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)

@@ -50,7 +50,7 @@ def test_dry_run_api_documents_real_dry_run_result_fields() -> None:
     """dry-run-api.md lists the real DryRunResult fields and none of the fictional ones."""
     text = read_doc(DRY_RUN_DOC)
     real_fields = {f.name for f in dataclasses.fields(DryRunResult)}
-    # {"migration_name", "success", "total_time_ms", "confidence_pct", "statements", "error"}
+    # Today: migration_name, success, total_time_ms, confidence_pct, statements, error.
     for field_name in real_fields:
         assert field_name in text, f"dry-run-api.md omits real DryRunResult field {field_name!r}"
 

@@ -265,7 +265,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         Returns:
             Scale for noise distribution
         """
-        # Scale = Δf / ε
+        # The scale is Δf / ε,
         # Where Δf is sensitivity, ε is privacy budget
         scale = self.config.sensitivity / self.config.epsilon
 
@@ -282,7 +282,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         """
         if self.config.mechanism == "laplace":
             # Laplace distribution: symmetric around 0
-            # Variance = 2 * scale^2
+            # with variance 2 · scale².
             u = random.uniform(-0.5, 0.5)
             noise = (
                 -scale

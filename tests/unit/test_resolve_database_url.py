@@ -56,7 +56,7 @@ def test_malformed_flag_dsn_raises_config_003(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 # Issue #152 — the secure precedence contract (0.20.0, flagged-breaking).
 #
-# Contract: "explicit-and-singular wins; ambiguity fails loud."
+# The contract: explicit-and-singular wins; ambiguity fails loud.
 #   a) --database-url flag                              → flag
 #   b) explicit --config/--env AND CONFITURE_DATABASE_URL both present → CONFIG_007
 #   c) explicit --config/--env only                    → config (None)

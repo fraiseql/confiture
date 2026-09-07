@@ -201,7 +201,7 @@ def bootstrap(
             _render_dry_run(plan, output_format)
             raise typer.Exit(0)  # success-signal: plan rendered, no side effects
 
-        # mode == "apply"
+        # Otherwise the mode is "apply".
         executor = BootstrapExecutor()
         try:
             result = executor.apply(plan, conn)
