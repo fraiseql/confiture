@@ -5,11 +5,10 @@
 name: local
 database_url: postgresql://postgres:postgres@localhost:5432/fraiseql_blog
 
-# Include directories (processed in order)
+# Include directories (files are applied in sorted path order, so the numbered
+# subdirectories under db/schema/ already give extensions → tables → indexes)
 include_dirs:
-  - db/schema/00_extensions
-  - db/schema/10_tables
-  - db/schema/20_indexes
+  - db/schema
 
 # Exclude directories (optional)
 exclude_dirs: []
