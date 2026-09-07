@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -29,67 +30,73 @@ from confiture.exceptions import ValidationError
 _MIGRATION_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
-@cli_boundary
-def migrate_generate(
-    name: str = typer.Argument(..., help="Migration name (snake_case)"),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
+NameOpt = Annotated[str, typer.Argument(help="Migration name (snake_case)")]
+MigrationsDirOpt = Annotated[
+    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
+]
+ForceOpt = Annotated[
+    bool, typer.Option("--force", help="Overwrite existing migration file (default: off)")
+]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option("--dry-run", help="Show what would be generated without creating (default: off)"),
+]
+VerboseOpt = Annotated[
+    bool, typer.Option("--verbose", "-v", help="Show version calculation details (default: off)")
+]
+FromSchemaOpt = Annotated[
+    Path | None, typer.Option("--from", help="Old schema file path (required with --generator)")
+]
+ToSchemaOpt = Annotated[
+    Path | None, typer.Option("--to", help="New schema file path (required with --generator)")
+]
+GeneratorOpt = Annotated[
+    str | None,
+    typer.Option("--generator", help="Named external generator from migration_generators config"),
+]
+ConfigOpt = Annotated[
+    Path,
+    typer.Option(
+        "--config", "-c", help="Environment config file (default: db/environments/local.yaml)"
     ),
-    format_output: str = format_option("text", "json"),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Overwrite existing migration file (default: off)",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Show what would be generated without creating (default: off)",
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show version calculation details (default: off)",
-    ),
-    from_schema: Path | None = typer.Option(
-        None,
-        "--from",
-        help="Old schema file path (required with --generator)",
-    ),
-    to_schema: Path | None = typer.Option(
-        None,
-        "--to",
-        help="New schema file path (required with --generator)",
-    ),
-    generator: str | None = typer.Option(
-        None,
-        "--generator",
-        help="Named external generator from migration_generators config",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Environment config file (default: db/environments/local.yaml)",
-    ),
-    snapshot: bool | None = typer.Option(
-        None,
+]
+SnapshotOpt = Annotated[
+    bool | None,
+    typer.Option(
         "--snapshot/--no-snapshot",
         help="Write schema history snapshot (default: from config, True)",
     ),
-    snapshots_dir: Path | None = typer.Option(
-        None,
-        "--snapshots-dir",
-        help="Override snapshot output directory (default: db/schema_history)",
+]
+SnapshotsDirOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--snapshots-dir", help="Override snapshot output directory (default: db/schema_history)"
     ),
-    live_snapshot: bool | None = typer.Option(
-        None,
+]
+LiveSnapshotOpt = Annotated[
+    bool | None,
+    typer.Option(
         "--live-snapshot/--no-live-snapshot",
         help="Snapshot via temp database + pg_dump (captures DO-block objects)",
     ),
+]
+
+
+@cli_boundary
+def migrate_generate(
+    name: NameOpt = ...,
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    format_output: str = format_option("text", "json"),
+    force: ForceOpt = False,
+    dry_run: DryRunOpt = False,
+    verbose: VerboseOpt = False,
+    from_schema: FromSchemaOpt = None,
+    to_schema: ToSchemaOpt = None,
+    generator: GeneratorOpt = None,
+    config: ConfigOpt = Path("db/environments/local.yaml"),
+    snapshot: SnapshotOpt = None,
+    snapshots_dir: SnapshotsDirOpt = None,
+    live_snapshot: LiveSnapshotOpt = None,
 ) -> None:
     """Generate a new migration file with timestamp-based version.
 
