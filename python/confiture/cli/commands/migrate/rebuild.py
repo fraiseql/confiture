@@ -8,6 +8,7 @@ from __future__ import annotations
 import json as json_module
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -16,51 +17,39 @@ from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, MigrationError
 
+ConfigOpt = Annotated[
+    Path,
+    typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
+]
+MigrationsDirOpt = Annotated[
+    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
+]
+DropSchemasOpt = Annotated[
+    bool, typer.Option("--drop-schemas", help="Drop all user schemas before rebuild")
+]
+SeedOpt = Annotated[bool, typer.Option("--seed", help="Apply seed files after DDL rebuild")]
+BackupTrackingOpt = Annotated[
+    bool, typer.Option("--backup-tracking", help="Dump tracking table to JSON before clearing")
+]
+VerifyOpt = Annotated[
+    bool, typer.Option("--verify", help="Run status check after rebuild to confirm 0 pending")
+]
+DryRunOpt = Annotated[
+    bool, typer.Option("--dry-run", help="Show what would happen without making changes")
+]
+YesOpt = Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")]
+
 
 @cli_boundary
 def migrate_rebuild(
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    drop_schemas: bool = typer.Option(
-        False,
-        "--drop-schemas",
-        help="Drop all user schemas before rebuild",
-    ),
-    seed: bool = typer.Option(
-        False,
-        "--seed",
-        help="Apply seed files after DDL rebuild",
-    ),
-    backup_tracking: bool = typer.Option(
-        False,
-        "--backup-tracking",
-        help="Dump tracking table to JSON before clearing",
-    ),
-    verify: bool = typer.Option(
-        False,
-        "--verify",
-        help="Run status check after rebuild to confirm 0 pending",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Show what would happen without making changes",
-    ),
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        help="Skip confirmation prompt",
-    ),
+    config: ConfigOpt = Path("db/environments/local.yaml"),
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    drop_schemas: DropSchemasOpt = False,
+    seed: SeedOpt = False,
+    backup_tracking: BackupTrackingOpt = False,
+    verify: VerifyOpt = False,
+    dry_run: DryRunOpt = False,
+    yes: YesOpt = False,
     format_output: str = format_option("text", "json"),
 ) -> None:
     """Rebuild database from DDL schema and bootstrap tracking table.
