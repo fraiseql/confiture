@@ -52,6 +52,14 @@ def _down_for(up_file: Path) -> Path:
     return up_file.with_name(up_file.name[: -len(".up.sql")] + ".down.sql")
 
 
+def _detect_destructive(up_file: Path) -> bool:
+    """Whether the ``.up.sql`` carries the ``-- confiture:destructive`` gate directive."""
+    # Reason: import cycle — confiture.core.__init__ → _migrator.session → this module
+    from confiture.core.destructive import is_gated
+
+    return is_gated(up_file.read_text(encoding="utf-8"))
+
+
 def _detect_transactional(up_file: Path) -> bool:
     """Return ``False`` when a SQL migration must run outside a transaction.
 
@@ -145,6 +153,7 @@ class FileSQLMigration(Migration):
             self.down_file = down_file if down_file is not None else _down_for(up_file)
             self.version, self.name = parse_migration_filename(up_file.name)
             self.transactional = _detect_transactional(up_file)
+            self.destructive = _detect_destructive(up_file)
         if not self.up_file.exists():
             raise FileNotFoundError(f"Migration up file not found: {self.up_file}")
         if not self.down_file.exists():
@@ -242,6 +251,7 @@ class FileSQLMigration(Migration):
                 # (same analyzer as the static preflight check) so `migrate up`
                 # applies it in autocommit and `preflight --against` skips it.
                 "transactional": _detect_transactional(up_file),
+                "destructive": _detect_destructive(up_file),
             },
         )
 

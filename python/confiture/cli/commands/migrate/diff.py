@@ -16,12 +16,14 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
+from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core.desired_state import DesiredStateSource, load_desired_state
+from confiture.core.destructive import data_loss_reason, resolve_policy
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
-from confiture.exceptions import ValidationError
+from confiture.exceptions import DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
 
@@ -67,6 +69,16 @@ def migrate_diff(
         help="Migrations directory (default: db/migrations)",
     ),
     format_type: str = format_option("text", "json", "csv"),
+    allow_destructive: bool = typer.Option(
+        False,
+        "--allow-destructive",
+        help="Write data-losing DDL unmarked, whatever migration.destructive says",
+    ),
+    forbid_destructive: bool = typer.Option(
+        False,
+        "--forbid-destructive",
+        help="Refuse to generate a migration that loses data (exit 5, DIFFER_401)",
+    ),
     report_file: Path | None = typer.Option(
         None,
         "--report",
@@ -113,8 +125,16 @@ def migrate_diff(
 
         # Convert changes to SchemaChange objects
 
-        changes = [MigrateDiffChange(change.type, str(change)) for change in diff.changes]
+        changes = [
+            MigrateDiffChange(
+                change.type,
+                str(change),
+                irreversible_reason=data_loss_reason(change),
+            )
+            for change in diff.changes
+        ]
         migration_file_name = None
+        policy: str | None = None
 
         # Handle migration generation if requested
         if generate:
@@ -136,11 +156,21 @@ def migrate_diff(
             # Generate migration
             generator = MigrationGenerator(migrations_dir=migrations_dir)
             ingest = from_ is not None or to is not None
-            migration_file = (
-                generator.generate_sql(diff, name=name)
-                if ingest
-                else generator.generate(diff, name=name)
+            policy = _destructive_policy(
+                config,
+                allow=allow_destructive,
+                forbid=forbid_destructive,
+                json_mode=is_json(format_type),
+                report=report_file,
             )
+            try:
+                migration_file = (
+                    generator.generate_sql(diff, name=name, destructive=policy)
+                    if ingest
+                    else generator.generate(diff, name=name, destructive=policy)
+                )
+            except DifferError as exc:  # the gate's refusal (DIFFER_401) carries its own code
+                fail(exc, json_mode=is_json(format_type), output_file=report_file)
             migration_file_name = migration_file.name
 
         # Create result and format output
@@ -151,6 +181,7 @@ def migrate_diff(
             migration_generated=generate and migration_file_name is not None,
             migration_file=migration_file_name,
             source=desired.describe(),
+            destructive_gate=policy,
         )
 
         format_migrate_diff_result(result, format_type, report_file, console)
@@ -233,3 +264,21 @@ def _read_current(spec: str, config: Path) -> str:
             pg_dump_schema(_core_connection.dsn_from_config(_core_connection.load_config(config)))
         )
     return load_desired_state(spec).read()
+
+
+def _destructive_policy(
+    config: Path, *, allow: bool, forbid: bool, json_mode: bool, report: Path | None
+) -> str:
+    """The gate policy for this run: the flags, else ``migration.destructive`` from ``config``.
+
+    A missing config file (the positional form needs none) means the default,
+    ``gated``. Both flags at once is a validation error (exit 5).
+    """
+    configured = "gated"
+    if config.exists():
+        migration = _core_connection.load_config(config).get("migration") or {}
+        configured = MigrationConfig.model_validate(migration).destructive
+    try:
+        return resolve_policy(configured, allow=allow, forbid=forbid)
+    except ValidationError as exc:
+        fail(exc, json_mode=json_mode, output_file=report)

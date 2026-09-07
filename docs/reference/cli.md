@@ -1070,6 +1070,8 @@ confiture migrate diff [OPTIONS] [OLD_SCHEMA] [NEW_SCHEMA]
 | `--name` | - | text | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--allow-destructive` | - | Flag | off | Write data-losing DDL unmarked, whatever migration.destructive says |
+| `--forbid-destructive` | - | Flag | off | Refuse to generate a migration that loses data (exit 5, DIFFER_401) |
 | `--report` | `-o` | path | - | Save report to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate diff -->
@@ -1241,6 +1243,7 @@ confiture migrate up [OPTIONS]
 | `--auto-detect-baseline` | - | Flag | off | Introspect DB and self-baseline if tb_confiture is missing (default: off) |
 | `--snapshots-dir` | - | path | - | Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history) |
 | `--require-reversible` | - | Flag | off | Abort if any pending migration lacks a .down.sql file (guarantees rollback capability). |
+| `--allow-destructive` | - | Flag | off | Apply migrations gated as destructive (data is lost): the generator's -- confiture:destructive directive, or destructive = True on a Python migration. |
 | `--batched` | - | Flag | off | Use batch processing for large-table operations (default: off) |
 | `--batch-size` | - | integer | `10000` | Rows per batch when --batched is active (default: 10000) |
 | `--batch-sleep` | - | float | `0.1` | Seconds to sleep between batches to reduce lock pressure (default: 0.1) |

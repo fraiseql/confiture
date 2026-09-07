@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 import time as _time
 
-import confiture.core.migrator as _m
 from confiture.core._migrator.rollback_planner import (
     REASON_IRREVERSIBLE,
     REASON_TARGET_NEWER,
@@ -111,6 +110,10 @@ def down(
     command: str | None = None,
 ) -> MigrateDownResult:
     """See :meth:`MigratorSession.down`."""
+    # Bound at call time through the module, so a test that patches
+    # confiture.core.migrator.<name> still holds.
+    # Reason: import cycle — session → apply_loop → migrator → session
+    import confiture.core.migrator as _m
 
     if session._migrator is None:
         raise ConfigurationError(
@@ -155,6 +158,10 @@ def down_to(
     command: str | None = None,
 ) -> DownToResult:
     """See :meth:`MigratorSession.down_to`."""
+    # Bound at call time through the module, so a test that patches
+    # confiture.core.migrator.<name> still holds.
+    # Reason: import cycle — session → apply_loop → migrator → session
+    import confiture.core.migrator as _m
 
     if session._migrator is None:
         raise ConfigurationError(

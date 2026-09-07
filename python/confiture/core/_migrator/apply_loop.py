@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import confiture.core.migrator as _m
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
@@ -20,7 +19,7 @@ from confiture.core.checksum import (
     ChecksumMismatchBehavior,
     MigrationChecksumVerifier,
 )
-from confiture.exceptions import ConfigurationError, MigrationError
+from confiture.exceptions import ConfigurationError, MigrationError, ValidationError
 from confiture.models.results import MigrateUpResult, MigrationApplied, SkippedMigration
 
 if TYPE_CHECKING:
@@ -93,6 +92,14 @@ class _Plan:
     checksums_verified: bool
     checksum_warnings: list[str]
     strict: bool
+    loaded: dict[Path, type] = field(default_factory=dict)  # each file's class, loaded once
+
+
+def _migration_class(session: MigratorSession, plan: _Plan, path: Path) -> type:
+    """The migration class for ``path``, loaded once per ``up`` and shared by every step."""
+    if path not in plan.loaded:
+        plan.loaded[path] = session.migration_loader(path)
+    return plan.loaded[path]
 
 
 @dataclass
@@ -110,6 +117,7 @@ class _Applied:
 def _up_under_lock(
     session: MigratorSession,
     *,
+    allow_destructive: bool,
     target: str | None,
     dry_run: bool,
     dry_run_execute: bool,
@@ -134,21 +142,19 @@ def _up_under_lock(
         install_view_helpers=install_view_helpers,
         on_event=on_event,
     )
-    early = _before_apply(session, plan, dry_run=dry_run, require_reversible=require_reversible)
+    early = _before_apply(
+        session,
+        plan,
+        dry_run=dry_run,
+        require_reversible=require_reversible,
+        allow_destructive=allow_destructive,
+        target=target,
+    )
     if early is not None:
         return early
     if dry_run_execute:
         return _up_dry_run_execute(
-            session,
-            pending_files=plan.pending_files,
-            target=target,
-            force=force,
-            checksums_verified=plan.checksums_verified,
-            skipped_versions=plan.skipped_versions,
-            checksum_warnings=plan.checksum_warnings,
-            strict_mode=plan.strict,
-            on_event=on_event,
-            batch=batch,
+            session, plan, target=target, force=force, on_event=on_event, batch=batch
         )
     applied = _apply_pending(
         session, plan, target=target, force=force, on_event=on_event, batch=batch
@@ -201,7 +207,13 @@ def _plan(
 
 
 def _before_apply(
-    session: MigratorSession, plan: _Plan, *, dry_run: bool, require_reversible: bool
+    session: MigratorSession,
+    plan: _Plan,
+    *,
+    dry_run: bool,
+    require_reversible: bool,
+    allow_destructive: bool = False,
+    target: str | None = None,
 ) -> MigrateUpResult | None:
     """The result ``up`` returns without applying anything, or ``None`` to go on."""
     if dry_run:
@@ -242,6 +254,20 @@ def _before_apply(
                 ],
                 skipped=plan.skipped_versions,
             )
+    # Destructive gate — a migration that loses data needs the operator's word
+    if not allow_destructive:
+        gated = [
+            path.name
+            for path, version in zip(plan.pending_files, plan.pending_versions, strict=True)
+            if not (target and version > target)
+            and getattr(_migration_class(session, plan, path), "destructive", False) is True
+        ]
+        if gated:
+            raise ValidationError(
+                "Destructive migration refused: data is lost when it applies: " + ", ".join(gated),
+                error_code="VALID_002",
+                resolution_hint="Review the migration, then run migrate up --allow-destructive",
+            )
     return None
 
 
@@ -259,7 +285,7 @@ def _apply_pending(
     applied = _Applied()
     try:
         for idx, migration_file in enumerate(plan.pending_files):
-            migration_class = session.migration_loader(migration_file)
+            migration_class = _migration_class(session, plan, migration_file)
             migration = migration_class(connection=session._conn)
             _apply_strict_mode(migration, plan.strict)
             _apply_batch(migration, batch)
@@ -362,14 +388,10 @@ def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResul
 
 def _up_dry_run_execute(
     session: MigratorSession,
+    plan: _Plan,
     *,
-    pending_files: list[Path],
     target: str | None,
     force: bool,
-    checksums_verified: bool,
-    skipped_versions: list[str],
-    checksum_warnings: list[str],
-    strict_mode: bool = False,
     on_event: UpObserver | None = None,
     batch: Any | None = None,
 ) -> MigrateUpResult:
@@ -390,10 +412,10 @@ def _up_dry_run_execute(
     try:
         session._conn.execute("SAVEPOINT dry_run_execute")
         try:
-            for migration_file in pending_files:
-                migration_class = session.migration_loader(migration_file)
+            for migration_file in plan.pending_files:
+                migration_class = _migration_class(session, plan, migration_file)
                 migration = migration_class(connection=session._conn)
-                _apply_strict_mode(migration, strict_mode)
+                _apply_strict_mode(migration, plan.strict)
                 _apply_batch(migration, batch)
 
                 if target and migration.version > target:
@@ -408,9 +430,9 @@ def _up_dry_run_execute(
                 if not getattr(migration, "transactional", True):
                     # Cannot run inside the SAVEPOINT: the autocommit path
                     # would commit everything tested so far.
-                    skipped_versions.append(migration.version)
-                    checksum_warnings = [
-                        *checksum_warnings,
+                    plan.skipped_versions.append(migration.version)
+                    plan.checksum_warnings = [
+                        *plan.checksum_warnings,
                         f"dry_run_execute: skipped {migration.version}_{migration.name} — "
                         "non-transactional migrations cannot run inside a SAVEPOINT",
                     ]
@@ -469,25 +491,25 @@ def _up_dry_run_execute(
             success=False,
             migrations_applied=migrations_tested,
             total_duration_ms=total_time,
-            checksums_verified=checksums_verified,
+            checksums_verified=plan.checksums_verified,
             dry_run=True,
             dry_run_execute=True,
             errors=[str(failed_exception)],
             failure=failed_exception,
-            skipped=skipped_versions,
+            skipped=plan.skipped_versions,
         )
 
     return MigrateUpResult(
         success=True,
         migrations_applied=migrations_tested,
         total_duration_ms=total_time,
-        checksums_verified=checksums_verified,
+        checksums_verified=plan.checksums_verified,
         dry_run=True,
         dry_run_execute=True,
-        skipped=skipped_versions,
+        skipped=plan.skipped_versions,
         warnings=[
             "dry_run_execute: all SQL executed successfully, changes rolled back",
-            *checksum_warnings,
+            *plan.checksum_warnings,
         ],
     )
 
@@ -510,6 +532,7 @@ def up(
     lock_timeout: int = 30000,
     no_lock: bool = False,
     require_reversible: bool = False,
+    allow_destructive: bool = False,
     strict_mode: bool | None = None,
     auto_baseline: Path | None = None,
     install_view_helpers: bool | None = None,
@@ -517,6 +540,10 @@ def up(
     batch: Any | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
+    # Bound at call time through the module, so a test that patches
+    # confiture.core.migrator.<name> still holds.
+    # Reason: import cycle — session → apply_loop → migrator → session
+    import confiture.core.migrator as _m
 
     # Import through confiture.core.migrator so tests can patch
     # confiture.core.migrator.load_migration_class and confiture.core.migrator.MigrationLock.
@@ -553,6 +580,7 @@ def up(
             emit(on_event, "lock_acquired")
         return _up_under_lock(
             session,
+            allow_destructive=allow_destructive,
             target=target,
             dry_run=dry_run,
             dry_run_execute=dry_run_execute,
@@ -577,6 +605,10 @@ def apply_one(
     no_lock: bool = False,
 ) -> MigrationApplied:
     """See :meth:`MigratorSession.apply_one`."""
+    # Bound at call time through the module, so a test that patches
+    # confiture.core.migrator.<name> still holds.
+    # Reason: import cycle — session → apply_loop → migrator → session
+    import confiture.core.migrator as _m
 
     if session._migrator is None:
         raise ConfigurationError(

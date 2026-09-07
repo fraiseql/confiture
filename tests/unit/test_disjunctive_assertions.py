@@ -18,7 +18,7 @@ from pathlib import Path
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 
 # Lower this number when you pin or explain a disjunctive assertion. Never raise it.
-BASELINE = 181
+BASELINE = 179
 
 
 def find_uncommented_disjunctions(root: Path) -> list[str]:

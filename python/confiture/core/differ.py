@@ -128,6 +128,16 @@ _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
 
 
+def _column_definition(column: Column) -> str:
+    """The column's definition without its name — what ``ADD COLUMN`` takes after the name."""
+    parts = [column.raw_sql_type or column.type.value]
+    if not column.nullable:
+        parts.append("NOT NULL")
+    if column.default is not None:
+        parts.append(f"DEFAULT {column.default}")
+    return " ".join(parts)
+
+
 def _column_details(table: Table) -> list[dict[str, Any]]:
     """The columns of ``table`` in the shape ``DifferSQLGenerator`` renders a ``CREATE TABLE`` from."""
     return [
@@ -344,11 +354,9 @@ class SchemaDiffer:
                 return f"'{val.sval}'"
             if vtype == "Boolean":
                 return "true" if val.boolval else "false"
-        if ntype == "FuncCall":
-            funcnames = [n.sval for n in (raw_expr.funcname or [])]
-            return ".".join(funcnames) + "()"
-        # TypeCast, ColumnRef, or other complex expression — non-None signals presence
-        return "expression"
+        # A call, a cast, a column reference: the expression as PostgreSQL would
+        # print it, arguments included, so a down file can write the default back.
+        return RawStream()(raw_expr)
 
     # ------------------------------------------------------------------
     # sqlparse-based CREATE TABLE parser (fallback when pglast not installed)
@@ -458,7 +466,11 @@ class SchemaDiffer:
             new_table_names.discard(new_name)
 
         changes.extend(
-            SchemaChange(type="DROP_TABLE", table=table_name)
+            SchemaChange(
+                type="DROP_TABLE",
+                table=table_name,
+                details={"columns": _column_details(old_table_map[table_name])},
+            )
             for table_name in sorted(old_table_names - new_table_names)
         )
 
@@ -530,12 +542,22 @@ class SchemaDiffer:
             new_col_names.discard(new_name)
 
         changes.extend(
-            SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name)
+            SchemaChange(
+                type="DROP_COLUMN",
+                table=old_table.name,
+                column=col_name,
+                old_value=_column_definition(old_col_map[col_name]),
+            )
             for col_name in sorted(old_col_names - new_col_names)
         )
 
         changes.extend(
-            SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name)
+            SchemaChange(
+                type="ADD_COLUMN",
+                table=old_table.name,
+                column=col_name,
+                new_value=_column_definition(new_col_map[col_name]),
+            )
             for col_name in sorted(new_col_names - old_col_names)
         )
 

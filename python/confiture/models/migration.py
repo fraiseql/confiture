@@ -164,6 +164,11 @@ class Migration(ABC):
     # `MigratorSession.up()` halts at the first migration with this set;
     # the operator resolves with `confiture migrate apply-as <role>`.
     requires_superuser: bool = False
+    # A migration that loses data (a dropped table or column, a narrowed type).
+    # ``migrate up`` refuses it unless run with ``--allow-destructive``; the
+    # generator sets it under the ``gated`` policy, a SQL migration carries it
+    # as the ``-- confiture:destructive`` directive.
+    destructive: bool = False
     # ``confiture migrate up --batched --batch-size N --batch-sleep S`` hands the
     # session a BatchConfig; the session sets it here before ``up()`` runs so a
     # migration using ``BatchedMigration(self.connection, self.batch_config)``

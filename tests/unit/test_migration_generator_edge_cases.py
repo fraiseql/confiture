@@ -99,7 +99,7 @@ class TestMigrationGeneratorEdgeCases:
         # Test DROP_COLUMN (reverse is ADD - warning)
         change = SchemaChange(type="DROP_COLUMN", table="users", column="old_field")
         sql = generator._change_to_down_sql(change)
-        assert "WARNING" in sql or "Add back column manually" in sql
+        assert sql is None  # nothing to restore from without the column definition
 
         # Test RENAME_COLUMN (reverse names)
         change = SchemaChange(
@@ -114,7 +114,7 @@ class TestMigrationGeneratorEdgeCases:
         # Test DROP_TABLE (reverse is warning)
         change = SchemaChange(type="DROP_TABLE", table="old_table")
         sql = generator._change_to_down_sql(change)
-        assert "WARNING" in sql or "Recreate table manually" in sql
+        assert sql is None  # nothing to recreate from without the columns
 
     def test_generate_migration_with_complex_diff(self, tmp_path):
         """Test generating migration with multiple complex changes."""

@@ -7,15 +7,18 @@ Each migration file contains up() and down() methods with the necessary SQL.
 import fcntl
 import shlex
 import subprocess
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
+from confiture.core.risk_tier import RiskTier, worst_tier
+from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
+from confiture.exceptions import DifferError, ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
 
@@ -24,6 +27,33 @@ def _execute_call(sql: str) -> str:
     if "\n" in sql or '"' in sql:
         return f'        self.execute("""{sql}""")'
     return f'        self.execute("{sql}")'
+
+
+def _restore_column(change: SchemaChange) -> str | None:
+    """``ADD COLUMN`` with the definition the differ captured, or nothing to restore from."""
+    if not change.old_value:
+        return None
+    return f"ALTER TABLE {change.table} ADD COLUMN {change.column} {change.old_value}"
+
+
+def _tier_of(statement: str) -> RiskTier | None:
+    """The tier the change-set classifier — the one ``migrate preflight`` runs — gives ``statement``."""
+    return worst_tier(entry.tier for entry in classify_statements(statement))
+
+
+def _with_tier(statement: str, *, floor: RiskTier | None = None) -> str:
+    """Prefix ``statement`` with its tier directive.
+
+    Read from the same classifier as preflight, so the file and the report
+    never disagree; ``floor`` raises it (a statement nothing can undo is
+    ``irreversible`` whatever its DDL says). A statement the classifier cannot
+    tier (a bare comment, SQL it cannot parse) gets no directive: five tiers,
+    no "unknown".
+    """
+    tier = worst_tier((_tier_of(statement), floor))
+    if tier is None:
+        return statement
+    return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
 
 
 def _terminated(sql: str) -> str:
@@ -53,7 +83,14 @@ class MigrationGenerator:
         # Non-destructive generator — destructive ops emit warning comments instead of raising
         self._sql_gen = DifferSQLGenerator(force_destructive=False)
 
-    def generate(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
+    def generate(
+        self,
+        diff: SchemaDiff,
+        name: str,
+        *,
+        version: str | None = None,
+        destructive: str = "gated",
+    ) -> Path:
         """Generate migration file from schema diff.
 
         Args:
@@ -70,6 +107,7 @@ class MigrationGenerator:
         """
         if not diff.has_changes():
             raise ValueError("No changes to generate migration from")
+        gated = self._gate(diff, destructive)
 
         # Get next version number
         version = version or self._get_next_version()
@@ -79,14 +117,21 @@ class MigrationGenerator:
         filepath = self.migrations_dir / filename
 
         # Generate migration code
-        code = self._generate_migration_code(diff, version, name)
+        code = self._generate_migration_code(diff, version, name, gated=gated)
 
         # Write file
         filepath.write_text(code)
 
         return filepath
 
-    def generate_sql(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
+    def generate_sql(
+        self,
+        diff: SchemaDiff,
+        name: str,
+        *,
+        version: str | None = None,
+        destructive: str = "gated",
+    ) -> Path:
         """Write the migration as a ``.up.sql`` / ``.down.sql`` pair; return the up path.
 
         SQL is the form every reader of a migration understands: ``migrate
@@ -101,35 +146,89 @@ class MigrationGenerator:
             name: Migration name (snake_case)
             version: Version stamp; by default the next one, allocated from
                 the clock. Inject it to make two runs write the same files.
+            destructive: The gate policy — ``gated`` marks a file that loses
+                data with ``-- confiture:destructive``, ``allow`` leaves it
+                unmarked, ``forbid`` refuses to write it (``DIFFER_401``).
 
         Returns:
             Path to the ``.up.sql`` file
 
         Raises:
             ValueError: If diff has no changes
+            DifferError: If the policy is ``forbid`` and a change loses data
         """
         if not diff.has_changes():
             raise ValueError("No changes to generate migration from")
+        gate = _destructive.GATE_LINE + "\n" if self._gate(diff, destructive) else ""
         version = version or self._get_next_version()
         header = f"-- Migration: {name}\n-- Version: {version}\n\n"
         up_path = self.migrations_dir / f"{version}_{name}.up.sql"
-        up_path.write_text(header + self._sql_statements(diff.changes, self._change_to_up_sql))
+        downs = {id(change): self._change_to_down_sql(change) for change in diff.changes}
+        up_path.write_text(header + gate + self._up_statements(diff.changes, downs))
         down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
-        down_path.write_text(
-            header + self._sql_statements(diff.changes[::-1], self._change_to_down_sql)
-        )
+        down_path.write_text(header + self._down_statements(diff.changes[::-1], downs))
         return up_path
 
-    def _sql_statements(
-        self, changes: list[SchemaChange], render: Callable[[SchemaChange], str | None]
-    ) -> str:
-        """One terminated statement per change; a change with no SQL leaves a warning."""
+    def _gate(self, diff: SchemaDiff, policy: str) -> bool:
+        """Whether the up side falls under the gate, and refuse it when the policy forbids."""
+        if policy not in _destructive.POLICIES:
+            raise ValueError(f"destructive must be one of {_destructive.POLICIES}; got {policy!r}")
+        losing = [
+            sql
+            for change in diff.changes
+            if (sql := self._change_to_up_sql(change)) is not None
+            and _destructive.gates(_tier_of(_terminated(sql)))
+        ]
+        if not losing:
+            return False
+        if policy == "forbid":
+            raise DifferError(
+                "Destructive change forbidden by policy (migration.destructive: forbid): "
+                + "; ".join(losing),
+                error_code="DIFFER_401",
+                resolution_hint=(
+                    "Re-run with --allow-destructive, or set migration.destructive to gated "
+                    "or allow in the environment config"
+                ),
+            )
+        return policy == "gated"
+
+    def _up_statements(self, changes: list[SchemaChange], downs: dict[int, str | None]) -> str:
+        """One tiered, terminated statement per change, each declaring what cannot be undone.
+
+        ``-- confiture:irreversible data`` precedes a statement that loses data
+        (the down file recreates the object, never its rows);
+        ``-- confiture:irreversible no rollback derived …`` precedes a statement
+        the down file cannot undo at all, and pins its tier to ``irreversible``.
+        """
         statements = []
         for change in changes:
-            sql = render(change)
+            sql = self._change_to_up_sql(change)
             if sql is None:
-                sql = f"-- WARNING: no SQL derived for: {change}. Edit this file before deploying."
-            statements.append(_terminated(sql))
+                statements.append(
+                    f"-- WARNING: no SQL derived for: {change}. Edit this file before deploying."
+                )
+                continue
+            reason = _destructive.irreversible_reason(
+                change, has_down=downs[id(change)] is not None
+            )
+            statement = _with_tier(
+                _terminated(sql), floor=RiskTier.IRREVERSIBLE if reason else None
+            )
+            if reason:
+                statement = f"{_destructive.irreversible_line(reason)}\n{statement}"
+            statements.append(statement)
+        return "\n\n".join(statements) + "\n"
+
+    def _down_statements(self, changes: list[SchemaChange], downs: dict[int, str | None]) -> str:
+        """The reverse of each change, or the directive that says there is none."""
+        statements = []
+        for change in changes:
+            sql = downs[id(change)]
+            if sql is None:
+                statements.append(_destructive.irreversible_line(_destructive.no_rollback(change)))
+            else:
+                statements.append(_with_tier(_terminated(sql)))
         return "\n\n".join(statements) + "\n"
 
     def _get_next_version(self) -> str:
@@ -236,7 +335,9 @@ class MigrationGenerator:
         finally:
             lock_fd.close()
 
-    def _generate_migration_code(self, diff: SchemaDiff, version: str, name: str) -> str:
+    def _generate_migration_code(
+        self, diff: SchemaDiff, version: str, name: str, *, gated: bool = False
+    ) -> str:
         """Generate Python migration code.
 
         Args:
@@ -266,7 +367,7 @@ class {class_name}(Migration):
 
     version = "{version}"
     name = "{name}"
-
+{destructive}
     def up(self) -> None:
         """Apply migration."""
 {up_statements}
@@ -280,6 +381,11 @@ class {class_name}(Migration):
             name=name,
             version=version,
             class_name=class_name,
+            destructive=(
+                "    destructive = True  # data is lost: migrate up needs --allow-destructive\n"
+                if gated
+                else ""
+            ),
             up_statements=up_statements,
             down_statements=down_statements,
         )
@@ -334,6 +440,8 @@ class {class_name}(Migration):
             sql = self._change_to_down_sql(change)
             if sql:
                 statements.append(_execute_call(sql))
+            else:
+                statements.append(f"        # irreversible: {_destructive.no_rollback(change)}")
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
@@ -491,6 +599,13 @@ class {class_name}(Migration):
 
         return (resolved, output_path)
 
+    def _recreate_table(self, change: SchemaChange) -> str | None:
+        """``CREATE TABLE`` from the columns the differ captured, or nothing to recreate from."""
+        if not (change.details or {}).get("columns"):
+            return None
+        recreate = SchemaChange(type="ADD_TABLE", table=change.table, details=change.details)
+        return self._sql_gen.generate_up(recreate).rstrip("\n")
+
     def _change_to_down_sql(self, change: SchemaChange) -> str | None:
         """Convert schema change to SQL for down migration (reverse).
 
@@ -504,7 +619,7 @@ class {class_name}(Migration):
             return f"DROP TABLE {change.table}"
 
         elif change.type == "DROP_TABLE":
-            return f"# WARNING: Cannot auto-generate down migration for DROP_TABLE {change.table}"
+            return self._recreate_table(change)
 
         elif change.type == "RENAME_TABLE":
             return f"ALTER TABLE {change.new_value} RENAME TO {change.old_value}"
@@ -513,7 +628,7 @@ class {class_name}(Migration):
             return f"ALTER TABLE {change.table} DROP COLUMN {change.column}"
 
         elif change.type == "DROP_COLUMN":
-            return f"# WARNING: Cannot auto-generate down migration for DROP_COLUMN {change.table}.{change.column}"
+            return _restore_column(change)
 
         elif change.type == "RENAME_COLUMN":
             return (

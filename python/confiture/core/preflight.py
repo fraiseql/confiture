@@ -19,6 +19,7 @@ from confiture.core._migrator.discovery import (
     find_duplicate_migration_versions,
     parse_migration_filename,
 )
+from confiture.core.destructive import irreversible_reasons, is_gated
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
@@ -134,6 +135,8 @@ def run_preflight(
                 filename=up_file.name,
                 parse_error=parse_error,
                 parse_error_line=parse_error_line,
+                destructive=is_gated(sql_content),
+                irreversible_reasons=irreversible_reasons(sql_content),
             )
         )
 

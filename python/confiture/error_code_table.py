@@ -186,6 +186,13 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "exit_code": 5,
         "resolution_hint": "Fix the SQL syntax in your schema files",
     },
+    {
+        "code": "DIFFER_401",
+        "message_template": "Destructive change forbidden by policy",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Re-run with --allow-destructive, or set migration.destructive to gated or allow",
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",
@@ -307,6 +314,13 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": "Check validation rules and data integrity",
+    },
+    {
+        "code": "VALID_002",
+        "message_template": "Destructive migration refused: data is lost when it applies",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Review the migration, then run migrate up --allow-destructive",
     },
     {
         "code": "VERIFY_001",

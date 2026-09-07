@@ -519,12 +519,14 @@ class MigrateDiffChange:
 
     change_type: str
     details: str
+    irreversible_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "type": self.change_type,
             "details": self.details,
+            "irreversible_reason": self.irreversible_reason,
         }
 
 
@@ -543,6 +545,7 @@ class MigrateDiffResult:
     migration_file: str | None = None
     error: str | None = None
     source: dict[str, str] | None = None
+    destructive_gate: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -559,6 +562,7 @@ class MigrateDiffResult:
             "migration_file": self.migration_file,
             "error": self.error,
             "source": self.source,
+            "destructive_gate": self.destructive_gate,
         }
 
 
@@ -775,6 +779,9 @@ class MigrationPreflightInfo:
     filename: str | None = None  # source filename, for issue attribution (#148)
     parse_error: str | None = None  # pglast rejected the file (PFLIGHT_UNPARSEABLE)
     parse_error_line: int | None = None
+    # -- confiture:destructive gate (PFLIGHT_DESTRUCTIVE_GATED) and its -- confiture:irreversible reasons
+    destructive: bool = False
+    irreversible_reasons: list[str] = field(default_factory=list)
 
     @property
     def reversible(self) -> bool:
@@ -905,6 +912,18 @@ class PreflightResult:
             )
             for m in self.non_transactional
         )
+        out.extend(
+            PreflightIssue.of(
+                "PFLIGHT_DESTRUCTIVE_GATED",
+                f"Migration {m.version} ({m.name}) is gated as destructive: "
+                f"data is lost when it applies.",
+                migration=m.version,
+                file=m.filename,
+                details={"irreversible": list(m.irreversible_reasons)},
+            )
+            for m in self.migrations
+            if m.destructive
+        )
         for version, files in self.duplicate_versions.items():
             out.append(
                 PreflightIssue.of(
@@ -965,6 +984,10 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
     "PFLIGHT_MISSING_DOWN": (
         "error",
         "Add a matching .down.sql sibling, or mark the migration explicitly non-reversible.",
+    ),
+    "PFLIGHT_DESTRUCTIVE_GATED": (
+        "warning",
+        "Review the migration, then run migrate up --allow-destructive to apply it.",
     ),
     "PFLIGHT_NON_TRANSACTIONAL": (
         "warning",

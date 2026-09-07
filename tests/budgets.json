@@ -25,7 +25,7 @@
     "python/confiture/cli/coordinate.py": 1,
     "python/confiture/cli/seed.py": 2,
     "python/confiture/cli/sync.py": 1,
-    "python/confiture/core/_migrator/apply_loop.py": 3,
+    "python/confiture/core/_migrator/apply_loop.py": 2,
     "python/confiture/core/_migrator/baseline.py": 1,
     "python/confiture/core/_migrator/session.py": 1,
     "python/confiture/core/linting/schema_linter.py": 1,
@@ -41,7 +41,6 @@
     "python/confiture/cli/seed.py": 1
   },
   "too_many_returns": {
-    "python/confiture/core/differ.py": 1,
     "python/confiture/core/error_handler.py": 1,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 3,
     "python/confiture/core/idempotency/static_eval/scope.py": 1,
