@@ -6,7 +6,7 @@ import ast
 import symtable
 import sys
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from confiture.core.idempotency.static_eval.values import (
     _RECEIVER_NAMES,
@@ -181,106 +181,137 @@ class _BindingCollector:
 
     def statement(self, stmt: ast.stmt, *, top_level: bool) -> None:
         self.expressions_in(stmt, top_level=top_level)
-        if isinstance(stmt, ast.Assign):
-            simple = len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)
-            for target in stmt.targets:
-                stored = _attribute_store(target)
-                if stored is not None:
-                    self.attribute_stores.add(stored)
-                for name in _store_names(target):
-                    self.add(
-                        name.id,
-                        "assign" if isinstance(target, ast.Name) else "unpack",
-                        stmt.lineno,
-                        value=stmt.value,
-                        simple=simple,
-                        top_level=top_level,
-                    )
-        elif isinstance(stmt, ast.AnnAssign):
-            stored = _attribute_store(stmt.target)
-            if stored is not None:
-                self.attribute_stores.add(stored)
-            if isinstance(stmt.target, ast.Name):
-                self.add(
-                    stmt.target.id,
-                    "annassign" if stmt.value is not None else "annotation",
-                    stmt.lineno,
-                    value=stmt.value,
-                    simple=stmt.value is not None,
-                    top_level=top_level,
-                )
-        elif isinstance(stmt, ast.AugAssign):
-            stored = _attribute_store(stmt.target)
-            if stored is not None:
-                self.attribute_stores.add(stored)
-            for name in _store_names(stmt.target):
-                self.add(name.id, "augassign", stmt.lineno, top_level=top_level)
-        elif isinstance(stmt, (ast.For, ast.AsyncFor)):
-            stored = _attribute_store(stmt.target)
-            if stored is not None:
-                self.attribute_stores.add(stored)
-            for name in _store_names(stmt.target):
-                self.add(name.id, "for", stmt.lineno, top_level=top_level)
-            self.statements(stmt.body, top_level=False)
-            self.statements(stmt.orelse, top_level=False)
-        elif isinstance(stmt, (ast.While, ast.If)):
-            self.statements(stmt.body, top_level=False)
-            self.statements(stmt.orelse, top_level=False)
-        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
-            for item in stmt.items:
-                if item.optional_vars is not None:
-                    stored = _attribute_store(item.optional_vars)
-                    if stored is not None:
-                        self.attribute_stores.add(stored)
-                    for name in _store_names(item.optional_vars):
-                        self.add(name.id, "with", stmt.lineno, top_level=top_level)
-            self.statements(stmt.body, top_level=False)
-        elif isinstance(stmt, ast.Try) or (
-            hasattr(ast, "TryStar") and isinstance(stmt, ast.TryStar)
-        ):
-            self.statements(stmt.body, top_level=False)
-            for handler in stmt.handlers:
-                if handler.name:
-                    self.add(handler.name, "except", handler.lineno, top_level=top_level)
-                self.statements(handler.body, top_level=False)
-            self.statements(stmt.orelse, top_level=False)
-            self.statements(stmt.finalbody, top_level=False)
-        elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
-            for alias in stmt.names:
-                if alias.name == "*":
-                    continue
-                self.add(
-                    alias.asname or alias.name.split(".")[0],
-                    "import",
-                    stmt.lineno,
-                    top_level=top_level,
-                )
-        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            self.add(stmt.name, "def", stmt.lineno, top_level=top_level, node=stmt)
-        elif isinstance(stmt, ast.ClassDef):
-            self.add(stmt.name, "class", stmt.lineno, top_level=top_level, node=stmt)
-        elif isinstance(stmt, ast.Global):
-            for name in stmt.names:
-                self.add(name, "global", stmt.lineno, top_level=top_level)
-        elif isinstance(stmt, ast.Nonlocal):
-            for name in stmt.names:
-                self.add(name, "nonlocal", stmt.lineno, top_level=top_level)
-        elif isinstance(stmt, ast.Delete):
-            for target in stmt.targets:
-                for name in _store_names(target):
-                    self.add(name.id, "del", stmt.lineno, top_level=top_level)
-        elif isinstance(stmt, ast.Match):
-            for case in stmt.cases:
-                for name in _pattern_captures(case.pattern):
-                    self.add(name, "match", case.pattern.lineno, top_level=top_level)
-                self.statements(case.body, top_level=False)
-        else:
-            # `type X = ...` (3.12+); the node is absent from 3.11's stubs.
-            type_alias = getattr(ast, "TypeAlias", None)
-            if type_alias is not None and isinstance(stmt, type_alias):
-                alias_name = getattr(stmt, "name", None)
-                if isinstance(alias_name, ast.Name):
-                    self.add(alias_name.id, "typealias", stmt.lineno, top_level=top_level)
+        for kinds, handler in self._STATEMENT_HANDLERS:
+            if isinstance(stmt, kinds):
+                handler(self, stmt, top_level)
+                return
+        self._type_alias(stmt, top_level)
+
+    def _store(
+        self, target: ast.expr, kind: str, lineno: int, *, top_level: bool, **extra: Any
+    ) -> None:
+        """Every name ``target`` binds, and the attribute it stores to if it is one."""
+        stored = _attribute_store(target)
+        if stored is not None:
+            self.attribute_stores.add(stored)
+        for name in _store_names(target):
+            self.add(name.id, kind, lineno, top_level=top_level, **extra)
+
+    def _assign(self, stmt: ast.Assign, top_level: bool) -> None:
+        simple = len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)
+        for target in stmt.targets:
+            self._store(
+                target,
+                "assign" if isinstance(target, ast.Name) else "unpack",
+                stmt.lineno,
+                top_level=top_level,
+                value=stmt.value,
+                simple=simple,
+            )
+
+    def _ann_assign(self, stmt: ast.AnnAssign, top_level: bool) -> None:
+        stored = _attribute_store(stmt.target)
+        if stored is not None:
+            self.attribute_stores.add(stored)
+        if isinstance(stmt.target, ast.Name):
+            self.add(
+                stmt.target.id,
+                "annassign" if stmt.value is not None else "annotation",
+                stmt.lineno,
+                value=stmt.value,
+                simple=stmt.value is not None,
+                top_level=top_level,
+            )
+
+    def _aug_assign(self, stmt: ast.AugAssign, top_level: bool) -> None:
+        self._store(stmt.target, "augassign", stmt.lineno, top_level=top_level)
+
+    def _for(self, stmt: ast.For | ast.AsyncFor, top_level: bool) -> None:
+        self._store(stmt.target, "for", stmt.lineno, top_level=top_level)
+        self.statements(stmt.body, top_level=False)
+        self.statements(stmt.orelse, top_level=False)
+
+    def _block(self, stmt: ast.While | ast.If, _top_level: bool) -> None:
+        self.statements(stmt.body, top_level=False)
+        self.statements(stmt.orelse, top_level=False)
+
+    def _with(self, stmt: ast.With | ast.AsyncWith, top_level: bool) -> None:
+        for item in stmt.items:
+            if item.optional_vars is not None:
+                self._store(item.optional_vars, "with", stmt.lineno, top_level=top_level)
+        self.statements(stmt.body, top_level=False)
+
+    def _try(self, stmt: Any, top_level: bool) -> None:
+        self.statements(stmt.body, top_level=False)
+        for handler in stmt.handlers:
+            if handler.name:
+                self.add(handler.name, "except", handler.lineno, top_level=top_level)
+            self.statements(handler.body, top_level=False)
+        self.statements(stmt.orelse, top_level=False)
+        self.statements(stmt.finalbody, top_level=False)
+
+    def _import(self, stmt: ast.Import | ast.ImportFrom, top_level: bool) -> None:
+        for alias in stmt.names:
+            if alias.name == "*":
+                continue
+            self.add(
+                alias.asname or alias.name.split(".")[0],
+                "import",
+                stmt.lineno,
+                top_level=top_level,
+            )
+
+    def _def(self, stmt: ast.FunctionDef | ast.AsyncFunctionDef, top_level: bool) -> None:
+        self.add(stmt.name, "def", stmt.lineno, top_level=top_level, node=stmt)
+
+    def _class(self, stmt: ast.ClassDef, top_level: bool) -> None:
+        self.add(stmt.name, "class", stmt.lineno, top_level=top_level, node=stmt)
+
+    def _global(self, stmt: ast.Global, top_level: bool) -> None:
+        for name in stmt.names:
+            self.add(name, "global", stmt.lineno, top_level=top_level)
+
+    def _nonlocal(self, stmt: ast.Nonlocal, top_level: bool) -> None:
+        for name in stmt.names:
+            self.add(name, "nonlocal", stmt.lineno, top_level=top_level)
+
+    def _delete(self, stmt: ast.Delete, top_level: bool) -> None:
+        for target in stmt.targets:
+            for name in _store_names(target):
+                self.add(name.id, "del", stmt.lineno, top_level=top_level)
+
+    def _match(self, stmt: ast.Match, top_level: bool) -> None:
+        for case in stmt.cases:
+            for name in _pattern_captures(case.pattern):
+                self.add(name, "match", case.pattern.lineno, top_level=top_level)
+            self.statements(case.body, top_level=False)
+
+    def _type_alias(self, stmt: ast.stmt, top_level: bool) -> None:
+        # `type X = ...` (3.12+); the node is absent from 3.11's stubs.
+        type_alias = getattr(ast, "TypeAlias", None)
+        if type_alias is not None and isinstance(stmt, type_alias):
+            alias_name = getattr(stmt, "name", None)
+            if isinstance(alias_name, ast.Name):
+                self.add(alias_name.id, "typealias", stmt.lineno, top_level=top_level)
+
+    # Statement node types → the method that records their bindings, in the
+    # order the ``elif`` chain used to try them.
+    _STATEMENT_HANDLERS: tuple[tuple[tuple[type, ...], Any], ...] = (
+        ((ast.Assign,), _assign),
+        ((ast.AnnAssign,), _ann_assign),
+        ((ast.AugAssign,), _aug_assign),
+        ((ast.For, ast.AsyncFor), _for),
+        ((ast.While, ast.If), _block),
+        ((ast.With, ast.AsyncWith), _with),
+        (tuple(t for t in (ast.Try, getattr(ast, "TryStar", None)) if t is not None), _try),
+        ((ast.Import, ast.ImportFrom), _import),
+        ((ast.FunctionDef, ast.AsyncFunctionDef), _def),
+        ((ast.ClassDef,), _class),
+        ((ast.Global,), _global),
+        ((ast.Nonlocal,), _nonlocal),
+        ((ast.Delete,), _delete),
+        ((ast.Match,), _match),
+    )
 
     def expressions_in(self, stmt: ast.stmt, *, top_level: bool) -> None:
         """Walrus bindings and ``setattr(self, …)`` in a statement's expressions.
@@ -331,6 +362,17 @@ class _Context:
         return Trace(names=tuple(self.names), definition_line=self.definition_line)
 
 
+def _parameter_defaults(args: ast.arguments, params: list[str]) -> dict[str, ast.expr]:
+    """Each parameter's default expression, positional and keyword-only."""
+    defaults: dict[str, ast.expr] = {}
+    if args.defaults:
+        defaults.update(zip(params[len(params) - len(args.defaults) :], args.defaults, strict=True))
+    for arg, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+        if default is not None:
+            defaults[arg.arg] = default
+    return defaults
+
+
 class _ScopeLookupMixin:
     """Methods :class:`~confiture.core.idempotency.static_eval.evaluator.ModuleModel` mixes in."""
 
@@ -366,14 +408,7 @@ class _ScopeLookupMixin:
                 return Unknown(Refusal.HELPER_SHAPE, f"method `{name}()` has no self parameter")
             params = params[1:]
         kwonly = [a.arg for a in args.kwonlyargs]
-        defaults: dict[str, ast.expr] = {}
-        if args.defaults:
-            defaults.update(
-                zip(params[len(params) - len(args.defaults) :], args.defaults, strict=True)
-            )
-        for arg, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
-            if default is not None:
-                defaults[arg.arg] = default
+        defaults = _parameter_defaults(args, params)
 
         positional = self._eval_args(call, scope, ctx)
         if isinstance(positional, Unknown):
@@ -388,18 +423,9 @@ class _ScopeLookupMixin:
                 f"`{name}()` takes {len(params)} positional argument(s) but {len(positional)} "
                 "were given",
             )
-        for keyword in call.keywords:
-            if keyword.arg is None:
-                return Unknown(Refusal.HELPER_ARGUMENTS, f"`{name}(**...)` is not static")
-            if keyword.arg in env or keyword.arg not in (*params, *kwonly):
-                return Unknown(
-                    Refusal.HELPER_ARGUMENTS,
-                    f"`{name}()` got an unexpected keyword `{keyword.arg}`",
-                )
-            value = self._eval(keyword.value, scope, ctx)
-            if isinstance(value, Unknown):
-                return value
-            env[keyword.arg] = value
+        bound = self._bind_keywords(call, env, (*params, *kwonly), scope, ctx, name=name)
+        if bound is not None:
+            return bound
         for param in (*params, *kwonly):
             if param in env:
                 continue
@@ -413,6 +439,51 @@ class _ScopeLookupMixin:
                 return value
             env[param] = value
         return env
+
+    def _bind_keywords(
+        self: ModuleModel,
+        call: ast.Call,
+        env: dict[str, Value],
+        accepted: tuple[str, ...],
+        scope: _Scope,
+        ctx: _Context,
+        *,
+        name: str,
+    ) -> Unknown | None:
+        """Bind the call's keywords into ``env``; the refusal when one cannot be."""
+        for keyword in call.keywords:
+            if keyword.arg is None:
+                return Unknown(Refusal.HELPER_ARGUMENTS, f"`{name}(**...)` is not static")
+            if keyword.arg in env or keyword.arg not in accepted:
+                return Unknown(
+                    Refusal.HELPER_ARGUMENTS,
+                    f"`{name}()` got an unexpected keyword `{keyword.arg}`",
+                )
+            value = self._eval(keyword.value, scope, ctx)
+            if isinstance(value, Unknown):
+                return value
+            env[keyword.arg] = value
+        return None
+
+    def _lookup_free(self: ModuleModel, name: str, scope: _Scope, ctx: _Context) -> Value:
+        """A free variable: the nearest enclosing function that binds it, or unbound."""
+        enclosing = scope.parent
+        while enclosing is not None:
+            if enclosing.kind == "function" and enclosing.table is not None:
+                try:
+                    enclosing_symbol = enclosing.table.lookup(name)
+                except KeyError:
+                    enclosing_symbol = None
+                if enclosing_symbol is not None and enclosing_symbol.is_parameter():
+                    return Unknown(
+                        Refusal.PARAMETER, f"`{name}` is a parameter of {enclosing.display}"
+                    )
+                if enclosing_symbol is not None and enclosing_symbol.is_local():
+                    local = self._single_binding(name, enclosing, ctx)
+                    if local is not None:
+                        return local
+            enclosing = enclosing.parent
+        return Unknown(Refusal.UNBOUND, f"`{name}` is not defined in this file")
 
     def _lookup_name(self: ModuleModel, name: str, scope: _Scope, ctx: _Context) -> Value:
         if name in scope.env:
@@ -442,23 +513,7 @@ class _ScopeLookupMixin:
                 return local
             return Unknown(Refusal.UNBOUND, f"`{name}` is not defined in this file")
         if symbol.is_free():
-            enclosing = scope.parent
-            while enclosing is not None:
-                if enclosing.kind == "function" and enclosing.table is not None:
-                    try:
-                        enclosing_symbol = enclosing.table.lookup(name)
-                    except KeyError:
-                        enclosing_symbol = None
-                    if enclosing_symbol is not None and enclosing_symbol.is_parameter():
-                        return Unknown(
-                            Refusal.PARAMETER, f"`{name}` is a parameter of {enclosing.display}"
-                        )
-                    if enclosing_symbol is not None and enclosing_symbol.is_local():
-                        local = self._single_binding(name, enclosing, ctx)
-                        if local is not None:
-                            return local
-                enclosing = enclosing.parent
-            return Unknown(Refusal.UNBOUND, f"`{name}` is not defined in this file")
+            return self._lookup_free(name, scope, ctx)
         return self._module_binding(name, ctx)
 
     def _module_binding(self: ModuleModel, name: str, ctx: _Context) -> Value:
