@@ -166,7 +166,7 @@ class TestPrintJsonReport:
         with patch("confiture.cli.dry_run.console") as mock_console:
             print_json_report(data)
             mock_console.print_json.assert_called_once()
-            args, kwargs = mock_console.print_json.call_args
+            _args, kwargs = mock_console.print_json.call_args
             assert kwargs["data"] == data
 
     def test_print_json_report_nested(self):
@@ -251,14 +251,14 @@ class TestAskDryRunExecuteConfirmation:
         with patch("typer.confirm") as mock_confirm:
             ask_dry_run_execute_confirmation()
             # Verify default=False was passed
-            args, kwargs = mock_confirm.call_args
+            _args, kwargs = mock_confirm.call_args
             assert kwargs["default"] is False
 
     def test_ask_confirmation_message(self):
         """Test confirmation message."""
         with patch("typer.confirm") as mock_confirm:
             ask_dry_run_execute_confirmation()
-            args, kwargs = mock_confirm.call_args
+            args, _kwargs = mock_confirm.call_args
             assert "Proceed with real execution" in args[0]
 
 

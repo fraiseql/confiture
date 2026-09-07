@@ -179,6 +179,7 @@ def migrate_status(
             )
     except typer.Exit:
         raise
+    # Reason: documented: a probe failure of any kind is status's exit 3 with its own rendering
     except Exception as e:
         _render_status_error(e, output_format, output_file)
         raise typer.Exit(3) from e
@@ -331,6 +332,7 @@ def _probe_database(
             resolved_table=resolved,
             ledger_elsewhere=elsewhere,
         )
+    # Reason: status degrades to the file list when the database cannot be reached for any reason
     except Exception as e:
         if output_format != "json":
             error_console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
@@ -402,8 +404,10 @@ def _rebuild_reasons(
     reasons: list[str] = []
     if len(pending) >= threshold:
         reasons.append(f"{len(pending)} pending migrations exceed threshold of {threshold}")
-    for sf in find_rebuild_strategy_files(migrations_dir):
-        reasons.append(f"Migration {sf.name} has '-- Strategy: rebuild' header")
+    reasons.extend(
+        f"Migration {sf.name} has '-- Strategy: rebuild' header"
+        for sf in find_rebuild_strategy_files(migrations_dir)
+    )
     return reasons
 
 

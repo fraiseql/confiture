@@ -38,16 +38,16 @@ from confiture.integrations.pggit.coordination.models import (
 from confiture.integrations.pggit.coordination.registry import IntentRegistry
 
 __all__ = [
-    # Models
-    "Intent",
-    "ConflictReport",
-    "IntentStatus",
-    "IntentStatusChange",
-    "ConflictType",
-    "ConflictSeverity",
-    "RiskLevel",
     # Detector
     "ConflictDetector",
+    "ConflictReport",
+    "ConflictSeverity",
+    "ConflictType",
+    # Models
+    "Intent",
     # Registry
     "IntentRegistry",
+    "IntentStatus",
+    "IntentStatusChange",
+    "RiskLevel",
 ]

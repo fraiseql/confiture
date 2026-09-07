@@ -15,17 +15,15 @@ from confiture.cli.dsn import (
     config_is_explicit,
     resolve_database_url,
 )
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
     _get_tracking_table,
     _output_json,
     console,
-    error_console,
     is_json,
     open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.exceptions import DatabaseNotInitializedError
 from confiture.models.results import CurrentRevision
 
@@ -80,29 +78,19 @@ def migrate_current(
     from confiture.core.connection import load_config
     from confiture.core.migrator import Migrator
 
-    try:
-        override = resolve_database_url(
-            database_url,
-            config,
-            config_explicit=config_is_explicit(ctx),
-            no_config=no_config,
-        )
-        config_data = {"database_url": override} if override is not None else load_config(config)
-        with open_connection(config_data) as conn:
-            migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
-            # Probe first: the row query raises on an absent table (≠ empty).
-            if not migrator.tracking_table_exists():
-                raise DatabaseNotInitializedError(
-                    "Database not initialized (tracking table absent)"
-                )
-            row = migrator.get_current_revision_row()
-    except typer.Exit:
-        raise
-    except Exception as e:
-        if is_json(output_format):
-            fail(e, json_mode=True, output_file=output_file)
-        print_error_to_console(e, error_console)
-        raise typer.Exit(handle_cli_error(e)) from e
+    override = resolve_database_url(
+        database_url,
+        config,
+        config_explicit=config_is_explicit(ctx),
+        no_config=no_config,
+    )
+    config_data = {"database_url": override} if override is not None else load_config(config)
+    with open_connection(config_data) as conn:
+        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
+        # Probe first: the row query raises on an absent table (≠ empty).
+        if not migrator.tracking_table_exists():
+            raise DatabaseNotInitializedError("Database not initialized (tracking table absent)")
+        row = migrator.get_current_revision_row()
 
     cur = (
         None

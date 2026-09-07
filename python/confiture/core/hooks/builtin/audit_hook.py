@@ -100,7 +100,7 @@ class AuditHook(Hook[ExecutionContext]):
             logger.info("Audit logged: %s (%s)", record["migration"], record["direction"])
             return HookResult(success=True, stats={"signature": signature})
 
-        except Exception as exc:
+        except psycopg.Error as exc:
             logger.warning("Audit logging failed: %s", exc)
             return HookResult(success=False, error=str(exc))
 

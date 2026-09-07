@@ -39,10 +39,10 @@ def create_app(
     """
     try:
         # Reason: optional dependency — extra 'mcp-http'; imported where used so the core never requires it
-        from fastapi import FastAPI, Request  # type: ignore[import-untyped]
+        from fastapi import FastAPI, Request
 
         # Reason: optional dependency — extra 'mcp-http'; imported where used so the core never requires it
-        from fastapi.responses import JSONResponse  # type: ignore[import-untyped]
+        from fastapi.responses import JSONResponse
     except ImportError as e:
         msg = "HTTP mode requires 'fastapi'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
         raise ImportError(msg) from e
@@ -71,7 +71,7 @@ def create_app(
         """Handle JSON-RPC MCP requests."""
         try:
             body: dict[str, Any] = await request.json()
-        except Exception:
+        except ValueError:
             return JSONResponse(
                 status_code=400,
                 content={"error": "Invalid JSON body"},
@@ -112,7 +112,7 @@ def serve(
     """
     try:
         # Reason: optional dependency — extra 'mcp-http'; imported where used so the core never requires it
-        import uvicorn  # type: ignore[import-untyped]
+        import uvicorn
     except ImportError as e:
         msg = "HTTP mode requires 'uvicorn'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
         raise ImportError(msg) from e

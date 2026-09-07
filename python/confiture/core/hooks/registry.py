@@ -109,6 +109,7 @@ class HookRegistry(Generic[T]):
                 ):
                     raise HookExecutionError(f"Hook {hook.name} failed: {result.error}")
 
+            # Reason: hooks are user code; any failure is routed by the configured error strategy
             except Exception as e:
                 if config.error_strategy == HookErrorStrategy.FAIL_SAFE:
                     logger.error(f"Hook {hook.name} failed: {e}")
@@ -240,7 +241,7 @@ class HookRegistry(Generic[T]):
                 reason=f"Exceeded {config.timeout_per_hook_ms}ms timeout",
                 duration_ms=config.timeout_per_hook_ms,
             )
-        except Exception as e:
+        except Exception as e:  # Reason: hooks are user code; any failure feeds the circuit breaker and the event log
             if circuit_breaker:
                 circuit_breaker.record_failure()
             return HookExecutionEvent(
@@ -268,7 +269,9 @@ class HookRegistry(Generic[T]):
         for attempt in range(retry_config.max_attempts):
             try:
                 return await self._execute_hook_with_timeout(hook, context, config)
-            except Exception as e:
+            except (
+                Exception
+            ) as e:  # Reason: hooks are user code; any failure is retried per the retry policy
                 last_error = e
                 if attempt < retry_config.max_attempts - 1:
                     delay_ms = min(

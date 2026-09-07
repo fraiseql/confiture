@@ -92,6 +92,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError("Git command timed out resolving the repository root") from e
@@ -113,7 +114,8 @@ class GitRepository:
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
-                timeout=3,  # local filesystem check; 3s is generous
+                timeout=3,  # local filesystem check; 3s is generous,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return False
@@ -154,6 +156,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError(f"Git command timed out retrieving '{file_path}' from '{ref}'") from e
@@ -208,6 +211,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError(f"Git command timed out verifying ref '{ref}'") from e
@@ -289,6 +293,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError(f"Git command timed out comparing '{base_ref}' to '{target_ref}'") from e
@@ -360,6 +365,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError(f"Git command timed out retrieving staged '{file_path}'") from e
@@ -411,6 +417,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError("Git command timed out writing the staged index to a tree") from e
@@ -458,6 +465,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError(
@@ -498,6 +506,7 @@ class GitRepository:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired as e:
             raise GitError("Git command timed out getting staged files") from e

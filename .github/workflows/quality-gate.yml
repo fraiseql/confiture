@@ -124,10 +124,10 @@ jobs:
         POSTGRES_DB: confiture_test
       run: |
         echo "=== Running Core Tests ==="
-        uv run pytest tests/ \
-          --cov=confiture \
-          --cov-report=xml \
-          --cov-report=term-missing \
+        # coverage starts BEFORE pytest imports its plugins: the confiture pytest11
+        # plugin would otherwise be imported (with everything it pulls in) before
+        # pytest-cov could begin recording, and those lines would read as missed.
+        uv run coverage run --source=python/confiture -m pytest tests/ \
           -v \
           --tb=short \
           || {
@@ -135,6 +135,12 @@ jobs:
             exit 1
           }
         echo "✅ Core tests completed successfully"
+    - name: Coverage report (fail_under from pyproject) and per-file floors
+      run: |
+        uv run coverage xml
+        uv run coverage json -o coverage.json
+        uv run coverage report --skip-covered | tail -5
+        uv run python scripts/coverage_floors.py --check coverage.json
 
     - name: Upload coverage
       uses: codecov/codecov-action@v5

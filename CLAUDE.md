@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.54.0
+**Version**: 0.55.0
 **Last Updated**: 2026-09-06
 **Current Status**: Production-Ready
 
@@ -99,7 +99,6 @@ pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
-cryptography = ">=42.0"   # Encryption utilities
 
 [project.optional-dependencies]
 ast = [
@@ -249,6 +248,7 @@ not the tree.
 confiture/
 ├── python/confiture/
 │   ├── __init__.py               # Confiture: PostgreSQL migrations, sweetly done 🍓
+│   ├── error_code_table.py       # The error-code catalog as data: one mapping per code, no logic
 │   ├── error_codes.py            # Error code registry and definitions for structured error handling
 │   ├── exceptions.py             # Confiture exception hierarchy
 │   ├── url_redaction.py          # DSN credential helpers (core-side, import-safe)
@@ -1134,7 +1134,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-09-06
-**Version**: 0.54.0
+**Version**: 0.55.0
 
 ---
 

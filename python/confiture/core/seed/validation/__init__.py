@@ -25,9 +25,9 @@ __all__ = [
     "FixResult",
     "PatternMatch",
     "SeedFixer",
-    "SeedValidator",
     "SeedValidationPattern",
     "SeedValidationReport",
+    "SeedValidator",
     "SeedViolation",
     "detect_seed_issues",
 ]

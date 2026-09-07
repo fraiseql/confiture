@@ -837,7 +837,7 @@ class TestExecuteFileResolvesFromTheProjectRoot:
         return root, migration
 
     def test_execute_file_is_read_from_a_foreign_cwd(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        root, migration = self._project(tmp_path, call='self.execute_file("db/schema/fn.sql")')
+        _root, migration = self._project(tmp_path, call='self.execute_file("db/schema/fn.sql")')
         elsewhere = tmp_path / "elsewhere"
         elsewhere.mkdir()
         monkeypatch.chdir(elsewhere)
@@ -849,7 +849,7 @@ class TestExecuteFileResolvesFromTheProjectRoot:
         assert result.snippets[0].kind == ExtractionKind.FILE
 
     def test_read_text_is_read_from_a_foreign_cwd(self, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        root, migration = self._project(
+        _root, migration = self._project(
             tmp_path, call='self.execute(Path("db/schema/fn.sql").read_text())'
         )
         monkeypatch.chdir(tmp_path)

@@ -83,6 +83,7 @@ class CustomStrategy(AnonymizationStrategy):
                 return self.config.func(value, self.config.seed)
             else:
                 return self.config.func(value)
+        # Reason: the wrapped function is user code; any failure is reported with the strategy's name
         except Exception as e:
             raise Exception(
                 f"Error in custom anonymization function '{self.config.name}': {e}"
@@ -140,6 +141,7 @@ class CustomLambdaStrategy(AnonymizationStrategy):
 
         try:
             return self.config.func(value)
+        # Reason: the wrapped lambda is user code; any failure is reported as the strategy's
         except Exception as e:
             raise Exception(f"Error in lambda anonymization: {e}") from e
 

@@ -187,7 +187,7 @@ def drift(
         if format_output == "json":
             payload = drift_report.to_dict()
             # `hints` is pre-allocated per the documented JSON-schema contract
-            # (docs/reference/json-schemas/drift.schema.json). Currently
+            # — see docs/reference/json-schemas/drift.schema.json. Currently
             # always empty; the contract guarantees the key exists so
             # agents can read `payload["hints"]` without a defensive get().
             payload["hints"] = []
@@ -214,6 +214,7 @@ def drift(
         # e.g. SCHEMA_202: the --schema file declares tables but parsed to zero
         # (issue #175) — surface with its own code/exit, not as a config error.
         fail(e, json_mode=json_mode)
+    # Reason: configuration or connection failure of any kind → the CONFIG_006 envelope
     except Exception as e:
         fail(
             ConfigurationError(

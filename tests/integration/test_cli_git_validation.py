@@ -31,7 +31,7 @@ class TestCliGitValidation:
             (tmppath / "test.txt").write_text("test")
 
             # Change to non-git directory and run command
-            old_cwd = os.getcwd()
+            old_cwd = Path.cwd()
             try:
                 os.chdir(tmppath)
                 result = runner.invoke(
@@ -62,7 +62,7 @@ class TestCliGitValidation:
             (tmppath / "test.txt").write_text("test")
 
             # Change to non-git directory and run command
-            old_cwd = os.getcwd()
+            old_cwd = Path.cwd()
             try:
                 os.chdir(tmppath)
                 result = runner.invoke(
@@ -126,7 +126,7 @@ class TestCliGitValidation:
             )
 
             # Change to repo and run validation
-            old_cwd = os.getcwd()
+            old_cwd = Path.cwd()
             try:
                 os.chdir(repo_path)
                 result = runner.invoke(
@@ -202,7 +202,7 @@ class TestMigrationAccompanimentCLI:
             )
 
             # Change to repo and run validation
-            old_cwd = os.getcwd()
+            old_cwd = Path.cwd()
             try:
                 os.chdir(repo_path)
                 result = runner.invoke(
@@ -278,7 +278,7 @@ class TestMigrationAccompanimentCLI:
             )
 
             # Change to repo and run validation
-            old_cwd = os.getcwd()
+            old_cwd = Path.cwd()
             try:
                 os.chdir(repo_path)
                 result = runner.invoke(

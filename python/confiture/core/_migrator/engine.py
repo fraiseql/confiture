@@ -126,11 +126,11 @@ class Migrator:
                     cursor.execute(query, params)
                 else:
                     cursor.execute(query)
-        except Exception as e:
+        except psycopg.Error as e:
             if isinstance(query, pgsql.Composable):
                 try:
                     sql_text = query.as_string(self.connection)
-                except Exception:
+                except Exception:  # Reason: psycopg's as_string needs a live connection for some adapters; fall back to the unbound rendering
                     sql_text = query.as_string(None)
             else:
                 sql_text = str(query)

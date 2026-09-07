@@ -177,6 +177,7 @@ class DryRunExecutor:
                     confidence_pct=40,  # Low confidence for simulation
                     statements=[],
                 )
+            # Reason: a migration's up() is user code; any failure is the DryRunError
             except Exception as e:
                 execution_time_ms = int((time.perf_counter() - start_time) * 1000)
                 raise DryRunError(getattr(migration, "name", "unknown"), e) from e
@@ -228,7 +229,7 @@ class DryRunExecutor:
                 execution_time_ms=elapsed,
                 rows_affected=cur.rowcount if cur.rowcount >= 0 else 0,
             )
-        except Exception as exc:
+        except psycopg.Error as exc:
             elapsed = (time.perf_counter() - start) * 1000
             return StatementResult(
                 sql=sql,

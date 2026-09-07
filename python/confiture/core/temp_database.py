@@ -168,7 +168,7 @@ class TempDatabase:
                     (self._db_name,),
                 )
                 conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {}").format(db_id))
-        except Exception:
+        except psycopg.Error:
             pass  # best-effort cleanup
         finally:
             if self._maintenance_conn is not None and not self._maintenance_conn.closed:

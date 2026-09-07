@@ -104,6 +104,7 @@ class JinjaRenderer(Renderer):
         self._env = _build_sandbox_env()
         try:
             ast = self._env.parse(self.template)
+        # Reason: jinja2 raises several unrelated types for a bad template; all are a configuration error
         except Exception as exc:
             raise ConfigurationError(f"JinjaRenderer template failed to parse: {exc}") from exc
 
@@ -374,7 +375,7 @@ def _render_with_timeout(template, ctx: dict, timeout_seconds: float) -> str:
         try:
             out = template.render(**ctx)
             result.append(out)
-        except Exception as exc:  # propagate any render error
+        except Exception as exc:  # Reason: the render error itself is the collected result for the caller to inspect
             result.append(exc)
         finally:
             done.set()

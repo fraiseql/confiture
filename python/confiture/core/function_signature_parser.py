@@ -166,7 +166,7 @@ class FunctionSignatureParser:
                         param_types=tuple(param_types),
                     )
                 )
-            except Exception:
+            except (AttributeError, KeyError, TypeError, ValueError):
                 # Skip malformed nodes gracefully
                 continue
 

@@ -22,6 +22,8 @@ class LintSeverity(Enum):
 class RuleVersion:
     """Semantic version for rules."""
 
+    __hash__ = None  # mutable; equality is structural
+
     major: int
     minor: int
     patch: int
@@ -145,7 +147,9 @@ class RuleVersionManager:
     ) -> list[str]:
         """Check if all rules are compatible with version."""
         incompatible = []
-        for rule in self.rules.values():
-            if not rule.version.is_compatible_with(min_rule_version):
-                incompatible.append(rule.rule_id)
+        incompatible.extend(
+            rule.rule_id
+            for rule in self.rules.values()
+            if not rule.version.is_compatible_with(min_rule_version)
+        )
         return incompatible

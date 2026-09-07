@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psycopg
 import pytest
 
 from confiture.exceptions import RebuildError
@@ -179,7 +180,7 @@ class TestApplyDdlString:
             nonlocal call_count
             call_count += 1
             if "CREATE EXTENSION" in sql:
-                raise Exception("extension not available")
+                raise psycopg.Error("extension not available")
 
         cursor.execute.side_effect = side_effect
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)

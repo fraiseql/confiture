@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import psycopg
+
 from confiture.core.cte_debugger import (
     CTEDebugger,
     _build_cte_isolation_query,
@@ -92,7 +94,7 @@ def test_cte_debugger_debug_stops_on_error():
     mock_cursor = MagicMock()
     mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
     mock_cursor.__exit__ = MagicMock(return_value=False)
-    mock_cursor.execute.side_effect = Exception("relation 'missing' does not exist")
+    mock_cursor.execute.side_effect = psycopg.ProgrammingError("relation 'missing' does not exist")
     mock_conn.cursor.return_value = mock_cursor
 
     debugger = CTEDebugger(mock_conn)

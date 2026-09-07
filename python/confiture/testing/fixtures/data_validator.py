@@ -150,7 +150,7 @@ class DataValidator:
                     )
                 row = cur.fetchone()
                 return row[0] if row else 0
-        except Exception:
+        except psycopg.Error:
             return 0
 
     def _count_fk_violations(self, cur: psycopg.Cursor) -> int:
@@ -173,7 +173,7 @@ class DataValidator:
             )
             row = cur.fetchone()
             return row[0] if row else 0
-        except Exception:
+        except psycopg.Error:
             # If query fails, assume no violations (constraint might not exist)
             return 0
 
@@ -224,6 +224,6 @@ class DataValidator:
                 # More detailed check would require analyzing actual data
                 return True
 
-        except Exception:
+        except psycopg.Error:
             # If validation fails, assume it's valid (prefer false negatives)
             return True

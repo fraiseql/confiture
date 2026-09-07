@@ -181,7 +181,7 @@ class CTEDebugger:
                     rows=list(rows),
                     execution_time_ms=round(elapsed_ms, 2),
                 )
-        except Exception as e:
+        except psycopg.Error as e:
             elapsed_ms = (time.monotonic() - start_time) * 1000
             # Rollback to recover the connection state
             import contextlib

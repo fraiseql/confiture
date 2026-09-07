@@ -309,14 +309,14 @@ class MCPServer:
             else:
                 return _error(msg_id, -32601, "Method not found")
             return {"jsonrpc": "2.0", "id": msg_id, "result": result}
-        except Exception as e:
+        except Exception as e:  # Reason: a JSON-RPC server answers every failure with an error response; nothing may escape the dispatch
             return _error(msg_id, -32603, str(e))
 
     def serve_stdio(self) -> None:
         """Run the MCP server, reading JSON-RPC messages from stdin."""
         self.initialize()
-        for line in sys.stdin:
-            line = line.strip()
+        for raw_line in sys.stdin:
+            line = raw_line.strip()
             if not line:
                 continue
             try:

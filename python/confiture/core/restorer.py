@@ -771,8 +771,8 @@ class DatabaseRestorer:
             ) as proc:
                 try:
                     assert proc.stderr is not None
-                    for line in proc.stderr:
-                        line = line.rstrip()
+                    for raw_line in proc.stderr:
+                        line = raw_line.rstrip()
                         if on_stderr_line:
                             on_stderr_line(line)
                         kind = self._classify_stderr_line(line)

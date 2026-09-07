@@ -171,6 +171,7 @@ def install_helpers(
         console.print("    • confiture.save_and_drop_dependent_views(schemas TEXT[])")
         console.print("    • confiture.recreate_saved_views()")
 
+    # Reason: legacy text command: any failure maps to its exit code; the boundary has already printed it
     except Exception as e:
         raise typer.Exit(handle_cli_error(e)) from e
 
@@ -245,8 +246,6 @@ def validate_profile(
             ConfiturError(f"Invalid profile: {e}", error_code="ANON_1400"),
             json_mode=False,
         )
-    except Exception as e:
-        fail(e, json_mode=False)
 
 
 @cli_boundary

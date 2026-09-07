@@ -62,7 +62,7 @@ def _ssh_override(config_data: Any, ssh_via: str) -> Any:
         @property
         def database_url(self) -> str:
             if hasattr(self._base, "database_url"):
-                return self._base.database_url  # type: ignore[no-any-return]
+                return self._base.database_url
             return self._base.get("database_url", "")
 
         def get(self, key: str, default: Any = None) -> Any:
@@ -95,6 +95,7 @@ def _resolve_source_sql(config_data: Any, schema_file: Path | None) -> tuple[str
                 "Config has no 'name' field — cannot auto-build schema. Pass --schema explicitly."
             )
         return SchemaBuilder(env=env_name).build(schema_only=True), True
+    # Reason: an auto-build failure of any kind is reported with the --schema remedy
     except Exception as build_exc:
         raise ConfigurationError(
             f"--schema not provided and auto-build failed: {build_exc}. "

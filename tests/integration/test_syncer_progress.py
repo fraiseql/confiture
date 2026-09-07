@@ -215,7 +215,7 @@ async def test_checkpoint_structure(
     # Read and verify checkpoint content
     import json
 
-    with open(checkpoint_file) as f:
+    with Path(checkpoint_file).open() as f:
         checkpoint = json.load(f)
 
     # Verify structure

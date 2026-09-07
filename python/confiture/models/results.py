@@ -855,26 +855,26 @@ class PreflightResult:
                     line=m.parse_error_line,
                 )
             )
-        for m in self.irreversible:
-            out.append(
-                PreflightIssue.of(
-                    "PFLIGHT_MISSING_DOWN",
-                    f"Migration {m.version} ({m.name}) is not reversible: no matching .down.sql.",
-                    migration=m.version,
-                    file=m.filename,
-                )
+        out.extend(
+            PreflightIssue.of(
+                "PFLIGHT_MISSING_DOWN",
+                f"Migration {m.version} ({m.name}) is not reversible: no matching .down.sql.",
+                migration=m.version,
+                file=m.filename,
             )
-        for m in self.non_transactional:
-            out.append(
-                PreflightIssue.of(
-                    "PFLIGHT_NON_TRANSACTIONAL",
-                    f"Migration {m.version} ({m.name}) has non-transactional "
-                    f"statement(s): {', '.join(m.non_transactional_statements)}.",
-                    migration=m.version,
-                    file=m.filename,
-                    details={"statements": list(m.non_transactional_statements)},
-                )
+            for m in self.irreversible
+        )
+        out.extend(
+            PreflightIssue.of(
+                "PFLIGHT_NON_TRANSACTIONAL",
+                f"Migration {m.version} ({m.name}) has non-transactional "
+                f"statement(s): {', '.join(m.non_transactional_statements)}.",
+                migration=m.version,
+                file=m.filename,
+                details={"statements": list(m.non_transactional_statements)},
             )
+            for m in self.non_transactional
+        )
         for version, files in self.duplicate_versions.items():
             out.append(
                 PreflightIssue.of(
@@ -884,15 +884,15 @@ class PreflightResult:
                     details={"files": list(files)},
                 )
             )
-        for version in self.checksum_mismatches:
-            out.append(
-                PreflightIssue.of(
-                    "PFLIGHT_CHECKSUM_MISMATCH",
-                    f"Checksum mismatch for applied migration {version} "
-                    f"(file changed after it was applied).",
-                    migration=version,
-                )
+        out.extend(
+            PreflightIssue.of(
+                "PFLIGHT_CHECKSUM_MISMATCH",
+                f"Checksum mismatch for applied migration {version} "
+                f"(file changed after it was applied).",
+                migration=version,
             )
+            for version in self.checksum_mismatches
+        )
         return out
 
     @property

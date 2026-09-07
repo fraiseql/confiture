@@ -169,7 +169,7 @@ class TestBatchedMigration:
         # Set up rowcount to return 50 first, then 0
         cursor.rowcount = 50
 
-        with patch.object(cursor, "rowcount", new_callable=lambda: Mock()):
+        with patch.object(cursor, "rowcount", new_callable=Mock):
             cursor.rowcount = 50
             batched.add_column_with_default(
                 table="users", column="status", column_type="TEXT", default="'active'"
@@ -312,7 +312,7 @@ class TestOnlineIndexBuilder:
 
     def test_create_index_custom_name(self, mock_connection):
         """Test creating index with custom name."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
         index_name = builder.create_index_concurrently(

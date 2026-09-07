@@ -70,6 +70,7 @@ def _rollback_transactional(migrator: Migrator, migration: Migration) -> None:
         migrator.connection.commit()
         logger.info(f"Successfully rolled back migration {migration.version} ({migration.name})")
 
+    # Reason: a migration's down() is user code; any failure rolls back and is a MigrationError
     except Exception as e:
         migrator.connection.rollback()
         raise MigrationError(
@@ -109,6 +110,7 @@ def _rollback_non_transactional(migrator: Migrator, migration: Migration) -> Non
             f"{migration.version} ({migration.name})"
         )
 
+    # Reason: a migration's down() is user code; any failure in autocommit mode is logged as needing manual cleanup
     except Exception as e:
         logger.error(
             f"Non-transactional rollback of migration {migration.version} failed. "

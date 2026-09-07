@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import typer
 
 from confiture.cli.dsn import NO_CONFIG_OPTION_HELP
@@ -106,7 +107,7 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
         with contextlib.suppress(Exception):
             conn.rollback()
         return (True, row is None)
-    except Exception:
+    except psycopg.Error:
         with contextlib.suppress(Exception):
             conn.rollback()
         return (False, True)
@@ -133,6 +134,7 @@ def _collect_preflight_facts(session: MigratorSession) -> SchemaFacts:
         return SchemaFacts()
     try:
         facts = collect_schema_facts(conn)
+    # Reason: schema facts are advisory; any failure to collect them means 'unknown'
     except Exception:
         facts = SchemaFacts()
     # Leave no aborted transaction behind for run_against.
@@ -160,6 +162,7 @@ def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tupl
         else:
             return False, False
         return bool(e.infrastructure.replicas), bool(e.migration.allow_unsafe_under_replication)
+    # Reason: a replica-config probe; any failure means 'no replicas declared'
     except Exception:
         return False, False
 
@@ -813,6 +816,7 @@ def _against_pending_files(
                 else None
             ),
         )
+    # Reason: #152: every DSN-resolution failure is classified into CONFIG_007/CONFIG_010/CONFIG_006 here
     except Exception as e:
         from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -883,6 +887,7 @@ def _run_against(
                 against_url=against,
                 allow_non_transactional=allow_non_transactional,
             )
+    # Reason: #151: an unreachable --against URL of any kind is exit 3 with the shared envelope
     except Exception as e:
         # #151: an unreachable --against URL is a connection failure → exit 3
         # (CONFIG_006), with the shared {ok:false, error} envelope in JSON mode.

@@ -942,7 +942,9 @@ class TestDbProvisioner:
         """
         _validate_identifier(template)
         dropped: list[str] = []
-        for db in self.list_databases():
-            if db.kind == "clone" and db.detail == template and self.drop(db.name):
-                dropped.append(db.name)
+        dropped.extend(
+            db.name
+            for db in self.list_databases()
+            if db.kind == "clone" and db.detail == template and self.drop(db.name)
+        )
         return dropped

@@ -53,6 +53,7 @@ def schema_diff(
     try:
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
+    # Reason: any parser failure on either schema is DIFFER_400 for the operator
     except Exception as exc:
         fail(
             DifferError(

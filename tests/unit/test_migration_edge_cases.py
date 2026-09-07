@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import psycopg
 import pytest
 
 from confiture.exceptions import MigrationError, SQLError
@@ -50,7 +51,7 @@ class TestMigrationEdgeCases:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
         # Simulate SQL execution error
-        original_error = Exception("SQL syntax error")
+        original_error = psycopg.ProgrammingError("SQL syntax error")
         mock_cursor.execute.side_effect = original_error
 
         migration = TestMigration(connection=mock_conn)
@@ -84,7 +85,7 @@ class TestMigrationEdgeCases:
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
         # Simulate SQL execution error
-        original_error = Exception("Parameter error")
+        original_error = psycopg.ProgrammingError("Parameter error")
         mock_cursor.execute.side_effect = original_error
 
         migration = TestMigration(connection=mock_conn)
@@ -125,7 +126,7 @@ class TestMigrationEdgeCases:
         # Mock successful first execution
         def mock_execute(sql, params=None):
             if "INVALID SQL STATEMENT" in sql:
-                raise Exception("Syntax error in SQL statement")
+                raise psycopg.ProgrammingError("Syntax error in SQL statement")
             # Other statements succeed
 
         mock_cursor.execute.side_effect = mock_execute

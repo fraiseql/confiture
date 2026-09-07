@@ -163,7 +163,7 @@ class Level2SchemaValidator:
         violations: list[PrepSeedViolation] = []
 
         # Find all FK columns in prep_seed
-        for col_name, _col_type in prep_table.columns.items():
+        for col_name in prep_table.columns:
             if col_name.startswith("fk_") and col_name.endswith("_id"):
                 # Expected final column name (without _id suffix)
                 final_col = col_name[:-3]  # Remove _id

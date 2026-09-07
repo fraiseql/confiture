@@ -12,6 +12,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [0.55.0] - 2026-09-07
+
+- **Dead declarations removed** (Phase 11). `cryptography` was a runtime dependency imported nowhere —
+  dropped from `[project.dependencies]` and the lockfile; `tests/unit/test_declared_dependencies_used.py`
+  fails on any declared runtime dependency the package never imports. `test-output.log`,
+  `RELEASE_COMMANDS.sh` and the stray `python/db/` sample tree are untracked (`.gitignore` now covers
+  `*.log`), `testpaths` names only `tests/`; `tests/unit/test_tracked_files_hygiene.py` holds the line.
+  `scripts/gen_mkdocs_nav.py` renders tracked pages only, like the tree generator.
+- **The error-code catalog is data.** `confiture/error_code_table.py` holds one mapping per code (45 codes,
+  no imports, no logic); `error_codes.py` renders it into the registry in a 15-line loop instead of a
+  442-line hand-written function. `tests/unit/test_error_codes_data_table.py` pins the rows against a
+  snapshot captured from the old builder, keeps the table module data-only and fails on any function in
+  `error_codes.py` longer than 60 lines. The codebook, exit-code table and every error-code test are unchanged.
+- **Quality budgets that only shrink.** `tests/budgets.json` records, per file, how many functions exceed
+  McCabe complexity 15 (ruff's `C901`), how many exceed 150 lines, and how many `except Exception` /
+  bare `except` handlers it has; `tests/unit/test_budgets.py` fails on a file over its number and on a
+  stale (too generous) entry, `scripts/budgets.py --update` only ever lowers numbers. Starting baseline:
+  28 complex functions in 23 files, 26 long functions in 22 files, 207 broad handlers in 95 files. The
+  CLI-only broad-except baseline test is folded in (its counts were identical).
+- **Ruff `RUF` family enabled** (D6, one family per commit). 267 findings: 85 auto-fixed (f-string conversions,
+  parenthesised chains, unused unpacked names, sorted `__all__`), 28 mutable class attributes annotated
+  `ClassVar` (the `Migration` hook/precondition lists included), 21 `pytest.raises(match=…)` patterns made
+  raw strings, one dataclass default factory, one useless conditional. `RUF001–003` (confusable
+  characters) are ignored with a written reason: the typographic `ℹ → —` in user-facing text are deliberate.
+  Example migrations keep plain hook lists (`examples/*` ignores `RUF012`) because that is the API.
+- **`ERA` and `PTH` families enabled.** ERA's 22 hits were prose comments that parsed as code (row-shape
+  tuples, `# mode == "apply"`) and are reworded — no commented-out code existed. PTH: 67 sites moved to
+  pathlib (`Path.cwd()`, `Path(...).open()`, `.mkdir(parents=True)`, `.stat()`, `Path()` for `Path(".")`).
+- **`PERF` family enabled.** 61 single-`append` loops became `extend(...)` over a generator (an AST rewrite
+  from ruff's findings, reviewed), three dict iterations use `.values()`/keys directly.
+- **`PL` and `C901` enabled with thresholds and a shrink-only baseline.** McCabe 15, max-args 8,
+  max-branches 15, max-statements 60, max-returns 8. The package files that exceed one today are listed
+  in a generated `per-file-ignores` block in `pyproject.toml` rendered from `tests/budgets.json`
+  (`scripts/budgets.py --update`, numbers only go down; `--check` fails when the block or a count is
+  stale), so every new file is held to the thresholds. Test bodies, examples and scripts ignore the
+  size and magic-value rules by design. Hand fixes: 19 `subprocess.run` calls say `check=False`
+  explicitly, 8 loops no longer rebind their loop variable, NaN check via `math.isnan`, explicit
+  `__hash__ = None` on two structurally-equal dataclasses, the builder's fallback flag is a module
+  list instead of a `global`. `PLC0415` (function-level imports) stays governed by the Phase 08 budget.
+- **No mypy-style `type: ignore[...]` codes.** All 14 were stripped and ty is clean without them — none was
+  suppressing anything; `tests/unit/test_no_mypy_ignore_codes.py` forbids the form (and bare `# type: ignore`).
+- **Broad `except Exception` handlers: 207 → 94** (first step of the Phase 11 narrowing; the budget in
+  `tests/budgets.json` only shrinks). 15 CLI handlers that duplicated the command error boundary are gone
+  (`cli_boundary` now also reads a `report_output` parameter); 89 blind handlers in the core were each
+  either narrowed to the failure class the `try` can raise (`psycopg.Error` around database work,
+  `sqlglot`/`pglast` parse errors around parsing, `OSError` around files, node-shape errors around AST
+  walks) or kept broad with a written `# Reason:` — user code (migrations, hooks, callbacks, preconditions),
+  documented best-effort checks, and servers that must answer every failure. Tests that simulated a
+  database failure with a bare `Exception` now raise a `psycopg` error, as the database does.
+  Second step: the 53 files' remaining handlers were each narrowed (database work → `psycopg.Error`,
+  model validation → `TypeError`/`ValueError`, files → `OSError`) or given a `# Reason:`; a guard now fails
+  on any broad handler without one. Two tests that passed for the wrong reason surfaced: a mocked ledger
+  row of the wrong shape had been swallowed into "Failed to initialize".
+- **Coverage floors.** `[tool.coverage.report] fail_under = 80` (the full suite measures 85.7 %), and
+  `tests/coverage_floors.json` holds per-file floors of 70 % for the review's lowest modules, checked in
+  CI by `scripts/coverage_floors.py` from the JSON report. Three of them were raised by behaviour tests:
+  the hook context payloads, the confiture pytest plugin (an inner pytest session run in-process through
+  `pytester`, against the real test server) and `confiture branch`.
+- **Fixed: `confiture branch` was broken against its own pgGit client.** `list`, `delete`, `merge` and
+  `diff` called `get_branch()` without a name, `create` passed a `parent_branch=` the client does not
+  accept, `status` and `commit` read change lists `StatusInfo` never had, `diff`/`merge --dry-run` read
+  `change_type` where the client reports `operation`, and a successful merge dereferenced a `commit_hash`
+  that does not exist. Found by tests that drive the commands with a fake carrying the real client's
+  signatures; the commands now use `get_current_branch()`, `from_branch`, `operation`, and render the
+  status facts pgGit actually reports.
+- **`import confiture.testing` no longer imports the core.** pytest loads the confiture plugin through its
+  `pytest11` entry point at the start of every session; the package's eager re-exports made that import
+  the whole of `confiture.core`. The names resolve lazily now (PEP 562), pinned by a fresh-interpreter test.
+  This also fixed coverage measurement: under `pytest --cov` the package was imported before recording
+  started, so module-level lines read as missed — CI now starts `coverage run` before pytest.
+
 ## [0.54.0] - 2026-09-07
 
 Phase 10 of the 2026-09-06 review: documentation truth — every documented

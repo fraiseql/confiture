@@ -173,7 +173,7 @@ database_url: postgresql://localhost/test
         builder = SchemaBuilder(env="test", project_dir=tmp_path)
 
         # Verify seed file is recognized
-        schema_files, seed_files = builder.categorize_sql_files()
+        _schema_files, seed_files = builder.categorize_sql_files()
         assert len(seed_files) == 1
         seed_file = seed_files[0]
 

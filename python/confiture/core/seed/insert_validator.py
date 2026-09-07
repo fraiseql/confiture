@@ -7,6 +7,7 @@ of fragile regex patterns.
 
 from __future__ import annotations
 
+import sqlglot.errors
 from sqlglot import exp, parse_one
 
 
@@ -30,8 +31,8 @@ class InsertValidator:
         """
         try:
             ast = parse_one(insert_sql, dialect="postgres")
-        except Exception as e:
-            return False, f"Parse error: {str(e)}"
+        except sqlglot.errors.SqlglotError as e:
+            return False, f"Parse error: {e!s}"
 
         # Must be INSERT statement
         if not isinstance(ast, exp.Insert):
@@ -166,7 +167,7 @@ class InsertValidator:
         """
         try:
             ast = parse_one(insert_sql, dialect="postgres")
-        except Exception:
+        except sqlglot.errors.SqlglotError:
             return None
 
         if not isinstance(ast.expression, exp.Values):
@@ -174,10 +175,13 @@ class InsertValidator:
 
         rows = []
 
-        for row_expr in ast.expression.expressions:
-            if not isinstance(row_expr, exp.Tuple):
-                # Single value wrapped in Tuple
-                row_expr = exp.Tuple(expressions=[row_expr])
+        for raw_row_expr in ast.expression.expressions:
+            # A single value is wrapped in a Tuple
+            row_expr = (
+                raw_row_expr
+                if isinstance(raw_row_expr, exp.Tuple)
+                else exp.Tuple(expressions=[raw_row_expr])
+            )
 
             values = []
             for col_expr in row_expr.expressions:
@@ -232,7 +236,7 @@ class InsertValidator:
                 # Use SQL method to get qualified name (handles schema.table)
                 return table.sql(dialect="postgres")
             return None
-        except Exception:
+        except (sqlglot.errors.SqlglotError, AttributeError, IndexError):
             return None
 
     def extract_columns(self, insert_sql: str) -> list[str] | None:
@@ -264,5 +268,5 @@ class InsertValidator:
                     columns.append(str(col_expr))
 
             return columns
-        except Exception:
+        except (sqlglot.errors.SqlglotError, AttributeError, IndexError):
             return None

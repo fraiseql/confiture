@@ -89,9 +89,9 @@ from confiture.core.idempotency.static_eval.values import (
 
 __all__ = [
     "MAX_DEPTH",
+    "REMEDIES",
     "ModuleModel",
     "PathV",
-    "REMEDIES",
     "Refusal",
     "Seq",
     "Str",

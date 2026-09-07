@@ -536,17 +536,17 @@ def _parse_alter_owner_in_do_block(
     found: list[tuple[_AlterOwnerRecord, bool]] = []
     body_upper = body.upper()
     guard_present = "IF EXISTS" in body_upper
-    for m in alter_re.finditer(body):
-        found.append(
-            (
-                _AlterOwnerRecord(
-                    schema=m.group("schema") or _DEFAULT_SCHEMA,
-                    relname=m.group("name"),
-                    new_owner=m.group("owner"),
-                ),
-                guard_present,
-            )
+    found.extend(
+        (
+            _AlterOwnerRecord(
+                schema=m.group("schema") or _DEFAULT_SCHEMA,
+                relname=m.group("name"),
+                new_owner=m.group("owner"),
+            ),
+            guard_present,
         )
+        for m in alter_re.finditer(body)
+    )
     return found
 
 

@@ -75,7 +75,7 @@ def _prepare_location_dir(location: str, uid: int, gid: int) -> bool:
     as a different user than the server.
     """
     try:
-        os.makedirs(location, mode=0o700, exist_ok=True)
+        Path(location).mkdir(mode=0o700, exist_ok=True, parents=True)
         os.chown(location, uid, gid)
     except PermissionError:
         return False
@@ -107,7 +107,7 @@ def _print_ram_setup_text(result: RamSetupResult, guided_command: str | None) ->
 def provision_template(
     template: str = typer.Option(..., "--template", help="Template database name."),
     env: str = typer.Option("local", "--env", "-e", help="Environment to build."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     from_artifact: Path = typer.Option(
         None,
         "--from-artifact",
@@ -164,7 +164,7 @@ def clone(
     template: str = typer.Option(..., "--template", help="Source template database."),
     target: str = typer.Option(..., "--target", help="Clone database name to create."),
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
     sync_commit_off: bool = typer.Option(
         True,
@@ -211,7 +211,7 @@ def ram_setup(
         help="Drop non-managed DBs in the tablespace and bypass the tmpfs-root allowlist.",
     ),
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
@@ -254,7 +254,7 @@ def drop(
         False, "--force", help="Drop even if not confiture-managed (use with care)."
     ),
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
@@ -274,7 +274,7 @@ def drop(
 def status(
     template: str = typer.Option(..., "--template", help="Template database name."),
     env: str = typer.Option("local", "--env", "-e", help="Environment to hash."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
@@ -298,7 +298,7 @@ def status(
 @cli_boundary
 def list_databases(
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
@@ -319,7 +319,7 @@ def list_databases(
 def prune(
     template: str = typer.Option(..., "--template", help="Template whose clones to drop."),
     env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
-    project_dir: Path = typer.Option(Path("."), "--project-dir", help="Project directory."),
+    project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:

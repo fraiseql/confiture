@@ -58,6 +58,7 @@ def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
         ) from e
     try:
         database_url: str | None = dsn_from_config(data)
+    # Reason: a config without a usable DSN is 'no URL' for these settings, whatever the cause
     except Exception:
         database_url = None
     return _MigrationSettings(migration=migration, database_url=database_url)

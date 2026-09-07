@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
@@ -46,7 +47,6 @@ def debug_cte(
       confiture debug cte -d $DATABASE_URL --file query.sql --format json
         Output results as JSON
     """
-    import psycopg
 
     from confiture.core.cte_debugger import CTEDebugger
 
@@ -72,11 +72,11 @@ def debug_cte(
             )
         query = file.read_text()
     else:
-        query = sql  # type: ignore[assignment]
+        query = sql
 
     try:
         conn = psycopg.connect(database_url)
-    except Exception as e:
+    except psycopg.Error as e:
         fail(
             ConfigurationError(
                 f"Connection failed: {e}",

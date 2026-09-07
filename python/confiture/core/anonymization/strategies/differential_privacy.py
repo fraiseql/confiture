@@ -265,7 +265,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         Returns:
             Scale for noise distribution
         """
-        # Scale = Δf / ε
+        # The scale is Δf / ε,
         # Where Δf is sensitivity, ε is privacy budget
         scale = self.config.sensitivity / self.config.epsilon
 
@@ -282,7 +282,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         """
         if self.config.mechanism == "laplace":
             # Laplace distribution: symmetric around 0
-            # Variance = 2 * scale^2
+            # with variance 2 · scale².
             u = random.uniform(-0.5, 0.5)
             noise = (
                 -scale
@@ -352,7 +352,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         # Check numeric
         try:
             numeric_value = float(value)
-            if numeric_value != numeric_value:  # NaN check
+            if math.isnan(numeric_value):
                 errors.append(f"Column {table_name}.{column_name}: NaN value cannot be anonymized")
         except (TypeError, ValueError):
             errors.append(

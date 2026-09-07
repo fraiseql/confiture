@@ -143,7 +143,7 @@ class IPAddressStrategy(AnonymizationStrategy):
         Returns:
             Anonymized IPv4 address string
         """
-        rng = random.Random(f"{self.config.seed}:{str(ip)}".encode())
+        rng = random.Random(f"{self.config.seed}:{ip!s}".encode())
 
         if self.config.preserve_subnet:
             # Preserve first N bits (subnet), anonymize host bits
@@ -180,7 +180,7 @@ class IPAddressStrategy(AnonymizationStrategy):
         Returns:
             Anonymized IPv6 address string
         """
-        rng = random.Random(f"{self.config.seed}:{str(ip)}".encode())
+        rng = random.Random(f"{self.config.seed}:{ip!s}".encode())
 
         if self.config.preserve_subnet:
             # Preserve first N bits (subnet), anonymize host bits

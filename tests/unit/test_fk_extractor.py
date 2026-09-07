@@ -90,7 +90,7 @@ CREATE TABLE orders (
     customer_id BIGINT REFERENCES customers(id) ON UPDATE SET NULL
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].on_update == "SET NULL"
 
@@ -101,7 +101,7 @@ CREATE TABLE orders (
     customer_id BIGINT REFERENCES customers(id) ON DELETE CASCADE ON UPDATE SET DEFAULT
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].on_delete == "CASCADE"
         assert fks[0].on_update == "SET DEFAULT"
@@ -113,7 +113,7 @@ CREATE TABLE crm.tb_order (
     fk_product BIGINT REFERENCES product.tb_product(pk_product)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].source_table == "crm.tb_order"
         assert fks[0].target_table == "product.tb_product"
@@ -126,7 +126,7 @@ CREATE TABLE orders (
     customer_id BIGINT REFERENCES customers
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].target_table == "customers"
         # When no target column specified, default to source column name
@@ -139,7 +139,7 @@ CREATE TABLE orders (
     customer_id BIGINT CONSTRAINT fk_orders_customer REFERENCES customers(id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].constraint_name == "fk_orders_customer"
 
@@ -151,7 +151,7 @@ CREATE TABLE orders (
     product_id BIGINT REFERENCES products(id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 2
         assert fks[0].source_columns == ["customer_id"]
         assert fks[1].source_columns == ["product_id"]
@@ -401,7 +401,7 @@ CREATE TABLE orders (
     FOREIGN KEY (customer_id) REFERENCES customers (id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].constraint_name is None
 
@@ -413,7 +413,7 @@ CREATE TABLE orders (
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE ON UPDATE NO ACTION
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].on_delete == "CASCADE"
         assert fks[0].on_update == "NO ACTION"
@@ -427,7 +427,7 @@ CREATE TABLE order_items (
     CONSTRAINT fk_order_product FOREIGN KEY (order_id, product_id) REFERENCES order_products (order_id, product_id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].source_columns == ["order_id", "product_id"]
         assert fks[0].target_columns == ["order_id", "product_id"]
@@ -440,7 +440,7 @@ CREATE TABLE orders (
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers (id) DEFERRABLE INITIALLY DEFERRED
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].deferrable == "DEFERRABLE INITIALLY DEFERRED"
 
@@ -452,7 +452,7 @@ CREATE TABLE orders (
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers (id) NOT DEFERRABLE
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].deferrable == "NOT DEFERRABLE"
 
@@ -589,7 +589,7 @@ CREATE TABLE orders (
 
 CREATE VIEW orders_view AS SELECT * FROM orders;
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        stripped, _fks = extract_and_strip_fks(sql)
         assert "CREATE VIEW" in stripped
 
     def test_non_fk_constraints_preserved(self):
@@ -636,7 +636,7 @@ CREATE TABLE order_items (
     product_id BIGINT REFERENCES products(id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 3
         assert fks[0].source_table == "orders"
         assert fks[1].source_table == "order_items"
@@ -649,7 +649,7 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_id BIGINT REFERENCES customers(id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].source_table == "orders"
 
@@ -665,7 +665,7 @@ CREATE TABLE "MyOrders" (
     customer_id BIGINT REFERENCES "MyCustomers"("customerId")
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].source_table == '"MyOrders"'
         assert fks[0].target_table == '"MyCustomers"'
@@ -678,7 +678,7 @@ CREATE TABLE "my_schema"."MyOrders" (
     customer_id BIGINT REFERENCES "other"."Customers"(id)
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 1
         assert fks[0].source_table == '"my_schema"."MyOrders"'
         assert fks[0].target_table == '"other"."Customers"'
@@ -709,7 +709,7 @@ CREATE TABLE orders (
     customer_id BIGINT
 );
 """
-        stripped, fks = extract_and_strip_fks(sql)
+        _stripped, fks = extract_and_strip_fks(sql)
         assert len(fks) == 0
 
     def test_inline_comment_between_table_constraints_preserves_constraints(self):

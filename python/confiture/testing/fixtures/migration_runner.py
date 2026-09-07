@@ -78,7 +78,7 @@ class MigrationRunner:
         try:
             if dry_run:
                 # Parse SQL but don't execute
-                with open(migration_file) as f:
+                with Path(migration_file).open() as f:
                     sql = f.read()
                 return MigrationResult(
                     success=True,
@@ -91,7 +91,7 @@ class MigrationRunner:
 
             # Execute migration within a transaction
             with self.connection.cursor() as cur:
-                with open(migration_file) as f:
+                with Path(migration_file).open() as f:
                     sql = f.read()
 
                 # Execute the migration SQL
@@ -108,7 +108,7 @@ class MigrationRunner:
                 stderr="",
             )
 
-        except Exception as e:
+        except (OSError, psycopg.Error) as e:
             duration = time.time() - start_time
             self.connection.rollback()
 

@@ -302,7 +302,7 @@ class RollbackTester:
 
                 result.error = "; ".join(changes)
 
-        except Exception as e:
+        except Exception as e:  # Reason: the migration under analysis is user code; any failure is the analysis result
             result.error = str(e)
             # Try to rollback the transaction
             with contextlib.suppress(Exception):

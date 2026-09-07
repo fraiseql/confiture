@@ -387,9 +387,9 @@ class MigrationGenerator:
 
         # Determine name from changes
         obj_types = {c.object_type for c in changes}
-        name_parts = [source_branch.split("/")[-1]]
+        name_parts = [source_branch.rsplit("/", maxsplit=1)[-1]]
         if len(obj_types) == 1:
-            name_parts.append(list(obj_types)[0].lower())
+            name_parts.append(next(iter(obj_types)).lower())
 
         return GeneratedMigration(
             version=self._generate_version(index),
@@ -450,7 +450,7 @@ class MigrationGenerator:
         """Convert branch name to migration-safe name."""
         # Remove prefix like feature/, hotfix/
         if "/" in name:
-            name = name.split("/")[-1]
+            name = name.rsplit("/", maxsplit=1)[-1]
         return self._sanitize_name(name)
 
     def _sanitize_name(self, name: str) -> str:

@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import psycopg
+
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.migrator import _version_from_migration_filename
 from confiture.core.sql_lexer import split_statements, statement_type
@@ -135,7 +137,7 @@ class MigrationVerifier:
                 row = cursor.fetchone()
             except VerifyFileError:
                 raise
-            except Exception as e:
+            except psycopg.Error as e:
                 self._end_savepoint(cursor)
                 return VerifyResult(**failed, error=str(e))
             self._end_savepoint(cursor)

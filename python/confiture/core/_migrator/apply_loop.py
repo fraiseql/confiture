@@ -243,7 +243,7 @@ def _up_under_lock(
                     name=migration.name,
                     elapsed_ms=elapsed,
                 )
-            except Exception as exc:
+            except Exception as exc:  # Reason: a migration's up() is user code and may raise anything; the failure is recorded and reported
                 failed_exception = exc
                 emit(
                     on_event,
@@ -253,7 +253,7 @@ def _up_under_lock(
                     message=str(exc),
                 )
                 break
-    except Exception as exc:
+    except Exception as exc:  # Reason: loader/constructor of a user migration module may raise anything; recorded and reported
         if failed_exception is None:
             failed_exception = exc
             emit(on_event, "failed", message=str(exc))
@@ -333,9 +333,10 @@ def _up_dry_run_execute(
                     # Cannot run inside the SAVEPOINT: the autocommit path
                     # would commit everything tested so far.
                     skipped_versions.append(migration.version)
-                    checksum_warnings = checksum_warnings + [
+                    checksum_warnings = [
+                        *checksum_warnings,
                         f"dry_run_execute: skipped {migration.version}_{migration.name} — "
-                        "non-transactional migrations cannot run inside a SAVEPOINT"
+                        "non-transactional migrations cannot run inside a SAVEPOINT",
                     ]
                     emit(
                         on_event,
@@ -370,7 +371,7 @@ def _up_dry_run_execute(
                         name=migration.name,
                         elapsed_ms=elapsed,
                     )
-                except Exception as exc:
+                except Exception as exc:  # Reason: a migration's up() is user code and may raise anything; recorded and reported
                     failed_exception = exc
                     emit(
                         on_event,
@@ -383,7 +384,7 @@ def _up_dry_run_execute(
         finally:
             session._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
             session._conn.execute("RELEASE SAVEPOINT dry_run_execute")
-    except Exception as exc:
+    except Exception as exc:  # Reason: user migration code under the dry-run savepoint may raise anything; recorded and reported
         if failed_exception is None:
             failed_exception = exc
 
@@ -408,8 +409,10 @@ def _up_dry_run_execute(
         dry_run=True,
         dry_run_execute=True,
         skipped=skipped_versions,
-        warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"]
-        + checksum_warnings,
+        warnings=[
+            "dry_run_execute: all SQL executed successfully, changes rolled back",
+            *checksum_warnings,
+        ],
     )
 
 

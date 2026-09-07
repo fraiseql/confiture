@@ -427,7 +427,7 @@ class TestMigratorSessionPreflight:
         (mdir / "002_pending.down.sql").write_text("DROP TABLE t2;")
 
         env = self._make_env()
-        session, mock_conn = self._make_session(env, mdir)
+        session, _mock_conn = self._make_session(env, mdir)
 
         # Mock status() to return 001 as applied, 002 as pending
         mock_status = StatusResult(

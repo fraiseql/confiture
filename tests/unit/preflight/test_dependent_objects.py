@@ -160,7 +160,7 @@ class TestDependentObjectsCheckerLogic:
             source_file=None,
             source_line=None,
         )
-        # (relkind, schema, name, referenced_columns)
+        # Each row is relkind, schema, name, referenced_columns.
         rows = [
             ("v", "public", "v_active_users", ["id", "email"]),
             ("v", "public", "v_admin_users", []),

@@ -265,7 +265,7 @@ class Acl001GrantCoverage:
 
             try:
                 result = extract_sql_from_python_migration(migration)
-            except Exception:
+            except Exception:  # Reason: the static evaluator refuses in many shapes; every one means 'no SQL extracted' for this rule
                 return ""
             return "\n".join(snippet.sql for snippet in result.snippets)
         return migration.read_text()

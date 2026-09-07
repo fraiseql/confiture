@@ -24,13 +24,13 @@ class TestLuhnChecksum:
 
     def test_luhn_checksum_mastercard(self):
         """Test Luhn checksum for Mastercard."""
-        # Mastercard: 5425233430109903
+        # A Mastercard number (5425233430109903) without its check digit:
         checksum = luhn_checksum("542523343010990")
         assert checksum == 3
 
     def test_luhn_checksum_amex(self):
         """Test Luhn checksum for Amex."""
-        # Amex: 374245455400126
+        # An Amex number (374245455400126) without its check digit:
         checksum = luhn_checksum("37424545540012")
         assert checksum == 6
 
@@ -409,7 +409,7 @@ class TestCardTypes:
 
     def test_card_types_structure(self):
         """Test CARD_TYPES has correct structure."""
-        for _card_type, (length, prefixes) in CARD_TYPES.items():
+        for length, prefixes in CARD_TYPES.values():
             assert isinstance(length, int)
             assert isinstance(prefixes, list)
             assert len(prefixes) > 0

@@ -39,18 +39,18 @@ from confiture.core.anonymization.strategy import (
 )
 
 __all__ = [
-    # Extension-point base classes
-    "AnonymizationStrategy",
-    "StrategyConfig",
-    "resolve_seed",
-    # Registry
-    "StrategyRegistry",
-    "register_strategy",
     # YAML profile
     "AnonymizationProfile",
     "AnonymizationRule",
+    # Extension-point base classes
+    "AnonymizationStrategy",
+    "StrategyConfig",
     "StrategyDefinition",
+    # Registry
+    "StrategyRegistry",
     "StrategyType",
     "TableDefinition",
+    "register_strategy",
+    "resolve_seed",
     "resolve_seed_for_column",
 ]

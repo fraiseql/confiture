@@ -228,7 +228,7 @@ def reinit(
             dry_run=dry_run,
         )
 
-    except Exception:
+    except psycopg.Error:
         migrator.connection.rollback()
         raise
 
@@ -299,7 +299,7 @@ def apply_ddl_string(migrator: Migrator, ddl: str) -> tuple[int, list[str]]:
                 try:
                     cursor.execute(stmt)
                     executed += 1
-                except Exception as exc:
+                except psycopg.Error as exc:
                     if "CREATE EXTENSION" in stmt.upper():
                         warnings.append(f"CREATE EXTENSION warning: {exc}")
                     else:
@@ -364,6 +364,7 @@ def rebuild(
             env=env_config.name if env_config and hasattr(env_config, "name") else "rebuild",
         )
         ddl = builder.build(schema_only=True)
+    # Reason: any schema build failure is a RebuildError with the DDL remedy
     except Exception as exc:
         raise RebuildError(
             f"Schema build failed: {exc}",

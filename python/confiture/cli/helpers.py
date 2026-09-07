@@ -21,9 +21,11 @@ from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
 from confiture.core.parser_info import parser_stamp
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.lint import LintReport, LintSeverity, Violation
-from confiture.url_redaction import redact_url as redact_url  # re-export (layering)
+from confiture.url_redaction import (
+    redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
+)
 
 _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 
@@ -140,38 +142,38 @@ def _convert_linter_report(
     }
 
     # Convert all violations
-    for violation in linter_report.errors:
-        violations.append(
-            Violation(
-                rule_id=violation.rule_id,
-                rule_name=violation.rule_name,
-                severity=severity_map[violation.severity],
-                message=violation.message,
-                location=violation.object_name,
-            )
+    violations.extend(
+        Violation(
+            rule_id=violation.rule_id,
+            rule_name=violation.rule_name,
+            severity=severity_map[violation.severity],
+            message=violation.message,
+            location=violation.object_name,
         )
+        for violation in linter_report.errors
+    )
 
-    for violation in linter_report.warnings:
-        violations.append(
-            Violation(
-                rule_id=violation.rule_id,
-                rule_name=violation.rule_name,
-                severity=severity_map[violation.severity],
-                message=violation.message,
-                location=violation.object_name,
-            )
+    violations.extend(
+        Violation(
+            rule_id=violation.rule_id,
+            rule_name=violation.rule_name,
+            severity=severity_map[violation.severity],
+            message=violation.message,
+            location=violation.object_name,
         )
+        for violation in linter_report.warnings
+    )
 
-    for violation in linter_report.info:
-        violations.append(
-            Violation(
-                rule_id=violation.rule_id,
-                rule_name=violation.rule_name,
-                severity=severity_map[violation.severity],
-                message=violation.message,
-                location=violation.object_name,
-            )
+    violations.extend(
+        Violation(
+            rule_id=violation.rule_id,
+            rule_name=violation.rule_name,
+            severity=severity_map[violation.severity],
+            message=violation.message,
+            location=violation.object_name,
         )
+        for violation in linter_report.info
+    )
 
     return LintReport(
         violations=violations,
@@ -431,5 +433,5 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
         with open_connection(config_data) as conn, conn.cursor() as cur:
             cur.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
             return {row[0] for row in cur.fetchall()}
-    except Exception:
+    except (ConfiturError, psycopg.Error):
         return set()

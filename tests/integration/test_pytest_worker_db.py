@@ -161,6 +161,7 @@ def test_real_xdist_n2_gives_each_worker_its_own_db(clean_server: None, tmp_path
         capture_output=True,
         text=True,
         cwd=str(inner),
+        check=False,
     )
 
     assert result.returncode == 0, f"inner pytest failed:\n{result.stdout}\n{result.stderr}"
@@ -242,6 +243,7 @@ def test_real_xdist_n2_clones_into_ram_tablespace(
         capture_output=True,
         text=True,
         cwd=str(inner),
+        check=False,
     )
 
     assert result.returncode == 0, f"inner pytest failed:\n{result.stdout}\n{result.stderr}"

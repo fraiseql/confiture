@@ -31,15 +31,14 @@ logger = logging.getLogger(__name__)
 # says so once per process at INFO.
 _core: Any = None
 HAS_RUST = False
-_fallback_noted = False
+_FALLBACK_NOTED: list[str] = []  # the first reason logged; empty until the fallback is used
 
 
 def _note_fallback(reason: str) -> None:
     """Log, once per process, that the Python hash path is in use and why."""
-    global _fallback_noted
-    if _fallback_noted:
+    if _FALLBACK_NOTED:
         return
-    _fallback_noted = True
+    _FALLBACK_NOTED.append(reason)
     logger.info("native extension %s: hashing schema files in Python", reason)
 
 
@@ -223,7 +222,7 @@ class SchemaBuilder:
 
         if not common_parts:
             # No common parent, use current directory
-            return Path(".")
+            return Path()
 
         # Reconstruct path from common parts
         return Path(*common_parts)
@@ -380,7 +379,7 @@ class SchemaBuilder:
         for file in files:
             try:
                 files_and_content[file] = file.read_text(encoding="utf-8")
-            except Exception as e:
+            except (OSError, UnicodeDecodeError) as e:
                 raise SchemaError(f"Error reading {file}: {e}") from e
 
         # Run validator
@@ -399,15 +398,16 @@ class SchemaBuilder:
 
         if errors and config.fail_on_unclosed_blocks:
             should_fail = True
-            for error in errors:
-                error_messages.append(f"  {error.file_path}:{error.line_number} - {error.message}")
+            error_messages.extend(
+                f"  {error.file_path}:{error.line_number} - {error.message}" for error in errors
+            )
 
         if spillovers and config.fail_on_spillover:
             should_fail = True
-            for spillover in spillovers:
-                error_messages.append(
-                    f"  {spillover.file_path}:{spillover.line_number} - {spillover.message}"
-                )
+            error_messages.extend(
+                f"  {spillover.file_path}:{spillover.line_number} - {spillover.message}"
+                for spillover in spillovers
+            )
 
         if should_fail:
             msg = "Comment validation failed:\n" + "\n".join(error_messages)
@@ -631,7 +631,7 @@ class SchemaBuilder:
             try:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(schema, encoding="utf-8")
-            except Exception as e:
+            except OSError as e:
                 raise SchemaError(
                     f"Error writing schema to {output_path}: {e}",
                     resolution_hint="Check that the output directory exists and you have write permissions",
@@ -678,7 +678,7 @@ class SchemaBuilder:
                 if progress:
                     progress.update(None, advance=1)
 
-            except Exception as e:
+            except (OSError, UnicodeDecodeError) as e:
                 raise SchemaError(f"Error reading {file}: {e}") from e
 
         return "".join(parts)
@@ -855,7 +855,7 @@ class SchemaBuilder:
             except OSError as e:
                 # The same failure the Python path reports: a file that cannot be read.
                 raise SchemaError(f"Error reading schema files for hash: {e}") from e
-            except Exception as e:
+            except Exception as e:  # Reason: a fault of any kind in the native extension falls back to the Python hash (Phase 09)
                 _note_fallback(f"failed ({type(e).__name__}: {e})")
             else:
                 return digest
@@ -875,7 +875,7 @@ class SchemaBuilder:
                 content = file.read_bytes()
                 hasher.update(content)
                 hasher.update(b"\x00")  # Separator
-            except Exception as e:
+            except OSError as e:
                 raise SchemaError(f"Error reading {file} for hash: {e}") from e
 
         return hasher.hexdigest()

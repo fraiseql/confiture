@@ -141,14 +141,14 @@ def test_the_fallback_to_python_is_logged_once(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    files, base = schema_tree
+    _files, _base = schema_tree
     (tmp_path / "db" / "environments").mkdir(parents=True)
     (tmp_path / "db" / "environments" / "local.yaml").write_text(
         "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
     )
     builder = SchemaBuilder(env="local", project_dir=tmp_path)
     monkeypatch.setattr(builder_module, "HAS_RUST", False)
-    builder_module._fallback_noted = False
+    builder_module._FALLBACK_NOTED.clear()
     with caplog.at_level(logging.INFO, logger="confiture.core.builder"):
         builder.compute_hash()
         builder.compute_hash()

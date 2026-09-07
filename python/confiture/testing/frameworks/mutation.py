@@ -115,7 +115,7 @@ class Mutation:
             return self.apply_fn(sql)
         elif self.apply_regex:
             # Simple regex-based mutations
-            # Format: "pattern=>replacement"
+            # Written as `pattern=>replacement`.
             parts = self.apply_regex.split("=>")
             if len(parts) == 2:
                 pattern, replacement = parts
@@ -505,7 +505,7 @@ class MutationRunner:
             if not migration_file.exists():
                 raise FileNotFoundError(f"Migration not found: {migration_file}")
 
-            with open(migration_file) as f:
+            with Path(migration_file).open() as f:
                 original_sql = f.read()
 
             # Apply mutation
@@ -545,7 +545,7 @@ class MutationRunner:
                     stderr="",
                 )
 
-            except Exception as e:
+            except psycopg.Error as e:
                 self.connection.rollback()
                 duration = time.time() - start_time
 
@@ -559,7 +559,7 @@ class MutationRunner:
                     error=e,
                 )
 
-        except Exception as e:
+        except (OSError, psycopg.Error) as e:
             return MutationResult(
                 mutation_id=mutation.id,
                 success=False,
@@ -641,5 +641,5 @@ class MutationRunner:
 
     def export_report(self, report: MutationReport, path: Path):
         """Export report to file."""
-        with open(path, "w") as f:
+        with Path(path).open("w") as f:
             json.dump(report.to_dict(), f, indent=2)

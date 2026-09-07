@@ -3,6 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import psycopg
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -385,7 +386,7 @@ def test_apply_body_corf_failure_rolls_back(tmp_path):
     schema.write_text(SCHEMA_WITH_FN)
 
     fake_cursor, fake_conn = _make_cursor_conn()
-    fake_cursor.execute.side_effect = Exception("syntax error in body")
+    fake_cursor.execute.side_effect = psycopg.ProgrammingError("syntax error in body")
 
     with (
         patch(
@@ -489,7 +490,7 @@ def test_apply_text_output_lists_body_fixes(tmp_path):
     schema = tmp_path / "schema.sql"
     schema.write_text(SCHEMA_WITH_FN)
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(
@@ -543,7 +544,7 @@ def test_apply_json_includes_body_fields(tmp_path):
     schema = tmp_path / "schema.sql"
     schema.write_text(SCHEMA_WITH_FN)
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(
@@ -600,7 +601,7 @@ def test_apply_residual_body_drift_exits_1(tmp_path):
     schema = tmp_path / "schema.sql"
     schema.write_text(SCHEMA_WITH_FN)
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(
@@ -668,7 +669,7 @@ def test_apply_json_no_body_fields_without_flag(tmp_path):
     )
     sig_clean = _clean_sig_report()
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(

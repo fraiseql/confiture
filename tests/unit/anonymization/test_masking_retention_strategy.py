@@ -338,7 +338,7 @@ class TestMaskingRetentionValidation:
 
     def test_validate_comprehensive_includes_context(self, strategy):
         """Test comprehensive validation includes column context."""
-        is_valid, errors = strategy.validate_comprehensive("  ", "email", "users")
+        _is_valid, errors = strategy.validate_comprehensive("  ", "email", "users")
 
         # Context should be in error message
         for error in errors:

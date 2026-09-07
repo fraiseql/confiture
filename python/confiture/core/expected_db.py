@@ -149,6 +149,7 @@ class ExpectedSchemaDB:
             # Registered after TempDatabase → closed first on unwind (LIFO), so the
             # connection is gone before the DROP DATABASE runs.
             self._conn = self._stack.enter_context(psycopg.connect(self._temp_url, autocommit=True))
+        # Reason: resource guard: the scratch database is dropped on any exit, KeyboardInterrupt included
         except BaseException:
             # Any build/connect failure still tears down the scratch DB.
             self._stack.close()

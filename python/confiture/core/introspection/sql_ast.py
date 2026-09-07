@@ -105,9 +105,7 @@ def _find_cte_refs(query_text: str, known_ctes: set[str]) -> list[str]:
     """Find references to known CTEs in a query text."""
     refs = []
     query_lower = query_text.lower()
-    for cte_name in sorted(known_ctes):
-        if cte_name.lower() in query_lower:
-            refs.append(cte_name)
+    refs.extend(cte_name for cte_name in sorted(known_ctes) if cte_name.lower() in query_lower)
     return refs
 
 

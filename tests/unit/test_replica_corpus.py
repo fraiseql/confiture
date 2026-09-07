@@ -20,7 +20,7 @@ from confiture.core.replica.classifier import OperationClassifier
 from confiture.core.replica.safety import classify_replica_safety, replica_severity
 from confiture.core.risk_tier import RiskTier
 
-# (sql, expected_safety, expected_severity_with_replicas, expected_risk_tier)
+# Each entry: sql → expected_safety, expected_severity_with_replicas, expected_risk_tier
 CORPUS = {
     "add_column_nullable": ("ALTER TABLE t ADD COLUMN c int;", "safe", None, RiskTier.ADDITIVE),
     "add_column_not_null_default": (

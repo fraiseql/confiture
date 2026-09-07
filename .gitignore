@@ -95,3 +95,6 @@ ISSUE_*_FIX*.md
 .phase*.md
 TRINITY_*.md
 DOCUMENTATION_DELIVERABLES.txt
+
+# Test and tool output
+*.log

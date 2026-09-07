@@ -297,7 +297,7 @@ class TestBlueGreenOrchestrator:
 
     def test_switch_traffic(self, mock_connection):
         """Test traffic switching."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         config = BlueGreenConfig(traffic_switch_delay=0)
         orchestrator = BlueGreenOrchestrator(conn, config)
 
@@ -319,7 +319,7 @@ class TestBlueGreenOrchestrator:
 
     def test_rollback_swap_back(self, mock_connection):
         """Test rollback by swapping schemas back."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         orchestrator = BlueGreenOrchestrator(conn)
         orchestrator.state.phase = MigrationPhase.TRAFFIC_SWITCHED
         orchestrator.state.metadata["backup_schema"] = "public_backup_123"
@@ -330,7 +330,7 @@ class TestBlueGreenOrchestrator:
 
     def test_rollback_no_backup_schema(self, mock_connection):
         """Test rollback fails without backup schema."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         orchestrator = BlueGreenOrchestrator(conn)
         orchestrator.state.phase = MigrationPhase.TRAFFIC_SWITCHED
         # No backup_schema in metadata
@@ -342,7 +342,7 @@ class TestBlueGreenOrchestrator:
 
     def test_manual_rollback(self, mock_connection):
         """Test manual rollback method."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         orchestrator = BlueGreenOrchestrator(conn)
         orchestrator.state.phase = MigrationPhase.DATA_SYNCING
 
@@ -353,7 +353,7 @@ class TestBlueGreenOrchestrator:
 
     def test_manual_rollback_unavailable(self, mock_connection):
         """Test manual rollback when not available."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         orchestrator = BlueGreenOrchestrator(conn)
         orchestrator.state.rollback_available = False
 
@@ -363,7 +363,7 @@ class TestBlueGreenOrchestrator:
 
     def test_cleanup_backup(self, mock_connection):
         """Test cleaning up backup schema."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         orchestrator = BlueGreenOrchestrator(conn)
         orchestrator.state.metadata["backup_schema"] = "public_backup_123"
 
@@ -374,7 +374,7 @@ class TestBlueGreenOrchestrator:
 
     def test_cleanup_backup_no_schema(self, mock_connection):
         """Test cleanup when no backup schema."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         orchestrator = BlueGreenOrchestrator(conn)
 
         success = orchestrator.cleanup_backup()

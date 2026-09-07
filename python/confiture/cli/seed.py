@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -41,7 +42,7 @@ DEFAULT_COPY_THRESHOLD = 1000
 DEFAULT_ENV = "local"
 
 
-def _format_benchmark_output(result: Any) -> None:  # type: ignore[no-untyped-def]
+def _format_benchmark_output(result: Any) -> None:
     """Format and display benchmark results.
 
     Args:
@@ -137,6 +138,7 @@ def _validate_prep_seed(
 
     except typer.Exit:
         raise
+    # Reason: seed validate's --output is its report path; the boundary cannot know that, so it routes the envelope itself
     except Exception as e:
         fail(e, json_mode=is_json(format_), output_file=output)
 
@@ -291,19 +293,18 @@ def validate(
                     json_mode=is_json(format_),
                     output_file=output,
                 )
+        # Validate provided directory
+        elif seeds_dir.exists():
+            dirs_to_validate.append((seeds_dir, "default"))
         else:
-            # Validate provided directory
-            if seeds_dir.exists():
-                dirs_to_validate.append((seeds_dir, "default"))
-            else:
-                fail(
-                    ConfigurationError(
-                        f"Seeds directory not found: {seeds_dir}",
-                        error_code="CONFIG_004",
-                    ),
-                    json_mode=is_json(format_),
-                    output_file=output,
-                )
+            fail(
+                ConfigurationError(
+                    f"Seeds directory not found: {seeds_dir}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=is_json(format_),
+                output_file=output,
+            )
 
         # Create validator
         validator = SeedValidator()
@@ -387,6 +388,7 @@ def validate(
 
     except typer.Exit:
         raise
+    # Reason: seed validate's --output is its report path; the boundary cannot know that, so it routes the envelope itself
     except Exception as e:
         fail(e, json_mode=is_json(format_), output_file=output)
 
@@ -493,126 +495,116 @@ def apply(
       OUTPUT: --format, --report
         Structured results (JSON/CSV for automation)
     """
-    try:
-        if not sequential:
-            console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
-            console.print("[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
-            raise typer.Exit(0)  # success-signal: advisory, nothing applied
+    if not sequential:
+        console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
+        console.print("[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
+        raise typer.Exit(0)  # success-signal: advisory, nothing applied
 
-        # Verify seeds directory exists
-        if not seeds_dir.exists():
+    # Verify seeds directory exists
+    if not seeds_dir.exists():
+        fail(
+            ConfigurationError(
+                f"Seeds directory not found: {seeds_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=is_json(format_type),
+            output_file=report_output,
+        )
+
+    # Resolve a named seed profile (before connecting): unknown → exit 5.
+    seed_profile = None
+    if profile is not None:
+        from confiture.config.environment import Environment
+
+        seed_profile = Environment.load(env).seed.get_profile(profile)
+
+    seed_settings = None
+    # Get database connection
+    if database_url:
+        # Use provided URL directly
+
+        try:
+            connection = connect(database_url)
+        except (ConfiturError, psycopg.Error) as e:
             fail(
                 ConfigurationError(
-                    f"Seeds directory not found: {seeds_dir}",
-                    error_code="CONFIG_004",
+                    f"Failed to connect to database: {e}",
+                    error_code="CONFIG_006",
+                ),
+                json_mode=is_json(format_type),
+                output_file=report_output,
+            )
+    else:
+        # Load from environment config
+        try:
+            from confiture.config.environment import Environment
+
+            env_config = Environment.load(env)
+            seed_settings = env_config.seed
+
+            connection = connect(env_config.database_url)
+        except (ConfiturError, psycopg.Error, OSError) as e:
+            fail(
+                ConfigurationError(
+                    f"Failed to load environment {env}: {e}",
+                    error_code="CONFIG_006",
                 ),
                 json_mode=is_json(format_type),
                 output_file=report_output,
             )
 
-        # Resolve a named seed profile (before connecting): unknown → exit 5.
-        seed_profile = None
-        if profile is not None:
-            from confiture.config.environment import Environment
+    # Apply seeds sequentially
+    try:
+        # Import ProgressManager for progress tracking
+        from confiture.core.progress import ProgressManager
 
-            try:
-                seed_profile = Environment.load(env).seed.get_profile(profile)
-            except Exception as e:
-                fail(e, json_mode=is_json(format_type), output_file=report_output)
+        applier = SeedApplier(
+            seeds_dir=seeds_dir,
+            env=env,
+            connection=connection,
+            console=console,
+            copy_format=copy_format,
+            copy_threshold=copy_threshold,
+        )
 
-        seed_settings = None
-        # Get database connection
-        if database_url:
-            # Use provided URL directly
-
-            try:
-                connection = connect(database_url)
-            except Exception as e:
-                fail(
-                    ConfigurationError(
-                        f"Failed to connect to database: {e}",
-                        error_code="CONFIG_006",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-        else:
-            # Load from environment config
-            try:
-                from confiture.config.environment import Environment
-
-                env_config = Environment.load(env)
-                seed_settings = env_config.seed
-
-                connection = connect(env_config.database_url)
-            except Exception as e:
-                fail(
-                    ConfigurationError(
-                        f"Failed to load environment {env}: {e}",
-                        error_code="CONFIG_006",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_output,
-                )
-
-        # Apply seeds sequentially
-        try:
-            # Import ProgressManager for progress tracking
-            from confiture.core.progress import ProgressManager
-
-            applier = SeedApplier(
-                seeds_dir=seeds_dir,
-                env=env,
-                connection=connection,
-                console=console,
-                copy_format=copy_format,
-                copy_threshold=copy_threshold,
+        # Use progress manager for seed application
+        with ProgressManager() as progress:
+            continue_on_error = continue_on_error or bool(
+                seed_settings and seed_settings.continue_on_error
             )
-
-            # Use progress manager for seed application
-            with ProgressManager() as progress:
-                continue_on_error = continue_on_error or bool(
-                    seed_settings and seed_settings.continue_on_error
-                )
-                result = applier.apply_sequential(
-                    continue_on_error=continue_on_error,
-                    progress=progress,
-                    profile=seed_profile,
-                    transaction_mode=seed_settings.transaction_mode
-                    if seed_settings
-                    else "savepoint",
-                )
-            result.seed_profile = profile
-
-            # Format output
-            from confiture.cli.formatters.seed_formatter import format_apply_result
-
-            format_apply_result(result, format_type, report_output, console)
-
-            # Close connection
-            connection.close()
-
-            # Exit with error if files failed and not continuing
-            if result.failed > 0 and not continue_on_error:
-                raise typer.Exit(1)  # success-signal: some seed files failed
-
-            raise typer.Exit(0)  # success-signal: all applied
-
-        except typer.Exit:
-            connection.close()
-            raise
-        except Exception as e:
-            connection.close()
-            fail(
-                SeedError(f"Seed application failed: {e}"),
-                json_mode=is_json(format_type),
-                output_file=report_output,
+            result = applier.apply_sequential(
+                continue_on_error=continue_on_error,
+                progress=progress,
+                profile=seed_profile,
+                transaction_mode=seed_settings.transaction_mode if seed_settings else "savepoint",
             )
+        result.seed_profile = profile
+
+        # Format output
+        from confiture.cli.formatters.seed_formatter import format_apply_result
+
+        format_apply_result(result, format_type, report_output, console)
+
+        # Close connection
+        connection.close()
+
+        # Exit with error if files failed and not continuing
+        if result.failed > 0 and not continue_on_error:
+            raise typer.Exit(1)  # success-signal: some seed files failed
+
+        raise typer.Exit(0)  # success-signal: all applied
 
     except typer.Exit:
+        connection.close()
         raise
+    # Reason: seed application runs user SQL; any failure is a SeedError with context, connection closed
     except Exception as e:
-        fail(e, json_mode=is_json(format_type), output_file=report_output)
+        connection.close()
+        fail(
+            SeedError(f"Seed application failed: {e}"),
+            json_mode=is_json(format_type),
+            output_file=report_output,
+        )
 
 
 @seed_app.command("convert")
@@ -806,6 +798,7 @@ def convert(
         raise
     except ConfiturError as e:
         fail(e, json_mode=False)
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(SeedError(f"Conversion failed: {e!s}"), json_mode=False)
 
@@ -913,6 +906,7 @@ def benchmark(
 
     except typer.Exit:
         raise
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(SeedError(f"Benchmark failed: {e}"), json_mode=False)
 
@@ -960,6 +954,7 @@ def seed_generate(
 
     try:
         result = bridge.generate(config)
+    # Reason: seed generation reaches the database and the file system; any failure is a SeedError
     except Exception as e:
         fail(
             SeedError(f"Seed generation failed: {e}"),
@@ -970,12 +965,11 @@ def seed_generate(
         import json
 
         console.print(json.dumps(result.to_dict(), indent=2))
+    elif result.success:
+        console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
+        console.print(
+            f"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
+        )
     else:
-        if result.success:
-            console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
-            console.print(
-                f"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
-            )
-        else:
-            console.print(f"[red]Error: {result.error}[/red]")
-            raise typer.Exit(1)
+        console.print(f"[red]Error: {result.error}[/red]")
+        raise typer.Exit(1)

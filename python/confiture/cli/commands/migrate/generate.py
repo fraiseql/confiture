@@ -382,12 +382,14 @@ def _write_history_snapshot(
                     ),
                     "live",
                 )
+            # Reason: a live snapshot failure of any kind falls back to the static snapshot (documented)
             except Exception as live_err:
                 if format_output == "text":
                     console.print(
                         f"[yellow]⚠️  Live snapshot failed, falling back to static: {live_err}[/yellow]"
                     )
         return snap_gen.write_snapshot(env_name, version, name, project_dir), "static"
+    # Reason: snapshot writing is documented non-fatal; any failure degrades to 'static'
     except Exception as snap_err:
         if format_output == "text":
             console.print(f"[yellow]⚠️  Snapshot write failed (non-fatal): {snap_err}[/yellow]")

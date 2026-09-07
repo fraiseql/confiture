@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext
 from confiture.core.ledger import ledger_exists
-from confiture.exceptions import MigrationError
+from confiture.exceptions import ConfiturError, MigrationError
 
 if TYPE_CHECKING:
     from confiture.core._migrator.engine import Migrator
@@ -106,7 +107,7 @@ def initialize(migrator: Migrator) -> None:
             )
 
         migrator.connection.commit()
-    except Exception as e:
+    except (psycopg.Error, ConfiturError) as e:
         migrator.connection.rollback()
         raise MigrationError(
             f"Failed to initialize migrations table: {e}",

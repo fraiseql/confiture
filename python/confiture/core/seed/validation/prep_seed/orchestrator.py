@@ -10,6 +10,9 @@ import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 
+import pglast.parser
+import psycopg
+
 from confiture.core.connection import create_connection
 from confiture.core.differ import SchemaDiffer
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
@@ -199,13 +202,13 @@ class PrepSeedOrchestrator:
             try:
                 table_violations = validator.validate_schema_mapping(prep_table)
                 violations.extend(table_violations)
-            except Exception as e:
+            except Exception as e:  # Reason: level-2 validation parses arbitrary seed SQL; any parser failure is a reported violation
                 # Handle parsing errors gracefully
                 violations.append(
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                         severity=ViolationSeverity.WARNING,
-                        message=f"Error validating schema for {table_name}: {str(e)}",
+                        message=f"Error validating schema for {table_name}: {e!s}",
                         file_path=f"db/schema/{table_name}.sql",
                         line_number=1,
                         impact="Could not validate schema mappings",
@@ -276,7 +279,7 @@ class PrepSeedOrchestrator:
                     result = cursor.fetchone()
                     cursor.close()
                     return result[0] if result else False
-                except Exception:
+                except psycopg.Error:
                     return False
 
             def get_column_type(schema: str, table: str, column: str) -> str | None:
@@ -293,7 +296,7 @@ class PrepSeedOrchestrator:
                     result = cursor.fetchone()
                     cursor.close()
                     return result[0] if result else None
-                except Exception:
+                except psycopg.Error:
                     return None
 
             # Create validator with callbacks
@@ -326,24 +329,24 @@ class PrepSeedOrchestrator:
                         connection=connection,
                     )
                     violations.extend(dry_run_violations)
-                except Exception as e:
+                except Exception as e:  # Reason: dry-running a user resolution function; any failure is a reported violation
                     violations.append(
                         PrepSeedViolation(
                             pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                             severity=ViolationSeverity.ERROR,
-                            message=(f"Failed to validate {func_name}: {str(e)}"),
+                            message=(f"Failed to validate {func_name}: {e!s}"),
                             file_path=f"db/schema/functions/{func_name}.sql",
                             line_number=1,
                             impact="Resolution function validation failed",
                         )
                     )
 
-        except Exception as e:
+        except Exception as e:  # Reason: level-4 reaches the database through create_connection; any failure is a CRITICAL violation, not a crash
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                     severity=ViolationSeverity.CRITICAL,
-                    message=f"Database connection failed: {str(e)}",
+                    message=f"Database connection failed: {e!s}",
                     file_path="database_url",
                     line_number=1,
                     impact="Cannot validate resolution functions",
@@ -421,12 +424,12 @@ class PrepSeedOrchestrator:
                     )
                 )
 
-        except Exception as e:
+        except Exception as e:  # Reason: level-5 executes arbitrary seed SQL; any failure is a CRITICAL violation, not a crash
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
                     severity=ViolationSeverity.CRITICAL,
-                    message=f"Level 5 execution failed: {str(e)}",
+                    message=f"Level 5 execution failed: {e!s}",
                     file_path="database_url",
                     line_number=1,
                     impact="Could not validate seed execution",
@@ -522,7 +525,7 @@ class PrepSeedOrchestrator:
 
                     target_dict[table.name] = table_def
 
-            except Exception:
+            except (OSError, UnicodeDecodeError, pglast.parser.ParseError):
                 # Silently skip unparseable files
                 pass
 

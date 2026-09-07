@@ -133,7 +133,7 @@ class TestBenchmarkAccuracy:
 
         result = await benchmark.compare(seed_data)
 
-        for _table, metrics in result.table_metrics.items():
+        for metrics in result.table_metrics.values():
             assert "rows" in metrics
             assert "values_time_ms" in metrics
             assert "copy_time_ms" in metrics

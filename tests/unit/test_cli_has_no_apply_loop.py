@@ -46,9 +46,11 @@ def _offences(path: Path) -> list[str]:
         if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
             found.append(f"{path.name}:{node.lineno} references {node.id}")
         elif isinstance(node, ast.ImportFrom | ast.Import):
-            for alias in node.names:
-                if alias.name.rsplit(".", 1)[-1] in FORBIDDEN_NAMES:
-                    found.append(f"{path.name}:{node.lineno} imports {alias.name}")
+            found.extend(
+                f"{path.name}:{node.lineno} imports {alias.name}"
+                for alias in node.names
+                if alias.name.rsplit(".", 1)[-1] in FORBIDDEN_NAMES
+            )
         elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)

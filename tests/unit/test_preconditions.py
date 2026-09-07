@@ -4,6 +4,7 @@ Tests the precondition validation system that provides fail-fast behavior
 before migration execution.
 """
 
+from typing import ClassVar
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -84,7 +85,7 @@ class TestTableExists:
         mock_conn = create_mock_connection({"information_schema.tables": [False]})
         precondition = TableExists("users", schema="public")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -121,7 +122,7 @@ class TestTableNotExists:
         )  # NOT EXISTS returns False
         precondition = TableNotExists("users")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -139,7 +140,7 @@ class TestColumnExists:
         mock_conn = create_mock_connection({"information_schema.columns": [True]})
         precondition = ColumnExists("users", "email")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -148,7 +149,7 @@ class TestColumnExists:
         mock_conn = create_mock_connection({"information_schema.columns": [False]})
         precondition = ColumnExists("users", "legacy_field")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -166,7 +167,7 @@ class TestColumnNotExists:
         mock_conn = create_mock_connection({"information_schema.columns": [True]})
         precondition = ColumnNotExists("users", "legacy_field")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -175,7 +176,7 @@ class TestColumnNotExists:
         mock_conn = create_mock_connection({"information_schema.columns": [False]})
         precondition = ColumnNotExists("users", "email")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -188,7 +189,7 @@ class TestColumnType:
         mock_conn = create_mock_connection({"information_schema.columns": ["uuid"]})
         precondition = ColumnType("users", "id", "uuid")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -208,7 +209,7 @@ class TestColumnType:
         mock_conn = create_mock_connection({"information_schema.columns": ["integer"]})
         precondition = ColumnType("users", "count", "int")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         # 'int' should be recognized as 'integer'
         assert passed is True
@@ -218,7 +219,7 @@ class TestColumnType:
         mock_conn = create_mock_connection({"information_schema.columns": ["character varying"]})
         precondition = ColumnType("users", "name", "varchar")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -236,7 +237,7 @@ class TestConstraintExists:
         mock_conn = create_mock_connection({"table_constraints": [True]})
         precondition = ConstraintExists("users", "users_pkey")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -245,7 +246,7 @@ class TestConstraintExists:
         mock_conn = create_mock_connection({"table_constraints": [False]})
         precondition = ConstraintExists("users", "fk_nonexistent")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -258,7 +259,7 @@ class TestConstraintNotExists:
         mock_conn = create_mock_connection({"table_constraints": [True]})
         precondition = ConstraintNotExists("users", "old_constraint")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -276,7 +277,7 @@ class TestIndexExists:
         mock_conn = create_mock_connection({"pg_indexes": [True]})
         precondition = IndexExists("users", "idx_users_email")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -285,7 +286,7 @@ class TestIndexExists:
         mock_conn = create_mock_connection({"pg_indexes": [False]})
         precondition = IndexExists("users", "idx_nonexistent")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -298,7 +299,7 @@ class TestIndexNotExists:
         mock_conn = create_mock_connection({"pg_indexes": [True]})
         precondition = IndexNotExists("users", "idx_old")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -316,7 +317,7 @@ class TestSchemaExists:
         mock_conn = create_mock_connection({"information_schema.schemata": [True]})
         precondition = SchemaExists("tenant")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -334,7 +335,7 @@ class TestSchemaNotExists:
         mock_conn = create_mock_connection({"information_schema.schemata": [True]})
         precondition = SchemaNotExists("legacy_schema")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -352,7 +353,7 @@ class TestRowCountEquals:
         mock_conn = create_mock_connection({"COUNT(*)": [5]})
         precondition = RowCountEquals("users", 5)
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -376,7 +377,7 @@ class TestRowCountGreaterThan:
         mock_conn = create_mock_connection({"COUNT(*)": [10]})
         precondition = RowCountGreaterThan("users", 5)
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -385,7 +386,7 @@ class TestRowCountGreaterThan:
         mock_conn = create_mock_connection({"COUNT(*)": [5]})
         precondition = RowCountGreaterThan("users", 5)
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -394,7 +395,7 @@ class TestRowCountGreaterThan:
         mock_conn = create_mock_connection({"COUNT(*)": [3]})
         precondition = RowCountGreaterThan("users", 5)
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -407,7 +408,7 @@ class TestTableIsEmpty:
         mock_conn = create_mock_connection({"COUNT(*)": [0]})
         precondition = TableIsEmpty("temp_data")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
@@ -416,7 +417,7 @@ class TestTableIsEmpty:
         mock_conn = create_mock_connection({"COUNT(*)": [5]})
         precondition = TableIsEmpty("temp_data")
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -450,7 +451,7 @@ class TestCustomSQL:
             description="No pending users",
         )
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is False
 
@@ -469,7 +470,7 @@ class TestCustomSQL:
             params=(5,),
         )
 
-        passed, message = precondition.check(mock_conn)
+        passed, _message = precondition.check(mock_conn)
 
         assert passed is True
         mock_cursor.execute.assert_called_once_with("SELECT COUNT(*) > %s FROM users", (5,))
@@ -586,8 +587,8 @@ class TestMigrationPreconditions:
         class TestMigration(Migration):
             version = "001"
             name = "test"
-            up_preconditions = [TableExists("users")]
-            down_preconditions = [TableNotExists("users")]
+            up_preconditions: ClassVar[list[TableExists]] = [TableExists("users")]
+            down_preconditions: ClassVar[list[TableNotExists]] = [TableNotExists("users")]
 
             def up(self):
                 pass

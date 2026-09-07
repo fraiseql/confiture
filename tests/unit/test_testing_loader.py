@@ -86,7 +86,7 @@ class CreateUsers(Migration):
             up_file = migrations_dir / "003_orphan.up.sql"
             up_file.write_text("CREATE TABLE orphan (id INT);")
 
-            with pytest.raises(MigrationNotFoundError, match="missing .down.sql"):
+            with pytest.raises(MigrationNotFoundError, match=r"missing .down.sql"):
                 load_migration("003_orphan", migrations_dir=migrations_dir)
 
     def test_load_migration_by_version_python(self):

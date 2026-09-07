@@ -139,21 +139,19 @@ class RuleLibraryComposer:
         new_rule_ids = set(new_library.rules.keys())
 
         for existing_library in self.libraries:
-            for existing_rule_id in existing_library.rules:
-                if existing_rule_id in new_rule_ids:
-                    conflicts.append(
-                        RuleConflict(
-                            rule_id=existing_rule_id,
-                            library_a=existing_library.name,
-                            library_b=new_library.name,
-                            conflict_type=ConflictType.DUPLICATE,
-                            severity=LintSeverity.WARNING,
-                            description=f"Rule {existing_rule_id} exists in both libraries",
-                            suggested_resolution=(
-                                "Use override_rule() to select preferred version"
-                            ),
-                        )
-                    )
+            conflicts.extend(
+                RuleConflict(
+                    rule_id=existing_rule_id,
+                    library_a=existing_library.name,
+                    library_b=new_library.name,
+                    conflict_type=ConflictType.DUPLICATE,
+                    severity=LintSeverity.WARNING,
+                    description=f"Rule {existing_rule_id} exists in both libraries",
+                    suggested_resolution=("Use override_rule() to select preferred version"),
+                )
+                for existing_rule_id in existing_library.rules
+                if existing_rule_id in new_rule_ids
+            )
 
         return conflicts
 

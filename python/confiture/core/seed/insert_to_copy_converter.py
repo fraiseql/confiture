@@ -4,6 +4,7 @@ This module provides InsertToCopyConverter to parse INSERT statements
 and convert them to COPY format for faster bulk loading.
 """
 
+import sqlglot.errors
 from sqlglot import parse as sqlglot_parse
 
 from confiture.core.seed.copy_formatter import CopyFormatter
@@ -86,11 +87,11 @@ class InsertToCopyConverter:
         """
         try:
             statements = [s for s in sqlglot_parse(insert_sql, dialect="postgres") if s is not None]
-        except Exception as e:
+        except sqlglot.errors.SqlglotError as e:
             return ConversionResult(
                 file_path=file_path,
                 success=False,
-                reason=f"Parse error: {str(e)}",
+                reason=f"Parse error: {e!s}",
             )
 
         if not statements:

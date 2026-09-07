@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pglast.parser
 from pglast import ast as pglast_ast
 from pglast import parse_sql
 
@@ -63,7 +64,7 @@ def find_cor_targets(
     """
     try:
         parsed = parse_sql(sql)
-    except Exception:  # pragma: no cover - pglast raises on bad SQL
+    except pglast.parser.ParseError:  # pragma: no cover - pglast raises on bad SQL
         return []
 
     targets: list[CorTarget] = []

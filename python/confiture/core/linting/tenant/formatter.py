@@ -35,8 +35,10 @@ class TenantIsolationFormatter:
 
         lines = ["Detected multi-tenant patterns:"]
 
-        for rel in relationships:
-            lines.append(f"  - {rel.view_name} -> {rel.source_table} (requires: {rel.required_fk})")
+        lines.extend(
+            f"  - {rel.view_name} -> {rel.source_table} (requires: {rel.required_fk})"
+            for rel in relationships
+        )
 
         return "\n".join(lines)
 

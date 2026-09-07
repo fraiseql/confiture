@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, Mock, call
 
+import psycopg
 import pytest
 
 
@@ -300,7 +301,7 @@ class TestSavepointDryRunExecutor:
             if "CREATE TABLE" in sql:
                 return success_cursor
             elif "INVALID SQL" in sql:
-                raise Exception('syntax error at or near "INVALID"')
+                raise psycopg.ProgrammingError('syntax error at or near "INVALID"')
             else:
                 return Mock()  # SAVEPOINT operations
 

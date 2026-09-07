@@ -41,11 +41,11 @@ def _runtime_imports(path: Path) -> list[str]:
                 f"{path.relative_to(PACKAGE).as_posix()}:{node.lineno} from {node.module}"
             )
         elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.startswith(FORBIDDEN_PREFIXES):
-                    findings.append(
-                        f"{path.relative_to(PACKAGE).as_posix()}:{node.lineno} import {alias.name}"
-                    )
+            findings.extend(
+                f"{path.relative_to(PACKAGE).as_posix()}:{node.lineno} import {alias.name}"
+                for alias in node.names
+                if alias.name.startswith(FORBIDDEN_PREFIXES)
+            )
     return findings
 
 

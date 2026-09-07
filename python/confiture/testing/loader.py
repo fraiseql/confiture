@@ -137,8 +137,7 @@ def _load_by_version(version: str, migrations_dir: Path) -> type[Migration]:
 
     # Collect all matches
     all_matches: list[tuple[str, Path]] = []
-    for f in py_files:
-        all_matches.append(("python", f))
+    all_matches.extend(("python", f) for f in py_files)
     for up_f in sql_up_files:
         # Check that .down.sql exists
         base_name = up_f.name.replace(".up.sql", "")
@@ -180,6 +179,7 @@ def _load_python_migration(migration_file: Path) -> type[Migration]:
         return migration_class  # ty: ignore[invalid-return-type]
     except MigrationError:
         raise
+    # Reason: importing a migration module executes user code; any failure is a MigrationLoadError
     except Exception as e:
         raise MigrationLoadError(
             f"Failed to load migration from {migration_file}: {e}\n"

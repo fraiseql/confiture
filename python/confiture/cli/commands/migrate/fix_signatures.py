@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary
@@ -223,6 +224,7 @@ def migrate_fix_signatures(
             raise typer.Exit(1)
     except typer.Exit:
         raise
+    # Reason: text-only command: every failure is printed with its context and exits 2
     except Exception as e:
         error_console.print(f"[red]❌ fix-signatures failed: {e}[/red]")
         raise typer.Exit(2) from e
@@ -248,6 +250,7 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
         if format_output == "text":
             console.print("[dim]  (schema auto-built from DDL files)[/dim]")
         return source_sql
+    # Reason: an auto-build failure of any kind is reported with the --schema remedy
     except Exception as build_exc:
         error_console.print(
             f"[red]❌ --schema not provided and auto-build failed: {build_exc}[/red]\n"
@@ -274,7 +277,7 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
         @property
         def database_url(self) -> str:
             if hasattr(self._base, "database_url"):
-                return self._base.database_url  # type: ignore[no-any-return]
+                return self._base.database_url
             return self._base.get("database_url", "")
 
         def get(self, key: str, default: Any = None) -> Any:
@@ -428,7 +431,7 @@ def _apply_fix_blocks(
             for block in body_fix_blocks:
                 cur.execute(block["create_sql"])
         conn.commit()
-    except Exception as apply_exc:
+    except psycopg.Error as apply_exc:
         conn.rollback()
         error_console.print(f"[red]❌ Fix failed (rolled back): {apply_exc}[/red]")
         raise typer.Exit(1) from apply_exc

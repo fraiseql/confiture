@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core.ledger import split_qualified_table
@@ -215,7 +216,7 @@ class BatchedMigration:
                         rows_affected = cur.rowcount
                         self.connection.commit()
                         break
-                    except Exception as e:
+                    except psycopg.Error as e:
                         self.connection.rollback()
                         if attempt == self.config.max_retries - 1:
                             progress.errors.append(f"Batch {batch_num}: {e}")

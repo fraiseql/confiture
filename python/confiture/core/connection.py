@@ -36,7 +36,7 @@ def load_config(config_file: Path) -> dict[str, Any]:
         )
 
     try:
-        with open(config_file) as f:
+        with Path(config_file).open() as f:
             config: dict[str, Any] = yaml.safe_load(f)
         return config
     except yaml.YAMLError as e:
@@ -223,6 +223,7 @@ def load_migration_module(migration_file: Path) -> ModuleType:
         spec.loader.exec_module(module)
 
         return module
+    # Reason: importing a migration module executes user code; any failure is a MigrationError with the file
     except Exception as e:
         raise MigrationError(
             f"Failed to load migration {migration_file}: {e}",

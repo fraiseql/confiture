@@ -69,7 +69,7 @@ class TestStrCarriesTheHint:
         """``match=`` searches ``str(exc)``; a suffix must not break it."""
         import pytest
 
-        with pytest.raises(ConfiturError, match="^boom"):
+        with pytest.raises(ConfiturError, match=r"^boom"):
             raise ConfiturError("boom", resolution_hint="try harder")
 
 

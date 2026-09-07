@@ -271,7 +271,7 @@ class SmtpConfig:
     host: str
     port: int = 587
     username: str = ""
-    password: SecretStr = SecretStr("")
+    password: SecretStr = field(default_factory=lambda: SecretStr(""))
     use_tls: bool = True
     timeout_seconds: float = 10.0
 
@@ -291,6 +291,7 @@ def _login_safely(server: smtplib.SMTP, cfg: SmtpConfig) -> None:
         return
     try:
         server.login(cfg.username, cfg.password.get_secret_value())
+    # Reason: re-raised after scrubbing the password from the traceback, whatever the failure
     except Exception as exc:
         _scrub_password_from_traceback(exc.__traceback__, cfg.password.get_secret_value())
         raise
@@ -330,7 +331,9 @@ def _frame_locals_contain(frame, password: str) -> bool:
     contain the cleartext *password* as a str value."""
     try:
         locals_view = frame.f_locals
-    except Exception:
+    except (
+        Exception
+    ):  # Reason: frame introspection on foreign frames; any failure means 'not our caller'
         return False
     return any(isinstance(value, str) and value == password for value in locals_view.values())
 

@@ -736,7 +736,9 @@ class PreconditionValidator:
                 passed, message = precondition.check(self.connection)
                 if not passed:
                     failures.append((precondition, message))
-            except Exception as e:
+            except (
+                Exception
+            ) as e:  # Reason: preconditions are user code; any failure is a failed precondition
                 failures.append((precondition, f"Check failed with error: {e}"))
 
         return (len(failures) == 0, failures)
@@ -793,6 +795,7 @@ class PreconditionValidator:
                 )
         except PreconditionError:
             raise
+        # Reason: preconditions are user code; any failure is a PreconditionError
         except Exception as e:
             raise PreconditionError(
                 precondition,

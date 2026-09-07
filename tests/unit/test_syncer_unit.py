@@ -332,7 +332,7 @@ class TestCheckpointFunctionality:
             assert checkpoint_file.exists()
 
             # Verify file structure
-            with open(checkpoint_file) as f:
+            with Path(checkpoint_file).open() as f:
                 data = json.load(f)
 
             assert data["version"] == "1.0"
@@ -370,7 +370,7 @@ class TestCheckpointFunctionality:
                 },
             }
 
-            with open(checkpoint_file, "w") as f:
+            with Path(checkpoint_file).open("w") as f:
                 json.dump(checkpoint_data, f)
 
             # Load checkpoint

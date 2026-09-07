@@ -5,6 +5,7 @@ Phase 9, Cycle 3-4: Savepoint execution and rollback
 
 from unittest.mock import MagicMock
 
+import psycopg
 import pytest
 
 from confiture.core.seed.executor import SeedExecutor
@@ -67,7 +68,7 @@ def test_execute_file_error_raises_seed_error(mock_connection, tmp_path):
 
     # Mock cursor to raise an error
     cursor = mock_connection.cursor.return_value.__enter__.return_value
-    cursor.execute.side_effect = Exception("Syntax error")
+    cursor.execute.side_effect = psycopg.ProgrammingError("Syntax error")
 
     executor = SeedExecutor(connection=mock_connection)
 
@@ -123,7 +124,7 @@ def test_seed_error_includes_file_context(mock_connection, tmp_path):
     seed_file.write_text("INSERT INTO users VALUES (1);")
 
     cursor = mock_connection.cursor.return_value.__enter__.return_value
-    cursor.execute.side_effect = Exception("Database error")
+    cursor.execute.side_effect = psycopg.OperationalError("Database error")
 
     executor = SeedExecutor(connection=mock_connection)
 

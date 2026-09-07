@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
+from functools import cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -71,13 +73,25 @@ def _quote(title: str) -> str:
     return "'" + title.replace("'", "''") + "'"
 
 
+@cache
+def _tracked_pages() -> frozenset[Path]:
+    """The Markdown pages git tracks under docs/ — never a local artefact."""
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "--", "docs/*.md", "docs/**/*.md"],
+        cwd=REPO,
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    return frozenset(REPO / rel for rel in out.split("\0") if rel)
+
+
 def render_nav() -> str:
     lines = ["nav:"]
     for section, directory, pinned in SECTIONS:
         folder = DOCS / directory
         if not folder.is_dir():
             continue
-        pages = sorted(folder.glob("*.md"))
+        pages = sorted(p for p in folder.glob("*.md") if p in _tracked_pages())
         ordered = [folder / name for name in pinned if (folder / name).exists()]
         ordered += [p for p in pages if p not in ordered]
         if not ordered:

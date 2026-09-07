@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
@@ -34,7 +35,7 @@ def _env() -> Environment:
 class _RecordingLock:
     """Stands in for ``MigrationLock``; records when the lock is taken and released."""
 
-    events: list[str] = []
+    events: ClassVar[list[str]] = []
 
     def __init__(self, conn, config=None) -> None:
         self.config = config

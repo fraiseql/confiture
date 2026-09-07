@@ -12,6 +12,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+import psycopg
+
 from confiture.integrations.pggit.detection import require_pggit
 from confiture.integrations.pggit.exceptions import (
     PgGitBranchError,
@@ -162,7 +164,7 @@ class PgGitClient:
                 """)
                 result = cursor.fetchone()
                 return bool(result and result[0])
-        except Exception:
+        except psycopg.Error:
             return False
 
     def init(self) -> None:
@@ -224,7 +226,7 @@ class PgGitClient:
                 self._connection.commit()
 
             return self.get_branch(name)
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitBranchError(
                 f"Failed to create branch '{name}' from '{from_branch}': {e}"
@@ -251,7 +253,7 @@ class PgGitClient:
                     (name, force),
                 )
                 self._connection.commit()
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitBranchError(f"Failed to delete branch '{name}': {e}") from e
 
@@ -277,7 +279,7 @@ class PgGitClient:
                 result = cursor.fetchone()
                 self._connection.commit()
                 return result[0] if result else f"Switched to {branch_name}"
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitCheckoutError(f"Failed to checkout branch '{branch_name}': {e}") from e
 
@@ -293,7 +295,7 @@ class PgGitClient:
                 cursor.execute("SELECT current_setting('pggit.current_branch', true)")
                 result = cursor.fetchone()
                 return result[0] if result and result[0] else "main"
-        except Exception:
+        except psycopg.Error:
             return "main"
 
     def get_branch(self, name: str) -> Branch:
@@ -413,7 +415,7 @@ class PgGitClient:
                 )
         except PgGitCommitError:
             raise
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitCommitError(f"Failed to create commit: {e}") from e
 
@@ -492,7 +494,7 @@ class PgGitClient:
                     message=result[0] if result else "Merge completed",
                     conflicts=[],
                 )
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             error_str = str(e).lower()
 
@@ -528,7 +530,7 @@ class PgGitClient:
                     }
                     for row in cursor.fetchall()
                 ]
-        except Exception:
+        except psycopg.Error:
             return []
 
     def resolve_conflict(

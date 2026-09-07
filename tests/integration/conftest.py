@@ -25,6 +25,7 @@ import os
 import pwd
 import shutil
 from collections.abc import Iterator
+from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import psycopg
@@ -92,7 +93,7 @@ def _try_chown_to_pg(conn: psycopg.Connection, location: str) -> None:
     """
     try:
         datadir = conn.execute("SHOW data_directory").fetchone()[0]
-        st = os.stat(datadir)
+        st = Path(datadir).stat()
         if st.st_uid != os.getuid():
             os.chown(location, st.st_uid, st.st_gid)
     except (OSError, psycopg.Error):
@@ -103,7 +104,7 @@ def _provision_tmpfs_tablespace(url: str, name: str, location: str) -> bool:
     """Create a tmpfs tablespace; return True on success, False if the env can't."""
     _teardown_tmpfs_tablespace(url, name, location)  # reap any leftover
     try:
-        os.makedirs(location, mode=0o700, exist_ok=True)
+        Path(location).mkdir(mode=0o700, exist_ok=True, parents=True)
     except OSError:
         return False
     with psycopg.connect(_maintenance_url(url), autocommit=True) as conn:
@@ -198,7 +199,7 @@ def ram_setup_env() -> Iterator[tuple[TestDbProvisioner, str, str, str]]:
         pytest.skip(f"PostgreSQL not available: {e}")
 
     try:
-        st = os.stat(datadir)
+        st = Path(datadir).stat()
         owner = pwd.getpwuid(st.st_uid).pw_name
     except (OSError, KeyError):
         pytest.skip("cannot resolve the PostgreSQL server OS user from its data directory")
@@ -206,7 +207,7 @@ def ram_setup_env() -> Iterator[tuple[TestDbProvisioner, str, str, str]]:
     _drop_tablespace(url, _RAMSETUP_TABLESPACE)
     shutil.rmtree(_RAMSETUP_LOCATION, ignore_errors=True)
     try:
-        os.makedirs(_RAMSETUP_LOCATION, mode=0o700, exist_ok=True)
+        Path(_RAMSETUP_LOCATION).mkdir(mode=0o700, exist_ok=True, parents=True)
         if st.st_uid != os.getuid():
             os.chown(_RAMSETUP_LOCATION, st.st_uid, st.st_gid)
     except (OSError, PermissionError):

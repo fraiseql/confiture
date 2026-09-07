@@ -108,7 +108,9 @@ def confiture_sandbox(
             migrations_dir=tb_confiture_dir,
         ) as sandbox:
             yield sandbox
-    except Exception as e:
+    except (
+        Exception
+    ) as e:  # Reason: a fixture that cannot reach its database skips the test, whatever the failure
         pytest.skip(f"Database not available: {e}")
 
 
@@ -185,7 +187,7 @@ def confiture_env() -> str:
 @pytest.fixture(scope="session")
 def confiture_project_dir() -> Path:
     """Project directory the template schema is built from (override to customise)."""
-    return Path(".")
+    return Path()
 
 
 @pytest.fixture(scope="session")

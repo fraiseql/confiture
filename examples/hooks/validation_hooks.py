@@ -199,8 +199,7 @@ class NotifyOnErrorHook(Hook):
             "timestamp": time.time(),
         }
 
-        # Example: log to monitoring system
-        # monitoring_client.send_alert("migration_failed", error_context)
+        # A real hook would forward error_context to a monitoring client here.
 
         elapsed_ms = int((time.time() - start) * 1000)
 

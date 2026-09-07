@@ -159,12 +159,12 @@ class Level4RuntimeValidator:
 
             return violations
 
-        except Exception as e:
+        except Exception as e:  # Reason: executes a user resolution function under a savepoint; any failure is a reported violation
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                     severity=ViolationSeverity.ERROR,
-                    message=(f"Resolution function {func_name} execution failed: {str(e)}"),
+                    message=(f"Resolution function {func_name} execution failed: {e!s}"),
                     file_path=f"db/schema/functions/{func_name}.sql",
                     line_number=1,
                     impact="Resolution cannot execute",

@@ -12,7 +12,7 @@ Features:
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
@@ -30,7 +30,7 @@ class StrategyRegistry:
         ['email', 'hash', 'phone', ...]
     """
 
-    _registry: dict[str, type[AnonymizationStrategy]] = {}
+    _registry: ClassVar[dict[str, type[AnonymizationStrategy]]] = {}
 
     @classmethod
     def register(cls, name: str, strategy_class: type[AnonymizationStrategy]) -> None:

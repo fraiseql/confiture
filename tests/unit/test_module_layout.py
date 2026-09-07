@@ -79,9 +79,11 @@ def test_nothing_in_the_package_imports_the_old_paths() -> None:
                 modules.append(node.module)
             elif isinstance(node, ast.Import):
                 modules.extend(alias.name for alias in node.names)
-            for module in modules:
-                if any(module == old or module.startswith(old + ".") for old in _OLD_TO_NEW):
-                    offenders.append(f"{rel}:{node.lineno}: {module}")
+            offenders.extend(
+                f"{rel}:{node.lineno}: {module}"
+                for module in modules
+                if any(module == old or module.startswith(old + ".") for old in _OLD_TO_NEW)
+            )
     assert offenders == [], "old paths still imported inside the package:\n" + "\n".join(offenders)
 
 

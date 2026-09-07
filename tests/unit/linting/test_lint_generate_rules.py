@@ -240,7 +240,7 @@ class TestGen003GapPolicy:
 
     def test_scans_subdirectories_independently(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
-        # Root: contiguous
+        # The root directory numbering is contiguous.
         _touch(schema, "00001_a.sql", "00002_b.sql")
         # Sub: has gap
         _touch(schema / "functions", "00001_x.sql", "00003_z.sql")
@@ -366,7 +366,7 @@ class TestSchemaLinterLintTree:
         _touch(schema, "00001_a.sql", "00001_b.sql")
         # GEN002: no verb
         _touch(schema, "00002.sql")
-        # GEN003: gap
+        # GEN003 fires on the gap that follows.
         _touch(schema, "00010_x.sql")
 
         report = SchemaLinter().lint_tree(schema)

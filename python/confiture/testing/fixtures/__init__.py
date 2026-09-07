@@ -5,7 +5,7 @@ from confiture.testing.fixtures.migration_runner import MigrationRunner
 from confiture.testing.fixtures.schema_snapshotter import SchemaSnapshotter
 
 __all__ = [
+    "DataValidator",
     "MigrationRunner",
     "SchemaSnapshotter",
-    "DataValidator",
 ]

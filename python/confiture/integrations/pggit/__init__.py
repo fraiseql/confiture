@@ -59,30 +59,30 @@ from confiture.integrations.pggit.generator import (
 )
 
 __all__ = [
-    # Detection
-    "is_pggit_available",
-    "get_pggit_version",
-    "require_pggit",
     "MIN_PGGIT_VERSION",
-    # Client
-    "PgGitClient",
+    "ConflictDetector",
+    "ConflictReport",
+    "ConflictSeverity",
+    "ConflictType",
     # Generator
     "GeneratedMigration",
-    "MigrationGenerator",
     # Coordination
     "Intent",
     "IntentRegistry",
     "IntentStatus",
-    "ConflictReport",
-    "ConflictType",
-    "ConflictSeverity",
-    "ConflictDetector",
-    "RiskLevel",
-    # Exceptions
-    "PgGitError",
-    "PgGitNotAvailableError",
-    "PgGitVersionError",
+    "MigrationGenerator",
     "PgGitBranchError",
     "PgGitCheckoutError",
+    # Client
+    "PgGitClient",
+    # Exceptions
+    "PgGitError",
     "PgGitMergeConflictError",
+    "PgGitNotAvailableError",
+    "PgGitVersionError",
+    "RiskLevel",
+    "get_pggit_version",
+    # Detection
+    "is_pggit_available",
+    "require_pggit",
 ]

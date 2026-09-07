@@ -6,6 +6,8 @@ patterns in PostgreSQL schemas by analyzing VIEWs.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from confiture.core.linting.tenant.function_parser import FunctionInfo
 from confiture.core.linting.tenant.insert_analyzer import InsertAnalyzer
 from confiture.core.linting.tenant.models import TenantRelationship, TenantViolation
@@ -26,7 +28,7 @@ class TenantDetector:
         True
     """
 
-    DEFAULT_TENANT_PATTERNS = ["tenant_id", "organization_id", "org_id"]
+    DEFAULT_TENANT_PATTERNS: ClassVar[list[str]] = ["tenant_id", "organization_id", "org_id"]
 
     def __init__(self, tenant_patterns: list[str] | None = None):
         """Initialize detector with tenant column patterns.
@@ -142,7 +144,7 @@ class TenantDetector:
             Table name without schema (e.g., "tb_item")
         """
         if "." in table_name:
-            return table_name.split(".")[-1]
+            return table_name.rsplit(".", maxsplit=1)[-1]
         return table_name
 
     def analyze_schema(

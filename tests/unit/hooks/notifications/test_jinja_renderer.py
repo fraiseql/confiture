@@ -147,7 +147,7 @@ class TestJinjaHappyPath:
 )
 class TestJinjaBlockTagRefusal:
     def test_block_tag_rejected_at_construction(self, template: str, description: str) -> None:
-        with pytest.raises(ConfigurationError, match="forbidden node|forbidden|no `{% "):
+        with pytest.raises(ConfigurationError, match=r"forbidden node|forbidden|no `{% "):
             JinjaRenderer(template=template, allow_templated_renderers=True)
 
 
@@ -384,7 +384,7 @@ class TestJinjaFlatContextBoundary:
     def test_context_helper_rejects_non_primitive(self) -> None:
         from confiture.core.hooks.notifications.jinja_renderer import _assert_flat_primitives
 
-        with pytest.raises(ConfigurationError, match="primitive|str |int |float |bool"):
+        with pytest.raises(ConfigurationError, match=r"primitive|str |int |float |bool"):
             _assert_flat_primitives({"x": [1, 2, 3]})
         with pytest.raises(ConfigurationError):
             _assert_flat_primitives({"x": {"nested": "dict"}})

@@ -21,6 +21,10 @@ import yaml
 
 from confiture.testing.worker_db import resolve_worker_db_url
 
+# The pytester fixture runs an inner pytest session in-process, so coverage of the
+# confiture pytest plugin's fixtures is measured (a subprocess run is invisible to it).
+pytest_plugins = ["pytester"]
+
 
 @pytest.fixture
 def temp_project_dir() -> Generator[Path, None, None]:

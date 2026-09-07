@@ -47,7 +47,7 @@ class ViewDriftResult:
 
 def _config_database_url(config_data: Any) -> str | None:
     if hasattr(config_data, "database_url"):
-        return config_data.database_url  # type: ignore[no-any-return]
+        return config_data.database_url
     if isinstance(config_data, dict):
         return config_data.get("database_url")
     return None

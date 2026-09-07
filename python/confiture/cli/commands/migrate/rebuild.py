@@ -199,6 +199,7 @@ def migrate_rebuild(
 
     except typer.Exit:
         raise
+    # Reason: documented: rebuild failures of any kind stay in the migrate family at exit 3
     except Exception as e:
         # Rebuild fatal errors (connection, build, DDL) stay in the migrate
         # family at exit 3; in --format json the unified envelope is emitted.

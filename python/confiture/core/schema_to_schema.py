@@ -347,8 +347,10 @@ class SchemaToSchemaMigrator:
             # Build SELECT query with column mapping for COPY
             # We select from the foreign schema with source column names
             select_items = []
-            for source_col in column_mapping:
-                select_items.append(sql.SQL("{source}").format(source=sql.Identifier(source_col)))
+            select_items.extend(
+                sql.SQL("{source}").format(source=sql.Identifier(source_col))
+                for source_col in column_mapping
+            )
 
             select_query = sql.SQL(
                 "SELECT {select_items} FROM {foreign_schema}.{source_table}"

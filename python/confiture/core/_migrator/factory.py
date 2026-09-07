@@ -50,7 +50,7 @@ def from_config(
                 context={"file_path": str(config_path)},
                 resolution_hint=f"Create a config file at {config_path} or use an existing one",
             )
-        with open(config_path) as f:
+        with Path(config_path).open() as f:
             raw: dict[str, Any] = yaml.safe_load(f)
         # Issue #168: a migrate-only config need only carry ``database_url`` —
         # the build-only fields ``name``/``include_dirs`` default on the
@@ -60,7 +60,7 @@ def from_config(
         # (e.g. missing ``database_url``) still fails validation.
         try:
             env = Environment.model_validate(raw)
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             if "ValidationError" in type(e).__name__:
                 raise ConfigurationError(
                     f"Invalid configuration in {config_path}: {e}",

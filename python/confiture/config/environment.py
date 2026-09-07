@@ -879,7 +879,7 @@ class Environment(BaseModel):
 
         # Load YAML
         try:
-            with open(config_path) as f:
+            with Path(config_path).open() as f:
                 data = yaml.safe_load(f)
         except yaml.YAMLError as e:
             raise ConfigurationError(f"Invalid YAML in {config_path}: {e}") from e
@@ -1025,5 +1025,5 @@ class Environment(BaseModel):
         # Create Environment instance
         try:
             return cls(**data)
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             raise ConfigurationError(f"Invalid configuration in {config_path}: {e}") from e

@@ -364,6 +364,7 @@ class MigrationSandbox:
             migration.down()
             self._pre_state_simulated = True
             self._simulated_migration = migration
+        # Reason: a migration's down() is user code; any failure is a PreStateSimulationError
         except Exception as e:
             raise PreStateSimulationError(
                 f"Failed to simulate pre-state for migration "

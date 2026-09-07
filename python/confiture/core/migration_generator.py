@@ -121,8 +121,7 @@ class MigrationGenerator:
             return []
 
         conflicts = []
-        for migration_file in self.migrations_dir.glob(f"*_{name}.py"):
-            conflicts.append(migration_file)
+        conflicts.extend(self.migrations_dir.glob(f"*_{name}.py"))
 
         return conflicts
 
@@ -150,7 +149,7 @@ class MigrationGenerator:
         lock_file.parent.mkdir(parents=True, exist_ok=True)
         lock_file.touch(exist_ok=True)
 
-        lock_fd = open(lock_file)  # noqa: SIM115 - File lock requires open handle
+        lock_fd = Path(lock_file).open()  # noqa: SIM115 - File lock requires open handle
 
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -407,6 +406,7 @@ class {class_name}(Migration):
             shell=True,  # nosec B602 — `resolved` is a trusted operator-configured generator command (not user/network input); a shell is required to honor the configured pipeline. See SEC-M1.
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise ExternalGeneratorError(
