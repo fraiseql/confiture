@@ -41,10 +41,12 @@ ConfigOpt = Annotated[
     Path,
     typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
 ]
-DatabaseUrlOpt = Annotated[str, typer.Option("--database-url", "-d", help=DATABASE_URL_OPTION_HELP)]
+DatabaseUrlOpt = Annotated[
+    str | None, typer.Option("--database-url", "-d", help=DATABASE_URL_OPTION_HELP)
+]
 NoConfigOpt = Annotated[bool, typer.Option("--no-config", help=NO_CONFIG_OPTION_HELP)]
 TargetOpt = Annotated[
-    str,
+    str | None,
     typer.Option("--target", "-t", help="Target migration version (default: applies all pending)"),
 ]
 StrictOpt = Annotated[

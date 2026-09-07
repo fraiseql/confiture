@@ -147,7 +147,6 @@
     "python/confiture/testing/frameworks/performance.py": 4
   },
   "function_length": {
-    "python/confiture/cli/commands/schema.py": 1,
     "python/confiture/cli/seed.py": 1,
     "python/confiture/config/environment.py": 1,
     "python/confiture/core/linting/libraries/gdpr.py": 1,

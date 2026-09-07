@@ -30,7 +30,6 @@ from confiture.exceptions import ValidationError
 _MIGRATION_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
-NameOpt = Annotated[str, typer.Argument(help="Migration name (snake_case)")]
 MigrationsDirOpt = Annotated[
     Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
 ]
@@ -84,7 +83,7 @@ LiveSnapshotOpt = Annotated[
 
 @cli_boundary
 def migrate_generate(
-    name: NameOpt = ...,
+    name: str = typer.Argument(..., help="Migration name (snake_case)"),
     migrations_dir: MigrationsDirOpt = Path("db/migrations"),
     format_output: str = format_option("text", "json"),
     force: ForceOpt = False,

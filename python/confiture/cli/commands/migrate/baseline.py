@@ -90,7 +90,7 @@ def _baseline_from_db_flow(
 
 
 ThroughOpt = Annotated[
-    str,
+    str | None,
     typer.Option(
         "--through",
         "-t",
@@ -99,7 +99,7 @@ ThroughOpt = Annotated[
     ),
 ]
 FromDbOpt = Annotated[
-    str,
+    str | None,
     typer.Option(
         "--from-db",
         help="Source DSN to copy tb_confiture rows from.  When set, history "
@@ -108,7 +108,7 @@ FromDbOpt = Annotated[
     ),
 ]
 SourceTableOpt = Annotated[
-    str,
+    str | None,
     typer.Option(
         "--source-table",
         help="Override the source DB's tracking table name when it differs "

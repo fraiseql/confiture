@@ -343,7 +343,7 @@ EmitRemediationOpt = Annotated[
     ),
 ]
 DdlDirOpt = Annotated[
-    list[Path],
+    list[Path] | None,
     typer.Option(
         "--ddl-dir",
         help="DDL directory to scan for `--check-function-uniqueness` and "

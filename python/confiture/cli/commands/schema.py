@@ -1,6 +1,7 @@
 """Schema commands: init, build, lint, introspect."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -202,7 +203,7 @@ Documentation: https://github.com/evoludigit/confiture
 
 EnvOpt = Annotated[str, typer.Option("--env", "-e", help="Environment to build (default: local)")]
 OutputOpt = Annotated[
-    Path,
+    Path | None,
     typer.Option(
         "--output", "-o", help="Output file path (default: db/generated/schema_{env}.sql)"
     ),
@@ -290,7 +291,7 @@ FailOnDuplicatesOpt = Annotated[
     ),
 ]
 ReportOutputOpt = Annotated[
-    Path,
+    Path | None,
     typer.Option(
         "--report",
         help="Save structured build report (JSON/CSV) to file (default: stdout). "
@@ -298,7 +299,7 @@ ReportOutputOpt = Annotated[
     ),
 ]
 DumpOpt = Annotated[
-    Path,
+    Path | None,
     typer.Option(
         "--dump",
         help="Also emit a content-addressed pg_dump -Fc artifact restorable by "
@@ -405,33 +406,23 @@ def build(
             json_mode=json_mode,
             report_output=report_output,
         )
-        if schema_only:
-            builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
-            builder.include_configs = [
-                cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
-            ]
-            if builder.include_dirs:
-                builder.base_dir = builder.find_common_parent(builder.include_dirs)
-        if output is None:
-            output_dir = project_dir / "db" / "generated"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output = output_dir / f"schema_{env}.sql"
-
-        # Resolve a named seed profile from env config (unknown → exit 5).
-        seed_profile_obj = None
-        if seed_profile is not None:
-            seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
-        apply_sequential = sequential or (
-            builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
+        output, seed_profile_obj, apply_sequential = _build_settings(
+            builder,
+            schema_only=schema_only,
+            output=output,
+            project_dir=project_dir,
+            env=env,
+            seed_profile=seed_profile,
+            sequential=sequential,
         )
-
-        out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
-        from confiture.core.progress import ProgressManager
-
-        with ProgressManager() as progress:
-            sql_files = builder.find_sql_files()
-            duplicates = _duplicate_gate(
-                sql_files,
+        schema, schema_file_count, duplicates = _run_build(
+            builder,
+            out,
+            env=env,
+            output=output,
+            apply_sequential=apply_sequential,
+            duplicate_gate=lambda files: _duplicate_gate(
+                files,
                 project_dir=project_dir,
                 output=output,
                 warn=warn_duplicates,
@@ -439,14 +430,8 @@ def build(
                 out=out,
                 json_mode=json_mode,
                 report_output=report_output,
-            )
-            if apply_sequential:
-                schema = builder.build(output_path=output, schema_only=True, progress=progress)
-                schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
-            else:
-                schema = builder.build(output_path=output, progress=progress)
-                schema_file_count = len(sql_files)
-        out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+            ),
+        )
 
         seed_files_applied = 0
         if apply_sequential:
@@ -576,6 +561,74 @@ def _duplicate_gate(
 
 
 _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
+
+
+def _build_settings(
+    builder: SchemaBuilder,
+    *,
+    schema_only: bool,
+    output: Path | None,
+    project_dir: Path,
+    env: str,
+    seed_profile: str | None,
+    sequential: bool,
+) -> tuple[Path, Any, bool]:
+    """Trim seeds under ``--schema-only``, default the output path, resolve the seed profile and mode.
+
+    Returns:
+        ``(output, seed_profile_obj, apply_sequential)``.
+    """
+    if schema_only:
+        builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
+        builder.include_configs = [
+            cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
+        ]
+        if builder.include_dirs:
+            builder.base_dir = builder.find_common_parent(builder.include_dirs)
+    if output is None:
+        output_dir = project_dir / "db" / "generated"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output = output_dir / f"schema_{env}.sql"
+
+    # Resolve a named seed profile from env config (unknown → exit 5).
+    seed_profile_obj = None
+    if seed_profile is not None:
+        seed_profile_obj = builder.env_config.seed.get_profile(seed_profile)
+    apply_sequential = sequential or (
+        builder.env_config.seed and builder.env_config.seed.execution_mode == "sequential"
+    )
+    return output, seed_profile_obj, bool(apply_sequential)
+
+
+def _run_build(
+    builder: SchemaBuilder,
+    out: Any,
+    *,
+    env: str,
+    output: Path,
+    apply_sequential: bool,
+    duplicate_gate: Callable[[list[Path]], Any],
+) -> tuple[str, int, Any]:
+    """Concatenate the schema under a progress bar, after ``duplicate_gate`` saw the files.
+
+    Returns:
+        ``(schema, schema_file_count, duplicates)``; the seed files are left
+        to the sequential applier when ``apply_sequential``.
+    """
+    out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
+    from confiture.core.progress import ProgressManager
+
+    with ProgressManager() as progress:
+        sql_files = builder.find_sql_files()
+        duplicates = duplicate_gate(sql_files)
+        if apply_sequential:
+            schema = builder.build(output_path=output, schema_only=True, progress=progress)
+            schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
+        else:
+            schema = builder.build(output_path=output, progress=progress)
+            schema_file_count = len(sql_files)
+    out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
+    return schema, schema_file_count, duplicates
 
 
 def _apply_build_overrides(
@@ -768,7 +821,7 @@ ProjectDirOpt = Annotated[
     Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
 ]
 OutputOpt = Annotated[
-    Path,
+    Path | None,
     typer.Option("--output", "-o", help="Output file path (default: stdout, only with json/csv)"),
 ]
 FailOnErrorOpt = Annotated[
@@ -781,7 +834,7 @@ FailOnWarningOpt = Annotated[
     ),
 ]
 SelectOpt = Annotated[
-    list[str],
+    list[str] | None,
     typer.Option(
         "--select",
         help="Rules or families to run, comma-separated (#150). `default` means "
@@ -791,7 +844,7 @@ SelectOpt = Annotated[
     ),
 ]
 IgnoreOpt = Annotated[
-    list[str],
+    list[str] | None,
     typer.Option(
         "--ignore",
         help="Rules or families to skip, comma-separated. Applied after --select, "

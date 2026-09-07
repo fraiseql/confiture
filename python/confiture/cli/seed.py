@@ -413,7 +413,7 @@ CopyThresholdOpt = Annotated[
     ),
 ]
 ReportOutputOpt = Annotated[
-    Path,
+    Path | None,
     typer.Option(
         "--output",
         "-o",
