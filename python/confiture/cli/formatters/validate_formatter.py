@@ -175,58 +175,75 @@ def render_naming(
     orphans alone are a warning that still exits 0.
     """
     if duplicate_versions:
-        if json_mode:
-            payload: dict[str, Any] = {
-                "status": "issues_found",
-                "duplicate_versions": {
-                    v: [f.name for f in files] for v, files in duplicate_versions.items()
-                },
-            }
-            if orphaned_files:
-                payload["orphaned_files"] = [f.name for f in orphaned_files]
-            return payload
-        console.print("[red]❌ Duplicate migration versions detected[/red]")
-        console.print("[red]Multiple migration files share the same version number:[/red]\n")
-        for version, files in sorted(duplicate_versions.items()):
-            console.print(f"  Version {version}:")
-            for f in files:
-                console.print(f"    • {f.name}")
-        console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-        console.print(
-            "[yellow]   Use 'confiture migrate generate' to auto-assign the next version.[/yellow]"
-        )
-        return None
-
+        return _naming_duplicates(duplicate_versions, orphaned_files, json_mode=json_mode)
     if not orphaned_files:
-        if json_mode:
-            return {
-                "status": "ok",
-                "message": "No orphaned migration files found",
-                "fixed": [],
-                "errors": [],
-            }
-        console.print("[green]✅ No orphaned migration files found[/green]")
-        return None
-
+        return _naming_clean(json_mode=json_mode)
     if fixed is not None:
-        if json_mode:
-            return {
-                "status": "preview" if dry_run else "fixed",
-                "fixed": fixed.get("renamed", []),
-                "errors": fixed.get("errors", []),
-            }
-        if dry_run:
-            console.print("[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]")
-        else:
-            console.print("[green]✅ Fixed orphaned migration files:[/green]")
-        for old_name, new_name in fixed.get("renamed", []):
-            console.print(f"  • {old_name} → {new_name}")
-        if fixed.get("errors"):
-            console.print("[red]Errors:[/red]")
-            for filename, error_msg in fixed.get("errors", []):
-                console.print(f"  ❌ {filename}: {error_msg}")
-        return None
+        return _naming_fixed(fixed, json_mode=json_mode, dry_run=dry_run)
+    return _naming_orphaned(orphaned_files, json_mode=json_mode)
 
+
+def _naming_duplicates(
+    duplicate_versions: dict[str, list[Any]], orphaned_files: list[Any], *, json_mode: bool
+) -> dict[str, Any] | None:
+    if json_mode:
+        payload: dict[str, Any] = {
+            "status": "issues_found",
+            "duplicate_versions": {
+                v: [f.name for f in files] for v, files in duplicate_versions.items()
+            },
+        }
+        if orphaned_files:
+            payload["orphaned_files"] = [f.name for f in orphaned_files]
+        return payload
+    console.print("[red]❌ Duplicate migration versions detected[/red]")
+    console.print("[red]Multiple migration files share the same version number:[/red]\n")
+    for version, files in sorted(duplicate_versions.items()):
+        console.print(f"  Version {version}:")
+        for f in files:
+            console.print(f"    • {f.name}")
+    console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+    console.print(
+        "[yellow]   Use 'confiture migrate generate' to auto-assign the next version.[/yellow]"
+    )
+    return None
+
+
+def _naming_clean(*, json_mode: bool) -> dict[str, Any] | None:
+    if json_mode:
+        return {
+            "status": "ok",
+            "message": "No orphaned migration files found",
+            "fixed": [],
+            "errors": [],
+        }
+    console.print("[green]✅ No orphaned migration files found[/green]")
+    return None
+
+
+def _naming_fixed(
+    fixed: dict[str, Any], *, json_mode: bool, dry_run: bool
+) -> dict[str, Any] | None:
+    if json_mode:
+        return {
+            "status": "preview" if dry_run else "fixed",
+            "fixed": fixed.get("renamed", []),
+            "errors": fixed.get("errors", []),
+        }
+    if dry_run:
+        console.print("[cyan]📋 DRY-RUN: Would fix the following orphaned files:[/cyan]")
+    else:
+        console.print("[green]✅ Fixed orphaned migration files:[/green]")
+    for old_name, new_name in fixed.get("renamed", []):
+        console.print(f"  • {old_name} → {new_name}")
+    if fixed.get("errors"):
+        console.print("[red]Errors:[/red]")
+        for filename, error_msg in fixed.get("errors", []):
+            console.print(f"  ❌ {filename}: {error_msg}")
+    return None
+
+
+def _naming_orphaned(orphaned_files: list[Any], *, json_mode: bool) -> dict[str, Any] | None:
     if json_mode:
         return {
             "status": "issues_found",

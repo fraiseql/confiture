@@ -329,6 +329,71 @@ def _format_rebuild_text(result: MigrateRebuildResult, console: Console) -> None
         console.print(f"[red]❌ Rebuild failed: {result.error}[/red]")
 
 
+def _sql_execution_details(error_message: str, console: Any) -> None:
+    """The statement, the database error and a hint keyed on the error text."""
+    console.print("  Error Type: SQL Execution Error")
+    parts = error_message.split(" | ")
+    sql_part = next((part for part in parts if part.startswith("SQL: ")), None)
+    error_part = next((part for part in parts if part.startswith("Error: ")), None)
+
+    sql_content = sql_part[5:].strip() if sql_part else None
+    if sql_content is not None:
+        console.print(
+            f"  SQL Statement: {sql_content[:100]}{'...' if len(sql_content) > 100 else ''}"
+        )
+
+    if error_part:
+        db_error = error_part[7:].strip()
+        console.print(f"  Database Error: {db_error.split(chr(10))[0]}")
+        _sql_error_hints(db_error.lower(), sql_content, console)
+
+
+def _sql_error_hints(error_msg: str, sql_content: str | None, console: Any) -> None:
+    if "syntax error" in error_msg:
+        console.print("\n[yellow]🔍 SQL Syntax Error Detected:[/yellow]")
+        console.print("  • Check for typos in SQL keywords, table names, or column names")
+        console.print("  • Verify quotes, parentheses, and semicolons are properly balanced")
+        if sql_content is not None:
+            console.print(f'  • Test the SQL manually: psql -c "{sql_content}"')
+    elif "does not exist" in error_msg:
+        _missing_object_hints(error_msg, console)
+    elif "already exists" in error_msg:
+        console.print("\n[yellow]🔍 Object Already Exists:[/yellow]")
+        console.print("  • Use IF NOT EXISTS clauses for safe creation")
+        console.print("  • Check if migration was partially applied")
+    elif "permission denied" in error_msg:
+        console.print("\n[yellow]🔍 Permission Error:[/yellow]")
+        console.print("  • Verify database user has required privileges")
+        console.print("  • Check GRANT statements in earlier migrations")
+
+
+def _missing_object_hints(error_msg: str, console: Any) -> None:
+    if "schema" in error_msg:
+        console.print("\n[yellow]🔍 Missing Schema Error:[/yellow]")
+        console.print("  • Create the schema first: CREATE SCHEMA IF NOT EXISTS schema_name;")
+        console.print("  • Or use the public schema by default")
+    elif "table" in error_msg or "relation" in error_msg:
+        console.print("\n[yellow]🔍 Missing Table Error:[/yellow]")
+        console.print("  • Ensure dependent migrations ran first")
+        console.print("  • Check table name spelling and schema qualification")
+    elif "function" in error_msg:
+        console.print("\n[yellow]🔍 Missing Function Error:[/yellow]")
+        console.print("  • Define the function before using it")
+        console.print("  • Check function name and parameter types")
+
+
+def _framework_error_hints(error_msg: str, console: Any) -> None:
+    if "already been applied" in error_msg:
+        console.print("\n[yellow]🔍 Migration Already Applied:[/yellow]")
+        console.print("  • Check migration status: confiture migrate status")
+        console.print("  • This migration may have run successfully before")
+    elif "connection" in error_msg:
+        console.print("\n[yellow]🔍 Database Connection Error:[/yellow]")
+        console.print("  • Verify database is running and accessible")
+        console.print("  • Check connection string in config file")
+        console.print("  • Test connection: psql 'your-connection-string'")
+
+
 def show_migration_error_details(
     failed_migration: Any,
     exception: BaseException,
@@ -353,69 +418,12 @@ def show_migration_error_details(
     error_message = base_message(exception)
 
     if "SQL execution failed" in error_message:
-        console.print("  Error Type: SQL Execution Error")
-        parts = error_message.split(" | ")
-        sql_part = next((part for part in parts if part.startswith("SQL: ")), None)
-        error_part = next((part for part in parts if part.startswith("Error: ")), None)
-
-        if sql_part:
-            sql_content = sql_part[5:].strip()
-            console.print(
-                f"  SQL Statement: {sql_content[:100]}{'...' if len(sql_content) > 100 else ''}"
-            )
-
-        if error_part:
-            db_error = error_part[7:].strip()
-            console.print(f"  Database Error: {db_error.split(chr(10))[0]}")
-
-            error_msg = db_error.lower()
-            if "syntax error" in error_msg:
-                console.print("\n[yellow]🔍 SQL Syntax Error Detected:[/yellow]")
-                console.print("  • Check for typos in SQL keywords, table names, or column names")
-                console.print(
-                    "  • Verify quotes, parentheses, and semicolons are properly balanced"
-                )
-                if sql_part:
-                    sql_content = sql_part[5:].strip()
-                    console.print(f'  • Test the SQL manually: psql -c "{sql_content}"')
-            elif "does not exist" in error_msg:
-                if "schema" in error_msg:
-                    console.print("\n[yellow]🔍 Missing Schema Error:[/yellow]")
-                    console.print(
-                        "  • Create the schema first: CREATE SCHEMA IF NOT EXISTS schema_name;"
-                    )
-                    console.print("  • Or use the public schema by default")
-                elif "table" in error_msg or "relation" in error_msg:
-                    console.print("\n[yellow]🔍 Missing Table Error:[/yellow]")
-                    console.print("  • Ensure dependent migrations ran first")
-                    console.print("  • Check table name spelling and schema qualification")
-                elif "function" in error_msg:
-                    console.print("\n[yellow]🔍 Missing Function Error:[/yellow]")
-                    console.print("  • Define the function before using it")
-                    console.print("  • Check function name and parameter types")
-            elif "already exists" in error_msg:
-                console.print("\n[yellow]🔍 Object Already Exists:[/yellow]")
-                console.print("  • Use IF NOT EXISTS clauses for safe creation")
-                console.print("  • Check if migration was partially applied")
-            elif "permission denied" in error_msg:
-                console.print("\n[yellow]🔍 Permission Error:[/yellow]")
-                console.print("  • Verify database user has required privileges")
-                console.print("  • Check GRANT statements in earlier migrations")
+        _sql_execution_details(error_message, console)
 
     elif isinstance(exception, MigrationError):
         console.print("  Error Type: Migration Framework Error")
         console.print(f"  Message: {exception}")
-
-        error_msg = base_message(exception).lower()
-        if "already been applied" in error_msg:
-            console.print("\n[yellow]🔍 Migration Already Applied:[/yellow]")
-            console.print("  • Check migration status: confiture migrate status")
-            console.print("  • This migration may have run successfully before")
-        elif "connection" in error_msg:
-            console.print("\n[yellow]🔍 Database Connection Error:[/yellow]")
-            console.print("  • Verify database is running and accessible")
-            console.print("  • Check connection string in config file")
-            console.print("  • Test connection: psql 'your-connection-string'")
+        _framework_error_hints(base_message(exception).lower(), console)
 
     else:
         console.print(f"  Error Type: {type(exception).__name__}")
