@@ -12,6 +12,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.0.2] - 2026-09-07
+
+### Changed
+
+- **Every function fits its budget.** `tests/budgets.json` records no function over 150 lines of code
+  (signature and body; a docstring is prose and no longer counts) and none over McCabe 15, and
+  `tests/unit/test_budgets.py` pins both budgets at zero. Behaviour is unchanged: the generated CLI
+  reference is byte-identical, every JSON schema test and the exit-code convention hold. What moved:
+  - CLI commands declare their options as module-level `Annotated` aliases, one line per option in the
+    signature (`migrate validate`, `up`, `preflight`, `baseline`, `rebuild`, `fix-signatures`,
+    `generate`, `build`, `lint`, `seed validate`, `seed apply`). Fourteen options annotated `Path` or
+    `str` with a `None` default now say `T | None`.
+  - The general and GDPR lint libraries are data tables; `SchemaChange.__str__` and the replica-safety
+    verdicts are tables too; `Environment.load`, `SchemaAnalyzer.get_schema_info`, the apply loop, the
+    FK extractor (now on the lexer's tokens, its two hand-written comment/string scanners gone), the
+    seed applier, the static evaluator and a dozen command bodies are split into named steps.
+  - `MigratorSession` keeps the lifecycle and the public surface; its six private pass-throughs are
+    gone and the apply/rollback loops are self-contained. `StatusResult`, `MigrateDownResult`,
+    `MigrateReinitResult` and `MigrateRebuildResult` document their attributes (the session's
+    docstrings point there).
+
 ## [1.0.1] - 2026-09-07
 
 ### Fixed
