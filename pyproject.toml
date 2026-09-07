@@ -288,7 +288,6 @@ max-returns = 8
 "python/confiture/cli/ownership.py" = ["C901", "PLR0912"]
 "python/confiture/cli/seed.py" = ["PLR0913", "PLR0915", "PLR2004"]
 "python/confiture/cli/sync.py" = ["PLR0913"]
-"python/confiture/config/environment.py" = ["C901", "PLR0912", "PLR0915"]
 "python/confiture/core/_migrator/apply.py" = ["PLR2004"]
 "python/confiture/core/_migrator/apply_loop.py" = ["PLR0913"]
 "python/confiture/core/_migrator/baseline.py" = ["PLR0913"]

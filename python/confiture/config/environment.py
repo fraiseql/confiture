@@ -733,6 +733,80 @@ class DriftConfig(BaseModel):
     column_order_severity: Literal["warning", "critical"] = "warning"
 
 
+def _read_config_yaml(config_path: Path) -> dict[str, Any]:
+    """The YAML mapping at ``config_path``; anything else is a ``ConfigurationError``."""
+    try:
+        with Path(config_path).open() as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise ConfigurationError(f"Invalid YAML in {config_path}: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ConfigurationError(
+            f"Invalid config format in {config_path}: expected dictionary, got {type(data)}"
+        )
+    return data
+
+
+def _resolve_dir_items(
+    items: list[Any], project_dir: Path, config_path: Path, field_name: str, *, check_exists: bool
+) -> list[str | dict[str, Any]]:
+    """Resolve a directory list (strings or ``{path: …}`` dicts) to absolute paths.
+
+    With ``check_exists`` a missing directory is an error unless the item sets
+    ``auto_discover`` (the ``include_dirs`` rule); the superuser lists are not
+    checked at load time.
+    """
+    resolved: list[str | dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, str):
+            abs_path = (project_dir / item).resolve()
+            if check_exists and not abs_path.exists():
+                raise ConfigurationError(
+                    f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
+                )
+            resolved.append(str(abs_path))
+        elif isinstance(item, dict):
+            path_str = item.get("path")
+            if not path_str:
+                raise ConfigurationError(
+                    f"Missing 'path' field in {field_name} item: {item}\nIn {config_path}"
+                )
+            abs_path = (project_dir / path_str).resolve()
+            if check_exists and not abs_path.exists() and not item.get("auto_discover", True):
+                raise ConfigurationError(
+                    f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
+                )
+            resolved_item = item.copy()
+            resolved_item["path"] = str(abs_path)
+            resolved.append(resolved_item)
+        else:
+            raise ConfigurationError(
+                f"Invalid {field_name} item type: {type(item)}. Expected str or dict.\nIn {config_path}"
+            )
+    return resolved
+
+
+def _normalize_acls(data: dict[str, Any]) -> None:
+    """Flatten a nested ``acls:`` block into the model's split fields.
+
+    Two shapes are accepted: a flat list (legacy) ``acls: [ {...}, {...} ]`` and
+    the preferred nested dict ``acls: { lint_enabled: true, expectations: [...] }``.
+    The rest of the loader (env-var expansion, Pydantic validation) then sees
+    one shape.
+    """
+    if "acls" in data and isinstance(data["acls"], dict):
+        acl_block = data["acls"]
+        unknown = set(acl_block) - {"lint_enabled", "expectations"}
+        if unknown:
+            raise ConfigurationError(
+                f"Unknown key(s) in acls block: {sorted(unknown)}. "
+                f"Allowed: 'lint_enabled', 'expectations'."
+            )
+        data["acls_lint_enabled"] = bool(acl_block.get("lint_enabled", False))
+        data["acls"] = acl_block.get("expectations", [])
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -877,17 +951,7 @@ class Environment(BaseModel):
                 f"Expected: db/environments/{env_name}.yaml"
             )
 
-        # Load YAML
-        try:
-            with Path(config_path).open() as f:
-                data = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            raise ConfigurationError(f"Invalid YAML in {config_path}: {e}") from e
-
-        if not isinstance(data, dict):
-            raise ConfigurationError(
-                f"Invalid config format in {config_path}: expected dictionary, got {type(data)}"
-            )
+        data = _read_config_yaml(config_path)
 
         # Validate required fields
         if "database_url" not in data:
@@ -896,114 +960,28 @@ class Environment(BaseModel):
         if "include_dirs" not in data:
             raise ConfigurationError(f"Missing required field 'include_dirs' in {config_path}")
 
-        # Resolve include_dirs paths to absolute
-        resolved_include_dirs: list[str | dict[str, Any]] = []
-        for include_item in data["include_dirs"]:
-            if isinstance(include_item, str):
-                # Simple string format - resolve to absolute path
-                abs_path = (project_dir / include_item).resolve()
-                if not abs_path.exists():
-                    raise ConfigurationError(
-                        f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
-                    )
-                resolved_include_dirs.append(str(abs_path))
-            elif isinstance(include_item, dict):
-                # Dict format - resolve the path field and keep as dict
-                path_str = include_item.get("path")
-                if not path_str:
-                    raise ConfigurationError(
-                        f"Missing 'path' field in include_dirs item: {include_item}\nIn {config_path}"
-                    )
-                abs_path = (project_dir / path_str).resolve()
-                auto_discover = include_item.get("auto_discover", True)
-                if not abs_path.exists() and not auto_discover:
-                    raise ConfigurationError(
-                        f"Include directory does not exist: {abs_path}\nSpecified in {config_path}"
-                    )
-                # Keep the dict format but with resolved path
-                resolved_item = include_item.copy()
-                resolved_item["path"] = str(abs_path)
-                resolved_include_dirs.append(resolved_item)
-            else:
-                raise ConfigurationError(
-                    f"Invalid include_dirs item type: {type(include_item)}. Expected str or dict.\nIn {config_path}"
-                )
-
-        data["include_dirs"] = resolved_include_dirs
+        # Resolve include_dirs paths to absolute (a missing directory is an error
+        # unless the item opts into auto-discovery)
+        data["include_dirs"] = _resolve_dir_items(
+            data["include_dirs"], project_dir, config_path, "include_dirs", check_exists=True
+        )
 
         # Resolve exclude_dirs if present
         if "exclude_dirs" in data:
-            exclude_dirs = []
-            for dir_path in data["exclude_dirs"]:
-                abs_path = (project_dir / dir_path).resolve()
-                exclude_dirs.append(str(abs_path))
-            data["exclude_dirs"] = exclude_dirs
+            data["exclude_dirs"] = [
+                str((project_dir / dir_path).resolve()) for dir_path in data["exclude_dirs"]
+            ]
 
-        # Resolve superuser_dirs if present
-        if "superuser_dirs" in data:
-            resolved_superuser_dirs: list[str | dict[str, Any]] = []
-            for item in data["superuser_dirs"]:
-                if isinstance(item, str):
-                    abs_path = (project_dir / item).resolve()
-                    resolved_superuser_dirs.append(str(abs_path))
-                elif isinstance(item, dict):
-                    path_str = item.get("path")
-                    if not path_str:
-                        raise ConfigurationError(
-                            f"Missing 'path' field in superuser_dirs item: {item}\nIn {config_path}"
-                        )
-                    abs_path = (project_dir / path_str).resolve()
-                    resolved_item = item.copy()
-                    resolved_item["path"] = str(abs_path)
-                    resolved_superuser_dirs.append(resolved_item)
-                else:
-                    raise ConfigurationError(
-                        f"Invalid superuser_dirs item type: {type(item)}. Expected str or dict.\nIn {config_path}"
-                    )
-            data["superuser_dirs"] = resolved_superuser_dirs
-
-        # Resolve superuser_post_dirs if present
-        if "superuser_post_dirs" in data:
-            resolved_superuser_post_dirs: list[str | dict[str, Any]] = []
-            for item in data["superuser_post_dirs"]:
-                if isinstance(item, str):
-                    abs_path = (project_dir / item).resolve()
-                    resolved_superuser_post_dirs.append(str(abs_path))
-                elif isinstance(item, dict):
-                    path_str = item.get("path")
-                    if not path_str:
-                        raise ConfigurationError(
-                            f"Missing 'path' field in superuser_post_dirs item: {item}\nIn {config_path}"
-                        )
-                    abs_path = (project_dir / path_str).resolve()
-                    resolved_item = item.copy()
-                    resolved_item["path"] = str(abs_path)
-                    resolved_superuser_post_dirs.append(resolved_item)
-                else:
-                    raise ConfigurationError(
-                        f"Invalid superuser_post_dirs item type: {type(item)}. Expected str or dict.\nIn {config_path}"
-                    )
-            data["superuser_post_dirs"] = resolved_superuser_post_dirs
+        for field_name in ("superuser_dirs", "superuser_post_dirs"):
+            if field_name in data:
+                data[field_name] = _resolve_dir_items(
+                    data[field_name], project_dir, config_path, field_name, check_exists=False
+                )
 
         # Set environment name
         data["name"] = env_name
 
-        # Normalize the ``acls:`` block — accept both shapes:
-        #   1. Flat list (legacy)       :  ``acls: [ {...}, {...} ]``
-        #   2. Nested dict (preferred)  :  ``acls: { lint_enabled: true, expectations: [...] }``
-        # Flatten the nested form into the model's split fields so the rest
-        # of the loader (env-var expansion, Pydantic validation) stays
-        # blissfully unaware of the dual shape.
-        if "acls" in data and isinstance(data["acls"], dict):
-            acl_block = data["acls"]
-            unknown = set(acl_block) - {"lint_enabled", "expectations"}
-            if unknown:
-                raise ConfigurationError(
-                    f"Unknown key(s) in acls block: {sorted(unknown)}. "
-                    f"Allowed: 'lint_enabled', 'expectations'."
-                )
-            data["acls_lint_enabled"] = bool(acl_block.get("lint_enabled", False))
-            data["acls"] = acl_block.get("expectations", [])
+        _normalize_acls(data)
 
         # Expand ${VAR} placeholders inside the acls: subtree at load time —
         # role names commonly parameterize across envs.  Missing variables
