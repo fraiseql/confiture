@@ -47,6 +47,13 @@ The round trip closes with `drift`: `confiture drift --schema <dir>` accepts the
 
 The payload's schema is `migrate-diff.schema.json` (see [JSON schemas](../reference/json-schemas.md)).
 
+## What the ingest does not read
+
+A structured export (a JSON or SpecQL schema) is not a source at 1.1.0. FraiseQL's compiled JSON
+describes GraphQL types, not tables; the mapping to DDL is fraiseql's own `--emit-ddl`, and that DDL
+is what confiture reads. `source.kind` in the JSON output is `sql` today and stays open for a
+structured source when one exists.
+
 ## The external generator
 
 `--generator` (the shell-out configured under `migration.generator`) remains the fallback for

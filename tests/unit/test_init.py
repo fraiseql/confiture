@@ -1,5 +1,7 @@
 """Tests for confiture package __init__ and lazy loading."""
 
+import re
+
 import pytest
 
 
@@ -12,7 +14,7 @@ class TestPackageMetadata:
 
         assert __version__ is not None
         assert isinstance(__version__, str)
-        assert "0." in __version__  # Check version prefix
+        assert re.fullmatch(r"\d+\.\d+\.\d+", __version__), __version__
 
     def test_author_exists(self):
         """Test that __author__ is defined."""

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
-## [Unreleased]
+## [1.1.0] - 2026-09-07
 
 ### Added
 
@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`pg_dump` 17.6+ output parses again.** Recent `pg_dump` wraps a dump in `\restrict <token>` /
   `\unrestrict` psql meta-commands; `clean_pg_dump_output` now drops them, so `migrate diff --from db`
   and every other consumer of the cleaned dump see SQL only.
+
+### Security
+
+- The lockfile moves starlette 1.2.1 → 1.6.0 (PYSEC-2026-248, PYSEC-2026-249; a transitive
+  dependency of the `mcp` extra's fastapi). The published constraint is unchanged.
 
 ## [1.0.3] - 2026-09-07
 
