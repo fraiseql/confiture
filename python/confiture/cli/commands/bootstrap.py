@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
@@ -171,7 +172,6 @@ def bootstrap(
         )
 
     # Build and (optionally) execute the plan.
-    import psycopg
 
     try:
         conn = psycopg.connect(bootstrap_url, autocommit=False)

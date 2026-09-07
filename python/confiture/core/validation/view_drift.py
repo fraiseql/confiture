@@ -18,7 +18,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from confiture.core.connection import load_config, open_connection
+from confiture.core.expected_db import ExpectedSchemaDB
+from confiture.core.live_view_catalog import LiveViewCatalog
 from confiture.core.validation.signature_drift import _resolve_source_sql, _ssh_override
+from confiture.core.view_body_drift import ViewBodyDriftDetector
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -83,9 +86,6 @@ def check_view_drift(
         ConfigurationError: config missing, auto-build failed, or ``--ssh`` was
             used without ``--scratch-url``.
     """
-    from confiture.core.expected_db import ExpectedSchemaDB
-    from confiture.core.live_view_catalog import LiveViewCatalog
-    from confiture.core.view_body_drift import ViewBodyDriftDetector
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")

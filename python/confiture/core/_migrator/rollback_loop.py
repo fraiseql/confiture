@@ -8,18 +8,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from confiture.exceptions import MigrationError
+from confiture.exceptions import ConfigurationError, MigrationError
 
 if TYPE_CHECKING:
     from confiture.core._migrator.session import MigratorSession
-    from confiture.models.results import (
-        DownToResult,
-        MigrateDownResult,
-    )
+
+
 import time as _time
 
-from confiture.exceptions import ConfigurationError, RollbackError
-from confiture.models.results import MigrationApplied
+import confiture.core.migrator as _m
+from confiture.core._migrator.rollback_planner import (
+    REASON_IRREVERSIBLE,
+    REASON_TARGET_NEWER,
+    plan_down_to,
+)
+from confiture.exceptions import RollbackError
+from confiture.models.results import DownToResult, MigrateDownResult, MigrationApplied
 
 
 def _rollback_sequence(
@@ -107,8 +111,6 @@ def down(
     command: str | None = None,
 ) -> MigrateDownResult:
     """See :meth:`MigratorSession.down`."""
-    import confiture.core.migrator as _m
-    from confiture.models.results import MigrateDownResult
 
     if session._migrator is None:
         raise ConfigurationError(
@@ -153,8 +155,6 @@ def down_to(
     command: str | None = None,
 ) -> DownToResult:
     """See :meth:`MigratorSession.down_to`."""
-    import confiture.core.migrator as _m
-    from confiture.exceptions import ConfigurationError
 
     if session._migrator is None:
         raise ConfigurationError(
@@ -174,12 +174,6 @@ def down_to(
 
 def _down_to_under_lock(session: MigratorSession, target: str, *, dry_run: bool) -> DownToResult:
     """Plan and execute ``down_to`` — the caller holds the lock unless ``dry_run``."""
-    from confiture.core._migrator.rollback_planner import (
-        REASON_IRREVERSIBLE,
-        REASON_TARGET_NEWER,
-        plan_down_to,
-    )
-    from confiture.models.results import DownToResult
 
     assert session._migrator is not None
     session._migrator.initialize()

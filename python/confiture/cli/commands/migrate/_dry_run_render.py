@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from confiture.cli.dry_run import print_json_report, save_json_report, save_text_report
 from confiture.cli.helpers import (
     console,
     error_console,
@@ -26,7 +27,7 @@ def _render_dry_run_analysis(
     rollback: bool = False,
 ) -> None:
     """The dry-run summary of ``migrate up --dry-run`` / ``migrate down --dry-run``."""
-    from confiture.cli.dry_run import print_json_report, save_json_report, save_text_report
+    # Reason: CLI start-up: importing confiture.cli.dry_run_summary costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.cli.dry_run_summary import build_dry_run_summary, render_dry_run_text
 
     summary = build_dry_run_summary(
@@ -57,6 +58,7 @@ def _render_dry_run_analysis(
 
 
 def _row_estimator(connection: Any) -> Any:
+    # Reason: CLI start-up: importing confiture.cli.dry_run_summary costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.cli.dry_run_summary import row_estimator
 
     return row_estimator(connection)

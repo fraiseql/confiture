@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pglast
 import pglast.parser
 
 from confiture.config.environment import FunctionCoverage
@@ -236,7 +237,6 @@ class Func001FunctionUniqueness:
         parse yields no definitions (the build-time gate would catch
         unparseable SQL separately).
         """
-        import pglast
 
         tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 

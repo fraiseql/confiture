@@ -22,9 +22,17 @@ from confiture.exceptions import MigrationError
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
     from confiture.core._migrator.engine import Migrator
-    from confiture.models.results import MigrateRebuildResult, MigrateReinitResult
+
+from confiture.core import builder as _core_builder
+from confiture.core import connection as _core_connection
+from confiture.core._migrator.apply import record_migration
+from confiture.core._migrator.baseline_copy import _select_rows_to_copy
+from confiture.core.checksum import compute_checksum
+from confiture.core.seed import applier as _core_seed_applier
+from confiture.core.sql_lexer import split_statements
+from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import RebuildError
-from confiture.models.results import MigrationApplied
+from confiture.models.results import MigrateRebuildResult, MigrateReinitResult, MigrationApplied
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +50,6 @@ def baseline_from_db(
 
     See :meth:`Migrator.baseline_from_db` for the full contract.
     """
-    from confiture.core._migrator.baseline_copy import _select_rows_to_copy
 
     local_files = migrator.find_migration_files(migrations_dir)
     local_versions = {migrator._version_from_filename(f.name) for f in local_files}
@@ -120,7 +127,6 @@ def _read_source_tracking_table(
 
 def _insert_baseline_row(migrator: Migrator, row: dict[str, Any], *, index: int = 0) -> None:
     """Copy one ledger row from the source database (``baseline-from-db``)."""
-    from confiture.core._migrator.apply import record_migration
 
     record_migration(
         migrator,
@@ -154,7 +160,6 @@ def reinit(
 
     See :meth:`Migrator.reinit` for the full contract.
     """
-    from confiture.models.results import MigrateReinitResult, MigrationApplied
 
     start_time = time.time()
 
@@ -188,13 +193,9 @@ def reinit(
         # Re-mark each migration using direct INSERT (avoid mark_applied's
         # commit which would interfere with dry-run rollback)
 
-        from confiture.core._migrator.apply import record_migration
-        from confiture.core.checksum import compute_checksum
-        from confiture.core.connection import load_migration_class
-
         marked: list[MigrationApplied] = []
         for migration_file in migrations_to_mark:
-            migration_class = load_migration_class(migration_file)
+            migration_class = _core_connection.load_migration_class(migration_file)
             migration = migration_class(connection=migrator.connection)
 
             record_migration(
@@ -275,8 +276,6 @@ def apply_ddl_string(migrator: Migrator, ddl: str) -> tuple[int, list[str]]:
     Strips BEGIN/COMMIT wrappers, splits into statements, and executes each.
     CREATE EXTENSION failures are captured as warnings rather than raised.
     """
-    from confiture.core.sql_lexer import split_statements
-    from confiture.core.sql_utils import strip_transaction_wrappers
 
     cleaned = strip_transaction_wrappers(ddl)
     statements = split_statements(cleaned)
@@ -337,7 +336,6 @@ def rebuild(
 
     See :meth:`Migrator.rebuild` for the full contract.
     """
-    from confiture.models.results import MigrateRebuildResult
 
     start_time = time.time()
     warnings: list[str] = []
@@ -358,9 +356,7 @@ def rebuild(
 
     # Step 2: Build DDL via SchemaBuilder
     try:
-        from confiture.core.builder import SchemaBuilder
-
-        builder = SchemaBuilder(
+        builder = _core_builder.SchemaBuilder(
             env=env_config.name if env_config and hasattr(env_config, "name") else "rebuild",
         )
         ddl = builder.build(schema_only=True)
@@ -373,8 +369,6 @@ def rebuild(
 
     if dry_run:
         # Count what would be executed
-        from confiture.core.sql_lexer import split_statements
-        from confiture.core.sql_utils import strip_transaction_wrappers
 
         cleaned = strip_transaction_wrappers(ddl)
         stmts = split_statements(cleaned)
@@ -419,9 +413,7 @@ def rebuild(
 
     # Step 6: Optionally apply seeds
     if apply_seeds:
-        from confiture.core.seed.applier import SeedApplier
-
-        applier = SeedApplier(
+        applier = _core_seed_applier.SeedApplier(
             seeds_dir=seeds_dir,
             connection=migrator.connection,
         )

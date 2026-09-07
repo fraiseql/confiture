@@ -15,7 +15,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from confiture.config.environment import SshTunnelConfig
+from confiture.core import builder as _core_builder
 from confiture.core.connection import load_config, open_connection
+from confiture.core.function_body_drift import FunctionBodyDriftDetector
+from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
+from confiture.core.function_signature_parser import FunctionSignatureParser
+from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -46,7 +52,6 @@ class SignatureDriftResult:
 
 def _ssh_override(config_data: Any, ssh_via: str) -> Any:
     """Layer an ssh_tunnel onto *config_data* from a ``user@host`` / ``host`` spec."""
-    from confiture.config.environment import SshTunnelConfig
 
     parts = ssh_via.split("@", 1)
     ssh_host = parts[1] if len(parts) == 2 else parts[0]
@@ -83,8 +88,6 @@ def _resolve_source_sql(config_data: Any, schema_file: Path | None) -> tuple[str
         return schema_file.read_text(), False
 
     try:
-        from confiture.core.builder import SchemaBuilder
-
         env_name = (
             config_data.get("name")
             if isinstance(config_data, dict)
@@ -94,7 +97,7 @@ def _resolve_source_sql(config_data: Any, schema_file: Path | None) -> tuple[str
             raise ValueError(
                 "Config has no 'name' field — cannot auto-build schema. Pass --schema explicitly."
             )
-        return SchemaBuilder(env=env_name).build(schema_only=True), True
+        return _core_builder.SchemaBuilder(env=env_name).build(schema_only=True), True
     # Reason: an auto-build failure of any kind is reported with the --schema remedy
     except Exception as build_exc:
         raise ConfigurationError(
@@ -128,9 +131,6 @@ def check_signature_drift(
     Raises:
         ConfigurationError: config missing, auto-build failed, or connection failed.
     """
-    from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
-    from confiture.core.function_signature_parser import FunctionSignatureParser
-    from confiture.core.live_function_catalog import LiveFunctionCatalog
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
@@ -157,8 +157,6 @@ def check_signature_drift(
 
         body_report = None
         if check_body:
-            from confiture.core.function_body_drift import FunctionBodyDriftDetector
-
             source_with_bodies = FunctionSignatureParser().parse_with_bodies(source_sql)
             source_bodies: dict[str, str | None] = {
                 sig.signature_key(): body for sig, body in source_with_bodies

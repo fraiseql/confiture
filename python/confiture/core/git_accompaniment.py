@@ -7,6 +7,7 @@ Useful for pre-commit hooks and CI/CD pipelines.
 import re
 from pathlib import Path
 
+from confiture.core.function_signature_checker import FunctionSignatureChecker
 from confiture.core.git import GitRepository
 from confiture.core.git_schema import GitSchemaDiffer
 from confiture.exceptions import GitError
@@ -146,10 +147,6 @@ class MigrationAccompanimentChecker:
             if not function_files:
                 return []
 
-            from confiture.core.function_signature_checker import (
-                FunctionSignatureChecker,
-            )
-
             checker = FunctionSignatureChecker(self.git_repo)
             return checker.check(
                 changed_sql_files=function_files,
@@ -177,6 +174,7 @@ class MigrationAccompanimentChecker:
             if not function_files:
                 return []
 
+            # Reason: import cycle (the module is partially initialised when this import runs at module level)
             from confiture.core.function_body_checker import (
                 FunctionBodyChecker,
             )

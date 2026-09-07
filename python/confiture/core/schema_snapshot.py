@@ -11,6 +11,7 @@ import datetime
 from pathlib import Path
 
 from confiture.core.builder import SchemaBuilder
+from confiture.core.temp_database import TempDatabase, clean_pg_dump_output, pg_dump_schema
 
 
 class SchemaSnapshotGenerator:
@@ -88,11 +89,6 @@ class SchemaSnapshotGenerator:
     @staticmethod
     def _live_snapshot(schema_sql: str, database_url: str) -> str:
         """Apply *schema_sql* to a temp DB and return ``pg_dump`` output."""
-        from confiture.core.temp_database import (
-            TempDatabase,
-            clean_pg_dump_output,
-            pg_dump_schema,
-        )
 
         td = TempDatabase(database_url)
         with td as temp_url:

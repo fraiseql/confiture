@@ -13,8 +13,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from confiture.config.environment import Environment
     from confiture.core._migrator.session import MigratorSession
+import yaml
+
+from confiture.config.environment import Environment
 from confiture.exceptions import ConfigurationError
 
 
@@ -34,14 +36,12 @@ def from_config(
     Raises:
         ConfigurationError: If the config file cannot be found or is invalid.
     """
-    from confiture.config.environment import Environment
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.core._migrator.session import MigratorSession
 
     if isinstance(config, Environment):
         env = config
     else:
-        import yaml
-
         config_path = Path(config)
         if not config_path.exists():
             raise ConfigurationError(

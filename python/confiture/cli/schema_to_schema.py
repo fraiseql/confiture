@@ -28,6 +28,12 @@ if TYPE_CHECKING:
     import psycopg
 import contextlib
 
+import psycopg
+import yaml
+
+from confiture.core import connection as _core_connection
+from confiture.core.schema_to_schema import SchemaToSchemaMigrator
+
 schema_to_schema_app = typer.Typer(
     help="Medium 4: zero-downtime schema migration via Foreign Data Wrapper (FDW).",
     no_args_is_help=True,
@@ -57,9 +63,6 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
     Raises:
         ConfigurationError: the spec can't be resolved or the connection fails.
     """
-    import psycopg
-
-    from confiture.core.connection import load_config
 
     try:
         if spec.startswith(("postgres://", "postgresql://")):
@@ -74,7 +77,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
                 f"(db/environments/{spec}.yaml), a config path, or a DSN.",
                 error_code="CONFIG_004",
             )
-        return connect(load_config(candidate))
+        return connect(_core_connection.load_config(candidate))
     except ConfiturError:
         raise
     except (psycopg.Error, OSError) as exc:
@@ -101,7 +104,6 @@ def _parse_inline_mapping(mapping: str) -> dict[str, str]:
 
 def _load_mapping_file(path: Path) -> dict[str, dict[str, Any]]:
     """Load the per-table column-mapping YAML (see the schema-to-schema guide)."""
-    import yaml
 
     if not path.exists():
         raise ConfigurationError(f"Mapping file not found: {path}", error_code="CONFIG_004")
@@ -112,7 +114,6 @@ def _load_mapping_file(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def _migrator(source: str, target: str):
-    from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 
     return SchemaToSchemaMigrator(_resolve_connection(source), _resolve_connection(target))
 

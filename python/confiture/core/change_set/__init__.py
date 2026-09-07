@@ -37,6 +37,7 @@ from confiture.core.schema_facts import SchemaFacts
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+from confiture.core._migrator.discovery import _version_from_migration_filename
 from confiture.core.change_set.models import (
     _DEFAULT_SCHEMA,
     CONTRACT_VERSION,
@@ -69,7 +70,6 @@ def build_change_set(
     the migrations preflight reports on. A missing directory classifies to an
     empty set; preflight already reports that condition on its own.
     """
-    from confiture.core._migrator.discovery import _version_from_migration_filename
 
     if not migrations_dir.exists():
         return ChangeSet()

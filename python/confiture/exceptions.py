@@ -176,6 +176,7 @@ class ConfiturError(Exception):
             Exit code (0-10)
         """
         if self.error_code:
+            # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> models.migration
             from confiture.error_codes import ERROR_CODE_REGISTRY
 
             definition = ERROR_CODE_REGISTRY.get(self.error_code)

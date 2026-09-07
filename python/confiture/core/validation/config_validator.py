@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 
+from confiture.config.environment import Environment
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
@@ -218,9 +220,6 @@ class ConfigValidator:
         )
 
     def _validate_schema(self, raw: dict[str, Any]) -> list[ConfigIssue]:
-        from pydantic import ValidationError
-
-        from confiture.config.environment import Environment
 
         # Best-effort env-var expansion so ${VAR} placeholders that are set
         # validate; a missing var stays literal and surfaces as a config issue

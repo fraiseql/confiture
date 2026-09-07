@@ -13,13 +13,18 @@ import typer
 
 from confiture.cli.commands.migrate._dry_run_render import _render_dry_run_analysis, _row_estimator
 from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.dry_run import ask_dry_run_execute_confirmation, display_dry_run_header
 from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
     resolve_database_url,
 )
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary, fail, lock_error_to_confiture
+from confiture.cli.formatters.migrate_formatter import (
+    format_migrate_up_result,
+    show_migration_error_details,
+)
 from confiture.cli.helpers import (
     _find_orphaned_sql_files,
     _get_tracking_table,
@@ -30,8 +35,13 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
+from confiture.core import connection as _core_connection
+from confiture.core import migrator as _core_migrator
+from confiture.core.checksum import ChecksumVerificationError
 from confiture.core.error_handler import print_error_to_console
-from confiture.core.locking import resolve_lock_settings
+from confiture.core.large_tables import BatchConfig
+from confiture.core.locking import LockAcquisitionError, resolve_lock_settings
+from confiture.core.migrator import find_duplicate_migration_versions
 from confiture.exceptions import MigrationConflictError
 
 MigrationsDirOpt = Annotated[
@@ -224,15 +234,6 @@ def migrate_up(
         Skip safety checks (use with caution in production)
     """
 
-    from confiture.cli.dry_run import (
-        ask_dry_run_execute_confirmation,
-        display_dry_run_header,
-    )
-    from confiture.core.checksum import ChecksumVerificationError
-    from confiture.core.connection import dsn_from_config, load_config
-    from confiture.core.locking import LockAcquisitionError
-    from confiture.core.migrator import MigratorSession, find_duplicate_migration_versions
-
     try:
         _validate_up_flags(
             dry_run=dry_run,
@@ -244,8 +245,6 @@ def migrate_up(
             logging.getLogger("confiture").setLevel(logging.DEBUG)
         batch = None
         if batched:
-            from confiture.core.large_tables import BatchConfig
-
             batch = BatchConfig(batch_size=batch_size, sleep_between_batches=batch_sleep)
 
         # Duplicate versions are a hard block; no database needed to see them.
@@ -266,7 +265,7 @@ def migrate_up(
         config_data = (
             {"database_url": _db_url_override}
             if _db_url_override is not None
-            else load_config(config)
+            else _core_connection.load_config(config)
         )
         # Environment-level migration settings apply only when YAML is the DSN
         # source; an invalid file is an error, only its absence means defaults.
@@ -306,10 +305,10 @@ def migrate_up(
             "on_event": reporter,
             "batch": batch,
         }
-        with MigratorSession(
+        with _core_migrator.MigratorSession(
             None,
             migrations_dir,
-            database_url_override=dsn_from_config(config_data),
+            database_url_override=_core_connection.dsn_from_config(config_data),
             migration_table_override=_get_tracking_table(config_data),
             command="confiture migrate up",
             connection_factory=connect,
@@ -420,8 +419,6 @@ def _report_lock_failure(
     error: Any, lock_timeout: int, format_output: str, output_file: Path | None
 ) -> None:
     if is_json(format_output):
-        from confiture.cli.error_json import lock_error_to_confiture
-
         # LOCK_1300 envelope enriched with holder identity (#147).
         fail(lock_error_to_confiture(error), json_mode=True, output_file=output_file)
     print_error_to_console(error, error_console)
@@ -523,10 +520,6 @@ def _render_up_result(
     force: bool,
 ) -> None:
     """Render a ``MigrateUpResult`` and exit with the command's contract code."""
-    from confiture.cli.formatters.migrate_formatter import (
-        format_migrate_up_result,
-        show_migration_error_details,
-    )
 
     text = format_output == "text"
 

@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+import pglast
 import pglast.parser
 
 from confiture.config.environment import OwnershipExpectation
@@ -246,7 +247,6 @@ class Own001OwnershipCoverage:
         never appear as top-level statements, so an ``EXECUTE 'ALTER …
         OWNER TO …'`` wrapped in a DO block correctly does NOT count.
         """
-        import pglast
 
         creates: list[_CreateRecord] = []
         alters: list[_AlterOwnerRecord] = []
@@ -430,7 +430,6 @@ class Own002BareAlterOwner:
         sql: str,
     ) -> tuple[list[_CreateRecord], list[tuple[_AlterOwnerRecord, bool]]]:
         """Parse *sql* and return CREATEs and ALTER OWNERs (each with a guard flag)."""
-        import pglast
 
         creates: list[_CreateRecord] = []
         alters: list[tuple[_AlterOwnerRecord, bool]] = []

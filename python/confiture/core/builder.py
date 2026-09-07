@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
+from confiture.core.fk_extractor import extract_and_strip_fks, generate_alter_statements
 from confiture.core.progress import ProgressManager
 
 # The seed-path rule lives in core.seed.paths; re-exported for callers that
@@ -588,11 +589,6 @@ class SchemaBuilder:
         # Two-pass FK processing: strip FK constraints from CREATE TABLE,
         # then emit ALTER TABLE ADD CONSTRAINT at the end (issue #94)
         if self.env_config.build.two_pass:
-            from confiture.core.fk_extractor import (
-                extract_and_strip_fks,
-                generate_alter_statements,
-            )
-
             stripped_sql, fk_infos = extract_and_strip_fks(schema)
             if fk_infos:
                 alter_block = generate_alter_statements(fk_infos)
@@ -763,11 +759,6 @@ class SchemaBuilder:
         app_sql = self._build_python(header, app_files)
 
         if self.env_config.build.two_pass:
-            from confiture.core.fk_extractor import (
-                extract_and_strip_fks,
-                generate_alter_statements,
-            )
-
             stripped_sql, fk_infos = extract_and_strip_fks(app_sql)
             if fk_infos:
                 alter_block = generate_alter_statements(fk_infos)

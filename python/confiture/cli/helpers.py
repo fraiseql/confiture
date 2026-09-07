@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+import yaml
 from psycopg import sql as pgsql
 from rich.console import Console
 
@@ -196,7 +197,6 @@ def _output_yaml(data: dict[str, Any], output_file: Path | None, console: Consol
         output_file: Optional file to write to; if None, writes to stdout.
         console: Console used for status messages (stderr).
     """
-    import yaml
 
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     if output_file:
@@ -229,7 +229,6 @@ def _resolve_config(config: Path, env: str | None) -> Path:
         >>> _resolve_config(Path("custom.yaml"), None)
         PosixPath('custom.yaml')
     """
-    from confiture.exceptions import ConfigurationError
 
     if env and config != _DEFAULT_CONFIG:
         raise ConfigurationError(

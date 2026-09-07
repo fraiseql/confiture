@@ -433,7 +433,6 @@ class DatabaseConfig(BaseModel):
             >>> config.host
             'localhost'
         """
-        import re
 
         # Parse URL: postgresql://user:pass@host:port/dbname
         pattern = r"(?:postgresql|postgres)://(?:([^:]+):([^@]+)@)?([^:/]+)(?::(\d+))?/(.+)"

@@ -11,7 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from confiture.core import connection as _core_connection
+from confiture.core.linting.libraries.functions import Func001FunctionUniqueness
 from confiture.core.linting.schema_linter import LintViolation
+from confiture.core.validation.config_loaders import load_function_coverage
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -51,14 +54,11 @@ def check_function_uniqueness(
         ConfigurationError: the config file does not exist, or
             ``function_coverage:`` is malformed.
     """
-    from confiture.core.connection import load_config
-    from confiture.core.linting.libraries.functions import Func001FunctionUniqueness
-    from confiture.core.validation.config_loaders import load_function_coverage
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = ctx.config_data if ctx is not None else load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else _core_connection.load_config(config_path)
     coverage = load_function_coverage(config_data, config_path, require=False)
 
     violations: list[LintViolation] = []

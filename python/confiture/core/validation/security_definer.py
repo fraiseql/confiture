@@ -27,6 +27,12 @@ if TYPE_CHECKING:
     from confiture.core.validation.context import ValidationContext
 from contextlib import nullcontext
 
+from confiture.core import connection as _core_connection
+from confiture.core.connection import open_connection
+from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
+from confiture.core.validation.config_loaders import load_security_lint
+from confiture.core.validation.signature_drift import _ssh_override
+
 
 @dataclass(frozen=True)
 class SecurityDefinerReport:
@@ -67,16 +73,11 @@ def check_security_definer(
         ConfigurationError: the config file does not exist, or
             ``security_lint:`` is malformed.
     """
-    from confiture.core.connection import load_config
-    from confiture.core.linting.libraries.security_definer import (
-        Sec002SecurityDefinerSearchPath,
-    )
-    from confiture.core.validation.config_loaders import load_security_lint
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = ctx.config_data if ctx is not None else load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else _core_connection.load_config(config_path)
     sec_lint = load_security_lint(config_data, config_path, require=False)
 
     if sec_lint is None or not sec_lint.enabled:
@@ -121,17 +122,10 @@ def check_security_definer_live(
             ``security_lint:`` malformed.
     """
 
-    from confiture.core.connection import load_config, open_connection
-    from confiture.core.linting.libraries.security_definer import (
-        Sec002SecurityDefinerSearchPath,
-    )
-    from confiture.core.validation.config_loaders import load_security_lint
-    from confiture.core.validation.signature_drift import _ssh_override
-
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = ctx.config_data if ctx is not None else load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else _core_connection.load_config(config_path)
     sec_lint = load_security_lint(config_data, config_path, require=False)
 
     if sec_lint is None or not sec_lint.enabled:

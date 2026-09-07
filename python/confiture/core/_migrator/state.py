@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg import sql as pgsql
 
-from confiture.core.hooks.context import ExecutionContext
+from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.ledger import ledger_exists
 from confiture.exceptions import ConfiturError, MigrationError
 
@@ -208,8 +208,6 @@ def trigger_hook(
             "executed_by": "migrator",  # Could be enhanced to track actual user
         },
     )
-
-    from confiture.core.hooks.context import HookContext
 
     hook_context = HookContext(phase=phase, data=context)
 

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import psycopg
+
+from confiture.core.seed import applier as _core_seed_applier
 from confiture.exceptions import ConfigurationError, SeedError
 
 if TYPE_CHECKING:
@@ -36,7 +39,6 @@ def apply_seed_files(
         SeedError: A seed file failed and ``continue_on_error`` is False, or the
             pass failed outright.
     """
-    from confiture.core.seed.applier import SeedApplier
 
     if not database_url:
         raise ConfigurationError(
@@ -45,15 +47,15 @@ def apply_seed_files(
             resolution_hint="Provide via --database-url or in the environment config.",
         )
     try:
-        import psycopg
-
         connection = psycopg.connect(database_url)
     except psycopg.Error as e:
         raise ConfigurationError(
             f"Failed to connect to database: {e}", error_code="CONFIG_006"
         ) from e
     try:
-        applier = SeedApplier(seeds_dir=seeds_dir, env=env, connection=connection, console=console)
+        applier = _core_seed_applier.SeedApplier(
+            seeds_dir=seeds_dir, env=env, connection=connection, console=console
+        )
         result = applier.apply_sequential(
             continue_on_error=continue_on_error, profile=profile, transaction_mode=transaction_mode
         )

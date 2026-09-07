@@ -8,8 +8,11 @@ from typing import Annotated, Any
 import psycopg
 import typer
 from rich.console import Console
+from rich.console import Console as _Console
+from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.formatters.build_formatter import format_build_result
 from confiture.cli.helpers import (
     FINDINGS_EXIT_CODE,
     USAGE_EXIT_CODE,
@@ -23,14 +26,35 @@ from confiture.cli.helpers import (
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.options import format_option
+from confiture.config.environment import Environment
+from confiture.core import builder as _core_builder
+from confiture.core import linting as _core_linting
 from confiture.core.builder import SchemaBuilder
+from confiture.core.connection import load_config as _lc
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.introspection.tables import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
-from confiture.core.linting.schema_linter import LintConfig as LinterConfig
+from confiture.core.linting.baseline import Baseline, BaselineDiff, identity
+from confiture.core.linting.duplicates import duplicate_violations, find_duplicates, inventory_files
+from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
+from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, LINT_RULES, resolve_selection
+from confiture.core.linting.schema_linter import (
+    LintConfig as LinterConfig,
+)
 from confiture.core.linting.schema_linter import LintReport as LinterReport
+from confiture.core.linting.schema_linter import (
+    RuleSeverity,
+)
+from confiture.core.linting.schema_linter import (
+    RuleSeverity as _RS,
+)
+from confiture.core.progress import ProgressManager
 from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
+from confiture.core.seed.applier import apply_profile_filter
 from confiture.core.seed.paths import is_seed_path
+from confiture.core.seed.sequencer import apply_seed_files
+from confiture.core.unified_linter import UnifiedLinter
+from confiture.core.validation.config_loaders import load_security_lint as _lsl
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 from confiture.models.lint import LintSeverity
 from confiture.models.results import BuildResult
@@ -467,9 +491,6 @@ def build(
                 report_output=report_output,
             )
 
-        from confiture.cli.formatters.build_formatter import format_build_result
-        from confiture.models.results import BuildResult
-
         build_result = BuildResult(
             success=True,
             files_processed=schema_file_count,
@@ -524,11 +545,6 @@ def _duplicate_gate(
     """
     if not (warn or fail):
         return []
-    from confiture.core.linting.duplicates import (
-        duplicate_violations,
-        find_duplicates,
-        inventory_files,
-    )
 
     objects, unparseable = inventory_files(sql_files, root=project_dir)
     for label in unparseable:
@@ -544,8 +560,6 @@ def _duplicate_gate(
             out.print(f"  ⚠️ {violation.rule_id}: {violation.message}")
     payload = [duplicate.to_dict() for duplicate in duplicates]
     if fail:
-        from confiture.cli.formatters.build_formatter import format_build_result
-
         result = BuildResult(
             success=False,
             files_processed=len(sql_files),
@@ -616,7 +630,6 @@ def _run_build(
         to the sequential applier when ``apply_sequential``.
     """
     out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
-    from confiture.core.progress import ProgressManager
 
     with ProgressManager() as progress:
         sql_files = builder.find_sql_files()
@@ -715,7 +728,6 @@ def _apply_seeds_sequentially(
     report_output: Path | None,
 ) -> int:
     """``--sequential``: apply the seed files through the core sequencer; return the count."""
-    from confiture.core.seed.sequencer import apply_seed_files
 
     # The environment's `seed:` block is the default; the flag can only widen it.
     seed_settings = getattr(builder.env_config, "seed", None)
@@ -795,8 +807,6 @@ def _write_dump_artifact(
     else:
         _schema_files, seed_paths = builder.categorize_sql_files()
         if seed_profile_obj is not None:
-            from confiture.core.seed.applier import apply_profile_filter
-
             seed_paths = apply_profile_filter(seed_paths, seed_profile_obj)
         artifact_seed_files = seed_paths or None
     artifact_result = build_schema_artifact(
@@ -1093,14 +1103,12 @@ def _replica_lint(
     A migration-tree check, distinct from the schema lint. Returns whether it
     fails the run under the given fail modes.
     """
+    # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import Replica001ForwardCompat
-    from confiture.core.linting.schema_linter import RuleSeverity
 
     has_replicas = False
     bypass = False
     try:
-        from confiture.config.environment import Environment
-
         _env = Environment.load(env, project_dir=project_dir)
         has_replicas = bool(_env.infrastructure.replicas)
         bypass = _env.migration.allow_unsafe_under_replication
@@ -1134,19 +1142,11 @@ def _security_definer_lint(
     machine-readable output use `migrate validate --check-security-definer --format json`.
     Returns whether it fails the run under the given fail modes.
     """
-    from confiture.core.builder import SchemaBuilder
-    from confiture.core.linting.libraries.security_definer import (
-        Sec002SecurityDefinerSearchPath,
-    )
-    from confiture.core.linting.schema_linter import RuleSeverity as _RS
 
     sec_cfg = None
     try:
         cfg_path = (project_dir or Path.cwd()) / "db" / "environments" / f"{env}.yaml"
         if cfg_path.exists():
-            from confiture.core.connection import load_config as _lc
-            from confiture.core.validation.config_loaders import load_security_lint as _lsl
-
             sec_cfg = _lsl(_lc(cfg_path), cfg_path, require=False)
         if sec_cfg is not None and not sec_cfg.enabled:
             sec_cfg = None
@@ -1157,7 +1157,7 @@ def _security_definer_lint(
         return False
     severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
     try:
-        ddl_paths = SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
+        ddl_paths = _core_builder.SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
     except (ConfiturError, OSError):
         ddl_paths = sorted(Path("db/schema").rglob("*.sql")) if Path("db/schema").exists() else []
     violations = Sec002SecurityDefinerSearchPath(
@@ -1191,7 +1191,6 @@ def _apply_baseline(
     """
     if baseline is None:
         return None
-    from confiture.core.linting.baseline import Baseline, BaselineDiff, identity
 
     path = baseline if baseline.is_absolute() else project_dir / baseline
     buckets = (linter_report.errors, linter_report.warnings, linter_report.info)
@@ -1233,7 +1232,6 @@ def _keep_selected_rules(linter_report: LinterReport, selected: frozenset[str]) 
     not have been selected, and dropping it would turn "I forgot to register my
     rule" into "my rule stopped reporting".
     """
-    from confiture.core.linting.rule_registry import LINT_RULES
 
     known = {rule.code for rule in LINT_RULES}
     for bucket in (linter_report.errors, linter_report.warnings, linter_report.info):
@@ -1258,7 +1256,6 @@ def _resolve_lint_rules(
     Raises:
         ConfigurationError: An unknown code or family was named.
     """
-    from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, resolve_selection
 
     aliases = [
         rule_family
@@ -1283,7 +1280,6 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     A report mode — it never consults the schema and always exits 0, so it works
     in a project that does not lint cleanly (or at all).
     """
-    from confiture.core.linting.rule_registry import LINT_RULES
 
     if is_json(format_type):
         _output_json(
@@ -1297,8 +1293,6 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
             console,
         )
         return
-
-    from rich.table import Table
 
     table = Table(title="confiture lint rules", show_lines=False)
     table.add_column("Code", style="cyan")
@@ -1381,7 +1375,6 @@ def lint_unified(
       confiture lint-unified --git-diff
         Lint only SQL files changed in the current git diff.
     """
-    from confiture.core.unified_linter import UnifiedLinter
 
     checks = list(check) if check else None
 
@@ -1398,11 +1391,8 @@ def lint_unified(
         all_issues.extend(result.issues)
 
     if run_schema:
-        from confiture.core.linting import SchemaLinter
-        from confiture.core.linting.schema_linter import LintConfig as LinterConfig
-
         schema_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
-        schema_linter = SchemaLinter(env=env, config=schema_config)
+        schema_linter = _core_linting.SchemaLinter(env=env, config=schema_config)
         try:
             linter_report = schema_linter.lint()
             all_issues.extend(
@@ -1414,14 +1404,11 @@ def lint_unified(
             console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
 
     if run_tree:
-        from confiture.core.linting import SchemaLinter
-        from confiture.core.linting.schema_linter import LintConfig as LinterConfig
-
         # Resolve schema_dir: CLI flag > default "db/schema"
         resolved_schema_dir: Path = schema_dir if schema_dir is not None else Path("db/schema")
 
         tree_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
-        tree_linter = SchemaLinter(env=env, config=tree_config)
+        tree_linter = _core_linting.SchemaLinter(env=env, config=tree_config)
         try:
             tree_report = tree_linter.lint_tree(
                 schema_dir=resolved_schema_dir,
@@ -1507,7 +1494,6 @@ def introspect(
 
       confiture introspect --db $DATABASE_URL --all-tables --no-hints
     """
-    from rich.console import Console as _Console
 
     # Status/error messages go to stderr so stdout stays pipe-friendly.
     _console = _Console(stderr=True)

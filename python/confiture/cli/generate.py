@@ -33,11 +33,20 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import connect
+from confiture.core.git import GitRepository
+from confiture.core.pgtap_generator import PgTAPGenerator
 from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
+from confiture.core.stub_generator import StubGenerator
 from confiture.core.tree_allocator import TreeAllocator
 from confiture.core.tree_renumber import TreeRenumber
 from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.integrations.pggit import (
+    MigrationGenerator,
+    PgGitClient,
+    PgGitNotAvailableError,
+    is_pggit_available,
+)
 
 
 def _detect_repo_root(schema_dir: Path) -> Path | None:
@@ -52,8 +61,6 @@ def _detect_repo_root(schema_dir: Path) -> Path | None:
     when the test layout is ``tmp_path/schema/`` rather than
     ``tmp_path/db/schema/``).
     """
-    from confiture.core.git import GitRepository
-    from confiture.exceptions import ConfiturError
 
     resolved = schema_dir.resolve()
     try:
@@ -356,11 +363,6 @@ def _get_generator(config_path: Path):
     Raises:
         typer.Exit: If pgGit is not available
     """
-    from confiture.integrations.pggit import (
-        MigrationGenerator,
-        PgGitNotAvailableError,
-        is_pggit_available,
-    )
 
     # Load config and create connection
     conn = connect(config_path)
@@ -570,8 +572,6 @@ def show_diff(
         confiture generate diff feature/payments --show-sql
     """
     try:
-        from confiture.integrations.pggit import PgGitClient, is_pggit_available
-
         conn = connect(config)
 
         if not is_pggit_available(conn):
@@ -637,8 +637,6 @@ def generate_pgtap(
 ) -> None:
     """Generate pgTAP test scaffolds for PostgreSQL stored functions."""
 
-    from confiture.core.pgtap_generator import PgTAPGenerator
-
     try:
         with psycopg.connect(database_url) as conn:
             gen = PgTAPGenerator(
@@ -684,8 +682,6 @@ def generate_stubs(
     ),
 ) -> None:
     """Generate typed Python wrapper functions for stored procedures."""
-
-    from confiture.core.stub_generator import StubGenerator
 
     try:
         with psycopg.connect(database_url) as conn:

@@ -10,7 +10,7 @@ from typing import Any
 
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
-from confiture.core.git import GitRepository
+from confiture.core.git import GitRepository, validate_ref
 from confiture.exceptions import GitError
 from confiture.models.schema import SchemaDiff
 
@@ -143,8 +143,6 @@ class GitSchemaBuilder:
         Raises:
             GitError: If git command fails
         """
-
-        from confiture.core.git import validate_ref
 
         # An option-shaped ref would be parsed by git as an option; refuse it
         # before anything is spawned. The `--` then ends option parsing so the

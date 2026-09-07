@@ -10,10 +10,27 @@ from typing import Any
 
 import typer
 
-from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, NO_CONFIG_OPTION_HELP
+from confiture.cli.commands.admin import _NO_LEDGER_HINT
+from confiture.cli.dsn import (
+    DATABASE_URL_OPTION_HELP,
+    NO_CONFIG_OPTION_HELP,
+    config_is_explicit,
+    has_intentional_dsn_source,
+    resolve_database_url,
+)
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import _output_json, console, is_json, open_connection
+from confiture.cli.formatters.migrate_formatter import format_verify_results
+from confiture.cli.helpers import (
+    _get_tracking_table,
+    _output_json,
+    console,
+    is_json,
+    open_connection,
+)
 from confiture.cli.options import format_option
+from confiture.core import connection as _core_connection
+from confiture.core import migration_verifier as _core_migration_verifier
+from confiture.core import migrator as _core_migrator
 from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
 from confiture.models.results import VerifyAllResult
 
@@ -89,17 +106,6 @@ def migrate_verify(
       confiture migrate status  - View migration history
       confiture migrate up      - Apply pending migrations
     """
-    from confiture.cli.commands.admin import _NO_LEDGER_HINT
-    from confiture.cli.dsn import (
-        config_is_explicit,
-        has_intentional_dsn_source,
-        resolve_database_url,
-    )
-    from confiture.cli.formatters.migrate_formatter import format_verify_results
-    from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import load_config
-    from confiture.core.migration_verifier import MigrationVerifier
-    from confiture.core.migrator import Migrator
 
     is_json(format_output)
     config_data: Any = None
@@ -113,13 +119,13 @@ def migrate_verify(
         if _db_url_override is not None:
             config_data = {"database_url": _db_url_override}
         elif config and config.exists():
-            config_data = load_config(config)
+            config_data = _core_connection.load_config(config)
     if config_data is None:
         raise ConfigurationError("Config file or --database-url required for migrate verify")
     tracking_table = _get_tracking_table(config_data)
 
     with open_connection(config_data) as conn:
-        migrator = Migrator(connection=conn, migration_table=tracking_table)
+        migrator = _core_migrator.Migrator(connection=conn, migration_table=tracking_table)
 
         # #182: get_applied_versions() raises psycopg's UndefinedTable on an
         # absent ledger. Absent is a distinct state from "present but empty",
@@ -151,7 +157,9 @@ def migrate_verify(
 
         applied_versions = migrator.get_applied_versions()
 
-        verifier = MigrationVerifier(connection=conn, migrations_dir=migrations_dir)
+        verifier = _core_migration_verifier.MigrationVerifier(
+            connection=conn, migrations_dir=migrations_dir
+        )
         results = verifier.verify_all(applied_versions, target_version=version)
 
         verify_result = VerifyAllResult(

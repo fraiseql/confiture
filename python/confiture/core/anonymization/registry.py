@@ -77,6 +77,7 @@ class StrategyRegistry:
             >>> strategy = StrategyRegistry.get(name)
         """
 
+        # Reason: CLI start-up: importing confiture.core.anonymization.plugins.import_lint costs ~14 ms at start (importtime, 2026-09-07); deferred until the command runs
         from confiture.core.anonymization.plugins.import_lint import load_strategy
 
         strategy_class = load_strategy(Path(path))

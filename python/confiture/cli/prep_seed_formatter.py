@@ -12,6 +12,7 @@ from io import StringIO
 from pathlib import Path
 
 from rich.console import Console
+from rich.console import Console as _Console
 from rich.table import Table
 
 from confiture.core.seed.validation.prep_seed.models import (
@@ -56,8 +57,6 @@ def output_table(
         console: Rich console for output
     """
     if output is not None:
-        from rich.console import Console as _Console
-
         recorder = _Console(record=True, width=120)
         output_table(report, None, recorder)
         output.write_text(recorder.export_text())

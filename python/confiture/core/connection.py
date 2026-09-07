@@ -10,7 +10,10 @@ from typing import Any
 
 import psycopg
 import yaml
+from psycopg.conninfo import make_conninfo
 
+from confiture.config.environment import DatabaseConfig, SshTunnelConfig
+from confiture.core import ssh_tunnel as _core_ssh_tunnel
 from confiture.exceptions import ConfigurationError, MigrationError
 from confiture.models.migration import Migration
 from confiture.models.sql_file_migration import FileSQLMigration
@@ -60,9 +63,6 @@ def dsn_from_config(config: dict[str, Any] | str | Any) -> str:
                 key or a ``database`` section, a ``DatabaseConfig`` instance,
                 or ``None`` (all defaults).
     """
-    from psycopg.conninfo import make_conninfo
-
-    from confiture.config.environment import DatabaseConfig
 
     if isinstance(config, str):
         return config
@@ -143,7 +143,6 @@ def open_connection(
         with open_connection(env) as conn:
             conn.execute("SELECT version()")
     """
-    from confiture.config.environment import SshTunnelConfig
 
     # Resolve ssh_tunnel config (supports Environment objects and raw dicts).
     # Explicitly check isinstance(SshTunnelConfig) to avoid treating MagicMock
@@ -158,8 +157,6 @@ def open_connection(
         tunnel_cfg = SshTunnelConfig(**raw) if isinstance(raw, dict) else raw
 
     if tunnel_cfg is not None:
-        from confiture.core.ssh_tunnel import ssh_tunnel
-
         database_url: str
         if hasattr(config, "database_url"):
             database_url = str(config.database_url)
@@ -172,7 +169,7 @@ def open_connection(
                 resolution_hint="Ensure your config has a 'database_url' field",
             )
 
-        with ssh_tunnel(tunnel_cfg, database_url) as patched_url:
+        with _core_ssh_tunnel.ssh_tunnel(tunnel_cfg, database_url) as patched_url:
             try:
                 conn = factory(patched_url)
             except (psycopg.Error, ConfigurationError) as e:

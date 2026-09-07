@@ -22,7 +22,10 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 
 from confiture import __version__
+from confiture.core import migrator as _core_migrator
+from confiture.core.drift import SchemaDriftDetector
 from confiture.core.introspection.functions import FunctionIntrospector
+from confiture.core.introspection.tables import SchemaIntrospector
 from confiture.core.introspection.type_mapping import TypeMapper
 from confiture.models.mcp_models import MCPTool
 
@@ -207,35 +210,31 @@ class MCPServer:
     # ── Built-in Confiture tool dispatch ─────────────────────────────────────
 
     def _call_migrate_status(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from confiture.core.migrator import Migrator
 
         config_path = Path(arguments["config_path"])
-        with Migrator.from_config(config_path) as session:
+        with _core_migrator.Migrator.from_config(config_path) as session:
             result = session.status()
         return result.to_dict()
 
     def _call_migrate_up(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from confiture.core.migrator import Migrator
 
         config_path = Path(arguments["config_path"])
         target: str | None = arguments.get("target")
         dry_run: bool = bool(arguments.get("dry_run", False))
-        with Migrator.from_config(config_path) as session:
+        with _core_migrator.Migrator.from_config(config_path) as session:
             result = session.up(target=target, dry_run=dry_run)
         return result.to_dict()
 
     def _call_migrate_down(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from confiture.core.migrator import Migrator
 
         config_path = Path(arguments["config_path"])
         steps: int = int(arguments.get("steps", 1))
         dry_run: bool = bool(arguments.get("dry_run", False))
-        with Migrator.from_config(config_path) as session:
+        with _core_migrator.Migrator.from_config(config_path) as session:
             result = session.down(steps=steps, dry_run=dry_run)
         return result.to_dict()
 
     def _call_schema_introspect(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from confiture.core.introspection.tables import SchemaIntrospector
 
         schema: str = arguments.get("schema", "public")
         all_tables: bool = bool(arguments.get("all_tables", False))
@@ -243,7 +242,6 @@ class MCPServer:
         return result.to_dict()
 
     def _call_drift_check(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from confiture.core.drift import SchemaDriftDetector
 
         schema_file: str = arguments.get("schema_file", "db/generated/schema_local.sql")
         detector = SchemaDriftDetector(self._conn)

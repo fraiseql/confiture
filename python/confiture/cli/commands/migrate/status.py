@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from rich.table import Table
 
 from confiture.cli.commands.migrate._settings import _effective_rebuild_threshold
 from confiture.cli.dsn import (
@@ -20,6 +21,7 @@ from confiture.cli.dsn import (
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.formatters.common import handle_output
 from confiture.cli.helpers import (
     _emit_hint,
     _find_orphaned_sql_files,
@@ -32,7 +34,18 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
-from confiture.core.migrator import discover_migration_files, parse_migration_filename
+from confiture.core import connection as _core_connection
+from confiture.core import ledger as _core_ledger
+from confiture.core import migrator as _core_migrator
+from confiture.core.migrator import (
+    discover_migration_files,
+    parse_migration_filename,
+)
+from confiture.core.migrator import (
+    find_duplicate_migration_versions as _status_find,
+)
+from confiture.core.strategy import find_rebuild_strategy_files
+from confiture.exceptions import ConfiturError
 
 
 @cli_boundary
@@ -127,7 +140,6 @@ def migrate_status(
         return
     migration_files = discover_migration_files(migrations_dir)
     orphaned_sql_files = _find_orphaned_sql_files(migrations_dir)
-    from confiture.core.migrator import find_duplicate_migration_versions as _status_find
 
     duplicate_versions = _status_find(migrations_dir)
     if not migration_files:
@@ -161,8 +173,6 @@ def migrate_status(
                 output_file=output_file,
             )
         elif output_format == "csv":
-            from confiture.cli.formatters.common import handle_output
-
             csv_data = (
                 ["version", "name", "status"],
                 [[m["version"], m["name"], m["status"]] for m in rows.migrations],
@@ -293,29 +303,27 @@ def _probe_database(
         if override is not None:
             config_data = {"database_url": override}
         elif config is not None and config.exists():
-            from confiture.core.connection import load_config
-
-            config_data = load_config(config)
+            config_data = _core_connection.load_config(config)
     if config_data is None:
         return _StatusFacts()
 
     tracking_table = _get_tracking_table(config_data)
     try:
-        from confiture.core.ledger import find_ledger_relations, probe_ledger
-        from confiture.core.migrator import Migrator
-        from confiture.exceptions import ConfiturError
-
         with open_connection(config_data) as conn:
-            migrator = Migrator(connection=conn, migration_table=tracking_table)
+            migrator = _core_migrator.Migrator(connection=conn, migration_table=tracking_table)
             was_present = migrator.tracking_table_exists()
             # A bare name resolves through search_path since 0.41.0, so "absent" no
             # longer implies "nowhere in this database" (#188).
-            elsewhere = () if was_present else tuple(find_ledger_relations(conn, tracking_table))
+            elsewhere = (
+                ()
+                if was_present
+                else tuple(_core_ledger.find_ledger_relations(conn, tracking_table))
+            )
             migrator.initialize()
             # Reporting metadata only: a probe refused for lack of privilege must not
             # turn a working status into "could not connect to database".
             try:
-                resolved = probe_ledger(conn, tracking_table).resolved_name
+                resolved = _core_ledger.probe_ledger(conn, tracking_table).resolved_name
             except ConfiturError:
                 resolved = None
             applied = frozenset(migrator.get_applied_versions())
@@ -398,7 +406,6 @@ def _status_hints(facts: _StatusFacts, output_format: str) -> list[str]:
 def _rebuild_reasons(
     pending: list[str], migrations_dir: Path, rebuild_threshold: int | None, config: Path
 ) -> list[str]:
-    from confiture.core.strategy import find_rebuild_strategy_files
 
     threshold = _effective_rebuild_threshold(rebuild_threshold, config)
     reasons: list[str] = []
@@ -467,7 +474,6 @@ def _render_status_table(
     duplicates: dict[str, list[Path]],
     rebuild_reasons: list[str],
 ) -> None:
-    from rich.table import Table
 
     table = Table(title="Migrations")
     table.add_column("Version", style="cyan")
@@ -513,8 +519,6 @@ def _render_status_error(error: Exception, output_format: str, output_file: Path
     if output_format == "json":
         fail(error, json_mode=True, output_file=output_file)
     elif output_format == "csv":
-        from confiture.cli.formatters.common import handle_output
-
         handle_output("csv", {}, (["error"], [[str(error)]]), output_file, console)
     else:
         console.print(f"[red]❌ Error: {error}[/red]")

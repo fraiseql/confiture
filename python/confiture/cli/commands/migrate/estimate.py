@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
@@ -18,6 +19,8 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
+from confiture.core import connection as _core_connection
+from confiture.core import large_tables as _core_large_tables
 
 
 @cli_boundary
@@ -51,17 +54,15 @@ def migrate_estimate(
     RELATED:
       confiture migrate up --batched - Apply migrations in batch mode
     """
-    from confiture.core.connection import load_config
-    from confiture.core.large_tables import TableSizeEstimator
 
     try:
         if not config.exists():
             error_console.print(f"[red]❌ Config file not found: {config}[/red]")
             raise typer.Exit(2)
 
-        config_data = load_config(config)
+        config_data = _core_connection.load_config(config)
         with open_connection(config_data) as conn:
-            estimator = TableSizeEstimator(conn)
+            estimator = _core_large_tables.TableSizeEstimator(conn)
 
         # If no tables specified, estimate all in public schema
         if not tables:
@@ -86,8 +87,6 @@ def migrate_estimate(
         if format_output == "json":
             print(json.dumps(rows_data, indent=2))
         else:
-            from rich.table import Table
-
             tbl = Table(title="Table Row Count Estimates")
             tbl.add_column("Table", style="cyan")
             tbl.add_column("Estimated Rows", justify="right")

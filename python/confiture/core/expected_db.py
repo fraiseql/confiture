@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING
 
 import psycopg
 
+from confiture.core import builder as _core_builder
+from confiture.core._migrator.session import MigratorSession
 from confiture.core.temp_database import TempDatabase
 from confiture.exceptions import ConfigurationError, SchemaError
 
@@ -191,12 +193,12 @@ class ExpectedSchemaDB:
                 "ExpectedSchemaDB.from_source needs an env or explicit schema_sql.",
                 resolution_hint="Pass env= to the constructor or schema_sql= to from_source().",
             )
-        from confiture.core.builder import SchemaBuilder
 
-        return SchemaBuilder(env=self._env, project_dir=self._project_dir).build(schema_only=True)
+        return _core_builder.SchemaBuilder(env=self._env, project_dir=self._project_dir).build(
+            schema_only=True
+        )
 
     def _replay_migrations(self) -> None:
-        from confiture.core._migrator.session import MigratorSession
 
         session = MigratorSession(
             config=None,

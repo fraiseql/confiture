@@ -10,6 +10,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
 from confiture.cli.helpers import (
     console,
     is_json,
@@ -18,6 +19,7 @@ from confiture.cli.options import format_option
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.exceptions import ValidationError
+from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
 
 @cli_boundary
@@ -93,8 +95,6 @@ def migrate_diff(
         diff = differ.compare(old_sql, new_sql)
 
         # Convert changes to SchemaChange objects
-        from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
-        from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
         changes = [MigrateDiffChange(change.type, str(change)) for change in diff.changes]
         migration_file_name = None
@@ -136,9 +136,6 @@ def migrate_diff(
         raise
     # Reason: the diff result carries the failure so the formatter can render it in every format
     except Exception as e:
-        from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
-        from confiture.models.results import MigrateDiffResult
-
         result = MigrateDiffResult(
             success=False,
             has_changes=False,

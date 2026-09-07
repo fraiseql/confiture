@@ -133,6 +133,7 @@ class IdempotencyPattern(Enum):
         package-load time.
         """
         # Lazy import to break models→fixer→models cycle.
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.idempotency.fixer import FIXABLE_PATTERNS
 
         return self in FIXABLE_PATTERNS

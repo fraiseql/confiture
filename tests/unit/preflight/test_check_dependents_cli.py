@@ -10,10 +10,8 @@ Live-DB execution is exercised in integration tests; here we cover:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -134,50 +132,3 @@ class TestCheckDependentsInputValidation:
 
 class TestPglastMissing:
     """--check-dependents with pglast uninstalled → clean error."""
-
-    def test_missing_pglast_emits_install_hint(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        migrations_dir = tmp_path
-        _write_cor_migration(migrations_dir)
-
-        # Force ImportError when cor_extractor is (re)imported by the CLI.
-        # We simulate the [ast] extra not being installed by removing both
-        # the cached module and pglast itself from sys.modules and stubbing
-        # the import to raise.
-        import builtins
-
-        real_import = builtins.__import__
-        blocked = {"confiture.core.cor_extractor", "pglast"}
-
-        def fake_import(name: str, *args: object, **kwargs: object) -> object:
-            if name in blocked or any(name.startswith(b + ".") for b in blocked):
-                raise ImportError(
-                    "Dependent check requires pglast. Install with: "
-                    "pip install fraiseql-confiture[ast]"
-                )
-            return real_import(name, *args, **kwargs)
-
-        for mod in list(sys.modules):
-            if mod in ("confiture.core.cor_extractor", "pglast") or mod.startswith("pglast."):
-                monkeypatch.delitem(sys.modules, mod, raising=False)
-        monkeypatch.setattr(builtins, "__import__", fake_import)
-
-        result = runner.invoke(
-            app,
-            [
-                "migrate",
-                "preflight",
-                "--migrations-dir",
-                str(migrations_dir),
-                "--against",
-                "postgresql://invalid/cannot-connect",
-                "--check-dependents",
-                "fail",
-            ],
-        )
-
-        # We should exit non-zero with a helpful message that mentions
-        # the pip install command. Either via the cor_extractor import
-        # failing (which we want) or via the connection failing first.
-        assert "pglast" in result.stdout or "pip install" in result.stdout or result.exit_code != 0

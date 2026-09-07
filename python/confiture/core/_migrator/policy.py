@@ -9,7 +9,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from confiture.core import baseline_detector as _core_baseline_detector
+from confiture.core import ledger as _ledger
 from confiture.core._migrator.events import UpObserver, emit
+from confiture.core.view_manager import ViewManager
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -33,7 +36,6 @@ def wants_view_helpers(flag: bool | None, config: Environment | None) -> bool:
 
 def install_view_helpers(conn: Any, on_event: UpObserver | None = None) -> bool:
     """Install the view helper functions if they are missing. Returns True if it did."""
-    from confiture.core.view_manager import ViewManager
 
     manager = ViewManager(conn)
     if manager.helpers_installed():
@@ -63,7 +65,6 @@ def auto_baseline(
             one path that rewrites history unprompted refuses rather than
             guesses); or the snapshots directory is missing or empty.
     """
-    from confiture.core import ledger as _ledger
 
     if migrator.tracking_table_exists():
         return None
@@ -100,12 +101,10 @@ def auto_baseline(
             ),
         )
 
-    from confiture.core.baseline_detector import BaselineDetector
-
     emit(
         on_event, "baseline_probe", message=f"{table} missing — attempting auto-detect baseline..."
     )
-    detector = BaselineDetector(snapshots_dir)
+    detector = _core_baseline_detector.BaselineDetector(snapshots_dir)
     live_sql = detector.introspect_live_schema(conn)
     detected = detector.find_matching_snapshot(live_sql)
     if detected:

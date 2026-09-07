@@ -37,7 +37,6 @@
     "python/confiture/core/builder.py": 1
   },
   "too_many_statements": {
-    "python/confiture/cli/commands/migrate/introspect.py": 1,
     "python/confiture/cli/seed.py": 1
   },
   "too_many_returns": {

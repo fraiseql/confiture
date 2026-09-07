@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 import pglast
+from pglast.enums.parsenodes import FunctionParameterMode
 
 _FUNC_RE = re.compile(
     r"""
@@ -107,7 +108,6 @@ class FunctionSignatureParser:
         return self._parse_pglast_nodes([stmt.stmt for stmt in pglast.parse_sql(sql) or []])
 
     def _parse_pglast_nodes(self, nodes: list[Any]) -> list[FunctionSignature]:
-        from pglast.enums.parsenodes import FunctionParameterMode
 
         _SKIP_PARAM_MODES = {
             FunctionParameterMode.FUNC_PARAM_OUT,
