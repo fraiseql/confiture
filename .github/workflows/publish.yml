@@ -109,7 +109,7 @@ jobs:
 
         echo "✅ All databases ready for testing"
 
-    - name: Run core tests with coverage
+    - name: Run core tests against the built wheel
       run: |
         echo "=== Running Core Tests for Release ==="
         # Run core tests against the BUILT WHEEL - MUST PASS for release.
