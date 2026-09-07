@@ -150,7 +150,6 @@
     "python/confiture/cli/commands/migrate/baseline.py": 1,
     "python/confiture/cli/commands/migrate/fix_signatures.py": 1,
     "python/confiture/cli/commands/migrate/generate.py": 1,
-    "python/confiture/cli/commands/migrate/preflight.py": 1,
     "python/confiture/cli/commands/migrate/rebuild.py": 1,
     "python/confiture/cli/commands/schema.py": 2,
     "python/confiture/cli/seed.py": 2,
