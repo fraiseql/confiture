@@ -468,6 +468,81 @@ measured in milliseconds; the alternative was a false verdict on a safety gate.
 
 ---
 
+### Decision 10: One apply loop — the session owns orchestration
+
+**Choice**: `MigratorSession` (`core/_migrator/session.py` and its `apply_loop`,
+`rollback_loop`, `replay` modules) is the only place migrations are iterated,
+locked, applied and recorded. The CLI commands call the session; they do not
+loop over migrations themselves.
+
+**Rationale**: two loops (one in the CLI, one in the library) drifted — dry-run
+semantics, lock ordering and checksum verification differed by entry point. A
+guard test (`tests/unit/test_cli_has_no_apply_loop.py`) fails on any `for … in
+pending` in `cli/`, and the function-length and complexity budgets in
+`tests/budgets.json` only shrink, so a second loop cannot grow back quietly.
+
+---
+
+### Decision 11: One SQL lexer, one parser
+
+**Choice**: `core/sql_lexer.py` is the single statement splitter (libpq_query's
+scanner, nothing hand-written), and pglast is the one parser, a hard dependency.
+There is no regex fallback and no switch to one.
+
+**Rationale**: five splitters disagreed on `"a;b"` identifiers, `E'\';'`
+literals and dollar-quoted bodies; an analyzer that fell back to regex when
+pglast was absent reported a clean result it had not earned. A file pglast
+rejects is a *finding* (`IDEM_UNPARSEABLE`, `PFLIGHT_UNPARSEABLE`, lint's
+`UNPARSEABLE`, `DIFFER_400`), never a pass. `tests/unit/test_single_parser.py`
+fails on any `FORCE_REGEX`, `_HAS_PGLAST` or `is_pglast_available` probe.
+
+---
+
+### Decision 12: Analyzers fail closed
+
+**Choice**: when an analyzer cannot decide, the verdict is the unsafe one:
+`window_safe` is false unless every operation is in the replica safety matrix;
+an unparseable migration counts as unanalyzed and blocks with
+`--fail-on-unanalyzable`; a static-evaluator refusal is a refusal, not a pass.
+
+**Rationale**: a deploy gate that answers "safe" when it does not know is worse
+than no gate. The fixtures under `tests/fixtures/idempotency_shapes/` pin what
+each argument shape resolves to; narrowing the reach by refactor fails the row
+that regressed.
+
+---
+
+### Decision 13: Injected factories instead of patch seams
+
+**Choice**: `MigratorSession(connection_factory=…, migration_loader=…)`. The CLI
+passes its one connection seam (`confiture.cli.helpers.create_connection`); tests
+inject doubles through the constructor (`tests/unit/_doubles.py`).
+`confiture.core.migrator` re-exports nothing for patching.
+
+**Rationale**: `patch("confiture.core.migrator.create_connection")` at 46 sites
+meant the engine's real import path was never exercised and a rename broke every
+test at once. A constructor parameter is a documented contract; a patch target is
+an accident of module layout.
+
+---
+
+### Decision 14: The native extension hashes files and nothing else
+
+**Choice**: `confiture._core.hash_files` is the only compiled entry point. It
+computes byte-for-byte the digest the Python path computes (a parity test holds
+it, with `HAS_RUST` patched both ways); an sdist or editable install without a
+Rust toolchain runs the Python path and says so once at INFO. Building the
+schema is pure Python.
+
+**Rationale**: the Rust builder produced a different schema hash from the Python
+builder (per-file digests versus one stream), so a wheel install and a source
+install disagreed on whether a template was stale, and a missing file panicked
+through the `except Exception` fallback. One function with a parity test is a
+contract; a second implementation of the build is not. See Decision 8 for why
+the crate is not the start of a port.
+
+---
+
 ## Testing Architecture
 
 ### Test Counts (2026-03-10)

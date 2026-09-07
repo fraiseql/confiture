@@ -1043,6 +1043,10 @@ def build(env: str):
     builder.build()                    # Delegate
 ```
 
+This is enforced, not advised: `tests/unit/test_cli_has_no_apply_loop.py` fails on a
+migration loop under `cli/`, and `tests/budgets.json` caps every function's length
+and complexity per file — the numbers only go down (`scripts/budgets.py --check`).
+
 ---
 
 ### ❌ Don't: Skip type hints

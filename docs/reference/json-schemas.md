@@ -1,11 +1,14 @@
 # JSON Output Schemas
 
-Many Confiture commands that support `--format json` ship with a
-machine-validatable JSON Schema — currently the `migrate` family (`current`,
-`down-to`, `fix`, `preflight`, `preflight --against`, `status`, and the
-`validate` modes), `drift` (and `drift --check-acls`), and `validate-config`,
-plus the shared error envelope. Commands such as `build`, `migrate up`/`down`,
-`migrate diff`, and `seed apply` emit JSON but do not yet ship a schema. Schemas
+> **Frozen at 1.0.0.** The published schemas are a stability contract: fields are added, never renamed or removed. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+
+The commands whose `--format json` output ships a machine-validatable JSON
+Schema are `build`, `drift` (and `drift --check-acls`), `introspect`, `lint`
+(and `lint --list-rules`), `sync`, `validate-config`, `verify-checksums` and, in
+the migrate family, `up`, `down-to`, `status`, `current`, `fix`, `introspect`,
+`preflight` (and `--against`), `validate` (every mode) and `verify` — plus the
+shared error envelope. The other JSON payloads are stable but not schema-backed
+yet; `tests/unit/docs/test_readme_claims.py` derives this list from the files. Schemas
 use Draft 2020-12 and live in `docs/reference/json-schemas/`.
 
 ## For agents and tooling

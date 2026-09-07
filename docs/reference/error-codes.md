@@ -1,5 +1,7 @@
 # Error-code codebook
 
+> **Frozen at 1.0.0.** The error codes, their exit codes and the envelope shape below are a stability contract. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+
 When a `confiture` command fails in `--format json` mode, it emits a structured
 **error envelope** on stdout (the process still exits with the
 [exit code](exit-codes.md) for that error):
