@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     )
 
 
+from confiture.core import connection
 from confiture.core._migrator import apply_loop as _apply_loop
 from confiture.core._migrator import replay as _replay
 from confiture.core._migrator import reporting as _reporting
@@ -44,7 +45,6 @@ def _not_entered() -> ConfigurationError:
 
 def _core_connection():
     """``confiture.core.connection``, imported when first needed (it imports psycopg)."""
-    from confiture.core import connection
 
     return connection
 
@@ -137,6 +137,7 @@ class MigratorSession:
     def __enter__(self) -> MigratorSession:
         # Import through confiture.core.migrator so tests can patch
         # confiture.core.migrator.create_connection and have it intercepted here.
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         import confiture.core.migrator as _m
 
         if self._migrator is not None:  # attached to a live engine

@@ -1,6 +1,7 @@
 """Admin commands: install_helpers, validate_profile, verify-checksums, restore,
 validate-config."""
 
+from importlib import resources
 from pathlib import Path
 
 import typer
@@ -16,7 +17,16 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
+from confiture.config.environment import Environment
+from confiture.core import checksum as _core_checksum
+from confiture.core import connection as _core_connection
+from confiture.core import ledger as _core_ledger
+from confiture.core.checksum import ChecksumConfig, ChecksumMismatchBehavior
 from confiture.core.error_handler import handle_cli_error
+from confiture.core.ledger import notable_resolution
+from confiture.core.restorer import DatabaseRestorer, RestoreOptions
+from confiture.core.validation.config_validator import ConfigValidator
+from confiture.core.view_manager import ViewManager
 from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
@@ -136,21 +146,14 @@ def install_helpers(
     Schema-qualify your DDL, or pin `search_path` on that role.
     """
     try:
-        from confiture.core.connection import load_config
-        from confiture.core.view_manager import ViewManager
-
         if config:
-            cfg = load_config(config)
+            cfg = _core_connection.load_config(config)
         else:
-            from confiture.config.environment import Environment
-
             environment = Environment.load(env)
             cfg = {"database": {"url": environment.database_url}}
 
         with open_connection(cfg) as conn:
             if dry_run:
-                from importlib import resources
-
                 sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
                 console.print("[bold]SQL that would be executed:[/bold]\n")
                 console.print(sql)
@@ -195,6 +198,7 @@ def validate_profile(
         confiture validate-profile db/profiles/production.yaml
     """
     try:
+        # Reason: CLI start-up: importing confiture.core.anonymization.profile costs ~14 ms at start (importtime, 2026-09-07); deferred until the command runs
         from confiture.core.anonymization.profile import AnonymizationProfile
 
         console.print(f"[cyan]📋 Validating profile: {path}[/cyan]")
@@ -306,26 +310,19 @@ def verify_checksums(
     Exit 1 on mismatches is a success-signal (the gate tripped), so it still
     carries this shape; a real error emits the error envelope instead.
     """
-    from confiture.core.checksum import (
-        ChecksumConfig,
-        ChecksumMismatchBehavior,
-        MigrationChecksumVerifier,
-    )
-    from confiture.core.connection import load_config
-    from confiture.core.ledger import find_ledger_relations, notable_resolution, probe_ledger
 
     json_mode = is_json(output_format)
 
-    config_data = load_config(config)
+    config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
         tracking_table = _get_tracking_table(config_data)
-        ledger = probe_ledger(conn, tracking_table)
+        ledger = _core_ledger.probe_ledger(conn, tracking_table)
         if not ledger.exists:
             # Since 0.41.0 a bare name is resolved through search_path, so
             # "absent" can mean "present, but not where this session looks".
             # Saying which is the difference between an actionable message and
             # a puzzle (#188).
-            _elsewhere = find_ledger_relations(conn, tracking_table)
+            _elsewhere = _core_ledger.find_ledger_relations(conn, tracking_table)
             _note = (
                 f" A relation of that name does exist in {', '.join(_elsewhere)}, but this "
                 "connection's search_path does not reach it."
@@ -362,7 +359,7 @@ def verify_checksums(
             )
 
         # Run verification (warn mode - we'll handle display)
-        verifier = MigrationChecksumVerifier(
+        verifier = _core_checksum.MigrationChecksumVerifier(
             conn,
             ChecksumConfig(
                 enabled=True,
@@ -474,7 +471,6 @@ def validate_config(
 
     JSON output: {valid, config_source, migrations_path, migration_count, issues[]}.
     """
-    from confiture.core.validation.config_validator import ConfigValidator
 
     # Source selection: an explicit --config validates that YAML; a
     # --database-url flag is validated for *format* as an issue (not raised);
@@ -626,7 +622,6 @@ def restore(
 
       confiture restore prod.pgdump --database staging --no-refresh-matviews
     """
-    from confiture.core.restorer import DatabaseRestorer, RestoreOptions
 
     if not backup_file.exists():
         fail(

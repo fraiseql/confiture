@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError as _PydanticValidationError
+
+from confiture.config.environment import MigrationConfig
+from confiture.core import connection as _core_connection
 from confiture.exceptions import ConfigurationError
 
 
@@ -35,12 +39,8 @@ def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
         and config.exists()
     ):
         return None
-    from pydantic import ValidationError as _PydanticValidationError
 
-    from confiture.config.environment import MigrationConfig
-    from confiture.core.connection import dsn_from_config, load_config
-
-    data = load_config(config) or {}
+    data = _core_connection.load_config(config) or {}
     if not isinstance(data, dict):
         # An already-built Environment (tests patch load_config to return one).
         return _MigrationSettings(
@@ -57,7 +57,7 @@ def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
             resolution_hint=f"Fix the `migration:` block in {config}.",
         ) from e
     try:
-        database_url: str | None = dsn_from_config(data)
+        database_url: str | None = _core_connection.dsn_from_config(data)
     # Reason: a config without a usable DSN is 'no URL' for these settings, whatever the cause
     except Exception:
         database_url = None
@@ -72,9 +72,7 @@ def _effective_rebuild_threshold(explicit: int | None, config: Path) -> int:
     if env is not None:
         return int(env.migration.rebuild_threshold)
     if config.exists():
-        from confiture.core.connection import load_config
-
-        data = load_config(config) or {}
+        data = _core_connection.load_config(config) or {}
         value = (data.get("migration") or {}).get("rebuild_threshold")
         if value is not None:
             return int(value)

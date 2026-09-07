@@ -24,6 +24,8 @@ import typer
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, connect, console, is_json
 from confiture.cli.options import format_option
+from confiture.config._env_vars import expand_env_vars
+from confiture.core import migrator as _core_migrator
 from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError, MigrationError
 
@@ -112,8 +114,6 @@ def migrate_apply_as(
             json_mode=json_mode,
         )
 
-    from confiture.config._env_vars import expand_env_vars
-
     raw_url = expand_env_vars(url_spec, context=f"apply_as.{role}.url")
     if not isinstance(raw_url, str):
         fail(
@@ -141,11 +141,9 @@ def migrate_apply_as(
             json_mode=json_mode,
         )
 
-    from confiture.core.migrator import MigratorSession
-
     tracking_table = _get_tracking_table(config_data)
     try:
-        with MigratorSession(
+        with _core_migrator.MigratorSession(
             None,
             migrations_dir,
             database_url_override=raw_url,

@@ -5,7 +5,9 @@ These commands validate seed files for consistency and correctness.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -15,10 +17,16 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.formatters.seed_formatter import format_apply_result
 from confiture.cli.helpers import connect, is_json
 from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
+from confiture.config.environment import Environment
+from confiture.core.progress import ProgressManager
 from confiture.core.seed.applier import SeedApplier
+from confiture.core.seed.bridge import SeedBridge, SeedGenerationConfig
+from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
+from confiture.core.seed.performance_benchmark import PerformanceBenchmark
 from confiture.core.seed.validation import SeedFixer, SeedValidator
 from confiture.core.seed.validation.prep_seed import (
     OrchestrationConfig,
@@ -123,7 +131,6 @@ def _validate_prep_seed(
                 console.print(f"[green]✓ Report saved to {output}[/green]")
             else:
                 # Use print() directly to avoid Rich color codes
-                import sys
 
                 print(json_output, file=sys.stdout)
         else:
@@ -523,8 +530,6 @@ def apply(
     # Resolve a named seed profile (before connecting): unknown → exit 5.
     seed_profile = None
     if profile is not None:
-        from confiture.config.environment import Environment
-
         seed_profile = Environment.load(env).seed.get_profile(profile)
 
     seed_settings = None
@@ -546,8 +551,6 @@ def apply(
     else:
         # Load from environment config
         try:
-            from confiture.config.environment import Environment
-
             env_config = Environment.load(env)
             seed_settings = env_config.seed
 
@@ -565,7 +568,6 @@ def apply(
     # Apply seeds sequentially
     try:
         # Import ProgressManager for progress tracking
-        from confiture.core.progress import ProgressManager
 
         applier = SeedApplier(
             seeds_dir=seeds_dir,
@@ -590,7 +592,6 @@ def apply(
         result.seed_profile = profile
 
         # Format output
-        from confiture.cli.formatters.seed_formatter import format_apply_result
 
         format_apply_result(result, format_type, report_output, console)
 
@@ -702,8 +703,6 @@ def convert(
         Process all .sql files in input directory
     """
     try:
-        from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
-
         # These guards raise ConfiturError (not fail() directly) so the type
         # checker narrows output_file past the --output requirement; the outer
         # handler routes them through fail() with their own registry codes.
@@ -797,8 +796,6 @@ def convert(
             console.print(f"  Output: {output_file}")
             console.print(f"  Rows: {result.rows_converted}")
         else:
-            import sys
-
             sys.stdout.write(result.copy_format or "")
 
         raise typer.Exit(0)
@@ -878,10 +875,6 @@ def benchmark(
         $ confiture seed apply --sequential --benchmark
     """
     try:
-        import asyncio
-
-        from confiture.core.seed.performance_benchmark import PerformanceBenchmark
-
         if not seeds_dir.exists():
             fail(
                 ConfigurationError(
@@ -948,7 +941,6 @@ def seed_generate(
       confiture seed generate bookings -d $DATABASE_URL --rows 5 --env test
         ↳ Generate 5-row stub for bookings in the test environment
     """
-    from confiture.core.seed.bridge import SeedBridge, SeedGenerationConfig
 
     config = SeedGenerationConfig(
         table=table,
@@ -971,8 +963,6 @@ def seed_generate(
         )
 
     if format_type == "json":
-        import json
-
         console.print(json.dumps(result.to_dict(), indent=2))
     elif result.success:
         console.print(f"[green]Seed stub generated: {result.output_path}[/green]")

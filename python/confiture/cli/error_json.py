@@ -26,6 +26,9 @@ if TYPE_CHECKING:
     from rich.console import Console
 import functools
 
+from confiture.core.error_handler import print_error_to_console
+from confiture.core.locking import LockAcquisitionError
+
 # Envelope `code` used when a non-ConfiturError escapes translation. It is not a
 # registry code (those are domain failures); it signals "unexpected internal
 # error" and pairs with the generic exit code 1.
@@ -74,7 +77,6 @@ def coerce_to_confiture_error(exc: Exception) -> ConfiturError:
     """
     if isinstance(exc, ConfiturError):
         return exc
-    from confiture.core.locking import LockAcquisitionError
 
     if isinstance(exc, LockAcquisitionError):
         return lock_error_to_confiture(exc)
@@ -154,10 +156,14 @@ def fail(
     Raises:
         typer.Exit: always, with ``ConfiturError.exit_code``.
     """
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.cli.helpers import _output_json
+
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.cli.helpers import console as default_console
+
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.cli.helpers import error_console as default_error_console
-    from confiture.core.error_handler import print_error_to_console
 
     err = coerce_to_confiture_error(error)
 

@@ -40,7 +40,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pglast
 import pglast.parser
+import psycopg.rows
 
 from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
@@ -278,7 +280,6 @@ class Sec002SecurityDefinerSearchPath:
     # ------------------------------------------------------------------ #
 
     def _extract_violations(self, sql: str, file_path: Path) -> list[LintViolation]:
-        import pglast
 
         tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
 
@@ -373,7 +374,6 @@ class Sec002SecurityDefinerSearchPath:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`,
             one per unpinned SECURITY DEFINER function/procedure.
         """
-        import psycopg.rows
 
         ext_join = (
             "LEFT JOIN pg_depend dep ON dep.objid = p.oid AND dep.deptype = 'e'"

@@ -14,6 +14,7 @@ from typing import Any
 
 import psycopg
 
+from confiture.core import large_tables as _core_large_tables
 from confiture.core.change_set import ChangeEntry, build_change_set
 from confiture.core.ledger import split_qualified_table
 from confiture.core.migrator import discover_migration_files, parse_migration_filename
@@ -27,9 +28,8 @@ SAFE_LINE = "✓ All migrations appear safe to execute"
 
 def row_estimator(connection: Any) -> RowEstimator:
     """``table -> estimated rows`` from ``pg_class.reltuples``; None when unknown."""
-    from confiture.core.large_tables import TableSizeEstimator
 
-    estimator = TableSizeEstimator(connection)
+    estimator = _core_large_tables.TableSizeEstimator(connection)
 
     def estimate(table: str) -> int | None:
         try:

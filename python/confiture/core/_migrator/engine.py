@@ -779,6 +779,7 @@ class Migrator:
             >>> migrator = Migrator(connection=conn)
             >>> applied = migrator.migrate_up()
         """
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core._migrator.session import MigratorSession  # session imports engine
 
         lock_config = lock_config or LockConfig()

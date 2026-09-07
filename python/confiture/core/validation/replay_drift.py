@@ -20,6 +20,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from confiture.core.connection import load_config, open_connection
+from confiture.core.expected_db import ExpectedSchemaDB
+from confiture.core.function_body_drift import FunctionBodyDriftDetector
+from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.core.validation.signature_drift import _ssh_override
 from confiture.core.validation.view_drift import _config_database_url
 from confiture.exceptions import ConfigurationError
@@ -77,9 +80,6 @@ def check_replay_drift(
         SchemaError: a migration failed during replay (surfaced, not treated as
             false drift).
     """
-    from confiture.core.expected_db import ExpectedSchemaDB
-    from confiture.core.function_body_drift import FunctionBodyDriftDetector
-    from confiture.core.live_function_catalog import LiveFunctionCatalog
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")

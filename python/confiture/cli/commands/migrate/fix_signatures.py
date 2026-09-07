@@ -21,7 +21,13 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
+from confiture.config.environment import SshTunnelConfig
+from confiture.core import builder as _core_builder
 from confiture.core.connection import load_config
+from confiture.core.function_body_drift import FunctionBodyDriftDetector
+from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
+from confiture.core.function_signature_parser import FunctionSignatureParser
+from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.core.sql_lexer import split_statements
 
 
@@ -140,16 +146,6 @@ def migrate_fix_signatures(
         schemas = [s.strip() for s in check_signature_schemas.split(",") if s.strip()]
         source_sql = _resolve_source_sql(schema_file, config_data, format_output)
 
-        from confiture.core.function_signature_drift import (
-            FunctionSignatureDriftDetector,
-        )
-        from confiture.core.function_signature_parser import (
-            FunctionSignatureParser,
-        )
-        from confiture.core.live_function_catalog import (
-            LiveFunctionCatalog,
-        )
-
         source_sigs = FunctionSignatureParser().parse(source_sql)
         effective_config = _ssh_override(config_data, ssh_via, format_output)
 
@@ -203,10 +199,6 @@ def migrate_fix_signatures(
                 schemas_checked=schemas,
             )
             if check_body and source_bodies:
-                from confiture.core.function_body_drift import (
-                    FunctionBodyDriftDetector,
-                )
-
                 live_bodies_after = LiveFunctionCatalog(conn).get_bodies(
                     schemas=schemas, sig_keys=set(source_bodies)
                 )
@@ -244,8 +236,6 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
     if schema_file is not None:
         return schema_file.read_text()
     try:
-        from confiture.core.builder import SchemaBuilder
-
         env_name = (
             config_data.get("name")
             if isinstance(config_data, dict)
@@ -255,7 +245,7 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
             raise ValueError(
                 "Config has no 'name' field — cannot auto-build schema. Pass --schema explicitly."
             )
-        source_sql = SchemaBuilder(env=env_name).build(schema_only=True)
+        source_sql = _core_builder.SchemaBuilder(env=env_name).build(schema_only=True)
         if format_output == "text":
             console.print("[dim]  (schema auto-built from DDL files)[/dim]")
         return source_sql
@@ -272,7 +262,6 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
     """``--ssh-via [user@]host``: the connection goes through an SSH tunnel."""
     if not ssh_via:
         return config_data
-    from confiture.config.environment import SshTunnelConfig
 
     parts = ssh_via.split("@", 1)
     ssh_host = parts[1] if len(parts) == 2 else parts[0]
@@ -354,8 +343,6 @@ def _plan_body_fixes(
     """``--check-body``: CREATE OR REPLACE for bodies that drifted (a DROP+CREATE already covers its function)."""
     if not check_body:
         return {}, [], []
-    from confiture.core.function_body_drift import FunctionBodyDriftDetector
-    from confiture.core.function_signature_parser import FunctionSignatureParser
 
     source_bodies = {
         sig.signature_key(): body

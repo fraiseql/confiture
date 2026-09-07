@@ -30,6 +30,34 @@ if TYPE_CHECKING:
     from confiture.core.validation.context import ValidationContext
 from unittest.mock import Mock
 
+from confiture.cli.formatters.validate_formatter import (
+    render_acl_coverage,
+    render_function_uniqueness,
+    render_import_check,
+    render_live_drift,
+    render_naming,
+    render_ownership_coverage,
+    render_replay_drift,
+    render_security_definer,
+    render_signature_drift,
+    render_view_drift,
+)
+from confiture.core import migrator as _core_migrator
+from confiture.core.import_checker import ImportChecker
+from confiture.core.migrator import find_duplicate_migration_versions
+from confiture.core.validation import replay_drift as _core_validation_replay_drift
+from confiture.core.validation import security_definer as _security_definer
+from confiture.core.validation import view_drift as _core_validation_view_drift
+from confiture.core.validation.acl_coverage import check_acl_coverage
+from confiture.core.validation.function_uniqueness import check_function_uniqueness
+from confiture.core.validation.live_drift import check_live_drift
+from confiture.core.validation.ownership_coverage import check_ownership_coverage
+from confiture.core.validation.security_definer import (
+    check_security_definer,
+    check_security_definer_live,
+)
+from confiture.core.validation.signature_drift import check_signature_drift
+
 # Flags that are modifiers rather than checks, and the checks they modify. Each
 # entry is (flag, "at least one of these must also be on"). Replaces the ad-hoc
 # `if check_body and not check_signatures` guards that used to sit halfway down
@@ -157,6 +185,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     check meant accompaniment and grant never ran. Both modes now run all
     three and report once.
     """
+    # Reason: CLI start-up: importing confiture.cli.git_validation costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.cli.git_validation import (
         validate_git_drift,
         validate_git_flags_in_repo,
@@ -290,12 +319,14 @@ def _resolve_grant_dir(opts: ValidateOptions, ctx: ValidationContext) -> str:
 
 
 def _run_list_patterns(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.cli.commands.migrate.validate import _pattern_catalog_payload
 
     return CheckOutcome("list_patterns", passed=True, payload=_pattern_catalog_payload(opts))
 
 
 def _run_list_unmigrated_bodies(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
+    # Reason: CLI start-up: importing confiture.cli.git_validation costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.cli.git_validation import report_unmigrated_bodies
 
     body_result = report_unmigrated_bodies(
@@ -316,8 +347,6 @@ def _run_list_unmigrated_bodies(opts: ValidateOptions, ctx: ValidationContext) -
 
 
 def _run_acls(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_acl_coverage
-    from confiture.core.validation.acl_coverage import check_acl_coverage
 
     report = check_acl_coverage(opts.migrations_dir, opts.config, ctx)
     payload = render_acl_coverage(report, json_mode=opts.json_mode)
@@ -325,8 +354,6 @@ def _run_acls(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
 
 
 def _run_ownership_coverage(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_ownership_coverage
-    from confiture.core.validation.ownership_coverage import check_ownership_coverage
 
     report = check_ownership_coverage(opts.migrations_dir, opts.config, ctx)
     payload = render_ownership_coverage(report, json_mode=opts.json_mode)
@@ -334,8 +361,6 @@ def _run_ownership_coverage(opts: ValidateOptions, ctx: ValidationContext) -> Ch
 
 
 def _run_function_uniqueness(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_function_uniqueness
-    from confiture.core.validation.function_uniqueness import check_function_uniqueness
 
     report = check_function_uniqueness(opts.scan_paths, opts.config, ctx)
     payload = render_function_uniqueness(report, json_mode=opts.json_mode)
@@ -343,11 +368,8 @@ def _run_function_uniqueness(opts: ValidateOptions, ctx: ValidationContext) -> C
 
 
 def _run_security_definer(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_security_definer
 
     if opts.secdef_against_db:
-        from confiture.core.validation.security_definer import check_security_definer_live
-
         report = check_security_definer_live(
             config_path=opts.config,
             schemas=opts.schemas,
@@ -355,15 +377,11 @@ def _run_security_definer(opts: ValidateOptions, ctx: ValidationContext) -> Chec
             ctx=ctx,
         )
     else:
-        from confiture.core.validation.security_definer import check_security_definer
-
         report = check_security_definer(opts.scan_paths, opts.config, ctx)
 
     payload = render_security_definer(report, json_mode=opts.json_mode)
     if opts.emit_remediation is not None and report.has_violations:
-        from confiture.core.validation.security_definer import emit_remediation as _emit
-
-        count = _emit(report, opts.emit_remediation)
+        count = _security_definer.emit_remediation(report, opts.emit_remediation)
         console.print(
             f"[dim]Remediation script ({count} statement(s)) written to "
             f"{opts.emit_remediation}[/dim]"
@@ -372,8 +390,6 @@ def _run_security_definer(opts: ValidateOptions, ctx: ValidationContext) -> Chec
 
 
 def _run_imports(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_import_check
-    from confiture.core.import_checker import ImportChecker
 
     result = ImportChecker(opts.migrations_dir).check()
     payload = render_import_check(result, json_mode=opts.json_mode)
@@ -386,8 +402,6 @@ def _run_imports(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome
 
 
 def _run_live_drift(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_live_drift
-    from confiture.core.validation.live_drift import check_live_drift
 
     report = check_live_drift(
         opts.config, opts.schema_file, ctx, ignore_column_order=opts.ignore_column_order
@@ -397,8 +411,6 @@ def _run_live_drift(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
 
 
 def _run_signatures(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_signature_drift
-    from confiture.core.validation.signature_drift import check_signature_drift
 
     result = check_signature_drift(
         config_path=opts.config,
@@ -425,10 +437,8 @@ def _run_signatures(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
 
 
 def _run_body_views(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_view_drift
-    from confiture.core.validation.view_drift import check_view_drift
 
-    result = check_view_drift(
+    result = _core_validation_view_drift.check_view_drift(
         config_path=opts.config,
         schema_file=opts.schema_file,
         schemas=opts.schemas,
@@ -448,10 +458,8 @@ def _run_body_views(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
 
 
 def _run_body_replay(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
-    from confiture.cli.formatters.validate_formatter import render_replay_drift
-    from confiture.core.validation.replay_drift import check_replay_drift
 
-    result = check_replay_drift(
+    result = _core_validation_replay_drift.check_replay_drift(
         config_path=opts.config,
         migrations_dir=opts.migrations_dir,
         schemas=opts.schemas,
@@ -497,15 +505,13 @@ def _run_idempotent(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutc
 
 def _run_naming(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
     """The default mode: orphaned-file detection, optionally fixing names."""
-    from confiture.cli.formatters.validate_formatter import render_naming
-    from confiture.core.migrator import Migrator, find_duplicate_migration_versions
 
     _require_migrations_dir(opts)
 
     # Migrator needs a connection object for construction only — every method
     # used here reads the filesystem.
 
-    migrator = Migrator(connection=Mock())
+    migrator = _core_migrator.Migrator(connection=Mock())
     duplicate_versions = find_duplicate_migration_versions(opts.migrations_dir)
     orphaned_files = migrator.find_orphaned_sql_files(opts.migrations_dir)
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import confiture.core.migrator as _m
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
@@ -517,8 +518,6 @@ def up(
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
 
-    import confiture.core.migrator as _m
-
     # Import through confiture.core.migrator so tests can patch
     # confiture.core.migrator.load_migration_class and confiture.core.migrator.MigrationLock.
 
@@ -578,7 +577,6 @@ def apply_one(
     no_lock: bool = False,
 ) -> MigrationApplied:
     """See :meth:`MigratorSession.apply_one`."""
-    import confiture.core.migrator as _m
 
     if session._migrator is None:
         raise ConfigurationError(

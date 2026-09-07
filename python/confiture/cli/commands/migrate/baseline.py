@@ -11,8 +11,15 @@ from typing import Annotated
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import console, open_connection
-from confiture.core.migrator import parse_migration_filename
+from confiture.cli.helpers import _get_tracking_table, console, open_connection
+from confiture.core import connection as _core_connection
+from confiture.core import migrator as _core_migrator
+from confiture.core.migrator import (
+    find_duplicate_migration_versions as _baseline_find,
+)
+from confiture.core.migrator import (
+    parse_migration_filename,
+)
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -31,13 +38,10 @@ def _baseline_from_db_flow(
     delegates to :meth:`Migrator.baseline_from_db`, and renders the
     resulting report to the operator.  Issue #119.
     """
-    from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import load_config
-    from confiture.core.migrator import Migrator
 
-    config_data = load_config(config)
+    config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
-        migrator = Migrator(
+        migrator = _core_migrator.Migrator(
             connection=conn,
             migration_table=_get_tracking_table(config_data),
         )
@@ -169,9 +173,6 @@ def migrate_baseline(
       confiture migrate status   - View migration history
       confiture migrate diff     - Compare schema versions
     """
-    from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import load_config
-    from confiture.core.migrator import Migrator
 
     if through is None and from_db is None:
         fail(
@@ -214,9 +215,11 @@ def migrate_baseline(
     _refuse_duplicate_baseline(migrations_dir)
 
     # Load config and create connection
-    config_data = load_config(config)
+    config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
-        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
+        migrator = _core_migrator.Migrator(
+            connection=conn, migration_table=_get_tracking_table(config_data)
+        )
         migrator.initialize()
 
         # Find all migration files
@@ -295,7 +298,6 @@ def migrate_baseline(
 
 def _refuse_duplicate_baseline(migrations_dir: Path) -> None:
     """Duplicate migration versions are a hard block (no DB needed)."""
-    from confiture.core.migrator import find_duplicate_migration_versions as _baseline_find
 
     duplicates = _baseline_find(migrations_dir)
     if not duplicates:

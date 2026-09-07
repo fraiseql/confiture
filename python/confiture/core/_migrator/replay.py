@@ -13,12 +13,12 @@ from psycopg import sql as pgsql
 
 if TYPE_CHECKING:
     from confiture.core._migrator.session import MigratorSession
-    from confiture.models.results import (
-        PreflightAgainstResult,
-    )
+
+
 import time as _time
 
 from confiture.exceptions import ConfigurationError
+from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
 
 
 def run_against(
@@ -29,8 +29,6 @@ def run_against(
     allow_non_transactional: bool = False,
 ) -> PreflightAgainstResult:
     """See :meth:`MigratorSession.run_against`."""
-
-    from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
 
     if session._conn is None:
         raise ConfigurationError(

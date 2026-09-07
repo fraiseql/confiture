@@ -5,9 +5,18 @@ from pathlib import Path
 from typing import Any
 
 from confiture.cli.helpers import _emit_hint, _output_json, console
+from confiture.core.git import GitRepository
+from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
+from confiture.core.idempotency.models import IdempotencyReport
+from confiture.core.idempotency.python_migration_extractor import (
+    ExtractionWarning,
+    extract_sql_from_python_migration,
+    extract_sql_from_python_source,
+)
 from confiture.core.idempotency.python_migration_extractor import (
     is_migration_file as _is_migration_file,
 )
+from confiture.core.sql_path import find_project_root
 from confiture.exceptions import ConfigurationError, NotAGitRepositoryError
 from confiture.url_redaction import (
     redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
@@ -21,7 +30,6 @@ def _repo_root_for(path: Path) -> Path:
     migration analyzed from a temp file gets the same ``execute_file``
     boundary it would have had on disk.
     """
-    from confiture.core.sql_path import find_project_root
 
     return find_project_root(path)
 
@@ -52,12 +60,6 @@ def _collect_idempotency_report(
     migration-relative reads resolve where the migration lives, not in a
     temp directory (0.46.0).
     """
-    from confiture.core.idempotency.models import IdempotencyReport
-    from confiture.core.idempotency.python_migration_extractor import (
-        ExtractionWarning,
-        extract_sql_from_python_migration,
-        extract_sql_from_python_source,
-    )
 
     combined = IdempotencyReport()
     staged_content = staged_content or {}
@@ -136,7 +138,6 @@ def _scope_files_to_git(
         ConfigurationError: When ``migrations_dir`` lies outside the repository,
             where the intersection could only ever be empty.
     """
-    from confiture.core.git import GitRepository
 
     repo = GitRepository()
     if not repo.is_git_repo():
@@ -215,7 +216,6 @@ def _read_staged_content(paths: list[Path]) -> dict[Path, str]:
     working tree whenever a file was staged and then edited further. A
     pre-commit gate must judge the former.
     """
-    from confiture.core.git import GitRepository
 
     repo = GitRepository()
     repo_root = repo.get_repo_root().resolve()
@@ -326,7 +326,6 @@ def _validate_idempotency(
         validate`` composes checks and emits one document for the whole run
         (#187).
     """
-    from confiture.core.idempotency import IdempotencyValidator
 
     validator = IdempotencyValidator()
 
@@ -648,7 +647,6 @@ def _fix_idempotency(
         format_output: Output format (text or json)
         output_file: Optional file to save output to
     """
-    from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
 
     fixer = IdempotencyFixer()
     validator = IdempotencyValidator()

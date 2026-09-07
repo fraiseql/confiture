@@ -100,6 +100,7 @@ def confiture_sandbox(
         This fixture requires a running PostgreSQL database.
         Tests will be skipped if the database is not available.
     """
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.testing.sandbox import MigrationSandbox
 
     try:
@@ -193,6 +194,7 @@ def confiture_project_dir() -> Path:
 @pytest.fixture(scope="session")
 def confiture_worker_id() -> str | None:
     """The active pytest-xdist worker id (``"gw0"``…), or None for single-process."""
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.testing.worker_db import current_worker_id
 
     return current_worker_id()
@@ -227,6 +229,7 @@ def confiture_ram_tablespace_usable(
     """
     if not confiture_ram_tablespace:
         return None
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.core.test_db import TestDbProvisioner
 
     provisioner = TestDbProvisioner(confiture_test_server_url)
@@ -245,6 +248,7 @@ def confiture_ci() -> bool:
     ``--from-artifact`` + on-disk clones; local → RAM clones). The fixtures
     themselves do not branch on it — ``ensure_template`` is already idempotent.
     """
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.testing.worker_db import is_ci
 
     return is_ci()
@@ -266,9 +270,13 @@ def confiture_template_db(
     Returns:
         The template database name.
     """
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     import psycopg
 
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.core.builder import SchemaBuilder
+
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.core.test_db import TestDbProvisioner
 
     try:
@@ -315,9 +323,13 @@ def confiture_worker_db(
         ``confiture.testing.worker_db.resolve_worker_db_url`` from conftest.py at
         import time — this fixture runs too late to fix a frozen singleton.
     """
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     import psycopg
 
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.core.test_db import TestDbProvisioner
+
+    # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
     from confiture.testing.worker_db import resolve_clone_concurrency, resolve_worker_db_name
 
     provisioner = TestDbProvisioner(confiture_test_server_url)

@@ -10,7 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from confiture.core import connection as _core_connection
+from confiture.core.linting.libraries.ownership import Own001OwnershipCoverage, Own002BareAlterOwner
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.validation.config_loaders import load_ownership_expectation
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -54,17 +57,11 @@ def check_ownership_coverage(
         ConfigurationError: the config file does not exist, or ``ownership:`` is
             malformed.
     """
-    from confiture.core.connection import load_config
-    from confiture.core.linting.libraries.ownership import (
-        Own001OwnershipCoverage,
-        Own002BareAlterOwner,
-    )
-    from confiture.core.validation.config_loaders import load_ownership_expectation
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = ctx.config_data if ctx is not None else load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else _core_connection.load_config(config_path)
     # No-op when the project hasn't adopted the `ownership:` block yet.
     ownership_exp = load_ownership_expectation(config_data, config_path, require=False)
 

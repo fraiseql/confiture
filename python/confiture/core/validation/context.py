@@ -19,6 +19,8 @@ from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any
 
 from confiture.core.connection import load_config, open_connection
+from confiture.core.git import GitRepository
+from confiture.core.validation.signature_drift import _ssh_override
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -107,8 +109,6 @@ class ValidationContext:
         if not self.staged:
             return self.effective_base_ref, "HEAD"
 
-        from confiture.core.git import GitRepository
-
         repo = GitRepository()
         repo.require_ref(self.effective_base_ref)
         base = repo.get_merge_base(self.effective_base_ref, "HEAD") or self.effective_base_ref
@@ -137,8 +137,6 @@ class ValidationContext:
         text has always claimed.
         """
         if self._connection is None:
-            from confiture.core.validation.signature_drift import _ssh_override
-
             config = self.config_data
             if self.ssh_via:
                 config = _ssh_override(config, self.ssh_via)

@@ -312,7 +312,6 @@ class MigrationLock:
         Raises:
             LockAcquisitionError: If timeout expires
         """
-        import psycopg
 
         timeout_sec = self.config.timeout_ms / 1000
 

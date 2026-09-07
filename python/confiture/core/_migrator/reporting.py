@@ -11,22 +11,20 @@ from typing import TYPE_CHECKING
 from confiture.core._migrator.discovery import parse_migration_filename
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from confiture.core._migrator.session import MigratorSession
-    from confiture.models.results import (
-        CurrentRevision,
-        PreflightResult,
-        StatusResult,
-    )
-from confiture.exceptions import ConfigurationError
+    from confiture.models.results import PreflightResult
+
+
+from datetime import datetime
+
+from confiture.core import checksum as _core_checksum
+from confiture.core.checksum import ChecksumConfig, ChecksumMismatchBehavior
+from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
+from confiture.models.results import CurrentRevision, MigrationInfo, StatusResult
 
 
 def status(session: MigratorSession) -> StatusResult:
     """See :meth:`MigratorSession.status`."""
-    from datetime import datetime
-
-    from confiture.models.results import MigrationInfo, StatusResult
 
     if session._migrator is None:
         raise ConfigurationError(
@@ -102,8 +100,6 @@ def status(session: MigratorSession) -> StatusResult:
 
 def current_revision(session: MigratorSession) -> CurrentRevision | None:
     """See :meth:`MigratorSession.current_revision`."""
-    from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
-    from confiture.models.results import CurrentRevision
 
     if session._migrator is None:
         raise ConfigurationError(
@@ -134,6 +130,7 @@ def preflight(
     versions: list[str] | None = None,
 ) -> PreflightResult:
     """See :meth:`MigratorSession.preflight`."""
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import run_preflight
 
     # Determine which versions to check
@@ -159,14 +156,8 @@ def preflight(
             )
             return result
 
-        from confiture.core.checksum import (
-            ChecksumConfig,
-            ChecksumMismatchBehavior,
-            MigrationChecksumVerifier,
-        )
-
         config = ChecksumConfig(on_mismatch=ChecksumMismatchBehavior.WARN)
-        verifier = MigrationChecksumVerifier(
+        verifier = _core_checksum.MigrationChecksumVerifier(
             session._conn,
             config,
             migration_table=(

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from confiture.core import connection as _core_connection
+from confiture.core.linting.schema_linter import SchemaLinter
+from confiture.core.validation.config_loaders import load_acl_expectations
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -37,14 +40,11 @@ def check_acl_coverage(
         ConfigurationError: the config file does not exist, or ``acls:`` is
             malformed.
     """
-    from confiture.core.connection import load_config
-    from confiture.core.linting.schema_linter import SchemaLinter
-    from confiture.core.validation.config_loaders import load_acl_expectations
 
     if not config_path.exists():
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
-    config_data = ctx.config_data if ctx is not None else load_config(config_path)
+    config_data = ctx.config_data if ctx is not None else _core_connection.load_config(config_path)
     # No-op when the project hasn't adopted the `acls:` block yet.
     expectations = load_acl_expectations(config_data, config_path, require=False)
 

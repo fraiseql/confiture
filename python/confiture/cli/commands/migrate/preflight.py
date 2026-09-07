@@ -12,8 +12,15 @@ from typing import Annotated, Any
 
 import psycopg
 import typer
+from psycopg import sql as pgsql
+from rich.table import Table
 
-from confiture.cli.dsn import NO_CONFIG_OPTION_HELP
+from confiture.cli.dsn import (
+    NO_CONFIG_OPTION_HELP,
+    config_is_explicit,
+    has_intentional_dsn_source,
+    resolve_database_url,
+)
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     _emit_hint,
@@ -27,10 +34,16 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import format_option
+from confiture.config.environment import Environment
+from confiture.core import connection as _core_connection
+from confiture.core import ledger as _core_ledger
 from confiture.core.connection import load_config
+from confiture.core.cor_extractor import find_cor_targets_in_file
+from confiture.core.dependent_objects import DependentObjectsChecker
+from confiture.core.ledger import table_identifier
 from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
-from confiture.core.schema_facts import SchemaFacts
-from confiture.exceptions import ConfigurationError
+from confiture.core.schema_facts import SchemaFacts, collect_schema_facts
+from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.preflight import DependentAnalysisReport
 from confiture.url_redaction import redact_url
 
@@ -57,11 +70,8 @@ def _preflight_tracking_table(config: Path | None) -> str:
     if config is None or not Path(config).exists():
         return "tb_confiture"
 
-    from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import load_config
-
     try:
-        return _get_tracking_table(load_config(Path(config)))
+        return _get_tracking_table(_core_connection.load_config(Path(config)))
     except (OSError, ValueError, ConfigurationError):
         # An unreadable or malformed config: the preflight run itself fails
         # loudly a few lines later, so this advisory probe just defaults. The
@@ -86,16 +96,12 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
     is one extra advisory hint.
     """
 
-    from psycopg import sql as pgsql
-
-    from confiture.core.ledger import ledger_exists, table_identifier
-
     conn = getattr(session, "_conn", None)
     if conn is None:
         return (False, False)
 
     try:
-        if not ledger_exists(conn, table):
+        if not _core_ledger.ledger_exists(conn, table):
             with contextlib.suppress(Exception):
                 conn.rollback()
             return (False, True)
@@ -125,9 +131,6 @@ def _collect_preflight_facts(session: MigratorSession) -> SchemaFacts:
     answer. Losing the refinement is acceptable; failing a preflight over it is
     not.
     """
-    import contextlib
-
-    from confiture.core.schema_facts import collect_schema_facts
 
     conn = getattr(session, "_conn", None)
     if conn is None:
@@ -151,14 +154,10 @@ def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tupl
     — no replicas declared, so the replica lint warns rather than errors (#139).
     """
     try:
-        from confiture.config.environment import Environment
-
         if env_name:
             e = Environment.load(env_name)
         elif config is not None and config.exists():
-            from confiture.core.connection import load_config
-
-            e = Environment.model_validate(load_config(config))
+            e = Environment.model_validate(_core_connection.load_config(config))
         else:
             return False, False
         return bool(e.infrastructure.replicas), bool(e.migration.allow_unsafe_under_replication)
@@ -334,27 +333,12 @@ def _run_dependent_check(
     ``"warn"`` (severity=info).
     """
 
-    try:
-        from confiture.core.cor_extractor import find_cor_targets_in_file
-    except ImportError:
-        error_console.print(
-            "[red]❌ Dependent check requires pglast. "
-            "Install with: pip install fraiseql-confiture[ast][/red]"
-        )
-        return DependentAnalysisReport(
-            entries=[], status="skipped", skip_reason="pglast_not_installed"
-        )
-
     targets: list[Any] = []
     for migration_file in pending_files:
         targets.extend(find_cor_targets_in_file(migration_file, project_root=migrations_dir))
 
     if not targets:
         return DependentAnalysisReport(entries=[], status="ok")
-
-    import psycopg
-
-    from confiture.core.dependent_objects import DependentObjectsChecker
 
     severity = "info" if mode == "warn" else "error"
     try:
@@ -566,8 +550,13 @@ def migrate_preflight(
         - default: migrate-preflight.schema.json
         - with --against: migrate-preflight-against.schema.json
     """
+    # Reason: CLI start-up: importing confiture.core.change_set costs ~9 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.change_set import build_change_set
+
+    # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import replica_preflight_issues
+
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import preflight_exit_code, run_preflight
 
     if check_dependents not in {"off", "fail", "warn"}:
@@ -681,6 +670,7 @@ def _preflight_summary(all_issues: list[Any], **counts: Any) -> dict[str, Any]:
 def _preflight_payload(
     all_issues: list[Any], summary: dict[str, Any], change_set: Any, exit_code: int
 ) -> dict[str, Any]:
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import is_window_safe
 
     return {
@@ -710,8 +700,13 @@ def _static_preflight(
     output_file: Path | None,
 ) -> None:
     """No ``--against``: static findings only, flat output."""
+    # Reason: CLI start-up: importing confiture.core.change_set costs ~9 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.change_set import build_change_set
+
+    # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import replica_preflight_issues
+
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import preflight_exit_code
 
     # #148 structured report + #139 replica-safety: merge the base preflight
@@ -743,7 +738,6 @@ def _static_preflight(
 def _render_static_preflight(
     result: Any, summary: dict[str, Any], change_set: Any, issues: list[Any], check_dependents: str
 ) -> None:
-    from rich.table import Table
 
     table = Table(title="Pre-flight Check")
     table.add_column("Version", style="cyan")
@@ -800,12 +794,6 @@ def _against_pending_files(
     (CONFIG_007).
     """
     try:
-        from confiture.cli.dsn import (
-            config_is_explicit,
-            has_intentional_dsn_source,
-            resolve_database_url,
-        )
-
         return _resolve_preflight_pending(
             migrations_dir=migrations_dir,
             config_path=config,
@@ -824,8 +812,6 @@ def _against_pending_files(
         )
     # Reason: #152: every DSN-resolution failure is classified into CONFIG_007/CONFIG_010/CONFIG_006 here
     except Exception as e:
-        from confiture.exceptions import ConfigurationError, ConfiturError
-
         # #152: a precedence conflict (CONFIG_007) or missing source (CONFIG_010)
         # — and any other ConfiturError — surfaces with its own exit code +
         # remediation via the shared error boundary.
@@ -897,7 +883,6 @@ def _run_against(
     except Exception as e:
         # #151: an unreachable --against URL is a connection failure → exit 3
         # (CONFIG_006), with the shared {ok:false, error} envelope in JSON mode.
-        from confiture.exceptions import ConfigurationError
 
         fail(
             ConfigurationError(

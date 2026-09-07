@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     _extract_version,
     _output_json,
@@ -11,6 +12,9 @@ from confiture.cli.helpers import (
     console,
     is_json,
 )
+from confiture.core import connection as _core_connection
+from confiture.core.ownership_fixer import OwnershipFixer
+from confiture.core.validation.config_loaders import load_ownership_expectation
 from confiture.exceptions import ConfigurationError, ValidationError
 from confiture.url_redaction import (
     redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
@@ -94,20 +98,15 @@ def _fix_ownership(
     - ``ownership.lint_enabled`` is False
     - pglast (the [ast] extra) is not installed
     """
-    from confiture.core.connection import load_config
-    from confiture.core.ownership_fixer import OwnershipFixer
-    from confiture.core.validation.config_loaders import load_ownership_expectation
 
     if not config_path.exists():
-        from confiture.cli.error_json import fail
-
         fail(
             ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004"),
             json_mode=is_json(format_output),
             output_file=output_file,
         )
 
-    config_data = load_config(config_path)
+    config_data = _core_connection.load_config(config_path)
     expectation = load_ownership_expectation(config_data, config_path, require=False)
     if expectation is None:
         if format_output == "json":
@@ -136,7 +135,6 @@ def _fix_ownership(
             modified.append(preview.file)
 
     def _refuse() -> None:
-        from confiture.cli.error_json import fail
 
         fail(
             ValidationError(

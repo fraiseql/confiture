@@ -20,7 +20,12 @@ from confiture.core.idempotency.models import (
 from confiture.core.idempotency.patterns import (
     detect_non_idempotent_patterns,
 )
-from confiture.core.idempotency.python_migration_extractor import ExtractionWarning, WarningKind
+from confiture.core.idempotency.python_migration_extractor import (
+    ExtractionWarning,
+    WarningKind,
+    extract_sql_from_python_migration,
+    is_migration_file,
+)
 from confiture.core.parser_info import parse_error_line
 
 if TYPE_CHECKING:
@@ -234,10 +239,6 @@ class IdempotencyValidator:
             ...     pattern="*.up.sql"
             ... )
         """
-        from confiture.core.idempotency.python_migration_extractor import (
-            extract_sql_from_python_migration,
-            is_migration_file,
-        )
 
         report = IdempotencyReport()
 

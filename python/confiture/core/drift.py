@@ -19,13 +19,16 @@ from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
 from confiture.exceptions import ConfigurationError, SchemaError
 
 if TYPE_CHECKING:
-    from confiture.config.environment import (
-        AclExpectation,
-        AclGrant,
-        DriftConfig,
-        OwnershipExpectation,
-    )
+    from confiture.config.environment import AclExpectation, AclGrant, OwnershipExpectation
+
+
 from pathlib import Path
+
+from pydantic import ValidationError
+
+from confiture.config.environment import DriftConfig
+from confiture.core.linting.inventory import build_inventory
+from confiture.core.parser_info import parse_error_line
 
 logger = logging.getLogger(__name__)
 
@@ -174,8 +177,6 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
             failure surfaced loudly rather than as an empty expectation that
             would report every live table as spurious drift.
     """
-    from confiture.core.linting.inventory import build_inventory
-    from confiture.core.parser_info import parse_error_line
 
     try:
         inventory = build_inventory(sql)
@@ -229,9 +230,6 @@ def drift_config_from(config_data: Any) -> "DriftConfig":
     A missing block is the defaults; a block that is not a mapping or fails
     validation is ``CONFIG_001`` — a configuration error, not a connection one.
     """
-    from pydantic import ValidationError
-
-    from confiture.config.environment import DriftConfig
 
     raw = config_data.get("drift") if isinstance(config_data, dict) else None
     if raw is None:

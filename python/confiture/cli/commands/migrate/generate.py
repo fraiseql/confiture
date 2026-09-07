@@ -20,9 +20,15 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
+from confiture.core import schema_snapshot as _core_schema_snapshot
 from confiture.core.migration_generator import MigrationGenerator
-from confiture.core.migrator import parse_migration_filename
-from confiture.exceptions import ValidationError
+from confiture.core.migrator import (
+    find_duplicate_migration_versions as _gen_find,
+)
+from confiture.core.migrator import (
+    parse_migration_filename,
+)
+from confiture.exceptions import ExternalGeneratorError, ValidationError
 
 # A migration name becomes a filename and a class name. snake_case only: a `/`
 # or `..` would walk out of the migrations directory, anything else is not a
@@ -149,7 +155,6 @@ def migrate_generate(
     warnings: list[str] = []
     if verbose:
         _show_scan(migrations_dir)
-    from confiture.core.migrator import find_duplicate_migration_versions as _gen_find
 
     duplicates = _gen_find(migrations_dir)
     if duplicates:
@@ -273,8 +278,6 @@ def _run_external_generator(
     migrations_dir.mkdir(parents=True, exist_ok=True)
     gen_instance = MigrationGenerator(migrations_dir=migrations_dir)
     try:
-        from confiture.exceptions import ExternalGeneratorError
-
         resolved_cmd, up_sql_path = gen_instance.run_external_generator(
             generator_config=gen_config,
             from_path=from_schema,
@@ -371,14 +374,12 @@ def _write_history_snapshot(
     )
     live_db_url = settings.database_url if (use_live and settings is not None) else None
     try:
-        from confiture.core.schema_snapshot import SchemaSnapshotGenerator
-
         resolved_dir = snapshots_dir
         if resolved_dir is None and settings is not None:
             resolved_dir = Path(settings.migration.snapshots_dir)
         if resolved_dir is None:
             resolved_dir = Path("db/schema_history")
-        snap_gen = SchemaSnapshotGenerator(snapshots_dir=resolved_dir)
+        snap_gen = _core_schema_snapshot.SchemaSnapshotGenerator(snapshots_dir=resolved_dir)
         env_name, project_dir = config.stem, config.parent.parent.parent
         if live_db_url:
             try:

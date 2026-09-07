@@ -24,6 +24,7 @@ import pglast.parser
 from pglast import ast as pglast_ast
 from pglast import parse_sql
 
+from confiture.core.idempotency.python_migration_extractor import extract_sql_from_python_migration
 from confiture.models.preflight import CorTarget
 
 
@@ -117,10 +118,6 @@ def find_cor_targets_in_file(
     the file is parsed as a single SQL string.
     """
     if path.suffix == ".py":
-        from confiture.core.idempotency.python_migration_extractor import (
-            extract_sql_from_python_migration,
-        )
-
         extraction = extract_sql_from_python_migration(path, project_root=project_root)
         targets: list[CorTarget] = []
         for snippet in extraction.snippets:

@@ -16,7 +16,7 @@ from psycopg import sql as pgsql
 from psycopg.pq import TransactionStatus
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
-from confiture.config.environment import DatabaseConfig
+from confiture.config.environment import DatabaseConfig, Environment
 from confiture.core.anonymization.pseudonymizer import Pseudonymizer
 from confiture.core.connection import create_connection
 
@@ -87,7 +87,6 @@ class ProductionSyncer:
             source: Source database config or environment name
             target: Target database config or environment name
         """
-        from confiture.config.environment import Environment
 
         # Load configs if strings provided
         if isinstance(source, str):

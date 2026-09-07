@@ -18,6 +18,7 @@ import pglast
 import pglast.parser
 
 from confiture.config.environment import Environment
+from confiture.core import builder as _core_builder
 from confiture.core.linting.inventory import Inventory, SchemaObject, build_inventory
 from confiture.core.parser_info import parse_error_line
 from confiture.exceptions import ConfiturError
@@ -297,9 +298,7 @@ class SchemaLinter:
     def _load_schema(self) -> None:
         """Load schema SQL from files."""
         try:
-            from confiture.core.builder import SchemaBuilder
-
-            builder = SchemaBuilder(env=self.env, project_dir=self.project_dir)
+            builder = _core_builder.SchemaBuilder(env=self.env, project_dir=self.project_dir)
             self._schema_files = builder.find_sql_files()
             self._schema_sql = builder.build()
         except (ConfiturError, OSError) as e:
@@ -365,6 +364,7 @@ class SchemaLinter:
 
     def _check_documentation(self, report: LintReport) -> None:
         """The ``doc`` family: every commentable object carries a COMMENT (#217)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.documentation import documentation_findings
 
         for violation in documentation_findings(self._inventory):
@@ -376,6 +376,7 @@ class SchemaLinter:
         File-backed runs inventory each schema file on its own so a finding can
         name the files; a run on one string reports offsets into that string.
         """
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.duplicates import (
             duplicate_violations,
             find_duplicates,
@@ -485,6 +486,7 @@ class SchemaLinter:
         Returns:
             LintReport with all violations found.
         """
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.libraries.generate import (
             Gen001PrefixUnique,
             Gen002VerbSuffix,
@@ -523,6 +525,7 @@ class SchemaLinter:
         if not self._schema_sql:
             return
 
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.tenant.tenant_isolation_rule import TenantIsolationRule
 
         TenantIsolationRule().run(
@@ -553,6 +556,7 @@ class SchemaLinter:
         Returns:
             :class:`LintReport` with any ACL001 violations.
         """
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.libraries.acl import Acl001GrantCoverage
 
         report = LintReport()

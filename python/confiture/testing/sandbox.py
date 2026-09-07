@@ -192,6 +192,7 @@ class MigrationSandbox:
             >>> # Also works with version prefix
             >>> migration = sandbox.load("003")
         """
+        # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
         from confiture.testing.loader import load_migration
 
         # Determine if name is a version prefix or full name
@@ -215,6 +216,7 @@ class MigrationSandbox:
             >>> assert sandbox.validator.constraints_valid()
         """
         if self._validator is None:
+            # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
             from confiture.testing.fixtures.data_validator import DataValidator
 
             self._validator = DataValidator(self.connection)
@@ -234,6 +236,7 @@ class MigrationSandbox:
             >>> changes = sandbox.snapshotter.compare(before, after)
         """
         if self._snapshotter is None:
+            # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
             from confiture.testing.fixtures.schema_snapshotter import SchemaSnapshotter
 
             self._snapshotter = SchemaSnapshotter(self.connection)

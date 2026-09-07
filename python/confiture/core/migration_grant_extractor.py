@@ -25,7 +25,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import pglast
 import pglast.parser
+from pglast.enums.parsenodes import GrantTargetType, ObjectType, RoleSpecType
 
 from confiture.core.sql_lexer import strip_comments
 
@@ -433,7 +435,6 @@ class MigrationGrantExtractor:
     # ------------------------------------------------------------------ #
 
     def _creates_pglast(self, sql: str) -> list[tuple[str, str]]:
-        import pglast
 
         out: list[tuple[str, str]] = []
         for raw in pglast.parse_sql(sql):
@@ -467,8 +468,6 @@ class MigrationGrantExtractor:
         return out
 
     def _drops_pglast(self, sql: str) -> list[tuple[str, str]]:
-        import pglast
-        from pglast.enums.parsenodes import ObjectType
 
         out: list[tuple[str, str]] = []
         for raw in pglast.parse_sql(sql):
@@ -487,12 +486,6 @@ class MigrationGrantExtractor:
         return out
 
     def _grants_pglast(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
-        import pglast
-        from pglast.enums.parsenodes import (
-            GrantTargetType,
-            ObjectType,
-            RoleSpecType,
-        )
 
         out: list[tuple[str, str, str, frozenset[str]]] = []
         for raw in pglast.parse_sql(sql):
@@ -537,12 +530,6 @@ class MigrationGrantExtractor:
         unrepresentable: list[UnrepresentableGrant],
     ) -> None:
         """pglast backend for :meth:`extract_grant_statements` (issue #162)."""
-        import pglast
-        from pglast.enums.parsenodes import (
-            GrantTargetType,
-            ObjectType,
-            RoleSpecType,
-        )
 
         objtype_map = {
             ObjectType.OBJECT_TABLE: "TABLE",

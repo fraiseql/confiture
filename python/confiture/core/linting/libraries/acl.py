@@ -22,6 +22,7 @@ from pathlib import Path
 
 from confiture.config.environment import AclExpectation, AclGrant
 from confiture.core import sql_lexer
+from confiture.core.idempotency.python_migration_extractor import extract_sql_from_python_migration
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.migration_grant_extractor import (
     MigrationGrantExtractor,
@@ -265,10 +266,6 @@ class Acl001GrantCoverage:
         the rest of the lint).
         """
         if migration.name.endswith(".py"):
-            from confiture.core.idempotency.python_migration_extractor import (
-                extract_sql_from_python_migration,
-            )
-
             try:
                 result = extract_sql_from_python_migration(migration)
             except Exception:  # Reason: the static evaluator refuses in many shapes; every one means 'no SQL extracted' for this rule

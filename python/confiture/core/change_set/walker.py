@@ -26,6 +26,8 @@ from confiture.core.type_lattice import (
 
 if TYPE_CHECKING:
     pass
+import pglast
+
 from confiture.core.change_set.models import (
     ChangeEntry,
     _detail_for,
@@ -85,7 +87,6 @@ _AST_SKIP: Final = frozenset(
 
 
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
-    import pglast
 
     entries: list[ChangeEntry] = []
     for raw in pglast.parse_sql(sql):

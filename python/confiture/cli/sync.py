@@ -30,19 +30,17 @@ the ``warnings`` array).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import typer
+import yaml
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, console, error_console, is_json
 from confiture.cli.options import format_option
+from confiture.config.environment import DatabaseConfig, Environment
+from confiture.core.syncer import AnonymizationRule, ProductionSyncer, SyncConfig, TableSelection
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import SyncResult
-
-if TYPE_CHECKING:
-    from confiture.config.environment import DatabaseConfig
-    from confiture.core.syncer import AnonymizationRule, ProductionSyncer
 
 _DEFAULT_ANON_CONFIG = Path("db/sync/anonymization.yaml")
 
@@ -64,7 +62,6 @@ def _resolve_database(spec: str) -> DatabaseConfig:
             environment config cannot be found (``Environment.load`` →
             ``CONFIG_001``).
     """
-    from confiture.config.environment import DatabaseConfig, Environment
 
     if spec.startswith(("postgres://", "postgresql://")):
         try:
@@ -85,9 +82,6 @@ def _load_anonymization(path: Path) -> dict[str, list[AnonymizationRule]]:
     Raises:
         ConfigurationError: the file is missing (``CONFIG_004``) or malformed.
     """
-    import yaml
-
-    from confiture.core.syncer import AnonymizationRule
 
     if not path.exists():
         raise ConfigurationError(
@@ -132,7 +126,6 @@ def _load_anonymization(path: Path) -> dict[str, list[AnonymizationRule]]:
 
 def _build_syncer(source: DatabaseConfig, target: DatabaseConfig) -> ProductionSyncer:
     """Factory seam (patched in tests) → a ``ProductionSyncer`` over both configs."""
-    from confiture.core.syncer import ProductionSyncer
 
     return ProductionSyncer(source, target)
 
@@ -181,7 +174,6 @@ def sync(
     ``db/sync/anonymization.yaml``.
     """
     json_mode = is_json(format_output)
-    from confiture.core.syncer import SyncConfig, TableSelection
 
     source = _resolve_database(from_)
     target = _resolve_database(to)

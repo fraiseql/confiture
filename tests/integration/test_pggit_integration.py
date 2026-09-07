@@ -25,16 +25,32 @@ from confiture.integrations.pggit import (
     require_pggit,
 )
 
+pytestmark = pytest.mark.optional_extension
+
 
 @pytest.fixture
 def pggit_connection(test_db_connection: psycopg.Connection):
-    """Get a connection with pgGit available, or skip test.
+    """A connection with the pgGit extension installed, or skip.
 
-    This fixture checks if pgGit is installed and skips the test
-    if not available.
+    The extension is created on demand when the server has it available
+    (``pg_available_extensions``): another test's ``clean_test_db`` drops every
+    user schema, the extension's included, so "installed earlier" cannot be
+    relied on. A server without pgGit skips; a pgGit that fails to install
+    skips with the server's error (CI's PostgreSQL 15 gets the files copied in
+    by the workflow; a local PostgreSQL 18 has no compatible release).
     """
     if not is_pggit_available(test_db_connection):
-        pytest.skip("pgGit extension not installed - skipping pgGit integration tests")
+        with test_db_connection.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_available_extensions WHERE name = 'pggit'")
+            available = cur.fetchone() is not None
+        if not available:
+            pytest.skip("pgGit extension not installed - skipping pgGit integration tests")
+        try:
+            test_db_connection.execute("CREATE EXTENSION IF NOT EXISTS pggit CASCADE")
+            test_db_connection.commit()
+        except psycopg.Error as exc:
+            test_db_connection.rollback()
+            pytest.skip(f"pgGit could not be installed on this server: {exc}")
 
     yield test_db_connection
 

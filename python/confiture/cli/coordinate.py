@@ -30,6 +30,7 @@ from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.integrations.pggit.coordination import (
     ConflictSeverity,
+    Intent,
     IntentRegistry,
     IntentStatus,
 )
@@ -137,8 +138,6 @@ def register(
     # Parse metadata
     meta_dict = {}
     if metadata:
-        import json
-
         try:
             meta_dict = json.loads(metadata)
         except json.JSONDecodeError:
@@ -307,8 +306,6 @@ def check(
         tables_list = [t.strip() for t in tables_affected.split(",")]
 
     # Create a temporary intent for checking
-
-    from confiture.integrations.pggit.coordination import Intent
 
     temp_intent = Intent(
         id=str(uuid4()),

@@ -13,8 +13,11 @@ from typing import Annotated, Any
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.formatters.migrate_formatter import format_rebuild_result
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
+from confiture.core import migrator as _core_migrator
+from confiture.core.migrator import find_duplicate_migration_versions
 from confiture.exceptions import ConfigurationError, MigrationError
 
 ConfigOpt = Annotated[
@@ -135,15 +138,12 @@ def migrate_rebuild(
       confiture migrate status  - View migration history
     """
 
-    from confiture.cli.formatters.migrate_formatter import format_rebuild_result
-    from confiture.core.migrator import Migrator, find_duplicate_migration_versions
-
     json_mode = is_json(format_output)
 
     _rebuild_preconditions(config, migrations_dir, find_duplicate_migration_versions, json_mode)
 
     try:
-        with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
+        with _core_migrator.Migrator.from_config(config, migrations_dir=migrations_dir) as m:
             # Backup tracking table before rebuild if requested
             tracking_backup_data = None
             tracking_backup_table = "tb_confiture"

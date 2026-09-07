@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import psycopg
 
 from confiture.core.connection import create_connection, load_config
-from confiture.core.drift import SchemaDriftDetector
+from confiture.core.drift import SchemaDriftDetector, drift_config_from
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
@@ -83,7 +83,6 @@ def check_live_drift(
 
 def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDriftDetector:
     """A detector honouring the config's ``drift:`` block and the CLI flag (#226)."""
-    from confiture.core.drift import drift_config_from
 
     cfg = drift_config_from(load_config(config_path))
     return SchemaDriftDetector(

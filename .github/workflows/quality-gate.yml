@@ -67,7 +67,7 @@ jobs:
         # re-resolve. The [notifications] and [ast] extras are required —
         # tests/unit/hooks/notifications/ requires jinja2, and the SQL parsers
         # depend on pglast for the primary path.
-        uv sync --locked --extra dev --extra notifications
+        uv sync --locked --extra dev --extra notifications --extra seed-uuid
 
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv
@@ -109,6 +109,26 @@ jobs:
         PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_source_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;"
         PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_target_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;"
 
+    - name: Install pgGit into the service container (best effort)
+      # pgGit is a pure-SQL extension (a control file and one script). Copying the
+      # two files into the container's extension directory lets
+      # tests/integration/test_pggit_integration.py run instead of skip; the
+      # fixture installs the extension on demand. A failure here only leaves those
+      # tests skipped, which the -rs summary shows.
+      env:
+        PGGIT_REF: "v0.5.1"
+      run: |
+        set +e
+        git clone --quiet --depth 1 --branch "$PGGIT_REF" https://github.com/evoludigit/pgGit /tmp/pggit \
+          || git clone --quiet --depth 1 https://github.com/evoludigit/pgGit /tmp/pggit
+        CID="${{ job.services.postgres.id }}"
+        EXTDIR="$(docker exec "$CID" pg_config --sharedir)/extension"
+        docker cp /tmp/pggit/pggit.control "$CID:$EXTDIR/" \
+          && for f in /tmp/pggit/pggit--*.sql; do docker cp "$f" "$CID:$EXTDIR/"; done \
+          && docker exec "$CID" psql -U confiture -d confiture_test -c "CREATE EXTENSION IF NOT EXISTS pggit CASCADE" \
+          && echo "pgGit installed" \
+          || echo "pgGit unavailable on this runner — its integration tests will skip"
+        true
     - name: Run core tests with coverage
       env:
         # The three CONFITURE_* variables are the only database routing the
@@ -129,6 +149,7 @@ jobs:
         # pytest-cov could begin recording, and those lines would read as missed.
         uv run coverage run --source=python/confiture -m pytest tests/ \
           -v \
+          -rs \
           --tb=short \
           || {
             echo "❌ Core tests failed with exit code $?"

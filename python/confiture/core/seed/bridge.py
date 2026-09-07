@@ -76,7 +76,6 @@ class SeedBridge:
 
     def _get_table_columns(self, table: str, schema: str = "public") -> list[dict[str, Any]]:
         """Introspect columns for a given table."""
-        import psycopg
 
         with psycopg.connect(self._database_url) as conn, conn.cursor() as cur:
             cur.execute(

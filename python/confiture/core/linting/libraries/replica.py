@@ -15,7 +15,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pglast.parser
 
@@ -27,9 +26,7 @@ from confiture.core.replica.safety import (
     classify_replica_safety,
     replica_severity,
 )
-
-if TYPE_CHECKING:
-    from confiture.models.results import PreflightIssue
+from confiture.models.results import PreflightIssue
 
 RULE_ID = "replica_001"
 RULE_NAME = "replica-forward-compat"
@@ -187,7 +184,6 @@ def replica_preflight_issues(
     silently mean "never inspected". UNCLASSIFIED is always a warning (opacity
     never hard-blocks).
     """
-    from confiture.models.results import PreflightIssue
 
     issues: list[PreflightIssue] = []
     for f in _iter_findings(migrations_dir, has_replicas=has_replicas, bypass=bypass):

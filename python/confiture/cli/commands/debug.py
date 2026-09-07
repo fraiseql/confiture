@@ -7,10 +7,12 @@ from pathlib import Path
 
 import psycopg
 import typer
+from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
+from confiture.core.cte_debugger import CTEDebugger
 from confiture.exceptions import ConfigurationError
 
 debug_app = typer.Typer(
@@ -47,8 +49,6 @@ def debug_cte(
       confiture debug cte -d $DATABASE_URL --file query.sql --format json
         Output results as JSON
     """
-
-    from confiture.core.cte_debugger import CTEDebugger
 
     json_mode = is_json(format_type)
 
@@ -111,8 +111,6 @@ def debug_cte(
                 f"{step.row_count} row(s)  {step.execution_time_ms:.1f}ms"
             )
             if step.columns and step.rows:
-                from rich.table import Table
-
                 tbl = Table(show_header=True, header_style="bold cyan")
                 for col in step.columns:
                     tbl.add_column(col)

@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from confiture.core import connection as _core_connection
+from confiture.core.idempotency.static_eval import ModuleModel, PathV, Str, Unknown
+from confiture.core.sql_path import find_project_root, resolve_sql_file
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 
@@ -143,10 +146,9 @@ class ImportChecker:
         violations: list[ImportCheckViolation],
     ) -> Any:
         """Try to import the module. Returns module or None on failure."""
-        from confiture.core.connection import load_migration_module
 
         try:
-            return load_migration_module(py_file)
+            return _core_connection.load_migration_module(py_file)
         except MigrationError as e:
             violations.append(
                 ImportCheckViolation(
@@ -165,11 +167,9 @@ class ImportChecker:
         violations: list[ImportCheckViolation],
     ) -> type | None:
         """Extract Migration subclass from module. Returns class or None."""
-        from confiture.core.connection import get_migration_class
-        from confiture.exceptions import MigrationError
 
         try:
-            return get_migration_class(module)
+            return _core_connection.get_migration_class(module)
         except MigrationError:
             violations.append(
                 ImportCheckViolation(
@@ -361,8 +361,6 @@ class ImportChecker:
         it resolves to a missing file, or to one outside the project root),
         and only a genuinely dynamic path is IMP011 — with the reason.
         """
-        from confiture.core.idempotency.static_eval import ModuleModel, PathV, Str, Unknown
-        from confiture.core.sql_path import find_project_root, resolve_sql_file
 
         project_root = find_project_root(py_file)
         try:

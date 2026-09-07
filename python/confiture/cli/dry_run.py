@@ -8,7 +8,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import typer
 from rich.console import Console
+from rich.table import Table
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -76,7 +78,6 @@ def ask_dry_run_execute_confirmation() -> bool:
     Returns:
         True if user confirms, False otherwise
     """
-    import typer
 
     return typer.confirm("\n🔄 Proceed with real execution?", default=False)
 
@@ -119,8 +120,6 @@ def display_dry_run_result(result, format_type: str = "text") -> None:
         # Statement details
         if hasattr(result, "statements") and result.statements:
             console.print("\n[bold]Statement Details:[/bold]")
-
-            from rich.table import Table
 
             table = Table(show_header=True, header_style="bold")
             table.add_column("SQL", style="dim", max_width=60)

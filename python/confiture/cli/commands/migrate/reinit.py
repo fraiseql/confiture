@@ -12,7 +12,8 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console
-from confiture.core.migrator import parse_migration_filename
+from confiture.core import migrator as _core_migrator
+from confiture.core.migrator import find_duplicate_migration_versions, parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -155,11 +156,10 @@ def migrate_reinit(
       confiture migrate up        - Apply migrations normally
       confiture migrate status    - View migration history
     """
-    from confiture.core.migrator import Migrator, find_duplicate_migration_versions
 
     _reinit_preconditions(config, migrations_dir, find_duplicate_migration_versions)
 
-    with Migrator.from_config(config, migrations_dir=migrations_dir) as m:
+    with _core_migrator.Migrator.from_config(config, migrations_dir=migrations_dir) as m:
         migrator = m.migrator
         migrator.initialize()
 

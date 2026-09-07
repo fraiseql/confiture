@@ -39,6 +39,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import pglast
+
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency._ast_visitor import (
     _extract_snippet_from_stmt,
@@ -242,6 +244,7 @@ def _make_match(
     sql: str,
     severity: str = "error",
 ) -> PatternMatch:
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.core.idempotency.patterns import PatternMatch
 
     captures = captures_from_ast(pattern, ctx.stmt)
@@ -476,7 +479,6 @@ def _detect_via_ast(sql: str) -> list[PatternMatch]:
             The dispatcher in :mod:`patterns` catches this and falls
             through to the regex backend.
     """
-    import pglast
 
     statements = _iter_statements(sql, pglast)
     drops = _collect_pair_drops(statements)

@@ -18,6 +18,7 @@ from confiture.cli.helpers import _output_json, console, is_json, redact_url
 from confiture.cli.options import format_option
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
+from confiture.core.seed.applier import apply_profile_filter
 from confiture.core.test_db import RamSetupResult, TemplateState, TestDbProvisioner
 from confiture.exceptions import ConfigurationError
 
@@ -140,8 +141,6 @@ def provision_template(
         schema_sql = builder.build(schema_only=True)
         _schema_files, seed_files = builder.categorize_sql_files()
         if seed_profile is not None:
-            from confiture.core.seed.applier import apply_profile_filter
-
             profile_obj = builder.env_config.seed.get_profile(seed_profile)
             seed_files = apply_profile_filter(seed_files, profile_obj)
         status = provisioner.provision_template(

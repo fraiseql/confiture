@@ -12,13 +12,15 @@ import typer
 
 from confiture.cli.commands.migrate._dry_run_render import _render_dry_run_analysis, _row_estimator
 from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.dry_run import display_dry_run_header
 from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
     resolve_database_url,
 )
-from confiture.cli.error_json import cli_boundary, fail
+from confiture.cli.error_json import cli_boundary, fail, lock_error_to_confiture
+from confiture.cli.formatters.migrate_formatter import format_migrate_down_result
 from confiture.cli.helpers import (
     _get_tracking_table,
     _output_json,
@@ -28,8 +30,10 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
+from confiture.core import connection as _core_connection
+from confiture.core import migrator as _core_migrator
 from confiture.core.error_handler import print_error_to_console
-from confiture.core.locking import resolve_lock_settings
+from confiture.core.locking import LockAcquisitionError, resolve_lock_settings
 
 
 @cli_boundary
@@ -127,11 +131,6 @@ def migrate_down(
         Control report format and destination
     """
 
-    from confiture.cli.formatters.migrate_formatter import format_migrate_down_result
-    from confiture.core.connection import dsn_from_config, load_config
-    from confiture.core.locking import LockAcquisitionError
-    from confiture.core.migrator import MigratorSession
-
     if verbose:
         logging.getLogger("confiture").setLevel(logging.DEBUG)
 
@@ -146,12 +145,12 @@ def migrate_down(
         if _db_url_override is not None:
             config_data = {"database_url": _db_url_override}
         else:
-            config_data = load_config(config)
+            config_data = _core_connection.load_config(config)
 
-        with MigratorSession(
+        with _core_migrator.MigratorSession(
             None,
             migrations_dir,
-            database_url_override=dsn_from_config(config_data),
+            database_url_override=_core_connection.dsn_from_config(config_data),
             migration_table_override=_get_tracking_table(config_data),
             command="confiture migrate down",
             connection_factory=connect,
@@ -161,8 +160,6 @@ def migrate_down(
                 return
 
             if dry_run:
-                from confiture.cli.dry_run import display_dry_run_header
-
                 display_dry_run_header("analysis")
                 preview = session.down(steps=steps, dry_run=True)
                 _render_dry_run_analysis(
@@ -189,8 +186,6 @@ def migrate_down(
 
     except LockAcquisitionError as e:
         if is_json(format_output):
-            from confiture.cli.error_json import lock_error_to_confiture
-
             fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
         print_error_to_console(e, error_console)
         raise typer.Exit(6) from e
@@ -259,7 +254,6 @@ def migrate_down_to(
       confiture migrate down-to 20260101_a -c db/environments/staging.yaml
       confiture migrate down-to 20260101_a --dry-run --format json
     """
-    from confiture.core.migrator import Migrator, MigratorSession
 
     override = resolve_database_url(
         database_url,
@@ -269,14 +263,14 @@ def migrate_down_to(
         require_intentional_source=True,
     )
     if override is not None:
-        session = MigratorSession(
+        session = _core_migrator.MigratorSession(
             config=None,
             migrations_dir=migrations_dir,
             database_url_override=override,
             connection_factory=connect,
         )
     else:
-        session = Migrator.from_config(
+        session = _core_migrator.Migrator.from_config(
             str(config), migrations_dir=migrations_dir, connection_factory=connect
         )
     with session as s:

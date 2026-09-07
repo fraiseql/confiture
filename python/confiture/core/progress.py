@@ -14,6 +14,8 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
+from confiture.testing.worker_db import is_ci
+
 
 def _is_ci_environment() -> bool:
     """Detect if running in a CI/CD environment (suppress progress bars).
@@ -27,7 +29,6 @@ def _is_ci_environment() -> bool:
     Returns:
         True if running in CI/CD or without an interactive TTY, False otherwise.
     """
-    from confiture.testing.worker_db import is_ci
 
     return is_ci() or not sys.stdout.isatty()
 

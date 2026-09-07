@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+import pglast
+
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
     column_has_default as _column_has_default,
@@ -300,7 +302,6 @@ class OperationClassifier:
     # ------------------------------------------------------------------ #
 
     def _classify_ast(self, sql: str) -> list[DdlOperation]:
-        import pglast
 
         ops: list[DdlOperation] = []
         for raw in pglast.parse_sql(sql):

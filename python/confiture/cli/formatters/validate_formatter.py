@@ -22,7 +22,9 @@ from typing import Any
 
 from rich.markup import escape
 
+from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import console
+from confiture.core.linting.schema_linter import RuleSeverity
 
 
 def _violation_dict(
@@ -68,7 +70,6 @@ def render_acl_coverage(report: Any, *, json_mode: bool) -> dict[str, Any] | Non
 
 def render_ownership_coverage(report: Any, *, json_mode: bool) -> dict[str, Any] | None:
     """Render the ``--check-ownership-coverage`` result."""
-    from confiture.core.linting.schema_linter import RuleSeverity
 
     if json_mode:
         return {
@@ -113,7 +114,6 @@ def render_function_uniqueness(report: Any, *, json_mode: bool) -> dict[str, Any
 
 def render_security_definer(report: Any, *, json_mode: bool) -> dict[str, Any] | None:
     """Render the ``--check-security-definer`` result."""
-    from confiture.core.linting.schema_linter import RuleSeverity
 
     if json_mode:
         return {
@@ -264,7 +264,6 @@ def _naming_orphaned(orphaned_files: list[Any], *, json_mode: bool) -> dict[str,
 
 def render_live_drift(report: Any, *, json_mode: bool) -> dict[str, Any] | None:
     """Render the ``--check-live-drift`` DriftReport."""
-    from confiture.cli.formatters.common import display_drift_report
 
     if json_mode:
         return {"check": "live_drift", **report.to_dict()}
@@ -327,7 +326,6 @@ def render_signature_drift(
     and unified diff; when ``False`` the output stays hash-only for both JSON and
     text — the historical, terse shape.
     """
-    from confiture.cli.formatters.common import display_signature_drift_report
 
     if json_mode:
         payload: dict[str, Any] = {

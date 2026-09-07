@@ -36,6 +36,7 @@ from pathlib import Path
 
 import pglast.parser
 import psycopg
+import yaml
 
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.preconditions import Precondition
@@ -66,6 +67,7 @@ def _detect_transactional(up_file: Path) -> bool:
     Any read or analysis failure degrades to ``True`` (transactional), the
     historical default; the real error surfaces when the migration executes.
     """
+    # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> this module
     from confiture.core.migration_analyzer import MigrationAnalyzer
 
     try:
@@ -338,8 +340,8 @@ def load_preconditions_from_yaml(
         ValueError: If precondition type is unknown or required fields are missing
         FileNotFoundError: If YAML file doesn't exist
     """
-    import yaml
 
+    # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> this module
     from confiture.core.preconditions import (
         ColumnExists,
         ColumnNotExists,

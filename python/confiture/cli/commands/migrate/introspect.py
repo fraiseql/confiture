@@ -12,12 +12,11 @@ from typing import Any
 import typer
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import (
-    console,
-    is_json,
-    open_connection,
-)
+from confiture.cli.helpers import _get_tracking_table, console, is_json, open_connection
 from confiture.cli.options import format_option
+from confiture.core import baseline_detector as _core_baseline_detector
+from confiture.core import connection as _core_connection
+from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import parse_migration_filename
 from confiture.exceptions import ConfigurationError
 
@@ -58,17 +57,16 @@ def migrate_introspect(
       confiture migrate up --auto-detect-baseline   - Apply migrations with auto-baseline
       confiture migrate baseline --through <ver>    - Manually establish baseline
     """
-    from confiture.cli.helpers import _get_tracking_table
-    from confiture.core.connection import load_config
-    from confiture.core.migrator import Migrator
 
     is_json(format_output)
     if not config.exists():
         raise ConfigurationError(f"Config file not found: {config}", error_code="CONFIG_004")
 
-    config_data = load_config(config)
+    config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
-        migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
+        migrator = _core_migrator.Migrator(
+            connection=conn, migration_table=_get_tracking_table(config_data)
+        )
 
         tb_present = migrator.tracking_table_exists()
 
@@ -104,9 +102,7 @@ def migrate_introspect(
                 )
             raise typer.Exit(1)
 
-        from confiture.core.baseline_detector import BaselineDetector
-
-        detector = BaselineDetector(snapshots_dir)
+        detector = _core_baseline_detector.BaselineDetector(snapshots_dir)
 
         if format_output == "text":
             console.print("\n  Comparing live schema against snapshots...")

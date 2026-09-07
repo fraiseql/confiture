@@ -51,6 +51,7 @@ def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
     uninspectable". The field's absence is treated fail-safe (blocked) by the
     consumer, so older confiture keeps working.
     """
+    # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import replica_lint_codes
 
     replica_codes = replica_lint_codes()

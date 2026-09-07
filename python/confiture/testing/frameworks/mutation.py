@@ -499,6 +499,7 @@ class MutationRunner:
                 )
 
             # Execute in isolated transaction
+            # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
             import time
 
             start_time = time.time()

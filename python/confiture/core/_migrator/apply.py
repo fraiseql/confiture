@@ -34,6 +34,8 @@ if TYPE_CHECKING:
     from confiture.core._migrator.engine import Migrator
 from datetime import datetime
 
+from confiture.core import connection as _core_connection
+
 logger = logging.getLogger(__name__)
 
 
@@ -453,10 +455,9 @@ def mark_applied(
 
     See :meth:`Migrator.mark_applied` for the full contract.
     """
-    from confiture.core.connection import load_migration_class
 
     # Load the migration class to get version and name
-    migration_class = load_migration_class(migration_file)
+    migration_class = _core_connection.load_migration_class(migration_file)
 
     # Create a minimal instance just to read attributes
     # We need to pass a connection but won't use it
@@ -529,7 +530,6 @@ def dry_run(migrator: Migrator, migration: Migration) -> DryRunResult:
         # Note: This creates a basic simulation result since the old executor
         # is no longer available. In practice, Python migrations should implement
         # get_up_sql_statements() or use SQL-based migrations.
-        from confiture.core.dry_run import DryRunResult
 
         return DryRunResult(
             migration_name=migration.name,

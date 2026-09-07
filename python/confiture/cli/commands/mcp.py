@@ -7,6 +7,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console
+from confiture.core.mcp_server import MCPServer
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 mcp_app = typer.Typer(help="Run confiture as an MCP server.", no_args_is_help=True)
@@ -27,10 +28,9 @@ def mcp_server(
 ) -> None:
     """Expose Confiture operations and PostgreSQL stored functions as MCP tools."""
 
-    from confiture.core.mcp_server import MCPServer
-
     if port is not None:
         try:
+            # Reason: optional dependency — core.mcp_http needs the [mcp-http] extra (fastapi, uvicorn)
             from confiture.core.mcp_http import serve
         except ImportError:
             # No registry code: a missing optional extra is an environment

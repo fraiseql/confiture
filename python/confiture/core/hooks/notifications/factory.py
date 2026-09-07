@@ -22,6 +22,7 @@ from confiture.core.hooks.notifications.config import (
     TeamsRendererConfig,
 )
 from confiture.core.hooks.notifications.hook import NotificationHook
+from confiture.core.hooks.notifications.jinja_renderer import JinjaRenderer
 from confiture.core.hooks.notifications.renderer import (
     DiscordRenderer,
     EmailRenderer,
@@ -138,7 +139,6 @@ def _build_renderer(cfg, *, allow_templated_renderers: bool) -> Renderer:
         return RawJsonRenderer()
     if isinstance(cfg, JinjaRendererConfig):
         # Lazy import — Jinja lives in the [notifications] extra.
-        from confiture.core.hooks.notifications.jinja_renderer import JinjaRenderer
 
         return JinjaRenderer(
             template=cfg.template,

@@ -200,6 +200,7 @@ def _sql_units(path: Path, content: str) -> list[str]:
     """The SQL a migration file carries: the file itself, or a ``.py`` file's snippets."""
     if path.suffix != ".py":
         return [content]
+    # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.core.idempotency.python_migration_extractor import (
         extract_sql_from_python_source,
     )

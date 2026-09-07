@@ -14,7 +14,10 @@ Usage::
 
 from typing import Any
 
+import psycopg
+
 from confiture import __version__
+from confiture.core import mcp_server as _mcp_server
 
 
 def create_app(
@@ -47,12 +50,8 @@ def create_app(
         msg = "HTTP mode requires 'fastapi'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
         raise ImportError(msg) from e
 
-    import psycopg
-
-    from confiture.core.mcp_server import MCPServer
-
     conn = psycopg.connect(database_url)
-    server = MCPServer(
+    server = _mcp_server.MCPServer(
         conn,
         schema=schema,
         name_pattern=name_pattern,

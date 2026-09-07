@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from rich.table import Table
 
 from confiture.cli.commands.validate_checks import (
     ValidateOptions,
@@ -19,6 +20,7 @@ from confiture.cli.dsn import param_is_explicit
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, _resolve_config, console, is_json
 from confiture.cli.options import format_option
+from confiture.core.idempotency.patterns import list_patterns
 from confiture.core.validation.context import ValidationContext
 from confiture.core.validation.registry import (
     ValidationCheck,
@@ -40,7 +42,6 @@ def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:
     Returns:
         The JSON catalog envelope, or ``None`` after printing the text table.
     """
-    from confiture.core.idempotency.patterns import list_patterns
 
     entries = list_patterns()
 
@@ -53,7 +54,6 @@ def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:
         return {"version": "1", "patterns": entries, "hints": []}
 
     # Text mode: compact table for human eyes.
-    from rich.table import Table
 
     table = Table(title="Idempotency detection patterns", expand=False)
     table.add_column("id", style="cyan", no_wrap=True)

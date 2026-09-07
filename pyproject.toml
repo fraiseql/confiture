@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "1.0.2"
+version = "1.0.3"
 description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -161,6 +161,7 @@ markers = [
     # Orthogonal markers.
     "slow: Slow tests (skip in fast CI)",
     "benchmark: Asserts an upper bound on a measured duration; excluded by default",
+    "optional_extension: needs a PostgreSQL extension the runner may not have (pgGit); skips do not count against the CI skip target",
 ]
 
 [tool.coverage.run]
@@ -270,7 +271,7 @@ max-returns = 8
 "python/confiture/cli/commands/migrate/down.py" = ["PLR0913"]
 "python/confiture/cli/commands/migrate/fix_signatures.py" = ["PLR0913", "PLR2004"]
 "python/confiture/cli/commands/migrate/generate.py" = ["PLR0913"]
-"python/confiture/cli/commands/migrate/introspect.py" = ["PLR0912", "PLR0915"]
+"python/confiture/cli/commands/migrate/introspect.py" = ["PLR0912"]
 "python/confiture/cli/commands/migrate/preflight.py" = ["PLR0913"]
 "python/confiture/cli/commands/migrate/rebuild.py" = ["PLR0913"]
 "python/confiture/cli/commands/migrate/reinit.py" = ["PLR2004"]

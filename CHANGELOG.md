@@ -12,6 +12,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.0.3] - 2026-09-07
+
+### Changed
+
+- **Every function-level import says why it is there.** 51 imports stay inside a function, each
+  with a `# Reason:` naming a true import cycle, a measured CLI start-up cost, the pytest plugin's
+  laziness or an optional dependency; the other ~350 moved to their module's import block.
+  `tests/unit/test_lazy_imports_justified.py` fails on any new one (no budget). Names that tests patch on
+  their source module are imported as the module and used through attribute access, so the existing
+  patch seams keep landing. `migrate preflight`'s obsolete "pglast not installed" fallback (pglast is a
+  hard dependency since 0.50.0) is gone.
+- **CI runs more of the database suite.** The ledger-probe tests connect as their unprivileged role with a
+  password (they skipped on CI's password-authenticated PostgreSQL), the `seed-uuid` extra is synced so the
+  uuid-seam tests run, the Tests job prints skip reasons (`-rs`), and pgGit's pure-SQL extension is copied
+  into the CI PostgreSQL on a best-effort basis; the pgGit fixture installs the extension on demand and
+  the suite is marked `optional_extension`. `tests/performance/test_guard_latency.py` also records
+  `confiture --help`'s start-up time.
+
 ## [1.0.2] - 2026-09-07
 
 ### Changed
