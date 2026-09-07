@@ -579,14 +579,13 @@ import subprocess
 
 # Get all intents
 result = subprocess.run(
-    ["confiture", "coordinate", "list-intents", "--format", "json"],
-    capture_output=True,
-    text=True
+    ["confiture", "coordinate", "list-intents", "--format", "json"], capture_output=True, text=True
 )
 data = json.loads(result.stdout)
 
 # Count intents by status
 from collections import Counter
+
 status_counts = Counter(intent["status"] for intent in data["intents"])
 print(f"In Progress: {status_counts['in_progress']}")
 print(f"Conflicted: {status_counts['conflicted']}")

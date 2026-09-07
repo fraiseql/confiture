@@ -98,9 +98,7 @@ from confiture.core.syncer import ProductionSyncer
 
 config = {
     "tables": ["users", "orders"],
-    "anonymize": {
-        "users": {"email": "email", "phone": "phone"}
-    }
+    "anonymize": {"users": {"email": "email", "phone": "phone"}},
 }
 
 with ProductionSyncer(source="production", target="local") as syncer:
@@ -119,10 +117,7 @@ import psycopg
 source = psycopg.connect("postgresql://old_db")
 target = psycopg.connect("postgresql://new_db")
 
-migrator = SchemaToSchemaMigrator(
-    source_connection=source,
-    target_connection=target
-)
+migrator = SchemaToSchemaMigrator(source_connection=source, target_connection=target)
 
 # Setup Foreign Data Wrapper
 migrator.setup_fdw()
@@ -134,8 +129,8 @@ migrator.migrate_table(
     column_mapping={
         "id": "id",
         "full_name": "display_name",  # Rename
-        "email": "email"
-    }
+        "email": "email",
+    },
 )
 
 # Verify before cutover
@@ -174,8 +169,9 @@ class NotifyTeam(Hook[ExecutionContext]):
 
     async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
         data = context.get_data()
-        print(f"Migration {data.metadata.get('migration_name')} completed "
-              f"in {data.elapsed_time_ms}ms")
+        print(
+            f"Migration {data.metadata.get('migration_name')} completed in {data.elapsed_time_ms}ms"
+        )
         return HookResult(success=True)
 
 
@@ -214,12 +210,12 @@ All Confiture APIs raise specific exceptions:
 
 ```python
 from confiture.exceptions import (
-    ConfitureError,          # Base exception
-    ConfigurationError,      # Invalid configuration
-    MigrationError,          # Migration execution failed
-    ConnectionError,         # Database connection issues
-    ValidationError,         # Schema validation failed
-    SyncError,               # Production sync failed
+    ConfitureError,  # Base exception
+    ConfigurationError,  # Invalid configuration
+    MigrationError,  # Migration execution failed
+    ConnectionError,  # Database connection issues
+    ValidationError,  # Schema validation failed
+    SyncError,  # Production sync failed
 )
 
 try:
@@ -243,12 +239,14 @@ import asyncio
 from confiture.core.builder import SchemaBuilder
 from confiture.core.migrator import Migrator
 
+
 async def migrate():
     builder = SchemaBuilder(env="local")
     schema = await builder.build_async()
 
     async with Migrator.connect_async("postgresql://localhost/mydb") as migrator:
         await migrator.apply_async("20260403120000_create_users")
+
 
 asyncio.run(migrate())
 ```
@@ -296,7 +294,7 @@ config = Config(
     env="local",
     database_url="postgresql://localhost/mydb",
     schema_dirs=["db/schema"],
-    seed_dirs=["db/seeds"]
+    seed_dirs=["db/seeds"],
 )
 
 builder = SchemaBuilder(config=config)
@@ -313,6 +311,7 @@ from confiture.core.builder import SchemaBuilder
 from confiture.core.migrator import Migrator, MigrationResult
 from confiture.core.syncer import ProductionSyncer, SyncConfig, SyncResult
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
+
 
 # Type hints work throughout
 def build_and_migrate(env: str) -> MigrationResult:

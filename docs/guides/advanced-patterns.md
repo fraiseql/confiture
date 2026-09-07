@@ -33,9 +33,11 @@ from dataclasses import dataclass
 from typing import Any
 import hashlib
 
+
 @dataclass
 class CreditCardConfig:
     seed: str = "confiture"
+
 
 class CreditCardAnonymizer(AnonymizationStrategy):
     """Anonymize credit card numbers while preserving last 4 digits."""
@@ -111,10 +113,10 @@ config = SyncConfig(
         "payments": [
             AnonymizationRule(
                 column="card_number",
-                strategy=custom_strategy  # Use custom anonymizer
+                strategy=custom_strategy,  # Use custom anonymizer
             )
         ]
-    }
+    },
 )
 
 syncer = Syncer(config)
@@ -125,6 +127,7 @@ result = await syncer.sync()
 
 ```python
 from typing import Dict, Any
+
 
 class ContextAwareAnonymizer(AnonymizationStrategy):
     """Apply different anonymization based on user role."""
@@ -180,6 +183,7 @@ Confiture provides 6 hook phases for complete control over migrations:
 ```python
 from confiture.core.hooks import MigrationHook, HookPhase, HookContext
 
+
 class ComplexMigrationHook(MigrationHook):
     """Orchestrate complex migration with multiple steps."""
 
@@ -228,8 +232,7 @@ class ComplexMigrationHook(MigrationHook):
 
         if long_running > 0:
             raise RuntimeError(
-                f"{long_running} long-running queries detected. "
-                "Cancel them before proceeding."
+                f"{long_running} long-running queries detected. Cancel them before proceeding."
             )
 
     async def _backup_critical_data(self, context: HookContext) -> None:
@@ -283,8 +286,7 @@ class ComplexMigrationHook(MigrationHook):
 
         if invalid_count > 0:
             raise RuntimeError(
-                f"{invalid_count} users have invalid email. "
-                "Data integrity check failed."
+                f"{invalid_count} users have invalid email. Data integrity check failed."
             )
 
     async def _update_elasticsearch(self) -> None:
@@ -295,7 +297,7 @@ class ComplexMigrationHook(MigrationHook):
         async with httpx.AsyncClient() as client:
             await client.post(
                 "http://elasticsearch:9200/_reindex",
-                json={"source": {"index": "users"}, "dest": {"index": "users_v2"}}
+                json={"source": {"index": "users"}, "dest": {"index": "users_v2"}},
             )
 
     async def _remove_temporary_tables(self, context: HookContext) -> None:
@@ -330,10 +332,7 @@ class ComplexMigrationHook(MigrationHook):
 from confiture.core.migrator import Migrator, MigrationConfig
 
 config = MigrationConfig(
-    environment="production",
-    hooks=[ComplexMigrationHook()],
-    dry_run=False,
-    dry_run_execute=False
+    environment="production", hooks=[ComplexMigrationHook()], dry_run=False, dry_run_execute=False
 )
 
 migrator = Migrator(config)
@@ -354,7 +353,7 @@ config_wide = SyncConfig(
     source_url="postgresql://prod:5432/production",
     target_url="postgresql://localhost/development",
     tables=TableSelection(include=["wide_table"]),
-    batch_size=2000  # Reduce for wide tables
+    batch_size=2000,  # Reduce for wide tables
 )
 
 # For simple tables (narrow tables)
@@ -362,7 +361,7 @@ config_narrow = SyncConfig(
     source_url="postgresql://prod:5432/production",
     target_url="postgresql://localhost/development",
     tables=TableSelection(include=["narrow_table"]),
-    batch_size=10000  # Increase for narrow tables
+    batch_size=10000,  # Increase for narrow tables
 )
 ```
 
@@ -373,10 +372,8 @@ config_narrow = SyncConfig(
 config = SyncConfig(
     source_url="postgresql://prod:5432/production",
     target_url="postgresql://localhost/development",
-    tables=TableSelection(
-        include=["users", "orders", "products", "payments"]
-    ),
-    parallelism=4  # Sync 4 tables at once
+    tables=TableSelection(include=["users", "orders", "products", "payments"]),
+    parallelism=4,  # Sync 4 tables at once
 )
 
 syncer = Syncer(config)
@@ -394,7 +391,7 @@ config = SyncConfig(
     tables=TableSelection(include=["huge_table"]),
     show_progress=True,  # Show progress bar
     checkpoint_file=Path("/tmp/sync_checkpoint.json"),  # Enable resume
-    verbose=True  # Show detailed logging
+    verbose=True,  # Show detailed logging
 )
 
 syncer = Syncer(config)
@@ -413,6 +410,7 @@ except KeyboardInterrupt:
 
 ```python
 from confiture.core.hooks import MigrationHook, HookPhase, HookContext
+
 
 class RenameColumnHook(MigrationHook):
     """Rename column with gradual backfill."""
@@ -520,15 +518,17 @@ class CQRSBackfillHook(MigrationHook):
         conn = context.connection
 
         # Fetch updated users
-        result = await conn.fetch("SELECT * FROM users WHERE updated_at > now() - interval '1 hour'")
+        result = await conn.fetch(
+            "SELECT * FROM users WHERE updated_at > now() - interval '1 hour'"
+        )
 
         # Update Elasticsearch
         import httpx
+
         async with httpx.AsyncClient() as client:
             for row in result:
                 await client.put(
-                    f"http://elasticsearch:9200/users/_doc/{row['id']}",
-                    json=dict(row)
+                    f"http://elasticsearch:9200/users/_doc/{row['id']}", json=dict(row)
                 )
 
     async def _refresh_materialized_views(self, context: HookContext) -> None:
@@ -566,6 +566,7 @@ async def idempotent_hook(context):
         CREATE TABLE IF NOT EXISTS temp_data (id INT)
     """)
 
+
 # ❌ Bad: Not idempotent (fails on retry)
 async def non_idempotent_hook(context):
     await conn.execute("""
@@ -579,6 +580,7 @@ async def non_idempotent_hook(context):
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 async def logged_hook(context):
     logger.info("🚀 Starting complex operation")
@@ -597,6 +599,7 @@ async def logged_hook(context):
 ```python
 # Save progress to resume if interrupted
 checkpoint_file = Path("/tmp/migration_checkpoint.json")
+
 
 async def checkpointed_hook(context):
     # Load checkpoint
@@ -621,7 +624,7 @@ async def checkpointed_hook(context):
         # Process batch
         for row in result:
             await process_row(row)
-            last_id = row['id']
+            last_id = row["id"]
 
         # Save checkpoint
         checkpoint_file.write_text(json.dumps({"last_processed_id": last_id}))

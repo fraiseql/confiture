@@ -33,8 +33,7 @@ with Migrator.from_config("db/environments/production.yaml") as session:
     if status.has_pending:
         result = session.up()
         print(
-            f"Applied {len(result.migrations_applied)} migrations "
-            f"in {result.total_duration_ms} ms"
+            f"Applied {len(result.migrations_applied)} migrations in {result.total_duration_ms} ms"
         )
 ```
 
@@ -182,8 +181,8 @@ def down(
 
 ```python
 with Migrator.from_config("db/environments/local.yaml") as session:
-    session.down(steps=1)          # roll back the last migration
-    session.down(steps=3)          # roll back the last three
+    session.down(steps=1)  # roll back the last migration
+    session.down(steps=3)  # roll back the last three
 ```
 
 ### `down_to()`
@@ -344,8 +343,8 @@ session = MigratorSession(
     None,
     Path("db/migrations"),
     database_url_override="postgresql://localhost/test",
-    connection_factory=my_pool.connection,      # called with the URL
-    migration_loader=my_loader,                 # called with the migration file path
+    connection_factory=my_pool.connection,  # called with the URL
+    migration_loader=my_loader,  # called with the migration file path
 )
 with Migrator.from_config("db/environments/test.yaml", connection_factory=fake) as m:
     m.status()

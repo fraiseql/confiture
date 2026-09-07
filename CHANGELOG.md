@@ -4414,11 +4414,10 @@ This release transforms Confiture from a basic migration tool into a **productio
   from importlib.resources import files
   import json
 
-  schema = json.loads(
-      files("confiture.schemas").joinpath("migrate_up_result.json").read_text()
-  )
+  schema = json.loads(files("confiture.schemas").joinpath("migrate_up_result.json").read_text())
   # or via public API:
   from confiture import generate_schema
+
   schema = generate_schema("MigrateUpResult")
   ```
 
@@ -5565,7 +5564,7 @@ from confiture.testing import load_migration
 
 # Both formats work now:
 Migration = load_migration("003_move_tables")  # Python or SQL auto-detected
-Migration = load_migration(version="003")       # Version lookup works too
+Migration = load_migration(version="003")  # Version lookup works too
 
 # SQL-only migrations are discovered automatically:
 # db/migrations/003_move_tables.up.sql
@@ -5702,6 +5701,7 @@ with MigrationSandbox(db_url) as sandbox:
 ```python
 # conftest.py
 pytest_plugins = ["confiture.testing.pytest"]
+
 
 # test file
 def test_migration(confiture_sandbox):
@@ -6135,6 +6135,7 @@ pip install --upgrade confiture
 **To verify Rust extension:**
 ```python
 from confiture.core.builder import HAS_RUST
+
 print(f"Rust available: {HAS_RUST}")
 ```
 

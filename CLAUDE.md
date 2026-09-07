@@ -775,17 +775,20 @@ def build_schema_from_ddl_files(env: str) -> str:
     """Build schema by concatenating DDL files for given environment."""
     ...
 
+
 # Bad: Vague names
-def build(e: str) -> str:
-    ...
+def build(e: str) -> str: ...
+
 
 # Good: Type hints everywhere
 def find_sql_files(self, directory: Path) -> list[Path]:
     return sorted(directory.rglob("*.sql"))
 
+
 # Bad: No type hints
 def find_sql_files(self, directory):
     return sorted(directory.rglob("*.sql"))
+
 
 # Good: Docstrings (Google style)
 def migrate_up(self, target: str | None = None) -> None:
@@ -959,10 +962,7 @@ When adding features, update README.md:
 
 ```python
 # Good: Parameterized query
-cursor.execute(
-    "SELECT * FROM users WHERE email = %s",
-    (user_email,)
-)
+cursor.execute("SELECT * FROM users WHERE email = %s", (user_email,))
 
 # Bad: String interpolation (SQL injection risk!)
 cursor.execute(f"SELECT * FROM users WHERE email = '{user_email}'")
@@ -1052,7 +1052,7 @@ def build(env: str):
 @app.command()
 def build(env: str):
     builder = SchemaBuilder(env=env)  # Core logic
-    builder.build()                    # Delegate
+    builder.build()  # Delegate
 ```
 
 This is enforced, not advised: `tests/unit/test_cli_has_no_apply_loop.py` fails on a

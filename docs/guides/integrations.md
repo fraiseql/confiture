@@ -413,21 +413,29 @@ class SlackNotify(Hook[ExecutionContext]):
         name = data.metadata.get("migration_name")
         if ok:
             header = "Migration Completed"
-            body = {"type": "section", "fields": [
-                {"type": "mrkdwn", "text": f"*Migration:*\n{name}"},
-                {"type": "mrkdwn", "text": f"*Duration:*\n{data.elapsed_time_ms}ms"},
-                {"type": "mrkdwn", "text": "*Status:*\n:white_check_mark: Success"},
-            ]}
+            body = {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Migration:*\n{name}"},
+                    {"type": "mrkdwn", "text": f"*Duration:*\n{data.elapsed_time_ms}ms"},
+                    {"type": "mrkdwn", "text": "*Status:*\n:white_check_mark: Success"},
+                ],
+            }
         else:
             header = ":x: Migration Failed"
-            body = {"type": "section", "text": {
-                "type": "mrkdwn",
-                "text": f"```{str(data.metadata.get('error'))[:500]}```",
-            }}
-        message = {"blocks": [
-            {"type": "header", "text": {"type": "plain_text", "text": header}},
-            body,
-        ]}
+            body = {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"```{str(data.metadata.get('error'))[:500]}```",
+                },
+            }
+        message = {
+            "blocks": [
+                {"type": "header", "text": {"type": "plain_text", "text": header}},
+                body,
+            ]
+        }
         try:
             requests.post(self._webhook, json=message, timeout=10)
         except requests.RequestException:
@@ -442,7 +450,8 @@ Register: `m.register_hook(HookPhase.AFTER_EXECUTE, SlackNotify(webhook_url))`.
 ```python
 from slack_sdk import WebClient
 
-client = WebClient(token=os.environ['SLACK_BOT_TOKEN'])
+client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+
 
 def request_approval(migration_name: str, channel: str) -> str:
     """Request migration approval via Slack."""
@@ -451,18 +460,31 @@ def request_approval(migration_name: str, channel: str) -> str:
         blocks=[
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*Migration Approval Required*\n`{migration_name}`"}
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Migration Approval Required*\n`{migration_name}`",
+                },
             },
             {
                 "type": "actions",
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "Approve"}, "style": "primary", "action_id": "approve"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Reject"}, "style": "danger", "action_id": "reject"}
-                ]
-            }
-        ]
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Approve"},
+                        "style": "primary",
+                        "action_id": "approve",
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Reject"},
+                        "style": "danger",
+                        "action_id": "reject",
+                    },
+                ],
+            },
+        ],
     )
-    return response['ts']
+    return response["ts"]
 ```
 
 ---
@@ -479,22 +501,18 @@ from confiture.core.hooks.context import ExecutionContext
 
 # Metrics
 MIGRATIONS_TOTAL = Counter(
-    'tb_confiture_total',
-    'Total migrations executed',
-    ['environment', 'status']
+    "tb_confiture_total", "Total migrations executed", ["environment", "status"]
 )
 
 MIGRATION_DURATION = Histogram(
-    'confiture_migration_duration_seconds',
-    'Migration execution time',
-    ['migration_name'],
-    buckets=[0.1, 0.5, 1, 5, 10, 30, 60, 120, 300]
+    "confiture_migration_duration_seconds",
+    "Migration execution time",
+    ["migration_name"],
+    buckets=[0.1, 0.5, 1, 5, 10, 30, 60, 120, 300],
 )
 
 PENDING_MIGRATIONS = Gauge(
-    'confiture_pending_migrations',
-    'Number of pending migrations',
-    ['environment']
+    "confiture_pending_migrations", "Number of pending migrations", ["environment"]
 )
 
 # Start metrics server
@@ -510,9 +528,9 @@ class PrometheusMetrics(Hook[ExecutionContext]):
         data = context.get_data()
         status = "success" if data.metadata.get("success") else "failure"
         MIGRATIONS_TOTAL.labels(environment=self._environment, status=status).inc()
-        MIGRATION_DURATION.labels(
-            migration_name=data.metadata.get("migration_name")
-        ).observe(data.elapsed_time_ms / 1000)
+        MIGRATION_DURATION.labels(migration_name=data.metadata.get("migration_name")).observe(
+            data.elapsed_time_ms / 1000
+        )
         return HookResult(success=True)
 ```
 
@@ -579,7 +597,7 @@ import boto3
 from confiture.core.hooks import Hook, HookContext, HookResult
 from confiture.core.hooks.context import ExecutionContext
 
-cloudwatch = boto3.client('cloudwatch')
+cloudwatch = boto3.client("cloudwatch")
 
 
 class CloudWatchMetrics(Hook[ExecutionContext]):
@@ -591,15 +609,17 @@ class CloudWatchMetrics(Hook[ExecutionContext]):
         data = context.get_data()
         cloudwatch.put_metric_data(
             Namespace="Confiture",
-            MetricData=[{
-                "MetricName": "MigrationDuration",
-                "Value": data.elapsed_time_ms,
-                "Unit": "Milliseconds",
-                "Dimensions": [
-                    {"Name": "Environment", "Value": self._environment},
-                    {"Name": "Migration", "Value": data.metadata.get("migration_name")},
-                ],
-            }],
+            MetricData=[
+                {
+                    "MetricName": "MigrationDuration",
+                    "Value": data.elapsed_time_ms,
+                    "Unit": "Milliseconds",
+                    "Dimensions": [
+                        {"Name": "Environment", "Value": self._environment},
+                        {"Name": "Migration", "Value": data.metadata.get("migration_name")},
+                    ],
+                }
+            ],
         )
         return HookResult(success=True)
 ```
@@ -683,8 +703,7 @@ class WebhookNotify(Hook[ExecutionContext]):
     async def execute(self, context: HookContext[ExecutionContext]) -> HookResult:
         data = context.get_data()
         payload = {
-            "event": "migration.completed" if data.metadata.get("success")
-            else "migration.failed",
+            "event": "migration.completed" if data.metadata.get("success") else "migration.failed",
             "timestamp": context.timestamp.isoformat(),
             "data": {
                 "migration": data.metadata.get("migration_name"),
@@ -706,22 +725,16 @@ class WebhookNotify(Hook[ExecutionContext]):
 import hmac
 import hashlib
 
+
 def send_signed_webhook(url: str, payload: dict, secret: str) -> None:
     body = json.dumps(payload)
-    signature = hmac.new(
-        secret.encode(),
-        body.encode(),
-        hashlib.sha256
-    ).hexdigest()
+    signature = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
 
     requests.post(
         url,
         data=body,
-        headers={
-            'Content-Type': 'application/json',
-            'X-Signature': f'sha256={signature}'
-        },
-        timeout=30
+        headers={"Content-Type": "application/json", "X-Signature": f"sha256={signature}"},
+        timeout=30,
     )
 ```
 
@@ -736,8 +749,8 @@ def send_signed_webhook(url: str, payload: dict, secret: str) -> None:
 
 ```python
 # Never hardcode secrets
-SLACK_WEBHOOK = os.environ.get('SLACK_WEBHOOK_URL')  # Good
-SLACK_WEBHOOK = "https://hooks.slack.com/..."        # Bad
+SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL")  # Good
+SLACK_WEBHOOK = "https://hooks.slack.com/..."  # Bad
 ```
 
 ### 2. Add Timeouts
@@ -745,7 +758,7 @@ SLACK_WEBHOOK = "https://hooks.slack.com/..."        # Bad
 ```python
 # Always set timeouts for external calls
 requests.post(url, json=data, timeout=10)  # Good
-requests.post(url, json=data)              # Bad - can hang forever
+requests.post(url, json=data)  # Bad - can hang forever
 ```
 
 ### 3. Handle Failures Gracefully
