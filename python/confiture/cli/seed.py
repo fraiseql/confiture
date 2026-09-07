@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 import typer
@@ -143,68 +143,61 @@ def _validate_prep_seed(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
+SeedsDirOpt = Annotated[
+    Path, typer.Option("--seeds-dir", help="Directory containing seed files (default: db/seeds)")
+]
+EnvOpt = Annotated[
+    str | None,
+    typer.Option("--env", help="Environment name for multi-env validation (default: none)"),
+]
+AllEnvsOpt = Annotated[bool, typer.Option("--all", help="Validate all environments (default: off)")]
+DatabaseUrlOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--database-url", help="Database URL for database mode validation (default: none)"
+    ),
+]
+OutputOpt = Annotated[
+    Path | None, typer.Option("--output", help="Output file path (default: stdout)")
+]
+FixOpt = Annotated[
+    bool, typer.Option("--fix", help="Automatically fix issues where possible (default: off)")
+]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option("--dry-run", help="Show what would be fixed without modifying (default: off)"),
+]
+PrepSeedOpt = Annotated[
+    bool, typer.Option("--prep-seed", help="Enable prep-seed pattern validation (default: off)")
+]
+PrepSeedLevelOpt = Annotated[
+    int,
+    typer.Option("--level", "-l", help="Prep-seed validation level 1-5 (default: 3)", min=1, max=5),
+]
+StaticOnlyOpt = Annotated[
+    bool, typer.Option("--static-only", help="Run only Levels 1-3, no database (default: off)")
+]
+FullExecutionOpt = Annotated[
+    bool,
+    typer.Option("--full-execution", help="Run all levels 1-5, requires database (default: off)"),
+]
+
+
 @seed_app.command("validate")
 @cli_boundary
 def validate(
-    seeds_dir: Path = typer.Option(
-        Path("db/seeds"),
-        "--seeds-dir",
-        help="Directory containing seed files (default: db/seeds)",
-    ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        help="Environment name for multi-env validation (default: none)",
-    ),
-    all_envs: bool = typer.Option(
-        False,
-        "--all",
-        help="Validate all environments (default: off)",
-    ),
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        help="Database URL for database mode validation (default: none)",
-    ),
+    seeds_dir: SeedsDirOpt = Path("db/seeds"),
+    env: EnvOpt = None,
+    all_envs: AllEnvsOpt = False,
+    database_url: DatabaseUrlOpt = None,
     format_: str = format_option("text", "json", "csv"),
-    output: Path | None = typer.Option(
-        None,
-        "--output",
-        help="Output file path (default: stdout)",
-    ),
-    fix: bool = typer.Option(
-        False,
-        "--fix",
-        help="Automatically fix issues where possible (default: off)",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Show what would be fixed without modifying (default: off)",
-    ),
-    prep_seed: bool = typer.Option(
-        False,
-        "--prep-seed",
-        help="Enable prep-seed pattern validation (default: off)",
-    ),
-    prep_seed_level: int = typer.Option(
-        3,
-        "--level",
-        "-l",
-        help="Prep-seed validation level 1-5 (default: 3)",
-        min=1,
-        max=5,
-    ),
-    static_only: bool = typer.Option(
-        False,
-        "--static-only",
-        help="Run only Levels 1-3, no database (default: off)",
-    ),
-    full_execution: bool = typer.Option(
-        False,
-        "--full-execution",
-        help="Run all levels 1-5, requires database (default: off)",
-    ),
+    output: OutputOpt = None,
+    fix: FixOpt = False,
+    dry_run: DryRunOpt = False,
+    prep_seed: PrepSeedOpt = False,
+    prep_seed_level: PrepSeedLevelOpt = 3,
+    static_only: StaticOnlyOpt = False,
+    full_execution: FullExecutionOpt = False,
 ) -> None:
     """Validate seed files for data consistency and quality.
 
@@ -393,60 +386,63 @@ def validate(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
-@seed_app.command("apply")
-@cli_boundary
-def apply(
-    seeds_dir: Path = typer.Option(
-        DEFAULT_SEEDS_DIR,
-        "--seeds-dir",
-        help="Directory containing seed files (default: db/seeds)",
+ApplyEnvOpt = Annotated[
+    str, typer.Option("--env", help="Environment name for database URL lookup (default: local)")
+]
+SequentialOpt = Annotated[
+    bool,
+    typer.Option("--sequential", help="Apply files sequentially, solves 650+ row parser limits"),
+]
+ContinueOnErrorOpt = Annotated[
+    bool,
+    typer.Option(
+        "--continue-on-error", help="Continue if file fails (--sequential only, useful for CI/CD)"
     ),
-    env: str = typer.Option(
-        DEFAULT_ENV,
-        "--env",
-        help="Environment name for database URL lookup (default: local)",
-    ),
-    sequential: bool = typer.Option(
-        False,
-        "--sequential",
-        help="Apply files sequentially, solves 650+ row parser limits",
-    ),
-    continue_on_error: bool = typer.Option(
-        False,
-        "--continue-on-error",
-        help="Continue if file fails (--sequential only, useful for CI/CD)",
-    ),
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        help="Database URL (overrides environment config)",
-    ),
-    copy_format: bool = typer.Option(
-        False,
-        "--copy-format",
-        help="Use COPY format (2-10x faster for large datasets)",
-    ),
-    copy_threshold: int = typer.Option(
-        DEFAULT_COPY_THRESHOLD,
+]
+ApplyDatabaseUrlOpt = Annotated[
+    str | None, typer.Option("--database-url", help="Database URL (overrides environment config)")
+]
+CopyFormatOpt = Annotated[
+    bool, typer.Option("--copy-format", help="Use COPY format (2-10x faster for large datasets)")
+]
+CopyThresholdOpt = Annotated[
+    int,
+    typer.Option(
         "--copy-threshold",
         help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
     ),
-    format_type: str = format_option("text", "json", "csv"),
-    report_output: Path = typer.Option(
-        None,
+]
+ReportOutputOpt = Annotated[
+    Path,
+    typer.Option(
         "--output",
         "-o",
         "--report",
-        help=(
-            "Save structured output (JSON/CSV) to file. --report is a "
-            "back-compat alias for --output/-o (DOCS-M2)."
-        ),
+        help="Save structured output (JSON/CSV) to file. --report is a "
+        "back-compat alias for --output/-o (DOCS-M2).",
     ),
-    profile: str | None = typer.Option(
-        None,
-        "--profile",
-        help="Apply only the named seed profile (seed.profiles.<name> in env config).",
+]
+ProfileOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--profile", help="Apply only the named seed profile (seed.profiles.<name> in env config)."
     ),
+]
+
+
+@seed_app.command("apply")
+@cli_boundary
+def apply(
+    seeds_dir: SeedsDirOpt = DEFAULT_SEEDS_DIR,
+    env: ApplyEnvOpt = DEFAULT_ENV,
+    sequential: SequentialOpt = False,
+    continue_on_error: ContinueOnErrorOpt = False,
+    database_url: ApplyDatabaseUrlOpt = None,
+    copy_format: CopyFormatOpt = False,
+    copy_threshold: CopyThresholdOpt = DEFAULT_COPY_THRESHOLD,
+    format_type: str = format_option("text", "json", "csv"),
+    report_output: ReportOutputOpt = None,
+    profile: ProfileOpt = None,
 ) -> None:
     """Load seed data into the database.
 
