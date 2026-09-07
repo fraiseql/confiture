@@ -46,6 +46,15 @@ A change to any of these is a breaking change: it needs a major version and a CH
   JSON payloads are unchanged — they always used these keys; only the Python attributes move. Build, lint
   and dry-run results keep `execution_time_ms` (their wire key), and the `tb_confiture` ledger column is
   untouched. The timing-vocabulary table in `docs/reference/json-schemas.md` reflects the new names.
+- **Removed: four mutation-testing mutations that never mutated.** `schema_010 wrong_column_order`,
+  `rollback_004 wrong_constraint_restoration`, `perf_002 inefficient_join` and `perf_003
+  missing_bulk_operation` were `lambda sql: sql` placeholders ("complex to implement"); a mutation that
+  returns its input measures nothing. 23 remain, each with a transformation, and
+  `tests/unit/test_mutation_sql_validity.py` now fails on any mutation no sample exercises and on any
+  mutation whose output PostgreSQL would not parse.
+- **Fixed: three mutations produced invalid SQL.** `rollback_003 partial_rollback` commented out `DROP
+  COLUMN` mid-statement (leaving `ALTER TABLE t -- …`), `data_007 partial_update` inserted its `WHERE`
+  before `SET`, and `perf_004 scan_full_table` replaced `WHERE id =` but kept the value (`WHERE TRUE 1`).
 
 ## [0.55.0] - 2026-09-07
 

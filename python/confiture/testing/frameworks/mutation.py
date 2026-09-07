@@ -284,14 +284,6 @@ class MutationRegistry:
                 severity=MutationSeverity.IMPORTANT,
                 apply_regex=r"CHECK\s*\([^)]+\)" + "=>" + " ",
             ),
-            Mutation(
-                id="schema_010",
-                name="wrong_column_order",
-                description="Change column ordering in table",
-                category=MutationCategory.SCHEMA,
-                severity=MutationSeverity.MINOR,
-                apply_fn=lambda sql: sql,  # Complex to implement
-            ),
         ]
 
         for mutation in schema_mutations:
@@ -359,10 +351,11 @@ class MutationRegistry:
                 category=MutationCategory.DATA,
                 severity=MutationSeverity.CRITICAL,
                 apply_fn=lambda sql: (
-                    sql.replace("UPDATE table", "UPDATE table WHERE id IN (1,2,3)")
-                    if "UPDATE table" in sql
+                    sql.rstrip().rstrip(";") + " WHERE id IN (1, 2, 3);"
+                    if re.match(r"\s*UPDATE\s", sql, flags=re.IGNORECASE)
+                    and "WHERE" not in sql.upper()
                     else sql
-                ),
+                ),  # updates only some rows of an unconditional UPDATE
             ),
             Mutation(
                 id="data_008",
@@ -402,15 +395,12 @@ class MutationRegistry:
                 description="Rollback only partially",
                 category=MutationCategory.ROLLBACK,
                 severity=MutationSeverity.CRITICAL,
-                apply_fn=lambda sql: sql.replace("DROP COLUMN", "-- DROP COLUMN"),
-            ),
-            Mutation(
-                id="rollback_004",
-                name="wrong_constraint_restoration",
-                description="Restore wrong constraint definition",
-                category=MutationCategory.ROLLBACK,
-                severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql,  # Complex to implement
+                apply_fn=lambda sql: re.sub(
+                    r"^(\s*)(ALTER\s+TABLE\s+\S+\s+DROP\s+COLUMN[^;]*;)",
+                    r"\1-- \2",
+                    sql,
+                    flags=re.IGNORECASE | re.MULTILINE,
+                ),  # skips the column drop: the statement is commented out whole
             ),
             Mutation(
                 id="rollback_005",
@@ -437,30 +427,14 @@ class MutationRegistry:
                 apply_regex=r"CREATE\s+INDEX" + "=>" + "-- CREATE INDEX (skipped)",
             ),
             Mutation(
-                id="perf_002",
-                name="inefficient_join",
-                description="Use inefficient JOIN instead of WHERE",
-                category=MutationCategory.PERFORMANCE,
-                severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql,  # Complex implementation
-            ),
-            Mutation(
-                id="perf_003",
-                name="missing_bulk_operation",
-                description="Process rows one by one instead of bulk",
-                category=MutationCategory.PERFORMANCE,
-                severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: sql,  # Complex implementation
-            ),
-            Mutation(
                 id="perf_004",
                 name="scan_full_table",
                 description="Scan entire table instead of using index",
                 category=MutationCategory.PERFORMANCE,
                 severity=MutationSeverity.IMPORTANT,
-                apply_fn=lambda sql: (
-                    sql.replace("WHERE id =", "WHERE TRUE") if "WHERE id =" in sql else sql
-                ),
+                apply_fn=lambda sql: re.sub(
+                    r"WHERE\s+id\s*=\s*[^\s;]+", "WHERE TRUE", sql, flags=re.IGNORECASE
+                ),  # the value goes with the predicate, or the SQL would not parse
             ),
         ]
 

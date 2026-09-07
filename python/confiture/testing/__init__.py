@@ -3,7 +3,7 @@
 Comprehensive testing framework for PostgreSQL migrations including:
 - Migration loader utility for easy test setup
 - Test fixtures (SchemaSnapshotter, DataValidator, MigrationRunner)
-- Mutation testing (27 mutations across 4 categories)
+- Mutation testing (23 mutations across 4 categories, each with a real transformation)
 - Performance profiling with regression detection
 - Load testing with 100k+ row validation
 - Advanced scenario testing
