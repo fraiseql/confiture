@@ -1,13 +1,26 @@
 {
-  "_comment": "Per-file line-coverage floors (percent) checked by scripts/coverage_floors.py against the full-suite report CI writes. Floors only rise.",
+  "_comment": "Per-file line-coverage floors (percent) checked by scripts/coverage_floors.py against the full-suite report CI writes. Floors only rise. The 85s are the modules behind the desired-state ingest, the destructive gate and the online runner: they ship with real-database end-to-end tests, and a refactor that drops their coverage is a regression, not a style choice.",
   "files": {
     "cli/branch.py": 70,
     "cli/commands/bootstrap.py": 70,
+    "cli/commands/migrate/diff.py": 85,
+    "cli/commands/migrate/steps.py": 85,
     "cli/schema_to_schema.py": 70,
     "config/environment.py": 70,
+    "core/_migrator/online.py": 85,
+    "core/backfill.py": 85,
+    "core/desired_state.py": 85,
+    "core/destructive.py": 85,
+    "core/differ.py": 85,
+    "core/differ_sql.py": 85,
+    "core/expand_contract.py": 85,
     "core/hooks/context.py": 70,
     "core/linting/composer.py": 70,
+    "core/lock_profile.py": 85,
+    "core/migration_generator.py": 85,
+    "core/replica/classifier.py": 85,
     "core/schema_to_schema.py": 70,
+    "core/step_runner.py": 85,
     "testing/pytest_plugin.py": 70
   }
 }
