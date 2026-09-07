@@ -179,7 +179,7 @@ def restricted(
     """
     schema, role = f"restricted_{tag}", f"probe_role_{tag}"
     try:
-        conn.execute(f'CREATE ROLE "{role}" LOGIN')
+        conn.execute(f'CREATE ROLE "{role}" LOGIN PASSWORD \'probe\'')
     except psycopg.errors.InsufficientPrivilege:  # pragma: no cover - environment gate
         pytest.skip("test connection cannot CREATE ROLE")
     _make_ledger(conn, schema)
@@ -189,7 +189,9 @@ def restricted(
     try:
         info = psycopg.conninfo.conninfo_to_dict(test_db_url)
         info["user"] = role
-        info.pop("password", None)
+        # The role has a password: CI's PostgreSQL wants one over TCP (pg_hba),
+        # and a local peer/trust setup ignores it.
+        info["password"] = "probe"
         try:
             restricted_conn = psycopg.connect(psycopg.conninfo.make_conninfo(**info))
         except psycopg.OperationalError as e:  # pragma: no cover - environment gate

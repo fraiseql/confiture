@@ -161,6 +161,7 @@ markers = [
     # Orthogonal markers.
     "slow: Slow tests (skip in fast CI)",
     "benchmark: Asserts an upper bound on a measured duration; excluded by default",
+    "optional_extension: needs a PostgreSQL extension the runner may not have (pgGit); skips do not count against the CI skip target",
 ]
 
 [tool.coverage.run]

@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their source module are imported as the module and used through attribute access, so the existing
   patch seams keep landing. `migrate preflight`'s obsolete "pglast not installed" fallback (pglast is a
   hard dependency since 0.50.0) is gone.
+- **CI runs more of the database suite.** The ledger-probe tests connect as their unprivileged role with a
+  password (they skipped on CI's password-authenticated PostgreSQL), the `seed-uuid` extra is synced so the
+  uuid-seam tests run, the Tests job prints skip reasons (`-rs`), and pgGit's pure-SQL extension is copied
+  into the CI PostgreSQL on a best-effort basis; the pgGit fixture installs the extension on demand and
+  the suite is marked `optional_extension`. `tests/performance/test_guard_latency.py` also records
+  `confiture --help`'s start-up time.
 
 ## [1.0.2] - 2026-09-07
 
