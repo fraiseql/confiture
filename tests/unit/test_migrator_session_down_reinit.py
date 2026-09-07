@@ -158,10 +158,8 @@ class TestMigratorSessionReinit:
         expected = MigrateReinitResult(
             success=True,
             deleted_count=3,
-            migrations_marked=[
-                MigrationApplied(version="001", name="add_users", execution_time_ms=0)
-            ],
-            total_execution_time_ms=0,
+            migrations_marked=[MigrationApplied(version="001", name="add_users", duration_ms=0)],
+            total_duration_ms=0,
         )
         session._migrator.initialize = MagicMock()
         session._migrator.reinit = MagicMock(return_value=expected)
@@ -185,7 +183,7 @@ class TestMigratorSessionReinit:
             success=True,
             deleted_count=1,
             migrations_marked=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
         )
         session._migrator.initialize = MagicMock()
         session._migrator.reinit = MagicMock(return_value=expected)
@@ -207,7 +205,7 @@ class TestMigratorSessionReinit:
             success=True,
             deleted_count=0,
             migrations_marked=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             dry_run=True,
         )
         session._migrator.initialize = MagicMock()

@@ -41,13 +41,13 @@ class TestMigrateRebuildResult:
             schemas_dropped=["public", "myapp"],
             ddl_statements_executed=15,
             migrations_marked=[],
-            total_execution_time_ms=500,
+            total_duration_ms=500,
             dry_run=False,
         )
         assert result.success is True
         assert result.schemas_dropped == ["public", "myapp"]
         assert result.ddl_statements_executed == 15
-        assert result.total_execution_time_ms == 500
+        assert result.total_duration_ms == 500
         assert result.dry_run is False
         assert result.warnings == []
         assert result.error is None
@@ -55,13 +55,13 @@ class TestMigrateRebuildResult:
         assert result.verified is None
 
     def test_to_dict_serialization(self):
-        applied = MigrationApplied(version="001", name="create_users", execution_time_ms=0)
+        applied = MigrationApplied(version="001", name="create_users", duration_ms=0)
         result = MigrateRebuildResult(
             success=True,
             schemas_dropped=["public"],
             ddl_statements_executed=10,
             migrations_marked=[applied],
-            total_execution_time_ms=200,
+            total_duration_ms=200,
             dry_run=False,
             warnings=["extension warning"],
             seeds_applied=3,
@@ -85,7 +85,7 @@ class TestMigrateRebuildResult:
             schemas_dropped=[],
             ddl_statements_executed=0,
             migrations_marked=[],
-            total_execution_time_ms=50,
+            total_duration_ms=50,
             dry_run=False,
             error="Connection refused",
         )
@@ -99,7 +99,7 @@ class TestMigrateRebuildResult:
             schemas_dropped=[],
             ddl_statements_executed=0,
             migrations_marked=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             dry_run=True,
         )
         d = result.to_dict()

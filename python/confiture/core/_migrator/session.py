@@ -362,7 +362,7 @@ class MigratorSession:
             - success: True if all migrations applied successfully
             - migrations_applied: List of MigrationApplied (serialized as "applied")
             - skipped: List of already-applied migration versions
-            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+            - total_duration_ms: Total time (serialized as "total_duration_ms")
             - errors: List of error messages if success=False
             - has_errors: Property — True if success=False and errors non-empty
             - error_summary: Property — first error message or None
@@ -503,7 +503,7 @@ class MigratorSession:
         lives there). Does NOT acquire the lock itself; callers wrap it.
 
         Returns:
-            (rolled_back, total_execution_time_ms) where rolled_back is a list
+            (rolled_back, total_duration_ms) where rolled_back is a list
             of MigrationApplied in the order rolled back.
         """
         return _rollback_loop._rollback_sequence(self, versions, dry_run=dry_run)
@@ -579,7 +579,7 @@ class MigratorSession:
             MigrateDownResult with:
             - success: True if all rollbacks succeeded
             - migrations_rolled_back: List of MigrationApplied (serialized as "rolled_back")
-            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+            - total_duration_ms: Total time (serialized as "total_duration_ms")
             - error: Error message if success=False
 
         Raises:
@@ -670,7 +670,7 @@ class MigratorSession:
             - success: True if reinit succeeded
             - deleted_count: Number of tracking entries removed
             - migrations_marked: List of MigrationApplied (serialized as "marked")
-            - total_execution_time_ms: Total time (serialized as "total_duration_ms")
+            - total_duration_ms: Total time (serialized as "total_duration_ms")
 
         Raises:
             ConfigurationError: If used outside ``with`` context manager.

@@ -24,7 +24,7 @@ class TestMigrateDownFormatter:
             result = MigrateDownResult(
                 success=True,
                 migrations_rolled_back=migrations,
-                total_execution_time_ms=350,
+                total_duration_ms=350,
             )
 
             console = Console()
@@ -46,7 +46,7 @@ class TestMigrateDownFormatter:
             result = MigrateDownResult(
                 success=True,
                 migrations_rolled_back=migrations,
-                total_execution_time_ms=150,
+                total_duration_ms=150,
             )
 
             console = Console()
@@ -66,7 +66,7 @@ class TestMigrateDownFormatter:
         result = MigrateDownResult(
             success=True,
             migrations_rolled_back=migrations,
-            total_execution_time_ms=200,
+            total_duration_ms=200,
         )
 
         console = Console()
@@ -81,7 +81,7 @@ class TestMigrateDownFormatter:
         result = MigrateDownResult(
             success=False,
             migrations_rolled_back=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             error="Rollback failed",
         )
 

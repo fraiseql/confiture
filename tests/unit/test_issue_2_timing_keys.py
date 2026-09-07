@@ -14,7 +14,7 @@ def test_migrate_up_result_timing_key() -> None:
     result = MigrateUpResult(
         success=True,
         migrations_applied=[],
-        total_execution_time_ms=1000,
+        total_duration_ms=1000,
     )
     result_dict = result.to_dict()
     assert "total_duration_ms" in result_dict
@@ -26,7 +26,7 @@ def test_migrate_down_result_timing_key() -> None:
     result = MigrateDownResult(
         success=True,
         migrations_rolled_back=[],
-        total_execution_time_ms=500,
+        total_duration_ms=500,
     )
     result_dict = result.to_dict()
     assert "total_duration_ms" in result_dict
@@ -41,7 +41,7 @@ def test_migrate_reinit_result_timing_key() -> None:
         success=True,
         deleted_count=1,
         migrations_marked=[],
-        total_execution_time_ms=300,
+        total_duration_ms=300,
     )
     result_dict = result.to_dict()
     assert "total_duration_ms" in result_dict
@@ -58,8 +58,8 @@ def test_migrate_rebuild_result_timing_key() -> None:
         success=True,
         schemas_dropped=[],
         ddl_statements_executed=0,
-        migrations_marked=[MigrationApplied(version="001", name="test", execution_time_ms=10)],
-        total_execution_time_ms=2000,
+        migrations_marked=[MigrationApplied(version="001", name="test", duration_ms=10)],
+        total_duration_ms=2000,
     )
     result_dict = result.to_dict()
     assert "total_duration_ms" in result_dict
@@ -70,23 +70,23 @@ def test_migrate_rebuild_result_timing_key() -> None:
 
 def test_all_result_types_use_consistent_collection_keys() -> None:
     """All result types should use short keys for migration collections in JSON."""
-    up = MigrateUpResult(migrations_applied=[], total_execution_time_ms=0, success=True)
+    up = MigrateUpResult(migrations_applied=[], total_duration_ms=0, success=True)
     assert "applied" in up.to_dict()
     assert "migrations_applied" not in up.to_dict()
 
-    down = MigrateDownResult(migrations_rolled_back=[], total_execution_time_ms=0, success=True)
+    down = MigrateDownResult(migrations_rolled_back=[], total_duration_ms=0, success=True)
     assert "rolled_back" in down.to_dict()
     assert "migrations_rolled_back" not in down.to_dict()
 
     reinit = MigrateReinitResult(
-        migrations_marked=[], total_execution_time_ms=0, success=True, deleted_count=0
+        migrations_marked=[], total_duration_ms=0, success=True, deleted_count=0
     )
     assert "marked" in reinit.to_dict()
     assert "migrations_marked" not in reinit.to_dict()
 
     rebuild = MigrateRebuildResult(
         migrations_marked=[],
-        total_execution_time_ms=0,
+        total_duration_ms=0,
         success=True,
         schemas_dropped=[],
         ddl_statements_executed=0,
@@ -100,41 +100,41 @@ def test_migration_applied_timing_key() -> None:
     migration = MigrationApplied(
         version="001",
         name="init",
-        execution_time_ms=100,
+        duration_ms=100,
     )
     migration_dict = migration.to_dict()
     assert "duration_ms" in migration_dict
     assert migration_dict["duration_ms"] == 100
-    # Should NOT have execution_time_ms as that's internal field name
+    # The attribute and the wire key share the name since 1.0.0; the old name is gone
     assert "execution_time_ms" not in migration_dict
 
 
 def test_all_result_types_use_consistent_timing() -> None:
     """Test all result types use consistent timing keys."""
     # Create instances with sample data
-    migration = MigrationApplied(version="001", name="test", execution_time_ms=100)
+    migration = MigrationApplied(version="001", name="test", duration_ms=100)
     up_result = MigrateUpResult(
         success=True,
         migrations_applied=[migration],
-        total_execution_time_ms=1000,
+        total_duration_ms=1000,
     )
     down_result = MigrateDownResult(
         success=True,
         migrations_rolled_back=[migration],
-        total_execution_time_ms=500,
+        total_duration_ms=500,
     )
     reinit_result = MigrateReinitResult(
         success=True,
         deleted_count=1,
         migrations_marked=[migration],
-        total_execution_time_ms=300,
+        total_duration_ms=300,
     )
     rebuild_result = MigrateRebuildResult(
         success=True,
         schemas_dropped=[],
         ddl_statements_executed=1,
         migrations_marked=[migration],
-        total_execution_time_ms=2000,
+        total_duration_ms=2000,
     )
 
     # All aggregate timing keys should be "total_duration_ms"

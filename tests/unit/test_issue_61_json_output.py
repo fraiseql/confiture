@@ -183,18 +183,18 @@ class TestMigrateUpJsonKeys:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[MigrationApplied("001", "init", 100)],
-            total_execution_time_ms=100,
+            total_duration_ms=100,
         )
         data = result.to_dict()
         assert "applied" in data
         assert "migrations_applied" not in data
 
     def test_migrate_up_json_uses_total_duration_ms_key(self):
-        """to_dict() must use 'total_duration_ms' instead of 'total_execution_time_ms'."""
+        """to_dict() must use 'total_duration_ms' instead of 'total_duration_ms'."""
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=500,
+            total_duration_ms=500,
         )
         data = result.to_dict()
         assert "total_duration_ms" in data
@@ -206,7 +206,7 @@ class TestMigrateUpJsonKeys:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             skipped=["001", "002"],
         )
         data = result.to_dict()
@@ -218,7 +218,7 @@ class TestMigrateUpJsonKeys:
         result = MigrateUpResult(
             success=False,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             errors=["Lock timeout", "Connection reset"],
         )
         data = result.to_dict()
@@ -239,7 +239,7 @@ class TestMigrateUpJsonKeys:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
         )
         data = result.to_dict()
         assert data["skipped"] == []
@@ -249,7 +249,7 @@ class TestMigrateUpJsonKeys:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
         )
         data = result.to_dict()
         assert data["errors"] == []
@@ -259,7 +259,7 @@ class TestMigrateUpJsonKeys:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[MigrationApplied("001", "init", 100)],
-            total_execution_time_ms=100,
+            total_duration_ms=100,
         )
         data = result.to_dict()
         assert "count" not in data

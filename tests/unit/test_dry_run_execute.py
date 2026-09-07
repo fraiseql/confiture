@@ -231,7 +231,7 @@ class TestDryRunExecute:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             dry_run_execute=True,
         )
         assert result.dry_run_execute is True
@@ -241,7 +241,7 @@ class TestDryRunExecute:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             dry_run_execute=True,
         )
         d = result.to_dict()

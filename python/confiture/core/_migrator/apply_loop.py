@@ -127,7 +127,7 @@ def _up_under_lock(
         return MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             checksums_verified=checksums_verified,
             dry_run=True,
             skipped=skipped_versions,
@@ -139,7 +139,7 @@ def _up_under_lock(
         return MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             checksums_verified=checksums_verified,
             dry_run=False,
             skipped=skipped_versions,
@@ -154,7 +154,7 @@ def _up_under_lock(
             return MigrateUpResult(
                 success=False,
                 migrations_applied=[],
-                total_execution_time_ms=0,
+                total_duration_ms=0,
                 checksums_verified=checksums_verified,
                 dry_run=False,
                 errors=[
@@ -181,7 +181,7 @@ def _up_under_lock(
     migrations_applied: list[MigrationApplied] = []
     skipped_superuser: list[SkippedMigration] = []
     pending_after_halt: list[str] = []
-    total_execution_time_ms = 0
+    total_duration_ms = 0
     failed_exception: Exception | None = None
     halted = False
 
@@ -228,12 +228,12 @@ def _up_under_lock(
                 start = _time.time()
                 session._migrator.apply(migration, force=force, migration_file=migration_file)
                 elapsed = int((_time.time() - start) * 1000)
-                total_execution_time_ms += elapsed
+                total_duration_ms += elapsed
                 migrations_applied.append(
                     MigrationApplied(
                         version=migration.version,
                         name=migration.name,
-                        execution_time_ms=elapsed,
+                        duration_ms=elapsed,
                     )
                 )
                 emit(
@@ -262,7 +262,7 @@ def _up_under_lock(
         return MigrateUpResult(
             success=False,
             migrations_applied=migrations_applied,
-            total_execution_time_ms=total_execution_time_ms,
+            total_duration_ms=total_duration_ms,
             checksums_verified=checksums_verified,
             dry_run=False,
             errors=[str(failed_exception)],
@@ -275,7 +275,7 @@ def _up_under_lock(
     return MigrateUpResult(
         success=not halted,
         migrations_applied=migrations_applied,
-        total_execution_time_ms=total_execution_time_ms,
+        total_duration_ms=total_duration_ms,
         checksums_verified=checksums_verified,
         dry_run=False,
         warnings=(["Force mode enabled"] if force else []) + checksum_warnings,
@@ -361,7 +361,7 @@ def _up_dry_run_execute(
                         MigrationApplied(
                             version=migration.version,
                             name=migration.name,
-                            execution_time_ms=elapsed,
+                            duration_ms=elapsed,
                         )
                     )
                     emit(
@@ -392,7 +392,7 @@ def _up_dry_run_execute(
         return MigrateUpResult(
             success=False,
             migrations_applied=migrations_tested,
-            total_execution_time_ms=total_time,
+            total_duration_ms=total_time,
             checksums_verified=checksums_verified,
             dry_run=True,
             dry_run_execute=True,
@@ -404,7 +404,7 @@ def _up_dry_run_execute(
     return MigrateUpResult(
         success=True,
         migrations_applied=migrations_tested,
-        total_execution_time_ms=total_time,
+        total_duration_ms=total_time,
         checksums_verified=checksums_verified,
         dry_run=True,
         dry_run_execute=True,
@@ -543,7 +543,7 @@ def apply_one(
         return MigrationApplied(
             version=migration.version,
             name=migration.name,
-            execution_time_ms=int((_time.time() - start) * 1000),
+            duration_ms=int((_time.time() - start) * 1000),
         )
 
 

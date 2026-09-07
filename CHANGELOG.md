@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `confiture.core.validation.{comment_validator,config_validator}`, `confiture.core.introspection.tables`,
   `confiture.core.differ_sql`, `confiture.core.anonymization.plugins.import_lint`. The layout guards
   now assert the old paths do not resolve.
+- **Renamed: the migrate family's timing attributes carry their wire names.** `MigrateUpResult`,
+  `MigrateDownResult`, `MigrateReinitResult` and `MigrateRebuildResult` expose `total_duration_ms` (was
+  `total_execution_time_ms`) and `MigrationApplied` exposes `duration_ms` (was `execution_time_ms`). The
+  JSON payloads are unchanged — they always used these keys; only the Python attributes move. Build, lint
+  and dry-run results keep `execution_time_ms` (their wire key), and the `tb_confiture` ledger column is
+  untouched. The timing-vocabulary table in `docs/reference/json-schemas.md` reflects the new names.
 
 ## [0.55.0] - 2026-09-07
 

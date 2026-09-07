@@ -161,13 +161,13 @@ class TestMigrateUpFormatterIntegration:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=300,
+            total_duration_ms=300,
         )
 
         # Verify result can be created and has expected structure
         assert result.success is True
         assert len(result.migrations_applied) == 2
-        assert result.total_execution_time_ms == 300
+        assert result.total_duration_ms == 300
 
     def test_migrate_up_result_to_json(self):
         """Test that MigrateUpResult can be serialized to JSON."""
@@ -180,7 +180,7 @@ class TestMigrateUpFormatterIntegration:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=100,
+            total_duration_ms=100,
         )
 
         # Should be able to convert to dict and then JSON

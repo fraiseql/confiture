@@ -209,7 +209,7 @@ def reinit(
                 MigrationApplied(
                     version=migration.version,
                     name=name,
-                    execution_time_ms=0,
+                    duration_ms=0,
                 )
             )
 
@@ -224,7 +224,7 @@ def reinit(
             success=True,
             deleted_count=deleted_count,
             migrations_marked=marked,
-            total_execution_time_ms=elapsed_ms,
+            total_duration_ms=elapsed_ms,
             dry_run=dry_run,
         )
 
@@ -386,7 +386,7 @@ def rebuild(
         marked = []
         for mf in all_migrations:
             version, name = parse_migration_filename(mf.name)
-            marked.append(MigrationApplied(version=version, name=name, execution_time_ms=0))
+            marked.append(MigrationApplied(version=version, name=name, duration_ms=0))
 
         # Discover schemas that would be dropped
         if drop_schemas:
@@ -398,7 +398,7 @@ def rebuild(
             schemas_dropped=schemas_dropped,
             ddl_statements_executed=ddl_count,
             migrations_marked=marked,
-            total_execution_time_ms=elapsed_ms,
+            total_duration_ms=elapsed_ms,
             dry_run=True,
             warnings=warnings,
         )
@@ -435,7 +435,7 @@ def rebuild(
         schemas_dropped=schemas_dropped,
         ddl_statements_executed=ddl_count,
         migrations_marked=migrations_marked,
-        total_execution_time_ms=elapsed_ms,
+        total_duration_ms=elapsed_ms,
         dry_run=False,
         warnings=warnings,
         seeds_applied=seeds_applied,

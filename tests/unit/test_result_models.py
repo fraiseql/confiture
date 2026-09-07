@@ -108,13 +108,13 @@ class TestMigrationApplied:
         migration = MigrationApplied(
             version="001",
             name="initial_schema",
-            execution_time_ms=100,
+            duration_ms=100,
             rows_affected=50,
         )
 
         assert migration.version == "001"
         assert migration.name == "initial_schema"
-        assert migration.execution_time_ms == 100
+        assert migration.duration_ms == 100
         assert migration.rows_affected == 50
 
     def test_migration_applied_to_dict(self):
@@ -122,7 +122,7 @@ class TestMigrationApplied:
         migration = MigrationApplied(
             version="002",
             name="add_users_table",
-            execution_time_ms=200,
+            duration_ms=200,
             rows_affected=0,
         )
 
@@ -138,7 +138,7 @@ class TestMigrationApplied:
         migration = MigrationApplied(
             version="003",
             name="add_indexes",
-            execution_time_ms=300,
+            duration_ms=300,
         )
 
         assert migration.rows_affected == 0
@@ -157,12 +157,12 @@ class TestMigrateUpResult:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=300,
+            total_duration_ms=300,
         )
 
         assert result.success is True
         assert len(result.migrations_applied) == 2
-        assert result.total_execution_time_ms == 300
+        assert result.total_duration_ms == 300
         assert result.checksums_verified is True
         assert result.dry_run is False
 
@@ -171,7 +171,7 @@ class TestMigrateUpResult:
         result = MigrateUpResult(
             success=False,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             errors=["Migration conflict"],
         )
 
@@ -190,7 +190,7 @@ class TestMigrateUpResult:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=300,
+            total_duration_ms=300,
             checksums_verified=True,
             dry_run=False,
             warnings=["Check indexes"],
@@ -212,7 +212,7 @@ class TestMigrateUpResult:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
         )
 
         data = result.to_dict()
@@ -229,7 +229,7 @@ class TestMigrateUpResult:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=50,
+            total_duration_ms=50,
             dry_run=True,
         )
 

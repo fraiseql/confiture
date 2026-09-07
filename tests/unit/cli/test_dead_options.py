@@ -37,7 +37,7 @@ def _session() -> MagicMock:
     session = session_double()
     session.__enter__.return_value = session
     session.up.return_value = MigrateUpResult(
-        success=True, migrations_applied=[], total_execution_time_ms=0
+        success=True, migrations_applied=[], total_duration_ms=0
     )
     return session
 

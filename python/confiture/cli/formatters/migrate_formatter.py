@@ -42,7 +42,7 @@ def format_migrate_up_result(
         csv_data = (
             ["version", "name", "duration_ms", "rows_affected"],
             [
-                [m.version, m.name, str(m.execution_time_ms), str(m.rows_affected)]
+                [m.version, m.name, str(m.duration_ms), str(m.rows_affected)]
                 for m in result.migrations_applied
             ],
         )
@@ -66,13 +66,13 @@ def format_text(result: MigrateUpResult, console: Console) -> None:
             console.print(f"\nMigrations: {len(result.migrations_applied)}")
             for migration in result.migrations_applied:
                 console.print(
-                    f"  • {migration.version}_{migration.name} ({migration.execution_time_ms}ms)"
+                    f"  • {migration.version}_{migration.name} ({migration.duration_ms}ms)"
                 )
         else:
             console.print("\n[yellow]No migrations applied[/yellow]")
 
-        if result.total_execution_time_ms > 0:
-            console.print(f"\n⏱️ Total time: {result.total_execution_time_ms}ms")
+        if result.total_duration_ms > 0:
+            console.print(f"\n⏱️ Total time: {result.total_duration_ms}ms")
 
         if result.checksums_verified:
             console.print("[cyan]🔐 Checksums verified[/cyan]")
@@ -110,7 +110,7 @@ def format_migrate_down_result(
         csv_data = (
             ["version", "name", "duration_ms", "rows_affected"],
             [
-                [m.version, m.name, str(m.execution_time_ms), str(m.rows_affected)]
+                [m.version, m.name, str(m.duration_ms), str(m.rows_affected)]
                 for m in result.migrations_rolled_back
             ],
         )
@@ -131,13 +131,13 @@ def format_down_text(result: MigrateDownResult, console: Console) -> None:
             console.print(f"\nMigrations: {len(result.migrations_rolled_back)}")
             for migration in result.migrations_rolled_back:
                 console.print(
-                    f"  • {migration.version}_{migration.name} ({migration.execution_time_ms}ms)"
+                    f"  • {migration.version}_{migration.name} ({migration.duration_ms}ms)"
                 )
         else:
             console.print("\n[yellow]No migrations rolled back[/yellow]")
 
-        if result.total_execution_time_ms > 0:
-            console.print(f"\n⏱️ Total time: {result.total_execution_time_ms}ms")
+        if result.total_duration_ms > 0:
+            console.print(f"\n⏱️ Total time: {result.total_duration_ms}ms")
 
         if result.checksums_verified:
             console.print("[cyan]🔐 Checksums verified[/cyan]")
@@ -291,7 +291,7 @@ def format_rebuild_result(
     else:
         csv_data = (
             ["version", "name", "duration_ms"],
-            [[m.version, m.name, str(m.execution_time_ms)] for m in result.migrations_marked],
+            [[m.version, m.name, str(m.duration_ms)] for m in result.migrations_marked],
         )
         handle_output(format_type, result.to_dict(), csv_data, output_path, console)
 
@@ -318,8 +318,8 @@ def _format_rebuild_text(result: MigrateRebuildResult, console: Console) -> None
             )
             console.print(f"  Post-rebuild verify: {status}")
 
-        if result.total_execution_time_ms > 0:
-            console.print(f"\n  ⏱️  Total time: {result.total_execution_time_ms}ms")
+        if result.total_duration_ms > 0:
+            console.print(f"\n  ⏱️  Total time: {result.total_duration_ms}ms")
 
         if result.warnings:
             console.print("\n[yellow]Warnings:[/yellow]")

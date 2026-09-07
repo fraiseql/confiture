@@ -36,7 +36,7 @@ def _rollback_sequence(
     by_version = {session._migrator._version_from_filename(f.name): f for f in migration_files}
 
     rolled_back: list[MigrationApplied] = []
-    total_execution_time_ms = 0
+    total_duration_ms = 0
 
     for version in versions:
         migration_file = by_version.get(version)
@@ -50,7 +50,7 @@ def _rollback_sequence(
             start = _time.time()
             session._migrator.rollback(migration)
             elapsed = int((_time.time() - start) * 1000)
-            total_execution_time_ms += elapsed
+            total_duration_ms += elapsed
         else:
             elapsed = 0
 
@@ -58,11 +58,11 @@ def _rollback_sequence(
             MigrationApplied(
                 version=migration.version,
                 name=migration.name,
-                execution_time_ms=elapsed,
+                duration_ms=elapsed,
             )
         )
 
-    return rolled_back, total_execution_time_ms
+    return rolled_back, total_duration_ms
 
 
 def _reversible_versions(session: MigratorSession) -> set[str]:
@@ -123,7 +123,7 @@ def down(
     return MigrateDownResult(
         success=True,
         migrations_rolled_back=rolled_back,
-        total_execution_time_ms=total_ms,
+        total_duration_ms=total_ms,
     )
 
 

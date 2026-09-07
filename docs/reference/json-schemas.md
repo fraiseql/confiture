@@ -69,8 +69,8 @@ key ending in `_ms`. The migrate family uses two words: `total_duration_ms` for
 the whole run and `duration_ms` for each applied item. Build, lint and the CTE
 debugger emit `execution_time_ms`; the drift reports emit `detection_time_ms`.
 Five models keep an older attribute name behind their wire key
-(`total_execution_time_ms` serializes as `total_duration_ms`,
-`MigrationApplied.execution_time_ms` as `duration_ms`). The table below is the
+(since 1.0.0 the migrate family's attributes carry their wire names:
+`total_duration_ms` and `MigrationApplied.duration_ms`). The table below is the
 one mapping from attribute to key; `tests/unit/json_schemas/test_timing_vocabulary.py`
 derives the same rows from every `to_dict()` in the package and from every
 `*_ms` property in the shipped schemas, so a new timing key, a renamed
@@ -79,11 +79,11 @@ attribute names are scheduled to follow them at 1.0.0.
 
 | Model | Attribute | JSON key | Where it appears |
 |---|---|---|---|
-| `confiture.models.results.MigrateUpResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate up --format json` ([`migrate-up.schema.json`](json-schemas/migrate-up.schema.json)) |
-| `confiture.models.results.MigrationApplied` | `execution_time_ms` | `duration_ms` | `migrate up` — each `applied[]` item |
-| `confiture.models.results.MigrateDownResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate down --format json` |
-| `confiture.models.results.MigrateRebuildResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate rebuild --format json` |
-| `confiture.models.results.MigrateReinitResult` | `total_execution_time_ms` | `total_duration_ms` | library result of `MigratorSession.reinit()` (text output only) |
+| `confiture.models.results.MigrateUpResult` | `total_duration_ms` | `total_duration_ms` | `migrate up --format json` ([`migrate-up.schema.json`](json-schemas/migrate-up.schema.json)) |
+| `confiture.models.results.MigrationApplied` | `duration_ms` | `duration_ms` | `migrate up` — each `applied[]` item |
+| `confiture.models.results.MigrateDownResult` | `total_duration_ms` | `total_duration_ms` | `migrate down --format json` |
+| `confiture.models.results.MigrateRebuildResult` | `total_duration_ms` | `total_duration_ms` | `migrate rebuild --format json` |
+| `confiture.models.results.MigrateReinitResult` | `total_duration_ms` | `total_duration_ms` | library result of `MigratorSession.reinit()` (text output only) |
 | `confiture.models.results.BuildResult` | `execution_time_ms` | `execution_time_ms` | `build --format json` ([`build.schema.json`](json-schemas/build.schema.json)) |
 | `confiture.models.results.SplitBuildResult` | `execution_time_ms` | `execution_time_ms` | library result of the split build |
 | `confiture.models.results.PreflightAgainstMigration` | `execution_time_ms` | `execution_time_ms` | library result of `run_against()`; the CLI prints it as text |
