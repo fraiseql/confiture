@@ -12,7 +12,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
-## [Unreleased]
+## [1.0.0] - 2026-09-07
+
+Confiture 1.0.0 freezes its contracts. What is frozen, and where each is pinned:
+
+- **Exit codes** (`docs/reference/exit-codes.md`): the integers 0–8, their semantic classes and the
+  per-code mapping — `tests/unit/test_exit_code_convention.py`.
+- **Error codes and the JSON error envelope** (`docs/reference/error-codes.md`): the codebook rendered from
+  the registry, every code referenced by code — `tests/unit/test_error_codebook.py`,
+  `test_error_codes_referenced.py`, `test_error_codes_data_table.py`.
+- **JSON schemas** (`docs/reference/json-schemas/`): fields are added, never renamed or removed; the docs
+  copy equals the packaged source — `scripts/gen_schemas.py --check`, `tests/unit/json_schemas/`.
+- **Library API**: `Migrator.from_config()`, `MigratorSession(connection_factory=, migration_loader=)`, the
+  result models with their wire-named timing attributes, the lazy `confiture` and `confiture.testing`
+  exports — `tests/unit/test_public_api_*`, `test_session_injection.py`, `test_testing_package_is_lazy.py`.
+- **CLI surface**: every command, flag and output shape documented in `docs/reference/cli.md` is generated
+  from the live Typer app and held by `tests/unit/docs/test_doc_sync_cli.py`.
+
+A change to any of these is a breaking change: it needs a major version and a CHANGELOG entry.
 
 ### ⚠️ BREAKING — 1.0.0 contract freeze
 
