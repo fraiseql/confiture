@@ -323,7 +323,6 @@ max-returns = 8
 "python/confiture/core/psql_applier.py" = ["PLR2004"]
 "python/confiture/core/replica/classifier.py" = ["PLR0911"]
 "python/confiture/core/schema_facts.py" = ["PLR2004"]
-"python/confiture/core/seed/applier.py" = ["C901", "PLR0912"]
 "python/confiture/core/seed/insert_validator.py" = ["PLR0911"]
 "python/confiture/core/seed/validation/models.py" = ["PLR2004"]
 "python/confiture/core/seed/validation/prep_seed/level_1_seed_files.py" = ["PLR2004"]

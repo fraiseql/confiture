@@ -12,8 +12,7 @@
     "python/confiture/core/idempotency/static_eval/scope.py": 3,
     "python/confiture/core/idempotency/static_eval/str_methods.py": 1,
     "python/confiture/core/linting/libraries/acl.py": 1,
-    "python/confiture/core/migration_grant_extractor.py": 1,
-    "python/confiture/core/seed/applier.py": 1
+    "python/confiture/core/migration_grant_extractor.py": 1
   },
   "too_many_args": {
     "python/confiture/cli/commands/admin.py": 1,
@@ -45,8 +44,7 @@
     "python/confiture/core/idempotency/static_eval/evaluator.py": 2,
     "python/confiture/core/idempotency/static_eval/scope.py": 3,
     "python/confiture/core/idempotency/static_eval/str_methods.py": 1,
-    "python/confiture/core/migration_grant_extractor.py": 1,
-    "python/confiture/core/seed/applier.py": 1
+    "python/confiture/core/migration_grant_extractor.py": 1
   },
   "too_many_statements": {
     "python/confiture/cli/commands/migrate/introspect.py": 1,
