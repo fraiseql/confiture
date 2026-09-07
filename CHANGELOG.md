@@ -12,6 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### Added
+
+- **Expand/contract migrations run online, stage by stage, with checkpoints (#200).**
+  `core/expand_contract.py` turns the replica classifier's advice into a staged plan — add a NOT NULL
+  column with a default (nullable + `CHECK … NOT VALID` → backfill → `VALIDATE` → `SET NOT NULL`),
+  add a CHECK/FOREIGN KEY (`NOT VALID` → `VALIDATE`), change a column's type (new column + dual-write
+  trigger → backfill → swap → drop, destructive) — each stage costed by the lock-profile table with the
+  longest ACCESS EXCLUSIVE hold it takes. `core/step_runner.py` drives a plan with a checkpoint per
+  stage in `<tracking_table>_steps` (created beside the ledger), every statement in its own
+  transaction; a run that dies between stages resumes from the checkpoint. New `migrate steps` lists
+  the checkpoints and `migrate steps --resume <version>` continues one, recording the migration in
+  the ledger only once its last contract stage has finished; `--format json` has
+  `migrate-steps.schema.json`. The lock-profile table gains `validate_constraint` and
+  `create_trigger`, and costs `SET NOT NULL` as metadata-only once a validated CHECK proves it
+  (PostgreSQL ≥ 12); the classifier's `AddColumn` carries the type and default as written,
+  `AddConstraint` its name and body.
+
 ## [1.2.0] - 2026-09-07
 
 ### Added

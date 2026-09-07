@@ -383,6 +383,22 @@ The structural changes between the current state (`--from`: a schema file, a dir
 }
 ```
 
+### `confiture migrate steps --format json`
+
+[migrate-steps.schema.json](./json-schemas/migrate-steps.schema.json)
+
+The online runner's checkpoints (#200): one row per (migration, plan, stage) in `<tracking_table>_steps`, and the version `--resume` continued to completion, if any. A `running` row after a crash is the stage to resume from.
+
+```json
+{
+  "steps": [
+    {"migration": "20260101000000", "plan_index": 0, "stage": "expand", "state": "done", "batch_cursor": null, "rows_done": 0, "updated_at": "2026-01-01T00:00:00+00:00"},
+    {"migration": "20260101000000", "plan_index": 0, "stage": "backfill", "state": "running", "batch_cursor": 4096, "rows_done": 200000, "updated_at": "2026-01-01T00:00:05+00:00"}
+  ],
+  "resumed": null
+}
+```
+
 ### `confiture migrate fix --idempotent --format json`
 
 [migrate-fix.schema.json](./json-schemas/migrate-fix.schema.json)

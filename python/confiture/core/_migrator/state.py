@@ -15,6 +15,7 @@ from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.ledger import ledger_exists
+from confiture.core.step_runner import CheckpointStore, steps_table
 from confiture.exceptions import ConfiturError, MigrationError
 
 if TYPE_CHECKING:
@@ -107,6 +108,8 @@ def initialize(migrator: Migrator) -> None:
             )
 
         migrator.connection.commit()
+        # The online runner's checkpoints live beside the ledger (issue #200).
+        CheckpointStore(migrator.connection, steps_table(_qualified_table(migrator))).ensure()
     except (psycopg.Error, ConfiturError) as e:
         migrator.connection.rollback()
         raise MigrationError(

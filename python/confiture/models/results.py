@@ -1178,3 +1178,19 @@ class SyncResult:
             "total_rows": self.total_rows,
             "warnings": list(self.warnings),
         }
+
+
+@dataclass
+class MigrateStepsResult:
+    """Result of ``migrate steps``: the online runner's checkpoints.
+
+    Attributes:
+        steps: One entry per (migration, plan, stage) checkpoint row, oldest first.
+        resumed: The version ``--resume`` continued, or None when only listing.
+    """
+
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    resumed: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"steps": self.steps, "resumed": self.resumed}

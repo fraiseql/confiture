@@ -274,6 +274,7 @@ class SchemaDriftDetector:
     # Confiture's own bookkeeping: never drift, whatever the schema declares
     SYSTEM_TABLES: ClassVar[set[str]] = {
         "tb_confiture",
+        "tb_confiture_steps",
         LOCK_HOLDER_TABLE,
         "confiture_version",
         "confiture_audit_log",

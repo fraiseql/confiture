@@ -50,6 +50,7 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "error-envelope.schema.json",
     "lint-list-rules.schema.json",
     "migrate-diff.schema.json",
+    "migrate-steps.schema.json",
     "migrate-fix.schema.json",
     "migrate-introspect.schema.json",
     "migrate-preflight-against.schema.json",

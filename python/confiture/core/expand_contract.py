@@ -144,6 +144,19 @@ def plan(sql: str, *, server_version: int | None = None) -> list[StagedPlan]:
     return plans
 
 
+def plannable(sql: str, *, server_version: int | None = None) -> list[StagedPlan] | None:
+    """The plans for ``sql`` when *every* statement has one; ``None`` when any does not.
+
+    A migration runs online as a whole or not at all: a file that mixes a
+    staged change with a plain statement applies the classic way.
+    """
+    ops = OperationClassifier().classify(sql)
+    plans = [_plan_operation(op, server_version) for op in ops]
+    if not plans or any(p is None for p in plans):
+        return None
+    return [p for p in plans if p is not None]
+
+
 def _plan_operation(op: DdlOperation, server_version: int | None) -> StagedPlan | None:
     if op.table is None:
         return None

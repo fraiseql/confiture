@@ -38,6 +38,7 @@ from confiture.cli.commands.migrate.preflight import migrate_preflight
 from confiture.cli.commands.migrate.rebuild import migrate_rebuild
 from confiture.cli.commands.migrate.reinit import migrate_reinit
 from confiture.cli.commands.migrate.status import migrate_status
+from confiture.cli.commands.migrate.steps import migrate_steps
 from confiture.cli.commands.migrate.up import migrate_up
 from confiture.cli.commands.migrate.validate import migrate_validate
 from confiture.cli.commands.migrate.verify import migrate_verify
@@ -233,6 +234,7 @@ migrate_app.command("fix-signatures")(migrate_fix_signatures)
 migrate_app.command("introspect")(migrate_introspect)
 migrate_app.command("verify")(migrate_verify)
 migrate_app.command("preflight")(migrate_preflight)
+migrate_app.command("steps")(migrate_steps)
 migrate_app.command("apply-as")(migrate_apply_as)
 
 # Medium 4: schema-to-schema (FDW) subcommand group

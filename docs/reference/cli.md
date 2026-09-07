@@ -2847,6 +2847,31 @@ confiture migrate reinit [OPTIONS]
 
 <!-- END GENERATED: cli confiture migrate reinit -->
 
+### `confiture migrate steps`
+
+List the online runner's checkpoints, or resume an online migration from them.
+
+<!-- BEGIN GENERATED: cli confiture migrate steps -->
+
+**Usage**
+
+```bash
+confiture migrate steps [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--config` | `-c` | path | `db/environments/local.yaml` | Path to environment config file |
+| `--migrations-dir` | - | path | `db/migrations` | Directory containing migration files |
+| `--resume` | - | text | - | Continue the online migration with this version from its last checkpoint |
+| `--allow-destructive` | - | Flag | off | Run a contract stage that drops the old column (data is lost) |
+| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--output` | `-o` | path | - | Write output to file |
+
+<!-- END GENERATED: cli confiture migrate steps -->
+
 ## `confiture lint`
 
 Lint the schema DDL of an environment against the registered rules — naming,

@@ -283,7 +283,7 @@ confiture/
 │   │   ├── seed.py               # CLI commands for seed data validation
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
-│   │   ├── commands/             # CLI command modules for Confiture (30 modules)
+│   │   ├── commands/             # CLI command modules for Confiture (31 modules)
 │   │   └── formatters/           # (7 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
@@ -358,6 +358,7 @@ confiture/
 │   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
 │   │   ├── sql_utils.py          # Shared SQL utility functions
 │   │   ├── ssh_tunnel.py         # SSH tunnel context manager for remote database access
+│   │   ├── step_runner.py        # Drive an expand/contract plan stage by stage, with a checkpoint after e…
 │   │   ├── strategy.py           # Migration strategy header parser
 │   │   ├── stub_generator.py     # Generate typed Python wrapper stubs from PostgreSQL functions
 │   │   ├── syncer.py             # Production data synchronization

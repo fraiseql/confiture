@@ -11,7 +11,7 @@ a stage takes — the number the online e2e measures.
 
 from __future__ import annotations
 
-from confiture.core.expand_contract import plan
+from confiture.core.expand_contract import plan, plannable
 
 ADD_NOT_NULL = "ALTER TABLE orders ADD COLUMN status text NOT NULL DEFAULT 'new';"
 ADD_CHECK = "ALTER TABLE orders ADD CONSTRAINT orders_total_positive CHECK (total >= 0);"
@@ -126,3 +126,13 @@ def test_the_plan_is_pure_and_stable() -> None:
     assert (
         plan(ADD_NOT_NULL + ADD_CHECK, server_version=15)[1].pattern == "add_constraint_not_valid"
     )
+
+
+def test_a_file_runs_online_as_a_whole_or_not_at_all() -> None:
+    """A migration that mixes a staged change with a plain statement applies the classic way."""
+    assert plannable(ADD_NOT_NULL + ADD_CHECK, server_version=15) is not None
+    assert (
+        plannable(ADD_NOT_NULL + "CREATE INDEX ix ON orders (status);", server_version=15) is None
+    )
+    assert plannable("CREATE TABLE t (id integer);", server_version=15) is None
+    assert plannable("", server_version=15) is None
