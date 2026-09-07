@@ -80,6 +80,9 @@ def test_plugin_fixtures_run_in_process(
 ) -> None:
     monkeypatch.setenv("CONFITURE_TEST_DB_URL", _server_url())
     monkeypatch.delenv("CONFITURE_TEST_RAM_TABLESPACE", raising=False)
+    # The inner session is its own pytest run: under an outer `-n N` it must not inherit
+    # the outer worker id (the assertions below describe a plain single-process run).
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     _write_project(pytester.path)
     pytester.makepyfile(
         test_inner="""
