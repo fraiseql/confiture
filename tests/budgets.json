@@ -145,8 +145,7 @@
     "python/confiture/testing/frameworks/performance.py": 4
   },
   "function_length": {
-    "python/confiture/config/environment.py": 1,
-    "python/confiture/core/schema_analyzer.py": 1
+    "python/confiture/config/environment.py": 1
   },
   "broad_except": {
     "python/confiture/cli/commands/admin.py": 1,
