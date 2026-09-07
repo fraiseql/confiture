@@ -51,6 +51,60 @@ if not TYPE_CHECKING:
         pass
 
 
+def _include_config(include: Any) -> dict[str, Any] | None:
+    """One ``include_dirs`` entry — a string, a dict or a ``DirectoryConfig`` — as a config dict.
+
+    A string means recursive ``**/*.sql``; a non-recursive entry with the
+    default pattern reads ``*.sql``. An entry of another type is ignored.
+    """
+    if isinstance(include, str):
+        return {
+            "path": Path(include),
+            "recursive": True,  # Default recursive for backward compatibility
+            "include": ["**/*.sql"],
+            "exclude": [],
+            "auto_discover": True,
+            "order": 0,
+        }
+    if isinstance(include, dict):
+        recursive = include.get("recursive", True)
+        default_include = ["**/*.sql"] if recursive else ["*.sql"]
+        return {
+            "path": Path(include["path"]),
+            "recursive": recursive,
+            "include": include.get("include", default_include),
+            "exclude": include.get("exclude", []),
+            "auto_discover": include.get("auto_discover", True),
+            "order": include.get("order", 0),
+        }
+    if hasattr(include, "path"):  # DirectoryConfig object
+        include_patterns = include.include
+        if include_patterns == ["**/*.sql"] and not include.recursive:
+            include_patterns = ["*.sql"]
+        return {
+            "path": Path(include.path),
+            "recursive": include.recursive,
+            "include": include_patterns,
+            "exclude": include.exclude,
+            "auto_discover": include.auto_discover,
+            "order": include.order,
+        }
+    return None
+
+
+def _resolved_dir_paths(items: Any) -> list[Path]:
+    """Absolute paths of a directory list (strings, ``{path: …}`` dicts or ``DirectoryConfig``)."""
+    paths: list[Path] = []
+    for item in items:
+        if isinstance(item, str):
+            paths.append(Path(item).resolve())
+        elif isinstance(item, dict):
+            paths.append(Path(item["path"]).resolve())
+        elif hasattr(item, "path"):
+            paths.append(Path(item.path).resolve())
+    return paths
+
+
 class SchemaBuilder:
     """Build PostgreSQL schema from DDL source files
 
@@ -90,70 +144,11 @@ class SchemaBuilder:
             )
 
         # Parse include_dirs (support string, dict, and DirectoryConfig formats)
-        self.include_configs: list[dict[str, Any]] = []
-        for include in self.env_config.include_dirs:
-            if isinstance(include, str):
-                self.include_configs.append(
-                    {
-                        "path": Path(include),
-                        "recursive": True,  # Default recursive for backward compatibility
-                        "include": ["**/*.sql"],
-                        "exclude": [],
-                        "auto_discover": True,
-                        "order": 0,
-                    }
-                )
-            elif isinstance(include, dict):
-                recursive = include.get("recursive", True)
-                default_include = ["**/*.sql"] if recursive else ["*.sql"]
-                self.include_configs.append(
-                    {
-                        "path": Path(include["path"]),
-                        "recursive": recursive,
-                        "include": include.get("include", default_include),
-                        "exclude": include.get("exclude", []),
-                        "auto_discover": include.get("auto_discover", True),
-                        "order": include.get("order", 0),
-                    }
-                )
-            elif hasattr(include, "path"):  # DirectoryConfig object
-                recursive = include.recursive
-                # If using default include pattern and recursive=False, adjust to non-recursive pattern
-                include_patterns = include.include
-                if include_patterns == ["**/*.sql"] and not recursive:
-                    include_patterns = ["*.sql"]
-                self.include_configs.append(
-                    {
-                        "path": Path(include.path),
-                        "recursive": recursive,
-                        "include": include_patterns,
-                        "exclude": include.exclude,
-                        "auto_discover": include.auto_discover,
-                        "order": include.order,
-                    }
-                )
-            elif isinstance(include, dict):
-                self.include_configs.append(
-                    {
-                        "path": Path(include["path"]),
-                        "recursive": include.get("recursive", True),
-                        "include": include.get("include", ["**/*.sql"]),
-                        "exclude": include.get("exclude", []),
-                        "auto_discover": include.get("auto_discover", True),
-                        "order": include.get("order", 0),
-                    }
-                )
-            elif hasattr(include, "path"):  # DirectoryConfig object
-                self.include_configs.append(
-                    {
-                        "path": Path(include.path),
-                        "recursive": include.recursive,
-                        "include": include.include,
-                        "exclude": include.exclude,
-                        "auto_discover": include.auto_discover,
-                        "order": include.order,
-                    }
-                )
+        self.include_configs: list[dict[str, Any]] = [
+            config
+            for config in (_include_config(include) for include in self.env_config.include_dirs)
+            if config is not None
+        ]
 
         # Sort by order
         self.include_configs.sort(key=lambda x: int(x["order"]))
@@ -165,25 +160,11 @@ class SchemaBuilder:
         # Find the common parent of all include directories
         self.base_dir = self._find_common_parent(self.include_dirs)
 
-        # Resolve superuser_dirs to absolute paths for file classification
-        self._superuser_paths: list[Path] = []
-        for su_dir in self.env_config.superuser_dirs:
-            if isinstance(su_dir, str):
-                self._superuser_paths.append(Path(su_dir).resolve())
-            elif isinstance(su_dir, dict):
-                self._superuser_paths.append(Path(su_dir["path"]).resolve())
-            elif hasattr(su_dir, "path"):
-                self._superuser_paths.append(Path(su_dir.path).resolve())
-
-        # Resolve superuser_post_dirs to absolute paths for file classification
-        self._superuser_post_paths: list[Path] = []
-        for su_post_dir in self.env_config.superuser_post_dirs:
-            if isinstance(su_post_dir, str):
-                self._superuser_post_paths.append(Path(su_post_dir).resolve())
-            elif isinstance(su_post_dir, dict):
-                self._superuser_post_paths.append(Path(su_post_dir["path"]).resolve())
-            elif hasattr(su_post_dir, "path"):
-                self._superuser_post_paths.append(Path(su_post_dir.path).resolve())
+        # Resolve superuser_dirs / superuser_post_dirs to absolute paths for file classification
+        self._superuser_paths: list[Path] = _resolved_dir_paths(self.env_config.superuser_dirs)
+        self._superuser_post_paths: list[Path] = _resolved_dir_paths(
+            self.env_config.superuser_post_dirs
+        )
 
     def find_common_parent(self, paths: list[Path]) -> Path:
         """Public spelling of :meth:`_find_common_parent`."""
