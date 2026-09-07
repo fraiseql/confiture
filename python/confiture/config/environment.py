@@ -258,6 +258,18 @@ class MigrationGeneratorConfig(BaseModel):
         return v
 
 
+class BackfillConfig(BaseModel):
+    """How the online runner's backfill stage runs (issue #200).
+
+    Attributes:
+        batch_size: Rows per committed batch of a backfill (default: 5000).
+        max_lock_ms: Pause, in milliseconds, between batches while another session waits for a lock on the table; unset disables the guard. ``--max-lock-ms`` on ``migrate steps --resume`` and ``migrate up --online`` overrides it per run.
+    """
+
+    batch_size: int = 5000
+    max_lock_ms: int | None = None
+
+
 class MigrationConfig(BaseModel):
     """Migration configuration options.
 
@@ -267,6 +279,7 @@ class MigrationConfig(BaseModel):
         allow_unsafe_under_replication: Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared.
         strict_mode: Whether to fail on warnings/notices (default: False)
         destructive: What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run.
+        backfill: The online runner's backfill settings (batch size, lock-waiter guard)
         locking: Distributed locking configuration
         view_helpers: View helper installation mode ("auto", "manual", "off")
         migration_generators: Named external generator commands
@@ -279,6 +292,7 @@ class MigrationConfig(BaseModel):
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
     destructive: Literal["gated", "allow", "forbid"] = "gated"
+    backfill: BackfillConfig = Field(default_factory=BackfillConfig)
     locking: LockingConfig = Field(default_factory=LockingConfig)
     view_helpers: Literal["auto", "manual", "off"] = "auto"
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)

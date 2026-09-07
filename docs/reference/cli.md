@@ -2867,6 +2867,7 @@ confiture migrate steps [OPTIONS]
 | `--migrations-dir` | - | path | `db/migrations` | Directory containing migration files |
 | `--resume` | - | text | - | Continue the online migration with this version from its last checkpoint |
 | `--allow-destructive` | - | Flag | off | Run a contract stage that drops the old column (data is lost) |
+| `--max-lock-ms` | - | integer | - | Pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms) |
 | `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
 | `--output` | `-o` | path | - | Write output to file |
 

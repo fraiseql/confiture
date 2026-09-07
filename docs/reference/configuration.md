@@ -574,6 +574,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 |---|---|---|---|
 | `strict_mode` | bool | `false` | Whether to fail on warnings/notices (default: False) |
 | `destructive` | `gated` \| `allow` \| `forbid` | `gated` | What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run. |
+| `backfill` | [BackfillConfig](#backfillconfig) | (nested) | The online runner's backfill settings (batch size, lock-waiter guard) |
 | `locking` | [LockingConfig](#lockingconfig) | (nested) | Distributed locking configuration |
 | `view_helpers` | `auto` \| `manual` \| `off` | `auto` | View helper installation mode ("auto", "manual", "off") |
 | `migration_generators` | dict[str, [MigrationGeneratorConfig](#migrationgeneratorconfig)] | `{}` | Named external generator commands |
@@ -584,6 +585,13 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `rebuild_threshold` | int | `5` | Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50). |
 | `grant_dir` | str | `db/7_grant` | Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``). |
 | `allow_unsafe_under_replication` | bool | `false` | Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared. |
+
+#### `BackfillConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `batch_size` | int | `5000` | Rows per committed batch of a backfill (default: 5000). |
+| `max_lock_ms` | int \| NoneType | - | Pause, in milliseconds, between batches while another session waits for a lock on the table; unset disables the guard. ``--max-lock-ms`` on ``migrate steps --resume`` and ``migrate up --online`` overrides it per run. |
 
 #### `LockingConfig`
 
@@ -745,6 +753,9 @@ build:
 migration:
   strict_mode: false
   destructive: gated
+  backfill:
+    batch_size: 5000
+    max_lock_ms: null
   locking:
     enabled: true
     timeout_ms: 30000

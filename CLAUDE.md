@@ -292,6 +292,7 @@ confiture/
 │   ├── core/                     # Core migration execution and schema building components
 │   │   ├── __init__.py           # Core migration execution and schema building components
 │   │   ├── _pglast_enums.py      # Name-resolved PostgreSQL parse-node enum members (issue #192)
+│   │   ├── backfill.py           # The batched backfill between expand and contract: bounded, observable,…
 │   │   ├── baseline_detector.py  # Baseline detector for auto-detecting migration level from a live databa…
 │   │   ├── blue_green.py         # Blue-green migration orchestration
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)

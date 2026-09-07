@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `create_trigger`, and costs `SET NOT NULL` as metadata-only once a validated CHECK proves it
   (PostgreSQL ≥ 12); the classifier's `AddColumn` carries the type and default as written,
   `AddConstraint` its name and body.
+- **The backfill is batched, observable and resumable.** `core/backfill.py`'s `BackfillExecutor` runs
+  the backfill stage over the ctid-batched `UPDATE` of `core/large_tables.py`: `migration.backfill.batch_size`
+  rows per committed batch (new config key, default 5 000), a checkpoint with the next ctid block after
+  every commit (`batch_cursor`), a `backfill_progress` event per batch, and resumption from the
+  checkpoint's block instead of the start. `migration.backfill.max_lock_ms` (and `--max-lock-ms` on
+  `migrate steps --resume`) pauses between batches while another session waits for a lock on the
+  table. `BatchedMigration.backfill_column` gains `start_block` and `BatchConfig.block_callback`.
 
 ## [1.2.0] - 2026-09-07
 

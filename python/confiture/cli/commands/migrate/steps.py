@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _get_tracking_table, _output_json, console, is_json
 from confiture.cli.options import format_option
+from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core import step_runner
+from confiture.core.backfill import BackfillSettings
 from confiture.models.results import MigrateStepsResult
 
 ConfigOpt = Annotated[Path, typer.Option("--config", "-c", help="Path to environment config file")]
@@ -24,6 +26,13 @@ ResumeOpt = Annotated[
     typer.Option(
         "--resume",
         help="Continue the online migration with this version from its last checkpoint",
+    ),
+]
+MaxLockMsOpt = Annotated[
+    int | None,
+    typer.Option(
+        "--max-lock-ms",
+        help="Pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms)",
     ),
 ]
 AllowDestructiveOpt = Annotated[
@@ -41,6 +50,7 @@ def migrate_steps(
     migrations_dir: MigrationsDirOpt = Path("db/migrations"),
     resume: ResumeOpt = None,
     allow_destructive: AllowDestructiveOpt = False,
+    max_lock_ms: MaxLockMsOpt = None,
     format_type: str = format_option("table", "json"),
     output_file: Path | None = typer.Option(None, "--output", "-o", help="Write output to file"),
 ) -> None:
@@ -70,6 +80,7 @@ def migrate_steps(
                 resume,
                 migrations_dir=migrations_dir,
                 allow_destructive=allow_destructive,
+                settings=_backfill_settings(config_data, max_lock_ms),
             )
         result = MigrateStepsResult(
             steps=[r.to_dict() for r in store.records()],
@@ -90,3 +101,12 @@ def migrate_steps(
             f"  {step['migration']}  plan {step['plan_index']}  {step['stage']:<9} {step['state']:<8}"
             f"  rows {step['rows_done']}  {step['updated_at']}"
         )
+
+
+def _backfill_settings(config_data: dict[str, Any], max_lock_ms: int | None) -> BackfillSettings:
+    """``migration.backfill`` from the config, the flag winning for the lock-waiter guard."""
+    backfill = MigrationConfig.model_validate(config_data.get("migration") or {}).backfill
+    return BackfillSettings(
+        batch_size=backfill.batch_size,
+        max_lock_ms=max_lock_ms if max_lock_ms is not None else backfill.max_lock_ms,
+    )

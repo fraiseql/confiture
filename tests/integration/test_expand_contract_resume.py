@@ -20,7 +20,7 @@ from confiture.cli.main import app
 from confiture.core._migrator.events import UpEvent
 from confiture.core.expand_contract import plan
 from confiture.core.schema_facts import server_major
-from confiture.core.step_runner import CheckpointStore, run
+from confiture.core.step_runner import CheckpointStore, RunOptions, run
 
 runner = CliRunner()
 VERSION = "20260101000000"
@@ -73,7 +73,13 @@ def test_a_crash_after_expand_is_resumed_by_migrate_steps(
     staged = plan(SQL, server_version=server_major(clean_test_db))[0]
 
     with pytest.raises(Crash):
-        run(staged, clean_test_db, migration=VERSION, store=store, on_event=_crash_after("expand"))
+        run(
+            staged,
+            clean_test_db,
+            migration=VERSION,
+            store=store,
+            options=RunOptions(on_event=_crash_after("expand")),
+        )
 
     # The expand stage landed and is on record; nothing after it ran.
     assert _column(clean_test_db) == ("YES", "'new'::text")
@@ -111,7 +117,11 @@ def test_the_ledger_is_written_only_after_contract(
 
     with pytest.raises(Crash):
         run(
-            staged, clean_test_db, migration=VERSION, store=store, on_event=_crash_after("backfill")
+            staged,
+            clean_test_db,
+            migration=VERSION,
+            store=store,
+            options=RunOptions(on_event=_crash_after("backfill")),
         )
 
     assert {s.stage: s.state for s in store.records(VERSION)} == {

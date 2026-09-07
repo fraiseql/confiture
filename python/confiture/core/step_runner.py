@@ -25,6 +25,7 @@ from psycopg import sql as pgsql
 from confiture.core._migrator.apply import record_migration
 from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
+from confiture.core.backfill import BackfillExecutor, BackfillSettings
 from confiture.core.checksum import compute_checksum
 from confiture.core.expand_contract import BackfillSpec, StagedPlan, plannable
 from confiture.core.ledger import table_identifier
@@ -162,24 +163,14 @@ def _autocommit(connection: Any) -> Iterator[None]:
         connection.autocommit = previous
 
 
-def _naive_backfill(
-    connection: Any,
-    spec: BackfillSpec,
-    _checkpoint: StepRecord | None,
-    progress: Callable[[int, int], None],
-) -> int:
-    """One UPDATE for the whole table — correct, not bounded, and nothing to resume from."""
-    query = pgsql.SQL("UPDATE {} SET {} = {} WHERE {}").format(
-        table_identifier(spec.table),
-        pgsql.Identifier(spec.column),
-        pgsql.SQL(spec.expression),
-        pgsql.SQL(spec.where_clause),
-    )
-    with connection.cursor() as cur:
-        cur.execute(query)
-        rows = cur.rowcount
-    progress(0, rows)
-    return rows
+@dataclass(frozen=True)
+class RunOptions:
+    """What a run may do and how it reports: the gate, the observer, the backfill settings."""
+
+    allow_destructive: bool = False
+    on_event: UpObserver | None = None
+    settings: BackfillSettings | None = None
+    backfill: Backfiller | None = None  # an executor to use instead of the batched one
 
 
 def run(
@@ -189,9 +180,7 @@ def run(
     migration: str,
     store: CheckpointStore,
     plan_index: int = 0,
-    backfill: Backfiller = _naive_backfill,
-    allow_destructive: bool = False,
-    on_event: UpObserver | None = None,
+    options: RunOptions | None = None,
 ) -> list[StepRecord]:
     """Run ``staged`` stage by stage from its checkpoints; a stage already ``done`` is skipped.
 
@@ -200,11 +189,16 @@ def run(
     the run with the checkpoint on record — that is the crash the next
     :func:`resume` recovers from.
     """
+    options = options or RunOptions()
+    on_event = options.on_event
+    backfill = options.backfill or BackfillExecutor(
+        options.settings, on_event=on_event, migration=migration
+    )
     for stage in staged.stages:
         record = store.get(migration, plan_index, stage.name)
         if record is not None and record.state == DONE:
             continue
-        if stage.destructive and not allow_destructive:
+        if stage.destructive and not options.allow_destructive:
             raise ValidationError(
                 f"Stage {stage.name} of {migration} drops the old column: data is lost when it applies",
                 error_code="VALID_002",
@@ -250,7 +244,7 @@ def resume(
     migrations_dir: Path,
     allow_destructive: bool = False,
     on_event: UpObserver | None = None,
-    backfill: Backfiller = _naive_backfill,
+    settings: BackfillSettings | None = None,
 ) -> list[StepRecord]:
     """Continue the online migration ``version`` from its checkpoints and, when its last
     contract stage is done, record it in the ledger."""
@@ -272,9 +266,9 @@ def resume(
             migration=version,
             store=store,
             plan_index=index,
-            backfill=backfill,
-            allow_destructive=allow_destructive,
-            on_event=on_event,
+            options=RunOptions(
+                allow_destructive=allow_destructive, on_event=on_event, settings=settings
+            ),
         )
     _, name = parse_migration_filename(up_file.name)
     record_migration(
