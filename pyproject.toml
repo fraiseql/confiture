@@ -265,7 +265,7 @@ max-returns = 8
 # BEGIN GENERATED: budget-ignores (scripts/budgets.py --update; do not edit)
 "python/confiture/cli/commands/admin.py" = ["PLR0913"]
 "python/confiture/cli/commands/debug.py" = ["PLR0912"]
-"python/confiture/cli/commands/drift.py" = ["C901", "PLR0912", "PLR0913"]
+"python/confiture/cli/commands/drift.py" = ["PLR0913"]
 "python/confiture/cli/commands/migrate/baseline.py" = ["PLR0912", "PLR2004"]
 "python/confiture/cli/commands/migrate/down.py" = ["PLR0913"]
 "python/confiture/cli/commands/migrate/fix_signatures.py" = ["PLR0913", "PLR2004"]
