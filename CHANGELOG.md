@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RELEASE_COMMANDS.sh` and the stray `python/db/` sample tree are untracked (`.gitignore` now covers
   `*.log`), `testpaths` names only `tests/`; `tests/unit/test_tracked_files_hygiene.py` holds the line.
   `scripts/gen_mkdocs_nav.py` renders tracked pages only, like the tree generator.
+- **The error-code catalog is data.** `confiture/error_code_table.py` holds one mapping per code (45 codes,
+  no imports, no logic); `error_codes.py` renders it into the registry in a 15-line loop instead of a
+  442-line hand-written function. `tests/unit/test_error_codes_data_table.py` pins the rows against a
+  snapshot captured from the old builder, keeps the table module data-only and fails on any function in
+  `error_codes.py` longer than 60 lines. The codebook, exit-code table and every error-code test are unchanged.
 
 ## [0.54.0] - 2026-09-07
 
