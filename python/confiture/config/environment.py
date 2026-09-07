@@ -1025,5 +1025,5 @@ class Environment(BaseModel):
         # Create Environment instance
         try:
             return cls(**data)
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             raise ConfigurationError(f"Invalid configuration in {config_path}: {e}") from e

@@ -217,6 +217,7 @@ def apply_transactional(
             migrator.connection.commit()
         logger.info(f"Successfully applied migration {migration.version} ({migration.name})")
 
+    # Reason: migration and hook code is user code; any failure runs the failure hooks and is re-raised
     except Exception as e:
         # Trigger AFTER_EXECUTE hook for failure case
         if "start_time" in locals():
@@ -312,6 +313,7 @@ def apply_non_transactional(
             f"{migration.version} ({migration.name})"
         )
 
+    # Reason: migration and hook code is user code; any failure runs the failure hooks and is re-raised
     except Exception as e:
         # Trigger AFTER_EXECUTE hook for failure case
         if "start_time" in locals():
@@ -375,7 +377,7 @@ def rollback_to_savepoint(migrator: Migrator, name: str, *, commit: bool = True)
             cursor.execute(pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name)))
         if commit:
             migrator.connection.commit()
-    except Exception:
+    except psycopg.Error:
         if commit:
             # Savepoint rollback failed, do full rollback
             migrator.connection.rollback()

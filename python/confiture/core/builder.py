@@ -379,7 +379,7 @@ class SchemaBuilder:
         for file in files:
             try:
                 files_and_content[file] = file.read_text(encoding="utf-8")
-            except Exception as e:
+            except (OSError, UnicodeDecodeError) as e:
                 raise SchemaError(f"Error reading {file}: {e}") from e
 
         # Run validator
@@ -631,7 +631,7 @@ class SchemaBuilder:
             try:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(schema, encoding="utf-8")
-            except Exception as e:
+            except OSError as e:
                 raise SchemaError(
                     f"Error writing schema to {output_path}: {e}",
                     resolution_hint="Check that the output directory exists and you have write permissions",
@@ -678,7 +678,7 @@ class SchemaBuilder:
                 if progress:
                     progress.update(None, advance=1)
 
-            except Exception as e:
+            except (OSError, UnicodeDecodeError) as e:
                 raise SchemaError(f"Error reading {file}: {e}") from e
 
         return "".join(parts)
@@ -875,7 +875,7 @@ class SchemaBuilder:
                 content = file.read_bytes()
                 hasher.update(content)
                 hasher.update(b"\x00")  # Separator
-            except Exception as e:
+            except OSError as e:
                 raise SchemaError(f"Error reading {file} for hash: {e}") from e
 
         return hasher.hexdigest()

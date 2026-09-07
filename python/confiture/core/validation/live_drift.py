@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import psycopg
+
 from confiture.core.connection import create_connection, load_config
 from confiture.core.drift import SchemaDriftDetector
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -55,7 +57,7 @@ def check_live_drift(
             shared = ctx.connection()
         except ConfigurationError:
             raise
-        except Exception as exc:
+        except (ConfiturError, psycopg.Error) as exc:
             raise ConfigurationError(
                 f"Database connection failed: {exc}", error_code="CONFIG_006"
             ) from exc
@@ -66,7 +68,7 @@ def check_live_drift(
     config_data = load_config(config_path)
     try:
         conn = create_connection(config_data)
-    except Exception as exc:
+    except (ConfiturError, psycopg.Error) as exc:
         raise ConfigurationError(
             f"Database connection failed: {exc}", error_code="CONFIG_006"
         ) from exc

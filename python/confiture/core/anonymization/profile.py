@@ -219,7 +219,7 @@ class AnonymizationProfile(BaseModel):
         # ✅ SAFE: Pydantic validates structure and types
         try:
             profile = cls(**raw_data)
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             raise ValueError(f"Invalid profile {path}: {e}") from e
 
         return profile

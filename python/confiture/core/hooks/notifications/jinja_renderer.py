@@ -104,6 +104,7 @@ class JinjaRenderer(Renderer):
         self._env = _build_sandbox_env()
         try:
             ast = self._env.parse(self.template)
+        # Reason: jinja2 raises several unrelated types for a bad template; all are a configuration error
         except Exception as exc:
             raise ConfigurationError(f"JinjaRenderer template failed to parse: {exc}") from exc
 

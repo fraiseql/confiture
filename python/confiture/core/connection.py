@@ -223,6 +223,7 @@ def load_migration_module(migration_file: Path) -> ModuleType:
         spec.loader.exec_module(module)
 
         return module
+    # Reason: importing a migration module executes user code; any failure is a MigrationError with the file
     except Exception as e:
         raise MigrationError(
             f"Failed to load migration {migration_file}: {e}",

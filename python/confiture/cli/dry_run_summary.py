@@ -12,6 +12,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import psycopg
+
 from confiture.core.change_set import ChangeEntry, build_change_set
 from confiture.core.ledger import split_qualified_table
 from confiture.core.migrator import discover_migration_files, parse_migration_filename
@@ -32,7 +34,7 @@ def row_estimator(connection: Any) -> RowEstimator:
     def estimate(table: str) -> int | None:
         try:
             value = estimator.get_row_count_estimate(split_qualified_table(table)[1])
-        except Exception:
+        except (psycopg.Error, ValueError):
             return None
         return value if value > 0 else None
 

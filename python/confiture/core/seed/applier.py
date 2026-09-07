@@ -12,13 +12,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import psycopg
 from rich.console import Console
 
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed.executor import SeedExecutor
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
-from confiture.exceptions import SchemaError, base_message
+from confiture.exceptions import ConfiturError, SchemaError, base_message
 
 if TYPE_CHECKING:
     from confiture.config.environment import SeedProfile
@@ -245,7 +246,7 @@ class SeedApplier:
                 if progress and apply_task is not None:
                     progress.update(apply_task, advance=1)
 
-            except Exception as e:
+            except (OSError, UnicodeDecodeError, psycopg.Error, ConfiturError) as e:
                 if transaction_mode == "transaction":
                     self.connection.rollback()
                 result.failed += 1

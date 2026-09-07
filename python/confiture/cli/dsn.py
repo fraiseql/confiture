@@ -194,6 +194,7 @@ def param_is_explicit(ctx: Any, *params: str) -> bool:
     for param in params:
         try:
             source = ctx.get_parameter_source(param)
+        # Reason: click's parameter-source lookup is best-effort; any failure means 'unknown source'
         except Exception:
             continue
         name = getattr(source, "name", None)

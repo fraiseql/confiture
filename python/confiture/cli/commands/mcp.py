@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import psycopg
 import typer
 
 from confiture.cli.error_json import fail
@@ -25,7 +26,6 @@ def mcp_server(
     ),
 ) -> None:
     """Expose Confiture operations and PostgreSQL stored functions as MCP tools."""
-    import psycopg
 
     from confiture.core.mcp_server import MCPServer
 
@@ -54,7 +54,7 @@ def mcp_server(
 
     try:
         conn = psycopg.connect(database_url)
-    except Exception as e:
+    except psycopg.Error as e:
         fail(
             ConfigurationError(
                 f"Connection failed: {e}",

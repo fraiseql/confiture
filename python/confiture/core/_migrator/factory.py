@@ -60,7 +60,7 @@ def from_config(
         # (e.g. missing ``database_url``) still fails validation.
         try:
             env = Environment.model_validate(raw)
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             if "ValidationError" in type(e).__name__:
                 raise ConfigurationError(
                     f"Invalid configuration in {config_path}: {e}",

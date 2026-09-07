@@ -150,6 +150,7 @@ def execute_timed(
 
     try:
         result = strategy.anonymize(value)
+    # Reason: custom strategies are user code; any failure is the lint finding
     except Exception as exc:
         elapsed = (time.perf_counter() - start) * 1000
         logger.warning(

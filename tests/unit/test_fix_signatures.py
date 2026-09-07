@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import psycopg
 from typer.testing import CliRunner
 
 from confiture.cli.commands.migrate.fix_signatures import _extract_function_source
@@ -310,7 +311,9 @@ class TestFixSignaturesApply:
 
         failing_conn = MagicMock()
         failing_conn.autocommit = True
-        failing_conn.cursor.return_value.__enter__ = MagicMock(side_effect=Exception("db error"))
+        failing_conn.cursor.return_value.__enter__ = MagicMock(
+            side_effect=psycopg.OperationalError("db error")
+        )
         failing_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
         cm = MagicMock()
         cm.__enter__ = MagicMock(return_value=failing_conn)

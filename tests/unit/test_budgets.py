@@ -68,3 +68,24 @@ def test_broad_except_total_is_under_the_phase_ceiling(measured) -> None:
     _budgets, actual = measured
     total = sum(actual["broad_except"].values())
     assert total <= 210, f"{total} broad handlers in python/confiture"
+
+
+def test_every_remaining_broad_handler_states_its_reason(budgets_module) -> None:
+    """A handler that must stay broad says why, on its header or the line above it."""
+    import ast
+
+    package = REPO_ROOT / "python" / "confiture"
+    missing: list[str] = []
+    for path in sorted(package.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        lines = source.splitlines()
+        tree = ast.parse(source)
+        broad_lines = set(budgets_module.broad_handlers(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ExceptHandler) or node.lineno not in broad_lines:
+                continue
+            first_body = node.body[0].lineno if node.body else node.lineno + 1
+            span = lines[max(node.lineno - 2, 0) : first_body - 1]
+            if not any("# Reason:" in line for line in span):
+                missing.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+    assert missing == [], "broad handlers without a `# Reason:`:\n" + "\n".join(missing)

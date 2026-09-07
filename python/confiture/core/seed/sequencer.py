@@ -48,7 +48,7 @@ def apply_seed_files(
         import psycopg
 
         connection = psycopg.connect(database_url)
-    except Exception as e:
+    except psycopg.Error as e:
         raise ConfigurationError(
             f"Failed to connect to database: {e}", error_code="CONFIG_006"
         ) from e
@@ -59,6 +59,7 @@ def apply_seed_files(
         )
     except (ConfigurationError, SeedError):
         raise
+    # Reason: seed application runs user SQL; any failure is a SeedError
     except Exception as e:
         raise SeedError(f"Seed application failed: {e}") from e
     finally:

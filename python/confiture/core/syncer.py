@@ -117,6 +117,7 @@ class ProductionSyncer:
         self._source_conn = create_connection(self.source_config)
         try:
             self._target_conn = create_connection(self.target_config)
+        # Reason: resource guard: the source connection must not leak on any exit, KeyboardInterrupt included
         except BaseException:
             self._source_conn.close()
             self._source_conn = None

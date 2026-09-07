@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -137,6 +138,7 @@ def _validate_prep_seed(
 
     except typer.Exit:
         raise
+    # Reason: seed validate's --output is its report path; the boundary cannot know that, so it routes the envelope itself
     except Exception as e:
         fail(e, json_mode=is_json(format_), output_file=output)
 
@@ -386,6 +388,7 @@ def validate(
 
     except typer.Exit:
         raise
+    # Reason: seed validate's --output is its report path; the boundary cannot know that, so it routes the envelope itself
     except Exception as e:
         fail(e, json_mode=is_json(format_), output_file=output)
 
@@ -522,7 +525,7 @@ def apply(
 
         try:
             connection = connect(database_url)
-        except Exception as e:
+        except (ConfiturError, psycopg.Error) as e:
             fail(
                 ConfigurationError(
                     f"Failed to connect to database: {e}",
@@ -540,7 +543,7 @@ def apply(
             seed_settings = env_config.seed
 
             connection = connect(env_config.database_url)
-        except Exception as e:
+        except (ConfiturError, psycopg.Error, OSError) as e:
             fail(
                 ConfigurationError(
                     f"Failed to load environment {env}: {e}",
@@ -594,6 +597,7 @@ def apply(
     except typer.Exit:
         connection.close()
         raise
+    # Reason: seed application runs user SQL; any failure is a SeedError with context, connection closed
     except Exception as e:
         connection.close()
         fail(
@@ -794,6 +798,7 @@ def convert(
         raise
     except ConfiturError as e:
         fail(e, json_mode=False)
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(SeedError(f"Conversion failed: {e!s}"), json_mode=False)
 
@@ -901,6 +906,7 @@ def benchmark(
 
     except typer.Exit:
         raise
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(SeedError(f"Benchmark failed: {e}"), json_mode=False)
 
@@ -948,6 +954,7 @@ def seed_generate(
 
     try:
         result = bridge.generate(config)
+    # Reason: seed generation reaches the database and the file system; any failure is a SeedError
     except Exception as e:
         fail(
             SeedError(f"Seed generation failed: {e}"),

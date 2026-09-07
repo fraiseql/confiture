@@ -78,7 +78,7 @@ def _get_connection(database_url: str | None = None) -> psycopg.Connection:
 
     try:
         return psycopg.connect(url)
-    except Exception as exc:
+    except psycopg.Error as exc:
         raise ConfigurationError(
             f"Connection failed: {exc}",
             error_code="CONFIG_006",

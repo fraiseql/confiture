@@ -154,6 +154,7 @@ class HookExecutor:
 
         except HookError:
             raise
+        # Reason: hooks are user code; any failure in a phase is a HookError for that phase
         except Exception as e:
             raise HookError(
                 message=f"Unexpected error executing phase '{phase}'",
@@ -222,6 +223,7 @@ class HookExecutor:
 
         except HookError:
             raise
+        # Reason: hooks are user code; any failure is a HookError naming the hook
         except Exception as e:
             raise HookError(
                 message=f"Exception during hook execution: {e!s}",

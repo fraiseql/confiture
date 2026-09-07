@@ -103,6 +103,7 @@ def migrate_estimate(
 
     except typer.Exit:
         raise
+    # Reason: legacy text-only command: every failure is printed and exits 1
     except Exception as e:
         error_console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e

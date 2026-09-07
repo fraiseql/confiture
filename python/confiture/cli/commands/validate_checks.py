@@ -195,6 +195,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
                 console=console,
                 format_output=opts.format_output,
             )
+        # Reason: any failure inside a git-backed check is reported as GitError naming the check
         except Exception as e:
             raise GitError(f"Drift check failed: {e}") from e
         results["drift"] = drift_result
@@ -213,6 +214,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
                 check_bodies=opts.require_migration_bodies,
                 two_dot=opts.staged,
             )
+        # Reason: any failure inside a git-backed check is reported as GitError naming the check
         except Exception as e:
             raise GitError(f"Accompaniment check failed: {e}") from e
         results["accompaniment"] = acc_result
@@ -236,6 +238,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
                     grant_dir=_resolve_grant_dir(opts, ctx),
                     migrations_dir=str(opts.migrations_dir),
                 )
+            # Reason: any failure inside a git-backed check is reported as GitError naming the check
             except Exception as e:
                 raise GitError(f"Grant accompaniment check failed: {e}") from e
             results["grant_accompaniment"] = grant_result
@@ -276,7 +279,7 @@ def _resolve_grant_dir(opts: ValidateOptions, ctx: ValidationContext) -> str:
         configured = (
             cfg_data.get("migration", {}).get("grant_dir") if isinstance(cfg_data, dict) else None
         )
-    except Exception:
+    except (AttributeError, KeyError, TypeError):
         return "db/7_grant"
     return str(configured) if configured else "db/7_grant"
 

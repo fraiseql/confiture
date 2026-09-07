@@ -291,6 +291,7 @@ def _login_safely(server: smtplib.SMTP, cfg: SmtpConfig) -> None:
         return
     try:
         server.login(cfg.username, cfg.password.get_secret_value())
+    # Reason: re-raised after scrubbing the password from the traceback, whatever the failure
     except Exception as exc:
         _scrub_password_from_traceback(exc.__traceback__, cfg.password.get_secret_value())
         raise

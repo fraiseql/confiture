@@ -6,6 +6,7 @@ All network and database interactions are mocked.
 import json
 from unittest.mock import MagicMock, patch
 
+import psycopg
 import yaml
 from typer.testing import CliRunner
 
@@ -88,7 +89,7 @@ class TestIntrospectCommand:
     @patch("confiture.cli.helpers.create_connection")
     def test_connection_failure_exits_with_error(self, mock_create_conn, mock_introspector_class):
         """Connection failure → CONFIG_006 → exit 3."""
-        mock_create_conn.side_effect = Exception("could not connect")
+        mock_create_conn.side_effect = psycopg.OperationalError("could not connect")
 
         result = runner.invoke(app, ["introspect", "--db", "postgresql://bad/db"])
 

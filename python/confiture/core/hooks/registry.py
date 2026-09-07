@@ -109,6 +109,7 @@ class HookRegistry(Generic[T]):
                 ):
                     raise HookExecutionError(f"Hook {hook.name} failed: {result.error}")
 
+            # Reason: hooks are user code; any failure is routed by the configured error strategy
             except Exception as e:
                 if config.error_strategy == HookErrorStrategy.FAIL_SAFE:
                     logger.error(f"Hook {hook.name} failed: {e}")

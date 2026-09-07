@@ -155,6 +155,7 @@ class MigratorSession:
                 connection=self._conn,
                 migration_table=migration_table,
             )
+        # Reason: resource guard: the connection must not leak on any exit, KeyboardInterrupt included
         except BaseException:
             # A rejected tracking-table name must not leak the connection.
             self._conn.close()

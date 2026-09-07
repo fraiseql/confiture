@@ -34,6 +34,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import psycopg
+
 from confiture.exceptions import BootstrapError, BootstrapScopeError
 
 if TYPE_CHECKING:
@@ -306,7 +308,7 @@ class BootstrapExecutor:
             # the released savepoint into a durable change — without it
             # the next conn.close() would discard the work.
             conn.commit()
-        except Exception as exc:
+        except psycopg.Error as exc:
             conn.rollback()
             raise BootstrapError(
                 f"Bootstrap failed during step {applied[-1] if applied else '<role check>'}: {exc}",

@@ -226,7 +226,7 @@ class PgGitClient:
                 self._connection.commit()
 
             return self.get_branch(name)
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitBranchError(
                 f"Failed to create branch '{name}' from '{from_branch}': {e}"
@@ -253,7 +253,7 @@ class PgGitClient:
                     (name, force),
                 )
                 self._connection.commit()
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitBranchError(f"Failed to delete branch '{name}': {e}") from e
 
@@ -279,7 +279,7 @@ class PgGitClient:
                 result = cursor.fetchone()
                 self._connection.commit()
                 return result[0] if result else f"Switched to {branch_name}"
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitCheckoutError(f"Failed to checkout branch '{branch_name}': {e}") from e
 
@@ -415,7 +415,7 @@ class PgGitClient:
                 )
         except PgGitCommitError:
             raise
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             raise PgGitCommitError(f"Failed to create commit: {e}") from e
 
@@ -494,7 +494,7 @@ class PgGitClient:
                     message=result[0] if result else "Merge completed",
                     conflicts=[],
                 )
-        except Exception as e:
+        except psycopg.Error as e:
             self._connection.rollback()
             error_str = str(e).lower()
 

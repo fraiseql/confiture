@@ -19,8 +19,9 @@ class TestMigratorInitializeEdgeCases:
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
-        # Simulate table doesn't exist
-        mock_cursor.fetchone.side_effect = [(False,)]
+        # The bare-name ledger probe signals absence with no row at all (#188); a
+        # `(False,)` row used to be swallowed by a broad handler into the same error.
+        mock_cursor.fetchone.return_value = None
 
         # Simulate commit failing
         mock_conn.commit.side_effect = psycopg.Error("Commit failed")

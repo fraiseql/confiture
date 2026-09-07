@@ -274,5 +274,5 @@ def load_notifications_config(raw: dict) -> NotificationsRootConfig:
         return NotificationsRootConfig.model_validate(expanded)
     except ConfigurationError:
         raise
-    except Exception as exc:
+    except (TypeError, ValueError) as exc:
         raise ConfigurationError(f"Invalid notifications config: {exc}") from exc

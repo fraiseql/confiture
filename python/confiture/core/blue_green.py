@@ -219,6 +219,7 @@ class BlueGreenOrchestrator:
             self.state.completed_at = datetime.datetime.now(datetime.UTC).isoformat()
             self._set_phase(MigrationPhase.COMPLETE)
 
+        # Reason: the orchestration runs user health checks and DDL; any failure marks FAILED and attempts rollback
         except Exception as e:
             self.state.error = str(e)
             self._set_phase(MigrationPhase.FAILED)

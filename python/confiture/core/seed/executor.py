@@ -53,7 +53,7 @@ class SeedExecutor:
         # Read seed file
         try:
             sql_content = seed_file.read_text(encoding="utf-8")
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             raise SeedError(
                 f"Failed to read seed file: {seed_file}",
                 seed_file=str(seed_file),
@@ -87,7 +87,7 @@ class SeedExecutor:
             # SeedError from validation - re-raise as-is
             self._rollback_to_savepoint(savepoint_name)
             raise
-        except Exception as e:
+        except psycopg.Error as e:
             # Catch execution errors
             self._rollback_to_savepoint(savepoint_name)
             raise SeedError(

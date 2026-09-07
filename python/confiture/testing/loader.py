@@ -179,6 +179,7 @@ def _load_python_migration(migration_file: Path) -> type[Migration]:
         return migration_class  # ty: ignore[invalid-return-type]
     except MigrationError:
         raise
+    # Reason: importing a migration module executes user code; any failure is a MigrationLoadError
     except Exception as e:
         raise MigrationLoadError(
             f"Failed to load migration from {migration_file}: {e}\n"

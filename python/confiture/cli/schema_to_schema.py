@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary
@@ -76,7 +77,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
         return connect(load_config(candidate))
     except ConfiturError:
         raise
-    except Exception as exc:
+    except (psycopg.Error, OSError) as exc:
         raise ConfigurationError(
             f"Could not connect to '{spec}': {exc}", error_code="CONFIG_006"
         ) from exc

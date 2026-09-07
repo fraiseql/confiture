@@ -327,7 +327,7 @@ class Migration(ABC):
                     # or through a notice handler
                     pass
 
-        except Exception as e:
+        except psycopg.Error as e:
             # Wrap the error with SQL context
             raise SQLError(sql, params, e) from e
 

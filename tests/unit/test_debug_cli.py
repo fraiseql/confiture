@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+import psycopg
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -42,13 +43,13 @@ def test_debug_cte_missing_file_exits_config_error(tmp_path) -> None:
 
 
 def test_debug_cte_connection_failure_is_config_006() -> None:
-    with patch("psycopg.connect", side_effect=RuntimeError("boom")):
+    with patch("psycopg.connect", side_effect=psycopg.OperationalError("boom")):
         result = runner.invoke(app, ["debug", "cte", "-d", "postgresql://x/y", "--sql", "SELECT 1"])
     assert result.exit_code == 3
 
 
 def test_debug_cte_connection_failure_json_envelope() -> None:
-    with patch("psycopg.connect", side_effect=RuntimeError("boom")):
+    with patch("psycopg.connect", side_effect=psycopg.OperationalError("boom")):
         result = runner.invoke(
             app,
             ["debug", "cte", "-d", "postgresql://x/y", "--sql", "SELECT 1", "--format", "json"],

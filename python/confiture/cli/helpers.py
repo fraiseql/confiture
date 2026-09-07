@@ -21,7 +21,7 @@ from confiture.core.linting.schema_linter import (
     RuleSeverity,
 )
 from confiture.core.parser_info import parser_stamp
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.lint import LintReport, LintSeverity, Violation
 from confiture.url_redaction import (
     redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
@@ -433,5 +433,5 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
         with open_connection(config_data) as conn, conn.cursor() as cur:
             cur.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
             return {row[0] for row in cur.fetchall()}
-    except Exception:
+    except (ConfiturError, psycopg.Error):
         return set()

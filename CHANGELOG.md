@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list instead of a `global`. `PLC0415` (function-level imports) stays governed by the Phase 08 budget.
 - **No mypy-style `type: ignore[...]` codes.** All 14 were stripped and ty is clean without them — none was
   suppressing anything; `tests/unit/test_no_mypy_ignore_codes.py` forbids the form (and bare `# type: ignore`).
-- **Broad `except Exception` handlers: 207 → 137** (first step of the Phase 11 narrowing; the budget in
+- **Broad `except Exception` handlers: 207 → 94** (first step of the Phase 11 narrowing; the budget in
   `tests/budgets.json` only shrinks). 15 CLI handlers that duplicated the command error boundary are gone
   (`cli_boundary` now also reads a `report_output` parameter); 89 blind handlers in the core were each
   either narrowed to the failure class the `try` can raise (`psycopg.Error` around database work,
@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   walks) or kept broad with a written `# Reason:` — user code (migrations, hooks, callbacks, preconditions),
   documented best-effort checks, and servers that must answer every failure. Tests that simulated a
   database failure with a bare `Exception` now raise a `psycopg` error, as the database does.
+  Second step: the 53 files' remaining handlers were each narrowed (database work → `psycopg.Error`,
+  model validation → `TypeError`/`ValueError`, files → `OSError`) or given a `# Reason:`; a guard now fails
+  on any broad handler without one. Two tests that passed for the wrong reason surfaced: a mocked ledger
+  row of the wrong shape had been swallowed into "Failed to initialize".
 
 ## [0.54.0] - 2026-09-07
 

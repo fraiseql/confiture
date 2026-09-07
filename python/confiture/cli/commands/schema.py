@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import typer
 from rich.console import Console
 
@@ -194,7 +195,7 @@ Documentation: https://github.com/evoludigit/confiture
 
     except typer.Exit:
         raise
-    except Exception as e:
+    except OSError as e:
         print_error_to_console(e)
         raise typer.Exit(handle_cli_error(e)) from e
 
@@ -970,6 +971,7 @@ def lint(
         if not is_json(format_type):
             console.print("\n💡 Tip: Make sure schema files exist in db/schema/")
         fail(e, json_mode=is_json(format_type), output_file=output)
+    # Reason: lint's --output is its report path; the boundary cannot know that, so lint routes the envelope itself
     except Exception as e:
         # The one error boundary: an envelope in JSON mode, the Rich rendering otherwise.
         fail(e, json_mode=is_json(format_type), output_file=output)
@@ -994,6 +996,7 @@ def _replica_lint(
         _env = Environment.load(env, project_dir=project_dir)
         has_replicas = bool(_env.infrastructure.replicas)
         bypass = _env.migration.allow_unsafe_under_replication
+    # Reason: replica config is optional; any failure reading it means 'no replicas'
     except Exception:
         pass
     violations = Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
@@ -1039,6 +1042,7 @@ def _security_definer_lint(
             sec_cfg = _lsl(_lc(cfg_path), cfg_path, require=False)
         if sec_cfg is not None and not sec_cfg.enabled:
             sec_cfg = None
+    # Reason: security config is optional; any failure reading it means 'defaults'
     except Exception:
         sec_cfg = None
     if sec_cfg is None:
@@ -1046,7 +1050,7 @@ def _security_definer_lint(
     severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
     try:
         ddl_paths = SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
-    except Exception:
+    except (ConfiturError, OSError):
         ddl_paths = sorted(Path("db/schema").rglob("*.sql")) if Path("db/schema").exists() else []
     violations = Sec002SecurityDefinerSearchPath(
         apply_to=sec_cfg.apply_to, ignore=sec_cfg.ignore, severity=severity
@@ -1297,6 +1301,7 @@ def lint_unified(
                 _violation_to_unified_issue(v, "schema", file=env)
                 for v in linter_report.errors + linter_report.warnings + linter_report.info
             )
+        # Reason: lint-unified skips a linter that fails for any reason and says so
         except Exception as e:
             console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
 
@@ -1318,6 +1323,7 @@ def lint_unified(
                 _violation_to_unified_issue(v, "tree")
                 for v in tree_report.errors + tree_report.warnings + tree_report.info
             )
+        # Reason: lint-unified skips a linter that fails for any reason and says so
         except Exception as e:
             console.print(f"[yellow]Tree lint skipped: {e}[/yellow]")
 
@@ -1405,7 +1411,7 @@ def introspect(
 
     try:
         conn = connect(db)
-    except Exception as e:
+    except (ConfiturError, psycopg.Error) as e:
         fail(
             ConfigurationError(
                 f"Connection failed: {e}",

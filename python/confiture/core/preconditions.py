@@ -795,6 +795,7 @@ class PreconditionValidator:
                 )
         except PreconditionError:
             raise
+        # Reason: preconditions are user code; any failure is a PreconditionError
         except Exception as e:
             raise PreconditionError(
                 precondition,

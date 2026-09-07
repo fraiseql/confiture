@@ -26,6 +26,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import psycopg
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -457,6 +458,7 @@ def generate_from_branch(
 
     except typer.Exit:
         raise
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(ConfiturError(f"Error generating migrations: {e}"), json_mode=False)
 
@@ -532,6 +534,7 @@ def preview_generation(
 
     except typer.Exit:
         raise
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(ConfiturError(f"Error previewing: {e}"), json_mode=False)
 
@@ -611,6 +614,7 @@ def show_diff(
 
     except typer.Exit:
         raise
+    # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(ConfiturError(f"Error: {e}"), json_mode=False)
 
@@ -632,7 +636,6 @@ def generate_pgtap(
     ),
 ) -> None:
     """Generate pgTAP test scaffolds for PostgreSQL stored functions."""
-    import psycopg
 
     from confiture.core.pgtap_generator import PgTAPGenerator
 
@@ -646,7 +649,7 @@ def generate_pgtap(
                 include_return_type=not no_return_type,
             )
             pgtap_file = gen.generate()
-    except Exception as e:
+    except psycopg.Error as e:
         fail(
             ConfigurationError(f"Error connecting to database: {e}", error_code="CONFIG_006"),
             json_mode=False,
@@ -681,7 +684,6 @@ def generate_stubs(
     ),
 ) -> None:
     """Generate typed Python wrapper functions for stored procedures."""
-    import psycopg
 
     from confiture.core.stub_generator import StubGenerator
 
@@ -689,7 +691,7 @@ def generate_stubs(
         with psycopg.connect(database_url) as conn:
             gen = StubGenerator(conn, schema=schema, name_pattern=include)
             stub_file = gen.generate()
-    except Exception as e:
+    except psycopg.Error as e:
         fail(
             ConfigurationError(f"Error connecting to database: {e}", error_code="CONFIG_006"),
             json_mode=False,

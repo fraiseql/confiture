@@ -134,6 +134,7 @@ def migrate_diff(
 
     except typer.Exit:
         raise
+    # Reason: the diff result carries the failure so the formatter can render it in every format
     except Exception as e:
         from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
         from confiture.models.results import MigrateDiffResult

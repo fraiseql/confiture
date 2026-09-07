@@ -191,6 +191,7 @@ def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
             typer.Abort,
         ):  # Click's Exit/Abort, re-exported — click itself is not a dependency
             raise
+        # Reason: this IS the one error boundary (ENG-08)
         except Exception as exc:
             fmt = next((kwargs[k] for k in _FORMAT_PARAMS if k in kwargs), None)
             out = next((kwargs[k] for k in _OUTPUT_PARAMS if k in kwargs), None)

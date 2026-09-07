@@ -3,6 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import psycopg
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -385,7 +386,7 @@ def test_apply_body_corf_failure_rolls_back(tmp_path):
     schema.write_text(SCHEMA_WITH_FN)
 
     fake_cursor, fake_conn = _make_cursor_conn()
-    fake_cursor.execute.side_effect = Exception("syntax error in body")
+    fake_cursor.execute.side_effect = psycopg.ProgrammingError("syntax error in body")
 
     with (
         patch(
