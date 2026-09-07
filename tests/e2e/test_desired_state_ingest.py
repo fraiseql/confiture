@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 
 import psycopg
-import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -97,7 +96,6 @@ def test_from_and_to_cannot_mix_with_the_positional_form(tmp_path: Path) -> None
     assert result.exit_code == 5, result.output
 
 
-@pytest.mark.integration
 def test_from_db_diffs_the_configured_database(
     clean_test_db: psycopg.Connection, test_db_url: str, tmp_path: Path
 ) -> None:
