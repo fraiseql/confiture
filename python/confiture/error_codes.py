@@ -352,8 +352,9 @@ def render_exit_codes_doc() -> str:
     lines: list[str] = []
     lines.append("| Exit | Meaning |")
     lines.append("|------|---------|")
-    for code in used_codes:
-        lines.append(f"| {code} | {EXIT_CODE_MEANINGS.get(code, '(reserved)')} |")
+    lines.extend(
+        f"| {code} | {EXIT_CODE_MEANINGS.get(code, '(reserved)')} |" for code in used_codes
+    )
 
     lines.append("")
     lines.append("### Symbolic codes per exit code")

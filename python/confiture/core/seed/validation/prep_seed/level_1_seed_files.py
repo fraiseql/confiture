@@ -130,23 +130,20 @@ class Level1SeedValidator:
             columns = [col.strip() for col in columns_str.split(",")]
 
             # Check each FK column
-            for col in columns:
-                # FK columns should be named fk_*_id
-                if col.lower().startswith("fk_") and not col.lower().endswith("_id"):
-                    violations.append(
-                        PrepSeedViolation(
-                            pattern=PrepSeedPattern.INVALID_FK_NAMING,
-                            severity=ViolationSeverity.WARNING,
-                            message=(
-                                f"FK column '{col}' missing _id suffix (should be '{col}_id')"
-                            ),
-                            file_path=file_path,
-                            line_number=line_number,
-                            impact=("FK column naming convention not followed for prep_seed"),
-                            fix_available=True,
-                            suggestion=f"Rename column to '{col}_id'",
-                        )
-                    )
+            violations.extend(
+                PrepSeedViolation(
+                    pattern=PrepSeedPattern.INVALID_FK_NAMING,
+                    severity=ViolationSeverity.WARNING,
+                    message=(f"FK column '{col}' missing _id suffix (should be '{col}_id')"),
+                    file_path=file_path,
+                    line_number=line_number,
+                    impact=("FK column naming convention not followed for prep_seed"),
+                    fix_available=True,
+                    suggestion=f"Rename column to '{col}_id'",
+                )
+                for col in columns
+                if col.lower().startswith("fk_") and not col.lower().endswith("_id")
+            )
 
         return violations
 

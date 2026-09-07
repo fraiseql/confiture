@@ -121,8 +121,7 @@ class MigrationGenerator:
             return []
 
         conflicts = []
-        for migration_file in self.migrations_dir.glob(f"*_{name}.py"):
-            conflicts.append(migration_file)
+        conflicts.extend(self.migrations_dir.glob(f"*_{name}.py"))
 
         return conflicts
 

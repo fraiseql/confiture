@@ -56,10 +56,10 @@ class TestStatusResult:
                     applied_at=ts,
                 )
             )
-        for i in range(applied + 1, applied + pending + 1):
-            migrations.append(
-                MigrationInfo(version=f"{i:03d}", name=f"migration_{i}", status="pending")
-            )
+        migrations.extend(
+            MigrationInfo(version=f"{i:03d}", name=f"migration_{i}", status="pending")
+            for i in range(applied + 1, applied + pending + 1)
+        )
         return StatusResult(
             migrations=migrations,
             tracking_table_exists=tracking_table_exists,

@@ -150,15 +150,15 @@ class ViewParser:
         """
         conditions = []
 
-        for match in self.JOIN_CONDITION_PATTERN.finditer(sql):
-            conditions.append(
-                JoinCondition(
-                    left_alias=match.group(1),
-                    left_column=match.group(2),
-                    right_alias=match.group(3),
-                    right_column=match.group(4),
-                )
+        conditions.extend(
+            JoinCondition(
+                left_alias=match.group(1),
+                left_column=match.group(2),
+                right_alias=match.group(3),
+                right_column=match.group(4),
             )
+            for match in self.JOIN_CONDITION_PATTERN.finditer(sql)
+        )
 
         return conditions
 

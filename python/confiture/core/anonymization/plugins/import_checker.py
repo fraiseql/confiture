@@ -67,15 +67,15 @@ def check_source(source: str) -> list[ImportViolation]:
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.split(".")[0] in BLOCKED_MODULES:
-                    violations.append(
-                        ImportViolation(
-                            module=alias.name,
-                            line=node.lineno,
-                            col=node.col_offset,
-                        )
-                    )
+            violations.extend(
+                ImportViolation(
+                    module=alias.name,
+                    line=node.lineno,
+                    col=node.col_offset,
+                )
+                for alias in node.names
+                if alias.name.split(".")[0] in BLOCKED_MODULES
+            )
         elif (
             isinstance(node, ast.ImportFrom)
             and node.module

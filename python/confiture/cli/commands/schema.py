@@ -1298,8 +1298,10 @@ def lint_unified(
         schema_linter = SchemaLinter(env=env, config=schema_config)
         try:
             linter_report = schema_linter.lint()
-            for v in linter_report.errors + linter_report.warnings + linter_report.info:
-                all_issues.append(_violation_to_unified_issue(v, "schema", file=env))
+            all_issues.extend(
+                _violation_to_unified_issue(v, "schema", file=env)
+                for v in linter_report.errors + linter_report.warnings + linter_report.info
+            )
         except Exception as e:
             console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
 
@@ -1317,8 +1319,10 @@ def lint_unified(
                 schema_dir=resolved_schema_dir,
                 overrides_dir=overrides_dir,
             )
-            for v in tree_report.errors + tree_report.warnings + tree_report.info:
-                all_issues.append(_violation_to_unified_issue(v, "tree"))
+            all_issues.extend(
+                _violation_to_unified_issue(v, "tree")
+                for v in tree_report.errors + tree_report.warnings + tree_report.info
+            )
         except Exception as e:
             console.print(f"[yellow]Tree lint skipped: {e}[/yellow]")
 

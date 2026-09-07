@@ -402,8 +402,10 @@ def _rebuild_reasons(
     reasons: list[str] = []
     if len(pending) >= threshold:
         reasons.append(f"{len(pending)} pending migrations exceed threshold of {threshold}")
-    for sf in find_rebuild_strategy_files(migrations_dir):
-        reasons.append(f"Migration {sf.name} has '-- Strategy: rebuild' header")
+    reasons.extend(
+        f"Migration {sf.name} has '-- Strategy: rebuild' header"
+        for sf in find_rebuild_strategy_files(migrations_dir)
+    )
     return reasons
 
 

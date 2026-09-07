@@ -146,7 +146,6 @@ def render_dry_run_text(summary: dict[str, Any], *, rollback: bool = False) -> s
             lines.append(
                 f"⚠️  {summary['summary']['unsafe_count']} unsafe change(s) — review before applying"
             )
-        for warning in summary["warnings"]:
-            lines.append(f"⚠️  {warning}")
+        lines.extend(f"⚠️  {warning}" for warning in summary["warnings"])
     lines.append("=" * 80)
     return "\n".join(lines) + "\n"

@@ -409,7 +409,7 @@ class TestCardTypes:
 
     def test_card_types_structure(self):
         """Test CARD_TYPES has correct structure."""
-        for _card_type, (length, prefixes) in CARD_TYPES.items():
+        for length, prefixes in CARD_TYPES.values():
             assert isinstance(length, int)
             assert isinstance(prefixes, list)
             assert len(prefixes) > 0

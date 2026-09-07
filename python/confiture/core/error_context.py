@@ -273,8 +273,7 @@ def format_error_with_context(error_code: str, custom_message: str | None = None
 
     if context.examples:
         lines.extend(["", "💡 EXAMPLES:"])
-        for example in context.examples:
-            lines.append(f"  $ {example}")
+        lines.extend(f"  $ {example}" for example in context.examples)
 
     lines.extend(
         [

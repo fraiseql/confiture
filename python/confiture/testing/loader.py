@@ -137,8 +137,7 @@ def _load_by_version(version: str, migrations_dir: Path) -> type[Migration]:
 
     # Collect all matches
     all_matches: list[tuple[str, Path]] = []
-    for f in py_files:
-        all_matches.append(("python", f))
+    all_matches.extend(("python", f) for f in py_files)
     for up_f in sql_up_files:
         # Check that .down.sql exists
         base_name = up_f.name.replace(".up.sql", "")

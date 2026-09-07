@@ -266,8 +266,7 @@ class DifferSQLGenerator:
         added = details.get("added_values", [])
         removed = details.get("removed_values", [])
         parts: list[str] = []
-        for v in added:
-            parts.append(f"ALTER TYPE {name} ADD VALUE IF NOT EXISTS '{v}';\n")
+        parts.extend(f"ALTER TYPE {name} ADD VALUE IF NOT EXISTS '{v}';\n" for v in added)
         if removed:
             removed_list = ", ".join(f"'{v}'" for v in removed)
             parts.append(

@@ -192,24 +192,26 @@ class GrantAccompanimentChecker:
             # A grant that differs only by WITH GRANT OPTION yields no key
             # change (the flag is out of the match key) — surface it (D9).
             # Iterate the target set so `stmt` is always the target instance.
-            for stmt in target_statements:
-                if stmt in base_statements and stmt.grant_option != base_options.get(stmt, False):
-                    notes.append(
-                        f"{grant_file.as_posix()}: {stmt.describe()} — only WITH GRANT OPTION "
-                        "changed; relying on migration presence"
-                    )
+            notes.extend(
+                f"{grant_file.as_posix()}: {stmt.describe()} — only WITH GRANT OPTION "
+                "changed; relying on migration presence"
+                for stmt in target_statements
+                if stmt in base_statements and stmt.grant_option != base_options.get(stmt, False)
+            )
 
             # A grant removed from the file (present at base, absent at target)
             # degrades to file-presence — v1 does not auto-require a REVOKE (D8).
-            for stmt in base_statements - target_statements:
-                notes.append(
-                    f"{grant_file.as_posix()}: {stmt.describe()} was removed; relying on "
-                    "migration presence (no automatic REVOKE-migration requirement)"
-                )
+            notes.extend(
+                f"{grant_file.as_posix()}: {stmt.describe()} was removed; relying on "
+                "migration presence (no automatic REVOKE-migration requirement)"
+                for stmt in base_statements - target_statements
+            )
 
             # Surface every grant the extractor couldn't represent (D9).
-            for marker in target_extraction.unrepresentable:
-                notes.append(f"{grant_file.as_posix()}: {marker.detail} ({marker.reason})")
+            notes.extend(
+                f"{grant_file.as_posix()}: {marker.detail} ({marker.reason})"
+                for marker in target_extraction.unrepresentable
+            )
 
         return required, notes
 
@@ -271,8 +273,9 @@ class GrantAccompanimentChecker:
             notes.append(f"{migration_file.as_posix()}: could not statically extract SQL")
             return covered, notes
 
-        for warning in result.warnings:
-            notes.append(f"{migration_file.as_posix()}: {warning.message}")
+        notes.extend(
+            f"{migration_file.as_posix()}: {warning.message}" for warning in result.warnings
+        )
         for snippet in result.snippets:
             if snippet.kind == ExtractionKind.FILE:
                 notes.append(
@@ -281,8 +284,10 @@ class GrantAccompanimentChecker:
                 )
             extraction = self._extractor.extract_grant_statements(snippet.sql)
             covered.update(extraction.statements)
-            for marker in extraction.unrepresentable:
-                notes.append(f"{migration_file.as_posix()}: {marker.detail} ({marker.reason})")
+            notes.extend(
+                f"{migration_file.as_posix()}: {marker.detail} ({marker.reason})"
+                for marker in extraction.unrepresentable
+            )
 
         return covered, notes
 
@@ -342,10 +347,7 @@ class GrantAccompanimentChecker:
         """
         grant_parts = Path(self.grant_dir).parts
         result = []
-        for f in files:
-            # Check if file path starts with the grant_dir parts
-            if f.parts[: len(grant_parts)] == grant_parts:
-                result.append(f)
+        result.extend(f for f in files if f.parts[: len(grant_parts)] == grant_parts)
         return result
 
     def _filter_migration_files(self, files: list[Path]) -> list[Path]:

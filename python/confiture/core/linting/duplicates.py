@@ -120,17 +120,17 @@ def find_duplicates(objects: Sequence[SchemaObject]) -> list[Duplicate]:
         by_key[_key(obj)].append(obj)
 
     findings: list[Duplicate] = []
-    for group in by_key.values():
-        if len(group) > 1:
-            findings.append(
-                Duplicate(
-                    rule_id="build_001",
-                    kind=group[0].kind,
-                    identity=group[0].identity,
-                    definitions=tuple(_definition(obj) for obj in group),
-                    wins=_wins(group),
-                )
-            )
+    findings.extend(
+        Duplicate(
+            rule_id="build_001",
+            kind=group[0].kind,
+            identity=group[0].identity,
+            definitions=tuple(_definition(obj) for obj in group),
+            wins=_wins(group),
+        )
+        for group in by_key.values()
+        if len(group) > 1
+    )
 
     routines: dict[tuple[str, str, str], list[SchemaObject]] = defaultdict(list)
     for key, group in by_key.items():

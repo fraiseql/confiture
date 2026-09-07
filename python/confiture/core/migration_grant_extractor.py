@@ -490,8 +490,7 @@ class MigrationGrantExtractor:
                 # obj is a RangeVar for table grants.
                 schema = obj.schemaname or "public"
                 table = obj.relname
-                for role in roles:
-                    out.append((schema, table, role, privs))
+                out.extend((schema, table, role, privs) for role in roles)
         return out
 
     def _statements_pglast(
@@ -625,19 +624,19 @@ class MigrationGrantExtractor:
         grant_option: bool,
     ) -> None:
         for grantee in grantees:
-            for priv in sorted(privs):
-                statements.append(
-                    GrantStatement(
-                        action=action,
-                        objtype=objtype,
-                        target_kind=target_kind,
-                        schema=schema,
-                        object=obj,
-                        grantee=grantee,
-                        privilege=priv,
-                        grant_option=grant_option,
-                    )
+            statements.extend(
+                GrantStatement(
+                    action=action,
+                    objtype=objtype,
+                    target_kind=target_kind,
+                    schema=schema,
+                    object=obj,
+                    grantee=grantee,
+                    privilege=priv,
+                    grant_option=grant_option,
                 )
+                for priv in sorted(privs)
+            )
 
     @staticmethod
     def _pglast_object_identity(objtype: str, obj: object) -> tuple[str, str | None, str | None]:

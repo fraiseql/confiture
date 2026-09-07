@@ -75,12 +75,12 @@ def _iter_statements(sql: str, pglast: Any) -> list[_StatementContext]:
     if tree is None:
         return []
     contexts: list[_StatementContext] = []
-    for raw in tree:
-        contexts.append(
-            _StatementContext(
-                stmt=raw.stmt,
-                stmt_location=raw.stmt_location or 0,
-                stmt_len=raw.stmt_len or 0,
-            )
+    contexts.extend(
+        _StatementContext(
+            stmt=raw.stmt,
+            stmt_location=raw.stmt_location or 0,
+            stmt_len=raw.stmt_len or 0,
         )
+        for raw in tree
+    )
     return contexts

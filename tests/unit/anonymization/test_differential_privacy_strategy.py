@@ -528,8 +528,7 @@ class TestDifferentialPrivacyEdgeCases:
         strategy = DifferentialPrivacyStrategy()
 
         results = []
-        for _ in range(5):
-            results.append(strategy.anonymize(100))
+        results.extend(strategy.anonymize(100) for _ in range(5))
 
         # All results should typically be different (random noise)
         # Check we don't have all identical values

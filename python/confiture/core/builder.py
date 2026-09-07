@@ -399,15 +399,16 @@ class SchemaBuilder:
 
         if errors and config.fail_on_unclosed_blocks:
             should_fail = True
-            for error in errors:
-                error_messages.append(f"  {error.file_path}:{error.line_number} - {error.message}")
+            error_messages.extend(
+                f"  {error.file_path}:{error.line_number} - {error.message}" for error in errors
+            )
 
         if spillovers and config.fail_on_spillover:
             should_fail = True
-            for spillover in spillovers:
-                error_messages.append(
-                    f"  {spillover.file_path}:{spillover.line_number} - {spillover.message}"
-                )
+            error_messages.extend(
+                f"  {spillover.file_path}:{spillover.line_number} - {spillover.message}"
+                for spillover in spillovers
+            )
 
         if should_fail:
             msg = "Comment validation failed:\n" + "\n".join(error_messages)

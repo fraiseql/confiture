@@ -105,9 +105,7 @@ class TenantIsolationRule:
         """
         # Read view files
         view_sqls = []
-        for path in view_paths:
-            if path.exists():
-                view_sqls.append(path.read_text())
+        view_sqls.extend(path.read_text() for path in view_paths if path.exists())
 
         # Read and analyze function files
         for func_path in function_paths:

@@ -129,8 +129,9 @@ class TestLargeFileEdgeCases:
     def test_mixed_data_types_large_file(self) -> None:
         """Test large file with all data types mixed."""
         rows = []
-        for i in range(5000):
-            rows.append(f"({i}, 'text_{i}', {i * 1.5}, {i % 2 == 0}, NULL, {i * 100})")
+        rows.extend(
+            f"({i}, 'text_{i}', {i * 1.5}, {i % 2 == 0}, NULL, {i * 100})" for i in range(5000)
+        )
 
         values_clause = ", ".join(rows)
         sql = (
@@ -146,9 +147,7 @@ class TestLargeFileEdgeCases:
     def test_consecutive_nulls_large_file(self) -> None:
         """Test large file with many consecutive NULL columns."""
         rows = []
-        for i in range(5000):
-            # Many NULLs in sequence
-            rows.append(f"({i}, NULL, NULL, NULL, 'value_{i}', NULL, NULL)")
+        rows.extend(f"({i}, NULL, NULL, NULL, 'value_{i}', NULL, NULL)" for i in range(5000))
 
         values_clause = ", ".join(rows)
         sql = f"INSERT INTO sparse (id, a, b, c, d, e, f) VALUES {values_clause};"

@@ -56,7 +56,9 @@ def find_rebuild_strategy_files(migrations_dir: Path) -> list[Path]:
     result: list[Path] = []
     if not migrations_dir.is_dir():
         return result
-    for path in sorted(migrations_dir.glob("*.up.sql")):
-        if parse_file_strategy(path) == "rebuild":
-            result.append(path)
+    result.extend(
+        path
+        for path in sorted(migrations_dir.glob("*.up.sql"))
+        if parse_file_strategy(path) == "rebuild"
+    )
     return result

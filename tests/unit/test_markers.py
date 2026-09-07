@@ -120,9 +120,11 @@ def _unmarked_in(node: ast.AST, marked: bool, rel: str, findings: list[str]) -> 
         elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if marked or _has_benchmark_mark(child.decorator_list):
                 continue
-            for sub in ast.walk(child):
-                if isinstance(sub, ast.Assert) and _is_upper_bound_on_timing(sub.test):
-                    findings.append(f"tests/{rel}:{sub.lineno}: {ast.unparse(sub.test)}")
+            findings.extend(
+                f"tests/{rel}:{sub.lineno}: {ast.unparse(sub.test)}"
+                for sub in ast.walk(child)
+                if isinstance(sub, ast.Assert) and _is_upper_bound_on_timing(sub.test)
+            )
         else:
             _unmarked_in(child, marked, rel, findings)
 

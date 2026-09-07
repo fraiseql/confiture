@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ERA` and `PTH` families enabled.** ERA's 22 hits were prose comments that parsed as code (row-shape
   tuples, `# mode == "apply"`) and are reworded — no commented-out code existed. PTH: 67 sites moved to
   pathlib (`Path.cwd()`, `Path(...).open()`, `.mkdir(parents=True)`, `.stat()`, `Path()` for `Path(".")`).
+- **`PERF` family enabled.** 61 single-`append` loops became `extend(...)` over a generator (an AST rewrite
+  from ruff's findings, reviewed), three dict iterations use `.values()`/keys directly.
 
 ## [0.54.0] - 2026-09-07
 

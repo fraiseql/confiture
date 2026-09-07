@@ -140,38 +140,38 @@ def _convert_linter_report(
     }
 
     # Convert all violations
-    for violation in linter_report.errors:
-        violations.append(
-            Violation(
-                rule_id=violation.rule_id,
-                rule_name=violation.rule_name,
-                severity=severity_map[violation.severity],
-                message=violation.message,
-                location=violation.object_name,
-            )
+    violations.extend(
+        Violation(
+            rule_id=violation.rule_id,
+            rule_name=violation.rule_name,
+            severity=severity_map[violation.severity],
+            message=violation.message,
+            location=violation.object_name,
         )
+        for violation in linter_report.errors
+    )
 
-    for violation in linter_report.warnings:
-        violations.append(
-            Violation(
-                rule_id=violation.rule_id,
-                rule_name=violation.rule_name,
-                severity=severity_map[violation.severity],
-                message=violation.message,
-                location=violation.object_name,
-            )
+    violations.extend(
+        Violation(
+            rule_id=violation.rule_id,
+            rule_name=violation.rule_name,
+            severity=severity_map[violation.severity],
+            message=violation.message,
+            location=violation.object_name,
         )
+        for violation in linter_report.warnings
+    )
 
-    for violation in linter_report.info:
-        violations.append(
-            Violation(
-                rule_id=violation.rule_id,
-                rule_name=violation.rule_name,
-                severity=severity_map[violation.severity],
-                message=violation.message,
-                location=violation.object_name,
-            )
+    violations.extend(
+        Violation(
+            rule_id=violation.rule_id,
+            rule_name=violation.rule_name,
+            severity=severity_map[violation.severity],
+            message=violation.message,
+            location=violation.object_name,
         )
+        for violation in linter_report.info
+    )
 
     return LintReport(
         violations=violations,

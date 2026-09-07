@@ -103,22 +103,22 @@ class Gen001PrefixUnique:
                 if len(files) <= 1:
                     continue
                 # First file is the "winner"; every subsequent file is a duplicate.
-                for dup in sorted(files, key=lambda f: f.name)[1:]:
-                    violations.append(
-                        LintViolation(
-                            rule_id="GEN001",
-                            rule_name="Prefix Uniqueness",
-                            severity=RuleSeverity.ERROR,
-                            object_type="file",
-                            object_name=dup.name,
-                            message=(
-                                f"Prefix '{raw_prefix}' is shared by multiple files "
-                                f"in {directory.name}/: "
-                                f"{', '.join(sorted(f.name for f in files))}"
-                            ),
-                            file_path=str(dup),
-                        )
+                violations.extend(
+                    LintViolation(
+                        rule_id="GEN001",
+                        rule_name="Prefix Uniqueness",
+                        severity=RuleSeverity.ERROR,
+                        object_type="file",
+                        object_name=dup.name,
+                        message=(
+                            f"Prefix '{raw_prefix}' is shared by multiple files "
+                            f"in {directory.name}/: "
+                            f"{', '.join(sorted(f.name for f in files))}"
+                        ),
+                        file_path=str(dup),
                     )
+                    for dup in sorted(files, key=lambda f: f.name)[1:]
+                )
 
         return violations
 
@@ -201,23 +201,23 @@ class Gen003GapPolicy:
                 continue
 
             values.sort()
-            for i in range(1, len(values)):
-                if values[i] - values[i - 1] > 1:
-                    violations.append(
-                        LintViolation(
-                            rule_id="GEN003",
-                            rule_name="Prefix Gap",
-                            severity=RuleSeverity.WARNING,
-                            object_type="directory",
-                            object_name=directory.name,
-                            message=(
-                                f"Gap in prefix sequence in {directory.name}/: "
-                                f"{values[i - 1]} → {values[i]} "
-                                f"(missing {values[i] - values[i - 1] - 1} value(s))"
-                            ),
-                            file_path=str(directory),
-                        )
-                    )
+            violations.extend(
+                LintViolation(
+                    rule_id="GEN003",
+                    rule_name="Prefix Gap",
+                    severity=RuleSeverity.WARNING,
+                    object_type="directory",
+                    object_name=directory.name,
+                    message=(
+                        f"Gap in prefix sequence in {directory.name}/: "
+                        f"{values[i - 1]} → {values[i]} "
+                        f"(missing {values[i] - values[i - 1] - 1} value(s))"
+                    ),
+                    file_path=str(directory),
+                )
+                for i in range(1, len(values))
+                if values[i] - values[i - 1] > 1
+            )
 
         return violations
 

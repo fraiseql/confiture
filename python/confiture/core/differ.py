@@ -454,11 +454,15 @@ class SchemaDiffer:
             old_table_names.discard(old_name)
             new_table_names.discard(new_name)
 
-        for table_name in old_table_names - new_table_names:
-            changes.append(SchemaChange(type="DROP_TABLE", table=table_name))
+        changes.extend(
+            SchemaChange(type="DROP_TABLE", table=table_name)
+            for table_name in old_table_names - new_table_names
+        )
 
-        for table_name in new_table_names - old_table_names:
-            changes.append(SchemaChange(type="ADD_TABLE", table=table_name))
+        changes.extend(
+            SchemaChange(type="ADD_TABLE", table=table_name)
+            for table_name in new_table_names - old_table_names
+        )
 
         for table_name in old_table_names & new_table_names:
             old_table = old_table_map[table_name]
@@ -516,11 +520,15 @@ class SchemaDiffer:
             old_col_names.discard(old_name)
             new_col_names.discard(new_name)
 
-        for col_name in old_col_names - new_col_names:
-            changes.append(SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name))
+        changes.extend(
+            SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name)
+            for col_name in old_col_names - new_col_names
+        )
 
-        for col_name in new_col_names - old_col_names:
-            changes.append(SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name))
+        changes.extend(
+            SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name)
+            for col_name in new_col_names - old_col_names
+        )
 
         for col_name in old_col_names & new_col_names:
             old_col = old_col_map[col_name]
@@ -653,11 +661,13 @@ class SchemaDiffer:
         old_map = {e.name: e for e in old_enums}
         new_map = {e.name: e for e in new_enums}
 
-        for name in set(new_map) - set(old_map):
-            changes.append(SchemaChange(type="ADD_ENUM_TYPE", table=name))
+        changes.extend(
+            SchemaChange(type="ADD_ENUM_TYPE", table=name) for name in set(new_map) - set(old_map)
+        )
 
-        for name in set(old_map) - set(new_map):
-            changes.append(SchemaChange(type="DROP_ENUM_TYPE", table=name))
+        changes.extend(
+            SchemaChange(type="DROP_ENUM_TYPE", table=name) for name in set(old_map) - set(new_map)
+        )
 
         for name in set(old_map) & set(new_map):
             old_vals = set(old_map[name].values)
@@ -684,11 +694,13 @@ class SchemaDiffer:
         old_map = {s.name: s for s in old_seqs}
         new_map = {s.name: s for s in new_seqs}
 
-        for name in set(new_map) - set(old_map):
-            changes.append(SchemaChange(type="ADD_SEQUENCE", table=name))
+        changes.extend(
+            SchemaChange(type="ADD_SEQUENCE", table=name) for name in set(new_map) - set(old_map)
+        )
 
-        for name in set(old_map) - set(new_map):
-            changes.append(SchemaChange(type="DROP_SEQUENCE", table=name))
+        changes.extend(
+            SchemaChange(type="DROP_SEQUENCE", table=name) for name in set(old_map) - set(new_map)
+        )
 
         return changes
 

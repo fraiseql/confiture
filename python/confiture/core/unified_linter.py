@@ -41,17 +41,17 @@ class SquawkRunner:
             return []
         issues = []
         for item in data:
-            for violation in item.get("violations", []):
-                issues.append(
-                    UnifiedLintIssue(
-                        tool="squawk",
-                        file=item.get("filename", ""),
-                        line=violation.get("line"),
-                        message=violation.get("message", ""),
-                        severity=LintSeverity.WARNING,
-                        rule=violation.get("rule"),
-                    )
+            issues.extend(
+                UnifiedLintIssue(
+                    tool="squawk",
+                    file=item.get("filename", ""),
+                    line=violation.get("line"),
+                    message=violation.get("message", ""),
+                    severity=LintSeverity.WARNING,
+                    rule=violation.get("rule"),
                 )
+                for violation in item.get("violations", [])
+            )
         return issues
 
 
@@ -80,17 +80,17 @@ class SQLFluffRunner:
         for f in files:
             try:
                 result = simple.lint(f.read_text(), dialect=dialect)
-                for violation in result:
-                    issues.append(
-                        UnifiedLintIssue(
-                            tool="sqlfluff",
-                            file=str(f),
-                            line=violation.get("line_no"),
-                            message=violation.get("description", ""),
-                            severity=LintSeverity.WARNING,
-                            rule=violation.get("code"),
-                        )
+                issues.extend(
+                    UnifiedLintIssue(
+                        tool="sqlfluff",
+                        file=str(f),
+                        line=violation.get("line_no"),
+                        message=violation.get("description", ""),
+                        severity=LintSeverity.WARNING,
+                        rule=violation.get("code"),
                     )
+                    for violation in result
+                )
             except Exception:
                 pass
         return issues
