@@ -7,9 +7,7 @@
     "max_statements": 60,
     "max_returns": 8
   },
-  "complexity": {
-    "python/confiture/core/idempotency/static_eval/str_methods.py": 1
-  },
+  "complexity": {},
   "too_many_args": {
     "python/confiture/cli/commands/admin.py": 1,
     "python/confiture/cli/commands/drift.py": 1,
@@ -36,8 +34,7 @@
     "python/confiture/cli/commands/debug.py": 1,
     "python/confiture/cli/commands/migrate/baseline.py": 1,
     "python/confiture/cli/commands/migrate/introspect.py": 1,
-    "python/confiture/core/builder.py": 1,
-    "python/confiture/core/idempotency/static_eval/str_methods.py": 1
+    "python/confiture/core/builder.py": 1
   },
   "too_many_statements": {
     "python/confiture/cli/commands/migrate/introspect.py": 1,
@@ -48,7 +45,6 @@
     "python/confiture/core/error_handler.py": 1,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 3,
     "python/confiture/core/idempotency/static_eval/scope.py": 1,
-    "python/confiture/core/idempotency/static_eval/str_methods.py": 1,
     "python/confiture/core/lock_profile.py": 1,
     "python/confiture/core/migration_generator.py": 2,
     "python/confiture/core/replica/classifier.py": 1,
