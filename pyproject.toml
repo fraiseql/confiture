@@ -323,7 +323,6 @@ max-returns = 8
 "python/confiture/core/migration_grant_extractor.py" = ["C901", "PLR0912", "PLR0913", "PLR2004"]
 "python/confiture/core/psql_applier.py" = ["PLR2004"]
 "python/confiture/core/replica/classifier.py" = ["PLR0911"]
-"python/confiture/core/replica/safety.py" = ["C901", "PLR0911", "PLR0912"]
 "python/confiture/core/schema_facts.py" = ["PLR2004"]
 "python/confiture/core/seed/applier.py" = ["C901", "PLR0912"]
 "python/confiture/core/seed/insert_validator.py" = ["PLR0911"]
