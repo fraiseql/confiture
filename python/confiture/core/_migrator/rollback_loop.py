@@ -25,7 +25,17 @@ from confiture.models.results import MigrationApplied
 def _rollback_sequence(
     session: MigratorSession, versions: list[str], *, dry_run: bool = False
 ) -> tuple[list, int]:
-    """See :meth:`MigratorSession._rollback_sequence`."""
+    """Roll back an ordered (newest → oldest) list of versions.
+
+    The shared rollback loop behind both ``down(steps=N)`` and
+    ``down_to(target)`` — keeps the two paths from diverging. Reuses the
+    engine's ``rollback()`` (transactional vs. non-transactional handling
+    lives there). Does NOT acquire the lock itself; callers wrap it.
+
+    Returns:
+        (rolled_back, total_duration_ms) where rolled_back is a list
+        of MigrationApplied in the order rolled back.
+    """
 
     # Import through confiture.core.migrator so tests can patch
     # confiture.core.migrator.load_migration_class.
@@ -66,7 +76,13 @@ def _rollback_sequence(
 
 
 def _reversible_versions(session: MigratorSession) -> set[str]:
-    """See :meth:`MigratorSession._reversible_versions`."""
+    """Set of discoverable versions that have a usable rollback.
+
+    A ``.up.sql`` migration is reversible iff its sibling ``.down.sql``
+    exists on disk; Python migrations are treated as reversible (they define
+    ``down()``). This feeds the planner's ``down_available`` so an
+    irreversible target is refused *before* any execution.
+    """
     assert session._migrator is not None
 
     reversible: set[str] = set()
@@ -109,7 +125,7 @@ def down(
         if not applied_versions:
             return [], 0
         versions_to_rollback = list(reversed(applied_versions[-steps:]))  # newest → oldest
-        return session._rollback_sequence(versions_to_rollback, dry_run=dry)
+        return _rollback_sequence(session, versions_to_rollback, dry_run=dry)
 
     if dry_run:
         rolled_back, total_ms = _plan_and_roll_back(True)
@@ -172,7 +188,7 @@ def _down_to_under_lock(session: MigratorSession, target: str, *, dry_run: bool)
         session._migrator._version_from_filename(f.name)
         for f in session._migrator.find_migration_files(migrations_dir=session._migrations_dir)
     }
-    down_available = session._reversible_versions()
+    down_available = _reversible_versions(session)
 
     plan = plan_down_to(applied, known, target, down_available)
 
@@ -217,5 +233,5 @@ def _down_to_under_lock(session: MigratorSession, target: str, *, dry_run: bool)
     if dry_run:
         return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)
 
-    session._rollback_sequence(to_execute, dry_run=False)
+    _rollback_sequence(session, to_execute, dry_run=False)
     return DownToResult(from_=from_, to=target, rolled_back=to_execute, skipped=skipped)

@@ -74,7 +74,7 @@ BASELINE: dict[str, int] = {
     "core/_migrator/replay.py": 1,
     "core/_migrator/reporting.py": 6,
     "core/_migrator/rollback_loop.py": 6,
-    "core/_migrator/session.py": 8,
+    "core/_migrator/session.py": 2,
     "core/_migrator/state.py": 1,
     "core/anonymization/registry.py": 1,
     "core/builder.py": 2,

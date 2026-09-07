@@ -27,7 +27,12 @@ if TYPE_CHECKING:
 
 
 def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Path], list[str]]:
-    """See :meth:`MigratorSession._plan_under_lock`."""
+    """Initialize the ledger and discover what to apply — the caller holds the lock.
+
+    Returns:
+        ``(pending_files, skipped_versions)``: the files to apply (every file
+        when *force*), and the versions the ledger already records.
+    """
     assert session._migrator is not None
     session._migrator.initialize()
 
@@ -51,7 +56,14 @@ def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Pat
 def _verify_checksums(
     session: MigratorSession, *, enabled: bool, on_mismatch: str
 ) -> tuple[bool, list[str]]:
-    """See :meth:`MigratorSession._verify_checksums`."""
+    """Check every applied migration file against the ledger — the caller holds the lock.
+
+    Returns:
+        ``(verified, warnings)``: *verified* is True only when the verifier
+        ran and found no mismatch; *warnings* carries the mismatches under
+        ``"warn"``. Under ``"fail"`` a mismatch raises
+        :class:`~confiture.core.checksum.ChecksumVerificationError`.
+    """
     assert session._migrator is not None
     if not enabled:
         return False, []
@@ -110,7 +122,7 @@ def _up_under_lock(
     on_event: UpObserver | None = None,
     batch: Any | None = None,
 ) -> MigrateUpResult:
-    """See :meth:`MigratorSession._up_under_lock`."""
+    """The body of :meth:`MigratorSession.up`, run while the migration lock is held."""
     plan = _plan(
         session,
         force=force,
@@ -125,7 +137,8 @@ def _up_under_lock(
     if early is not None:
         return early
     if dry_run_execute:
-        return session._up_dry_run_execute(
+        return _up_dry_run_execute(
+            session,
             pending_files=plan.pending_files,
             target=target,
             force=force,
@@ -163,11 +176,11 @@ def _plan(
             snapshots_dir=auto_baseline,
             on_event=on_event,
         )
-    pending_files, skipped_versions = session._plan_under_lock(force=force)
+    pending_files, skipped_versions = _plan_under_lock(session, force=force)
     if _policy.wants_view_helpers(install_view_helpers, session._config):
         _policy.install_view_helpers(session._conn, on_event)
-    checksums_verified, checksum_warnings = session._verify_checksums(
-        enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
+    checksums_verified, checksum_warnings = _verify_checksums(
+        session, enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
     )
     if checksums_verified:
         emit(on_event, "checksums_verified")
@@ -359,7 +372,12 @@ def _up_dry_run_execute(
     on_event: UpObserver | None = None,
     batch: Any | None = None,
 ) -> MigrateUpResult:
-    """See :meth:`MigratorSession._up_dry_run_execute`."""
+    """Execute pending migrations inside a SAVEPOINT, then roll back.
+
+    This catches real SQL errors (syntax, constraints, type mismatches)
+    without persisting any changes. Non-transactional DDL (e.g. ``CREATE
+    INDEX CONCURRENTLY``) cannot run inside a SAVEPOINT and is skipped.
+    """
     # Invariant: this helper only runs inside an active session (callers guard).
     assert session._conn is not None
     assert session._migrator is not None
@@ -534,7 +552,8 @@ def up(
     with lock.acquire():
         if not no_lock:
             emit(on_event, "lock_acquired")
-        return session._up_under_lock(
+        return _up_under_lock(
+            session,
             target=target,
             dry_run=dry_run,
             dry_run_execute=dry_run_execute,

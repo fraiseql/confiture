@@ -34,6 +34,14 @@ from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_setti
 from confiture.exceptions import ConfigurationError
 
 
+def _not_entered() -> ConfigurationError:
+    """The error every session method raises outside its ``with`` block."""
+    return ConfigurationError(
+        "MigratorSession must be used as a context manager",
+        resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+    )
+
+
 def _core_connection():
     """``confiture.core.connection``, imported when first needed (it imports psycopg)."""
     from confiture.core import connection
@@ -177,24 +185,14 @@ class MigratorSession:
     def connection(self) -> Connection:
         """The session's live connection (inside ``with``)."""
         if self._conn is None:
-            from confiture.exceptions import ConfigurationError
-
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
+            raise _not_entered()
         return self._conn
 
     @property
     def migrator(self) -> Migrator:
         """The session's engine (inside ``with``, or when attached)."""
         if self._migrator is None:
-            from confiture.exceptions import ConfigurationError
-
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
+            raise _not_entered()
         return self._migrator
 
     def _lock_settings(self, lock_timeout: int | None, no_lock: bool | None) -> tuple[int, bool]:
@@ -215,14 +213,7 @@ class MigratorSession:
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
         """
-        from confiture.exceptions import ConfigurationError
-
-        if self._conn is None:
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
-        lock = MigrationLock(self._conn, LockConfig())
+        lock = MigrationLock(self.connection, LockConfig())
         return lock.is_locked()
 
     def get_lock_holder(self) -> dict[str, Any] | None:
@@ -235,14 +226,7 @@ class MigratorSession:
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
         """
-        from confiture.exceptions import ConfigurationError
-
-        if self._conn is None:
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
-        lock = MigrationLock(self._conn, LockConfig())
+        lock = MigrationLock(self.connection, LockConfig())
         return lock.get_lock_holder()
 
     # ------------------------------------------------------------------ #
@@ -256,12 +240,8 @@ class MigratorSession:
         If the tracking table doesn't exist, all migrations show as pending.
 
         Returns:
-            StatusResult with:
-            - migrations: List of MigrationInfo (version, name, status, applied_at)
-            - applied/pending: Shortcut properties for version lists
-            - has_pending: True if any migrations need applying
-            - summary: {"applied": N, "pending": N, "total": N}
-            - tracking_table_exists: Whether tracking table is present
+            :class:`~confiture.models.results.StatusResult` (its fields are documented there).
+
 
         Raises:
             ConfigurationError: If called outside ``with`` context manager.
@@ -358,14 +338,8 @@ class MigratorSession:
                      ``--batched``). None leaves the class defaults.
 
         Returns:
-            MigrateUpResult with:
-            - success: True if all migrations applied successfully
-            - migrations_applied: List of MigrationApplied (serialized as "applied")
-            - skipped: List of already-applied migration versions
-            - total_duration_ms: Total time (serialized as "total_duration_ms")
-            - errors: List of error messages if success=False
-            - has_errors: Property — True if success=False and errors non-empty
-            - error_summary: Property — first error message or None
+            :class:`~confiture.models.results.MigrateUpResult` (its fields are documented there).
+
 
         Raises:
             ConfigurationError: If used outside ``with`` context manager, or
@@ -405,118 +379,6 @@ class MigratorSession:
             on_event=on_event,
             batch=batch,
         )
-
-    def _plan_under_lock(self, *, force: bool) -> tuple[list[Path], list[str]]:
-        """Initialize the ledger and discover what to apply — the caller holds the lock.
-
-        Returns:
-            ``(pending_files, skipped_versions)``: the files to apply (every file
-            when *force*), and the versions the ledger already records.
-        """
-        return _apply_loop._plan_under_lock(self, force=force)
-
-    def _verify_checksums(self, *, enabled: bool, on_mismatch: str) -> tuple[bool, list[str]]:
-        """Check every applied migration file against the ledger — the caller holds the lock.
-
-        Returns:
-            ``(verified, warnings)``: *verified* is True only when the verifier
-            ran and found no mismatch; *warnings* carries the mismatches under
-            ``"warn"``. Under ``"fail"`` a mismatch raises
-            :class:`~confiture.core.checksum.ChecksumVerificationError`.
-        """
-        return _apply_loop._verify_checksums(self, enabled=enabled, on_mismatch=on_mismatch)
-
-    def _up_under_lock(
-        self,
-        *,
-        target: str | None,
-        dry_run: bool,
-        dry_run_execute: bool,
-        verify_checksums: bool,
-        on_checksum_mismatch: str,
-        force: bool,
-        require_reversible: bool,
-        strict_mode: bool | None = None,
-        auto_baseline: Path | None = None,
-        install_view_helpers: bool | None = None,
-        on_event: UpObserver | None = None,
-        batch: Any | None = None,
-    ) -> MigrateUpResult:
-        """The body of :meth:`up`, run while the migration lock is held."""
-        return _apply_loop._up_under_lock(
-            self,
-            target=target,
-            dry_run=dry_run,
-            dry_run_execute=dry_run_execute,
-            verify_checksums=verify_checksums,
-            on_checksum_mismatch=on_checksum_mismatch,
-            force=force,
-            require_reversible=require_reversible,
-            strict_mode=strict_mode,
-            auto_baseline=auto_baseline,
-            install_view_helpers=install_view_helpers,
-            on_event=on_event,
-            batch=batch,
-        )
-
-    def _up_dry_run_execute(
-        self,
-        *,
-        pending_files: list[Path],
-        target: str | None,
-        force: bool,
-        checksums_verified: bool,
-        skipped_versions: list[str],
-        checksum_warnings: list[str],
-        strict_mode: bool = False,
-        on_event: UpObserver | None = None,
-        batch: Any | None = None,
-    ) -> MigrateUpResult:
-        """Execute pending migrations inside a SAVEPOINT, then roll back.
-
-        This catches real SQL errors (syntax, constraints, type mismatches)
-        without persisting any changes.
-
-        Note:
-            Non-transactional DDL (e.g. ``CREATE INDEX CONCURRENTLY``) cannot
-            run inside a SAVEPOINT and will cause an error.
-        """
-        return _apply_loop._up_dry_run_execute(
-            self,
-            pending_files=pending_files,
-            target=target,
-            force=force,
-            checksums_verified=checksums_verified,
-            skipped_versions=skipped_versions,
-            checksum_warnings=checksum_warnings,
-            strict_mode=strict_mode,
-            on_event=on_event,
-            batch=batch,
-        )
-
-    def _rollback_sequence(self, versions: list[str], *, dry_run: bool = False) -> tuple[list, int]:
-        """Roll back an ordered (newest → oldest) list of versions.
-
-        The shared rollback loop behind both ``down(steps=N)`` and
-        ``down_to(target)`` — keeps the two paths from diverging. Reuses the
-        engine's ``rollback()`` (transactional vs. non-transactional handling
-        lives there). Does NOT acquire the lock itself; callers wrap it.
-
-        Returns:
-            (rolled_back, total_duration_ms) where rolled_back is a list
-            of MigrationApplied in the order rolled back.
-        """
-        return _rollback_loop._rollback_sequence(self, versions, dry_run=dry_run)
-
-    def _reversible_versions(self) -> set[str]:
-        """Set of discoverable versions that have a usable rollback.
-
-        A ``.up.sql`` migration is reversible iff its sibling ``.down.sql``
-        exists on disk; Python migrations are treated as reversible (they define
-        ``down()``). This feeds the planner's ``down_available`` so an
-        irreversible target is refused *before* any execution.
-        """
-        return _rollback_loop._reversible_versions(self)
 
     def apply_one(
         self,
@@ -576,11 +438,8 @@ class MigratorSession:
             no_lock: If True, skip distributed locking.
 
         Returns:
-            MigrateDownResult with:
-            - success: True if all rollbacks succeeded
-            - migrations_rolled_back: List of MigrationApplied (serialized as "rolled_back")
-            - total_duration_ms: Total time (serialized as "total_duration_ms")
-            - error: Error message if success=False
+            :class:`~confiture.models.results.MigrateDownResult` (its fields are documented there).
+
 
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
@@ -666,11 +525,8 @@ class MigratorSession:
             dry_run: If True, show what would happen without making changes.
 
         Returns:
-            MigrateReinitResult with:
-            - success: True if reinit succeeded
-            - deleted_count: Number of tracking entries removed
-            - migrations_marked: List of MigrationApplied (serialized as "marked")
-            - total_duration_ms: Total time (serialized as "total_duration_ms")
+            :class:`~confiture.models.results.MigrateReinitResult` (its fields are documented there).
+
 
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
@@ -681,17 +537,9 @@ class MigratorSession:
             ...     result = m.reinit(through="20260228180602")
             ...     print(f"Marked {len(result.migrations_marked)} migrations")
         """
-        from confiture.exceptions import ConfigurationError
-
-        if self._migrator is None:
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
-        self._migrator.initialize()
-        return self._migrator.reinit(
-            through=through, dry_run=dry_run, migrations_dir=self._migrations_dir
-        )
+        engine = self.migrator
+        engine.initialize()
+        return engine.reinit(through=through, dry_run=dry_run, migrations_dir=self._migrations_dir)
 
     def rebuild(
         self,
@@ -713,13 +561,8 @@ class MigratorSession:
             backup_tracking: Dump tracking table before clearing.
 
         Returns:
-            MigrateRebuildResult with:
-            - success: True if rebuild completed
-            - schemas_dropped: List of dropped schema names
-            - ddl_statements_executed: Number of DDL statements applied
-            - migrations_marked: Migrations marked as applied
-            - verified: True/False/None — post-rebuild verification result
-            - seeds_applied: Number of seed files applied (None if not requested)
+            :class:`~confiture.models.results.MigrateRebuildResult` (its fields are documented there).
+
 
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
@@ -731,14 +574,7 @@ class MigratorSession:
             ...     if result.success:
             ...         print(f"Rebuilt with {result.ddl_statements_executed} DDL statements")
         """
-        from confiture.exceptions import ConfigurationError
-
-        if self._migrator is None:
-            raise ConfigurationError(
-                "MigratorSession must be used as a context manager",
-                resolution_hint="Use: with Migrator.from_config(...) as m: ...",
-            )
-        return self._migrator.rebuild(
+        return self.migrator.rebuild(
             drop_schemas=drop_schemas,
             dry_run=dry_run,
             apply_seeds=apply_seeds,
