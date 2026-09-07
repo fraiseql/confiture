@@ -255,6 +255,33 @@ class Schema:
         return [table.name for table in self.tables]
 
 
+# ``str(SchemaChange)`` per change type; ``name`` / ``index_name`` come from ``details``.
+_CHANGE_TEMPLATES: dict[str, str] = {
+    "ADD_TABLE": "ADD TABLE {table}",
+    "DROP_TABLE": "DROP TABLE {table}",
+    "RENAME_TABLE": "RENAME TABLE {old} TO {new}",
+    "ADD_COLUMN": "ADD COLUMN {table}.{column}",
+    "DROP_COLUMN": "DROP COLUMN {table}.{column}",
+    "RENAME_COLUMN": "RENAME COLUMN {table}.{old} TO {new}",
+    "CHANGE_COLUMN_TYPE": "CHANGE COLUMN TYPE {table}.{column} FROM {old} TO {new}",
+    "CHANGE_COLUMN_NULLABLE": "CHANGE COLUMN NULLABLE {table}.{column} FROM {old} TO {new}",
+    "CHANGE_COLUMN_DEFAULT": "CHANGE COLUMN DEFAULT {table}.{column}",
+    "ADD_INDEX": "ADD INDEX {index_name} ON {table}",
+    "DROP_INDEX": "DROP INDEX {index_name}",
+    "ADD_FOREIGN_KEY": "ADD FOREIGN KEY {name} ON {table}",
+    "DROP_FOREIGN_KEY": "DROP FOREIGN KEY {name}",
+    "ADD_CHECK_CONSTRAINT": "ADD CHECK CONSTRAINT {name} ON {table}",
+    "DROP_CHECK_CONSTRAINT": "DROP CHECK CONSTRAINT {name}",
+    "ADD_UNIQUE_CONSTRAINT": "ADD UNIQUE CONSTRAINT {name} ON {table}",
+    "DROP_UNIQUE_CONSTRAINT": "DROP UNIQUE CONSTRAINT {name}",
+    "ADD_ENUM_TYPE": "ADD ENUM TYPE {table}",
+    "DROP_ENUM_TYPE": "DROP ENUM TYPE {table}",
+    "CHANGE_ENUM_VALUES": "CHANGE ENUM VALUES {table}",
+    "ADD_SEQUENCE": "ADD SEQUENCE {table}",
+    "DROP_SEQUENCE": "DROP SEQUENCE {table}",
+}
+
+
 @dataclass
 class SchemaChange:
     """Represents a single change between two schemas."""
@@ -268,60 +295,18 @@ class SchemaChange:
 
     def __str__(self) -> str:
         """String representation of change."""
-        if self.type == "ADD_TABLE":
-            return f"ADD TABLE {self.table}"
-        elif self.type == "DROP_TABLE":
-            return f"DROP TABLE {self.table}"
-        elif self.type == "RENAME_TABLE":
-            return f"RENAME TABLE {self.old_value} TO {self.new_value}"
-        elif self.type == "ADD_COLUMN":
-            return f"ADD COLUMN {self.table}.{self.column}"
-        elif self.type == "DROP_COLUMN":
-            return f"DROP COLUMN {self.table}.{self.column}"
-        elif self.type == "RENAME_COLUMN":
-            return f"RENAME COLUMN {self.table}.{self.old_value} TO {self.new_value}"
-        elif self.type == "CHANGE_COLUMN_TYPE":
-            return f"CHANGE COLUMN TYPE {self.table}.{self.column} FROM {self.old_value} TO {self.new_value}"
-        elif self.type == "CHANGE_COLUMN_NULLABLE":
-            return f"CHANGE COLUMN NULLABLE {self.table}.{self.column} FROM {self.old_value} TO {self.new_value}"
-        elif self.type == "CHANGE_COLUMN_DEFAULT":
-            return f"CHANGE COLUMN DEFAULT {self.table}.{self.column}"
-        elif self.type == "ADD_INDEX":
-            d = self.details or {}
-            return f"ADD INDEX {d.get('index_name', '')} ON {self.table}"
-        elif self.type == "DROP_INDEX":
-            d = self.details or {}
-            return f"DROP INDEX {d.get('index_name', '')}"
-        elif self.type == "ADD_FOREIGN_KEY":
-            d = self.details or {}
-            return f"ADD FOREIGN KEY {d.get('name', '')} ON {self.table}"
-        elif self.type == "DROP_FOREIGN_KEY":
-            d = self.details or {}
-            return f"DROP FOREIGN KEY {d.get('name', '')}"
-        elif self.type == "ADD_CHECK_CONSTRAINT":
-            d = self.details or {}
-            return f"ADD CHECK CONSTRAINT {d.get('name', '')} ON {self.table}"
-        elif self.type == "DROP_CHECK_CONSTRAINT":
-            d = self.details or {}
-            return f"DROP CHECK CONSTRAINT {d.get('name', '')}"
-        elif self.type == "ADD_UNIQUE_CONSTRAINT":
-            d = self.details or {}
-            return f"ADD UNIQUE CONSTRAINT {d.get('name', '')} ON {self.table}"
-        elif self.type == "DROP_UNIQUE_CONSTRAINT":
-            d = self.details or {}
-            return f"DROP UNIQUE CONSTRAINT {d.get('name', '')}"
-        elif self.type == "ADD_ENUM_TYPE":
-            return f"ADD ENUM TYPE {self.table}"
-        elif self.type == "DROP_ENUM_TYPE":
-            return f"DROP ENUM TYPE {self.table}"
-        elif self.type == "CHANGE_ENUM_VALUES":
-            return f"CHANGE ENUM VALUES {self.table}"
-        elif self.type == "ADD_SEQUENCE":
-            return f"ADD SEQUENCE {self.table}"
-        elif self.type == "DROP_SEQUENCE":
-            return f"DROP SEQUENCE {self.table}"
-        else:
+        template = _CHANGE_TEMPLATES.get(self.type)
+        if template is None:
             return f"{self.type}: {self.table}.{self.column if self.column else ''}"
+        details = self.details or {}
+        return template.format(
+            table=self.table,
+            column=self.column,
+            old=self.old_value,
+            new=self.new_value,
+            index_name=details.get("index_name", ""),
+            name=details.get("name", ""),
+        )
 
 
 @dataclass

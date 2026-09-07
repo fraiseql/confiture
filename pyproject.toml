@@ -339,7 +339,6 @@ max-returns = 8
 "python/confiture/integrations/pggit/client.py" = ["PLR2004"]
 "python/confiture/integrations/pggit/exceptions.py" = ["PLR2004"]
 "python/confiture/integrations/pggit/generator.py" = ["PLR2004"]
-"python/confiture/models/schema.py" = ["C901", "PLR0911", "PLR0912"]
 "python/confiture/testing/frameworks/mutation.py" = ["PLR2004"]
 "python/confiture/testing/frameworks/performance.py" = ["PLR2004"]
 # END GENERATED: budget-ignores
