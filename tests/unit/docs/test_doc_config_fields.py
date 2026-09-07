@@ -1,9 +1,9 @@
-"""`docs/reference/configuration.md` documents exactly the fields on the models (Phase 10, ARC-03).
+"""`docs/reference/configuration.md` documents exactly the fields on the models.
 
 Every key in the reference's YAML blocks must be a field the `Environment`
 model (or one of its nested models) actually reads, and every such field must
 appear in at least one YAML block — so a deleted field cannot linger in the
-docs (Phase 06 removed `auto_backup`, `require_confirmation` and `pggit:`) and a
+docs and a
 new field cannot ship undocumented.
 """
 

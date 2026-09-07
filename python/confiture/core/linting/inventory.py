@@ -1,4 +1,4 @@
-"""The object inventory the lint rules read (Phase 05 #216, Phase 07 #217/#218).
+"""The object inventory the lint rules read.
 
 Built once per lint run from ``pglast.parser.parse_sql``. Table and column names
 are kept as written in the source — pglast folds unquoted identifiers to

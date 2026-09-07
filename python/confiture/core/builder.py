@@ -855,7 +855,7 @@ class SchemaBuilder:
             except OSError as e:
                 # The same failure the Python path reports: a file that cannot be read.
                 raise SchemaError(f"Error reading schema files for hash: {e}") from e
-            except Exception as e:  # Reason: a fault of any kind in the native extension falls back to the Python hash (Phase 09)
+            except Exception as e:  # Reason: a fault of any kind in the native extension falls back to the Python hash
                 _note_fallback(f"failed ({type(e).__name__}: {e})")
             else:
                 return digest

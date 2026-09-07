@@ -14,7 +14,7 @@ class TestMigrateUpResultHasErrors:
         result = MigrateUpResult(
             success=False,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             errors=["fail"],
         )
         assert result.has_errors is True
@@ -23,7 +23,7 @@ class TestMigrateUpResultHasErrors:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             errors=[],
         )
         assert result.has_errors is False
@@ -34,7 +34,7 @@ class TestMigrateUpResultErrorSummary:
         result = MigrateUpResult(
             success=False,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             errors=["first", "second"],
         )
         assert result.error_summary == "first"
@@ -43,7 +43,7 @@ class TestMigrateUpResultErrorSummary:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             errors=[],
         )
         assert result.error_summary is None
@@ -51,24 +51,24 @@ class TestMigrateUpResultErrorSummary:
 
 class TestMigrateUpResultByVersion:
     def test_migrate_up_result_by_version_found(self) -> None:
-        m1 = MigrationApplied(version="001", name="create_users", execution_time_ms=10)
-        m2 = MigrationApplied(version="002", name="add_email", execution_time_ms=20)
+        m1 = MigrationApplied(version="001", name="create_users", duration_ms=10)
+        m2 = MigrationApplied(version="002", name="add_email", duration_ms=20)
         result = MigrateUpResult(
             success=True,
             migrations_applied=[m1, m2],
-            total_execution_time_ms=30,
+            total_duration_ms=30,
         )
         found = result.by_version("002")
         assert found is not None
         assert found.name == "add_email"
-        assert found.execution_time_ms == 20
+        assert found.duration_ms == 20
 
     def test_migrate_up_result_by_version_not_found(self) -> None:
-        m1 = MigrationApplied(version="001", name="create_users", execution_time_ms=10)
+        m1 = MigrationApplied(version="001", name="create_users", duration_ms=10)
         result = MigrateUpResult(
             success=True,
             migrations_applied=[m1],
-            total_execution_time_ms=10,
+            total_duration_ms=10,
         )
         assert result.by_version("999") is None
 

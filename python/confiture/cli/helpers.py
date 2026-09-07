@@ -301,7 +301,7 @@ def _get_tracking_table(config_data: Any) -> str:
 #: violations, duplicate definitions. Not an error: no envelope, exit 1 (#146).
 FINDINGS_EXIT_CODE = 1
 
-#: Flag combinations that make no sense exit 2 before anything runs (Phase 04
+#: Flag combinations that make no sense exit 2 before anything runs
 #: CLI contract) — a usage error, not a failure envelope.
 USAGE_EXIT_CODE = 2
 

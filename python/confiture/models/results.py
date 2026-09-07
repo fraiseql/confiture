@@ -229,7 +229,7 @@ class MigrationApplied:
 
     version: str
     name: str
-    execution_time_ms: int
+    duration_ms: int
     rows_affected: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -241,7 +241,7 @@ class MigrationApplied:
         return {
             "version": self.version,
             "name": self.name,
-            "duration_ms": self.execution_time_ms,
+            "duration_ms": self.duration_ms,
             "rows_affected": self.rows_affected,
         }
 
@@ -276,10 +276,10 @@ class MigrateUpResult:
         success: True if all migrations applied successfully, False if any failed.
 
         migrations_applied: List of migrations that were successfully applied.
-                           Each includes version, name, execution_time_ms, rows_affected.
+                           Each includes version, name, duration_ms, rows_affected.
                            (Serialized as "applied" in to_dict() output.)
 
-        total_execution_time_ms: Total time in milliseconds.
+        total_duration_ms: Total time in milliseconds.
                                 (Serialized as "total_duration_ms" in to_dict() output.)
 
         checksums_verified: True if all applied migrations passed checksum verification.
@@ -300,7 +300,7 @@ class MigrateUpResult:
 
     success: bool
     migrations_applied: list[MigrationApplied]
-    total_execution_time_ms: int
+    total_duration_ms: int
     checksums_verified: bool = True
     dry_run: bool = False
     dry_run_execute: bool = False
@@ -346,7 +346,7 @@ class MigrateUpResult:
             "skipped_superuser": [s.to_dict() for s in self.skipped_superuser],
             "pending": self.pending,
             "errors": self.errors,
-            "total_duration_ms": self.total_execution_time_ms,
+            "total_duration_ms": self.total_duration_ms,
             "checksums_verified": self.checksums_verified,
             "dry_run": self.dry_run,
             "dry_run_execute": self.dry_run_execute,
@@ -365,7 +365,7 @@ class MigrateReinitResult:
     success: bool
     deleted_count: int
     migrations_marked: list[MigrationApplied]
-    total_execution_time_ms: int
+    total_duration_ms: int
     dry_run: bool = False
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
@@ -380,7 +380,7 @@ class MigrateReinitResult:
             "success": self.success,
             "deleted_count": self.deleted_count,
             "marked": [m.to_dict() for m in self.migrations_marked],
-            "total_duration_ms": self.total_execution_time_ms,
+            "total_duration_ms": self.total_duration_ms,
             "dry_run": self.dry_run,
             "warnings": self.warnings,
             "error": self.error,
@@ -397,7 +397,7 @@ class MigrateDownResult:
 
     success: bool
     migrations_rolled_back: list[MigrationApplied]
-    total_execution_time_ms: int
+    total_duration_ms: int
     checksums_verified: bool = True
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
@@ -411,7 +411,7 @@ class MigrateDownResult:
         return {
             "success": self.success,
             "rolled_back": [m.to_dict() for m in self.migrations_rolled_back],
-            "total_duration_ms": self.total_execution_time_ms,
+            "total_duration_ms": self.total_duration_ms,
             "checksums_verified": self.checksums_verified,
             "warnings": self.warnings,
             "error": self.error,
@@ -459,7 +459,7 @@ class MigrateRebuildResult:
     schemas_dropped: list[str]
     ddl_statements_executed: int
     migrations_marked: list[MigrationApplied]
-    total_execution_time_ms: int
+    total_duration_ms: int
     dry_run: bool = False
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
@@ -473,7 +473,7 @@ class MigrateRebuildResult:
             "schemas_dropped": self.schemas_dropped,
             "ddl_statements_executed": self.ddl_statements_executed,
             "marked": [m.to_dict() for m in self.migrations_marked],
-            "total_duration_ms": self.total_execution_time_ms,
+            "total_duration_ms": self.total_duration_ms,
             "dry_run": self.dry_run,
             "warnings": self.warnings,
             "error": self.error,

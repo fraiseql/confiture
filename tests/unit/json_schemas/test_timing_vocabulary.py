@@ -1,8 +1,7 @@
-"""One place documents every timing key a `to_dict()` emits (Phase 06).
+"""One place documents every timing key a `to_dict()` emits.
 
-The migrate family serializes ``total_duration_ms`` / ``duration_ms`` while the
-dataclasses behind it are still named ``total_execution_time_ms`` /
-``execution_time_ms``; build and lint emit ``execution_time_ms`` as-is; the drift
+The migrate family serializes ``total_duration_ms`` / ``duration_ms`` (since 1.0.0 the
+dataclass attributes carry the same names); build and lint emit ``execution_time_ms`` as-is; the drift
 reports emit ``detection_time_ms``. Rather than three vocabularies discovered by
 reading source, ``docs/reference/json-schemas.md`` carries one table mapping
 every ``*_ms`` key to the attribute that produces it, and this test derives the

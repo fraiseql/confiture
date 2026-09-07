@@ -1,4 +1,4 @@
-"""``backfill_column`` terminates on its own (ENG-04).
+"""``backfill_column`` terminates on its own.
 
 The loop used to stop only when an ``UPDATE … LIMIT batch_size`` touched zero
 rows. With the default ``where_clause="TRUE"`` that never happens: every batch

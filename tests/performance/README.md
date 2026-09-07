@@ -214,14 +214,14 @@ Track performance over time in `docs/performance.md`.
 
 ## 🎯 Performance Goals
 
-### Short Term (Phase 3)
+### Short Term
 
 - [x] Establish baseline metrics
 - [x] Optimize batch size
 - [x] Document performance characteristics
 - [ ] Reduce variance to <30%
 
-### Long Term (Phase 4+)
+### Long Term
 
 - [ ] Rust-based anonymization (10-50x faster)
 - [ ] Parallel table sync

@@ -1,4 +1,4 @@
-"""No CLI function body exceeds 150 lines (ARC-01).
+"""No CLI function body exceeds 150 lines.
 
 Options are declarations, not logic, so a command's *body* is measured from
 its first statement after the docstring. The CLI declares and renders; the

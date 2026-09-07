@@ -1,4 +1,4 @@
-"""A DSN password never reaches argv, a log line or an error message (SEC-04).
+"""A DSN password never reaches argv, a log line or an error message.
 
 Four leaks, one rule: the only spelling of a connection URL that may leave the
 process is the one :func:`confiture.url_redaction.redact_url` produces, and

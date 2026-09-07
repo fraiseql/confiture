@@ -1,4 +1,4 @@
-"""Integration tests for lock-holder identity metadata (issue #147, Phase 1)."""
+"""Integration tests for lock-holder identity metadata (issue #147)."""
 
 from __future__ import annotations
 

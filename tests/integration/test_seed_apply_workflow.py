@@ -1,6 +1,6 @@
 """Integration tests for complete sequential seed application workflow.
 
-Phase 9, Cycle 9: Integration Tests
+Integration Tests
 
 Tests with real PostgreSQL database to verify:
 - Multi-file sequential execution

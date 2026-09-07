@@ -1,6 +1,6 @@
 """Values that become a filename or a subprocess argument are validated first.
 
-Reviewer extras from the 2026-09-06 review, closed in Phase 01 Cycle 6:
+Reviewer extras from the 2026-09-06 review:
 
 * ``migrate generate NAME`` spliced NAME into a path — ``../../x`` walked out of
   the migrations directory; the contract is ``^[a-z0-9_]+$`` and exit 5;

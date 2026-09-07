@@ -12,6 +12,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.0.0] - 2026-09-07
+
+Confiture 1.0.0 freezes its contracts. What is frozen, and where each is pinned:
+
+- **Exit codes** (`docs/reference/exit-codes.md`): the integers 0–8, their semantic classes and the
+  per-code mapping — `tests/unit/test_exit_code_convention.py`.
+- **Error codes and the JSON error envelope** (`docs/reference/error-codes.md`): the codebook rendered from
+  the registry, every code referenced by code — `tests/unit/test_error_codebook.py`,
+  `test_error_codes_referenced.py`, `test_error_codes_data_table.py`.
+- **JSON schemas** (`docs/reference/json-schemas/`): fields are added, never renamed or removed; the docs
+  copy equals the packaged source — `scripts/gen_schemas.py --check`, `tests/unit/json_schemas/`.
+- **Library API**: `Migrator.from_config()`, `MigratorSession(connection_factory=, migration_loader=)`, the
+  result models with their wire-named timing attributes, the lazy `confiture` and `confiture.testing`
+  exports — `tests/unit/test_public_api_*`, `test_session_injection.py`, `test_testing_package_is_lazy.py`.
+- **CLI surface**: every command, flag and output shape documented in `docs/reference/cli.md` is generated
+  from the live Typer app and held by `tests/unit/docs/test_doc_sync_cli.py`.
+
+A change to any of these is a breaking change: it needs a major version and a CHANGELOG entry.
+
+### ⚠️ BREAKING — 1.0.0 contract freeze
+
+- **Removed: the pre-1.0 import-path shims.** `confiture.core.seed_applier`, `seed_bridge`,
+  `seed_executor`, `seed_validation/` (all 14 modules), `validators/`, `config_validator`,
+  `introspector`, `introspection.differ_sql` and `anonymization.plugins.sandbox` no longer exist. Import
+  from their homes: `confiture.core.seed.{applier,bridge,executor,validation}`,
+  `confiture.core.validation.{comment_validator,config_validator}`, `confiture.core.introspection.tables`,
+  `confiture.core.differ_sql`, `confiture.core.anonymization.plugins.import_lint`. The layout guards
+  now assert the old paths do not resolve.
+- **Renamed: the migrate family's timing attributes carry their wire names.** `MigrateUpResult`,
+  `MigrateDownResult`, `MigrateReinitResult` and `MigrateRebuildResult` expose `total_duration_ms` (was
+  `total_execution_time_ms`) and `MigrationApplied` exposes `duration_ms` (was `execution_time_ms`). The
+  JSON payloads are unchanged — they always used these keys; only the Python attributes move. Build, lint
+  and dry-run results keep `execution_time_ms` (their wire key), and the `tb_confiture` ledger column is
+  untouched. The timing-vocabulary table in `docs/reference/json-schemas.md` reflects the new names.
+- **Removed: four mutation-testing mutations that never mutated.** `schema_010 wrong_column_order`,
+  `rollback_004 wrong_constraint_restoration`, `perf_002 inefficient_join` and `perf_003
+  missing_bulk_operation` were `lambda sql: sql` placeholders ("complex to implement"); a mutation that
+  returns its input measures nothing. 23 remain, each with a transformation, and
+  `tests/unit/test_mutation_sql_validity.py` now fails on any mutation no sample exercises and on any
+  mutation whose output PostgreSQL would not parse.
+- **Fixed: three mutations produced invalid SQL.** `rollback_003 partial_rollback` commented out `DROP
+  COLUMN` mid-statement (leaving `ALTER TABLE t -- …`), `data_007 partial_update` inserted its `WHERE`
+  before `SET`, and `perf_004 scan_full_table` replaced `WHERE id =` but kept the value (`WHERE TRUE 1`).
+
 ## [0.55.0] - 2026-09-07
 
 - **Dead declarations removed** (Phase 11). `cryptography` was a runtime dependency imported nowhere —

@@ -1,4 +1,4 @@
-"""The CLI does not reach into core objects' private attributes (ARC-01).
+"""The CLI does not reach into core objects' private attributes.
 
 ``migrator._version_from_filename(...)`` from a command is a dependency on an
 implementation detail. What the CLI needs is public or moved to where the CLI is.

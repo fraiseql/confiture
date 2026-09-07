@@ -1,4 +1,4 @@
-"""Every registered error code is one the package can actually emit (Phase 06, D9).
+"""Every registered error code is one the package can actually emit.
 
 The registry and the published codebook promised 80 symbolic codes, but a
 consumer matching on `SYNC_300` or `HOOK_1100` would wait forever: nothing in

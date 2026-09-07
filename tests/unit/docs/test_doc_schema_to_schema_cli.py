@@ -1,6 +1,6 @@
 """Executable guard: docs/reference/cli.md documents the schema-to-schema group.
 
-Phase 04 wired ``migrate schema-to-schema`` (Medium 4, FDW) as a real CLI group
+``migrate schema-to-schema`` is wired (Medium 4, FDW) as a real CLI group
 but the CLI reference still had no section for it — a "shipped but undocumented"
 gap. This guard pins that the reference lists the group and every one of its six
 subcommands, and that the documented names exactly match the names the CLI app

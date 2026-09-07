@@ -1,4 +1,4 @@
-"""Tests for the ``Captures`` normalization layer (Phase 04, issue #123).
+"""Tests for the ``Captures`` normalization layer.
 
 The regex backend produces ``re.Match`` objects with numbered groups
 that vary by pattern; the AST backend produces typed pglast nodes.

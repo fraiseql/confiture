@@ -1,11 +1,14 @@
 # JSON Output Schemas
 
-Many Confiture commands that support `--format json` ship with a
-machine-validatable JSON Schema — currently the `migrate` family (`current`,
-`down-to`, `fix`, `preflight`, `preflight --against`, `status`, and the
-`validate` modes), `drift` (and `drift --check-acls`), and `validate-config`,
-plus the shared error envelope. Commands such as `build`, `migrate up`/`down`,
-`migrate diff`, and `seed apply` emit JSON but do not yet ship a schema. Schemas
+> **Frozen at 1.0.0.** The published schemas are a stability contract: fields are added, never renamed or removed. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+
+The commands whose `--format json` output ships a machine-validatable JSON
+Schema are `build`, `drift` (and `drift --check-acls`), `introspect`, `lint`
+(and `lint --list-rules`), `sync`, `validate-config`, `verify-checksums` and, in
+the migrate family, `up`, `down-to`, `status`, `current`, `fix`, `introspect`,
+`preflight` (and `--against`), `validate` (every mode) and `verify` — plus the
+shared error envelope. The other JSON payloads are stable but not schema-backed
+yet; `tests/unit/docs/test_readme_claims.py` derives this list from the files. Schemas
 use Draft 2020-12 and live in `docs/reference/json-schemas/`.
 
 ## For agents and tooling
@@ -50,7 +53,7 @@ schema fails the build.
 
 The `hints: list[string]` field is pre-allocated on every top-level
 schema and emitted as `[]` today. Future releases may populate it on
-quiet-success ambiguities (Phase 05 of issue #123). Consumers should
+quiet-success ambiguities (issue #123). Consumers should
 *accept* the field today but not depend on specific content.
 
 Every top-level payload and the error envelope carry `parser` (0.50.0):
@@ -69,8 +72,8 @@ key ending in `_ms`. The migrate family uses two words: `total_duration_ms` for
 the whole run and `duration_ms` for each applied item. Build, lint and the CTE
 debugger emit `execution_time_ms`; the drift reports emit `detection_time_ms`.
 Five models keep an older attribute name behind their wire key
-(`total_execution_time_ms` serializes as `total_duration_ms`,
-`MigrationApplied.execution_time_ms` as `duration_ms`). The table below is the
+(since 1.0.0 the migrate family's attributes carry their wire names:
+`total_duration_ms` and `MigrationApplied.duration_ms`). The table below is the
 one mapping from attribute to key; `tests/unit/json_schemas/test_timing_vocabulary.py`
 derives the same rows from every `to_dict()` in the package and from every
 `*_ms` property in the shipped schemas, so a new timing key, a renamed
@@ -79,11 +82,11 @@ attribute names are scheduled to follow them at 1.0.0.
 
 | Model | Attribute | JSON key | Where it appears |
 |---|---|---|---|
-| `confiture.models.results.MigrateUpResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate up --format json` ([`migrate-up.schema.json`](json-schemas/migrate-up.schema.json)) |
-| `confiture.models.results.MigrationApplied` | `execution_time_ms` | `duration_ms` | `migrate up` — each `applied[]` item |
-| `confiture.models.results.MigrateDownResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate down --format json` |
-| `confiture.models.results.MigrateRebuildResult` | `total_execution_time_ms` | `total_duration_ms` | `migrate rebuild --format json` |
-| `confiture.models.results.MigrateReinitResult` | `total_execution_time_ms` | `total_duration_ms` | library result of `MigratorSession.reinit()` (text output only) |
+| `confiture.models.results.MigrateUpResult` | `total_duration_ms` | `total_duration_ms` | `migrate up --format json` ([`migrate-up.schema.json`](json-schemas/migrate-up.schema.json)) |
+| `confiture.models.results.MigrationApplied` | `duration_ms` | `duration_ms` | `migrate up` — each `applied[]` item |
+| `confiture.models.results.MigrateDownResult` | `total_duration_ms` | `total_duration_ms` | `migrate down --format json` |
+| `confiture.models.results.MigrateRebuildResult` | `total_duration_ms` | `total_duration_ms` | `migrate rebuild --format json` |
+| `confiture.models.results.MigrateReinitResult` | `total_duration_ms` | `total_duration_ms` | library result of `MigratorSession.reinit()` (text output only) |
 | `confiture.models.results.BuildResult` | `execution_time_ms` | `execution_time_ms` | `build --format json` ([`build.schema.json`](json-schemas/build.schema.json)) |
 | `confiture.models.results.SplitBuildResult` | `execution_time_ms` | `execution_time_ms` | library result of the split build |
 | `confiture.models.results.PreflightAgainstMigration` | `execution_time_ms` | `execution_time_ms` | library result of `run_against()`; the CLI prints it as text |

@@ -1,4 +1,4 @@
-"""A function-level import says why it is there, or counts against a budget that only shrinks (Phase 08).
+"""A function-level import says why it is there, or counts against a budget that only shrinks.
 
 An import inside a function is legitimate for three reasons — an optional
 dependency that may be absent, a genuine import cycle, or a deliberate deferral

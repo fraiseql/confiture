@@ -1,4 +1,4 @@
-"""`mkdocs.yml` navigates every page that exists and no page that does not (Phase 10, ARC-03).
+"""`mkdocs.yml` navigates every page that exists and no page that does not.
 
 The nav listed ten pages that were never written or have since moved
 (`guides/medium-1-build-from-ddl.md`, `LICENSE.md`, …) and left ninety real

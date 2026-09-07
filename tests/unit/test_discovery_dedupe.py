@@ -1,4 +1,4 @@
-"""One discovery, one filename parser, one loader (Phase 03, Cycle 8)."""
+"""One discovery, one filename parser, one loader."""
 
 from __future__ import annotations
 

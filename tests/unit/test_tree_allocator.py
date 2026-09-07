@@ -1,4 +1,4 @@
-"""Unit tests for TreeAllocator — Phase 1 of issue #111.
+"""Unit tests for TreeAllocator — issue #111.
 
 All tests are pure-Python, no database required.  Temporary directories
 are created with pytest's ``tmp_path`` fixture so nothing is written to

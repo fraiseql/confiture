@@ -127,7 +127,7 @@ def test_check_ownership_without_block_is_config_error(
 ) -> None:
     cfg = _write_config(tmp_path, pg_url)
     result = CliRunner().invoke(app, ["drift", "--check-ownership", "--config", str(cfg)])
-    # Phase 03: missing required block → ConfigurationError (CONFIG_001 → exit 5)
+    # missing required block → ConfigurationError (CONFIG_001 → exit 5)
     assert result.exit_code == 5, result.output
 
 

@@ -1,4 +1,4 @@
-"""Lock-contention identity surfacing via the migrate CLI (issue #147, Phase 2).
+"""Lock-contention identity surfacing via the migrate CLI (issue #147).
 
 Writer A holds the migration lock on a real connection; the second writer hits
 contention and must surface A's identity in stderr (human) and the #145

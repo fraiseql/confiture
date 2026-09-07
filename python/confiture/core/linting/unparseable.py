@@ -1,4 +1,4 @@
-"""The lint notice for a file pglast cannot parse (Phase 05, ANA-02).
+"""The lint notice for a file pglast cannot parse.
 
 A rule that reads DDL through pglast used to return no findings for a file the
 parser rejected, so a broken file linted clean. Each rule now reports the file

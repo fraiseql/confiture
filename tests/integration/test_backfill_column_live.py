@@ -1,4 +1,4 @@
-"""``backfill_column`` on a real table larger than one batch (ENG-04)."""
+"""``backfill_column`` on a real table larger than one batch."""
 
 from __future__ import annotations
 

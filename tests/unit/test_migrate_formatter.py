@@ -25,7 +25,7 @@ class TestMigrateUpFormatter:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=300,
+            total_duration_ms=300,
         )
 
         console = Console()
@@ -47,7 +47,7 @@ class TestMigrateUpFormatter:
             result = MigrateUpResult(
                 success=True,
                 migrations_applied=migrations,
-                total_execution_time_ms=300,
+                total_duration_ms=300,
                 checksums_verified=True,
             )
 
@@ -73,7 +73,7 @@ class TestMigrateUpFormatter:
             result = MigrateUpResult(
                 success=True,
                 migrations_applied=migrations,
-                total_execution_time_ms=300,
+                total_duration_ms=300,
             )
 
             console = Console()
@@ -96,7 +96,7 @@ class TestMigrateUpFormatter:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=100,
+            total_duration_ms=100,
         )
 
         console = Console()
@@ -113,7 +113,7 @@ class TestMigrateUpFormatter:
             result = MigrateUpResult(
                 success=False,
                 migrations_applied=[],
-                total_execution_time_ms=0,
+                total_duration_ms=0,
                 errors=["Lock timeout"],
             )
 
@@ -132,7 +132,7 @@ class TestMigrateUpFormatter:
         result = MigrateUpResult(
             success=True,
             migrations_applied=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
         )
 
         console = Console()
@@ -152,7 +152,7 @@ class TestMigrateUpFormatter:
             result = MigrateUpResult(
                 success=True,
                 migrations_applied=migrations,
-                total_execution_time_ms=100,
+                total_duration_ms=100,
                 warnings=["Checksum mismatch for 002"],
             )
 
@@ -171,7 +171,7 @@ class TestMigrateUpFormatter:
         result = MigrateUpResult(
             success=True,
             migrations_applied=migrations,
-            total_execution_time_ms=50,
+            total_duration_ms=50,
             dry_run=True,
         )
 

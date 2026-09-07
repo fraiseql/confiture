@@ -1,4 +1,4 @@
-"""A file pglast cannot parse is a finding, never a clean result (Phase 05, ANA-02).
+"""A file pglast cannot parse is a finding, never a clean result.
 
 ``CREATE TABL x (`` used to make the idempotency check swap to its regex backend
 and report *ok*, make preflight crash, and leave lint's report clean. Each

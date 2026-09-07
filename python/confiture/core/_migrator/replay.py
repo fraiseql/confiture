@@ -1,6 +1,6 @@
 """``run_against``: replay pending migrations on a parallel database inside SAVEPOINTs.
 
-Split out of ``session.py`` (Phase 03, Cycle 9). Every function takes the
+Split out of ``session.py``. Every function takes the
 ``MigratorSession`` as its first argument; the session's methods delegate here.
 """
 

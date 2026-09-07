@@ -591,7 +591,7 @@ def test_py_migrations_included_in_all(tmp_path):
 # --output: the fraisier adapter passes --output to *every* migrate subcommand
 # (unconditional in its plan()), so preflight must accept it and write clean
 # JSON to the file — not reject it with a Typer usage error. Regression guard
-# for the ECO-rec1 contract drift fixed in Phase 08.
+# for the ECO-rec1 contract drift.
 # ---------------------------------------------------------------------------
 
 

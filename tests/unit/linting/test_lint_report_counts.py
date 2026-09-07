@@ -1,4 +1,4 @@
-"""``lint --format json`` reports how many tables and columns it read (Phase 07).
+"""``lint --format json`` reports how many tables and columns it read.
 
 The payload carried ``tables_checked: 0`` and ``columns_checked: 0`` for every
 schema — the converter hard-coded them because the linter "did not track"

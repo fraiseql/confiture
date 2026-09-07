@@ -1,4 +1,4 @@
-"""Tests for the Replica001ForwardCompat lint rule (issue #139, Phase 2)."""
+"""Tests for the Replica001ForwardCompat lint rule (issue #139)."""
 
 from __future__ import annotations
 

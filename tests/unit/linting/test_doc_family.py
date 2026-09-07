@@ -1,4 +1,4 @@
-"""The doc family covers every commentable object kind (#217, Phase 07).
+"""The doc family covers every commentable object kind (#217).
 
 ``doc_001`` judged tables and nothing else, so an undocumented function, view
 or type passed silently — and a partition child, which inherits its parent's

@@ -5,9 +5,6 @@ executes the file in this process — with confiture's privileges — warning as
 does so. There is no isolation boundary here; see
 :mod:`confiture.core.anonymization.plugins.import_lint`.
 
-The pre-0.47 names (``SandboxViolationError``, ``SandboxResult``,
-``execute_sandboxed``) remain importable from the deprecated
-``plugins.sandbox`` module until 1.0.0.
 """
 
 from confiture.core.anonymization.plugins.import_checker import (

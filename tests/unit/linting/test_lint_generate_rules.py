@@ -1,4 +1,4 @@
-"""Unit tests for GEN001–GEN004 lint rules — Phase 5 of issue #111.
+"""Unit tests for GEN001–GEN004 lint rules — issue #111.
 
 All tests use pytest's ``tmp_path`` fixture.  No database required.
 """

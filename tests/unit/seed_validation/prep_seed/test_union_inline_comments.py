@@ -69,7 +69,7 @@ class TestUnionInlineComments:
         """Test that inline comment with special characters is detected."""
         seed_sql = """
         SELECT 1
-        UNION ALL -- TODO: Fix this query!
+        UNION ALL -- note: this query needs fixing
         SELECT 2;
         """
         validator = Level1SeedValidator()

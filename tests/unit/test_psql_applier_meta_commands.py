@@ -1,4 +1,4 @@
-"""psql meta-commands are refused before ``psql`` ever sees the file (SEC-03).
+"""psql meta-commands are refused before ``psql`` ever sees the file.
 
 ``apply_sql_via_psql`` hands schema and seed files to ``psql``, and ``psql``
 executes backslash commands: ``\\!`` runs a shell command, ``\\copy … TO PROGRAM``

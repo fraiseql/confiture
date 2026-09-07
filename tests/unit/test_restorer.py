@@ -683,7 +683,7 @@ class TestParallelRestoreFlag:
 
 
 # ---------------------------------------------------------------------------
-# Issue #172, Phase 1: TOC parsing
+# Issue #172: TOC parsing
 # ---------------------------------------------------------------------------
 
 # A representative `pg_restore -l` listing: header comments, a table + its data,
@@ -766,7 +766,7 @@ class TestParseTocLines:
 
 
 # ---------------------------------------------------------------------------
-# Issue #172, Phase 2: use-list partitioning + _build_command -L
+# Issue #172: use-list partitioning + _build_command -L
 # ---------------------------------------------------------------------------
 
 
@@ -841,7 +841,7 @@ class TestBuildCommandUseList:
 
 
 # ---------------------------------------------------------------------------
-# Issue #172, Phase 3: ANALYZE phase
+# Issue #172: ANALYZE phase
 # ---------------------------------------------------------------------------
 
 
@@ -932,7 +932,7 @@ class TestRunAnalyze:
 
 
 # ---------------------------------------------------------------------------
-# Issue #172, Phase 4: deferred-matview orchestration
+# Issue #172: deferred-matview orchestration
 # ---------------------------------------------------------------------------
 
 

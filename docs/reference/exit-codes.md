@@ -1,5 +1,7 @@
 # Exit-code convention
 
+> **Frozen at 1.0.0.** The exit integers, their semantic classes and the per-code mapping below are a stability contract. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+
 Confiture's process exit codes are a **stability contract**. Tooling that wraps
 Confiture — CI gates, deploy adapters, monitoring — branches on them, so they
 are documented here and frozen going forward (see [Stability

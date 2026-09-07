@@ -1,4 +1,4 @@
-"""Tests for Phase 2: Core rebuild logic on Migrator."""
+"""Tests for the core rebuild logic on Migrator."""
 
 from __future__ import annotations
 
@@ -299,7 +299,7 @@ class TestRebuildOrchestrator:
         migrator.reinit = MagicMock(
             return_value=MagicMock(
                 migrations_marked=[
-                    MigrationApplied(version="001", name="create_users", execution_time_ms=0)
+                    MigrationApplied(version="001", name="create_users", duration_ms=0)
                 ]
             )
         )

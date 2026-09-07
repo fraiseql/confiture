@@ -1,6 +1,6 @@
 """The drift expected-schema parser is the pglast walk, not a regex (#227, ANA-05).
 
-Phase 05 made pglast the one parser; ``core/drift.py`` was the last analyzer
+pglast is the one parser (D13); ``core/drift.py`` was the last analyzer
 still matching ``CREATE TABLE (\\w+)`` by hand — which is how ``tenant.tb_user``
 became a table called ``tenant``. This pins the replacement: no DDL regex in
 the module, and the expected side built from the shared inventory.

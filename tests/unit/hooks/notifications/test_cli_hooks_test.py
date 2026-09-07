@@ -1,4 +1,4 @@
-"""Tests for ``confiture hooks test`` — Phase 03 Cycle 8.
+"""Tests for ``confiture hooks test``
 
 Pins:
 

@@ -6,7 +6,7 @@ exit codes that are both real verdicts — and those carry a comment saying why.
 The uncommented ones are counted here against a baseline that may only go down:
 review one, either pin it or explain it, and lower the number.
 
-Phase 02 Cycle 7 reviewed and resolved every disjunction over an exit code (the
+Every disjunction was reviewed and resolved over an exit code (the
 class that hides a wrong verdict); the rest are frozen at this baseline.
 """
 

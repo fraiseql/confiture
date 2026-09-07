@@ -1,4 +1,4 @@
-"""Tests for Phase 5: CLI command (confiture migrate rebuild)."""
+"""Tests for the CLI command (confiture migrate rebuild)."""
 
 from __future__ import annotations
 
@@ -78,9 +78,9 @@ class TestRebuildExecution:
             "schemas_dropped": ["public"],
             "ddl_statements_executed": 5,
             "migrations_marked": [
-                MigrationApplied(version="001", name="create_users", execution_time_ms=0),
+                MigrationApplied(version="001", name="create_users", duration_ms=0),
             ],
-            "total_execution_time_ms": 200,
+            "total_duration_ms": 200,
             "dry_run": False,
             "warnings": [],
         }
@@ -149,9 +149,9 @@ class TestRebuildFormatter:
             schemas_dropped=["public"],
             ddl_statements_executed=5,
             migrations_marked=[
-                MigrationApplied(version="001", name="init", execution_time_ms=0),
+                MigrationApplied(version="001", name="init", duration_ms=0),
             ],
-            total_execution_time_ms=100,
+            total_duration_ms=100,
             dry_run=False,
         )
         mock_from_config.return_value = mock_session
@@ -188,7 +188,7 @@ class TestRebuildExitCodes:
             schemas_dropped=[],
             ddl_statements_executed=5,
             migrations_marked=[],
-            total_execution_time_ms=100,
+            total_duration_ms=100,
             dry_run=False,
         )
         mock_from_config.return_value = mock_session

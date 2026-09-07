@@ -308,7 +308,7 @@ class TestSchemaChange:
 
 
 class TestNewModelTypes:
-    """Tests for new DDL object models (Phase 02)."""
+    """Tests for new DDL object models."""
 
     def test_column_type_enum_includes_money(self):
         assert ColumnType.MONEY.value == "MONEY"

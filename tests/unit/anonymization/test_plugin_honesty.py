@@ -1,4 +1,4 @@
-"""A custom strategy is import-linted, then run in-process (SEC-05, D10).
+"""A custom strategy is import-linted, then run in-process.
 
 ``plugins/sandbox.py`` rejected files that import ``os`` or ``subprocess`` and
 then executed the module with ``importlib`` — the same interpreter, the same
@@ -95,17 +95,11 @@ class TestHonestNames:
             assert name in plugins.__all__, name
             assert getattr(plugins, name) is getattr(plugins.import_lint, name)
 
-    def test_sandbox_module_is_a_deprecated_alias_of_import_lint(self) -> None:
-        from confiture.core.anonymization.plugins import import_lint
-
+    def test_sandbox_module_is_gone(self) -> None:
+        """The deprecated ``plugins.sandbox`` alias left with 1.0.0."""
         sys.modules.pop("confiture.core.anonymization.plugins.sandbox", None)
-        with pytest.warns(DeprecationWarning, match="import_lint"):
-            sandbox = importlib.import_module("confiture.core.anonymization.plugins.sandbox")
-
-        assert sandbox.load_strategy is import_lint.load_strategy
-        assert sandbox.SandboxViolationError is import_lint.BlockedImportError
-        assert sandbox.execute_sandboxed is import_lint.execute_timed
-        assert sandbox.SandboxResult is import_lint.TimedResult
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("confiture.core.anonymization.plugins.sandbox")
 
     def test_registry_does_not_import_the_shim(self) -> None:
         source = (

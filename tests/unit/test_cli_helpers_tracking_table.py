@@ -1,4 +1,4 @@
-"""The tracking-table name is an identifier, never SQL text (SEC-01).
+"""The tracking-table name is an identifier, never SQL text.
 
 ``migration.tracking_table`` comes from a YAML file that anyone with write
 access to the repository can edit.  Two properties keep it from becoming a SQL

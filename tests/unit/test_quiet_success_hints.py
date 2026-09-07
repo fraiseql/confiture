@@ -1,4 +1,4 @@
-"""Tests for "looks unusual" hints on quiet successes (Phase 05, issue #123).
+"""Tests for "looks unusual" hints on quiet successes.
 
 When a command technically succeeds (exit 0) but the success state is
 also consistent with a configuration error, the CLI emits an advisory

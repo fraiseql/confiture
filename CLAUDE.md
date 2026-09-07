@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 0.55.0
+**Version**: 1.0.0
 **Last Updated**: 2026-09-06
 **Current Status**: Production-Ready
 
@@ -266,7 +266,7 @@ confiture/
 │   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
 │   │   ├── lint_formatter.py     # Output formatting for linting results
 │   │   ├── main.py               # Main CLI entry point for Confiture
-│   │   ├── options.py            # Shared CLI option factories (ARC-02)
+│   │   ├── options.py            # Shared CLI option factories
 │   │   ├── ownership.py          # ``migrate fix --ownership``: apply the ownership expectation to a live…
 │   │   ├── prep_seed_formatter.py # Formatter for prep-seed validation reports
 │   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI (issue ARCH…
@@ -287,11 +287,10 @@ confiture/
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
 │   │   ├── builder.py            # Schema builder - builds PostgreSQL schemas from DDL files
 │   │   ├── checksum.py           # Migration file checksum computation and verification
-│   │   ├── config_validator.py   # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.val…
 │   │   ├── connection.py         # Database connection management for CLI commands
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
-│   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL (Phase 05)
+│   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL
 │   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
 │   │   ├── differ.py             # Schema differ for detecting database schema changes
 │   │   ├── differ_sql.py         # Generate DDL SQL from SchemaChange objects
@@ -312,7 +311,6 @@ confiture/
 │   │   ├── git_schema.py         # Schema building and comparison from git refs
 │   │   ├── grant_accompaniment.py # Grant accompaniment validation
 │   │   ├── import_checker.py     # Import-check validation for Python migration modules
-│   │   ├── introspector.py       # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.int…
 │   │   ├── large_tables.py       # Large table migration patterns
 │   │   ├── ledger.py             # Migration ledger existence probe
 │   │   ├── live_function_catalog.py # Adapter that converts FunctionIntrospector results to FunctionSignature…
@@ -343,9 +341,6 @@ confiture/
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
-│   │   ├── seed_applier.py       # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
-│   │   ├── seed_bridge.py        # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
-│   │   ├── seed_executor.py      # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see…
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…
 │   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
 │   │   ├── sql_utils.py          # Shared SQL utility functions
@@ -362,18 +357,16 @@ confiture/
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
 │   │   ├── _migrator/            # (18 modules)
-│   │   ├── anonymization/        # PII anonymization framework (library API) (25 modules)
+│   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (4 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
-│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (7 modules)
+│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)
 │   │   ├── linting/              # Rule Library System (30 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
-│   │   ├── seed_validation/      # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.see… (14 modules)
-│   │   ├── validation/           # Validation orchestration for ``confiture migrate validate`` modes (14 modules)
-│   │   └── validators/           # Compatibility shim — removed at 1.0.0. Import from ``confiture.core.val… (2 modules)
+│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (14 modules)
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   └── pggit/                # pgGit integration module for Confiture (9 modules)
@@ -394,8 +387,8 @@ confiture/
 │   │   ├── sql_file_migration.py # SQL file-based migrations
 │   │   ├── stub_models.py        # Data models for Python stub generation from PostgreSQL functions
 │   │   └── unified_lint.py       # Models for unified SQL linting results
-│   ├── schemas/                  # The JSON schemas confiture publishes: the one source (Phase 06, ENG-10)
-│   │   └── __init__.py           # The JSON schemas confiture publishes: the one source (Phase 06, ENG-10)
+│   ├── schemas/                  # The JSON schemas confiture publishes: the one source
+│   │   └── __init__.py           # The JSON schemas confiture publishes: the one source
 │   ├── sql/
 │   │   └── __init__.py
 │   └── testing/                  # Confiture Migration Testing Framework
@@ -1050,6 +1043,10 @@ def build(env: str):
     builder.build()                    # Delegate
 ```
 
+This is enforced, not advised: `tests/unit/test_cli_has_no_apply_loop.py` fails on a
+migration loop under `cli/`, and `tests/budgets.json` caps every function's length
+and complexity per file — the numbers only go down (`scripts/budgets.py --check`).
+
 ---
 
 ### ❌ Don't: Skip type hints
@@ -1134,7 +1131,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: 2026-09-06
-**Version**: 0.55.0
+**Version**: 1.0.0
 
 ---
 

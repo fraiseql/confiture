@@ -1,4 +1,4 @@
-"""Phase 02 Cycle 2 — MigrationGenerator: delegate 13 new change types via DifferSQLGenerator."""
+"""MigrationGenerator: delegate 13 new change types via DifferSQLGenerator."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""One schema source, and every result model validates against it (Phase 06, ENG-10).
+"""One schema source, and every result model validates against it.
 
 Two schema sets used to drift apart: seventeen hand-coded "model" schemas under
 ``python/confiture/schemas/`` (which rejected real ``migrate up`` output — no

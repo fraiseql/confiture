@@ -260,7 +260,7 @@ def _init_repo(repo_path: Path) -> None:
 
 
 class TestGitPlumbingIssue162:
-    """Tests for the merge-base + staged-content plumbing (issue #162, Phase 3)."""
+    """Tests for the merge-base + staged-content plumbing (issue #162)."""
 
     def test_get_staged_file_content_returns_staged_blob(self):
         """Staged content is the index blob, not the (dirtier) working tree."""

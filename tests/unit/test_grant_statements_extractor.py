@@ -220,7 +220,7 @@ def test_grant_option_excluded_from_match_key() -> None:
     )
     # Equal as keys (grant_option is compare=False) ...
     assert set(plain.statements) == set(with_opt.statements)
-    # ... but the flag is still readable for Phase 3's "differs only by" check.
+    # ... but the flag is still readable for the "differs only by" check.
     assert next(iter(plain.statements)).grant_option is False
     assert next(iter(with_opt.statements)).grant_option is True
 

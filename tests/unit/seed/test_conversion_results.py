@@ -1,6 +1,6 @@
 """Tests for seed conversion result models.
 
-Phase 11, Cycle 1: Add ConversionResult and ConversionReport models.
+Add ConversionResult and ConversionReport models.
 """
 
 from __future__ import annotations

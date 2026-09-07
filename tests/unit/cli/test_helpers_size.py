@@ -1,4 +1,4 @@
-"""``cli/helpers.py`` is a helpers module, not a second command layer (ARC-01)."""
+"""``cli/helpers.py`` is a helpers module, not a second command layer."""
 
 from __future__ import annotations
 

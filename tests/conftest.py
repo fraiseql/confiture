@@ -521,7 +521,7 @@ def _sync_clean_database(conn: psycopg.Connection) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layer markers (Phase 02 Cycle 4)
+# Layer markers
 #
 # A test's layer is where it lives. Assigning the marker from the directory
 # means `-m integration` selects exactly the integration layer and a test can

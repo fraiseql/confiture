@@ -1,4 +1,4 @@
-"""SchemaLinter ↔ TenantIsolationRule wiring (Phase 04b, cluster D).
+"""SchemaLinter ↔ TenantIsolationRule wiring.
 
 The tenant-isolation rule existed but was never reachable from `confiture
 lint` — no config flag invoked it. These tests pin the wiring: the check is

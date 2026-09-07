@@ -1,4 +1,4 @@
-"""The native hasher agrees with Python, fails like Python, and says whether it is there (Phase 09).
+"""The native hasher agrees with Python, fails like Python, and says whether it is there.
 
 ``hash_files`` hashed each file separately and then hashed the digests, with
 paths relative to the files' common parent; Python streams one digest over

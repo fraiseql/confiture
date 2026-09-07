@@ -1,4 +1,4 @@
-"""Connections and cursors are released on the failure paths (Phase 03, Cycle 7)."""
+"""Connections and cursors are released on the failure paths."""
 
 from __future__ import annotations
 

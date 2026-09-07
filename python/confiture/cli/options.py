@@ -1,4 +1,4 @@
-"""Shared CLI option factories (ARC-02).
+"""Shared CLI option factories.
 
 ``format_option`` is the one ``--format`` validator: an invalid value exits 5
 with the error on stderr — the same way on every command — before the command

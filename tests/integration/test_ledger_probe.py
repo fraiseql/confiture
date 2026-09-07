@@ -311,7 +311,7 @@ class TestInitializeFollowsTheResolvedLedger:
     """`initialize()` must create the ledger the session will go on to read.
 
     It probes with `_qualified_table()`, which returns a **bare** name whenever
-    `tracking_table` is unqualified — the default. Phase 05 recorded that this
+    `tracking_table` is unqualified — the default. The analyzer-honesty work recorded that this
     path "always" uses the qualified probe; it does not, and that is what puts
     `initialize()` in the blast radius of the search_path fix rather than out
     of it.

@@ -1,6 +1,6 @@
 """Conformance: Phase-02-converted commands emit the #145 error envelope.
 
-Phase 02 routed every CLI failure path through the single ``fail()`` boundary,
+Every CLI failure path is routed through the single ``fail()`` boundary,
 so a command run with ``--format json`` must emit the published
 ``error-envelope.schema.json`` shape on stdout — and *only* that (no Rich error
 text interleaved). This test pins that contract for a representative set of the

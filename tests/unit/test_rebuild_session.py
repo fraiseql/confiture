@@ -1,4 +1,4 @@
-"""Tests for Phase 3: MigratorSession.rebuild() API."""
+"""Tests for the MigratorSession.rebuild() API."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ class TestMigratorSessionRebuild:
             success=True,
             schemas_dropped=["public"],
             ddl_statements_executed=5,
-            migrations_marked=[MigrationApplied(version="001", name="init", execution_time_ms=0)],
-            total_execution_time_ms=100,
+            migrations_marked=[MigrationApplied(version="001", name="init", duration_ms=0)],
+            total_duration_ms=100,
             dry_run=False,
         )
         mock_migrator.rebuild.return_value = expected_result
@@ -57,7 +57,7 @@ class TestMigratorSessionRebuild:
             schemas_dropped=[],
             ddl_statements_executed=0,
             migrations_marked=[],
-            total_execution_time_ms=0,
+            total_duration_ms=0,
             dry_run=True,
         )
         session._migrator = mock_migrator

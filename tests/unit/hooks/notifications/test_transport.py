@@ -1,6 +1,6 @@
 """Unit tests for the Transport layer of the notifications package.
 
-Cycle 1 of Phase 03 — Transport ABC, HttpTransport, StdoutTransport.
+Transport ABC, HttpTransport, StdoutTransport.
 All tests run without a network or process subprocess; HttpTransport is
 exercised against ``pytest-httpserver`` for happy-path / retry tests.
 """

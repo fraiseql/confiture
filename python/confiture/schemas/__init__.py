@@ -1,4 +1,4 @@
-"""The JSON schemas confiture publishes: the one source (Phase 06, ENG-10).
+"""The JSON schemas confiture publishes: the one source.
 
 Every ``*.schema.json`` here ships in the wheel and is what
 ``docs/reference/json-schemas/`` copies byte for byte::

@@ -1,4 +1,4 @@
-"""``migrate up --dry-run`` reports what it knows, not constants (ENG-11).
+"""``migrate up --dry-run`` reports what it knows, not constants.
 
 The summary used to print ``Estimated time: 500ms | Disk: 1.0MB | CPU: 30%`` for
 every migration and ``classification: "warning"`` regardless of content, and

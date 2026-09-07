@@ -1,7 +1,7 @@
 """Real-world testing for INSERT to COPY converter.
 
 Tests converter with realistic seed files that reflect actual production usage.
-Phase 11, Cycle 5: Real-world examples
+Real-world examples
 """
 
 from __future__ import annotations

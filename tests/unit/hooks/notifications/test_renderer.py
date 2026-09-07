@@ -1,6 +1,6 @@
 """Unit tests for the Renderer layer.
 
-Cycle 2 of Phase 03 — Renderer ABC + SlackRenderer + DiscordRenderer +
+Renderer ABC + SlackRenderer + DiscordRenderer +
 TeamsRenderer.  All tests are pure-Python; no network, no DB.
 """
 

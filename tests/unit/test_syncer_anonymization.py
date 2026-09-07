@@ -1,4 +1,4 @@
-"""Pseudonyms are keyed by a per-deployment secret, never plain SHA-256 (SEC-02).
+"""Pseudonyms are keyed by a per-deployment secret, never plain SHA-256.
 
 ``confiture sync --anonymize`` replaced PII with ``sha256(value)[:n]``.  Anyone
 holding the anonymised copy can hash a candidate email and match it — the

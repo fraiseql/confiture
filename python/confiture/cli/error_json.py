@@ -174,7 +174,7 @@ _OUTPUT_PARAMS = ("output_file", "report_file", "report_output")
 
 
 def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
-    """The one error boundary for a CLI command (ENG-08, ARC-02).
+    """The one error boundary for a CLI command.
 
     ``typer.Exit`` and ``click.exceptions.Abort`` cross it untouched — a
     command's own exit code is its own. A ``ConfiturError`` goes through
@@ -191,7 +191,7 @@ def cli_boundary(func: Callable[..., Any]) -> Callable[..., Any]:
             typer.Abort,
         ):  # Click's Exit/Abort, re-exported — click itself is not a dependency
             raise
-        # Reason: this IS the one error boundary (ENG-08)
+        # Reason: this IS the one error boundary
         except Exception as exc:
             fmt = next((kwargs[k] for k in _FORMAT_PARAMS if k in kwargs), None)
             out = next((kwargs[k] for k in _OUTPUT_PARAMS if k in kwargs), None)

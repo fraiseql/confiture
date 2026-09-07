@@ -1,4 +1,4 @@
-"""``docs/guides/dry-run.md`` shows what ``migrate up --dry-run`` prints (ENG-11).
+"""``docs/guides/dry-run.md`` shows what ``migrate up --dry-run`` prints.
 
 The example block is rendered from a fixed two-migration fixture; when the
 renderer changes, the doc changes with it or this test says so.

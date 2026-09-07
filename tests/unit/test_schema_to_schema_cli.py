@@ -1,4 +1,4 @@
-"""Reachability + threading tests for `migrate schema-to-schema` (Phase 04, ARCH-N2).
+"""Reachability + threading tests for `migrate schema-to-schema`.
 
 The Medium-4 FDW feature was advertised in docs but had no CLI. These tests pin
 that the subcommand group is reachable and threads to SchemaToSchemaMigrator,

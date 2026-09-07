@@ -56,7 +56,7 @@ def test_alloc_returns_next_filename_in_empty_dir(project) -> None:
 
 
 def test_alloc_rejects_unsafe_verb(project, tmp_path: Path) -> None:
-    """The security fix from Phase 02 Cycle 2 must surface through the CLI.
+    """The path-confinement fix must surface through the CLI.
 
     Tighter than the original: asserts that no ``.sql`` file landed outside
     the schema dir, so this test can't pass on the wrong code path (e.g. an
@@ -171,7 +171,7 @@ def test_scaffold_then_renumber_full_flow(project, tmp_path: Path) -> None:
 
 
 def test_renumber_refuses_when_filename_referenced_outside_db(project, tmp_path: Path) -> None:
-    """The cross-repo refusal from Phase 02 Cycle 3 must trip through the CLI."""
+    """The cross-repo refusal must trip through the CLI."""
     old = project["funcs"] / "00001_create_item.sql"
     old.write_text("-- defines create_item")
     new = project["funcs"] / "00005_create_item.sql"

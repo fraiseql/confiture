@@ -1,4 +1,4 @@
-"""``--rebuild-threshold`` comes from config, and an invalid config is an error (Phase 04, Cycle 7).
+"""``--rebuild-threshold`` comes from config, and an invalid config is an error.
 
 ``migrate status --check-rebuild`` read ``migration.rebuild_threshold`` only in
 table mode — and through a plain dict that has no ``.migration``, so never —
@@ -83,7 +83,7 @@ def test_invalid_environment_config_fails_migrate_up(project: Path) -> None:
     session = session_double()
     session.__enter__.return_value = session
     session.up.return_value = MigrateUpResult(
-        success=True, migrations_applied=[], total_execution_time_ms=0
+        success=True, migrations_applied=[], total_duration_ms=0
     )
     with patch("confiture.core.migrator.MigratorSession", autospec=True, return_value=session):
         result = runner.invoke(app, ["migrate", "up", "-c", "db/environments/bad.yaml"])

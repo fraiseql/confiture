@@ -1,4 +1,4 @@
-"""Every configuration field is read somewhere (Phase 06, ARC-03).
+"""Every configuration field is read somewhere.
 
 A field on a Pydantic config model that nothing reads is a promise the YAML
 makes and the code never keeps — `auto_backup: true` did nothing, and the

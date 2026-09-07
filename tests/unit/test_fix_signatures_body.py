@@ -77,7 +77,7 @@ def _make_cursor_conn() -> tuple[MagicMock, MagicMock]:
 
 
 # ---------------------------------------------------------------------------
-# Phase 01 — Cycle 1: flag exists, no regression
+# Cycle 1: flag exists, no regression
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ def test_without_check_body_no_regression(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 01 — Cycle 2: body-only path (sig clean, body dirty)
+# Cycle 2: body-only path (sig clean, body dirty)
 # ---------------------------------------------------------------------------
 
 
@@ -160,7 +160,7 @@ def test_check_body_body_only_dry_run(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 01 — Cycle 3: both checks clean with --check-body
+# Cycle 3: both checks clean with --check-body
 # ---------------------------------------------------------------------------
 
 
@@ -204,7 +204,7 @@ def test_check_body_both_clean_exits_0(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 01 — Cycle 4: no fixable overloads + body drift — body still detected
+# Cycle 4: no fixable overloads + body drift — body still detected
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ def test_check_body_no_fixable_overloads_body_still_detected(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 01 — Cycle 5: dry-run JSON includes body fields
+# Cycle 5: dry-run JSON includes body fields
 # ---------------------------------------------------------------------------
 
 
@@ -321,7 +321,7 @@ def test_check_body_dry_run_json(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 02 — Cycle 1: --apply executes body CORF in transaction
+# Cycle 1: --apply executes body CORF in transaction
 # ---------------------------------------------------------------------------
 
 
@@ -374,7 +374,7 @@ def test_apply_executes_body_corf(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 02 — Cycle 2: rollback on body CORF failure
+# Cycle 2: rollback on body CORF failure
 # ---------------------------------------------------------------------------
 
 
@@ -427,7 +427,7 @@ def test_apply_body_corf_failure_rolls_back(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 02 — Cycle 3: body-only path (fix_blocks empty)
+# Cycle 3: body-only path (fix_blocks empty)
 # ---------------------------------------------------------------------------
 
 
@@ -480,7 +480,7 @@ def test_apply_body_only_no_sig_fixes(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 03 — Cycle 1: post-apply text output lists body fixes applied
+# Cycle 1: post-apply text output lists body fixes applied
 # ---------------------------------------------------------------------------
 
 
@@ -534,7 +534,7 @@ def test_apply_text_output_lists_body_fixes(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 03 — Cycle 2: post-apply JSON includes body drift fields
+# Cycle 2: post-apply JSON includes body drift fields
 # ---------------------------------------------------------------------------
 
 
@@ -590,7 +590,7 @@ def test_apply_json_includes_body_fields(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 03 — Cycle 3: residual body drift after apply → exit 1
+# Cycle 3: residual body drift after apply → exit 1
 # ---------------------------------------------------------------------------
 
 
@@ -640,7 +640,7 @@ def test_apply_residual_body_drift_exits_1(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 03 — Cycle 4: no body fields in JSON without --check-body
+# Cycle 4: no body fields in JSON without --check-body
 # ---------------------------------------------------------------------------
 
 

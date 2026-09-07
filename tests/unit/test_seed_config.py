@@ -1,6 +1,6 @@
 """Tests for SeedConfig model.
 
-Phase 9, Cycle 1: RED - Test SeedConfig defaults
+RED - Test SeedConfig defaults
 """
 
 from confiture.config.environment import SeedConfig

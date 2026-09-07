@@ -1,6 +1,6 @@
 """Tests for INSERT to COPY converter with complex SQL patterns.
 
-Phase 11, Cycle 2: Add detection for SQL patterns that cannot be converted.
+Add detection for SQL patterns that cannot be converted.
 """
 
 from __future__ import annotations

@@ -347,7 +347,7 @@ class TestSchemaDiffAlgorithm:
 
 
 class TestParseSchema:
-    """Phase 02: parse_schema returns ParsedSchema with enums/sequences."""
+    """parse_schema returns ParsedSchema with enums/sequences."""
 
     def test_parse_sql_returns_list_of_tables(self):
         differ = SchemaDiffer()
@@ -413,7 +413,7 @@ class TestParseSchema:
 
 
 class TestIndexDiff:
-    """Phase 02 Cycle 3: Index diffing."""
+    """Index diffing."""
 
     def test_diff_detects_new_index(self):
         differ = SchemaDiffer()
@@ -443,7 +443,7 @@ class TestIndexDiff:
 
 
 class TestForeignKeyDiff:
-    """Phase 02 Cycle 4: Foreign key diffing."""
+    """Foreign key diffing."""
 
     _BASE = "CREATE TABLE users (id INT);\nCREATE TABLE orders (id INT, user_id INT);\n"
 
@@ -469,7 +469,7 @@ class TestForeignKeyDiff:
 
 
 class TestEnumDiff:
-    """Phase 02 Cycle 6: Enum type diffing."""
+    """Enum type diffing."""
 
     def test_diff_detects_new_enum(self):
         differ = SchemaDiffer()
@@ -502,7 +502,7 @@ class TestEnumDiff:
 
 
 class TestSequenceDiff:
-    """Phase 02 Cycle 7: Sequence diffing."""
+    """Sequence diffing."""
 
     def test_diff_detects_new_sequence(self):
         differ = SchemaDiffer()

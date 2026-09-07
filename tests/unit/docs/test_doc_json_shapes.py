@@ -4,7 +4,7 @@ DOCS-H2 / DOCS-H3 anti-drift guards.
 
 * ``migrate up`` JSON in ``structured-output.md`` must use the real
   ``MigrateUpResult.to_dict()`` keys (no fictional ``migrations_applied`` /
-  ``total_execution_time_ms`` / ``count``).
+  ``total_duration_ms`` / ``count``).
 * ``dry-run-api.md`` must describe the real ``DryRunExecutor`` / ``DryRunResult``
   surface (no ``locked_tables`` / ``confidence_percent`` / ``estimated_*``).
 """
@@ -24,7 +24,7 @@ DRY_RUN_DOC = "docs/reference/dry-run-api.md"
 
 
 def _real_up_keys() -> set[str]:
-    sample = MigrateUpResult(success=True, migrations_applied=[], total_execution_time_ms=0)
+    sample = MigrateUpResult(success=True, migrations_applied=[], total_duration_ms=0)
     return set(sample.to_dict().keys())
 
 

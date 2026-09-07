@@ -1,4 +1,4 @@
-"""Unit tests for lock-holder identity collection (issue #147, Phase 1)."""
+"""Unit tests for lock-holder identity collection (issue #147)."""
 
 from __future__ import annotations
 

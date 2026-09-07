@@ -1,4 +1,4 @@
-"""One definition of "seed path" (Phase 04, Cycle 5).
+"""One definition of "seed path".
 
 The builder decides with a whole-token rule (``seed``/``seeds`` delimited by
 ``_``/``-``): ``30_seed_backend`` is a seed directory, ``reseed_tools`` is not.

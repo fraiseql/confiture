@@ -1,4 +1,4 @@
-"""Unit tests for JinjaRenderer — Phase 03 Cycle 4.
+"""Unit tests for JinjaRenderer
 
 Covers:
 - Happy path (flat-dict context, expression-only templates).

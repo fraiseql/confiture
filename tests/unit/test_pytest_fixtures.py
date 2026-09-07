@@ -1,4 +1,4 @@
-"""Unit tests for the per-worker xdist fixtures (#158 Phase 05).
+"""Unit tests for the per-worker xdist fixtures (#158).
 
 The fixtures are exercised by calling their underlying functions directly
 (``fixture.__wrapped__``) with a stub provisioner — no database required. The

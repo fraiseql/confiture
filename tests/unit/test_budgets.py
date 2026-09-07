@@ -64,7 +64,7 @@ def test_budget_thresholds_are_the_plan_thresholds(measured) -> None:
 
 
 def test_broad_except_total_is_under_the_phase_ceiling(measured) -> None:
-    """Phase 11 lowers the whole-package count in steps (200 → 160 → 120)."""
+    """The whole-package count came down in steps (207 → 137 → 94) and may only fall further."""
     _budgets, actual = measured
     total = sum(actual["broad_except"].values())
     assert total <= 210, f"{total} broad handlers in python/confiture"

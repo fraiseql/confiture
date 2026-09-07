@@ -1,4 +1,4 @@
-"""pglast receives the raw file (Phase 05, ANA-01).
+"""pglast receives the raw file.
 
 The validator used to blank ``--`` to end of line and mask ``$tag$…$tag$`` with
 a tag-blind regex before parsing. ``'a--b'`` lost its closing quote, a ``$q$``

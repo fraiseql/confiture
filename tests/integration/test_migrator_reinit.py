@@ -215,7 +215,7 @@ class TestReinit:
         assert result.success is True
         assert result.deleted_count == 1
         assert result.dry_run is False
-        assert result.total_execution_time_ms >= 0
+        assert result.total_duration_ms >= 0
         assert result.warnings == []
         assert result.error is None
 

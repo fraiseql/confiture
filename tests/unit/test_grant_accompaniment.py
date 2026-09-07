@@ -290,7 +290,7 @@ class TestGrantAccompanimentChecker:
 
 
 class TestSemanticGrantMatching:
-    """Content-bearing tests for the semantic engine (issue #162, Phase 3).
+    """Content-bearing tests for the semantic engine (issue #162).
 
     Unlike the MagicMock-only tests above (which exercise the degradation
     path), these stub the git content reads so the engine can actually parse

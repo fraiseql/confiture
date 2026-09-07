@@ -1,4 +1,4 @@
-"""Tests for the replica-safety verdict matrix + policy (issue #139, Phase 2/3)."""
+"""Tests for the replica-safety verdict matrix + policy (issue #139)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""The exception hierarchy and the data models import nothing from ``core/`` or ``testing/`` (Phase 06).
+"""The exception hierarchy and the data models import nothing from ``core/`` or ``testing/``.
 
 ``confiture.exceptions`` re-exported classes defined in ``core.preconditions``
 and ``testing.sandbox``, so importing the leaf pulled in the trunk and the

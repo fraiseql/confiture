@@ -1,4 +1,4 @@
-"""``migrate up --dry-run-execute`` never commits (ENG-01).
+"""``migrate up --dry-run-execute`` never commits.
 
 The CLI used to run the analysis, ask for confirmation, then fall through into
 its *own* apply loop — the one that commits. The SAVEPOINT existed only in the

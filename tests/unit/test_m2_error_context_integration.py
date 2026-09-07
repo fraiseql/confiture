@@ -1,4 +1,4 @@
-"""Integration tests for Phase 2 M2 Enhanced Error Messages.
+"""Integration tests for the enhanced error messages.
 
 Tests error context detection and formatting with various exception types.
 """

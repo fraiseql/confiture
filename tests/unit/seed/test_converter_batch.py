@@ -1,6 +1,6 @@
 """Tests for INSERT to COPY batch conversion.
 
-Phase 11, Cycle 4: Add convert_batch() method for batch processing.
+Add convert_batch() method for batch processing.
 """
 
 from __future__ import annotations

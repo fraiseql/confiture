@@ -1,6 +1,6 @@
 """Characterization safety net for the ``migrate validate`` god-command.
 
-Phase 03 decomposes ``migrate_validate`` into per-mode ``core/validation``
+``migrate_validate`` is decomposed into per-mode ``core/validation``
 handlers rendered through ``formatters/validate_formatter.py``. The extraction
 must be behaviour-preserving for everything except the deliberately-changed
 failure exit codes (config/usage errors → 5, tracked as BREAKING for 0.22.0).

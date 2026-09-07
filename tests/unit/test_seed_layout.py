@@ -1,4 +1,4 @@
-"""One seed package (Phase 08, Cycle 2): applier, executor, bridge, paths, validation under ``core/seed/``.
+"""One seed package: applier, executor, bridge, paths, validation under ``core/seed/``.
 
 Seed logic lived in five places — ``core/seed/``, ``core/seed_applier.py``,
 ``core/seed_bridge.py``, ``core/seed_executor.py`` and ``core/seed_validation/``.
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import inspect
 from pathlib import Path
 
 import pytest
@@ -43,29 +42,25 @@ def test_the_seed_package_holds_every_seed_module() -> None:
     assert orchestrator.PrepSeedOrchestrator
 
 
-@pytest.mark.parametrize(("old", "new"), sorted(_OLD_TO_NEW.items()))
-def test_the_old_path_is_a_shim_over_the_new_module(old: str, new: str) -> None:
-    shim = importlib.import_module(old)
-    home = importlib.import_module(new)
-    # A shim re-exports the module's public names: ``__all__`` when it declares one,
-    # otherwise every non-underscore name that is not a submodule.
-    public = list(getattr(home, "__all__", None) or []) or [
-        n for n in dir(home) if not n.startswith("_") and not inspect.ismodule(getattr(home, n))
-    ]
-    assert public, new
-    for name in public:
-        assert getattr(shim, name) is getattr(home, name), f"{old}.{name} is not {new}.{name}"
-    assert "shim" in (shim.__doc__ or "").lower() and "1.0.0" in (shim.__doc__ or ""), (
-        f"{old} must say it is a shim removed at 1.0.0"
+@pytest.mark.parametrize("old", sorted(_OLD_TO_NEW))
+def test_the_old_path_is_gone(old: str) -> None:
+    """The one-release shims left with 1.0.0; the old import paths no longer resolve."""
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(old)
+
+
+def test_no_shim_file_remains() -> None:
+    present = [rel for rel in sorted(_SHIM_FILES) if (_PACKAGE_ROOT / rel).exists()]
+    present += (
+        ["core/seed_validation/"] if (_PACKAGE_ROOT / "core" / "seed_validation").exists() else []
     )
+    assert present == [], f"shim files still present: {present}"
 
 
 def test_nothing_in_the_package_imports_the_old_paths() -> None:
     offenders: list[str] = []
     for path in sorted(_PACKAGE_ROOT.rglob("*.py")):
         rel = path.relative_to(_PACKAGE_ROOT).as_posix()
-        if rel in _SHIM_FILES or rel.startswith("core/seed_validation/"):
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             modules: list[str] = []

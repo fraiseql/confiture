@@ -1,4 +1,4 @@
-"""Cross-snippet pair recognition for ``.py`` migrations (Phase 6).
+"""Cross-snippet pair recognition for ``.py`` migrations.
 
 Before 0.14.0 the validator called :func:`detect_non_idempotent_patterns`
 once per extracted snippet, so a ``DROP X IF EXISTS`` in one

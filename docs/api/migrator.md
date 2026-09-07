@@ -34,7 +34,7 @@ with Migrator.from_config("db/environments/production.yaml") as session:
         result = session.up()
         print(
             f"Applied {len(result.migrations_applied)} migrations "
-            f"in {result.total_execution_time_ms} ms"
+            f"in {result.total_duration_ms} ms"
         )
 ```
 
@@ -274,7 +274,7 @@ from confiture.models.results import MigrateUpResult
 # Fields
 #   success: bool
 #   migrations_applied: list[MigrationApplied]
-#   total_execution_time_ms: int
+#   total_duration_ms: int
 #   checksums_verified: bool   # the verifier ran and found no mismatch
 #   skipped_superuser: list[SkippedMigration]
 #   pending: list[str]        # versions not applied (dry run, or after a halt)
@@ -288,7 +288,7 @@ from confiture.models.results import MigrateUpResult
 #   has_errors: bool
 #   error_summary: str | None
 # to_dict() serialises migrations_applied as "applied" and
-# total_execution_time_ms as "total_duration_ms".
+# total_duration_ms (the attribute and the JSON key share the name since 1.0.0).
 ```
 
 ### `MigrationApplied`

@@ -93,7 +93,7 @@ Working code examples for each tool with confiture-relevant INSERT statements.
 - Performance **impact is acceptable** (10-20ms per file, not bottleneck)
 
 **When**:
-1. After current Phase 11 Cycle 6 completes
+1. After the current release work completes
 2. If you have spare capacity
 3. As quality-of-life improvement (not blocking issue)
 

@@ -1,4 +1,4 @@
-"""Helpers shared by the AST walkers that read DDL (Phase 05).
+"""Helpers shared by the AST walkers that read DDL.
 
 The replica classifier (``core/replica/classifier.py``) and the change-set
 walker (``core/change_set.py``) feed two verdicts — replica forward-compatibility

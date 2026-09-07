@@ -29,7 +29,7 @@ def test_list_patterns_payload_validates_against_schema(schemas_dir, schema_regi
 
 
 def test_hints_field_present_and_empty_by_default(schemas_dir, schema_registry):
-    """`hints` is pre-allocated for Phase 05; today it's always an empty list."""
+    """`hints` is pre-allocated by the schema contract; today it's always an empty list."""
     runner = CliRunner()
     result = runner.invoke(app, ["migrate", "validate", "--list-patterns", "--format", "json"])
     payload = json.loads(result.stdout)

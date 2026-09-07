@@ -1,6 +1,6 @@
 """The object inventory records every commentable kind, every definition, and where it is.
 
-Phase 05 built the inventory for tables only. The doc family (#217) needs
+The inventory first covered tables only. The doc family (#217) needs
 functions matched on name *and* argument types, views and materialised views,
 composite types and domains, and partitions told apart from their parents; the
 duplicate-definition check (#218) needs every definition of the same key kept,

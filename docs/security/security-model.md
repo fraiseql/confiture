@@ -103,6 +103,24 @@ every layer of the system.
 - Resolved-path containment checks (`Path.resolve()` + `relative_to`)
 - No path component accepted outside the project's configured directories
 
+#### Closed in the 2026-09 review
+
+Five findings from the whole-repository security review are closed and guarded:
+
+- **Config-to-SQL identifiers**: the tracking-table name is quoted with
+  `psycopg.sql.Identifier` and validated against one pattern; an AST guard fails
+  on any f-string that interpolates into `FROM`/`TABLE`/`INTO`.
+- **Anonymiser keying**: pseudonyms come from the HMAC strategy only; no
+  truncated `sha256` or seeded `random` keyed on PII survives.
+- **`psql` meta-commands**: `core/psql_applier.py` refuses any line that starts a
+  backslash command (except the `\.` COPY terminator) before handing a file to
+  `psql`, after stripping comments and dollar-quoted bodies.
+- **Credential hygiene**: the backup hook passes the password through
+  `libpq_env`, never on argv; `redact_url` masks a `password=` query key; echoed
+  URLs are redacted at every site (a guard greps for DSN rendering).
+- **Plugins run in-process**: the strategy loader is an import *lint*, not a
+  sandbox; loading a plugin logs that its code executes in-process.
+
 ---
 
 ## Security Controls

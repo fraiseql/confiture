@@ -119,7 +119,7 @@ class TestCheckSignaturesFlag:
             app,
             ["migrate", "validate", "--check-signatures", "--config", str(config)],
         )
-        # Phase 03: --schema omitted + auto-build fails → ConfigurationError → exit 5
+        # --schema omitted + auto-build fails → ConfigurationError → exit 5
         assert result.exit_code == 5
 
     def test_check_signatures_requires_config_file(self, tmp_path):
@@ -137,7 +137,7 @@ class TestCheckSignaturesFlag:
                 str(schema),
             ],
         )
-        # Phase 03: missing config file → ConfigurationError (CONFIG_004) → exit 5
+        # missing config file → ConfigurationError (CONFIG_004) → exit 5
         assert result.exit_code == 5
 
     def _make_open_conn_mock(self) -> MagicMock:
@@ -284,7 +284,7 @@ class TestCheckBodyFlag:
             app,
             ["migrate", "validate", "--check-body", "--config", str(config)],
         )
-        # Phase 03: the usage guard now routes through fail() (CONFIG_001 → exit 5).
+        # the usage guard now routes through fail() (CONFIG_001 → exit 5).
         assert result.exit_code == 5
 
     # ------------------------------------------------------------------

@@ -1,6 +1,6 @@
 """Shared rendering of `--dry-run` summaries for `migrate up` / `migrate down`.
 
-Split out of the monolithic migrate command modules (Phase 04, Cycle 8).
+Split out of the monolithic migrate command modules.
 """
 
 from __future__ import annotations
