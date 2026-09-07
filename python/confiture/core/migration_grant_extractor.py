@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 import pglast.parser
 
@@ -310,6 +311,42 @@ _UNMODELED_ON_KEYWORDS: tuple[str, ...] = (
 )
 
 
+def _unrepresentable_grant(stmt: Any, action: str, modeled: str | None) -> Any | None:
+    """Why a ``GrantStmt`` cannot be keyed statically, or ``None`` when it can."""
+    if modeled is None:
+        return UnrepresentableGrant(
+            reason="unmodeled_objtype",
+            detail=f"{action} on an object class outside table/schema/sequence/function",
+        )
+    # Column-level privileges (``GRANT SELECT (col) …``) carry a non-empty
+    # ``cols`` list — keying them as table grants would let a column grant
+    # match (or vanish against) a whole-table grant.
+    if any(p.cols for p in (stmt.privileges or [])):
+        return UnrepresentableGrant(
+            reason="column_privileges",
+            detail=f"{action} with a column-level privilege list is not modeled",
+        )
+    return None
+
+
+def _grant_privileges(stmt: Any, modeled: str) -> frozenset[str]:
+    """The privilege names a ``GrantStmt`` carries; ``ALL`` (or none named) expands per object type."""
+    if stmt.privileges is None:
+        return _ALL_PRIVILEGES_BY_OBJTYPE[modeled]
+    privs = frozenset(p.priv_name.upper() for p in stmt.privileges if p.priv_name)
+    return privs or _ALL_PRIVILEGES_BY_OBJTYPE[modeled]  # an empty/None priv name means ALL
+
+
+def _grantees(stmt: Any, role_spec_type: Any) -> list[str]:
+    grantees: list[str] = []
+    for g in stmt.grantees or []:
+        if g.roletype == role_spec_type.ROLESPEC_PUBLIC:
+            grantees.append("PUBLIC")
+        elif g.rolename:
+            grantees.append(g.rolename)  # pglast already folds case
+    return grantees
+
+
 class MigrationGrantExtractor:
     """Pull ``CREATE TABLE``, ``DROP TABLE``, and ``GRANT`` statements out of SQL."""
 
@@ -533,42 +570,14 @@ class MigrationGrantExtractor:
 
             action = "GRANT" if stmt.is_grant else "REVOKE"
             modeled = objtype_map.get(stmt.objtype)
-            if modeled is None:
-                unrepresentable.append(
-                    UnrepresentableGrant(
-                        reason="unmodeled_objtype",
-                        detail=f"{action} on an object class outside table/schema/sequence/function",
-                    )
-                )
+            rejection = _unrepresentable_grant(stmt, action, modeled)
+            if rejection is not None:
+                unrepresentable.append(rejection)
                 continue
-
-            # Column-level privileges (``GRANT SELECT (col) …``) carry a
-            # non-empty ``cols`` list — keying them as table grants would let a
-            # column grant match (or vanish against) a whole-table grant.
-            if any(p.cols for p in (stmt.privileges or [])):
-                unrepresentable.append(
-                    UnrepresentableGrant(
-                        reason="column_privileges",
-                        detail=f"{action} with a column-level privilege list is not modeled",
-                    )
-                )
-                continue
-
-            if stmt.privileges is None:
-                privs = _ALL_PRIVILEGES_BY_OBJTYPE[modeled]
-            else:
-                privs = frozenset(p.priv_name.upper() for p in stmt.privileges if p.priv_name)
-                if not privs:  # an empty/None priv name means ALL
-                    privs = _ALL_PRIVILEGES_BY_OBJTYPE[modeled]
-
+            assert modeled is not None  # rejected above otherwise
+            privs = _grant_privileges(stmt, modeled)
             grant_option = bool(stmt.grant_option)
-
-            grantees: list[str] = []
-            for g in stmt.grantees or []:
-                if g.roletype == RoleSpecType.ROLESPEC_PUBLIC:
-                    grantees.append("PUBLIC")
-                elif g.rolename:
-                    grantees.append(g.rolename)  # pglast already folds case
+            grantees = _grantees(stmt, RoleSpecType)
 
             if stmt.targtype == GrantTargetType.ACL_TARGET_ALL_IN_SCHEMA:
                 # objects are String nodes naming the target schema(s).
