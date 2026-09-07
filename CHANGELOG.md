@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   442-line hand-written function. `tests/unit/test_error_codes_data_table.py` pins the rows against a
   snapshot captured from the old builder, keeps the table module data-only and fails on any function in
   `error_codes.py` longer than 60 lines. The codebook, exit-code table and every error-code test are unchanged.
+- **Quality budgets that only shrink.** `tests/budgets.json` records, per file, how many functions exceed
+  McCabe complexity 15 (ruff's `C901`), how many exceed 150 lines, and how many `except Exception` /
+  bare `except` handlers it has; `tests/unit/test_budgets.py` fails on a file over its number and on a
+  stale (too generous) entry, `scripts/budgets.py --update` only ever lowers numbers. Starting baseline:
+  28 complex functions in 23 files, 26 long functions in 22 files, 207 broad handlers in 95 files. The
+  CLI-only broad-except baseline test is folded in (its counts were identical).
 
 ## [0.54.0] - 2026-09-07
 

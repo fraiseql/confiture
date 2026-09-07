@@ -248,6 +248,7 @@ not the tree.
 confiture/
 ├── python/confiture/
 │   ├── __init__.py               # Confiture: PostgreSQL migrations, sweetly done 🍓
+│   ├── error_code_table.py       # The error-code catalog as data: one mapping per code, no logic
 │   ├── error_codes.py            # Error code registry and definitions for structured error handling
 │   ├── exceptions.py             # Confiture exception hierarchy
 │   ├── url_redaction.py          # DSN credential helpers (core-side, import-safe)
