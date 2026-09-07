@@ -6,7 +6,7 @@ Split out of the monolithic migrate command modules.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 
@@ -73,337 +73,372 @@ def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:
     return None
 
 
-@cli_boundary
-def migrate_validate(
-    ctx: typer.Context,
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
+MigrationsDirOpt = Annotated[
+    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
+]
+FixNamingOpt = Annotated[
+    bool,
+    typer.Option(
+        "--fix-naming", help="Auto-rename orphaned files to match convention (default: off)"
     ),
-    fix_naming: bool = typer.Option(
-        False,
-        "--fix-naming",
-        help="Auto-rename orphaned files to match convention (default: off)",
+]
+IdempotentOpt = Annotated[
+    bool,
+    typer.Option(
+        "--idempotent", help="Validate migrations are idempotent, can re-run (default: off)"
     ),
-    idempotent: bool = typer.Option(
-        False,
-        "--idempotent",
-        help="Validate migrations are idempotent, can re-run (default: off)",
-    ),
-    list_patterns: bool = typer.Option(
-        False,
+]
+ListPatternsOpt = Annotated[
+    bool,
+    typer.Option(
         "--list-patterns",
-        help=(
-            "Print machine-readable catalog of detection patterns "
-            "(read-only, no DB needed). Use with `--format json` for tooling. "
-            "Report mode: cannot be combined with any other check."
-        ),
+        help="Print machine-readable catalog of detection patterns "
+        "(read-only, no DB needed). Use with `--format json` for tooling. "
+        "Report mode: cannot be combined with any other check.",
     ),
-    strict_cor: bool = typer.Option(
-        False,
+]
+StrictCorOpt = Annotated[
+    bool,
+    typer.Option(
         "--strict-cor",
-        help=(
-            "Treat info-severity CREATE OR REPLACE shape-risk findings as "
-            "blocking (exit 1). Off by default — info findings are still "
-            "rendered but don't fail the gate."
-        ),
+        help="Treat info-severity CREATE OR REPLACE shape-risk findings as "
+        "blocking (exit 1). Off by default — info findings are still "
+        "rendered but don't fail the gate.",
     ),
-    fail_on_unanalyzable: bool = typer.Option(
-        False,
+]
+FailOnUnanalyzableOpt = Annotated[
+    bool,
+    typer.Option(
         "--fail-on-unanalyzable",
-        help=(
-            "Treat statements the analyzer could not read as a failure (exit 1). "
-            "Off by default. Pair with --base-ref so an existing backlog of "
-            "dynamic SQL does not fail every run. Requires --idempotent."
-        ),
+        help="Treat statements the analyzer could not read as a failure (exit 1). "
+        "Off by default. Pair with --base-ref so an existing backlog of "
+        "dynamic SQL does not fail every run. Requires --idempotent.",
     ),
-    check_drift: bool = typer.Option(
-        False,
-        "--check-drift",
-        help="Validate schema against git refs for drift (default: off)",
-    ),
-    require_migration: bool = typer.Option(
-        False,
+]
+CheckDriftOpt = Annotated[
+    bool,
+    typer.Option("--check-drift", help="Validate schema against git refs for drift (default: off)"),
+]
+RequireMigrationOpt = Annotated[
+    bool,
+    typer.Option(
         "--require-migration",
-        help=(
-            "Ensure DDL changes have migration files (static, no DB required). "
-            "Also detects function parameter type changes missing a DROP FUNCTION. "
-            "Companion to --check-signatures which detects stale overloads in a live DB."
-        ),
+        help="Ensure DDL changes have migration files (static, no DB required). "
+        "Also detects function parameter type changes missing a DROP FUNCTION. "
+        "Companion to --check-signatures which detects stale overloads in a live DB.",
     ),
-    require_migration_bodies: bool = typer.Option(
-        False,
+]
+RequireMigrationBodiesOpt = Annotated[
+    bool,
+    typer.Option(
         "--require-migration-bodies",
-        help=(
-            "Additionally require a function/procedure BODY change (between --base-ref "
-            "and HEAD) to be carried by a migration that re-defines it (#178). Static, "
-            "no DB. Implies --require-migration. OFF by default — drain the standing "
-            "backlog first (see --list-unmigrated-bodies). The runtime counterpart is "
-            "--check-body-replay."
-        ),
+        help="Additionally require a function/procedure BODY change (between --base-ref "
+        "and HEAD) to be carried by a migration that re-defines it (#178). Static, "
+        "no DB. Implies --require-migration. OFF by default — drain the standing "
+        "backlog first (see --list-unmigrated-bodies). The runtime counterpart is "
+        "--check-body-replay.",
     ),
-    list_unmigrated_bodies: bool = typer.Option(
-        False,
+]
+ListUnmigratedBodiesOpt = Annotated[
+    bool,
+    typer.Option(
         "--list-unmigrated-bodies",
-        help=(
-            "Report-only: list function body changes (between --base-ref and HEAD) not "
-            "carried by a migration, WITHOUT failing (exit 0). Use to size and drain the "
-            "backlog before enabling --require-migration-bodies. Report mode: cannot be "
-            "combined with any other check."
-        ),
+        help="Report-only: list function body changes (between --base-ref and HEAD) not "
+        "carried by a migration, WITHOUT failing (exit 0). Use to size and drain the "
+        "backlog before enabling --require-migration-bodies. Report mode: cannot be "
+        "combined with any other check.",
     ),
-    base_ref: str = typer.Option(
-        "origin/main",
-        "--base-ref",
-        help="Base git reference for comparison (default: origin/main)",
-    ),
-    since: str | None = typer.Option(
-        None,
-        "--since",
-        help="Shortcut for --base-ref (default: none)",
-    ),
-    staged: bool = typer.Option(
-        False,
-        "--staged",
-        help="Validate staged files only, pre-commit mode (default: off)",
-    ),
-    require_grant_migration: bool = typer.Option(
-        False,
+]
+BaseRefOpt = Annotated[
+    str, typer.Option("--base-ref", help="Base git reference for comparison (default: origin/main)")
+]
+SinceOpt = Annotated[
+    str | None, typer.Option("--since", help="Shortcut for --base-ref (default: none)")
+]
+StagedOpt = Annotated[
+    bool,
+    typer.Option("--staged", help="Validate staged files only, pre-commit mode (default: off)"),
+]
+RequireGrantMigrationOpt = Annotated[
+    bool,
+    typer.Option(
         "--require-grant-migration",
-        help=(
-            "Verify that each changed GRANT/REVOKE in the grant directory is carried by an "
-            "accompanying migration (SQL or Python). Semantic match across "
-            "table/schema/sequence/function objects; grants that can't be statically verified "
-            "degrade to a file-presence check and are surfaced as notes (default: off)."
-        ),
+        help="Verify that each changed GRANT/REVOKE in the grant directory is carried by an "
+        "accompanying migration (SQL or Python). Semantic match across "
+        "table/schema/sequence/function objects; grants that can't be statically verified "
+        "degrade to a file-presence check and are surfaced as notes (default: off).",
     ),
-    allow_grant_only: bool = typer.Option(
-        False,
+]
+AllowGrantOnlyOpt = Annotated[
+    bool,
+    typer.Option(
         "--allow-grant-only",
         help="Suppress --require-grant-migration failure for build-only branches (default: off)",
     ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Preview changes without renaming (default: off)",
-    ),
-    check_live_drift: bool = typer.Option(
-        False,
+]
+DryRunOpt = Annotated[
+    bool, typer.Option("--dry-run", help="Preview changes without renaming (default: off)")
+]
+CheckLiveDriftOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-live-drift",
-        help=(
-            "Compare the live database schema against the DDL files. "
-            "Requires --config and a database connection."
-        ),
+        help="Compare the live database schema against the DDL files. "
+        "Requires --config and a database connection.",
     ),
-    ignore_column_order: bool = typer.Option(
-        False,
+]
+IgnoreColumnOrderOpt = Annotated[
+    bool,
+    typer.Option(
         "--ignore-column-order",
         help="With --check-live-drift: do not report column_order_mismatch (#226)",
     ),
-    check_signatures: bool = typer.Option(
-        False,
+]
+CheckSignaturesOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-signatures",
-        help=(
-            "Compare function signatures in --schema against the live DB. "
-            "Detects stale overloads created by CREATE OR REPLACE with changed param types. "
-            "Companion to --require-migration (static pre-commit check, no DB needed). "
-            "Requires --config (or --env) and --schema."
-        ),
+        help="Compare function signatures in --schema against the live DB. "
+        "Detects stale overloads created by CREATE OR REPLACE with changed param types. "
+        "Companion to --require-migration (static pre-commit check, no DB needed). "
+        "Requires --config (or --env) and --schema.",
     ),
-    check_imports: bool = typer.Option(
-        False,
+]
+CheckImportsOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-imports",
-        help=(
-            "Import-check pending Python migration modules. "
-            "Level 1: catches syntax errors and missing imports. "
-            "Level 2: verifies version, name, up(), down() are defined. "
-            "No database connection required."
-        ),
+        help="Import-check pending Python migration modules. "
+        "Level 1: catches syntax errors and missing imports. "
+        "Level 2: verifies version, name, up(), down() are defined. "
+        "No database connection required.",
     ),
-    check_body: bool = typer.Option(
-        False,
+]
+CheckBodyOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-body",
-        help=(
-            "Compare function bodies (prosrc) between source SQL and the live database. "
-            "Requires --check-signatures. Opt-in because body comparison is heavier than "
-            "signature-only comparison."
-        ),
+        help="Compare function bodies (prosrc) between source SQL and the live database. "
+        "Requires --check-signatures. Opt-in because body comparison is heavier than "
+        "signature-only comparison.",
     ),
-    show_diff: bool = typer.Option(
-        False,
+]
+ShowDiffOpt = Annotated[
+    bool,
+    typer.Option(
         "--show-diff",
-        help=(
-            "With --check-body: also emit, per drifted function, the expected body, the "
-            "live body, and a unified diff of the two (normalised) bodies. Requires "
-            "--check-body. Opt-in because bodies can be large; the default output stays "
-            "hash-only for terse CI logs. Also applies to --check-body-views."
-        ),
+        help="With --check-body: also emit, per drifted function, the expected body, the "
+        "live body, and a unified diff of the two (normalised) bodies. Requires "
+        "--check-body. Opt-in because bodies can be large; the default output stays "
+        "hash-only for terse CI logs. Also applies to --check-body-views.",
     ),
-    check_body_views: bool = typer.Option(
-        False,
+]
+CheckBodyViewsOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-body-views",
-        help=(
-            "Compare view and materialized-view definitions between the source schema "
-            "and the live database. The expected views are built into a scratch DB and "
-            "read back through the same pg_get_viewdef deparser as live, so only genuine "
-            "predicate/projection changes register (formatting, schema-qualification and "
-            "*-expansion differences do not). Requires --config (or --env) and --schema. "
-            "Honours --schemas and --ssh (with --scratch-url)."
-        ),
+        help="Compare view and materialized-view definitions between the source schema "
+        "and the live database. The expected views are built into a scratch DB and "
+        "read back through the same pg_get_viewdef deparser as live, so only genuine "
+        "predicate/projection changes register (formatting, schema-qualification and "
+        "*-expansion differences do not). Requires --config (or --env) and --schema. "
+        "Honours --schemas and --ssh (with --scratch-url).",
     ),
-    check_body_replay: bool = typer.Option(
-        False,
+]
+CheckBodyReplayOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-body-replay",
-        help=(
-            "Detect out-of-band function/procedure hot-patches by REPLAY: rebuild the "
-            "expected database by replaying all migrations into a scratch DB, then diff "
-            "prosrc against live. Unlike --check-body (expected = source DDL, swamped by "
-            "the build-vs-migrate backlog), this reports only definitions no migration "
-            "produced — the clean production drift signal. Requires --config (or --env); "
-            "honours --schemas, --migrations-dir, --ssh (with --scratch-url). Heaviest "
-            "drift check (replays the full migration history)."
-        ),
+        help="Detect out-of-band function/procedure hot-patches by REPLAY: rebuild the "
+        "expected database by replaying all migrations into a scratch DB, then diff "
+        "prosrc against live. Unlike --check-body (expected = source DDL, swamped by "
+        "the build-vs-migrate backlog), this reports only definitions no migration "
+        "produced — the clean production drift signal. Requires --config (or --env); "
+        "honours --schemas, --migrations-dir, --ssh (with --scratch-url). Heaviest "
+        "drift check (replays the full migration history).",
     ),
-    scratch_url: str | None = typer.Option(
-        None,
+]
+ScratchUrlOpt = Annotated[
+    str | None,
+    typer.Option(
         "--scratch-url",
-        help=(
-            "Writable PostgreSQL server on which to build the expected scratch database "
-            "for --check-body-views / --check-body-replay (default: the live server from "
-            "the config). Required when using --ssh, since the scratch DB cannot be built "
-            "on the remote read-only live server."
-        ),
+        help="Writable PostgreSQL server on which to build the expected scratch database "
+        "for --check-body-views / --check-body-replay (default: the live server from "
+        "the config). Required when using --ssh, since the scratch DB cannot be built "
+        "on the remote read-only live server.",
     ),
-    check_acls: bool = typer.Option(
-        False,
+]
+CheckAclsOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-acls",
-        "--check-acl-coverage",  # back-compat alias (deprecated in 0.12.0)
-        help=(
-            "Static: verify every `CREATE TABLE` in db/migrations/ has a matching "
-            "`GRANT` either in the same migration or in the configured global grant "
-            "sweep directory (defaults to db/7_grant). No-op when the config has no "
-            "`acls:` block. No database connection required.  "
-            "Use --check-acls; --check-acl-coverage is a deprecated alias."
-        ),
+        "--check-acl-coverage",
+        help="Static: verify every `CREATE TABLE` in db/migrations/ has a matching "
+        "`GRANT` either in the same migration or in the configured global grant "
+        "sweep directory (defaults to db/7_grant). No-op when the config has no "
+        "`acls:` block. No database connection required.  "
+        "Use --check-acls; --check-acl-coverage is a deprecated alias.",
     ),
-    check_ownership_coverage: bool = typer.Option(
-        False,
+]
+CheckOwnershipCoverageOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-ownership-coverage",
-        help=(
-            "Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
-            "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
-            "in the same file (`own_001`).  Also flags bare `ALTER … OWNER TO` on objects "
-            "the migration didn't create (`own_002` — three severity tiers: silent when "
-            "guarded + companion `requires_superuser=True`, WARNING when only guarded, "
-            "ERROR when bare).  No-op when the config has no `ownership:` block, or when "
-            "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast)."
-        ),
+        help="Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
+        "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
+        "in the same file (`own_001`).  Also flags bare `ALTER … OWNER TO` on objects "
+        "the migration didn't create (`own_002` — three severity tiers: silent when "
+        "guarded + companion `requires_superuser=True`, WARNING when only guarded, "
+        "ERROR when bare).  No-op when the config has no `ownership:` block, or when "
+        "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast).",
     ),
-    check_function_uniqueness: bool = typer.Option(
-        False,
+]
+CheckFunctionUniquenessOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-function-uniqueness",
-        help=(
-            "Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` "
-            "in the configured DDL directories has a unique fully-qualified "
-            "signature. Two files defining the same `schema.name(args)` "
-            "are silently shadowed by `confiture build` — this rule "
-            "(`func_001`) catches the duplicate first. No-op when the "
-            "config has no `function_coverage:` block, or when "
-            "`function_coverage.enabled` is false. Requires the [ast] extra (pglast)."
-        ),
+        help="Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` "
+        "in the configured DDL directories has a unique fully-qualified "
+        "signature. Two files defining the same `schema.name(args)` "
+        "are silently shadowed by `confiture build` — this rule "
+        "(`func_001`) catches the duplicate first. No-op when the "
+        "config has no `function_coverage:` block, or when "
+        "`function_coverage.enabled` is false. Requires the [ast] extra (pglast).",
     ),
-    check_security_definer: bool = typer.Option(
-        False,
+]
+CheckSecurityDefinerOpt = Annotated[
+    bool,
+    typer.Option(
         "--check-security-definer",
-        help=(
-            "Flag `SECURITY DEFINER` functions/procedures that do not pin "
-            "`search_path` (CVE-2018-1058). Rule `sec_002`. "
-            "Without `--against-db`: static DDL scan (no DB, requires [ast]/pglast). "
-            "With `--against-db`: live `pg_proc` query (authoritative; works even when "
-            "ALTER FUNCTION patched the search_path separately from the CREATE). "
-            "No-op when config has no `security_lint:` block or "
-            "`security_lint.enabled` is false. Default severity advisory "
-            "(warning, exit 0); set `security_lint.severity: error` for exit 1. "
-            "See docs/guides/security-definer-lint.md."
-        ),
+        help="Flag `SECURITY DEFINER` functions/procedures that do not pin "
+        "`search_path` (CVE-2018-1058). Rule `sec_002`. "
+        "Without `--against-db`: static DDL scan (no DB, requires [ast]/pglast). "
+        "With `--against-db`: live `pg_proc` query (authoritative; works even when "
+        "ALTER FUNCTION patched the search_path separately from the CREATE). "
+        "No-op when config has no `security_lint:` block or "
+        "`security_lint.enabled` is false. Default severity advisory "
+        "(warning, exit 0); set `security_lint.severity: error` for exit 1. "
+        "See docs/guides/security-definer-lint.md.",
     ),
-    secdef_against_db: bool = typer.Option(
-        False,
+]
+SecdefAgainstDbOpt = Annotated[
+    bool,
+    typer.Option(
         "--against-db",
-        help=(
-            "Used with `--check-security-definer`: query the live database "
-            "(`pg_proc.proconfig`) instead of scanning DDL source files. "
-            "Authoritative for migrate-strategy databases where "
-            "`ALTER FUNCTION … SET search_path` may have been applied after "
-            "the original CREATE."
-        ),
+        help="Used with `--check-security-definer`: query the live database "
+        "(`pg_proc.proconfig`) instead of scanning DDL source files. "
+        "Authoritative for migrate-strategy databases where "
+        "`ALTER FUNCTION … SET search_path` may have been applied after "
+        "the original CREATE.",
     ),
-    emit_remediation: Path | None = typer.Option(
-        None,
+]
+EmitRemediationOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--emit-remediation",
-        help=(
-            "Used with `--check-security-definer`: write a SQL remediation script "
-            "containing one `ALTER FUNCTION … SET search_path = …` statement per "
-            "flagged callable to the given file path. Does nothing when no violations "
-            "are found."
-        ),
+        help="Used with `--check-security-definer`: write a SQL remediation script "
+        "containing one `ALTER FUNCTION … SET search_path = …` statement per "
+        "flagged callable to the given file path. Does nothing when no violations "
+        "are found.",
     ),
-    ddl_dir: list[Path] = typer.Option(
-        None,
+]
+DdlDirOpt = Annotated[
+    list[Path],
+    typer.Option(
         "--ddl-dir",
-        help=(
-            "DDL directory to scan for `--check-function-uniqueness` and "
-            "`--check-security-definer` (repeatable). "
-            "Defaults to `db/schema` if not provided."
-        ),
+        help="DDL directory to scan for `--check-function-uniqueness` and "
+        "`--check-security-definer` (repeatable). "
+        "Defaults to `db/schema` if not provided.",
     ),
-    check_signature_schemas: str = typer.Option(
-        "public",
+]
+CheckSignatureSchemasOpt = Annotated[
+    str,
+    typer.Option(
         "--schemas",
-        help=(
-            "Comma-separated list of schemas to inspect for stale overloads "
-            "(default: public). Used with --check-signatures."
-        ),
+        help="Comma-separated list of schemas to inspect for stale overloads "
+        "(default: public). Used with --check-signatures.",
     ),
-    config: Path = typer.Option(
-        Path("confiture.yaml"),
+]
+ConfigOpt = Annotated[
+    Path,
+    typer.Option(
         "-c",
         "--config",
         help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
     ),
-    env: str | None = typer.Option(
-        None,
+]
+EnvOpt = Annotated[
+    str | None,
+    typer.Option(
         "--env",
-        help=(
-            "Environment name — shortcut for --config db/environments/{name}.yaml "
-            "(e.g. --env production). Cannot be combined with --config."
-        ),
+        help="Environment name — shortcut for --config db/environments/{name}.yaml "
+        "(e.g. --env production). Cannot be combined with --config.",
     ),
-    ssh_via: str | None = typer.Option(
-        None,
+]
+SshViaOpt = Annotated[
+    str | None,
+    typer.Option(
         "--ssh",
-        help=(
-            "Open an SSH tunnel before connecting: user@host or host "
-            "(e.g. lionel@printoptim.io).  Used with --check-signatures and "
-            "--check-live-drift.  Overrides the ssh_tunnel block in the config file."
-        ),
+        help="Open an SSH tunnel before connecting: user@host or host "
+        "(e.g. lionel@printoptim.io).  Used with --check-signatures and "
+        "--check-live-drift.  Overrides the ssh_tunnel block in the config file.",
     ),
-    schema_file: Path | None = typer.Option(
-        None,
+]
+SchemaFileOpt = Annotated[
+    Path | None,
+    typer.Option(
         "--schema",
-        help=(
-            "Schema SQL file to compare against. "
-            "If omitted with --check-signatures, schema is auto-built from DDL files."
-        ),
+        help="Schema SQL file to compare against. "
+        "If omitted with --check-signatures, schema is auto-built from DDL files.",
     ),
+]
+OutputFileOpt = Annotated[
+    Path | None, typer.Option("--output", "-o", help="Save output to file (default: stdout)")
+]
+
+
+@cli_boundary
+def migrate_validate(
+    ctx: typer.Context,
+    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    fix_naming: FixNamingOpt = False,
+    idempotent: IdempotentOpt = False,
+    list_patterns: ListPatternsOpt = False,
+    strict_cor: StrictCorOpt = False,
+    fail_on_unanalyzable: FailOnUnanalyzableOpt = False,
+    check_drift: CheckDriftOpt = False,
+    require_migration: RequireMigrationOpt = False,
+    require_migration_bodies: RequireMigrationBodiesOpt = False,
+    list_unmigrated_bodies: ListUnmigratedBodiesOpt = False,
+    base_ref: BaseRefOpt = "origin/main",
+    since: SinceOpt = None,
+    staged: StagedOpt = False,
+    require_grant_migration: RequireGrantMigrationOpt = False,
+    allow_grant_only: AllowGrantOnlyOpt = False,
+    dry_run: DryRunOpt = False,
+    check_live_drift: CheckLiveDriftOpt = False,
+    ignore_column_order: IgnoreColumnOrderOpt = False,
+    check_signatures: CheckSignaturesOpt = False,
+    check_imports: CheckImportsOpt = False,
+    check_body: CheckBodyOpt = False,
+    show_diff: ShowDiffOpt = False,
+    check_body_views: CheckBodyViewsOpt = False,
+    check_body_replay: CheckBodyReplayOpt = False,
+    scratch_url: ScratchUrlOpt = None,
+    check_acls: CheckAclsOpt = False,
+    check_ownership_coverage: CheckOwnershipCoverageOpt = False,
+    check_function_uniqueness: CheckFunctionUniquenessOpt = False,
+    check_security_definer: CheckSecurityDefinerOpt = False,
+    secdef_against_db: SecdefAgainstDbOpt = False,
+    emit_remediation: EmitRemediationOpt = None,
+    ddl_dir: DdlDirOpt = None,
+    check_signature_schemas: CheckSignatureSchemasOpt = "public",
+    config: ConfigOpt = Path("confiture.yaml"),
+    env: EnvOpt = None,
+    ssh_via: SshViaOpt = None,
+    schema_file: SchemaFileOpt = None,
     format_output: str = format_option("text", "json", "csv"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout)",
-    ),
+    output_file: OutputFileOpt = None,
 ) -> None:
     """Validate migration files follow naming and quality conventions.
 

@@ -5,7 +5,9 @@ Three measurements over ``python/confiture``:
 
 - ``complexity``: functions whose McCabe complexity exceeds ``thresholds.complexity``
   (ruff's ``C901``, so the number is the one ruff will enforce when the rule is on);
-- ``function_length``: functions longer than ``thresholds.function_length`` lines;
+- ``function_length``: functions longer than ``thresholds.function_length`` lines of
+  code — the signature and the body, the docstring excluded (prose, the same definition
+  ``tests/unit/cli/test_function_size_budget.py`` uses for a command's body);
 - ``broad_except``: ``except Exception``, ``except BaseException`` and bare ``except:``
   handlers (``tests/unit/test_budgets.py`` is the one place this is counted);
 - ``sql_keyword_regex``: ``re`` calls whose pattern names a SQL statement keyword
@@ -151,16 +153,28 @@ def _functions(tree: ast.AST):
             yield node
 
 
+def code_lines(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    """Lines of ``fn`` from ``def`` to its end, minus its docstring."""
+    if fn.end_lineno is None:
+        return 0
+    total = fn.end_lineno - fn.lineno + 1
+    first = fn.body[0] if fn.body else None
+    if (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+        and first.end_lineno is not None
+    ):
+        total -= first.end_lineno - first.lineno + 1
+    return total
+
+
 def measure_function_length(threshold: int) -> dict[str, int]:
-    """Functions per file longer than ``threshold`` lines."""
+    """Functions per file longer than ``threshold`` lines of code."""
     counts: dict[str, int] = {}
     for path in sorted(PACKAGE.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        over = sum(
-            1
-            for fn in _functions(tree)
-            if fn.end_lineno is not None and fn.end_lineno - fn.lineno + 1 > threshold
-        )
+        over = sum(1 for fn in _functions(tree) if code_lines(fn) > threshold)
         if over:
             counts[_rel(path)] = over
     return counts

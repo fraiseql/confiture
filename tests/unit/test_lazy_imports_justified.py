@@ -66,7 +66,7 @@ BASELINE: dict[str, int] = {
     "cli/test_db.py": 1,
     "config/environment.py": 1,
     "core/_migrator/apply.py": 2,
-    "core/_migrator/apply_loop.py": 8,
+    "core/_migrator/apply_loop.py": 2,
     "core/_migrator/baseline.py": 13,
     "core/_migrator/engine.py": 1,
     "core/_migrator/factory.py": 3,
