@@ -271,7 +271,7 @@ class SmtpConfig:
     host: str
     port: int = 587
     username: str = ""
-    password: SecretStr = SecretStr("")
+    password: SecretStr = field(default_factory=lambda: SecretStr(""))
     use_tls: bool = True
     timeout_seconds: float = 10.0
 

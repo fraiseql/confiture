@@ -226,7 +226,7 @@ def apply(text: str) -> tuple[str, list[str]]:
             new = _new_section(path, cmd, level)
         parent = " ".join(parts[:-1])
         if parent and parent in {n for *_, n in _section_spans(text)}:
-            pstart, pend, *_ = next(s for s in _section_spans(text) if s[3] == parent)
+            _pstart, pend, *_ = next(s for s in _section_spans(text) if s[3] == parent)
             text = text[:pend].rstrip("\n") + "\n\n" + new + text[pend:]
         else:
             anchor = text.find("\n## Error Handling")

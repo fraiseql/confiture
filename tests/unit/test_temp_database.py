@@ -262,7 +262,7 @@ class TestPgDumpSchema:
         mock_run.side_effect = subprocess.CalledProcessError(
             1, "pg_dump", stderr="connection refused"
         )
-        with pytest.raises(SchemaError, match="pg_dump failed.*connection refused"):
+        with pytest.raises(SchemaError, match=r"pg_dump failed.*connection refused"):
             pg_dump_schema("postgresql://localhost/mydb")
 
 

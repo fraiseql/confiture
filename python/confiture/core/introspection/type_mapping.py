@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 
 class TypeMapper:
     """Bidirectional mapping between PostgreSQL and Python types."""
 
-    _DEFAULT: dict[str, str] = {
+    _DEFAULT: ClassVar[dict[str, str]] = {
         # Numeric
         "smallint": "int",
         "integer": "int",
@@ -49,7 +51,7 @@ class TypeMapper:
         "void": "None",
     }
 
-    _IMPORT_MAP: dict[str, str] = {
+    _IMPORT_MAP: ClassVar[dict[str, str]] = {
         "Decimal": "from decimal import Decimal",
         "date": "from datetime import date",
         "datetime": "from datetime import datetime",

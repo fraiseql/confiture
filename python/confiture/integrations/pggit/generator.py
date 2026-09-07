@@ -389,7 +389,7 @@ class MigrationGenerator:
         obj_types = {c.object_type for c in changes}
         name_parts = [source_branch.split("/")[-1]]
         if len(obj_types) == 1:
-            name_parts.append(list(obj_types)[0].lower())
+            name_parts.append(next(iter(obj_types)).lower())
 
         return GeneratedMigration(
             version=self._generate_version(index),

@@ -12,6 +12,7 @@ Supports multiple date formats (ISO 8601, US, UK, etc).
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import ClassVar
 
 from confiture.core.anonymization.strategy import AnonymizationStrategy, StrategyConfig
 
@@ -64,7 +65,7 @@ class DateMaskingStrategy(AnonymizationStrategy):
     strategy_name = "date"
 
     # Common date formats to try
-    DATE_FORMATS = [
+    DATE_FORMATS: ClassVar[list[str]] = [
         "%Y-%m-%d",  # ISO 8601: 2020-05-15
         "%m/%d/%Y",  # US: 05/15/2020
         "%d/%m/%Y",  # UK: 15/05/2020

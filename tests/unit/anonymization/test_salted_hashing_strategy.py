@@ -435,7 +435,7 @@ class TestSaltedHashingValidation:
         config = SaltedHashingConfig(salt="test-salt", seed=12345)
         strategy = SaltedHashingStrategy(config)
 
-        is_valid, errors = strategy.validate_comprehensive("", "email", "users")
+        _is_valid, errors = strategy.validate_comprehensive("", "email", "users")
 
         # Should warn about empty string
         assert len(errors) > 0

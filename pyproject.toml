@@ -213,13 +213,18 @@ select = [
     "UP",  # pyupgrade
     "ARG", # flake8-unused-arguments
     "SIM", # flake8-simplify
-    "RUF100",  # unused noqa directives (Phase 08): a noqa that silences nothing is noise
+    "RUF",  # ruff-specific rules (Phase 11, D6); RUF100 alone since Phase 08
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
     "UP042",  # StrEnum migration changes str() semantics; code/tests rely on the
     # (str, Enum) form (e.g. str(LintSeverity.ERROR) == "LintSeverity.ERROR").
+    # Typographic characters (ℹ → — …) in user-facing strings, docstrings and comments
+    # are deliberate; the confusable-character rules would flag every one of them.
+    "RUF001",
+    "RUF002",
+    "RUF003",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -227,7 +232,9 @@ ignore = [
 # SIM117: Nested with statements are often clearer in tests with many patches
 # SIM105: try-except-pass is acceptable for "expected to fail" test scenarios
 "tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
-"python/tests/*" = ["ARG", "S101", "SIM117", "SIM105"]
+# Migration subclasses set hook/precondition lists as plain class attributes — that is
+# the Migration API as documented; the examples show it as users write it.
+"examples/*" = ["RUF012"]
 # Extractor-coverage fixtures pin argument *shapes*, some of them deliberately
 # wrong: an unbound name (F821) and %-formatting (UP031) are the shapes.
 "tests/fixtures/idempotency_shapes/*" = ["F821", "UP031"]

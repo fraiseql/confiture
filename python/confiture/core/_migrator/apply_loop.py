@@ -333,9 +333,10 @@ def _up_dry_run_execute(
                     # Cannot run inside the SAVEPOINT: the autocommit path
                     # would commit everything tested so far.
                     skipped_versions.append(migration.version)
-                    checksum_warnings = checksum_warnings + [
+                    checksum_warnings = [
+                        *checksum_warnings,
                         f"dry_run_execute: skipped {migration.version}_{migration.name} — "
-                        "non-transactional migrations cannot run inside a SAVEPOINT"
+                        "non-transactional migrations cannot run inside a SAVEPOINT",
                     ]
                     emit(
                         on_event,
@@ -408,8 +409,10 @@ def _up_dry_run_execute(
         dry_run=True,
         dry_run_execute=True,
         skipped=skipped_versions,
-        warnings=["dry_run_execute: all SQL executed successfully, changes rolled back"]
-        + checksum_warnings,
+        warnings=[
+            "dry_run_execute: all SQL executed successfully, changes rolled back",
+            *checksum_warnings,
+        ],
     )
 
 

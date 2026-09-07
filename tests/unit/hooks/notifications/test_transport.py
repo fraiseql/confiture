@@ -139,7 +139,7 @@ class TestHttpTransport:
         # 5xx every attempt → final exception.
         with mock.patch("urllib.request.urlopen", return_value=_mock_response(503, b"boom")):
             t = HttpTransport(url=self.URL, retry=RetryPolicy(attempts=3, backoff_seconds=0.0))
-            with pytest.raises(HttpTransportError, match="5..|HTTP 5"):
+            with pytest.raises(HttpTransportError, match=r"5..|HTTP 5"):
                 t.send(TransportPayload(body=b'{"x":1}'))
 
     def test_retry_policy_attempts_then_gives_up(self) -> None:

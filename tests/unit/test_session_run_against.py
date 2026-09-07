@@ -62,7 +62,7 @@ def _mock_migration_class(
 
 
 def test_run_against_all_pass():
-    session, mock_conn = _make_session()
+    session, _mock_conn = _make_session()
     with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(fail=False)
         result = session.run_against(
@@ -109,7 +109,7 @@ def test_run_against_outer_rollback():
 
 
 def test_run_against_continues_past_failure():
-    session, mock_conn = _make_session()
+    session, _mock_conn = _make_session()
     files = [
         Path("db/migrations/20260428000001_fail.up.sql"),
         Path("db/migrations/20260428000002_pass.up.sql"),
@@ -245,7 +245,7 @@ def test_non_transactional_runs_when_allowed():
 
 def test_non_transactional_failure_when_allowed():
     """Non-transactional migration that fails is recorded; db_consumed still True."""
-    session, mock_conn = _make_session()
+    session, _mock_conn = _make_session()
     with injected_loader() as mock_lmc:
         mock_lmc.return_value = _mock_migration_class(
             version="20260428000000",
@@ -317,7 +317,7 @@ def test_outer_rollback_runs_even_on_first_migration_failure():
 
 def test_up_called_not_apply():
     """migration.up() is called directly — migrator.apply() must never be called."""
-    session, mock_conn = _make_session()
+    session, _mock_conn = _make_session()
     up_called = []
 
     class _TrackedMigration:

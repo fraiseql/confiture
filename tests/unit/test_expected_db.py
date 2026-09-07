@@ -7,6 +7,8 @@ left behind.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from confiture.core.expected_db import ExpectedSchemaDB
@@ -16,7 +18,7 @@ from confiture.exceptions import ConfigurationError, SchemaError
 class _FakeTempDatabase:
     """Stand-in for TempDatabase that records whether __exit__ (drop) ran."""
 
-    instances: list[_FakeTempDatabase] = []
+    instances: ClassVar[list[_FakeTempDatabase]] = []
 
     def __init__(self, server_url: str) -> None:
         self.server_url = server_url

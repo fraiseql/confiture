@@ -508,7 +508,7 @@ class TestRenumberRefusesOnCollision:
 
         renum = TreeRenumber(schema)
         plans = renum.build_plans(old, existing_target)
-        with pytest.raises(ValueError, match="collision|exists|already"):
+        with pytest.raises(ValueError, match=r"collision|exists|already"):
             renum.execute(plans)
 
         # Both files still exist; nothing was moved.

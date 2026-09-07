@@ -685,12 +685,12 @@ class MigrationGrantExtractor:
 
 
 __all__ = [
-    "GrantExtraction",
-    "GrantStatement",
-    "MigrationGrantExtractor",
-    "UnrepresentableGrant",
     "_ALL_FUNCTION_PRIVILEGES",
     "_ALL_SCHEMA_PRIVILEGES",
     "_ALL_SEQUENCE_PRIVILEGES",
     "_ALL_TABLE_PRIVILEGES",
+    "GrantExtraction",
+    "GrantStatement",
+    "MigrationGrantExtractor",
+    "UnrepresentableGrant",
 ]

@@ -321,5 +321,5 @@ class TestPgGitErrorHandling:
 
     def test_delete_main_branch_fails(self, pggit_client: PgGitClient):
         """Deleting main branch should fail."""
-        with pytest.raises(PgGitBranchError, match="[Mm]ain"):
+        with pytest.raises(PgGitBranchError, match=r"[Mm]ain"):
             pggit_client.delete_branch("main")

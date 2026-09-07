@@ -205,7 +205,7 @@ class PrepSeedOrchestrator:
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                         severity=ViolationSeverity.WARNING,
-                        message=f"Error validating schema for {table_name}: {str(e)}",
+                        message=f"Error validating schema for {table_name}: {e!s}",
                         file_path=f"db/schema/{table_name}.sql",
                         line_number=1,
                         impact="Could not validate schema mappings",
@@ -331,7 +331,7 @@ class PrepSeedOrchestrator:
                         PrepSeedViolation(
                             pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                             severity=ViolationSeverity.ERROR,
-                            message=(f"Failed to validate {func_name}: {str(e)}"),
+                            message=(f"Failed to validate {func_name}: {e!s}"),
                             file_path=f"db/schema/functions/{func_name}.sql",
                             line_number=1,
                             impact="Resolution function validation failed",
@@ -343,7 +343,7 @@ class PrepSeedOrchestrator:
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                     severity=ViolationSeverity.CRITICAL,
-                    message=f"Database connection failed: {str(e)}",
+                    message=f"Database connection failed: {e!s}",
                     file_path="database_url",
                     line_number=1,
                     impact="Cannot validate resolution functions",
@@ -426,7 +426,7 @@ class PrepSeedOrchestrator:
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
                     severity=ViolationSeverity.CRITICAL,
-                    message=f"Level 5 execution failed: {str(e)}",
+                    message=f"Level 5 execution failed: {e!s}",
                     file_path="database_url",
                     line_number=1,
                     impact="Could not validate seed execution",

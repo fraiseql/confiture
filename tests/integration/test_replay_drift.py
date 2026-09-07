@@ -150,7 +150,7 @@ def test_broken_migration_is_error_not_false_drift(live_db: str, tmp_path: Path)
     )
     (migrations_dir / "20260708000002_broken.down.sql").write_text("SELECT 1;\n")
 
-    with pytest.raises(SchemaError, match="[Mm]igration replay"):
+    with pytest.raises(SchemaError, match=r"[Mm]igration replay"):
         check_replay_drift(
             config_path=_config(tmp_path, live_db),
             migrations_dir=migrations_dir,

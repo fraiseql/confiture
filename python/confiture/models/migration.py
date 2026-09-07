@@ -3,7 +3,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import psycopg
 
@@ -172,16 +172,16 @@ class Migration(ABC):
 
     # Precondition attributes (optional, default to empty lists)
     # Validated before migration execution - fail fast if not satisfied
-    up_preconditions: list["Precondition"] = []
-    down_preconditions: list["Precondition"] = []
+    up_preconditions: ClassVar[list["Precondition"]] = []
+    down_preconditions: ClassVar[list["Precondition"]] = []
 
     # Hook attributes (optional, default to empty lists)
-    before_validation_hooks: list["Hook"] = []
-    before_ddl_hooks: list["Hook"] = []
-    after_ddl_hooks: list["Hook"] = []
-    after_validation_hooks: list["Hook"] = []
-    cleanup_hooks: list["Hook"] = []
-    error_hooks: list["Hook"] = []
+    before_validation_hooks: ClassVar[list["Hook"]] = []
+    before_ddl_hooks: ClassVar[list["Hook"]] = []
+    after_ddl_hooks: ClassVar[list["Hook"]] = []
+    after_validation_hooks: ClassVar[list["Hook"]] = []
+    cleanup_hooks: ClassVar[list["Hook"]] = []
+    error_hooks: ClassVar[list["Hook"]] = []
 
     def __init__(self, connection: psycopg.Connection):
         """Initialize migration with database connection.

@@ -157,7 +157,7 @@ def test_package_and_docs_schema_directories_are_identical() -> None:
 @pytest.mark.parametrize(
     ("model_name", "schema_file"),
     sorted(schema_exporter.MODEL_SCHEMAS.items()),
-    ids=lambda x: x if x.endswith(".json") else x,
+    ids=lambda x: x,
 )
 def test_populated_model_validates_against_its_schema(model_name: str, schema_file: str) -> None:
     model = schema_exporter.model_class(model_name)

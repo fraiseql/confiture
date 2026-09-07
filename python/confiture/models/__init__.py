@@ -14,10 +14,10 @@ from confiture.models.sql_file_migration import (
 )
 
 __all__ = [
+    "FileSQLMigration",
     # Base migration classes
     "Migration",
     "SQLMigration",
-    "FileSQLMigration",
     # SQL file discovery
     "find_sql_migration_files",
     "get_sql_migration_version",

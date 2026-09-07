@@ -546,7 +546,7 @@ class TestErrorHandling:
 
     def test_register_requires_agent_id(self, registry):
         """Registering without agent_id should raise error."""
-        with pytest.raises(ValueError, match="agent_id.*required"):
+        with pytest.raises(ValueError, match=r"agent_id.*required"):
             registry.register(
                 agent_id="",
                 feature_name="feature",
@@ -556,7 +556,7 @@ class TestErrorHandling:
 
     def test_register_requires_feature_name(self, registry):
         """Registering without feature_name should raise error."""
-        with pytest.raises(ValueError, match="feature_name.*required"):
+        with pytest.raises(ValueError, match=r"feature_name.*required"):
             registry.register(
                 agent_id="agent_a",
                 feature_name="",
@@ -566,7 +566,7 @@ class TestErrorHandling:
 
     def test_register_requires_schema_changes(self, registry):
         """Registering without schema_changes should raise error."""
-        with pytest.raises(ValueError, match="schema_changes.*required"):
+        with pytest.raises(ValueError, match=r"schema_changes.*required"):
             registry.register(
                 agent_id="agent_a",
                 feature_name="feature",

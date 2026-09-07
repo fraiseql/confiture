@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import inspect
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -21,8 +22,8 @@ from confiture.testing import pytest_plugin
 class _StubProvisioner:
     """Records clone() calls; tablespace_usable answers from a configured set."""
 
-    usable_names: set[str] = set()
-    clone_calls: list[dict] = []
+    usable_names: ClassVar[set[str]] = set()
+    clone_calls: ClassVar[list[dict]] = []
     fsync_on: bool = False
 
     def __init__(self, url: str) -> None:

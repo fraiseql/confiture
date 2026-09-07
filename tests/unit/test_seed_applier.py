@@ -46,7 +46,7 @@ class TestApplySeedFiles:
         good.write_text("INSERT INTO t VALUES (1);")
         bad.write_text("BROKEN;")
 
-        with pytest.raises(SchemaError, match="02_broken.sql"):
+        with pytest.raises(SchemaError, match=r"02_broken.sql"):
             apply_seed_files("postgresql://localhost/db", [good, bad])
 
 

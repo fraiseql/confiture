@@ -224,7 +224,7 @@ class HookExecutor:
             raise
         except Exception as e:
             raise HookError(
-                message=f"Exception during hook execution: {str(e)}",
+                message=f"Exception during hook execution: {e!s}",
                 hook_id=hook_id,
                 hook_name=hook_name,
                 phase=phase,

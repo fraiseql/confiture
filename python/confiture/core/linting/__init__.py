@@ -41,30 +41,30 @@ from .versioning import (
 )
 
 __all__ = [
-    # Versioning
-    "RuleVersion",
-    "Rule",
-    "LintSeverity",
-    "RuleVersionManager",
-    "RuleRemovedError",
-    # Composition
-    "RuleLibrary",
-    "RuleLibraryComposer",
     "ComposedRuleSet",
-    "RuleConflict",
-    "RuleConflictError",
     "ConflictResolution",
     "ConflictType",
+    "GDPRLibrary",
     # Libraries
     "GeneralLibrary",
     "HIPAALibrary",
-    "SOXLibrary",
-    "GDPRLibrary",
-    "PCI_DSSLibrary",
-    # Schema Linter
-    "SchemaLinter",
     "LintConfig",
     "LintReport",
+    "LintSeverity",
     "LintViolation",
+    "PCI_DSSLibrary",
+    "Rule",
+    "RuleConflict",
+    "RuleConflictError",
+    # Composition
+    "RuleLibrary",
+    "RuleLibraryComposer",
+    "RuleRemovedError",
     "RuleSeverity",
+    # Versioning
+    "RuleVersion",
+    "RuleVersionManager",
+    "SOXLibrary",
+    # Schema Linter
+    "SchemaLinter",
 ]

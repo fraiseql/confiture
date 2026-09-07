@@ -184,7 +184,7 @@ class TestRunExternalGenerator:
             return result
 
         with patch("subprocess.run", side_effect=fake_run):
-            resolved_cmd, up_path = gen.run_external_generator(
+            _resolved_cmd, up_path = gen.run_external_generator(
                 generator_config=cfg,
                 from_path=from_file,
                 to_path=to_file,

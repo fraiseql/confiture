@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stale (too generous) entry, `scripts/budgets.py --update` only ever lowers numbers. Starting baseline:
   28 complex functions in 23 files, 26 long functions in 22 files, 207 broad handlers in 95 files. The
   CLI-only broad-except baseline test is folded in (its counts were identical).
+- **Ruff `RUF` family enabled** (D6, one family per commit). 267 findings: 85 auto-fixed (f-string conversions,
+  parenthesised chains, unused unpacked names, sorted `__all__`), 28 mutable class attributes annotated
+  `ClassVar` (the `Migration` hook/precondition lists included), 21 `pytest.raises(match=…)` patterns made
+  raw strings, one dataclass default factory, one useless conditional. `RUF001–003` (confusable
+  characters) are ignored with a written reason: the typographic `ℹ → —` in user-facing text are deliberate.
+  Example migrations keep plain hook lists (`examples/*` ignores `RUF012`) because that is the API.
 
 ## [0.54.0] - 2026-09-07
 

@@ -9,9 +9,9 @@ from .pci_dss import PCI_DSSLibrary
 from .sox import SOXLibrary
 
 __all__ = [
+    "GDPRLibrary",
     "GeneralLibrary",
     "HIPAALibrary",
-    "SOXLibrary",
-    "GDPRLibrary",
     "PCI_DSSLibrary",
+    "SOXLibrary",
 ]

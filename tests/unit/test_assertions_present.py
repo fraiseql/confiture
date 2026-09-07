@@ -49,7 +49,7 @@ def _asserts_something(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
                 and node.func.value.id == "pytest"
             ):
                 return True
-            if name.startswith("assert_") or name.startswith("assert") and name[6:7].isupper():
+            if name.startswith("assert_") or (name.startswith("assert") and name[6:7].isupper()):
                 return True  # mock.assert_called_with, self.assertEqual
             if _ASSERTING_CALL.match(name):
                 return True

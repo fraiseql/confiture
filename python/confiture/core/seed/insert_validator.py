@@ -31,7 +31,7 @@ class InsertValidator:
         try:
             ast = parse_one(insert_sql, dialect="postgres")
         except Exception as e:
-            return False, f"Parse error: {str(e)}"
+            return False, f"Parse error: {e!s}"
 
         # Must be INSERT statement
         if not isinstance(ast, exp.Insert):

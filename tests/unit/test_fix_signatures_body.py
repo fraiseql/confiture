@@ -489,7 +489,7 @@ def test_apply_text_output_lists_body_fixes(tmp_path):
     schema = tmp_path / "schema.sql"
     schema.write_text(SCHEMA_WITH_FN)
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(
@@ -543,7 +543,7 @@ def test_apply_json_includes_body_fields(tmp_path):
     schema = tmp_path / "schema.sql"
     schema.write_text(SCHEMA_WITH_FN)
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(
@@ -600,7 +600,7 @@ def test_apply_residual_body_drift_exits_1(tmp_path):
     schema = tmp_path / "schema.sql"
     schema.write_text(SCHEMA_WITH_FN)
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(
@@ -668,7 +668,7 @@ def test_apply_json_no_body_fields_without_flag(tmp_path):
     )
     sig_clean = _clean_sig_report()
 
-    fake_cursor, fake_conn = _make_cursor_conn()
+    _fake_cursor, fake_conn = _make_cursor_conn()
 
     with (
         patch(

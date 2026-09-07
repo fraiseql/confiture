@@ -59,7 +59,7 @@ def test_text_is_analyzed_at_the_path_it_belongs_to(tmp_path: Path, monkeypatch)
 
 def test_staged_content_reads_relative_to_the_real_migration(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """The CLI's staged path: the working tree differs from the index blob."""
-    root, migration = _project(tmp_path)
+    _root, migration = _project(tmp_path)
     migration.write_text("# working tree: edited after staging\n")
     monkeypatch.chdir(tmp_path)
 

@@ -141,7 +141,7 @@ def test_the_fallback_to_python_is_logged_once(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    files, base = schema_tree
+    _files, _base = schema_tree
     (tmp_path / "db" / "environments").mkdir(parents=True)
     (tmp_path / "db" / "environments" / "local.yaml").write_text(
         "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"

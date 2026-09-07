@@ -38,23 +38,23 @@ from confiture.testing.worker_db import (
 )
 
 __all__ = [
-    # Decorator
-    "migration_test",
     # Migration-sandbox fixtures (for documentation; registered via plugin)
     "confiture_db_url",
-    "confiture_sandbox",
-    "confiture_validator",
-    "confiture_snapshotter",
-    # Per-worker test-database fixtures (pytest-xdist)
-    "confiture_test_server_url",
-    "confiture_template_name",
     "confiture_env",
     "confiture_project_dir",
-    "confiture_worker_id",
+    "confiture_sandbox",
+    "confiture_snapshotter",
     "confiture_template_db",
+    "confiture_template_name",
+    # Per-worker test-database fixtures (pytest-xdist)
+    "confiture_test_server_url",
+    "confiture_validator",
     "confiture_worker_db",
+    "confiture_worker_id",
+    "current_worker_id",
+    # Decorator
+    "migration_test",
     # Import-time helpers (primary integration surface)
     "resolve_worker_db_name",
     "resolve_worker_db_url",
-    "current_worker_id",
 ]

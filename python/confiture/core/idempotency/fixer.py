@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import ClassVar
 
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
@@ -148,7 +149,7 @@ class IdempotencyFixer:
     # Dispatch table: pattern → fixer-method name. The set of keys is the
     # single source of truth for ``FIXABLE_PATTERNS`` (and therefore for
     # ``IdempotencyPattern.fix_available``) — keep them in sync.
-    _FIX_METHOD_NAMES: dict[IdempotencyPattern, str] = {
+    _FIX_METHOD_NAMES: ClassVar[dict[IdempotencyPattern, str]] = {
         IdempotencyPattern.CREATE_TABLE: "_fix_create_table",
         IdempotencyPattern.CREATE_INDEX: "_fix_create_index",
         IdempotencyPattern.CREATE_UNIQUE_INDEX: "_fix_create_unique_index",

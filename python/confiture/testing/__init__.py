@@ -65,38 +65,38 @@ from confiture.testing.loader import (
 from confiture.testing.sandbox import MigrationSandbox, PreStateSimulationError
 
 __all__ = [
-    # Migration sandbox (context manager for testing)
-    "MigrationSandbox",
-    "PreStateSimulationError",
-    # Migration loader (most commonly used)
-    "load_migration",
-    "find_migration_by_version",
-    "MigrationNotFoundError",
-    "MigrationLoadError",
-    # Test fixtures
-    "SchemaSnapshotter",
-    "DataValidator",
-    "MigrationRunner",
-    # Fixture data classes
-    "DataBaseline",
-    "SchemaSnapshot",
-    "TableSchema",
     "ColumnInfo",
     "ConstraintInfo",
-    "IndexInfo",
+    # Fixture data classes
+    "DataBaseline",
+    "DataValidator",
     "ForeignKeyInfo",
-    "SchemaChange",
-    # Mutation testing
-    "Mutation",
-    "MutationRegistry",
-    "MutationTestRunner",
-    "MutationRunner",  # Alias for backwards compatibility
-    "MutationReport",
-    "MutationMetrics",
-    "MutationSeverity",
-    "MutationCategory",
+    "IndexInfo",
+    "MigrationLoadError",
+    "MigrationNotFoundError",
     # Performance testing
     "MigrationPerformanceProfiler",
-    "PerformanceProfile",
+    "MigrationRunner",
+    # Migration sandbox (context manager for testing)
+    "MigrationSandbox",
+    # Mutation testing
+    "Mutation",
+    "MutationCategory",
+    "MutationMetrics",
+    "MutationRegistry",
+    "MutationReport",
+    "MutationRunner",  # Alias for backwards compatibility
+    "MutationSeverity",
+    "MutationTestRunner",
     "PerformanceOptimizationReport",
+    "PerformanceProfile",
+    "PreStateSimulationError",
+    "SchemaChange",
+    "SchemaSnapshot",
+    # Test fixtures
+    "SchemaSnapshotter",
+    "TableSchema",
+    "find_migration_by_version",
+    # Migration loader (most commonly used)
+    "load_migration",
 ]

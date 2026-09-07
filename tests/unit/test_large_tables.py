@@ -312,7 +312,7 @@ class TestOnlineIndexBuilder:
 
     def test_create_index_custom_name(self, mock_connection):
         """Test creating index with custom name."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         builder = OnlineIndexBuilder(conn)
 
         index_name = builder.create_index_concurrently(

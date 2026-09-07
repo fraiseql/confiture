@@ -142,7 +142,7 @@ class TestRunVerify:
         assert result.status == "failed"
 
     def test_ddl_rejected(self, tmp_migrations, mock_connection):
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         verify_file = tmp_migrations / "001_foo.verify.sql"
         verify_file.write_text("ALTER TABLE foo ADD COLUMN bar int")
 
@@ -151,7 +151,7 @@ class TestRunVerify:
             verifier.run_verify("001", "foo", verify_file)
 
     def test_insert_rejected(self, tmp_migrations, mock_connection):
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         verify_file = tmp_migrations / "001_foo.verify.sql"
         verify_file.write_text("INSERT INTO foo VALUES (1)")
 
@@ -227,7 +227,7 @@ class TestVerifyAll:
         assert results[0].version == "001"
 
     def test_no_file_is_skipped(self, tmp_migrations, mock_connection):
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
 
         # No verify file for version 001
         verifier = MigrationVerifier(connection=conn, migrations_dir=tmp_migrations)

@@ -98,25 +98,25 @@ class TestDumpFormatValidation:
     def test_directory_without_toc_raises(self, tmp_path):
         dump_dir = tmp_path / "nodump"
         dump_dir.mkdir()
-        with pytest.raises(RestoreError, match="toc.dat"):
+        with pytest.raises(RestoreError, match=r"toc.dat"):
             DatabaseRestorer()._validate_dump_format(dump_dir)
 
     def test_plain_text_sql_raises_restore_error(self, tmp_path):
         dump = tmp_path / "dump.sql"
         dump.write_text("-- PostgreSQL database dump\nCREATE TABLE foo (id int);")
-        with pytest.raises(RestoreError, match="plain.text"):
+        with pytest.raises(RestoreError, match=r"plain.text"):
             DatabaseRestorer()._validate_dump_format(dump)
 
     def test_plain_text_starting_with_set_raises(self, tmp_path):
         dump = tmp_path / "dump.sql"
         dump.write_text("SET client_encoding = 'UTF8';\nCREATE TABLE foo (id int);")
-        with pytest.raises(RestoreError, match="plain.text"):
+        with pytest.raises(RestoreError, match=r"plain.text"):
             DatabaseRestorer()._validate_dump_format(dump)
 
     def test_unrecognised_format_raises_restore_error(self, tmp_path):
         dump = tmp_path / "dump.bin"
         dump.write_bytes(b"\x00\x01\x02\x03")
-        with pytest.raises(RestoreError, match="custom.*directory|directory.*custom"):
+        with pytest.raises(RestoreError, match=r"custom.*directory|directory.*custom"):
             DatabaseRestorer()._validate_dump_format(dump)
 
     def test_missing_file_raises_restore_error(self, tmp_path):

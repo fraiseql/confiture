@@ -45,43 +45,43 @@ from .phases import HookAlert, HookEvent, HookPhase
 from .registry import HookRegistry
 
 __all__ = [
+    "CircuitBreaker",
+    "CircuitBreakerState",
+    "ExecutionContext",
+    "ExecutionDAG",
     # Base classes
     "Hook",
-    "HookResult",
-    "HookError",
-    "HookExecutor",
+    "HookAlert",
     "HookContext",
+    "HookContextMutationPolicy",
+    "HookError",
+    "HookErrorStrategy",
+    "HookEvent",
+    "HookExecutionError",
+    "HookExecutionEvent",
+    "HookExecutionResult",
+    # Observability
+    "HookExecutionStatus",
+    # Execution strategies
+    "HookExecutionStrategy",
+    "HookExecutionTracer",
+    "HookExecutor",
     # Phases/Events/Alerts
     "HookPhase",
-    "HookEvent",
-    "HookAlert",
+    "HookPhaseConfig",
+    # Registry
+    "HookRegistry",
+    "HookResult",
+    "MigrationPlanContext",
+    "MigrationStep",
+    "PerformanceTrace",
+    "RetryConfig",
+    "RiskAssessment",
+    "RollbackContext",
+    "Schema",
     # Contexts
     "SchemaAnalysisContext",
     "SchemaDiffContext",
-    "MigrationPlanContext",
-    "ExecutionContext",
-    "RollbackContext",
-    "ValidationContext",
-    "Schema",
     "SchemaDifference",
-    "RiskAssessment",
-    "MigrationStep",
-    # Execution strategies
-    "HookExecutionStrategy",
-    "HookErrorStrategy",
-    "HookContextMutationPolicy",
-    "HookPhaseConfig",
-    "RetryConfig",
-    # Observability
-    "HookExecutionStatus",
-    "HookExecutionEvent",
-    "HookExecutionResult",
-    "CircuitBreaker",
-    "CircuitBreakerState",
-    "HookExecutionTracer",
-    "HookExecutionError",
-    "ExecutionDAG",
-    "PerformanceTrace",
-    # Registry
-    "HookRegistry",
+    "ValidationContext",
 ]

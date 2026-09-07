@@ -47,38 +47,8 @@ from confiture.core.preconditions import (
 )
 
 __all__ = [
-    # Dry-run mode
-    "DryRunError",
-    "DryRunExecutor",
-    "DryRunResult",
-    # Hook system - Base
-    "Hook",
-    "HookContext",
-    "HookResult",
-    "HookPhase",
-    "HookRegistry",
-    # Hook system - Execution strategies
-    "HookExecutionStrategy",
-    "HookErrorStrategy",
-    "RetryConfig",
-    # Hook system - Observability
-    "HookExecutionStatus",
-    "HookExecutionEvent",
-    "HookExecutionResult",
     "CircuitBreaker",
     "CircuitBreakerState",
-    "HookExecutionTracer",
-    "ExecutionDAG",
-    "PerformanceTrace",
-    # Preconditions - Base
-    "Precondition",
-    "PreconditionValidator",
-    "PreconditionError",
-    "PreconditionValidationError",
-    # Preconditions - Table checks
-    "TableExists",
-    "TableNotExists",
-    "TableIsEmpty",
     # Preconditions - Column checks
     "ColumnExists",
     "ColumnNotExists",
@@ -86,16 +56,46 @@ __all__ = [
     # Preconditions - Constraint checks
     "ConstraintExists",
     "ConstraintNotExists",
+    # Preconditions - Custom SQL
+    "CustomSQL",
+    # Dry-run mode
+    "DryRunError",
+    "DryRunExecutor",
+    "DryRunResult",
+    "ExecutionDAG",
     "ForeignKeyExists",
+    # Hook system - Base
+    "Hook",
+    "HookContext",
+    "HookErrorStrategy",
+    "HookExecutionEvent",
+    "HookExecutionResult",
+    # Hook system - Observability
+    "HookExecutionStatus",
+    # Hook system - Execution strategies
+    "HookExecutionStrategy",
+    "HookExecutionTracer",
+    "HookPhase",
+    "HookRegistry",
+    "HookResult",
     # Preconditions - Index checks
     "IndexExists",
     "IndexNotExists",
-    # Preconditions - Schema checks
-    "SchemaExists",
-    "SchemaNotExists",
+    "PerformanceTrace",
+    # Preconditions - Base
+    "Precondition",
+    "PreconditionError",
+    "PreconditionValidationError",
+    "PreconditionValidator",
+    "RetryConfig",
     # Preconditions - Row count checks
     "RowCountEquals",
     "RowCountGreaterThan",
-    # Preconditions - Custom SQL
-    "CustomSQL",
+    # Preconditions - Schema checks
+    "SchemaExists",
+    "SchemaNotExists",
+    # Preconditions - Table checks
+    "TableExists",
+    "TableIsEmpty",
+    "TableNotExists",
 ]

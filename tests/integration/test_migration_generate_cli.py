@@ -590,7 +590,7 @@ class TestMigrateGenerateExternalGenerator:
         to_file = tmp_path / "v2.sql"
         to_file.write_text("SELECT 2;")
 
-        project_dir, config_path = _make_env_yaml(
+        _project_dir, config_path = _make_env_yaml(
             tmp_path,
             "fake",
             f"{script_path} {{from}} {{to}} {{output}}",
@@ -631,7 +631,7 @@ class TestMigrateGenerateExternalGenerator:
         to_file = tmp_path / "v2.sql"
         to_file.write_text("SELECT 2;")
 
-        project_dir, config_path = _make_env_yaml(
+        _project_dir, config_path = _make_env_yaml(
             tmp_path,
             "fake",
             f"{script_path} {{from}} {{to}} {{output}}",
@@ -665,7 +665,7 @@ class TestMigrateGenerateExternalGenerator:
         to_file = tmp_path / "v2.sql"
         to_file.write_text("SELECT 2;")
 
-        project_dir, config_path = _make_env_yaml(
+        _project_dir, config_path = _make_env_yaml(
             tmp_path,
             "fake",
             "tool {from} {to} {output}",
@@ -698,7 +698,7 @@ class TestMigrateGenerateExternalGenerator:
         from_file = tmp_path / "v1.sql"
         from_file.write_text("SELECT 1;")
 
-        project_dir, config_path = _make_env_yaml(
+        _project_dir, config_path = _make_env_yaml(
             tmp_path,
             "fake",
             "tool {from} {to} {output}",
@@ -733,7 +733,7 @@ class TestMigrateGenerateExternalGenerator:
         to_file = tmp_path / "v2.sql"
         to_file.write_text("SELECT 2;")
 
-        project_dir, config_path = _make_env_yaml(
+        _project_dir, config_path = _make_env_yaml(
             tmp_path,
             "fake",
             "tool {from} {to} {output}",

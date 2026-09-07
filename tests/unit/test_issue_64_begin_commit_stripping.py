@@ -59,12 +59,12 @@ class TestStripTransactionWrappers:
 
     def test_returns_changed_flag_true_when_stripped(self):
         sql = "BEGIN;\nSELECT 1;\nCOMMIT;\n"
-        result, changed = strip_transaction_wrappers(sql, return_changed=True)
+        _result, changed = strip_transaction_wrappers(sql, return_changed=True)
         assert changed is True
 
     def test_returns_changed_flag_false_when_not_stripped(self):
         sql = "SELECT 1;\n"
-        result, changed = strip_transaction_wrappers(sql, return_changed=True)
+        _result, changed = strip_transaction_wrappers(sql, return_changed=True)
         assert changed is False
 
 

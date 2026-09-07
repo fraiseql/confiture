@@ -90,7 +90,7 @@ class InsertToCopyConverter:
             return ConversionResult(
                 file_path=file_path,
                 success=False,
-                reason=f"Parse error: {str(e)}",
+                reason=f"Parse error: {e!s}",
             )
 
         if not statements:

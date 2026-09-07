@@ -33,8 +33,8 @@ from enum import Enum
 
 __all__ = [
     "SqlType",
-    "canonical_type",
     "TypeChange",
+    "canonical_type",
     "changes_rewrite_table",
     "compare_types",
     "parse_type",

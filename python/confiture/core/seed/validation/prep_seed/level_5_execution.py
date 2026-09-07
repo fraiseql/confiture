@@ -85,7 +85,7 @@ class Level5ExecutionValidator:
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
                         severity=ViolationSeverity.ERROR,
-                        message=f"Error loading seeds from {seed_file_path}: {str(e)}",
+                        message=f"Error loading seeds from {seed_file_path}: {e!s}",
                         file_path=seed_file_path,
                         line_number=1,
                         impact="Seed data not loaded",
@@ -121,7 +121,7 @@ class Level5ExecutionValidator:
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                         severity=ViolationSeverity.ERROR,
-                        message=(f"Error executing {func_name}: {str(e)}"),
+                        message=(f"Error executing {func_name}: {e!s}"),
                         file_path=f"db/schema/functions/{func_name}.sql",
                         line_number=1,
                         impact="Resolution failed",

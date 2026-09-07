@@ -340,9 +340,9 @@ def _quote_ident(ident: str) -> str:
 
 
 __all__ = [
+    "BootstrapExecutor",
     "BootstrapPlan",
     "BootstrapPlanner",
-    "BootstrapExecutor",
     "BootstrapResult",
     "BootstrapStep",
 ]

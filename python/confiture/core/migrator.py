@@ -30,14 +30,14 @@ from confiture.core._migrator.session import MigratorSession
 from confiture.core.locking import LockConfig, MigrationLock
 
 __all__ = [
-    "UpEvent",
-    "UpObserver",
+    "LockConfig",
+    "MigrationLock",
     "Migrator",
     "MigratorSession",
+    "UpEvent",
+    "UpObserver",
     "_version_from_migration_filename",
     "discover_migration_files",
     "find_duplicate_migration_versions",
     "parse_migration_filename",
-    "LockConfig",
-    "MigrationLock",
 ]

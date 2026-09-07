@@ -10,7 +10,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pglast
 import psycopg
@@ -272,7 +272,7 @@ class SchemaDriftDetector:
     """
 
     # Tables to always ignore
-    SYSTEM_TABLES = {
+    SYSTEM_TABLES: ClassVar[set[str]] = {
         "tb_confiture",
         "confiture_version",
         "confiture_audit_log",

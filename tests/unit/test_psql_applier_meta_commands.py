@@ -199,6 +199,6 @@ class TestApplierRefuses:
         assert len(run_never_called) == 1
 
     def test_reject_meta_commands_is_the_public_entry(self) -> None:
-        with pytest.raises(SchemaError, match="seed.sql"):
+        with pytest.raises(SchemaError, match=r"seed.sql"):
             psql_applier.reject_meta_commands("\\! id\n", source=Path("seed.sql"))
         psql_applier.reject_meta_commands("SELECT 1;\n", source=None)

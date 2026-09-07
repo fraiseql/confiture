@@ -4,7 +4,7 @@ from confiture.testing.frameworks.mutation import MutationRegistry, MutationRunn
 from confiture.testing.frameworks.performance import MigrationPerformanceProfiler
 
 __all__ = [
+    "MigrationPerformanceProfiler",
     "MutationRegistry",
     "MutationRunner",
-    "MigrationPerformanceProfiler",
 ]

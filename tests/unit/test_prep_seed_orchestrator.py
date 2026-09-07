@@ -315,7 +315,7 @@ class TestPrepSeedOrchestrator:
         )
         orchestrator = PrepSeedOrchestrator(config)
 
-        with pytest.raises(ValueError, match="database_url.*required.*level"):
+        with pytest.raises(ValueError, match=r"database_url.*required.*level"):
             orchestrator.run()
 
     def test_report_includes_scanned_files(self) -> None:
