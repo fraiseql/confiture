@@ -64,6 +64,11 @@
         "null"
       ]
     },
+    "destructive_gate": {
+      "type": ["string", "null"],
+      "enum": ["gated", "allow", "forbid", null],
+      "description": "The destructive-gate policy the generated migration was written under (migration.destructive, overridden by --allow-destructive / --forbid-destructive): `gated` marks a data-losing file with `-- confiture:destructive` so `migrate up` needs `--allow-destructive`, `allow` leaves it unmarked, `forbid` would have refused. Null when nothing was generated."
+    },
     "source": {
       "description": "Where the desired state came from; null when the run failed before it was resolved.",
       "oneOf": [

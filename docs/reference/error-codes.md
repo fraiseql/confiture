@@ -57,6 +57,7 @@ resolution hint surfaced in the envelope.
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
+| `DIFFER_401` | 5 | error | Destructive change forbidden by policy | Re-run with --allow-destructive, or set migration.destructive to gated or allow |
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
@@ -86,6 +87,7 @@ resolution hint surfaced in the envelope.
 | `SQL_001` | 1 | error | SQL execution error | Check the SQL statement for errors |
 | `SYNC_001` | 5 | error | Sync error | Check source and target database connections |
 | `VALID_001` | 5 | error | Validation error | Check validation rules and data integrity |
+| `VALID_002` | 5 | error | Destructive migration refused: data is lost when it applies | Review the migration, then run migrate up --allow-destructive |
 | `VERIFY_001` | 5 | error | Verify file contains forbidden SQL | Verify files must only contain SELECT queries |
 <!-- END GENERATED -->
 

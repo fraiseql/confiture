@@ -573,6 +573,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `strict_mode` | bool | `false` | Whether to fail on warnings/notices (default: False) |
+| `destructive` | `gated` \| `allow` \| `forbid` | `gated` | What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run. |
 | `locking` | [LockingConfig](#lockingconfig) | (nested) | Distributed locking configuration |
 | `view_helpers` | `auto` \| `manual` \| `off` | `auto` | View helper installation mode ("auto", "manual", "off") |
 | `migration_generators` | dict[str, [MigrationGeneratorConfig](#migrationgeneratorconfig)] | `{}` | Named external generator commands |
@@ -743,6 +744,7 @@ build:
       - security
 migration:
   strict_mode: false
+  destructive: gated
   locking:
     enabled: true
     timeout_ms: 30000

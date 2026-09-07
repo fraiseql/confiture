@@ -14,8 +14,10 @@ import pytest
 
 from confiture.core import sql_lexer
 from confiture.core.change_set import classify_statements
+from confiture.core.destructive import resolve_policy
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.risk_tier import worst_tier
+from confiture.exceptions import DifferError, ValidationError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
 VERSION = "20260101000000"
@@ -72,3 +74,76 @@ def test_every_statement_carries_the_tier_the_change_set_gives_it(
         classified = [worst_tier(e.tier for e in classify_statements(s)) for s in statements]
         expected = [tier.value for tier in classified if tier is not None]
         assert list(_tiers(text).values()) == expected, text
+
+
+class TestTheGate:
+    """``destructive`` policy at generation: gated marks the file, allow leaves it, forbid refuses."""
+
+    DROP = SchemaChange(type="DROP_COLUMN", table="tb_user", column="display_name")
+    ADD = SchemaChange(type="ADD_COLUMN", table="tb_user", column="bio", new_value="TEXT")
+
+    def _gate(self, text: str) -> list[int | None]:
+        return [d.statement_line for d in sql_lexer.directives(text) if d.name == "destructive"]
+
+    def test_gated_marks_the_up_file_on_its_first_statement(self, tmp_path: Path) -> None:
+        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+            SchemaDiff(changes=[self.ADD, self.DROP]), name="reshape", version=VERSION
+        )
+        text = up.read_text()
+        first = text.index("ALTER TABLE")
+        assert self._gate(text) == [text[:first].count("\n") + 1], text
+
+    def test_gated_leaves_an_additive_file_alone(self, tmp_path: Path) -> None:
+        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+            SchemaDiff(changes=[self.ADD]), name="grow", version=VERSION
+        )
+        assert self._gate(up.read_text()) == []
+
+    def test_allow_writes_the_ddl_unmarked(self, tmp_path: Path) -> None:
+        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+            SchemaDiff(changes=[self.DROP]), name="reshape", version=VERSION, destructive="allow"
+        )
+        text = up.read_text()
+        assert "DROP COLUMN display_name;" in text
+        assert self._gate(text) == []
+
+    def test_forbid_refuses_to_generate(self, tmp_path: Path) -> None:
+        with pytest.raises(DifferError) as excinfo:
+            MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+                SchemaDiff(changes=[self.DROP]),
+                name="reshape",
+                version=VERSION,
+                destructive="forbid",
+            )
+        assert excinfo.value.error_code == "DIFFER_401"
+        assert "display_name" in str(excinfo.value)
+        assert list(tmp_path.iterdir()) == []
+
+
+class TestPolicy:
+    def test_a_flag_wins_over_the_config(self) -> None:
+        assert resolve_policy("forbid", allow=True) == "allow"
+        assert resolve_policy("allow", forbid=True) == "forbid"
+        assert resolve_policy("forbid") == "forbid"
+
+    def test_both_flags_is_a_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            resolve_policy("gated", allow=True, forbid=True)
+
+    def test_an_unknown_config_value_is_a_validation_error(self) -> None:
+        with pytest.raises(ValidationError, match="gated, allow, forbid"):
+            resolve_policy("maybe")
+
+    def test_the_python_form_declares_the_gate_on_the_class(self, tmp_path: Path) -> None:
+        path = MigrationGenerator(migrations_dir=tmp_path).generate(
+            SchemaDiff(changes=[TestTheGate.DROP]), name="reshape", version=VERSION
+        )
+        assert "    destructive = True" in path.read_text()
+        (tmp_path / "allow").mkdir()
+        allowed = MigrationGenerator(migrations_dir=tmp_path / "allow").generate(
+            SchemaDiff(changes=[TestTheGate.DROP]),
+            name="reshape",
+            version=VERSION,
+            destructive="allow",
+        )
+        assert "destructive = True" not in allowed.read_text()

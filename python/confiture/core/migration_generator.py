@@ -12,13 +12,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.core.risk_tier import worst_tier
+from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
+from confiture.exceptions import DifferError, ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
 
@@ -29,14 +30,19 @@ def _execute_call(sql: str) -> str:
     return f'        self.execute("{sql}")'
 
 
-def _with_tier(statement: str) -> str:
-    """Prefix ``statement`` with the tier directive the change-set classifier gives it.
+def _tier_of(statement: str) -> RiskTier | None:
+    """The tier the change-set classifier — the one ``migrate preflight`` runs — gives ``statement``."""
+    return worst_tier(entry.tier for entry in classify_statements(statement))
 
-    The same classifier ``migrate preflight`` runs, so the file and the
-    preflight report never disagree. A statement it cannot tier (a bare
-    comment, SQL it cannot parse) gets no directive: five tiers, no "unknown".
+
+def _with_tier(statement: str) -> str:
+    """Prefix ``statement`` with its tier directive.
+
+    Read from the same classifier as preflight, so the file and the report
+    never disagree. A statement it cannot tier (a bare comment, SQL it cannot
+    parse) gets no directive: five tiers, no "unknown".
     """
-    tier = worst_tier(entry.tier for entry in classify_statements(statement))
+    tier = _tier_of(statement)
     if tier is None:
         return statement
     return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
@@ -69,7 +75,14 @@ class MigrationGenerator:
         # Non-destructive generator — destructive ops emit warning comments instead of raising
         self._sql_gen = DifferSQLGenerator(force_destructive=False)
 
-    def generate(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
+    def generate(
+        self,
+        diff: SchemaDiff,
+        name: str,
+        *,
+        version: str | None = None,
+        destructive: str = "gated",
+    ) -> Path:
         """Generate migration file from schema diff.
 
         Args:
@@ -86,6 +99,7 @@ class MigrationGenerator:
         """
         if not diff.has_changes():
             raise ValueError("No changes to generate migration from")
+        gated = self._gate(diff, destructive)
 
         # Get next version number
         version = version or self._get_next_version()
@@ -95,14 +109,21 @@ class MigrationGenerator:
         filepath = self.migrations_dir / filename
 
         # Generate migration code
-        code = self._generate_migration_code(diff, version, name)
+        code = self._generate_migration_code(diff, version, name, gated=gated)
 
         # Write file
         filepath.write_text(code)
 
         return filepath
 
-    def generate_sql(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
+    def generate_sql(
+        self,
+        diff: SchemaDiff,
+        name: str,
+        *,
+        version: str | None = None,
+        destructive: str = "gated",
+    ) -> Path:
         """Write the migration as a ``.up.sql`` / ``.down.sql`` pair; return the up path.
 
         SQL is the form every reader of a migration understands: ``migrate
@@ -117,24 +138,55 @@ class MigrationGenerator:
             name: Migration name (snake_case)
             version: Version stamp; by default the next one, allocated from
                 the clock. Inject it to make two runs write the same files.
+            destructive: The gate policy — ``gated`` marks a file that loses
+                data with ``-- confiture:destructive``, ``allow`` leaves it
+                unmarked, ``forbid`` refuses to write it (``DIFFER_401``).
 
         Returns:
             Path to the ``.up.sql`` file
 
         Raises:
             ValueError: If diff has no changes
+            DifferError: If the policy is ``forbid`` and a change loses data
         """
         if not diff.has_changes():
             raise ValueError("No changes to generate migration from")
+        gate = _destructive.GATE_LINE + "\n" if self._gate(diff, destructive) else ""
         version = version or self._get_next_version()
         header = f"-- Migration: {name}\n-- Version: {version}\n\n"
         up_path = self.migrations_dir / f"{version}_{name}.up.sql"
-        up_path.write_text(header + self._sql_statements(diff.changes, self._change_to_up_sql))
+        up_path.write_text(
+            header + gate + self._sql_statements(diff.changes, self._change_to_up_sql)
+        )
         down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
         down_path.write_text(
             header + self._sql_statements(diff.changes[::-1], self._change_to_down_sql)
         )
         return up_path
+
+    def _gate(self, diff: SchemaDiff, policy: str) -> bool:
+        """Whether the up side falls under the gate, and refuse it when the policy forbids."""
+        if policy not in _destructive.POLICIES:
+            raise ValueError(f"destructive must be one of {_destructive.POLICIES}; got {policy!r}")
+        losing = [
+            sql
+            for change in diff.changes
+            if (sql := self._change_to_up_sql(change)) is not None
+            and _destructive.gates(_tier_of(_terminated(sql)))
+        ]
+        if not losing:
+            return False
+        if policy == "forbid":
+            raise DifferError(
+                "Destructive change forbidden by policy (migration.destructive: forbid): "
+                + "; ".join(losing),
+                error_code="DIFFER_401",
+                resolution_hint=(
+                    "Re-run with --allow-destructive, or set migration.destructive to gated "
+                    "or allow in the environment config"
+                ),
+            )
+        return policy == "gated"
 
     def _sql_statements(
         self, changes: list[SchemaChange], render: Callable[[SchemaChange], str | None]
@@ -252,7 +304,9 @@ class MigrationGenerator:
         finally:
             lock_fd.close()
 
-    def _generate_migration_code(self, diff: SchemaDiff, version: str, name: str) -> str:
+    def _generate_migration_code(
+        self, diff: SchemaDiff, version: str, name: str, *, gated: bool = False
+    ) -> str:
         """Generate Python migration code.
 
         Args:
@@ -282,7 +336,7 @@ class {class_name}(Migration):
 
     version = "{version}"
     name = "{name}"
-
+{destructive}
     def up(self) -> None:
         """Apply migration."""
 {up_statements}
@@ -296,6 +350,11 @@ class {class_name}(Migration):
             name=name,
             version=version,
             class_name=class_name,
+            destructive=(
+                "    destructive = True  # data is lost: migrate up needs --allow-destructive\n"
+                if gated
+                else ""
+            ),
             up_statements=up_statements,
             down_statements=down_statements,
         )

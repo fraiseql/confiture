@@ -266,6 +266,7 @@ class MigrationConfig(BaseModel):
         grant_dir: Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``).
         allow_unsafe_under_replication: Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared.
         strict_mode: Whether to fail on warnings/notices (default: False)
+        destructive: What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run.
         locking: Distributed locking configuration
         view_helpers: View helper installation mode ("auto", "manual", "off")
         migration_generators: Named external generator commands
@@ -277,6 +278,7 @@ class MigrationConfig(BaseModel):
     """
 
     strict_mode: bool = False  # Whether to fail on warnings/notices
+    destructive: Literal["gated", "allow", "forbid"] = "gated"
     locking: LockingConfig = Field(default_factory=LockingConfig)
     view_helpers: Literal["auto", "manual", "off"] = "auto"
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)

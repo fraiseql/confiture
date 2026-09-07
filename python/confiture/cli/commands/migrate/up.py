@@ -130,6 +130,13 @@ RequireReversibleOpt = Annotated[
         help="Abort if any pending migration lacks a .down.sql file (guarantees rollback capability).",
     ),
 ]
+AllowDestructiveOpt = Annotated[
+    bool,
+    typer.Option(
+        "--allow-destructive",
+        help="Apply migrations gated as destructive (data is lost): the generator's -- confiture:destructive directive, or destructive = True on a Python migration.",
+    ),
+]
 BatchedOpt = Annotated[
     bool,
     typer.Option(
@@ -177,6 +184,7 @@ def migrate_up(
     auto_detect_baseline: AutoDetectBaselineOpt = False,
     snapshots_dir_up: SnapshotsDirUpOpt = None,
     require_reversible: RequireReversibleOpt = False,
+    allow_destructive: AllowDestructiveOpt = False,
     batched: BatchedOpt = False,
     batch_size: BatchSizeOpt = 10000,
     batch_sleep: BatchSleepOpt = 0.1,
@@ -297,6 +305,7 @@ def migrate_up(
             "lock_timeout": lock_timeout,
             "no_lock": no_lock,
             "require_reversible": require_reversible,
+            "allow_destructive": allow_destructive,
             "strict_mode": effective_strict_mode,
             "auto_baseline": (
                 (snapshots_dir_up or Path("db/schema_history")) if auto_detect_baseline else None

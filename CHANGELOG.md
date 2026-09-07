@@ -22,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `irreversible`, a narrowing type change too), read from the same classifier so the file and the
   preflight report cannot disagree. A statement the classifier cannot tier gets no directive. The
   checked-in artifact → migration contract fixture gains the directives.
+- **The destructive gate (#198).** A change that loses data — a dropped table or column, a narrowed
+  type — is generated under `migration.destructive: gated|allow|forbid` (new config key, default
+  `gated`), overridden per run by `--allow-destructive` / `--forbid-destructive` on `migrate diff`.
+  `gated` writes the DDL with a `-- confiture:destructive` directive on the up file (a Python
+  migration from the positional form gets `destructive = True`); `migrate up` refuses such a
+  migration with the new `VALID_002` (exit 5) unless run with the new `--allow-destructive`; `forbid`
+  refuses to generate with the new `DIFFER_401` (exit 5). `migrate preflight` reports a gated file as
+  `PFLIGHT_DESTRUCTIVE_GATED` (warning). `migrate diff --format json` gains `destructive_gate`, the
+  policy the file was written under. The two codes are additions to the frozen codebook; no existing
+  code or exit changes. New module `core/destructive.py`; `Migration.destructive` attribute.
 
 ## [1.1.0] - 2026-09-07
 

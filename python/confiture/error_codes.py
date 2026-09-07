@@ -222,9 +222,11 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "SYNC_001": 5,
     # DIFFER family → 5.
     "DIFFER_400": 5,
+    "DIFFER_401": 5,
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,
+    "VALID_002": 5,
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,
