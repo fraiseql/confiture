@@ -7,7 +7,7 @@ This module provides functionality to:
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import pglast
@@ -126,6 +126,19 @@ _PG_FK_DEL_ACTION: dict[str, str | None] = {
 _CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
+
+
+def _column_details(table: Table) -> list[dict[str, Any]]:
+    """The columns of ``table`` in the shape ``DifferSQLGenerator`` renders a ``CREATE TABLE`` from."""
+    return [
+        {
+            "name": column.name,
+            "type": column.raw_sql_type or column.type.value,
+            "nullable": column.nullable,
+            "default": column.default,
+        }
+        for column in table.columns
+    ]
 
 
 class SchemaDiffer:
@@ -434,7 +447,7 @@ class SchemaDiffer:
         new_table_names = set(new_table_map.keys())
 
         renamed_tables = self._detect_table_renames(
-            old_table_names - new_table_names, new_table_names - old_table_names
+            sorted(old_table_names - new_table_names), sorted(new_table_names - old_table_names)
         )
 
         for old_name, new_name in renamed_tables.items():
@@ -446,15 +459,19 @@ class SchemaDiffer:
 
         changes.extend(
             SchemaChange(type="DROP_TABLE", table=table_name)
-            for table_name in old_table_names - new_table_names
+            for table_name in sorted(old_table_names - new_table_names)
         )
 
         changes.extend(
-            SchemaChange(type="ADD_TABLE", table=table_name)
-            for table_name in new_table_names - old_table_names
+            SchemaChange(
+                type="ADD_TABLE",
+                table=table_name,
+                details={"columns": _column_details(new_table_map[table_name])},
+            )
+            for table_name in sorted(new_table_names - old_table_names)
         )
 
-        for table_name in old_table_names & new_table_names:
+        for table_name in sorted(old_table_names & new_table_names):
             old_table = old_table_map[table_name]
             new_table = new_table_map[table_name]
             changes.extend(self._compare_table_columns(old_table, new_table))
@@ -475,7 +492,9 @@ class SchemaDiffer:
     # Table column comparison
     # ------------------------------------------------------------------
 
-    def _detect_table_renames(self, old_names: set[str], new_names: set[str]) -> dict[str, str]:
+    def _detect_table_renames(
+        self, old_names: Iterable[str], new_names: Iterable[str]
+    ) -> dict[str, str]:
         """Detect renamed tables using fuzzy matching."""
         renames: dict[str, str] = {}
         for old_name in old_names:
@@ -495,7 +514,7 @@ class SchemaDiffer:
         new_col_names = set(new_col_map.keys())
 
         renamed_columns = self._detect_column_renames(
-            old_col_names - new_col_names, new_col_names - old_col_names
+            sorted(old_col_names - new_col_names), sorted(new_col_names - old_col_names)
         )
 
         for old_name, new_name in renamed_columns.items():
@@ -512,22 +531,24 @@ class SchemaDiffer:
 
         changes.extend(
             SchemaChange(type="DROP_COLUMN", table=old_table.name, column=col_name)
-            for col_name in old_col_names - new_col_names
+            for col_name in sorted(old_col_names - new_col_names)
         )
 
         changes.extend(
             SchemaChange(type="ADD_COLUMN", table=old_table.name, column=col_name)
-            for col_name in new_col_names - old_col_names
+            for col_name in sorted(new_col_names - old_col_names)
         )
 
-        for col_name in old_col_names & new_col_names:
+        for col_name in sorted(old_col_names & new_col_names):
             old_col = old_col_map[col_name]
             new_col = new_col_map[col_name]
             changes.extend(self._compare_column_properties(old_table.name, old_col, new_col))
 
         return changes
 
-    def _detect_column_renames(self, old_names: set[str], new_names: set[str]) -> dict[str, str]:
+    def _detect_column_renames(
+        self, old_names: Iterable[str], new_names: Iterable[str]
+    ) -> dict[str, str]:
         """Detect renamed columns using fuzzy matching."""
         renames: dict[str, str] = {}
         for old_name in old_names:

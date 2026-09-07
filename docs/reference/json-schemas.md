@@ -362,6 +362,27 @@ Migration status report. Without `--config`, per-migration `status` is `unknown`
 }
 ```
 
+### `confiture migrate diff --format json`
+
+[migrate-diff.schema.json](./json-schemas/migrate-diff.schema.json)
+
+The structural changes between the current state (`--from`: a schema file, a directory of DDL files, `-` for stdin, or `db` for the configured database) and the desired state (`--to`: a schema file, a directory such as `fraiseql compile --emit-ddl` writes, or `-`), and the migration written under `--generate`. `source` says where the desired state came from.
+
+```json
+{
+  "success": true,
+  "has_changes": true,
+  "changes": [
+    {"type": "ADD_TABLE", "details": "ADD TABLE tb_post"}
+  ],
+  "change_count": 1,
+  "migration_generated": true,
+  "migration_file": "20260907120000_add_posts.py",
+  "error": null,
+  "source": {"kind": "sql", "path": "build/ddl"}
+}
+```
+
 ### `confiture migrate fix --idempotent --format json`
 
 [migrate-fix.schema.json](./json-schemas/migrate-fix.schema.json)

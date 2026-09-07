@@ -7,6 +7,7 @@ Each migration file contains up() and down() methods with the necessary SQL.
 import fcntl
 import shlex
 import subprocess
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,21 @@ from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff
+
+
+def _execute_call(sql: str) -> str:
+    """One ``self.execute(...)`` line; multi-line DDL (a ``CREATE TABLE``) rides in triple quotes."""
+    if "\n" in sql or '"' in sql:
+        return f'        self.execute("""{sql}""")'
+    return f'        self.execute("{sql}")'
+
+
+def _terminated(sql: str) -> str:
+    """End a statement with a semicolon; leave a trailing comment line alone."""
+    sql = sql.rstrip()
+    if sql.endswith(";") or sql.rsplit("\n", 1)[-1].lstrip().startswith("--"):
+        return sql
+    return sql + ";"
 
 
 class MigrationGenerator:
@@ -37,12 +53,14 @@ class MigrationGenerator:
         # Non-destructive generator — destructive ops emit warning comments instead of raising
         self._sql_gen = DifferSQLGenerator(force_destructive=False)
 
-    def generate(self, diff: SchemaDiff, name: str) -> Path:
+    def generate(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
         """Generate migration file from schema diff.
 
         Args:
             diff: Schema diff containing changes
             name: Name for the migration (snake_case)
+            version: The version stamp to use (``YYYYMMDDHHMMSS``); ``None`` takes
+                the clock. Inject it to make two runs write the same file.
 
         Returns:
             Path to generated migration file
@@ -54,7 +72,7 @@ class MigrationGenerator:
             raise ValueError("No changes to generate migration from")
 
         # Get next version number
-        version = self._get_next_version()
+        version = version or self._get_next_version()
 
         # Generate file path
         filename = f"{version}_{name}.py"
@@ -67,6 +85,52 @@ class MigrationGenerator:
         filepath.write_text(code)
 
         return filepath
+
+    def generate_sql(self, diff: SchemaDiff, name: str, *, version: str | None = None) -> Path:
+        """Write the migration as a ``.up.sql`` / ``.down.sql`` pair; return the up path.
+
+        SQL is the form every reader of a migration understands: ``migrate
+        preflight`` classifies its statements and reports their risk tier (a
+        Python migration is unclassified by contract) and ``--idempotent``
+        walks them. The down file undoes the changes in reverse; a change with
+        no derivable rollback leaves a comment saying so, for the deployer to
+        finish before shipping.
+
+        Args:
+            diff: Schema diff containing changes
+            name: Migration name (snake_case)
+            version: Version stamp; by default the next one, allocated from
+                the clock. Inject it to make two runs write the same files.
+
+        Returns:
+            Path to the ``.up.sql`` file
+
+        Raises:
+            ValueError: If diff has no changes
+        """
+        if not diff.has_changes():
+            raise ValueError("No changes to generate migration from")
+        version = version or self._get_next_version()
+        header = f"-- Migration: {name}\n-- Version: {version}\n\n"
+        up_path = self.migrations_dir / f"{version}_{name}.up.sql"
+        up_path.write_text(header + self._sql_statements(diff.changes, self._change_to_up_sql))
+        down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
+        down_path.write_text(
+            header + self._sql_statements(diff.changes[::-1], self._change_to_down_sql)
+        )
+        return up_path
+
+    def _sql_statements(
+        self, changes: list[SchemaChange], render: Callable[[SchemaChange], str | None]
+    ) -> str:
+        """One terminated statement per change; a change with no SQL leaves a warning."""
+        statements = []
+        for change in changes:
+            sql = render(change)
+            if sql is None:
+                sql = f"-- WARNING: no SQL derived for: {change}. Edit this file before deploying."
+            statements.append(_terminated(sql))
+        return "\n\n".join(statements) + "\n"
 
     def _get_next_version(self) -> str:
         """Generate a timestamp-based migration version (seconds precision).
@@ -184,7 +248,6 @@ class MigrationGenerator:
             Python code as string
         """
         class_name = self._to_class_name(name)
-        timestamp = datetime.now().isoformat()
 
         # Generate up and down statements
         up_statements = self._generate_up_statements(diff.changes)
@@ -193,7 +256,6 @@ class MigrationGenerator:
         template = '''"""Migration: {name}
 
 Version: {version}
-Generated: {timestamp}
 """
 
 from confiture.models.migration import Migration
@@ -220,7 +282,6 @@ class {class_name}(Migration):
             class_name=class_name,
             up_statements=up_statements,
             down_statements=down_statements,
-            timestamp=timestamp,
         )
 
     def _to_class_name(self, snake_case: str) -> str:
@@ -253,7 +314,7 @@ class {class_name}(Migration):
         for change in changes:
             sql = self._change_to_up_sql(change)
             if sql:
-                statements.append(f'        self.execute("{sql}")')
+                statements.append(_execute_call(sql))
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
@@ -272,13 +333,14 @@ class {class_name}(Migration):
         for change in reversed(changes):
             sql = self._change_to_down_sql(change)
             if sql:
-                statements.append(f'        self.execute("{sql}")')
+                statements.append(_execute_call(sql))
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
     # Change types delegated to DifferSQLGenerator (destructive ops emit warning comments)
     _DELEGATED_UP_TYPES = frozenset(
         {
+            "ADD_TABLE",
             "ADD_INDEX",
             "DROP_INDEX",
             "ADD_FOREIGN_KEY",
@@ -304,14 +366,7 @@ class {class_name}(Migration):
         Returns:
             SQL string or None if not applicable
         """
-        if change.type == "ADD_TABLE":
-            # Full schema info not available; user must write this migration manually
-            raise NotImplementedError(
-                f"Cannot auto-generate migration for ADD_TABLE on {change.table}. "
-                "Write the migration manually or use --generator."
-            )
-
-        elif change.type == "DROP_TABLE":
+        if change.type == "DROP_TABLE":
             return f"DROP TABLE {change.table}"
 
         elif change.type == "RENAME_TABLE":

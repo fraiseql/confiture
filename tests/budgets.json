@@ -11,6 +11,7 @@
   "too_many_args": {
     "python/confiture/cli/commands/admin.py": 1,
     "python/confiture/cli/commands/drift.py": 1,
+    "python/confiture/cli/commands/migrate/diff.py": 1,
     "python/confiture/cli/commands/migrate/down.py": 2,
     "python/confiture/cli/commands/migrate/fix_signatures.py": 2,
     "python/confiture/cli/commands/migrate/generate.py": 2,

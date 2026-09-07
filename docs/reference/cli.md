@@ -1049,21 +1049,24 @@ confiture migrate up
 **Usage**
 
 ```bash
-confiture migrate diff [OPTIONS] OLD_SCHEMA NEW_SCHEMA
+confiture migrate diff [OPTIONS] [OLD_SCHEMA] [NEW_SCHEMA]
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `OLD_SCHEMA` | path | yes | Old schema file |
-| `NEW_SCHEMA` | path | yes | New schema file |
+| `OLD_SCHEMA` | path | no | Old schema file |
+| `NEW_SCHEMA` | path | no | New schema file |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--generate` | - | Flag | off | Generate migration from diff (default: off) |
+| `--from` | - | text | - | Current state: a schema file, a directory of .sql files, '-' for stdin, or 'db' for the configured database (default: the first positional) |
+| `--to` | - | text | - | Desired state: a schema file, a directory of .sql files (what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
+| `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` (default: db/environments/local.yaml) |
+| `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |
 | `--name` | - | text | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
@@ -2976,7 +2979,7 @@ confiture drift [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml) |
-| `--schema` | - | path | - | Schema SQL file to compare against (optional when --check-acls is set) |
+| `--schema` | - | path | - | Schema SQL file, or a directory of .sql files, to compare against (optional when --check-acls is set) |
 | `--default-schema` | - | text | `public` | Schema an unqualified CREATE TABLE in --schema belongs to (#227) |
 | `--ignore-column-order` | - | Flag | off | Do not report column_order_mismatch (#226); also drift.ignore_column_order in the config |
 | `--check-acls` | - | Flag | off | Also compare live grants against the `acls:` block in the config |

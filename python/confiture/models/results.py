@@ -542,6 +542,7 @@ class MigrateDiffResult:
     migration_generated: bool = False
     migration_file: str | None = None
     error: str | None = None
+    source: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -557,6 +558,7 @@ class MigrateDiffResult:
             "migration_generated": self.migration_generated,
             "migration_file": self.migration_file,
             "error": self.error,
+            "source": self.source,
         }
 
 

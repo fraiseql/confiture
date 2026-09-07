@@ -1,0 +1,20 @@
+{
+  "types": [
+    {"name": "User", "fields": [
+      {"name": "id", "type": "Int", "nullable": false},
+      {"name": "email", "type": "String", "nullable": false},
+      {"name": "displayName", "type": "String", "nullable": true},
+      {"name": "isActive", "type": "Boolean", "nullable": false},
+      {"name": "createdAt", "type": "DateTime", "nullable": false}
+    ], "sql_source": "v_user", "is_input": false},
+    {"name": "Post", "fields": [
+      {"name": "id", "type": "Int", "nullable": false},
+      {"name": "authorId", "type": "Int", "nullable": false},
+      {"name": "title", "type": "String", "nullable": false},
+      {"name": "body", "type": "String", "nullable": true},
+      {"name": "score", "type": "Float", "nullable": true}
+    ], "sql_source": "v_post", "is_input": false}
+  ],
+  "queries": [{"name": "users", "return_type": "User", "returns_list": true, "sql_source": "v_user", "nullable": false, "arguments": []}],
+  "mutations": [], "subscriptions": [], "version": "2.0.0"
+}

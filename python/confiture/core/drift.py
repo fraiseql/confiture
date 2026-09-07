@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import pglast
 import psycopg
 
+from confiture.core.desired_state import load_desired_state
+from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
 from confiture.exceptions import ConfigurationError, SchemaError
 
@@ -269,9 +271,10 @@ class SchemaDriftDetector:
         ...         print(f"  {item}")
     """
 
-    # Tables to always ignore
+    # Confiture's own bookkeeping: never drift, whatever the schema declares
     SYSTEM_TABLES: ClassVar[set[str]] = {
         "tb_confiture",
+        LOCK_HOLDER_TABLE,
         "confiture_version",
         "confiture_audit_log",
     }
@@ -600,7 +603,7 @@ class SchemaDriftDetector:
         reads exactly the schemas the file declares or qualifies with.
 
         Args:
-            schema_file_path: Path to schema SQL file
+            schema_file_path: Schema SQL file, or a directory of ``.sql`` files read in name order
             default_schema: Schema an unqualified ``CREATE TABLE`` belongs to
 
         Returns:
@@ -611,7 +614,8 @@ class SchemaDriftDetector:
         if not path.exists():
             raise FileNotFoundError(f"Schema file not found: {schema_file_path}")
 
-        expected = parse_expected_schema(path.read_text(), default_schema=default_schema)
+        sql = load_desired_state(schema_file_path).read()
+        expected = parse_expected_schema(sql, default_schema=default_schema)
         actual = self.get_live_schema(expected.schemas)
         report = self.compare_schemas(expected.info, actual)
         report.expected_schema_source = f"file:{schema_file_path}"
