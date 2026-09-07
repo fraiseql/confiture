@@ -1,4 +1,4 @@
-"""Unit tests for the pure rollback planner (issue #142, Phase 1).
+"""Unit tests for the pure rollback planner (issue #142).
 
 The planner computes the rollback set and validates reversibility up front,
 without touching the database. The four edge cases are typed outcomes.

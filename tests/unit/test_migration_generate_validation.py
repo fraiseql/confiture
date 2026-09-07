@@ -1,4 +1,4 @@
-"""Unit tests for migration generation safety validations (Phase 1).
+"""Unit tests for migration generation safety validations.
 
 Tests duplicate version detection, file existence checks, name conflicts,
 and concurrent creation protection.

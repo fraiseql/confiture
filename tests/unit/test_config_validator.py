@@ -1,4 +1,4 @@
-"""Unit tests for the connection-free ConfigValidator (issue #144, Phase 1)."""
+"""Unit tests for the connection-free ConfigValidator (issue #144)."""
 
 from __future__ import annotations
 

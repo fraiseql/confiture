@@ -1,4 +1,4 @@
-"""``typer.Exit`` crosses every command boundary intact (ENG-08).
+"""``typer.Exit`` crosses every command boundary intact.
 
 ``typer.Exit`` is a ``RuntimeError``. A command that validates its inputs with
 ``raise typer.Exit(n)`` *inside* the ``try`` whose ``except Exception`` is its

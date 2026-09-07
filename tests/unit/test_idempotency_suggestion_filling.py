@@ -1,4 +1,4 @@
-"""Tests for template-filled idempotency suggestions (Phase 04 Cycle 3).
+"""Tests for template-filled idempotency suggestions.
 
 For each :data:`TEMPLATE_FILLABLE` pattern, the suggestion machinery
 takes a :class:`Captures` instance and produces a copy-pasteable SQL

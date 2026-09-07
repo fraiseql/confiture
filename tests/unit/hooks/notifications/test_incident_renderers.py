@@ -1,4 +1,4 @@
-"""Unit tests for PagerDuty and OpsGenie renderers — Phase 03 Cycle 6.
+"""Unit tests for PagerDuty and OpsGenie renderers
 
 Both use the stateless model: one event per migration, trigger on failure,
 resolve on success.  No cross-migration incident pairing — documented v1

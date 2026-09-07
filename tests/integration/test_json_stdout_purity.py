@@ -1,4 +1,4 @@
-"""With ``--format json``, stdout is the payload and nothing else (ENG-11).
+"""With ``--format json``, stdout is the payload and nothing else.
 
 Progress and warning lines belong on stderr when the payload is machine-read;
 ``json.loads(result.stdout)`` must parse without scraping for the first ``{``.

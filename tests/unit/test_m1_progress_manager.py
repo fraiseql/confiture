@@ -1,4 +1,4 @@
-"""Tests for Phase 2 M1 Progress Manager.
+"""Tests for the Progress Manager.
 
 Tests the ProgressManager utility for displaying progress during operations.
 """
@@ -291,11 +291,11 @@ class TestProgressManagerIntegration:
     def test_multiple_tasks_workflow(self):
         """Test workflow with multiple sequential tasks."""
         with ProgressManager(show_progress=True) as manager:
-            task1 = manager.add_task("Phase 1...", total=5)
+            task1 = manager.add_task("Step 1...", total=5)
             for _ in range(5):
                 manager.update(task1, 1)
 
-            task2 = manager.add_task("Phase 2...", total=3)
+            task2 = manager.add_task("Step 2...", total=3)
             for _ in range(3):
                 manager.update(task2, 1)
         assert [t.completed for t in manager.progress.tasks] == [5, 3]

@@ -23,7 +23,7 @@ def _write_sql(content: str) -> str:
 
 
 class TestDiffResult:
-    """Phase 03 Cycle 1: DiffResult model."""
+    """DiffResult model."""
 
     def test_diff_result_no_changes(self):
         diff = SchemaDiff(changes=[])
@@ -84,7 +84,7 @@ class TestDiffResult:
 
 
 class TestDiffCommand:
-    """Phase 03 Cycle 2: diff CLI command."""
+    """diff CLI command."""
 
     def test_diff_command_text_no_changes(self):
         p = _write_sql(OLD_SQL)
@@ -241,7 +241,7 @@ class TestDiffCommandFormatFallthrough:
     def test_diff_command_unknown_format_is_rejected(self):
         p = _write_sql(OLD_SQL)
         result = runner.invoke(app, ["diff", "--from", p, "--to", p, "--format", "csv"])
-        # One --format validator for every command: an unknown value exits 5 (ARC-02).
+        # One --format validator for every command: an unknown value exits 5.
         assert result.exit_code == 5, result.output
         assert "Invalid --format" in result.output
 

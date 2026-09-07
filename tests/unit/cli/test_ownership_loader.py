@@ -2,7 +2,7 @@
 
 Mirrors :mod:`tests.unit.cli.test_acl_loader` in spirit. The loader is
 consumed by both ``drift --check-ownership`` and
-``migrate validate --check-ownership-coverage``. As of Phase 03 it raises
+``migrate validate --check-ownership-coverage``. It raises
 ``ConfigurationError`` (CONFIG_001 → exit 5) instead of ``typer.Exit(2)``, so
 its callers funnel the failure through their ``fail()`` boundary.
 """

@@ -258,7 +258,7 @@ class TestBuildFormatValidation:
             ],
         )
 
-        # One --format validator for every command (ARC-02): exit 5, the message on
+        # One --format validator for every command: exit 5, the message on
         # stderr via the fail() boundary (mixed into result.output by the runner).
         assert result.exit_code == 5
         assert "Invalid --format" in result.output

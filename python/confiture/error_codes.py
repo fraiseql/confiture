@@ -217,7 +217,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "SCHEMA_001": 4,
     "SCHEMA_201": 4,
     "SCHEMA_202": 4,
-    "SCHEMA_205": 4,  # psql meta-command refused before psql runs (SEC-03)
+    "SCHEMA_205": 4,  # psql meta-command refused before psql runs
     # SYNC family → 5.
     "SYNC_001": 5,
     # DIFFER family → 5.

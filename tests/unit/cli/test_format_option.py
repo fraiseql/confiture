@@ -1,4 +1,4 @@
-"""One ``--format`` validator for every command (ARC-02).
+"""One ``--format`` validator for every command.
 
 Fifteen commands validated ``--format`` by hand — each with its own message,
 stream and exit code (1, 2, or a swallowed ``typer.Exit``) — and the rest did

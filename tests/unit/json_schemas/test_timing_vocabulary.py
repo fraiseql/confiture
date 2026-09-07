@@ -1,4 +1,4 @@
-"""One place documents every timing key a `to_dict()` emits (Phase 06).
+"""One place documents every timing key a `to_dict()` emits.
 
 The migrate family serializes ``total_duration_ms`` / ``duration_ms`` (since 1.0.0 the
 dataclass attributes carry the same names); build and lint emit ``execution_time_ms`` as-is; the drift

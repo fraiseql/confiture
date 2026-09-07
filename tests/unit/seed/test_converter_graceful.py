@@ -1,6 +1,6 @@
 """Tests for INSERT to COPY converter graceful degradation.
 
-Phase 11, Cycle 3: Add try_convert() method with graceful fallback.
+Add try_convert() method with graceful fallback.
 """
 
 from __future__ import annotations

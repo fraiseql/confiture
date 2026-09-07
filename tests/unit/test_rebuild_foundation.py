@@ -1,4 +1,4 @@
-"""Tests for Phase 1: rebuild foundation (exceptions, results, config, strategy parser)."""
+"""Tests for the rebuild foundation (exceptions, results, config, strategy parser)."""
 
 from __future__ import annotations
 

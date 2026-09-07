@@ -1,4 +1,4 @@
-"""Integration tests for the live sec_002 path (issue #161 Phase 03).
+"""Integration tests for the live sec_002 path (issue #161).
 
 Requires a running PostgreSQL instance at CONFITURE_TEST_DB_URL
 (see tests/conftest.py for the routing rule). Skips automatically

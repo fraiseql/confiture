@@ -1,4 +1,4 @@
-"""Tests for the replica-safety DDL classifier (issue #139, Phase 1)."""
+"""Tests for the replica-safety DDL classifier (issue #139)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Acceptance corpus: one case per replica-safety matrix row (issue #139, Phase 4).
+"""Acceptance corpus: one case per replica-safety matrix row (issue #139).
 
 End-to-end through the classifier + verdict, asserting safety, severity (under
 replicas-declared), and multi-step remediation — the regression guard against

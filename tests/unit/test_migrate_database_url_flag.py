@@ -27,7 +27,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 @pytest.mark.parametrize("cmd", ["up", "down", "status", "verify", "preflight"])
 def test_database_url_in_help(cmd: str) -> None:
-    """Every migrate subcommand documents --database-url (#140 / Phase 2)."""
+    """Every migrate subcommand documents --database-url (#140)."""
     out = runner.invoke(app, ["migrate", cmd, "--help"]).output
     # Rich wraps long option names at narrow terminal widths (e.g. CI's 80
     # cols) AND colorizes them when a TTY/FORCE_COLOR is detected, interleaving

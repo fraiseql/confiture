@@ -1,4 +1,4 @@
-"""Unit tests for ScaffoldOrchestrator — Phase 3 of issue #111.
+"""Unit tests for ScaffoldOrchestrator — issue #111.
 
 All tests use pytest's ``tmp_path`` fixture.  No database required.
 """

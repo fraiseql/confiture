@@ -1,4 +1,4 @@
-"""The CLI reference documents every command the CLI registers, and only those (Phase 10, ARC-03).
+"""The CLI reference documents every command the CLI registers, and only those.
 
 `docs/reference/cli.md` carried sections for commands that do not exist
 (`coordinate init`, `coordinate complete`, `coordinate list`) and none for whole

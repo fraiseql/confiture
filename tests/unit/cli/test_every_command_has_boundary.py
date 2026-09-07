@@ -1,4 +1,4 @@
-"""Every registered command runs inside ``cli_boundary`` (ENG-08, ARC-02).
+"""Every registered command runs inside ``cli_boundary``.
 
 The boundary re-raises ``typer.Exit`` and routes everything else through
 ``fail()``. Discovery walks Typer's own registry, so a new command cannot skip

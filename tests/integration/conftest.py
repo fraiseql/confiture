@@ -1,13 +1,13 @@
 """Shared integration-test scaffolding for RAM-tablespace provisioning (#158).
 
-Two fixtures supply a live tablespace to the Phase 02–04 integration tests:
+Two fixtures supply a live tablespace to the tablespace integration tests:
 
 - :func:`ram_tablespace` builds a real **tmpfs** (``/dev/shm``) tablespace — the
   production target. It **skips cleanly** whenever the environment cannot host
   one: a non-superuser connection, no reachable database, or (the common
   multi-user case) a PostgreSQL server whose OS user cannot claim a freshly
   created ``/dev/shm`` directory because the test process lacks chown rights.
-  That skip is not a gap — it is precisely the environment Phase 03's on-disk
+  That skip is not a gap — it is precisely the environment the on-disk
   fallback exists to cover.
 
 - :func:`inplace_tablespace` builds an **in-place** tablespace via the PG 15+
@@ -126,7 +126,7 @@ def ram_tablespace() -> Iterator[tuple[TestDbProvisioner, str, str]]:
     """Yield ``(provisioner, tablespace_name, location)`` for a live tmpfs tablespace.
 
     Skips cleanly when the environment cannot host one (see module docstring).
-    Shared scaffolding for the Phase 02–04 integration tests.
+    Shared scaffolding for the tablespace integration tests.
     """
     url = _ram_server_url()
     try:

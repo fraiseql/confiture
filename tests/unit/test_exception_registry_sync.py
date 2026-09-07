@@ -1,4 +1,4 @@
-"""Every exception the package raises resolves to a registered code (Phase 06, ENG-09).
+"""Every exception the package raises resolves to a registered code.
 
 ``fail()`` maps an exception to its exit code through the registry; an
 exception whose default code is unregistered crashed the error path itself

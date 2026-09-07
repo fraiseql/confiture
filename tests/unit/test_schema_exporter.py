@@ -1,4 +1,4 @@
-"""The schema exporter serves the one packaged source (Phase 06, ENG-10)."""
+"""The schema exporter serves the one packaged source."""
 
 from __future__ import annotations
 

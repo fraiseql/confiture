@@ -1,4 +1,4 @@
-"""One thin lexer over pglast (Phase 05, ANA-04 / ANA-05).
+"""One thin lexer over pglast.
 
 Ten hand-written scanners split statements, skipped comments and matched dollar
 tags, and disagreed with each other on ``"a;b"`` identifiers, ``E'\\';'``

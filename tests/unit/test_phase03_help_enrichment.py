@@ -1,4 +1,4 @@
-"""Phase 03 help-text enrichment — pin the new help-text content.
+"""Help-text enrichment — pin the help-text content.
 
 These tests are intentionally narrow: they assert the strings users
 will see in --help, not implementation details.

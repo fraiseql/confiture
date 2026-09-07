@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 
 # PreconditionError and PreconditionValidationError live in confiture.exceptions
-# (Phase 06: the exception hierarchy imports nothing from core); re-exported here
+# ; re-exported here
 # for `from confiture.core.preconditions import …`.
 
 

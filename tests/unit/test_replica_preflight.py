@@ -1,6 +1,6 @@
 """Unit tests for the preflight replica surface (#154).
 
-Covers the ".py can't-see" blind spot (Phase 2): the replica classifier reads
+Covers the ".py can't-see" blind spot: the replica classifier reads
 ``*.up.sql`` only, so a ``DROP COLUMN`` inside a Python migration used to produce
 no finding at all — making "no replica issue" ambiguous between *inspected-and-safe*
 and *never-inspected*. The surface now emits ``PFLIGHT_REPLICA_UNCLASSIFIED`` for

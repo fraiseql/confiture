@@ -1,4 +1,4 @@
-"""CLI tests for the structured preflight report (issue #148, Phase 2).
+"""CLI tests for the structured preflight report (issue #148).
 
 The no-``--against`` static path needs no database; these run as unit tests.
 """

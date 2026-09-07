@@ -488,7 +488,7 @@ class {class_name}(Migration):
 
         return None
 
-    # Public spellings (Phase 04, Cycle 8): the CLI must not reach into private names.
+    # Public spellings: the CLI must not reach into private names.
     def check_name_conflict(self, name: str) -> list[Path]:
         """Public spelling of :meth:`_check_name_conflict`."""
         return self._check_name_conflict(name)

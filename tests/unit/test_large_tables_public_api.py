@@ -1,4 +1,4 @@
-"""Tests for large_tables public API exposure (Phase 03)."""
+"""Tests for large_tables public API exposure."""
 
 from unittest.mock import MagicMock, patch
 

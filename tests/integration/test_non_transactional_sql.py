@@ -1,4 +1,4 @@
-"""Non-transactional SQL-file migrations (ENG-05, ENG-06).
+"""Non-transactional SQL-file migrations.
 
 ``CREATE INDEX CONCURRENTLY`` cannot run inside a transaction block. A
 ``.up.sql`` carrying two of them was executed as one multi-statement string,

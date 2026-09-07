@@ -1,6 +1,6 @@
 """The one rollback loop — ``down()``/``down_to()`` planning and execution under the lock.
 
-Split out of ``session.py`` (Phase 03, Cycle 9). Every function takes the
+Split out of ``session.py``. Every function takes the
 ``MigratorSession`` as its first argument; the session's methods delegate here.
 """
 
@@ -102,7 +102,7 @@ def down(
 
     def _plan_and_roll_back(dry: bool) -> tuple[list, int]:
         # Planning reads the ledger; under the lock it sees what the previous
-        # writer committed (ENG-03 for the rollback path).
+        # writer committed.
         assert session._migrator is not None
         session._migrator.initialize()
         applied_versions = session._migrator.get_applied_versions()

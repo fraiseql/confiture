@@ -323,7 +323,7 @@ class TestLockRecovery:
 
 @pytest.mark.integration
 class TestConcurrentSessionUp:
-    """Two deployers, one migration (ENG-03).
+    """Two deployers, one migration.
 
     Deployer A holds the migration lock and applies the only pending migration
     while deployer B is already inside ``session.up()``. B must wait for the

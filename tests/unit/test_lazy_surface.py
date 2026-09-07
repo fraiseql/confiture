@@ -1,4 +1,4 @@
-"""``import confiture`` is a promise, not a payload (Phase 06).
+"""``import confiture`` is a promise, not a payload.
 
 The package advertises a lazy surface (``_LAZY_IMPORTS``) but imported the
 linter eagerly, which pulled the whole rule library in for every ``import

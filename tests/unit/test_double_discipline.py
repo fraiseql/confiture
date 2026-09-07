@@ -3,7 +3,7 @@
 ``patch("confiture.core.migrator.Migrator", autospec=True)`` with no spec hands the code under
 test a mock that answers *any* attribute with another mock. When the real
 class loses a method or changes a signature, such tests keep passing — the
-Phase 03 engine refactor needs guards that fail, not guards that agree with
+The engine refactor needs guards that fail, not guards that agree with
 whatever is there. Every patch of ``Migrator``, ``MigratorSession`` or
 ``SchemaBuilder`` therefore passes ``autospec=True``, a ``spec``/``spec_set``,
 or a double built by ``tests/unit/_doubles.py`` (which is itself autospecced).

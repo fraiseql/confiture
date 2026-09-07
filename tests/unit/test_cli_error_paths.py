@@ -270,6 +270,6 @@ class TestInitCommand:
         result = runner.invoke(app, ["init", str(tmp_path)], input="n\n")
 
         # Declining to overwrite an existing project is exit 1.
-        # Declining is not an error: `typer.Exit()` crosses the boundary intact (ENG-08).
+        # Declining is not an error: `typer.Exit()` crosses the boundary intact.
         assert result.exit_code == 0, result.output
         assert "already exists" in result.output

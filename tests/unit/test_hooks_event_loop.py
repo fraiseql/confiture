@@ -1,4 +1,4 @@
-"""Hooks fire from any context and fail loudly (Phase 03, Cycle 7).
+"""Hooks fire from any context and fail loudly.
 
 ``trigger_hook`` used to *skip* every hook when an event loop was already
 running, swallow every hook failure into a log line, and leave a closed loop

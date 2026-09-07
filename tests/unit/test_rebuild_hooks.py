@@ -1,4 +1,4 @@
-"""Tests for Phase 4: Hooks integration (BEFORE/AFTER_REBUILD)."""
+"""Tests for the hooks integration (BEFORE/AFTER_REBUILD)."""
 
 from __future__ import annotations
 

@@ -4,7 +4,7 @@ A parity probe once parametrized over every ``*.sql`` under the repo root, so a
 developer machine contributed ~1,600 gitignored ``db/schema_history/`` snapshots
 (written by the suite itself) and the local run collected ~3,000 more tests
 than CI — a gap carried for months as "cause unknown" (#207). That probe is
-gone (pglast parses the raw file since Phase 05); what stays is the rule: a
+gone (pglast parses the raw file); what stays is the rule: a
 test module builds its parametrizations from files the repository tracks —
 paths under ``tests/`` — never from a filesystem walk of the repo root.
 """
@@ -94,7 +94,7 @@ def test_every_test_directory_is_a_layer() -> None:
 
     ``tests/migration_testing`` was a parallel tree with its own database
     convention (``DATABASE_URL``), its own connection handling and 114 tests of
-    PostgreSQL rather than of confiture; Phase 02 Cycle 5 folded what mattered
+    PostgreSQL rather than of confiture; the collection clean-up folded what mattered
     into the layers (D2).
     """
     tests_root = REPO_ROOT / "tests"

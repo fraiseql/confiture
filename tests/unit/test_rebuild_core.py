@@ -1,4 +1,4 @@
-"""Tests for Phase 2: Core rebuild logic on Migrator."""
+"""Tests for the core rebuild logic on Migrator."""
 
 from __future__ import annotations
 

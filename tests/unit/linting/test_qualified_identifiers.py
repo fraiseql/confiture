@@ -1,5 +1,5 @@
 """The default lint rules read a pglast-built inventory, so a schema qualifier
-changes nothing (Phase 05, #216).
+changes nothing.
 
 Four of the five default rules matched ``CREATE TABLE (\\w+)`` and reported
 zero violations on ``tenant.tb_x`` — a fail-open silence indistinguishable from

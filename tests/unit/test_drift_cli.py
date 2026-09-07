@@ -289,7 +289,7 @@ class TestDriftCommand:
                 str(config_file),
             ],
         )
-        # Phase 03: the config-block loaders moved to core/validation and now
+        # the config-block loaders moved to core/validation and now
         # raise ConfigurationError; drift routes it through fail() → exit 5.
         assert result.exit_code == 5
 

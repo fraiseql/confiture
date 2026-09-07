@@ -1,4 +1,4 @@
-"""The session plans under the lock (ENG-03).
+"""The session plans under the lock.
 
 ``MigratorSession.up()`` used to discover pending migrations *before*
 acquiring the migration lock. Two deployers starting together therefore both

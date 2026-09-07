@@ -17,7 +17,7 @@ per-file/line violations with full object names.  When pglast is absent
 returns no violations.
 
 Live path: see :mod:`confiture.core.validation.security_definer`
-(Phase 03) which queries ``pg_proc.proconfig`` directly.
+ which queries ``pg_proc.proconfig`` directly.
 
 Opt-out directive
 =================

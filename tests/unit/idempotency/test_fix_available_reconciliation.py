@@ -80,7 +80,7 @@ class TestDispatchCoverage:
             )
 
     def test_six_patterns_previously_missing_dispatch_now_route(self):
-        """The 6 patterns identified in Phase 01 review now route."""
+        """The 6 patterns the review identified now route."""
         previously_missing = {
             IdempotencyPattern.CREATE_EXTENSION,
             IdempotencyPattern.CREATE_SCHEMA,

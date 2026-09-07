@@ -1,4 +1,4 @@
-"""Tests for replica-safety config (issue #139, Phase 3)."""
+"""Tests for replica-safety config (issue #139)."""
 
 from __future__ import annotations
 

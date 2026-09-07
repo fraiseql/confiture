@@ -1,4 +1,4 @@
-"""Phase 03 C2: pre-scan banner stating the active idempotency backend.
+"""Pre-scan banner stating the active idempotency backend.
 
 Text mode prints a one-line status banner. JSON mode reports the
 backend via ``payload["meta"]["backend"]`` so pipe-able output stays

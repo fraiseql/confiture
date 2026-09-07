@@ -1,4 +1,4 @@
-"""Tests for the honest DryRunExecutor (Phase 05)."""
+"""Tests for the honest DryRunExecutor."""
 
 import pytest
 

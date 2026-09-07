@@ -1,7 +1,7 @@
 """``import confiture.testing`` must not import the core package.
 
 pytest loads ``confiture.testing.pytest_plugin`` through its ``pytest11`` entry point at
-the start of every session on a machine with confiture installed. Until Phase 11 the
+the start of every session on a machine with confiture installed. Until 0.55.0 the
 package's ``__init__`` eagerly re-exported the sandbox, fixtures and frameworks, which
 imported ``confiture.core`` — paying the whole package's import cost in every user's
 pytest start-up and, under ``pytest --cov``, importing the package before coverage

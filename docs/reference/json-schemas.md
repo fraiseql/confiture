@@ -50,7 +50,7 @@ schema fails the build.
 
 The `hints: list[string]` field is pre-allocated on every top-level
 schema and emitted as `[]` today. Future releases may populate it on
-quiet-success ambiguities (Phase 05 of issue #123). Consumers should
+quiet-success ambiguities (issue #123). Consumers should
 *accept* the field today but not depend on specific content.
 
 Every top-level payload and the error envelope carry `parser` (0.50.0):

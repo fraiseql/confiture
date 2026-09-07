@@ -1,4 +1,4 @@
-"""Tests for idempotency suggestion templates (Phase 04, issue #123).
+"""Tests for idempotency suggestion templates.
 
 The catalog of patterns is split into two disjoint frozensets:
 

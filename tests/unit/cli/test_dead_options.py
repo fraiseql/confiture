@@ -1,4 +1,4 @@
-"""Every declared option is read (ENG-07, D3).
+"""Every declared option is read.
 
 Wired: ``migrate up --batched/--batch-size/--batch-sleep`` (the session hands
 the ``BatchConfig`` to each migration), ``--verbose`` (debug logging),

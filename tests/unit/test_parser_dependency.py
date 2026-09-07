@@ -1,4 +1,4 @@
-"""pglast is the one parser (Phase 05, D13).
+"""pglast is the one parser.
 
 A standard install used to classify migrations with a regex backend while
 reporting a version indistinguishable from an AST-capable one (#210), and the

@@ -1,4 +1,4 @@
-"""Unit tests for the structured preflight report model (issue #148, Phase 1)."""
+"""Unit tests for the structured preflight report model (issue #148)."""
 
 from __future__ import annotations
 

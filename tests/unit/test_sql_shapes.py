@@ -1,4 +1,4 @@
-"""The shape table: what every analyzer says about the awkward identifiers (Phase 05, Cycle 7).
+"""The shape table: what every analyzer says about the awkward identifiers.
 
 One fixture per shape under ``tests/fixtures/sql_shapes/``; one expected answer
 per analyzer. A quoted identifier keeps its case and its spaces — PostgreSQL

@@ -110,7 +110,7 @@ def connection_double(
 
 @contextmanager
 def injected_connection(conn: Any) -> Iterator[MagicMock]:
-    """Every session entered inside the block opens ``conn`` (Phase 08: inject, don't patch).
+    """Every session entered inside the block opens ``conn``.
 
     Sets ``MigratorSession.default_connection_factory`` — the class-level default a
     session reads when no ``connection_factory`` was passed — and yields the factory

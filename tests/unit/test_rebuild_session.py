@@ -1,4 +1,4 @@
-"""Tests for Phase 3: MigratorSession.rebuild() API."""
+"""Tests for the MigratorSession.rebuild() API."""
 
 from __future__ import annotations
 

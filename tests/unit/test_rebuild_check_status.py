@@ -1,4 +1,4 @@
-"""Tests for Phase 6: Status integration (--check-rebuild)."""
+"""Tests for the status integration (--check-rebuild)."""
 
 from __future__ import annotations
 

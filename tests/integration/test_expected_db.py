@@ -1,4 +1,4 @@
-"""Integration tests for ``ExpectedSchemaDB`` (Phase 4 foundation).
+"""Integration tests for ``ExpectedSchemaDB``.
 
 Builds an "expected" schema into a throwaway database and reads it back through
 a live connection — the reusable primitive that Phases 5–7 use to normalise the

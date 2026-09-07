@@ -1,4 +1,4 @@
-"""Unit tests for TreeRenumber — Phase 4 of issue #111.
+"""Unit tests for TreeRenumber — issue #111.
 
 No database required.  All tests use pytest's ``tmp_path`` fixture.
 """

@@ -1,4 +1,4 @@
-"""One seed package (Phase 08, Cycle 2): applier, executor, bridge, paths, validation under ``core/seed/``.
+"""One seed package: applier, executor, bridge, paths, validation under ``core/seed/``.
 
 Seed logic lived in five places — ``core/seed/``, ``core/seed_applier.py``,
 ``core/seed_bridge.py``, ``core/seed_executor.py`` and ``core/seed_validation/``.

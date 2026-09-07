@@ -1,4 +1,4 @@
-"""A custom strategy is import-linted, then run in-process (SEC-05, D10).
+"""A custom strategy is import-linted, then run in-process.
 
 ``plugins/sandbox.py`` rejected files that import ``os`` or ``subprocess`` and
 then executed the module with ``importlib`` — the same interpreter, the same

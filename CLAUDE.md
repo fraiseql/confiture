@@ -266,7 +266,7 @@ confiture/
 │   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
 │   │   ├── lint_formatter.py     # Output formatting for linting results
 │   │   ├── main.py               # Main CLI entry point for Confiture
-│   │   ├── options.py            # Shared CLI option factories (ARC-02)
+│   │   ├── options.py            # Shared CLI option factories
 │   │   ├── ownership.py          # ``migrate fix --ownership``: apply the ownership expectation to a live…
 │   │   ├── prep_seed_formatter.py # Formatter for prep-seed validation reports
 │   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI (issue ARCH…
@@ -290,7 +290,7 @@ confiture/
 │   │   ├── connection.py         # Database connection management for CLI commands
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
-│   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL (Phase 05)
+│   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL
 │   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
 │   │   ├── differ.py             # Schema differ for detecting database schema changes
 │   │   ├── differ_sql.py         # Generate DDL SQL from SchemaChange objects
@@ -387,8 +387,8 @@ confiture/
 │   │   ├── sql_file_migration.py # SQL file-based migrations
 │   │   ├── stub_models.py        # Data models for Python stub generation from PostgreSQL functions
 │   │   └── unified_lint.py       # Models for unified SQL linting results
-│   ├── schemas/                  # The JSON schemas confiture publishes: the one source (Phase 06, ENG-10)
-│   │   └── __init__.py           # The JSON schemas confiture publishes: the one source (Phase 06, ENG-10)
+│   ├── schemas/                  # The JSON schemas confiture publishes: the one source
+│   │   └── __init__.py           # The JSON schemas confiture publishes: the one source
 │   ├── sql/
 │   │   └── __init__.py
 │   └── testing/                  # Confiture Migration Testing Framework

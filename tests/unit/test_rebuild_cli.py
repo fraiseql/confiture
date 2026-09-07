@@ -1,4 +1,4 @@
-"""Tests for Phase 5: CLI command (confiture migrate rebuild)."""
+"""Tests for the CLI command (confiture migrate rebuild)."""
 
 from __future__ import annotations
 

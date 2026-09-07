@@ -1,4 +1,4 @@
-"""CI runs what it says it runs (ARC-05).
+"""CI runs what it says it runs.
 
 The Python matrix declared three interpreters and ran 3.11 three times: ``uv
 venv`` without ``--python`` picks its own interpreter and ignores the one

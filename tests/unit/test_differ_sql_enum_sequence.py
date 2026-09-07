@@ -1,4 +1,4 @@
-"""Phase 02 Cycle 1 — DifferSQLGenerator: enum and sequence change types."""
+"""DifferSQLGenerator: enum and sequence change types."""
 
 from __future__ import annotations
 

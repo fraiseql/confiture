@@ -218,7 +218,7 @@ def test_real_xdist_n2_clones_into_ram_tablespace(
 ) -> None:
     """A genuine `pytest -n2` run places every worker DB in the configured tablespace.
 
-    Exercises the whole Phase 05 chain under real parallelism: the env var →
+    Exercises the whole provisioning chain under real parallelism: the env var →
     ``confiture_ram_tablespace`` → usability memo → ``clone(tablespace=…)``. Uses a
     real in-place tablespace so it runs on an ordinary superuser box.
     """

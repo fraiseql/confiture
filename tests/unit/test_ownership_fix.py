@@ -1,4 +1,4 @@
-"""Unit tests for the ownership auto-fixer (issue #124, Phase 04).
+"""Unit tests for the ownership auto-fixer (issue #124).
 
 Mirrors :mod:`confiture.core.idempotency.fixer` on the ownership axis.
 The fixer reuses :class:`Own001OwnershipCoverage` to find violations,

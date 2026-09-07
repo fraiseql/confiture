@@ -1,6 +1,6 @@
 """The one apply loop — planning, checksum verification and application under the lock.
 
-Split out of ``session.py`` (Phase 03, Cycle 9). Every function takes the
+Split out of ``session.py``. Every function takes the
 ``MigratorSession`` as its first argument; the session's methods delegate here.
 """
 
@@ -465,7 +465,7 @@ def up(
             resolution_hint=f"Create the migrations directory at {session._migrations_dir} or run 'confiture migrate generate' to scaffold it",
         )
 
-    # Everything from here runs under the migration lock (ENG-03): the plan
+    # Everything from here runs under the migration lock: the plan
     # is made against the ledger as the lock holder sees it, so a second
     # deployer that waited for the lock finds nothing left to apply instead
     # of failing on what the first one just recorded — and two first-run

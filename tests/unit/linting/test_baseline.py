@@ -1,4 +1,4 @@
-"""`lint --baseline`: adopt a rule without a flag day (#219, Phase 07).
+"""`lint --baseline`: adopt a rule without a flag day (#219).
 
 A baseline records the identity of every finding a schema has today —
 ``rule_id``, object kind and qualified name, plus the file for file-scoped

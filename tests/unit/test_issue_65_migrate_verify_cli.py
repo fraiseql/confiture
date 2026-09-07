@@ -22,7 +22,7 @@ class TestMigrateVerifyCLI:
         return config_file
 
     def test_requires_config(self):
-        """Config-required is a ConfigurationError (CONFIG_001 → exit 5) since Phase 03."""
+        """Config-required is a ConfigurationError (CONFIG_001 → exit 5)."""
         result = self.runner.invoke(app, ["migrate", "verify"])
         assert result.exit_code == 5
 

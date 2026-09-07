@@ -1,4 +1,4 @@
-"""The session verifies checksums; ``checksums_verified`` means the verifier ran (ENG-02).
+"""The session verifies checksums; ``checksums_verified`` means the verifier ran.
 
 ``MigratorSession.up(verify_checksums=True)`` used to set ``checksums_verified``
 on the result and never call the verifier — a tampered applied file was

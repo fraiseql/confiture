@@ -1,4 +1,4 @@
-"""The import graph respects the layering (Phase 08, Cycle 5).
+"""The import graph respects the layering.
 
 Three rules, checked on the runtime import graph built from the AST (imports
 under ``if TYPE_CHECKING:`` do not count):

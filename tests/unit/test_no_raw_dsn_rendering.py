@@ -1,4 +1,4 @@
-"""Guard: no output sink renders a DSN that has not been through ``redact_url`` (SEC-04).
+"""Guard: no output sink renders a DSN that has not been through ``redact_url``.
 
 A connection URL carries a password. The only spelling that may leave the
 process — into a log line, a console message, an exception text, JSON on

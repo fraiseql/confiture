@@ -1,4 +1,4 @@
-"""One parser: pglast, with no switch to anything else (Phase 05, D13).
+"""One parser: pglast, with no switch to anything else.
 
 Two backends and fifty-odd switches meant every DDL question had two answers
 and a third state — "which one ran?" — that nothing reported (#210, #216). The

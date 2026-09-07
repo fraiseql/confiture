@@ -1,4 +1,4 @@
-"""Unit tests for SmtpTransport + EmailRenderer — Phase 03 Cycle 5.
+"""Unit tests for SmtpTransport + EmailRenderer
 
 The critical regression net here is ``test_smtp_config_traceback_show_locals_
 does_not_leak_password``: ``pydantic.SecretStr`` redacts ``repr()`` and

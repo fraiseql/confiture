@@ -335,7 +335,7 @@ def render_replay_drift(
 ) -> dict[str, Any] | None:
     """Render the ``--check-body-replay`` FunctionBodyDriftReport.
 
-    Reuses the function-body report shape (Phase 3) but frames drifts as
+    Reuses the function-body report shape but frames drifts as
     out-of-band hot-patches — definitions live has but a clean migration replay
     does not produce. ``show_diff`` surfaces the expected/live bodies + diff.
     """

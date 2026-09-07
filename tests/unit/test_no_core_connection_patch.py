@@ -1,4 +1,4 @@
-"""No test patches ``confiture.core.connection.create_connection`` (Phase 04, Cycle 9).
+"""No test patches ``confiture.core.connection.create_connection``.
 
 That name is core's own factory. Replacing it from a test reached every caller
 through an in-function import, so a CLI test could pass while the command it

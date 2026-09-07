@@ -21,8 +21,8 @@ Two kinds of entries live in ``_ALLOWLIST``:
    literals (``diff`` → 1 on changes, ``status`` → 1 on pending, idempotency
    gate → 1 on findings). These carry an inline ``# success-signal`` note and
    stay put.
-2. **Not-yet-converted failure sites** — debt this phase (and Phase 03, for the
-   ``migrate_validate`` god-command) pays down. Each carries a ``# TODO`` note.
+2. **Not-yet-converted failure sites** — debt that the decomposition (of the
+   ``migrate_validate`` god-command) pays down. Each carries a follow-up note.
 
 When the allowlist contains only success-signal entries, the contract is fully
 universalized. Mirrors the spirit of ``test_exit_code_convention.py``.
@@ -45,7 +45,7 @@ _CLI_ROOT = Path(__file__).resolve().parents[2] / "python" / "confiture" / "cli"
 # ``fail()`` → lower the number here. Never raise a number to "make it pass" —
 # route the new failure through ``fail()`` instead.
 _ALLOWLIST: dict[str, int] = {
-    # ---- Phase 03: migrate_validate god-command fully decomposed ----
+    # ---- migrate_validate god-command fully decomposed ----
     # migrate_validate now holds only success-signal Exit(1) gates (found
     # drift / orphans / violations); its config/usage/connection failures route
     # through fail(). The migrate fix/introspect/verify siblings were converted
@@ -54,12 +54,12 @@ _ALLOWLIST: dict[str, int] = {
     # failure paths in three siblings — migrate diff (renders errors through its
     # MigrateDiffResult domain formatter), migrate fix-signatures, and migrate
     # preflight (already mostly fail()-routed via computed Exit(exit_code)).
-    # TODO(follow-up): finish diff / fix-signatures / preflight contract sweep.
+    # Follow-up: finish the diff / fix-signatures / preflight contract sweep (the count only shrinks).
     # 0.40.0 (#187): the validate dispatch became a check registry, so its
     # eleven per-check `Exit(1)` success-signals collapsed into the single
     # aggregated `Exit(aggregate_exit_code(...))` — a computed value, not a
     # literal, so it no longer appears here at all. 29 → 15.
-    # Phase 04 Cycle 8 split migrate_analysis.py (11) into per-command modules — same total.
+    # migrate_analysis.py (11) was split into per-command modules — same total.
     "commands/migrate/diff.py": 1,
     "commands/migrate/fix_signatures.py": 6,
     "commands/migrate/introspect.py": 1,
@@ -68,7 +68,7 @@ _ALLOWLIST: dict[str, int] = {
     # ---- migrate_core: status/up/down/generate/estimate ----
     # Mix of success-signal (status→1 pending) and not-yet-converted failures;
     # already partially routed through fail(). Paid down opportunistically.
-    # Phase 04 Cycle 8 split migrate_core.py (22) into per-command modules — same total.
+    # migrate_core.py (22) was split into per-command modules — same total.
     "commands/migrate/down.py": 1,
     "commands/migrate/estimate.py": 2,
     "commands/migrate/generate.py": 5,
@@ -97,7 +97,7 @@ _ALLOWLIST: dict[str, int] = {
     # not a literal, so it no longer appears here.
     # acl_loader.py / ownership_loader.py / function_coverage_loader.py: the
     # three config-block loaders moved to core/validation/config_loaders.py
-    # (Phase 03) and now raise ConfigurationError instead of typer.Exit(2) — the
+    # and now raise ConfigurationError instead of typer.Exit(2) — the
     # ValidationError seam they shared with migrate_validate is reseamed through
     # the callers' fail() boundaries (drift/bootstrap/migrate validate).
     # helpers.py: fully converted (0.40.0) — _validate_idempotency returns

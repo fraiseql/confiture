@@ -1,4 +1,4 @@
-"""CLI tests for `confiture validate-config` (issue #144, Phase 2).
+"""CLI tests for `confiture validate-config` (issue #144).
 
 Offline — no database. Run as integration only because they exercise the full
 CLI; none of them connect.

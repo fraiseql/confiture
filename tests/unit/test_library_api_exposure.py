@@ -1,6 +1,6 @@
-"""Public-API exposure + no-limbo consistency guard (Phase 04, ARCH-H1).
+"""Public-API exposure + no-limbo consistency guard.
 
-Phase 04 promoted three previously-orphaned modules (blue_green, pg_version,
+Three previously-orphaned modules were promoted (blue_green, pg_version,
 rollback_generator) to the documented library surface. These tests pin that
 they are reachable via ``import confiture`` and, more importantly, add the
 comprehensive consistency check the per-feature tests lacked: every name in
@@ -14,7 +14,7 @@ from __future__ import annotations
 import confiture
 from confiture import _LAZY_IMPORTS
 
-# Names promoted to the public library surface in Phase 04.
+# Names promoted to the public library surface.
 _BLUE_GREEN = (
     "BlueGreenOrchestrator",
     "BlueGreenConfig",

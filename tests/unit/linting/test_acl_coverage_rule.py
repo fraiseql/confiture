@@ -444,7 +444,7 @@ def test_lint_flags_partitioned_parent_without_grant(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Lint auto-fire gating — Phase 03 opt-in
+# Lint auto-fire gating — opt-in
 #
 # ``SchemaLinter.lint()`` must NOT run ACL coverage when
 # ``acls_lint_enabled`` is False, even if expectations are configured.

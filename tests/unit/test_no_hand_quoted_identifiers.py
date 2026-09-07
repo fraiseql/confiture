@@ -1,4 +1,4 @@
-"""Tripwire: no SQL identifier is hand-quoted into a query string (SEC-01).
+"""Tripwire: no SQL identifier is hand-quoted into a query string.
 
 ``f'SELECT … FROM "{schema}"."{table}"'`` looks safe — the quotes are there —
 and is not: a value carrying ``"`` or ``;`` closes the quote and the rest of it
@@ -32,7 +32,7 @@ _OPEN_QUOTE_TAIL = re.compile(r'\b(?:FROM|TABLE|INTO|JOIN|UPDATE)\s+"\s*$', re.I
 # Deliberately empty.  Fix the site instead of listing it here.
 ALLOWLIST: frozenset[str] = frozenset()
 
-# Modules held to the stricter rule (Phase 03, Cycle 6): in a SQL string, no
+# Modules held to the stricter rule: in a SQL string, no
 # *bare* interpolation may follow a keyword that introduces a relation, column,
 # index or savepoint name either — ``f"SAVEPOINT {name}"`` is not quoted at all.
 # Only expressions and predicates (after ``WHERE``, ``=``, ``SET DEFAULT``) may

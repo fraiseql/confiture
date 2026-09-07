@@ -1,4 +1,4 @@
-"""The parser is named everywhere its verdicts appear (Phase 05, ISS-210).
+"""The parser is named everywhere its verdicts appear.
 
 A standard install classified with a regex backend while ``confiture --version``
 and every JSON payload looked exactly like an AST-capable one (#210). The
@@ -41,7 +41,7 @@ def test_version_has_a_second_line_naming_the_parser() -> None:
     lines = _ANSI.sub("", result.output).strip().splitlines()
     assert lines[0].split()[0] == "confiture"  # the adapter reads this line only
     assert lines[0].split()[-1][0].isdigit()
-    assert len(lines) == 3, lines  # version, parser, native extension (Phase 09)
+    assert len(lines) == 3, lines  # version, parser, native extension
     assert lines[2].startswith("native extension: "), lines[2]
     m = PARSER_LINE.match(lines[1])
     assert m, lines[1]

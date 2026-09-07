@@ -1,4 +1,4 @@
-"""Two migrations with the same name applied in one run are both recorded (Phase 03, Cycle 8).
+"""Two migrations with the same name applied in one run are both recorded.
 
 The ledger's ``slug`` was ``<name>_<timestamp to the second>``; two migrations
 sharing a name and applied within the same second collided on ``slug UNIQUE``.

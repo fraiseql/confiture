@@ -1,6 +1,6 @@
 """Environment-file settings the migrate commands read (`migration:` block, DSN).
 
-Split out of the monolithic migrate command modules (Phase 04, Cycle 8).
+Split out of the monolithic migrate command modules.
 """
 
 from __future__ import annotations

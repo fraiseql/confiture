@@ -1,4 +1,4 @@
-"""The CLI has no apply loop of its own (ENG-01, ARC-01).
+"""The CLI has no apply loop of its own.
 
 ``MigratorSession`` is the one engine: it takes the lock, plans, verifies
 checksums and applies. A CLI module that imports the lock or the migration

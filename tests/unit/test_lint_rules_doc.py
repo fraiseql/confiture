@@ -1,4 +1,4 @@
-"""The published rule reference is generated from the registry (Phase 07).
+"""The published rule reference is generated from the registry.
 
 ``docs/reference/lint-rules.md`` embeds ``render_rule_table()`` between
 generated-section markers, exactly as the error codebook does; a rule added

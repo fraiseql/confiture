@@ -13,7 +13,7 @@ from confiture.core.preflight import run_preflight
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
 from tests.unit._doubles import injected_connection
 
-# ── Phase 1: Models ──────────────────────────────────────────────────────
+# ── Models ──────────────────────────────────────────────────────
 
 
 class TestMigrationPreflightInfo:
@@ -165,7 +165,7 @@ class TestPreflightResult:
         assert d["checksum_mismatches"] == []
 
 
-# ── Phase 1: Reversibility check ─────────────────────────────────────────
+# ── Reversibility check ─────────────────────────────────────────
 
 
 class TestReversibilityCheck:
@@ -222,7 +222,7 @@ class TestReversibilityCheck:
         assert result.safe_to_deploy is True
 
 
-# ── Phase 1: Duplicate version detection ──────────────────────────────────
+# ── Duplicate version detection ──────────────────────────────────
 
 
 class TestDuplicateDetection:
@@ -268,7 +268,7 @@ class TestDuplicateDetection:
         assert "002" not in versions
 
 
-# ── Phase 2: MigrationAnalyzer (pglast path) ─────────────────────────────
+# ── MigrationAnalyzer (pglast path) ─────────────────────────────
 
 
 class TestMigrationAnalyzerPglast:
@@ -343,10 +343,10 @@ class TestMigrationAnalyzerPglast:
         assert result == []
 
 
-# ── Phase 2: MigrationAnalyzer (regex fallback) ──────────────────────────
+# ── MigrationAnalyzer (regex fallback) ──────────────────────────
 
 
-# ── Phase 2: Integration with reversibility ───────────────────────────────
+# ── Integration with reversibility ───────────────────────────────
 
 
 class TestPreflightNonTransactional:
@@ -366,7 +366,7 @@ class TestPreflightNonTransactional:
         assert result.non_transactional[0].version == "002"
 
 
-# ── Phase 3: MigratorSession.preflight() ─────────────────────────────────
+# ── MigratorSession.preflight() ─────────────────────────────────
 
 
 class TestMigratorSessionPreflight:
@@ -535,7 +535,7 @@ class TestMigratorSessionPreflight:
         assert result.checksum_verified is False
 
 
-# ── Phase 3: CLI command ──────────────────────────────────────────────────
+# ── CLI command ──────────────────────────────────────────────────
 
 
 class TestMigratePreflightCLI:
@@ -641,7 +641,7 @@ class TestMigratePreflightCLI:
         assert "PFLIGHT_NON_TRANSACTIONAL" in result.output
 
 
-# ── Phase 3: Lazy exports ────────────────────────────────────────────────
+# ── Lazy exports ────────────────────────────────────────────────
 
 
 class TestLazyExports:

@@ -1,4 +1,4 @@
-"""Validation and introspection each live in one package (Phase 08, Cycle 3).
+"""Validation and introspection each live in one package.
 
 ``core/validators/`` sat beside ``core/validation/``, ``core/config_validator.py``
 beside both, ``core/introspector.py`` beside ``core/introspection/``, and

@@ -1,4 +1,4 @@
-"""``build`` validates its flags before any database or seed work (Phase 04, Cycle 5)."""
+"""``build`` validates its flags before any database or seed work."""
 
 from __future__ import annotations
 

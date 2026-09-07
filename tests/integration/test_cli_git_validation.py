@@ -44,7 +44,7 @@ class TestCliGitValidation:
                     catch_exceptions=False,
                 )
 
-                # Phase 03: not-a-repo routes through fail() → NotAGitRepositoryError
+                # not-a-repo routes through fail() → NotAGitRepositoryError
                 # (GIT_002 → exit 7); the message goes to stderr (folded into
                 # CliRunner's combined .output).
                 assert result.exit_code == 7
@@ -75,7 +75,7 @@ class TestCliGitValidation:
                     catch_exceptions=False,
                 )
 
-                # Phase 03: not-a-repo routes through fail() → NotAGitRepositoryError
+                # not-a-repo routes through fail() → NotAGitRepositoryError
                 # (GIT_002 → exit 7); the message goes to stderr (folded into
                 # CliRunner's combined .output).
                 assert result.exit_code == 7

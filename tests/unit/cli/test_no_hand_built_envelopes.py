@@ -1,4 +1,4 @@
-"""Every error path is ``fail()`` (ARC-02).
+"""Every error path is ``fail()``.
 
 An error envelope built by hand — ``{"error": …}``, ``{"status": "error", …}`` —
 has its own shape, stream and exit code. The one envelope is

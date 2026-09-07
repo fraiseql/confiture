@@ -1,4 +1,4 @@
-"""The session takes its factories as parameters; the migrator module is not a patch seam (Phase 08).
+"""The session takes its factories as parameters; the migrator module is not a patch seam.
 
 ``confiture.core.migrator`` re-exported two call-time wrappers,
 ``create_connection`` and ``load_migration_class``, whose only purpose was to

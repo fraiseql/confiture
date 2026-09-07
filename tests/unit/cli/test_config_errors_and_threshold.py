@@ -1,4 +1,4 @@
-"""``--rebuild-threshold`` comes from config, and an invalid config is an error (Phase 04, Cycle 7).
+"""``--rebuild-threshold`` comes from config, and an invalid config is an error.
 
 ``migrate status --check-rebuild`` read ``migration.rebuild_threshold`` only in
 table mode — and through a plain dict that has no ``.migration``, so never —

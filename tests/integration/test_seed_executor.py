@@ -1,6 +1,6 @@
 """Integration tests for SeedExecutor with savepoint management.
 
-Phase 9, Cycle 3-4: Savepoint execution and rollback
+Savepoint execution and rollback
 """
 
 from unittest.mock import MagicMock
