@@ -12,6 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### Fixed
+
+- **`confiture drift` no longer reports constraint-backed indexes as `extra_index`.** The index
+  PostgreSQL creates for a `PRIMARY KEY`, `UNIQUE` or `EXCLUDE` constraint (`t_pkey`, `t_code_key`, or
+  the constraint's name) is never declared by the DDL, so every such table produced one info-level item
+  per constraint. `SchemaAnalyzer.get_schema_info` now records those indexes separately
+  (`SchemaInfo.constraint_indexes`, from `pg_constraint.conindid`) and the comparison subtracts them; an
+  index the DDL declares that also backs a constraint (`UNIQUE USING INDEX`) still matches by name.
+- **`confiture drift` compares the indexes of every table the DDL declares**, not only the tables with a
+  `CREATE INDEX` of their own: a free-standing index the live database grew on an index-less table is
+  now an `extra_index` item. `indexes_checked` counts the indexes compared rather than the items found.
+
 ## [1.0.0] - 2026-09-07
 
 Confiture 1.0.0 freezes its contracts. What is frozen, and where each is pinned:

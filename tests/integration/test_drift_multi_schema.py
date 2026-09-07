@@ -13,7 +13,7 @@ from pathlib import Path
 
 import psycopg
 
-from confiture.core.drift import DriftSeverity, DriftType, SchemaDriftDetector
+from confiture.core.drift import DriftType, SchemaDriftDetector
 
 EXPECTED = """
 CREATE SCHEMA tenant;
@@ -44,9 +44,7 @@ def test_two_schemas_compare_clean_when_live_matches(
     assert [i for i in report.drift_items if i.drift_type == DriftType.MISSING_TABLE] == []
     assert [i for i in report.drift_items if i.drift_type == DriftType.EXTRA_TABLE] == []
     assert report.tables_checked == 2
-    # The implicit primary-key index is a pre-existing info-level extra on any
-    # table that declares an index; nothing above info may remain.
-    assert [str(i) for i in report.drift_items if i.severity != DriftSeverity.INFO] == []
+    assert [str(i) for i in report.drift_items] == []
 
 
 def test_a_dropped_column_in_the_tenant_schema_is_named_qualified(

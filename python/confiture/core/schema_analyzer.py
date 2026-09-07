@@ -50,10 +50,17 @@ class ValidationIssue:
 
 @dataclass
 class SchemaInfo:
-    """Current database schema information."""
+    """Current database schema information.
+
+    ``indexes`` lists every index of a table, ``constraint_indexes`` the subset
+    PostgreSQL created to back a ``PRIMARY KEY``, ``UNIQUE`` or ``EXCLUDE``
+    constraint — the DDL never declares those, so drift must not count them
+    against it.
+    """
 
     tables: dict[str, dict[str, Any]] = field(default_factory=dict)
     indexes: dict[str, list[str]] = field(default_factory=dict)
+    constraint_indexes: dict[str, set[str]] = field(default_factory=dict)
     constraints: dict[str, list[str]] = field(default_factory=dict)
     sequences: list[str] = field(default_factory=list)
     extensions: list[str] = field(default_factory=list)
@@ -216,6 +223,23 @@ class SchemaAnalyzer:
                 if table_name not in info.indexes:
                     info.indexes[table_name] = []
                 info.indexes[table_name].append(row[2])
+
+        # Which of those indexes exist only to back a constraint
+        with self.connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT n.nspname, t.relname, i.relname
+                FROM pg_constraint c
+                JOIN pg_class i ON i.oid = c.conindid
+                JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE c.contype IN ('p', 'u', 'x')
+                AND n.nspname = ANY(%s)
+            """,
+                (wanted,),
+            )
+            for row in cur.fetchall():
+                info.constraint_indexes.setdefault(key(row[0], row[1]), set()).add(row[2])
 
         # Get constraints
         with self.connection.cursor() as cur:
