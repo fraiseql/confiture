@@ -183,6 +183,116 @@ FullExecutionOpt = Annotated[
 ]
 
 
+def _seed_dirs_to_validate(
+    seeds_dir: Path, *, env: str | None, all_envs: bool, json_mode: bool, output: Path | None
+) -> list[tuple[Path, str]]:
+    """The ``(directory, environment)`` pairs ``seed validate`` scans; exit 5 when none exists."""
+    dirs_to_validate: list[tuple[Path, str]] = []
+    if all_envs:
+        # Validate all environment seed directories
+        env_dir = Path("db/environments")
+        if env_dir.exists():
+            for env_file in env_dir.glob("*.yaml"):
+                env_name = env_file.stem
+                env_seeds = Path("db/seeds") / env_name
+                if env_seeds.exists():
+                    dirs_to_validate.append((env_seeds, env_name))
+    elif env:
+        # Validate specific environment
+        env_seeds = Path("db/seeds") / env
+        if env_seeds.exists():
+            dirs_to_validate.append((env_seeds, env))
+        else:
+            fail(
+                ConfigurationError(
+                    f"Environment seeds not found: {env_seeds}",
+                    error_code="CONFIG_004",
+                ),
+                json_mode=json_mode,
+                output_file=output,
+            )
+    # Validate provided directory
+    elif seeds_dir.exists():
+        dirs_to_validate.append((seeds_dir, "default"))
+    else:
+        fail(
+            ConfigurationError(
+                f"Seeds directory not found: {seeds_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=json_mode,
+            output_file=output,
+        )
+    return dirs_to_validate
+
+
+def _fix_seed_files(scanned_files: list[str], *, dry_run: bool) -> None:
+    """``--fix``: rewrite each scanned file, or say what would change under ``--dry-run``."""
+    fixer = SeedFixer()
+    for file_path in scanned_files:
+        fix_result = fixer.fix_file(Path(file_path), dry_run=dry_run)
+        if fix_result.fixes_applied > 0:
+            if dry_run:
+                console.print(
+                    f"[yellow]~ Would fix {fix_result.fixes_applied} issues in {file_path}[/yellow]"
+                )
+            else:
+                console.print(
+                    f"[green]✓ Fixed {fix_result.fixes_applied} issues in {file_path}[/green]"
+                )
+
+
+def _render_seed_validation(
+    all_violations: list[Any], all_files: list[str], *, format_: str, output: Path | None
+) -> None:
+    """The validation report: JSON (to ``output`` when given) or the text table."""
+    if format_ == "json":
+        report_dict = {
+            "violations": [v.to_dict() for v in all_violations],
+            "violation_count": len(all_violations),
+            "files_scanned": len(all_files),
+            "has_violations": len(all_violations) > 0,
+        }
+        json_output = json.dumps(report_dict, indent=2)
+
+        if output:
+            output.write_text(json_output)
+            console.print(f"[green]✓ Report saved to {output}[/green]")
+        else:
+            console.print(json_output)
+        return
+
+    # Text format (default)
+    console.print("\nSeed Validation Report")
+    console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.print(f"Files scanned: {len(all_files)}")
+    console.print(f"Violations found: {len(all_violations)}")
+
+    if all_violations:
+        console.print("\n[red]Issues found:[/red]")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("File", style="cyan")
+        table.add_column("Line", style="magenta")
+        table.add_column("Issue", style="yellow")
+        table.add_column("Suggestion", style="green")
+
+        for violation in sorted(all_violations, key=lambda v: (v.file_path, v.line_number)):
+            table.add_row(
+                violation.file_path,
+                str(violation.line_number),
+                violation.pattern.name,
+                violation.suggestion,
+            )
+
+        console.print(table)
+    else:
+        console.print("[green]✓ All seed files are valid![/green]")
+        console.print("\n💡 Next steps:")
+        console.print("  • Load data: confiture seed apply")
+        console.print("  • Show performance: confiture seed benchmark")
+        console.print("  • Convert format: confiture seed convert")
+
+
 @seed_app.command("validate")
 @cli_boundary
 def validate(
@@ -260,118 +370,21 @@ def validate(
                 output=output,
             )
 
-        # Determine which directories to validate
-        dirs_to_validate: list[tuple[Path, str]] = []
+        dirs_to_validate = _seed_dirs_to_validate(
+            seeds_dir, env=env, all_envs=all_envs, json_mode=is_json(format_), output=output
+        )
 
-        if all_envs:
-            # Validate all environment seed directories
-            env_dir = Path("db/environments")
-            if env_dir.exists():
-                for env_file in env_dir.glob("*.yaml"):
-                    env_name = env_file.stem
-                    env_seeds = Path("db/seeds") / env_name
-                    if env_seeds.exists():
-                        dirs_to_validate.append((env_seeds, env_name))
-        elif env:
-            # Validate specific environment
-            env_seeds = Path("db/seeds") / env
-            if env_seeds.exists():
-                dirs_to_validate.append((env_seeds, env))
-            else:
-                fail(
-                    ConfigurationError(
-                        f"Environment seeds not found: {env_seeds}",
-                        error_code="CONFIG_004",
-                    ),
-                    json_mode=is_json(format_),
-                    output_file=output,
-                )
-        # Validate provided directory
-        elif seeds_dir.exists():
-            dirs_to_validate.append((seeds_dir, "default"))
-        else:
-            fail(
-                ConfigurationError(
-                    f"Seeds directory not found: {seeds_dir}",
-                    error_code="CONFIG_004",
-                ),
-                json_mode=is_json(format_),
-                output_file=output,
-            )
-
-        # Create validator
         validator = SeedValidator()
-
-        # Collect all reports
-        all_violations = []
-        all_files = []
-
+        all_violations: list[Any] = []
+        all_files: list[str] = []
         for dir_path, _env_name in dirs_to_validate:
             report = validator.validate_directory(dir_path, recursive=True)
             all_violations.extend(report.violations)
             all_files.extend(report.scanned_files)
-
-            # Auto-fix if requested
             if fix:
-                fixer = SeedFixer()
-                for file_path in report.scanned_files:
-                    file_path_obj = Path(file_path)
-                    fix_result = fixer.fix_file(file_path_obj, dry_run=dry_run)
-                    if fix_result.fixes_applied > 0:
-                        if dry_run:
-                            console.print(
-                                f"[yellow]~ Would fix {fix_result.fixes_applied} issues in {file_path}[/yellow]"
-                            )
-                        else:
-                            console.print(
-                                f"[green]✓ Fixed {fix_result.fixes_applied} issues in {file_path}[/green]"
-                            )
+                _fix_seed_files(report.scanned_files, dry_run=dry_run)
 
-        # Output report
-        if format_ == "json":
-            report_dict = {
-                "violations": [v.to_dict() for v in all_violations],
-                "violation_count": len(all_violations),
-                "files_scanned": len(all_files),
-                "has_violations": len(all_violations) > 0,
-            }
-            json_output = json.dumps(report_dict, indent=2)
-
-            if output:
-                output.write_text(json_output)
-                console.print(f"[green]✓ Report saved to {output}[/green]")
-            else:
-                console.print(json_output)
-        else:
-            # Text format (default)
-            console.print("\nSeed Validation Report")
-            console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            console.print(f"Files scanned: {len(all_files)}")
-            console.print(f"Violations found: {len(all_violations)}")
-
-            if all_violations:
-                console.print("\n[red]Issues found:[/red]")
-                table = Table(show_header=True, header_style="bold")
-                table.add_column("File", style="cyan")
-                table.add_column("Line", style="magenta")
-                table.add_column("Issue", style="yellow")
-                table.add_column("Suggestion", style="green")
-
-                for violation in sorted(all_violations, key=lambda v: (v.file_path, v.line_number)):
-                    table.add_row(
-                        violation.file_path,
-                        str(violation.line_number),
-                        violation.pattern.name,
-                        violation.suggestion,
-                    )
-
-                console.print(table)
-            else:
-                console.print("[green]✓ All seed files are valid![/green]")
-                console.print("\n💡 Next steps:")
-                console.print("  • Load data: confiture seed apply")
-                console.print("  • Show performance: confiture seed benchmark")
-                console.print("  • Convert format: confiture seed convert")
+        _render_seed_validation(all_violations, all_files, format_=format_, output=output)
 
         # Exit with appropriate code
         if all_violations:
