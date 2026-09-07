@@ -49,15 +49,30 @@ class TestMigrationGenerator:
         assert file2.name[:14] >= file1.name[:14]
 
     def test_generate_migration_for_add_table(self, tmp_path):
-        """Should raise NotImplementedError for ADD_TABLE (requires manual migration)."""
+        """ADD_TABLE renders the CREATE TABLE from the change's columns (issue #196)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[SchemaChange(type="ADD_TABLE", table="users")])
+        diff = SchemaDiff(
+            changes=[
+                SchemaChange(
+                    type="ADD_TABLE",
+                    table="users",
+                    details={
+                        "columns": [
+                            {"name": "id", "type": "integer", "nullable": False, "default": None},
+                            {"name": "email", "type": "text", "nullable": True, "default": None},
+                        ]
+                    },
+                )
+            ]
+        )
         generator = MigrationGenerator(migrations_dir=migrations_dir)
+        content = generator.generate(diff, name="add_users_table").read_text()
 
-        with pytest.raises(NotImplementedError, match="ADD_TABLE on users"):
-            generator.generate(diff, name="add_users_table")
+        assert 'self.execute("""CREATE TABLE IF NOT EXISTS users (' in content
+        assert "id integer NOT NULL" in content and "email text" in content
+        assert 'self.execute("DROP TABLE users")' in content
 
     def test_generate_migration_for_drop_table(self, tmp_path):
         """Should generate correct SQL for DROP_TABLE."""

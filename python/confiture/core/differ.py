@@ -128,6 +128,19 @@ _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
 
 
+def _column_details(table: Table) -> list[dict[str, Any]]:
+    """The columns of ``table`` in the shape ``DifferSQLGenerator`` renders a ``CREATE TABLE`` from."""
+    return [
+        {
+            "name": column.name,
+            "type": column.raw_sql_type or column.type.value,
+            "nullable": column.nullable,
+            "default": column.default,
+        }
+        for column in table.columns
+    ]
+
+
 class SchemaDiffer:
     """Parses SQL and detects schema differences.
 
@@ -450,7 +463,11 @@ class SchemaDiffer:
         )
 
         changes.extend(
-            SchemaChange(type="ADD_TABLE", table=table_name)
+            SchemaChange(
+                type="ADD_TABLE",
+                table=table_name,
+                details={"columns": _column_details(new_table_map[table_name])},
+            )
             for table_name in new_table_names - old_table_names
         )
 

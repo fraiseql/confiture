@@ -1049,20 +1049,23 @@ confiture migrate up
 **Usage**
 
 ```bash
-confiture migrate diff [OPTIONS] OLD_SCHEMA NEW_SCHEMA
+confiture migrate diff [OPTIONS] [OLD_SCHEMA] [NEW_SCHEMA]
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `OLD_SCHEMA` | path | yes | Old schema file |
-| `NEW_SCHEMA` | path | yes | New schema file |
+| `OLD_SCHEMA` | path | no | Old schema file |
+| `NEW_SCHEMA` | path | no | New schema file |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
+| `--from` | - | text | - | Current state: a schema file, a directory of .sql files, '-' for stdin, or 'db' for the configured database (default: the first positional) |
+| `--to` | - | text | - | Desired state: a schema file, a directory of .sql files (what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
+| `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` (default: db/environments/local.yaml) |
 | `--generate` | - | Flag | off | Generate migration from diff (default: off) |
 | `--name` | - | text | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |

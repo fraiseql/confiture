@@ -49,6 +49,7 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "drift-check-acls.schema.json",
     "error-envelope.schema.json",
     "lint-list-rules.schema.json",
+    "migrate-diff.schema.json",
     "migrate-fix.schema.json",
     "migrate-introspect.schema.json",
     "migrate-preflight-against.schema.json",

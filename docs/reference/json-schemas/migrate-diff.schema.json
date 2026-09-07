@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-diff.schema.json",
+  "title": "confiture migrate diff --format json",
+  "description": "Report from `migrate diff`: the structural changes between the current state (a schema file, a directory of DDL files, stdin, or the configured database) and the desired state (a schema file, a directory such as `fraiseql compile --emit-ddl` writes, or stdin), and the migration file written when `--generate` was given.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "success",
+    "has_changes",
+    "changes",
+    "change_count",
+    "migration_generated",
+    "migration_file",
+    "error",
+    "source"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean",
+      "description": "False when either side could not be read or parsed; `error` says why."
+    },
+    "has_changes": {
+      "type": "boolean"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "details"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The change kind (`ADD_TABLE`, `DROP_COLUMN`, `CHANGE_COLUMN_TYPE`, ...)."
+          },
+          "details": {
+            "type": "string",
+            "description": "The change as one line (`ADD TABLE tb_post`)."
+          }
+        }
+      }
+    },
+    "change_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "migration_generated": {
+      "type": "boolean"
+    },
+    "migration_file": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The generated file's name under --migrations-dir, or null."
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source": {
+      "description": "Where the desired state came from; null when the run failed before it was resolved.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "path"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "sql"
+              ],
+              "description": "`sql`: DDL text. Reserved for a structured export (`json`) when one exists."
+            },
+            "path": {
+              "type": "string",
+              "description": "The file or directory, or `-` for stdin."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

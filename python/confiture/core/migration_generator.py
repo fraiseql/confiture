@@ -18,6 +18,13 @@ from confiture.exceptions import ExternalGeneratorError, UnsafeOperationError
 from confiture.models.schema import SchemaChange, SchemaDiff
 
 
+def _execute_call(sql: str) -> str:
+    """One ``self.execute(...)`` line; multi-line DDL (a ``CREATE TABLE``) rides in triple quotes."""
+    if "\n" in sql or '"' in sql:
+        return f'        self.execute("""{sql}""")'
+    return f'        self.execute("{sql}")'
+
+
 class MigrationGenerator:
     """Generates Python migration files from schema diffs.
 
@@ -253,7 +260,7 @@ class {class_name}(Migration):
         for change in changes:
             sql = self._change_to_up_sql(change)
             if sql:
-                statements.append(f'        self.execute("{sql}")')
+                statements.append(_execute_call(sql))
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
@@ -272,13 +279,14 @@ class {class_name}(Migration):
         for change in reversed(changes):
             sql = self._change_to_down_sql(change)
             if sql:
-                statements.append(f'        self.execute("{sql}")')
+                statements.append(_execute_call(sql))
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
     # Change types delegated to DifferSQLGenerator (destructive ops emit warning comments)
     _DELEGATED_UP_TYPES = frozenset(
         {
+            "ADD_TABLE",
             "ADD_INDEX",
             "DROP_INDEX",
             "ADD_FOREIGN_KEY",
@@ -304,14 +312,7 @@ class {class_name}(Migration):
         Returns:
             SQL string or None if not applicable
         """
-        if change.type == "ADD_TABLE":
-            # Full schema info not available; user must write this migration manually
-            raise NotImplementedError(
-                f"Cannot auto-generate migration for ADD_TABLE on {change.table}. "
-                "Write the migration manually or use --generator."
-            )
-
-        elif change.type == "DROP_TABLE":
+        if change.type == "DROP_TABLE":
             return f"DROP TABLE {change.table}"
 
         elif change.type == "RENAME_TABLE":

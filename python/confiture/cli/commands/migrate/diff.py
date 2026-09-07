@@ -16,16 +16,41 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.options import format_option
+from confiture.core import connection as _core_connection
+from confiture.core.desired_state import DesiredStateSource, load_desired_state
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
 from confiture.exceptions import ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
 
 @cli_boundary
 def migrate_diff(
-    old_schema: Path = typer.Argument(..., help="Old schema file"),
-    new_schema: Path = typer.Argument(..., help="New schema file"),
+    old_schema: Path | None = typer.Argument(None, help="Old schema file"),
+    new_schema: Path | None = typer.Argument(None, help="New schema file"),
+    from_: str | None = typer.Option(
+        None,
+        "--from",
+        help=(
+            "Current state: a schema file, a directory of .sql files, '-' for stdin, "
+            "or 'db' for the configured database (default: the first positional)"
+        ),
+    ),
+    to: str | None = typer.Option(
+        None,
+        "--to",
+        help=(
+            "Desired state: a schema file, a directory of .sql files (what fraiseql's "
+            "emit-ddl option writes), or '-' for stdin (default: the second positional)"
+        ),
+    ),
+    config: Path = typer.Option(
+        Path("db/environments/local.yaml"),
+        "--config",
+        "-c",
+        help="Environment config, read for `--from db` (default: db/environments/local.yaml)",
+    ),
     generate: bool = typer.Option(
         False,
         "--generate",
@@ -71,24 +96,16 @@ def migrate_diff(
       confiture build             - Build schema from DDL files
     """
     try:
-        # Validate format
-
-        # Validate files exist
-        for label, schema_path in (("Old", old_schema), ("New", new_schema)):
-            if not schema_path.exists():
-                fail(
-                    ValidationError(
-                        f"{label} schema file not found: {schema_path}",
-                        context={"path": str(schema_path)},
-                        resolution_hint="Pass two existing schema files: migrate diff OLD.sql NEW.sql",
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_file,
-                )
-
-        # Read schemas
-        old_sql = old_schema.read_text()
-        new_sql = new_schema.read_text()
+        current, desired = _resolve_sides(
+            old_schema,
+            new_schema,
+            from_=from_,
+            to=to,
+            json_mode=is_json(format_type),
+            report=report_file,
+        )
+        old_sql = _read_current(current, config)
+        new_sql = desired.read()
 
         # Compare schemas
         differ = SchemaDiffer()
@@ -128,6 +145,7 @@ def migrate_diff(
             changes=changes,
             migration_generated=generate and migration_file_name is not None,
             migration_file=migration_file_name,
+            source=desired.describe(),
         )
 
         format_migrate_diff_result(result, format_type, report_file, console)
@@ -143,3 +161,73 @@ def migrate_diff(
         )
         format_migrate_diff_result(result, format_type, report_file, console)
         raise typer.Exit(1) from e
+
+
+def _resolve_sides(
+    old_schema: Path | None,
+    new_schema: Path | None,
+    *,
+    from_: str | None,
+    to: str | None,
+    json_mode: bool,
+    report: Path | None,
+) -> tuple[str, DesiredStateSource]:
+    """The two sides of the diff: ``(current spec, desired-state source)``.
+
+    Either both positionals or both ``--from``/``--to``; mixing the two forms
+    is refused (exit 5). The current side is a spec string (``db`` is special),
+    the desired side a :class:`DesiredStateSource`.
+    """
+    positional = old_schema is not None or new_schema is not None
+    named = from_ is not None or to is not None
+    if positional and named:
+        fail(
+            ValidationError(
+                "Use either `migrate diff OLD NEW` or `--from … --to …`, not both.",
+                resolution_hint="Drop the positional arguments, or the --from/--to options.",
+            ),
+            json_mode=json_mode,
+            output_file=report,
+        )
+    if named:
+        if from_ is None or to is None:
+            fail(
+                ValidationError(
+                    "--from and --to go together.",
+                    resolution_hint="Usage: confiture migrate diff --from current.sql --to desired/",
+                ),
+                json_mode=json_mode,
+                output_file=report,
+            )
+        return from_, load_desired_state(to)
+    if old_schema is None or new_schema is None:
+        fail(
+            ValidationError(
+                "Two schema files are required (or use --from/--to).",
+                resolution_hint="Usage: confiture migrate diff old.sql new.sql",
+            ),
+            json_mode=json_mode,
+            output_file=report,
+        )
+    assert old_schema is not None and new_schema is not None  # fail() exits above
+    for label, schema_path in (("Old", old_schema), ("New", new_schema)):
+        if not schema_path.exists():
+            fail(
+                ValidationError(
+                    f"{label} schema file not found: {schema_path}",
+                    context={"path": str(schema_path)},
+                    resolution_hint="Pass two existing schema files: migrate diff OLD.sql NEW.sql",
+                ),
+                json_mode=json_mode,
+                output_file=report,
+            )
+    return str(old_schema), load_desired_state(str(new_schema))
+
+
+def _read_current(spec: str, config: Path) -> str:
+    """The current schema's DDL: ``db`` dumps the configured database, else a file/dir/stdin."""
+    if spec == "db":
+        return clean_pg_dump_output(
+            pg_dump_schema(_core_connection.dsn_from_config(_core_connection.load_config(config)))
+        )
+    return load_desired_state(spec).read()

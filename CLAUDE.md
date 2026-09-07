@@ -302,6 +302,7 @@ confiture/
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
 │   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL
 │   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
+│   │   ├── desired_state.py      # Where ``migrate diff`` reads its desired state from (issue #196)
 │   │   ├── differ.py             # Schema differ for detecting database schema changes
 │   │   ├── differ_sql.py         # Generate DDL SQL from SchemaChange objects
 │   │   ├── drift.py              # Schema drift detection for Confiture

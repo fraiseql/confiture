@@ -12,6 +12,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### Added
+
+- **`migrate diff --from … --to …` ingests a desired-state artifact (#196).** `--to` takes a schema
+  file, a directory of DDL files — what `fraiseql compile --emit-ddl <dir>` writes, read in name
+  order — or `-` for stdin; `--from` takes the same, or `db` for the configured database (read with
+  `pg_dump --schema-only`). The positional form `migrate diff OLD NEW` is unchanged; the two forms do
+  not mix (exit 5). `--format json` gains `source: {"kind": "sql", "path": …}` and its payload now has
+  a schema (`migrate-diff.schema.json`). New guide: `docs/guides/desired-state.md`.
+- **A new table is generated, not refused.** `MigrationGenerator` rendered every change type but
+  `ADD_TABLE`, which raised "write the migration manually". The differ now attaches the new table's
+  columns to the change and the generator writes `CREATE TABLE IF NOT EXISTS … (columns)` (multi-line
+  DDL rides in a triple-quoted `execute`), with `DROP TABLE` in `down()`.
+
+### Fixed
+
+- **`pg_dump` 17.6+ output parses again.** Recent `pg_dump` wraps a dump in `\restrict <token>` /
+  `\unrestrict` psql meta-commands; `clean_pg_dump_output` now drops them, so `migrate diff --from db`
+  and every other consumer of the cleaned dump see SQL only.
+
 ## [1.0.3] - 2026-09-07
 
 ### Changed

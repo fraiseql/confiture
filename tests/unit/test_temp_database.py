@@ -320,3 +320,21 @@ class TestCleanPgDumpOutput:
 
     def test_empty_input(self) -> None:
         assert clean_pg_dump_output("") == ""
+
+
+def test_clean_pg_dump_output_drops_the_restrict_meta_commands() -> None:
+    """pg_dump 17.6+ wraps a dump in ``\\restrict <token>`` … ``\\unrestrict <token>``: psql meta-commands, not SQL."""
+    from confiture.core.temp_database import clean_pg_dump_output
+
+    raw = (
+        "--\n-- PostgreSQL database dump\n--\n"
+        "\\restrict ycpkB2aQtFRNQly9036ulqllr969\n"
+        "SET statement_timeout = 0;\n"
+        "CREATE TABLE public.t (id integer NOT NULL);\n"
+        "\\unrestrict ycpkB2aQtFRNQly9036ulqllr969\n"
+    )
+
+    cleaned = clean_pg_dump_output(raw)
+
+    assert "\\restrict" not in cleaned and "\\unrestrict" not in cleaned
+    assert "CREATE TABLE public.t (id integer NOT NULL);" in cleaned

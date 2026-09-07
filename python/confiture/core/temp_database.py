@@ -257,7 +257,8 @@ _PG_DUMP_NOISE_RE = re.compile(
     r"SELECT\s+pg_catalog\.set_config|"
     r"--\s*Dumped\s+(from|by)\s|"
     r"CREATE\s+EXTENSION\s|"
-    r"COMMENT\s+ON\s+EXTENSION\s"
+    r"COMMENT\s+ON\s+EXTENSION\s|"
+    r"\\(un)?restrict\s"  # psql meta-commands pg_dump >= 17.6 wraps a dump in; never SQL
     r")",
     re.IGNORECASE,
 )

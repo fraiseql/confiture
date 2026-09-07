@@ -99,6 +99,7 @@ nav:
       - 'COPY Format Loading - Documentation Index': guides/copy-format-index.md
       - 'COPY Format Loading Guide': guides/copy-format-loading.md
       - 'Confiture Database Infrastructure Setup Guide': guides/database-setup.md
+      - 'Desired-state ingest: from a FraiseQL artifact to a migration': guides/desired-state.md
       - 'Dry-Run Mode': guides/dry-run.md
       - 'Error Context Development Guide': guides/error-context-development.md
       - 'Function Uniqueness': guides/function-uniqueness.md
