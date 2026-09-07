@@ -76,6 +76,11 @@ def collect_schema_facts(conn: Any) -> SchemaFacts:
     )
 
 
+def server_major(conn: Any) -> int | None:
+    """The server's PostgreSQL major version, or ``None`` when it cannot be read."""
+    return _server_version(conn)
+
+
 def _server_version(conn: Any) -> int | None:
     """The server *major* version.
 

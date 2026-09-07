@@ -12,6 +12,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.3.0] - 2026-09-07
+
+### Added
+
+- **Expand/contract migrations run online, stage by stage, with checkpoints (#200).**
+  `core/expand_contract.py` turns the replica classifier's advice into a staged plan — add a NOT NULL
+  column with a default (nullable + `CHECK … NOT VALID` → backfill → `VALIDATE` → `SET NOT NULL`),
+  add a CHECK/FOREIGN KEY (`NOT VALID` → `VALIDATE`), change a column's type (new column + dual-write
+  trigger → backfill → swap → drop, destructive) — each stage costed by the lock-profile table with the
+  longest ACCESS EXCLUSIVE hold it takes. `core/step_runner.py` drives a plan with a checkpoint per
+  stage in `<tracking_table>_steps` (created beside the ledger), every statement in its own
+  transaction; a run that dies between stages resumes from the checkpoint. New `migrate steps` lists
+  the checkpoints and `migrate steps --resume <version>` continues one, recording the migration in
+  the ledger only once its last contract stage has finished; `--format json` has
+  `migrate-steps.schema.json`. The lock-profile table gains `validate_constraint` and
+  `create_trigger`, and costs `SET NOT NULL` as metadata-only once a validated CHECK proves it
+  (PostgreSQL ≥ 12); the classifier's `AddColumn` carries the type and default as written,
+  `AddConstraint` its name and body.
+- **The backfill is batched, observable and resumable.** `core/backfill.py`'s `BackfillExecutor` runs
+  the backfill stage over the ctid-batched `UPDATE` of `core/large_tables.py`: `migration.backfill.batch_size`
+  rows per committed batch (new config key, default 5 000), a checkpoint with the next ctid block after
+  every commit (`batch_cursor`), a `backfill_progress` event per batch, and resumption from the
+  checkpoint's block instead of the start. `migration.backfill.max_lock_ms` (and `--max-lock-ms` on
+  `migrate steps --resume`) pauses between batches while another session waits for a lock on the
+  table. `BatchedMigration.backfill_column` gains `start_block` and `BatchConfig.block_callback`.
+- **`migrate up --online`.** A pending `.up.sql` whose every statement has a staged plan applies as
+  expand → backfill → contract through the step runner (`--max-lock-ms` for the waiter guard;
+  `--allow-destructive` for a contract stage that drops the old column); any other migration applies
+  the classic way. `migrate preflight` reports `online_available` and `online_stages` per migration
+  (schema updated; `window_safe` is untouched). New guide `docs/guides/zero-downtime.md`. e2e: a type
+  change on 200 000 rows runs online with the longest ACCESS EXCLUSIVE hold on the table, sampled from a
+  second connection, under 100 ms and below the classic rewrite's; a run that dies mid-backfill is
+  resumed by `migrate steps --resume` with every row accounted for.
+
 ## [1.2.0] - 2026-09-07
 
 ### Added

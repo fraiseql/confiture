@@ -18,11 +18,18 @@ from confiture.core.replica.classifier import (
 _COLUMN_CASES = [
     (
         "ALTER TABLE t ADD COLUMN c int;",
-        AddColumn(table="t", column="c", nullable=True, has_default=False),
+        AddColumn(table="t", column="c", nullable=True, has_default=False, type_sql="integer"),
     ),
     (
         "ALTER TABLE t ADD COLUMN c int NOT NULL DEFAULT 0;",
-        AddColumn(table="t", column="c", nullable=False, has_default=True),
+        AddColumn(
+            table="t",
+            column="c",
+            nullable=False,
+            has_default=True,
+            type_sql="integer",
+            default_sql="0",
+        ),
     ),
     ("ALTER TABLE t DROP COLUMN c;", DropColumn(table="t", column="c")),
     ("ALTER TABLE t RENAME COLUMN a TO b;", RenameColumn(table="t", old="a", new="b")),
@@ -39,11 +46,15 @@ _OTHER_CASES = [
     ("CREATE INDEX CONCURRENTLY idx ON t (c);", CreateIndex(table="t", concurrently=True)),
     (
         "ALTER TABLE t ADD CONSTRAINT ck CHECK (c > 0);",
-        AddConstraint(table="t", kind="check", not_valid=False),
+        AddConstraint(
+            table="t", kind="check", not_valid=False, name="ck", definition="CHECK (c > 0)"
+        ),
     ),
     (
         "ALTER TABLE t ADD CONSTRAINT ck CHECK (c > 0) NOT VALID;",
-        AddConstraint(table="t", kind="check", not_valid=True),
+        AddConstraint(
+            table="t", kind="check", not_valid=True, name="ck", definition="CHECK (c > 0)"
+        ),
     ),
     ("CREATE TABLE t (id int);", CreateTable(table="t")),
 ]

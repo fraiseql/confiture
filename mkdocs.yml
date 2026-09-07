@@ -128,6 +128,7 @@ nav:
       - 'Structured Output Guide': guides/structured-output.md
       - 'Superuser Migrations': guides/superuser-migrations.md
       - 'View Helpers': guides/view-helpers.md
+      - 'Zero-downtime migrations: expand, backfill, contract': guides/zero-downtime.md
   - 'Reference':
       - 'CLI Reference': reference/cli.md
       - 'Configuration Reference': reference/configuration.md

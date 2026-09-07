@@ -55,6 +55,7 @@ class BatchConfig:
     max_retries: int = 3
     progress_callback: Callable[[int, int], None] | None = None
     checkpoint_callback: Callable[[int], None] | None = None
+    block_callback: Callable[[int], None] | None = None  # the next ctid block, after each commit
 
 
 @dataclass
@@ -265,6 +266,7 @@ class BatchedMigration:
         expression: str,
         where_clause: str = "TRUE",
         start_from: int = 0,
+        start_block: int | None = None,
     ) -> BatchProgress:
         """Backfill a column in batches, committing after each.
 
@@ -319,7 +321,13 @@ class BatchedMigration:
             rows_per_block = max(1, -(-total_rows // blocks))
             blocks_per_batch = max(1, self.config.batch_size // rows_per_block)
             total_batches = -(-blocks // blocks_per_batch)
-            first_block = min(blocks, start_from // rows_per_block)
+            # ``start_block`` is the resumable cursor (``block_callback`` reports it);
+            # ``start_from`` maps rows to a block through today's matching count.
+            first_block = (
+                min(blocks, start_block)
+                if start_block is not None
+                else min(blocks, start_from // rows_per_block)
+            )
 
             processed = start_from
             progress = BatchProgress(
@@ -359,6 +367,8 @@ class BatchedMigration:
 
                 if self.config.checkpoint_callback:
                     self.config.checkpoint_callback(processed)
+                if self.config.block_callback:
+                    self.config.block_callback(block + blocks_per_batch)
 
                 logger.info(
                     f"Backfill batch {batch_num}/{total_batches}: "

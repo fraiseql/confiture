@@ -11,14 +11,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from confiture.core._migrator import online as _online
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
+from confiture.core.backfill import BackfillSettings
 from confiture.core.checksum import (
     ChecksumConfig,
     ChecksumMismatchBehavior,
     MigrationChecksumVerifier,
 )
+from confiture.core.step_runner import RunOptions
 from confiture.exceptions import ConfigurationError, MigrationError, ValidationError
 from confiture.models.results import MigrateUpResult, MigrationApplied, SkippedMigration
 
@@ -118,6 +121,7 @@ def _up_under_lock(
     session: MigratorSession,
     *,
     allow_destructive: bool,
+    online: RunOptions | None,
     target: str | None,
     dry_run: bool,
     dry_run_execute: bool,
@@ -157,7 +161,13 @@ def _up_under_lock(
             session, plan, target=target, force=force, on_event=on_event, batch=batch
         )
     applied = _apply_pending(
-        session, plan, target=target, force=force, on_event=on_event, batch=batch
+        session,
+        plan,
+        target=target,
+        force=force,
+        on_event=on_event,
+        batch=batch,
+        online=online,
     )
     return _up_result(plan, applied, force=force)
 
@@ -279,6 +289,7 @@ def _apply_pending(
     force: bool,
     on_event: UpObserver | None,
     batch: Any | None,
+    online: RunOptions | None = None,
 ) -> _Applied:
     """Apply the pending files in order; stop at the target, a superuser halt or a failure."""
     assert session._migrator is not None
@@ -324,7 +335,7 @@ def _apply_pending(
             emit(on_event, "applying", version=migration.version, name=migration.name)
             try:
                 start = _time.time()
-                session._migrator.apply(migration, force=force, migration_file=migration_file)
+                _apply_one(session, migration, migration_file, force=force, online=online)
                 elapsed = int((_time.time() - start) * 1000)
                 applied.total_duration_ms += elapsed
                 applied.migrations.append(
@@ -356,6 +367,23 @@ def _apply_pending(
             applied.failure = exc
             emit(on_event, "failed", message=str(exc))
     return applied
+
+
+def _apply_one(
+    session: MigratorSession,
+    migration: Any,
+    migration_file: Path,
+    *,
+    force: bool,
+    online: RunOptions | None,
+) -> None:
+    """Apply one migration: as expand/contract stages when asked and possible, else the classic way."""
+    assert session._migrator is not None
+    plans = _online.online_plans(migration_file, session._conn) if online is not None else None
+    if plans:
+        _online.apply_online(session._migrator, migration, migration_file, plans, online)
+        return
+    session._migrator.apply(migration, force=force, migration_file=migration_file)
 
 
 def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResult:
@@ -538,6 +566,8 @@ def up(
     install_view_helpers: bool | None = None,
     on_event: UpObserver | None = None,
     batch: Any | None = None,
+    online: bool = False,
+    backfill: BackfillSettings | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
     # Bound at call time through the module, so a test that patches
@@ -581,6 +611,13 @@ def up(
         return _up_under_lock(
             session,
             allow_destructive=allow_destructive,
+            online=(
+                RunOptions(
+                    allow_destructive=allow_destructive, on_event=on_event, settings=backfill
+                )
+                if online
+                else None
+            ),
             target=target,
             dry_run=dry_run,
             dry_run_execute=dry_run_execute,

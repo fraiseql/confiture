@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-steps.schema.json",
+  "title": "confiture migrate steps --format json",
+  "description": "The online runner's checkpoints (issue #200): one row per (migration, plan, stage) in `<tracking_table>_steps`, and the version `--resume` continued, if any.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "steps",
+    "resumed"
+  ],
+  "properties": {
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "migration",
+          "plan_index",
+          "stage",
+          "state",
+          "batch_cursor",
+          "rows_done",
+          "updated_at"
+        ],
+        "properties": {
+          "migration": {
+            "type": "string",
+            "description": "The migration version the stage belongs to."
+          },
+          "plan_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Which staged plan of the migration (a file with several multi-step statements has several)."
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "expand",
+              "backfill",
+              "contract"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "done",
+              "failed"
+            ],
+            "description": "`running`: started and not finished — after a crash, the stage to resume from. `done`: finished. `failed`: its statement or batch raised."
+          },
+          "batch_cursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The backfill's last committed batch position; null for a DDL stage."
+          },
+          "rows_done": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "ISO-8601 timestamp of the last change to the row."
+          }
+        }
+      }
+    },
+    "resumed": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The version `--resume` continued to completion, or null."
+    }
+  }
+}

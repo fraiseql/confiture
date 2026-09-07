@@ -187,6 +187,7 @@ def profile_for_kind(
     concurrently: bool = False,
     not_valid: bool = False,
     rewrites: bool | None = None,
+    proven_by_check: bool = False,
     server_version: int | None = None,
 ) -> LockProfile:
     """The lock and rewrite cost of a change of ``kind``.
@@ -206,7 +207,7 @@ def profile_for_kind(
             has_default=has_default, nullable=nullable, server_version=server_version
         )
     if kind == "set_not_null":
-        return _set_not_null(server_version)
+        return _set_not_null(server_version, proven_by_check=proven_by_check)
     if kind == "alter_column_type":
         return _alter_column_type(rewrites)
     if kind == "add_constraint":
@@ -277,6 +278,17 @@ _PROFILE_BY_KIND: dict[str, LockProfile] = {
     "drop_table": _METADATA_ALTER,
     "truncate": _METADATA_ALTER,
     "drop_constraint": _METADATA_ALTER,
+    # The expand/contract stages: a validation scans without blocking, a
+    # trigger is a catalog change that briefly excludes writers.
+    "validate_constraint": LockProfile(
+        lock=LockLevel.SHARE_UPDATE_EXCLUSIVE,
+        rewrites_table=False,
+        blocks_reads=False,
+        blocks_writes=False,
+        duration=Duration.MINUTES_PLUS,
+        note="scans every row to validate; reads and writes continue",
+    ),
+    "create_trigger": _METADATA_ALTER,
     "set_column_default": _METADATA_ALTER,
     "drop_column_default": _METADATA_ALTER,
     "column_default": _METADATA_ALTER,
@@ -424,8 +436,26 @@ def _add_column(*, has_default: bool, nullable: bool, server_version: int | None
     )
 
 
-def _set_not_null(server_version: int | None) -> LockProfile:
-    """`SET NOT NULL` scans, unless PG 12+ can prove it from a valid CHECK."""
+def _set_not_null(server_version: int | None, *, proven_by_check: bool = False) -> LockProfile:
+    """``SET NOT NULL``: a full scan, unless a validated CHECK already proves it (PostgreSQL ≥ 12).
+
+    ``proven_by_check`` is the expand/contract runner's fact: it validated
+    ``CHECK (col IS NOT NULL)`` first, so the server skips the scan.
+    """
+    if (
+        proven_by_check
+        and server_version is not None
+        and server_version >= NOT_NULL_FROM_CHECK_SINCE
+    ):
+        return LockProfile(
+            lock=LockLevel.ACCESS_EXCLUSIVE,
+            rewrites_table=False,
+            blocks_reads=True,
+            blocks_writes=True,
+            duration=Duration.METADATA,
+            since_version=NOT_NULL_FROM_CHECK_SINCE,
+            note="a validated CHECK (col IS NOT NULL) proves it; no scan",
+        )
     if server_version is not None and server_version >= NOT_NULL_FROM_CHECK_SINCE:
         return LockProfile(
             lock=LockLevel.ACCESS_EXCLUSIVE,

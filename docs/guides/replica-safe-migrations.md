@@ -86,3 +86,5 @@ This static guarantee is the foundation for read-replica routing and replica-saf
 plan generation in the broader stack: specql#13 (replica-safe migration plan
 generation) and fraiseql#407 (read-replica read routing) rely on it; the deploy
 tool (fraisier) owns the live replica topology and sets `infrastructure.replicas`.
+
+> Since 1.3.0 `migrate up --online` drives the multi-step advice above as staged phases with checkpoints — see [Zero-downtime migrations](zero-downtime.md).

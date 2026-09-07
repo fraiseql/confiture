@@ -26,6 +26,9 @@ UpEventKind = Literal[
     "superuser_halt",
     "skipped_non_transactional",
     "target_reached",
+    "stage_started",
+    "stage_done",
+    "backfill_progress",
 ]
 
 

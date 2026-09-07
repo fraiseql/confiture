@@ -1244,6 +1244,8 @@ confiture migrate up [OPTIONS]
 | `--snapshots-dir` | - | path | - | Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history) |
 | `--require-reversible` | - | Flag | off | Abort if any pending migration lacks a .down.sql file (guarantees rollback capability). |
 | `--allow-destructive` | - | Flag | off | Apply migrations gated as destructive (data is lost): the generator's -- confiture:destructive directive, or destructive = True on a Python migration. |
+| `--online` | - | Flag | off | Apply a migration the classifier marks multi-step as expand → backfill → contract stages with a checkpoint each (see migrate steps); other migrations apply the classic way. |
+| `--max-lock-ms` | - | integer | - | With --online: pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms). |
 | `--batched` | - | Flag | off | Use batch processing for large-table operations (default: off) |
 | `--batch-size` | - | integer | `10000` | Rows per batch when --batched is active (default: 10000) |
 | `--batch-sleep` | - | float | `0.1` | Seconds to sleep between batches to reduce lock pressure (default: 0.1) |
@@ -2846,6 +2848,32 @@ confiture migrate reinit [OPTIONS]
 | `--yes` | `-y` | Flag | off | Skip confirmation prompt |
 
 <!-- END GENERATED: cli confiture migrate reinit -->
+
+### `confiture migrate steps`
+
+List the online runner's checkpoints, or resume an online migration from them.
+
+<!-- BEGIN GENERATED: cli confiture migrate steps -->
+
+**Usage**
+
+```bash
+confiture migrate steps [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--config` | `-c` | path | `db/environments/local.yaml` | Path to environment config file |
+| `--migrations-dir` | - | path | `db/migrations` | Directory containing migration files |
+| `--resume` | - | text | - | Continue the online migration with this version from its last checkpoint |
+| `--allow-destructive` | - | Flag | off | Run a contract stage that drops the old column (data is lost) |
+| `--max-lock-ms` | - | integer | - | Pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms) |
+| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--output` | `-o` | path | - | Write output to file |
+
+<!-- END GENERATED: cli confiture migrate steps -->
 
 ## `confiture lint`
 

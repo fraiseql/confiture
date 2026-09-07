@@ -283,7 +283,7 @@ confiture/
 │   │   ├── seed.py               # CLI commands for seed data validation
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
-│   │   ├── commands/             # CLI command modules for Confiture (30 modules)
+│   │   ├── commands/             # CLI command modules for Confiture (31 modules)
 │   │   └── formatters/           # (7 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
@@ -292,6 +292,7 @@ confiture/
 │   ├── core/                     # Core migration execution and schema building components
 │   │   ├── __init__.py           # Core migration execution and schema building components
 │   │   ├── _pglast_enums.py      # Name-resolved PostgreSQL parse-node enum members (issue #192)
+│   │   ├── backfill.py           # The batched backfill between expand and contract: bounded, observable,…
 │   │   ├── baseline_detector.py  # Baseline detector for auto-detecting migration level from a live databa…
 │   │   ├── blue_green.py         # Blue-green migration orchestration
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
@@ -310,6 +311,7 @@ confiture/
 │   │   ├── dry_run.py            # SAVEPOINT-based dry-run execution with guaranteed rollback
 │   │   ├── error_context.py      # Enhanced error context system for user-friendly error messages
 │   │   ├── error_handler.py      # CLI error handler for structured error output
+│   │   ├── expand_contract.py    # The expand/contract plan: the classifier's online advice as explicit, c…
 │   │   ├── expected_db.py        # Build an "expected" schema into a throwaway database for pg-normalised…
 │   │   ├── fk_extractor.py       # Two-pass FK extraction for cross-schema build ordering
 │   │   ├── function_body_checker.py # Check that function/procedure body changes include an accompanying migr…
@@ -357,6 +359,7 @@ confiture/
 │   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
 │   │   ├── sql_utils.py          # Shared SQL utility functions
 │   │   ├── ssh_tunnel.py         # SSH tunnel context manager for remote database access
+│   │   ├── step_runner.py        # Drive an expand/contract plan stage by stage, with a checkpoint after e…
 │   │   ├── strategy.py           # Migration strategy header parser
 │   │   ├── stub_generator.py     # Generate typed Python wrapper stubs from PostgreSQL functions
 │   │   ├── syncer.py             # Production data synchronization
@@ -368,7 +371,7 @@ confiture/
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
-│   │   ├── _migrator/            # (18 modules)
+│   │   ├── _migrator/            # (19 modules)
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (4 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
