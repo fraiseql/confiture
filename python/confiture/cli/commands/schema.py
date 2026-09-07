@@ -54,7 +54,7 @@ def _violation_to_unified_issue(v, tool: str, file=None):
 @cli_boundary
 def init(
     path: Path = typer.Argument(
-        Path("."),
+        Path(),
         help="Project directory to initialize",
     ),
 ) -> None:
@@ -214,7 +214,7 @@ def build(
         help="Output file path (default: db/generated/schema_{env}.sql)",
     ),
     project_dir: Path = typer.Option(
-        Path("."),
+        Path(),
         "--project-dir",
         help="Project directory (default: current directory)",
     ),
@@ -743,7 +743,7 @@ def lint(
         help="Environment to lint (default: local)",
     ),
     project_dir: Path = typer.Option(
-        Path("."),
+        Path(),
         "--project-dir",
         help="Project directory (default: current directory)",
     ),

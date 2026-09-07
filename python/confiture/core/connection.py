@@ -36,7 +36,7 @@ def load_config(config_file: Path) -> dict[str, Any]:
         )
 
     try:
-        with open(config_file) as f:
+        with Path(config_file).open() as f:
             config: dict[str, Any] = yaml.safe_load(f)
         return config
     except yaml.YAMLError as e:

@@ -185,7 +185,7 @@ def confiture_env() -> str:
 @pytest.fixture(scope="session")
 def confiture_project_dir() -> Path:
     """Project directory the template schema is built from (override to customise)."""
-    return Path(".")
+    return Path()
 
 
 @pytest.fixture(scope="session")

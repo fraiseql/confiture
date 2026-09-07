@@ -88,7 +88,7 @@ class TestMigrationAccompanimentCheckerSignatureIntegration:
             checker = MigrationAccompanimentChecker.__new__(MigrationAccompanimentChecker)
 
         checker.env = "local"
-        checker.repo_path = Path(".")
+        checker.repo_path = Path()
         checker.git_repo = MagicMock()
         checker.differ = MagicMock()
         return checker

@@ -186,7 +186,7 @@ class SchemaLinter:
             config: Linting configuration (optional)
         """
         self.env = env
-        self.project_dir = project_dir or Path(".")
+        self.project_dir = project_dir or Path()
         self.config = config or LintConfig()
 
         # Load environment configuration

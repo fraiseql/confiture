@@ -215,7 +215,7 @@ class TestAccompanimentGracefulDegradation:
         from confiture.core.git_accompaniment import MigrationAccompanimentChecker
         from confiture.models.git import MigrationAccompanimentReport
 
-        checker = MigrationAccompanimentChecker("local", Path("."))
+        checker = MigrationAccompanimentChecker("local", Path())
 
         with (
             patch.object(
@@ -237,7 +237,7 @@ class TestAccompanimentGracefulDegradation:
         """migration_error is populated with the original error description."""
         from confiture.core.git_accompaniment import MigrationAccompanimentChecker
 
-        checker = MigrationAccompanimentChecker("local", Path("."))
+        checker = MigrationAccompanimentChecker("local", Path())
         original_error = "Maximum number of tokens exceeded (10000)."
 
         with (
@@ -294,7 +294,7 @@ class TestGetNewMigrationsPyFiles:
     def _make_checker(self):
         from confiture.core.git_accompaniment import MigrationAccompanimentChecker
 
-        return MigrationAccompanimentChecker("local", Path("."))
+        return MigrationAccompanimentChecker("local", Path())
 
     def test_py_migration_file_is_recognised(self):
         """.py file in db/migrations/ counts as a migration."""

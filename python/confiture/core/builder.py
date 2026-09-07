@@ -223,7 +223,7 @@ class SchemaBuilder:
 
         if not common_parts:
             # No common parent, use current directory
-            return Path(".")
+            return Path()
 
         # Reconstruct path from common parts
         return Path(*common_parts)

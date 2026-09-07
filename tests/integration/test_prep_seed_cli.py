@@ -84,7 +84,7 @@ class TestPrepSeedCLI:
         # Change to temp directory
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -118,7 +118,7 @@ class TestPrepSeedCLI:
         """Test that --static-only runs only Levels 1-3."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -150,7 +150,7 @@ class TestPrepSeedCLI:
         """Test that --full-execution requires --database-url."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -182,7 +182,7 @@ class TestPrepSeedCLI:
         """Test that Level 4+ requires --database-url."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -215,7 +215,7 @@ class TestPrepSeedCLI:
         """Test JSON output format."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -255,7 +255,7 @@ class TestPrepSeedCLI:
         """Test JSON output to file."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -294,7 +294,7 @@ class TestPrepSeedCLI:
         """Test exit code 0 when no violations found."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             # Create clean seeds directory
             seeds_dir = tmp_path / "db" / "seeds" / "prep"
@@ -334,7 +334,7 @@ class TestPrepSeedCLI:
         """Test exit code 1 when violations found."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -365,7 +365,7 @@ class TestPrepSeedCLI:
         """Test exit code 2 on configuration error."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -397,7 +397,7 @@ class TestPrepSeedCLI:
         """Test CSV output format."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(tmp_path)
 
@@ -432,7 +432,7 @@ class TestPrepSeedCLI:
         """Test that multiple seed files are scanned."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             seeds_dir = tmp_path / "db" / "seeds" / "prep"
             seeds_dir.mkdir(parents=True)

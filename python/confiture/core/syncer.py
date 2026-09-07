@@ -556,7 +556,7 @@ class ProductionSyncer:
         }
 
         checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(checkpoint_file, "w") as f:
+        with Path(checkpoint_file).open("w") as f:
             json.dump(checkpoint_data, f, indent=2)
 
     def load_checkpoint(self, checkpoint_file: Path) -> None:
@@ -565,7 +565,7 @@ class ProductionSyncer:
         Args:
             checkpoint_file: Path to checkpoint file
         """
-        with open(checkpoint_file) as f:
+        with Path(checkpoint_file).open() as f:
             self._checkpoint_data = json.load(f)
 
         # Restore completed tables

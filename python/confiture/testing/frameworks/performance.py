@@ -278,7 +278,7 @@ class PerformanceBaseline:
     def _load_baselines(self):
         """Load baseline metrics from file."""
         if self.baselines_file.exists():
-            with open(self.baselines_file) as f:
+            with Path(self.baselines_file).open() as f:
                 data = json.load(f)
                 self.baselines = data.get("baselines", {})
 
@@ -286,7 +286,7 @@ class PerformanceBaseline:
         """Save baseline metrics to file."""
         data = {"baselines": self.baselines}
         self.baselines_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.baselines_file, "w") as f:
+        with Path(self.baselines_file).open("w") as f:
             json.dump(data, f, indent=2)
 
     def set_baseline(self, migration_name: str, profile: PerformanceProfile):
@@ -457,7 +457,7 @@ class PerformanceBaseline:
         """Export baselines to file."""
         data = {"baselines": self.baselines}
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
+        with Path(path).open("w") as f:
             json.dump(data, f, indent=2)
 
     def export_comparison(self, profile: PerformanceProfile, path: Path):
@@ -476,5 +476,5 @@ class PerformanceBaseline:
         }
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
+        with Path(path).open("w") as f:
             json.dump(comparison, f, indent=2)

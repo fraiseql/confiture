@@ -207,7 +207,7 @@ class AnonymizationProfile(BaseModel):
             raise FileNotFoundError(f"Profile file not found: {path}")
 
         try:
-            with open(path) as f:
+            with Path(path).open() as f:
                 # ✅ SAFE: Use safe_load, not load
                 raw_data = yaml.safe_load(f)
         except yaml.YAMLError as e:

@@ -58,7 +58,7 @@ def test_output_json_stamps_the_parser(capsys: pytest.CaptureFixture[str]) -> No
 
 def test_output_json_stamps_the_parser_into_a_file(tmp_path: Path) -> None:
     target = tmp_path / "out.json"
-    _output_json({"ok": True}, target, Console(file=open(tmp_path / "log", "w")))  # noqa: SIM115
+    _output_json({"ok": True}, target, Console(file=(tmp_path / "log").open("w")))
     assert json.loads(target.read_text())["parser"] == _expected_stamp()
 
 

@@ -215,6 +215,7 @@ select = [
     "SIM", # flake8-simplify
     "RUF",  # ruff-specific rules (Phase 11, D6); RUF100 alone since Phase 08
     "ERA",  # commented-out code (Phase 11, D6): prose comments that parse as code are reworded
+    "PTH",  # pathlib over os.path (Phase 11, D6)
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)

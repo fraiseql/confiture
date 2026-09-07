@@ -106,7 +106,7 @@ def compute_checksum(file_path: Path, algorithm: str = "sha256") -> str:
     """
     hasher = hashlib.new(algorithm)
 
-    with open(file_path, "rb") as f:
+    with Path(file_path).open("rb") as f:
         # Read in chunks for memory efficiency with large files
         for chunk in iter(lambda: f.read(8192), b""):
             hasher.update(chunk)

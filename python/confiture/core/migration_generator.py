@@ -150,7 +150,7 @@ class MigrationGenerator:
         lock_file.parent.mkdir(parents=True, exist_ok=True)
         lock_file.touch(exist_ok=True)
 
-        lock_fd = open(lock_file)  # noqa: SIM115 - File lock requires open handle
+        lock_fd = Path(lock_file).open()  # noqa: SIM115 - File lock requires open handle
 
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

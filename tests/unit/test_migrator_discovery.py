@@ -1,5 +1,6 @@
 """Unit tests for migration discovery functionality."""
 
+from pathlib import Path
 from unittest.mock import Mock
 
 from confiture.core.migrator import Migrator
@@ -44,7 +45,7 @@ class AddEmail(Migration):
         # Change to temp directory
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -83,7 +84,7 @@ class CreateUsers(Migration):
 
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -140,7 +141,7 @@ class AddEmail(Migration):
 
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -176,7 +177,7 @@ class AddEmail(Migration):
         """Should handle empty migrations directory gracefully."""
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -207,7 +208,7 @@ class AddEmail(Migration):
 
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -246,7 +247,7 @@ class AddEmail(Migration):
 
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -271,7 +272,7 @@ class AddEmail(Migration):
 
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:
@@ -308,7 +309,7 @@ class AddEmail(Migration):
 
         import os
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         os.chdir(temp_project_dir)
 
         try:

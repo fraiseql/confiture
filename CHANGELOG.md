@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw strings, one dataclass default factory, one useless conditional. `RUF001–003` (confusable
   characters) are ignored with a written reason: the typographic `ℹ → —` in user-facing text are deliberate.
   Example migrations keep plain hook lists (`examples/*` ignores `RUF012`) because that is the API.
+- **`ERA` and `PTH` families enabled.** ERA's 22 hits were prose comments that parsed as code (row-shape
+  tuples, `# mode == "apply"`) and are reworded — no commented-out code existed. PTH: 67 sites moved to
+  pathlib (`Path.cwd()`, `Path(...).open()`, `.mkdir(parents=True)`, `.stat()`, `Path()` for `Path(".")`).
 
 ## [0.54.0] - 2026-09-07
 

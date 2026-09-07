@@ -9,7 +9,6 @@ below is one the three consumers must now agree on.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -273,4 +272,4 @@ class TestFindProjectRoot:
         monkeypatch.chdir(tmp_path)
 
         assert find_project_root(root / "db" / "migrations" / "x.py") == root.resolve()
-        assert Path(os.getcwd()) == tmp_path
+        assert Path(Path.cwd()) == tmp_path

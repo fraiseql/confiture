@@ -505,7 +505,7 @@ class MutationRunner:
             if not migration_file.exists():
                 raise FileNotFoundError(f"Migration not found: {migration_file}")
 
-            with open(migration_file) as f:
+            with Path(migration_file).open() as f:
                 original_sql = f.read()
 
             # Apply mutation
@@ -641,5 +641,5 @@ class MutationRunner:
 
     def export_report(self, report: MutationReport, path: Path):
         """Export report to file."""
-        with open(path, "w") as f:
+        with Path(path).open("w") as f:
             json.dump(report.to_dict(), f, indent=2)
