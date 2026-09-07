@@ -26,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CREATE INDEX` of their own: a free-standing index the live database grew on an index-less table is
   now an `extra_index` item. `indexes_checked` counts the indexes compared rather than the items found.
 
+### Changed
+
+- **One SQL lexer.** `core/sql_lexer.py` gains `tokens()` (libpg_query's scanner with absolute
+  offsets, the data rows of a `COPY … FROM stdin` block skipped up to their `\.` line, a scanner error
+  ending the code) and `code_text()` (the text with everything that is not code blanked, line for line).
+  The `psql` applier's meta-command and inline-COPY scan runs on them; its hand-written line lexer and
+  its two regexes are gone. Behaviour is unchanged: every pinned meta-command and COPY case passes as
+  before.
+
 ## [1.0.0] - 2026-09-07
 
 Confiture 1.0.0 freezes its contracts. What is frozen, and where each is pinned:

@@ -20,35 +20,28 @@ semantics and avoids breaking any ``CREATE … CONCURRENTLY`` in schema files.
 **Meta-commands are refused.** ``psql`` executes backslash commands: ``\\!``
 runs a shell command, ``\\copy … TO PROGRAM`` pipes data into one, ``\\i``
 reads any file the operator can read. Schema and seed files are repository
-content; the host running ``psql`` is not. :func:`reject_meta_commands` scans
+content; the host running ``psql`` is not. :func:`reject_meta_commands` sees
 the text the way ``psql``'s own lexer does — a backslash outside quotes,
 comments, dollar-quoted bodies and ``COPY … FROM stdin`` data blocks is a
 command wherever it sits on the line — and raises before ``psql`` is started.
-The one tolerated backslash is a line consisting of ``\\.``, the COPY
-terminator. The scan assumes ``standard_conforming_strings = on`` (the default
-since PostgreSQL 9.1); with it off, ``psql`` would treat *more* text as string
+What is code and what is not comes from :func:`confiture.core.sql_lexer.code_text`
+(libpg_query's scanner, the data rows skipped up to their ``\\.`` line). The
+one tolerated backslash is a line consisting of ``\\.``, the COPY terminator.
+The scanner assumes ``standard_conforming_strings = on`` (the default since
+PostgreSQL 9.1); with it off, ``psql`` would treat *more* text as string
 literal than the scanner does, so the disagreement can only over-report.
 """
 
 from __future__ import annotations
 
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from confiture.core import sql_lexer
 from confiture.exceptions import SchemaError
 from confiture.url_redaction import libpq_env, redact_url, split_password
 
-# An inline ``COPY … FROM stdin`` statement, tested against the code text of one
-# statement (comments, literals and quoted identifiers already blanked) when the
-# scanner reaches its terminating ``;`` — the moment ``psql`` switches to reading
-# COPY data from the following lines. Server-side ``COPY … FROM '/path'`` has no
-# ``stdin`` token and is intentionally not matched.
-_COPY_STDIN_STMT_RE = re.compile(r"^\s*COPY\b.*\bFROM\s+stdin\b", re.IGNORECASE | re.DOTALL)
-# A dollar-quote opener: ``$$`` or ``$tag$`` where the tag is an identifier.
-# ``$1`` (a positional parameter) has no closing ``$`` and does not match.
-_DOLLAR_TAG_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
 _COPY_TERMINATOR = "\\."
 
 _MISSING_PSQL_BASE = (
@@ -66,13 +59,12 @@ _MISSING_PSQL_COPY = (
 def contains_inline_copy(sql: str) -> bool:
     """Return True if *sql* contains an inline ``COPY … FROM stdin`` block.
 
-    Answered by the same scanner that skips COPY data for
-    :func:`find_meta_commands`, so the two agree on what a COPY block is: a
-    ``COPY … FROM stdin`` statement outside comments, string literals,
-    dollar-quoted bodies and quoted identifiers, terminated by ``;``. The word
-    ``copy`` inside a comment, a function body or a string does not count, and
-    server-side ``COPY … FROM '/path'`` is not matched (it has no ``stdin``
-    token).
+    Answered by the lexer that skips COPY data for :func:`find_meta_commands`,
+    so the two agree on what a COPY block is: a ``COPY … FROM stdin`` statement
+    outside comments, string literals, dollar-quoted bodies and quoted
+    identifiers, terminated by ``;``. The word ``copy`` inside a comment, a
+    function body or a string does not count, and server-side ``COPY … FROM
+    '/path'`` is not matched (it has no ``stdin`` token).
 
     Args:
         sql: SQL text to inspect.
@@ -80,7 +72,7 @@ def contains_inline_copy(sql: str) -> bool:
     Returns:
         True if an inline COPY-from-stdin statement is present.
     """
-    return _scan(sql)[1] > 0
+    return sql_lexer.code_text(sql).copy_blocks > 0
 
 
 @dataclass(frozen=True)
@@ -154,125 +146,6 @@ def reject_meta_commands(sql: str, *, source: str | Path | None) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# The scanner
-# ---------------------------------------------------------------------------
-#
-# ``code_text`` is the one place that decides what is SQL and what is not. It
-# is a line-oriented lexer with the same states as ``psql``'s: string literal
-# (standard and ``E''``), quoted identifier, nested block comment, dollar-quoted
-# body, and — after a ``COPY … FROM stdin;`` — a data block ending at a line
-# that is exactly ``\.``. Line comments end with their line. The rest of a line
-# after a COPY statement's ``;`` is still code (psql lexes it before it starts
-# reading data), and the data block is skipped at the line level regardless of
-# lexer state, exactly as psql consumes it from the input stream.
-
-_NORMAL, _SQUOTE, _ESQUOTE, _DQUOTE, _BLOCK, _DOLLAR = range(6)
-
-
-def _is_ident_char(c: str) -> bool:
-    return c.isalnum() or c in "_$"
-
-
-class _Lexer:
-    """Lexer state that survives across lines."""
-
-    def __init__(self) -> None:
-        self.mode = _NORMAL
-        self.depth = 0
-        self.tag = ""
-        self.stmt: list[str] = []
-
-    def feed_line(self, line: str) -> tuple[str, int]:
-        """Blank the non-code characters of *line*.
-
-        Returns:
-            The blanked line and how many ``COPY … FROM stdin`` statements were
-            terminated on it (each one is followed by a data block).
-        """
-        out = [" "] * len(line)
-        copies = 0
-        i, n = 0, len(line)
-        while i < n:
-            c = line[i]
-            if self.mode == _NORMAL:
-                if line.startswith("--", i):
-                    break
-                if line.startswith("/*", i):
-                    self.mode, self.depth = _BLOCK, 1
-                    self.stmt.append(" ")
-                    i += 2
-                    continue
-                if c == "'":
-                    is_escape_string = (
-                        i >= 1
-                        and line[i - 1] in "eE"
-                        and (i < 2 or not _is_ident_char(line[i - 2]))
-                    )
-                    self.mode = _ESQUOTE if is_escape_string else _SQUOTE
-                    self.stmt.append(" ")
-                    i += 1
-                    continue
-                if c == '"':
-                    self.mode = _DQUOTE
-                    self.stmt.append(" ")
-                    i += 1
-                    continue
-                if c == "$" and (i == 0 or not _is_ident_char(line[i - 1])):
-                    m = _DOLLAR_TAG_RE.match(line, i)
-                    if m:
-                        self.mode, self.tag = _DOLLAR, m.group(0)
-                        self.stmt.append(" ")
-                        i = m.end()
-                        continue
-                out[i] = c
-                if c == ";":
-                    if _COPY_STDIN_STMT_RE.match("".join(self.stmt)):
-                        copies += 1
-                    self.stmt = []
-                else:
-                    self.stmt.append(c)
-                i += 1
-            elif self.mode in (_SQUOTE, _ESQUOTE):
-                if self.mode == _ESQUOTE and c == "\\":
-                    i += 2
-                    continue
-                if c == "'":
-                    if line.startswith("''", i):
-                        i += 2
-                        continue
-                    self.mode = _NORMAL
-                i += 1
-            elif self.mode == _DQUOTE:
-                if c == '"':
-                    if line.startswith('""', i):
-                        i += 2
-                        continue
-                    self.mode = _NORMAL
-                i += 1
-            elif self.mode == _BLOCK:
-                if line.startswith("/*", i):
-                    self.depth += 1
-                    i += 2
-                    continue
-                if line.startswith("*/", i):
-                    self.depth -= 1
-                    if self.depth == 0:
-                        self.mode = _NORMAL
-                    i += 2
-                    continue
-                i += 1
-            else:  # _DOLLAR
-                if line.startswith(self.tag, i):
-                    self.mode = _NORMAL
-                    i += len(self.tag)
-                    continue
-                i += 1
-        if self.mode == _NORMAL:
-            self.stmt.append("\n")
-        return "".join(out), copies
-
-
 def code_text(sql: str) -> str:
     r"""*sql* with everything that is not SQL code blanked to spaces.
 
@@ -281,7 +154,7 @@ def code_text(sql: str) -> str:
     the input. Blanked: comments, string literals, quoted identifiers,
     dollar-quoted bodies and ``COPY … FROM stdin`` data rows (including the
     ``\.`` terminator). Kept: keywords, identifiers, operators, ``;`` and any
-    backslash ``psql`` would execute.
+    backslash ``psql`` would execute. See :func:`confiture.core.sql_lexer.code_text`.
 
     Args:
         sql: SQL text.
@@ -289,26 +162,7 @@ def code_text(sql: str) -> str:
     Returns:
         The blanked text.
     """
-    return _scan(sql)[0]
-
-
-def _scan(sql: str) -> tuple[str, int]:
-    """Run the lexer over *sql*: the blanked code text and the COPY-block count."""
-    lexer = _Lexer()
-    out: list[str] = []
-    copy_blocks = 0
-    pending_copy_blocks = 0
-    for raw in sql.split("\n"):
-        if pending_copy_blocks:
-            out.append(" " * len(raw))
-            if raw.rstrip("\r") == _COPY_TERMINATOR:
-                pending_copy_blocks -= 1
-            continue
-        code, copies = lexer.feed_line(raw)
-        out.append(code)
-        copy_blocks += copies
-        pending_copy_blocks += copies
-    return "\n".join(out), copy_blocks
+    return sql_lexer.code_text(sql).text
 
 
 def apply_sql_via_psql(
