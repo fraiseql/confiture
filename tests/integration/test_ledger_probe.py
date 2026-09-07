@@ -179,7 +179,7 @@ def restricted(
     """
     schema, role = f"restricted_{tag}", f"probe_role_{tag}"
     try:
-        conn.execute(f'CREATE ROLE "{role}" LOGIN PASSWORD \'probe\'')
+        conn.execute(f"CREATE ROLE \"{role}\" LOGIN PASSWORD 'probe'")
     except psycopg.errors.InsufficientPrivilege:  # pragma: no cover - environment gate
         pytest.skip("test connection cannot CREATE ROLE")
     _make_ledger(conn, schema)

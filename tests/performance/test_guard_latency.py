@@ -82,7 +82,9 @@ def test_cli_help_stays_fast() -> None:
     best = None
     for _ in range(3):
         start = time.perf_counter()
-        subprocess.run([sys.executable, "-m", "confiture.cli.main", "--help"], check=True, capture_output=True)
+        subprocess.run(
+            [sys.executable, "-m", "confiture.cli.main", "--help"], check=True, capture_output=True
+        )
         mid = time.perf_counter()
         subprocess.run([sys.executable, "-c", "pass"], check=True)
         end = time.perf_counter()
