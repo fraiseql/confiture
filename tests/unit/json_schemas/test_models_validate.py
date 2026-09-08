@@ -101,6 +101,12 @@ FIELD_SAMPLES: dict[tuple[str, str], Any] = {
         "fixed": ["doc_001:table:tb_c"],
         "known": 2,
     },
+    ("LintReport", "gate"): {
+        "threshold": "error",
+        "reachable": False,
+        "reason": "no selected rule emits at 'error'",
+        "max_selectable_severity": "warning",
+    },
     ("BuildResult", "duplicates"): [
         {
             "rule_id": "build_001",

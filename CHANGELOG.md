@@ -12,6 +12,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### Added
+
+- **`confiture lint --fail-on <severity>`: a gate a pipeline can actually set (#247, part 1).**
+  One threshold — `error` (the default), `warning`, `info` or `never` — decides the exit code, in one
+  place (`core/linting/gate.py`). `--fail-on-error` and `--fail-on-warning` stay as documented aliases
+  with their current defaults; passing an alias *and* `--fail-on` states the gate twice and exits 2,
+  and an unrecognised severity is `CONFIG_010` (exit 5). `--fail-on never` is the setting the two
+  booleans could not express.
+- **A gate that cannot fire says so.** When no *selected* rule can emit at the run's threshold — the
+  trap #247 was filed for, where four real `build_001` findings sat behind a green tick for months —
+  the summary prints `no selected rule emits at 'error'; this gate cannot fail — see --fail-on and
+  --baseline` and `--format json` carries `gate: {threshold, reachable, reason,
+  max_selectable_severity}`. Reachability reads the registry's declared severities *plus* the
+  escalations the environment config makes (`security_lint.severity: error`, declared replicas), so a
+  project that has escalated is told its gate is armed rather than warned about a problem it has not
+  got. New guide section: [Making lint block](docs/guides/schema-linting.md).
+- **Every finding reports its file and its line.** `lint --format json` and `--format csv` carry
+  `file` and `line` for every violation (`null` together when the rule read a string rather than a
+  file tree), the violations table shows `file:line` under the object, and `lint.schema.json` is
+  updated. `--list-rules --format json` gains `escalates_to` / `escalated_by`.
+
+### Changed
+
+- **`acl_001` is declared `error` in the catalogue.** The rule has always *emitted* `error`; the
+  registry entry said `warning` (LINT-01), so `--list-rules` and the published rule reference were
+  wrong about the one rule that could reach `error`. **No project's exit code moves** — the emission
+  is unchanged and this is a correction to the catalogue, not a change to the rule. A new guard
+  (`tests/unit/linting/test_registry_severity_is_truth.py`) drives every registered rule against a
+  fixture that violates it and holds the emitted severity equal to the declared one, so the table
+  cannot grow another lie.
+- **`sec_002` and `replica_001` findings are in the report.** Both printed straight to the console
+  and contributed nothing to the report the formatter reads, so `lint --format json` said
+  `violations.items: []` while the terminal showed the finding — and the console block landed *in* the
+  JSON stream, so the payload would not parse (LINT-03). They now go through the same report, the same
+  `--baseline` and the same gate as every other rule. The `--check-security-definer` help no longer
+  sends users to `migrate validate` for machine-readable output.
+
+### Fixed
+
+- `docs/guides/schema-linting.md` recommended `confiture lint --strict` and
+  `confiture lint --fail-level critical` in its CI examples. Neither flag has ever existed.
+
 ## [1.3.0] - 2026-09-07
 
 ### Added

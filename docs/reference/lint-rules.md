@@ -20,11 +20,24 @@ Adopt a rule on a schema that already trips it with a
 | `build_001` | build | warning | on | An object is defined more than once in one build |
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
-| `acl_001` | acl | warning | off | Every CREATE TABLE has a matching GRANT |
+| `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
 | `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 <!-- END GENERATED -->
+
+The **Severity** column is the severity a rule emits by default. Two rules are
+escalated by configuration, and `--list-rules --format json` names both the
+severity they reach and what raises it (`escalates_to`, `escalated_by`):
+
+| Rule | Reaches | When |
+|------|---------|------|
+| `sec_002` | `error` | `security_lint.severity: error` |
+| `replica_001` | `error` | `infrastructure.replicas` declared, without `migration.allow_unsafe_under_replication` |
+
+`confiture lint --fail-on <severity>` reads both, so it can tell a project whose
+gate cannot fire from one whose gate is armed — see
+[making lint block](cli.md#making-lint-block-fail-on).
 
 > The table above is generated from `LINT_RULES`. Regenerate with
 > `python -c "from confiture.core.linting.rule_registry import render_rule_table;

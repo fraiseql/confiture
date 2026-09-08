@@ -19,7 +19,12 @@ import pglast.parser
 
 from confiture.config.environment import Environment
 from confiture.core import builder as _core_builder
-from confiture.core.linting.inventory import Inventory, SchemaObject, build_inventory
+from confiture.core.linting.inventory import (
+    Inventory,
+    SchemaObject,
+    attribute_files,
+    build_inventory,
+)
 from confiture.core.parser_info import parse_error_line
 from confiture.exceptions import ConfiturError
 
@@ -198,6 +203,8 @@ class SchemaLinter:
         self._schema_sql: str | None = None
         self._inventory: Inventory = Inventory()
         self._tables: dict[str, dict[str, Any]] | None = None
+        self._schema_files: list[Path] = []
+        self._file_objects: list[SchemaObject] = []
 
     def lint(self, schema: str | None = None) -> LintReport:
         """Run linting and return report.
@@ -228,8 +235,10 @@ class SchemaLinter:
         # rules below read what they can, and this notice says the rest was
         # not read (ANA-02).
         self._inventory = Inventory()
+        self._file_objects = self._inventory_per_file()
         try:
             self._inventory = build_inventory(self._schema_sql)
+            attribute_files(self._inventory, self._file_objects)
         except pglast.parser.ParseError as exc:
             report.add_violation(
                 LintViolation(
@@ -295,6 +304,20 @@ class SchemaLinter:
 
         return report
 
+    def _inventory_per_file(self) -> list[SchemaObject]:
+        """Every object the schema files declare, each knowing the file it is in.
+
+        Empty for a whole-string lint (``lint(schema=...)``), which has no files
+        and therefore no locations to report.
+        """
+        # Reason: import cycle (duplicates imports this module's inventory at module level)
+        from confiture.core.linting.duplicates import inventory_files
+
+        if not self._schema_files:
+            return []
+        objects, _unparseable = inventory_files(self._schema_files, root=self.project_dir)
+        return objects
+
     def _load_schema(self) -> None:
         """Load schema SQL from files."""
         try:
@@ -320,6 +343,7 @@ class SchemaLinter:
                             f"Table name '{table.qualified}' should be lowercase with "
                             "underscores (snake_case)"
                         ),
+                        file_path=table.file,
                         line_number=table.line,
                     )
                 )
@@ -339,6 +363,7 @@ class SchemaLinter:
                         message=(
                             f"Column '{column.name}' should be lowercase with underscores (snake_case)"
                         ),
+                        file_path=table.file,
                         line_number=column.line,
                     )
                 )
@@ -358,6 +383,7 @@ class SchemaLinter:
                     object_type="table",
                     object_name=table.qualified,
                     message=f"Table '{table.qualified}' should have a PRIMARY KEY",
+                    file_path=table.file,
                     line_number=table.line,
                 )
             )
@@ -377,17 +403,9 @@ class SchemaLinter:
         name the files; a run on one string reports offsets into that string.
         """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.duplicates import (
-            duplicate_violations,
-            find_duplicates,
-            inventory_files,
-        )
+        from confiture.core.linting.duplicates import duplicate_violations, find_duplicates
 
-        files = getattr(self, "_schema_files", None)
-        if files:
-            objects, _unparseable = inventory_files(files, root=self.project_dir)
-        else:
-            objects = self._inventory.objects
+        objects = self._file_objects or self._inventory.objects
         for violation in duplicate_violations(find_duplicates(objects)):
             report.add_violation(violation)
 
@@ -450,6 +468,7 @@ class SchemaLinter:
                                 f"Column '{column.name}' appears to store {description} - "
                                 "ensure proper encryption and access controls"
                             ),
+                            file_path=table.file,
                             line_number=column.line,
                         )
                     )

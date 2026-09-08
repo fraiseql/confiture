@@ -47,6 +47,12 @@ class LintRule:
         legacy_flag: The pre-0.42.0 per-rule flag, kept as an alias, or None.
         requires_config: Configuration the rule additionally needs before it can
             report anything — selecting it is necessary, not sufficient.
+        escalates_to: The severity the rule emits when ``escalated_by`` holds,
+            or None when :attr:`severity` is the only severity it ever emits.
+            The gate reads this to answer whether a threshold is reachable for
+            *this* project rather than in general.
+        escalated_by: The configuration that raises the severity, named the way
+            an operator would set it.
     """
 
     code: str
@@ -56,6 +62,8 @@ class LintRule:
     default_on: bool
     legacy_flag: str | None = None
     requires_config: str | None = None
+    escalates_to: str | None = None
+    escalated_by: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """JSON shape for ``lint --list-rules --format json``."""
@@ -67,6 +75,8 @@ class LintRule:
             "default_on": self.default_on,
             "legacy_flag": self.legacy_flag,
             "requires_config": self.requires_config,
+            "escalates_to": self.escalates_to,
+            "escalated_by": self.escalated_by,
         }
 
 
@@ -145,7 +155,11 @@ LINT_RULES: tuple[LintRule, ...] = (
         code="acl_001",
         family="acl",
         title="Every CREATE TABLE has a matching GRANT",
-        severity="warning",
+        # A missing GRANT is a table the application cannot read once deployed.
+        # The rule has always emitted `error`; before 1.4.0 the catalogue said
+        # `warning`, which is the entry that was wrong (LINT-01) — no project's
+        # exit code moves, because the emission is unchanged.
+        severity="error",
         default_on=False,
         requires_config="acls.lint_enabled: true",
     ),
@@ -164,6 +178,8 @@ LINT_RULES: tuple[LintRule, ...] = (
         severity="warning",
         default_on=False,
         legacy_flag="--replica-safe",
+        escalates_to="error",
+        escalated_by="infrastructure.replicas declared, without migration.allow_unsafe_under_replication",
     ),
     LintRule(
         code="sec_002",
@@ -173,6 +189,8 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=False,
         legacy_flag="--check-security-definer",
         requires_config="security_lint.enabled: true",
+        escalates_to="error",
+        escalated_by="security_lint.severity: error",
     ),
 )
 

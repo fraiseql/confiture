@@ -39,6 +39,12 @@ class Violation:
         message: Human-readable description of the issue
         location: Where the violation occurred (table name, column, etc.)
         suggested_fix: Optional suggestion on how to fix it
+        file: Path of the source file the finding is in, relative to the
+            project root, or ``None`` when the rule read a string rather than
+            a tree (``SchemaLinter.lint(schema=...)``).
+        line: 1-based line within ``file``, or ``None`` for the same reason.
+            Never a line in the concatenated build: a line without a file is
+            not a location.
     """
 
     rule_name: str
@@ -47,6 +53,8 @@ class Violation:
     location: str
     suggested_fix: str | None = None
     rule_id: str = ""
+    file: str | None = None
+    line: int | None = None
 
     def __str__(self) -> str:
         """Format violation for human consumption."""
@@ -131,6 +139,10 @@ class LintReport:
         warnings_count: Number of WARNING level violations
         info_count: Number of INFO level violations
         execution_time_ms: Time taken to lint in milliseconds
+        gate: What decided the exit code and whether anything could have
+            reached it — see ``core.linting.gate.Gate.to_dict``. Every
+            ``confiture lint`` run sets it; a report a library caller builds
+            itself has none.
     """
 
     violations: list[Violation]
@@ -142,6 +154,7 @@ class LintReport:
     info_count: int
     execution_time_ms: int
     baseline: dict[str, Any] | None = None
+    gate: dict[str, Any] | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -200,7 +213,9 @@ class LintReport:
     def to_dict(self) -> dict[str, Any]:
         """The ``lint --format json`` payload (before the envelope adds ``parser``).
 
-        ``baseline`` is present only when the run compared against one (#219).
+        ``baseline`` is present only when the run compared against one (#219);
+        ``gate`` only when a gate decided the outcome, which is every run of
+        the command.
         """
         payload: dict[str, Any] = {
             "schema_name": self.schema_name,
@@ -218,6 +233,8 @@ class LintReport:
                         "rule_id": v.rule_id,
                         "severity": v.severity.value,
                         "location": v.location,
+                        "file": v.file,
+                        "line": v.line,
                         "message": v.message,
                         "suggested_fix": v.suggested_fix,
                     }
@@ -227,4 +244,6 @@ class LintReport:
         }
         if self.baseline is not None:
             payload["baseline"] = self.baseline
+        if self.gate is not None:
+            payload["gate"] = self.gate
         return payload

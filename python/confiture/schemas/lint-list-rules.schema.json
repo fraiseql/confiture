@@ -32,7 +32,9 @@
           "severity",
           "default_on",
           "legacy_flag",
-          "requires_config"
+          "requires_config",
+          "escalates_to",
+          "escalated_by"
         ],
         "properties": {
           "code": {
@@ -72,6 +74,26 @@
               "null"
             ],
             "description": "Configuration the rule additionally needs; selecting it is necessary, not sufficient."
+          },
+          "escalates_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "error",
+              "warning",
+              "info",
+              null
+            ],
+            "description": "Severity the rule emits when `escalated_by` holds; null when `severity` is the only one it emits."
+          },
+          "escalated_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The configuration that raises the severity, named the way an operator would set it."
           }
         }
       }

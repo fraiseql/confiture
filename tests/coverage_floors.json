@@ -16,6 +16,7 @@
     "core/expand_contract.py": 85,
     "core/hooks/context.py": 70,
     "core/linting/composer.py": 70,
+    "core/linting/gate.py": 95,
     "core/lock_profile.py": 85,
     "core/migration_generator.py": 85,
     "core/replica/classifier.py": 85,
