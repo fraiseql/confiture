@@ -46,8 +46,14 @@ from confiture.core.linting.gate import (
     threshold_from_aliases,
 )
 from confiture.core.linting.inventory import label_for
+from confiture.core.linting.libraries.generate import TREE_RULE_CODES, tree_violations
 from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
-from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, LINT_RULES, resolve_selection
+from confiture.core.linting.rule_registry import (
+    DEFAULT_SELECTOR,
+    LEGACY_CODE_ALIASES,
+    LINT_RULES,
+    resolve_selection,
+)
 from confiture.core.linting.schema_linter import (
     LintConfig as LinterConfig,
 )
@@ -915,7 +921,17 @@ ReplicaSafeOpt = Annotated[
 MigrationsDirOpt = Annotated[
     Path,
     typer.Option(
-        "--migrations-dir", help="Migrations directory for --replica-safe (default: db/migrations)"
+        "--migrations-dir",
+        help="Migrations directory the migration-tree rules read — replica_001, "
+        "own_001, own_002 (default: db/migrations)",
+    ),
+]
+OverridesDirOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--overrides-dir",
+        help="Overrides mirror directory. tree_004 needs it and is skipped without it: "
+        "there is no conventional location to guess.",
     ),
 ]
 CheckTenantIsolationOpt = Annotated[
@@ -957,6 +973,7 @@ def lint(
     list_rules: ListRulesOpt = False,
     replica_safe: ReplicaSafeOpt = False,
     migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    overrides_dir: OverridesDirOpt = None,
     check_tenant_isolation: CheckTenantIsolationOpt = False,
     check_security_definer: CheckSecurityDefinerOpt = False,
 ) -> None:
@@ -973,17 +990,18 @@ def lint(
       `--select default,replica` is the usual lint plus one opt-in family.
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
-      naming_001, naming_002, pk_001, doc_001–doc_004, sec_001 — on by default.
-      (LintConfig also carries check_indexes / check_constraints; neither has a
-      rule behind it, so neither is listed or selectable.)
+      naming_001, naming_002, pk_001, doc_001–doc_004, build_001, build_002,
+      sec_001 — on by default. (LintConfig also carries check_indexes /
+      check_constraints; neither has a rule behind it, so neither is listed or
+      selectable.)
 
-      ACL coverage (acl_001) — opt-in. Set ``acls.lint_enabled: true`` in
-      the environment YAML to enable.  Merely defining ``acls:`` no longer
-      auto-fires the rule (changed in 0.12.0).  See ``docs/guides/acl-coverage.md``.
-
-      Multi-tenant isolation (tenant_001) — opt-in via ``--select default,tenant``
-      (or the ``--check-tenant-isolation`` alias). Detects function INSERTs that
-      omit the FK column a tenant-scoped view needs.
+      Opt-in, each needing its configuration as well as its selector:
+      acl_001 (`acls.lint_enabled: true`), tenant_001, replica_001, sec_002
+      (`security_lint.enabled: true`), func_001 (`function_coverage.enabled:
+      true`), own_001 / own_002 (an `ownership:` block), and tree_001–tree_004,
+      the DDL file-tree rules — `--select tree`; tree_004 also needs
+      `--overrides-dir`. `--list-rules` prints all of it with the configuration
+      each needs.
 
     EXAMPLES:
       confiture lint
@@ -1049,13 +1067,15 @@ def lint(
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
             console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
-        linter = SchemaLinter(env=env, config=config)
+        linter = SchemaLinter(env=env, project_dir=project_dir, config=config)
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
         # second pass over the findings.
         _keep_selected_rules(linter_report, selected)
-        for violation in _tree_rule_findings(selected, env, project_dir, migrations_dir):
+        for violation in _tree_rule_findings(
+            selected, env, project_dir, migrations_dir, overrides_dir
+        ):
             linter_report.add_violation(violation)
         baseline_diff = _apply_baseline(
             linter_report, baseline=baseline, write=write_baseline, project_dir=project_dir
@@ -1202,19 +1222,118 @@ def _linter_config(selected: frozenset[str], threshold: Threshold) -> LinterConf
 
 
 def _tree_rule_findings(
-    selected: frozenset[str], env: str, project_dir: Path, migrations_dir: Path
+    selected: frozenset[str],
+    env: str,
+    project_dir: Path,
+    migrations_dir: Path,
+    overrides_dir: Path | None = None,
 ) -> list[LintViolation]:
     """The rules that read a tree of files rather than the built schema.
 
     They are findings like any other — same report, same baseline, same gate —
-    and they name their files the way the rest of the report does.
+    and they name their files the way the rest of the report does. Every one of
+    them is selected by code here rather than through ``LintConfig``'s coarser
+    switches, because they run after ``_keep_selected_rules`` has already passed.
     """
     findings: list[LintViolation] = []
     if "replica_001" in selected:
         findings += _replica_findings(env, project_dir, migrations_dir)
     if "sec_002" in selected:
         findings += _security_definer_findings(env, project_dir)
+    if "func_001" in selected:
+        findings += _function_uniqueness_findings(env, project_dir)
+    if selected & {"own_001", "own_002"}:
+        findings += _ownership_findings(selected, env, project_dir, migrations_dir)
+    if selected & set(TREE_RULE_CODES):
+        findings += _ddl_tree_findings(selected, env, project_dir, overrides_dir)
     return [_relative(v, project_dir) for v in findings]
+
+
+def _under(path: Path | None, project_dir: Path) -> Path | None:
+    """A directory an operator named, read relative to ``--project-dir``.
+
+    ``--migrations-dir`` and ``--overrides-dir`` are project-relative like
+    ``--baseline`` is; three rules read the first of them and they must all read
+    the same directory.
+    """
+    if path is None or path.is_absolute():
+        return path
+    return project_dir / path
+
+
+def _env_ddl_files(env: str, project_dir: Path) -> tuple[list[Path], list[Path]]:
+    """``(the files the build reads, the roots it reads them from)``.
+
+    One answer for every rule that walks the DDL tree, so none of them reports a
+    file the environment's ``exclude_dirs`` or per-directory ``exclude`` globs
+    keep out of the build (LINT-08). A project whose config will not load has no
+    build to describe, so it has no tree to lint.
+    """
+    try:
+        builder = _core_builder.SchemaBuilder(env=env, project_dir=project_dir)
+        return builder.find_sql_files(), list(builder.include_dirs)
+    except (ConfiturError, OSError):
+        return [], []
+
+
+def _ddl_tree_findings(
+    selected: frozenset[str], env: str, project_dir: Path, overrides_dir: Path | None
+) -> list[LintViolation]:
+    """#111: tree_001–tree_004 over the DDL file tree the environment builds."""
+    files, roots = _env_ddl_files(env, project_dir)
+    return tree_violations(
+        files,
+        selected=selected,
+        schema_dirs=roots,
+        overrides_dir=_under(overrides_dir, project_dir),
+    )
+
+
+def _function_uniqueness_findings(env: str, project_dir: Path) -> list[LintViolation]:
+    """#136: func_001 — one definition per function signature across the DDL tree."""
+    # Reason: CLI start-up: the rule is opt-in, so its import is deferred until it is selected
+    from confiture.core.linting.libraries.functions import Func001FunctionUniqueness
+
+    coverage = _env_block(env, project_dir, "function_coverage")
+    if coverage is None or not coverage.enabled:
+        return []
+    files, roots = _env_ddl_files(env, project_dir)
+    return Func001FunctionUniqueness(coverage=coverage).check(files or roots)
+
+
+def _ownership_findings(
+    selected: frozenset[str], env: str, project_dir: Path, migrations_dir: Path
+) -> list[LintViolation]:
+    """#124/#137: own_001 and own_002 over the migrations tree."""
+    # Reason: CLI start-up: the rules are opt-in, so their import is deferred until one is selected
+    from confiture.core.linting.libraries.ownership import (
+        Own001OwnershipCoverage,
+        Own002BareAlterOwner,
+    )
+
+    expectation = _env_block(env, project_dir, "ownership")
+    if expectation is None:
+        return []
+    resolved = _under(migrations_dir, project_dir)
+    findings: list[LintViolation] = []
+    if "own_001" in selected:
+        findings += Own001OwnershipCoverage(expectation=expectation).check(resolved)
+    if "own_002" in selected:
+        findings += Own002BareAlterOwner(expectation=expectation).check(resolved)
+    return findings
+
+
+def _env_block(env: str, project_dir: Path, attribute: str) -> Any:
+    """One optional block of the environment config, or ``None`` when it is absent.
+
+    A rule whose configuration is missing has nothing to report — the same
+    contract ``_security_lint_config`` and ``_replica_policy`` keep, and the
+    reason each of these rules declares a ``requires_config``.
+    """
+    try:
+        return getattr(Environment.load(env, project_dir=project_dir), attribute)
+    except (ConfiturError, OSError):
+        return None
 
 
 def _relative(violation: LintViolation, project_dir: Path) -> LintViolation:
@@ -1235,7 +1354,9 @@ def _replica_findings(env: str, project_dir: Path, migrations_dir: Path) -> list
     from confiture.core.linting.libraries.replica import Replica001ForwardCompat
 
     has_replicas, bypass = _replica_policy(env, project_dir)
-    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(migrations_dir)
+    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
+        _under(migrations_dir, project_dir)
+    )
 
 
 def _replica_policy(env: str, project_dir: Path) -> tuple[bool, bool]:
@@ -1259,13 +1380,10 @@ def _security_definer_findings(env: str, project_dir: Path) -> list[LintViolatio
     if sec_cfg is None:
         return []
     severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
-    try:
-        ddl_paths = _core_builder.SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
-    except (ConfiturError, OSError):
-        ddl_paths = sorted(Path("db/schema").rglob("*.sql")) if Path("db/schema").exists() else []
+    ddl_paths, roots = _env_ddl_files(env, project_dir)
     return Sec002SecurityDefinerSearchPath(
         apply_to=sec_cfg.apply_to, ignore=sec_cfg.ignore, severity=severity
-    ).check(ddl_paths or [Path("db/schema")])
+    ).check(ddl_paths or roots or [Path("db/schema")])
 
 
 def _security_lint_config(env: str, project_dir: Path) -> Any:
@@ -1415,6 +1533,31 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
         "\n[dim]Select with --select <family|code>[,…]; skip with --ignore. "
         "`default` selects every rule marked on.[/dim]"
     )
+    aliases = ", ".join(
+        f"{old.upper()} → {new}" for old, new in sorted(LEGACY_CODE_ALIASES.items())
+    )
+    console.print(f"[dim]Deprecated selectors, accepted for one minor: {aliases}.[/dim]")
+
+
+def _unified_tree_findings(
+    env: str, schema_dir: Path | None, overrides_dir: Path | None
+) -> list[LintViolation]:
+    """``lint-unified --check tree``'s findings, resolved the way ``lint`` resolves them.
+
+    ``--schema-dir`` names a tree explicitly; without it the environment's own
+    include configuration decides, which is what the flag's help has always
+    claimed and what ``confiture lint --select tree`` does. Two commands, one
+    answer to "which files is this rule about".
+    """
+    if schema_dir is not None:
+        files = sorted(f for f in schema_dir.rglob("*.sql") if f.is_file())
+        roots = [schema_dir]
+    else:
+        files, roots = _env_ddl_files(env, Path())
+    return [
+        _relative(v, Path())
+        for v in tree_violations(files, schema_dirs=roots, overrides_dir=overrides_dir)
+    ]
 
 
 @cli_boundary
@@ -1427,7 +1570,7 @@ def lint_unified(
         None,
         "--check",
         "-c",
-        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (GEN001–GEN004 file-numbering). "
+        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (tree_001–tree_004 file-numbering). "
         "Default: all.",
     ),
     git_diff: bool = typer.Option(
@@ -1444,12 +1587,13 @@ def lint_unified(
     schema_dir: Path | None = typer.Option(
         None,
         "--schema-dir",
-        help="Root of the DDL file tree for --check tree (default: inferred from env config).",
+        help="Root of the DDL file tree for --check tree (default: the directories --env's "
+        "include_dirs builds from, minus what it excludes).",
     ),
     overrides_dir: Path | None = typer.Option(
         None,
         "--overrides-dir",
-        help="Overrides mirror directory for GEN004 orphan check (optional).",
+        help="Overrides mirror directory for the tree_004 orphan check (optional).",
     ),
     format_type: str = format_option("table", "json"),
     fail_on_error: bool = typer.Option(
@@ -1471,8 +1615,9 @@ def lint_unified(
         Run only SchemaLinter checks on the local environment.
 
       confiture lint-unified --check tree --schema-dir db/schema/
-        Check DDL file-tree numbering rules (GEN001–GEN004): duplicate prefixes,
-        verb suffixes, sequence gaps, and orphaned overrides.
+        Check DDL file-tree numbering rules (tree_001–tree_004): duplicate prefixes,
+        verb suffixes, sequence gaps, and orphaned overrides. Without --schema-dir
+        the tree is the one --env builds from.
 
       confiture lint-unified --git-diff
         Lint only SQL files changed in the current git diff.
@@ -1506,19 +1651,10 @@ def lint_unified(
             console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
 
     if run_tree:
-        # Resolve schema_dir: CLI flag > default "db/schema"
-        resolved_schema_dir: Path = schema_dir if schema_dir is not None else Path("db/schema")
-
-        tree_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
-        tree_linter = _core_linting.SchemaLinter(env=env, config=tree_config)
         try:
-            tree_report = tree_linter.lint_tree(
-                schema_dir=resolved_schema_dir,
-                overrides_dir=overrides_dir,
-            )
             all_issues.extend(
                 _violation_to_unified_issue(v, "tree")
-                for v in tree_report.errors + tree_report.warnings + tree_report.info
+                for v in _unified_tree_findings(env, schema_dir, overrides_dir)
             )
         # Reason: lint-unified skips a linter that fails for any reason and says so
         except Exception as e:
@@ -1537,7 +1673,10 @@ def lint_unified(
                 sev = issue.severity.value.upper()
                 loc = f"{issue.file}:{issue.line}" if issue.line else issue.file
                 rule = f" [{issue.rule}]" if issue.rule else ""
-                console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
+                # markup=False: every field is data. Rich reads `[tree_001]` as a
+                # style tag and prints nothing where the rule id should be — the
+                # uppercase codes only survived because they are not style names.
+                console.print(f"  [{sev}]{rule} {loc}: {issue.message}", markup=False)
 
     if fail_on_error and unified_result.has_errors:
         raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found errors

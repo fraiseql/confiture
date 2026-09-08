@@ -29,6 +29,20 @@ from confiture.exceptions import ConfigurationError
 #: ``--select default,replica``, i.e. the usual lint *plus* one family.
 DEFAULT_SELECTOR = "default"
 
+#: Retired rule ids that still resolve, lower-cased. The file-tree rules emitted
+#: ``GEN001``–``GEN004`` from a namespace ``confiture lint`` could not reach;
+#: folding them in as ``tree_001``–``tree_004`` renamed ids a pipeline may have
+#: typed, so the old spelling stays an accepted *selector* for one minor — it
+#: costs one mapping — while the emitted ``rule_id`` is the new code from 1.4.0
+#: on. Nothing published ever carried the old ids: ``lint-unified``, the only
+#: command that emitted them, has no JSON schema.
+LEGACY_CODE_ALIASES: dict[str, str] = {
+    "gen001": "tree_001",
+    "gen002": "tree_002",
+    "gen003": "tree_003",
+    "gen004": "tree_004",
+}
+
 
 @dataclass(frozen=True)
 class LintRule:
@@ -182,6 +196,63 @@ LINT_RULES: tuple[LintRule, ...] = (
         escalated_by="infrastructure.replicas declared, without migration.allow_unsafe_under_replication",
     ),
     LintRule(
+        code="func_001",
+        family="func",
+        title="Every function and procedure signature is defined exactly once",
+        severity="error",
+        default_on=False,
+        requires_config="function_coverage.enabled: true",
+    ),
+    LintRule(
+        code="own_001",
+        family="own",
+        title="Every created relation is paired with an ALTER … OWNER TO",
+        severity="error",
+        default_on=False,
+        requires_config="ownership.lint_enabled: true",
+    ),
+    LintRule(
+        code="own_002",
+        family="own",
+        # Graded by the finding, not by configuration: an `ALTER … OWNER TO`
+        # wrapped in an `IF EXISTS` guard is a `warning`, a bare one an `error`.
+        # The declaration is the ceiling, because that is what the gate needs to
+        # answer "can `--fail-on error` fire here"; the title states the floor.
+        title="No bare ALTER … OWNER TO on an object the migration did not create (guarded: warning)",
+        severity="error",
+        default_on=False,
+        requires_config="an ownership: block",
+    ),
+    LintRule(
+        code="tree_001",
+        family="tree",
+        title="No two files in one directory share a numeric prefix",
+        severity="error",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_002",
+        family="tree",
+        title="A numbered file carries a verb after its prefix",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_003",
+        family="tree",
+        title="Prefixes within one directory are contiguous",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_004",
+        family="tree",
+        title="Every file in the overrides mirror has a counterpart in the tree",
+        severity="warning",
+        default_on=False,
+        requires_config="--overrides-dir <path>",
+    ),
+    LintRule(
         code="sec_002",
         family="security-definer",
         title="SECURITY DEFINER routines pin search_path (CVE-2018-1058)",
@@ -227,6 +298,7 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
     key = token.strip().lower()
     if not key:
         return frozenset()
+    key = LEGACY_CODE_ALIASES.get(key, key)
     if key == DEFAULT_SELECTOR:
         return default_codes()
     by_code = {rule.code: rule for rule in LINT_RULES}
@@ -241,6 +313,7 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
         resolution_hint=(
             f"Families: {', '.join(families())}, {DEFAULT_SELECTOR}. "
             f"Codes: {', '.join(rule.code for rule in LINT_RULES)}. "
+            f"Deprecated aliases: {', '.join(sorted(a.upper() for a in LEGACY_CODE_ALIASES))}. "
             "Run `confiture lint --list-rules` for the full table."
         ),
     )

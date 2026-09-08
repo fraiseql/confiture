@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..composer import RuleLibrary
-from ..versioning import LintSeverity, Rule, RuleVersion
+from ..versioning import ComplianceSeverity, Rule, RuleVersion
 
 
 class PCI_DSSLibrary(RuleLibrary):
@@ -16,7 +16,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="cardholder_data_encryption",
                 description="Cardholder data must be encrypted at rest and in transit",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -24,7 +24,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="no_default_credentials",
                 description="No default credentials allowed in database",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -32,7 +32,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="no_plaintext_cardholder_data",
                 description="Cardholder data must never be stored in plaintext",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -40,7 +40,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="access_control",
                 description="Implement strong access control (need-to-know basis)",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -48,7 +48,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="vulnerability_scanning",
                 description="Regular vulnerability scanning required",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
             Rule(
@@ -56,7 +56,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="firewall_configuration",
                 description="Maintain firewall configuration standards",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
             Rule(
@@ -64,7 +64,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="audit_trail",
                 description="Maintain audit trail of all access to cardholder data",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -72,7 +72,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="secure_deletion",
                 description="Implement secure deletion for sensitive data",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -80,7 +80,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="key_management",
                 description="Implement encryption key management procedures",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -88,7 +88,7 @@ class PCI_DSSLibrary(RuleLibrary):
                 name="security_testing",
                 description="Regular security testing and assessment required",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
         ]

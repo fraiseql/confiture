@@ -43,6 +43,13 @@ class TestRegistryContents:
             "tenant_001",
             "replica_001",
             "sec_002",
+            "func_001",
+            "own_001",
+            "own_002",
+            "tree_001",
+            "tree_002",
+            "tree_003",
+            "tree_004",
         }
 
     def test_the_default_set_is_the_pre_0420_default_behaviour(self) -> None:
@@ -84,6 +91,9 @@ class TestRegistryContents:
             "acl",
             "tenant",
             "replica",
+            "func",
+            "own",
+            "tree",
             "security-definer",
         )
 

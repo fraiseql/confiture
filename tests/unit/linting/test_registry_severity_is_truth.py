@@ -40,6 +40,8 @@ class Fixture:
     #: The config that raises the rule above its declared severity, when it has one.
     escalated_env_extra: str | None = None
     migrations: dict[str, str] = field(default_factory=dict)
+    #: Files outside `db/schema` and `db/migrations`, keyed by project-relative path.
+    extra_files: dict[str, str] = field(default_factory=dict)
     extra_args: tuple[str, ...] = ()
 
 
@@ -52,6 +54,15 @@ _ACLS = (
     "      grants:\n"
     "        - role: my_app\n"
     "          privileges: [SELECT]\n"
+)
+
+_OWNERSHIP = (
+    "ownership:\n"
+    "  expected_owner: app_owner\n"
+    "  lint_enabled: true\n"
+    "  apply_to:\n"
+    "    - schema: public\n"
+    "      relkinds: [r]\n"
 )
 
 _TENANT_SCHEMA = """CREATE TABLE tb_item (id INT PRIMARY KEY, name TEXT, fk_org INT);
@@ -111,6 +122,41 @@ FIXTURES: dict[str, Fixture] = {
         env_extra="security_lint:\n  enabled: true\n",
         escalated_env_extra="security_lint:\n  enabled: true\n  severity: error\n",
     ),
+    "func_001": Fixture(
+        {
+            "010.sql": "CREATE FUNCTION fn_f(a int) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n",
+            "020.sql": "CREATE FUNCTION fn_f(a int) RETURNS int LANGUAGE sql AS $$ SELECT 2 $$;\n",
+        },
+        env_extra="function_coverage:\n  enabled: true\n",
+    ),
+    "own_001": Fixture(
+        {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n"},
+        env_extra=_OWNERSHIP,
+        migrations={"20260908120000.up.sql": "CREATE TABLE public.tb_new (id int);"},
+    ),
+    "own_002": Fixture(
+        {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n"},
+        env_extra=_OWNERSHIP,
+        migrations={"20260908120000.up.sql": "ALTER TABLE public.tb_old OWNER TO app_owner;"},
+    ),
+    "tree_001": Fixture(
+        {
+            "00001_create.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n",
+            "00001_update.sql": "CREATE TABLE tb_b (id INT PRIMARY KEY);\n",
+        }
+    ),
+    "tree_002": Fixture({"00001.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n"}),
+    "tree_003": Fixture(
+        {
+            "00001_create.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n",
+            "00009_create.sql": "CREATE TABLE tb_b (id INT PRIMARY KEY);\n",
+        }
+    ),
+    "tree_004": Fixture(
+        {"00001_create.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n"},
+        extra_files={"db/overrides/00002_gone.sql": "-- override of a file that is not there\n"},
+        extra_args=("--overrides-dir", "db/overrides"),
+    ),
 }
 
 
@@ -131,6 +177,10 @@ def _build(tmp_path: Path, fixture: Fixture, env_extra: str) -> None:
         (tmp_path / "db" / "migrations").mkdir(parents=True, exist_ok=True)
         for name, sql in fixture.migrations.items():
             (tmp_path / "db" / "migrations" / name).write_text(sql)
+    for rel, text in fixture.extra_files.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
 
 
 @pytest.fixture

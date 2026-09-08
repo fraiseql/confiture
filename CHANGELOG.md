@@ -34,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `file` and `line` for every violation (`null` together when the rule read a string rather than a
   file tree), the violations table shows `file:line` under the object, and `lint.schema.json` is
   updated. `--list-rules --format json` gains `escalates_to` / `escalated_by`.
+- **Seven rules confiture already implemented join the catalogue (LINT-04, LINT-05).** `func_001`,
+  `own_001`, `own_002` and the four file-tree rules emitted violations while sitting outside the
+  registry, so none of them could be listed by `--list-rules`, named by `--select` / `--ignore`,
+  absorbed by `--baseline`, or counted when the gate answered "can this run fail" — and one of them
+  is an `error`, which is part of why `--fail-on-error` could report an unreachable threshold with an
+  `error` rule in the tree. All seven are registered and reachable from `confiture lint`:
+  `--select func` (needs `function_coverage.enabled: true`), `--select own` (needs `ownership:`),
+  `--select tree`. `confiture lint` gains `--overrides-dir`, which `tree_004` needs.
+  A new guard — `tests/unit/linting/test_every_rule_is_registered.py` — walks the AST of every module
+  under `core/linting/` for the rule codes it declares and fails on one the registry does not know,
+  with a stated reason for each of the two allow-listed groups (the five dormant compliance
+  catalogues, and the `UNPARSEABLE` notice). LINT-04 cannot recur.
 
 ### Changed
 
@@ -50,9 +62,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON stream, so the payload would not parse (LINT-03). They now go through the same report, the same
   `--baseline` and the same gate as every other rule. The `--check-security-definer` help no longer
   sends users to `migrate validate` for machine-readable output.
+- **The file-tree rules emit `tree_001`–`tree_004`, not `GEN001`–`GEN004`.** One lint catalogue, one
+  code namespace: the uppercase codes were a second namespace that `--select`, `--ignore` and
+  `--baseline` could not reach. The classes are renamed to match
+  (`Gen001PrefixUnique` → `Tree001PrefixUnique`, and so on). No published JSON schema covered the old
+  ids. `GEN001`–`GEN004` stay accepted `--select` / `--ignore` selectors for one minor —
+  `--list-rules` names them as deprecated and so does the unknown-selector hint — and are removed in
+  the minor after this one.
+- **The file-tree rules read the files the build reads.** `tree_001`–`tree_003` are handed the
+  environment's own file list instead of walking the tree with `rglob`, so a file kept out of the
+  build by `exclude_dirs` or a per-directory `exclude` glob no longer produces a finding about a
+  numbering that decides nothing (LINT-08). `Tree001PrefixUnique.check()` and its two siblings take a
+  sequence of files; `Tree004OrphanedOverride.check()` takes the schema roots.
+- **A tree, ownership or function-uniqueness finding can be baselined.** `own_001`, `own_002` and
+  `tree_001`–`tree_004` join `baseline.FILE_SCOPED_RULES`, so their identity carries the file:
+  a tree rule's object *is* a path, and `tree_001:file:00001_create.sql` would collapse every
+  directory in the tree onto one baseline entry. `func_001` deliberately stays out — it reports one
+  finding per duplicated signature and names whichever copy sorted first, so `@file` would churn.
+- **`core/linting/versioning.LintSeverity` is renamed `ComplianceSeverity` (LINT-11).** Two enums
+  shared the name — a three-value one in `models/lint.py` and a four-value one (it adds `CRITICAL`)
+  behind the compliance catalogues — so which one an import meant depended on where it was written.
+  Behaviour is unchanged; the catalogues are the only importers. A guard holds one severity name to
+  one enum.
 
 ### Fixed
 
+- **`confiture lint-unified --check tree` reads the tree the environment builds.** `--schema-dir`'s
+  help said "inferred from env config" while the command read a hardcoded `db/schema`, so a project
+  whose DDL lives anywhere else got no tree findings at all and one with `exclude_dirs` got findings
+  about files it does not build. Both commands now resolve through the same builder;
+  `--schema-dir` still names a tree explicitly.
+- **`lint-unified`'s table output printed no rule id.** The line was rendered as Rich markup, so a
+  lower-case code in brackets (`[tree_001]`) was read as a style tag and dropped. Every field on that
+  line is data and is printed as data.
+- **`confiture lint --project-dir` now points the whole command at that project.** It reached
+  `--baseline` and the migration-tree rules but not `SchemaLinter`, which loaded its environment
+  config from the current directory instead — so linting a project from outside it read one
+  project's config and another project's schema. The directories an operator names
+  (`--migrations-dir`, `--overrides-dir`) resolve under it too, through one resolver: before this,
+  `replica_001` read `--migrations-dir` as typed and reported a clean tree it had never opened.
 - `docs/guides/schema-linting.md` recommended `confiture lint --strict` and
   `confiture lint --fail-level critical` in its CI examples. Neither flag has ever existed.
 

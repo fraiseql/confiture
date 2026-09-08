@@ -23,6 +23,13 @@ Adopt a rule on a schema that already trips it with a
 | `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
 | `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
+| `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
+| `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
+| `own_002` | own | error | off | No bare ALTER … OWNER TO on an object the migration did not create (guarded: warning) |
+| `tree_001` | tree | error | off | No two files in one directory share a numeric prefix |
+| `tree_002` | tree | warning | off | A numbered file carries a verb after its prefix |
+| `tree_003` | tree | warning | off | Prefixes within one directory are contiguous |
+| `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 <!-- END GENERATED -->
 
@@ -38,6 +45,16 @@ severity they reach and what raises it (`escalates_to`, `escalated_by`):
 `confiture lint --fail-on <severity>` reads both, so it can tell a project whose
 gate cannot fire from one whose gate is armed — see
 [making lint block](cli.md#making-lint-block-fail-on).
+
+One rule grades its findings rather than its configuration: `own_002` emits
+`warning` for an `ALTER … OWNER TO` wrapped in an `IF EXISTS` guard and `error`
+for a bare one. The catalogue declares the `error`, because that is what the gate
+needs in order to answer whether `--fail-on error` can fire.
+
+Rules whose subject is a file rather than a database object — `tree_001` through
+`tree_004`, `own_001`, `own_002`, and the four that read a tree of migrations —
+carry the file in their `--baseline` identity, so baselining one directory does
+not silence the rest of the tree.
 
 > The table above is generated from `LINT_RULES`. Regenerate with
 > `python -c "from confiture.core.linting.rule_registry import render_rule_table;

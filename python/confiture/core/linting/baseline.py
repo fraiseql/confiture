@@ -26,15 +26,34 @@ MALFORMED_CODE = "CONFIG_012"
 
 #: The rules that read a *tree of files* rather than the one built schema, so the
 #: same object name can legitimately be reported from several of them: a
-#: duplicate definition is about the pair of files it is in, an ACL or replica
-#: finding is about one migration. Their identity carries ``@file``.
+#: duplicate definition is about the pair of files it is in, an ACL, ownership or
+#: replica finding is about one migration, and a file-tree finding's object *is*
+#: a path — ``tree_001:file:00001_create.sql`` would collapse every directory in
+#: the tree onto one entry. Their identity carries ``@file``.
 #:
 #: Every other rule reads the build, where an object is defined once, and
 #: identifies its finding by the object alone — moving a table from one schema
 #: file to another must not retire a baseline entry and add a new one. That is
 #: why this is an explicit set and not "whatever violations happen to carry a
-#: ``file_path``": since 1.4.0 nearly all of them do.
-FILE_SCOPED_RULES = frozenset({"build_001", "build_002", "acl_001", "tenant_001", "replica_001"})
+#: ``file_path``": since 1.4.0 nearly all of them do. ``func_001`` is deliberately
+#: outside it although it walks a tree: it reports one finding per duplicated
+#: signature, and the file it names is whichever copy sorted first, so ``@file``
+#: would churn the identity when the *other* copy moved.
+FILE_SCOPED_RULES = frozenset(
+    {
+        "build_001",
+        "build_002",
+        "acl_001",
+        "tenant_001",
+        "replica_001",
+        "own_001",
+        "own_002",
+        "tree_001",
+        "tree_002",
+        "tree_003",
+        "tree_004",
+    }
+)
 
 
 def identity(violation: LintViolation) -> str:

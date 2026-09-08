@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..composer import RuleLibrary
-from ..versioning import LintSeverity, Rule, RuleVersion
+from ..versioning import ComplianceSeverity, Rule, RuleVersion
 
 
 class HIPAALibrary(RuleLibrary):
@@ -16,7 +16,7 @@ class HIPAALibrary(RuleLibrary):
                 name="encrypt_phi",
                 description="All PII/PHI columns must be encrypted at rest",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -24,7 +24,7 @@ class HIPAALibrary(RuleLibrary):
                 name="audit_log_retention",
                 description="Maintain audit logs for minimum 6 years",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -32,7 +32,7 @@ class HIPAALibrary(RuleLibrary):
                 name="access_control_logs",
                 description="Log all database access and modifications",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -40,7 +40,7 @@ class HIPAALibrary(RuleLibrary):
                 name="no_plaintext_phi",
                 description="PHI must never be stored in plaintext",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -48,7 +48,7 @@ class HIPAALibrary(RuleLibrary):
                 name="encryption_key_rotation",
                 description="Encryption keys must be rotated regularly",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -56,7 +56,7 @@ class HIPAALibrary(RuleLibrary):
                 name="breach_notification",
                 description="Implement breach notification protocol",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -64,7 +64,7 @@ class HIPAALibrary(RuleLibrary):
                 name="user_authentication",
                 description="Multi-factor authentication required for access",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -72,7 +72,7 @@ class HIPAALibrary(RuleLibrary):
                 name="session_timeout",
                 description="Sessions must timeout after inactivity period",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
             Rule(
@@ -80,7 +80,7 @@ class HIPAALibrary(RuleLibrary):
                 name="data_segregation",
                 description="Patient data must be properly segregated",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -88,7 +88,7 @@ class HIPAALibrary(RuleLibrary):
                 name="backup_encryption",
                 description="All backups must be encrypted",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -96,7 +96,7 @@ class HIPAALibrary(RuleLibrary):
                 name="disaster_recovery",
                 description="Disaster recovery plan must be documented",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -104,7 +104,7 @@ class HIPAALibrary(RuleLibrary):
                 name="integrity_verification",
                 description="Implement data integrity verification",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -112,7 +112,7 @@ class HIPAALibrary(RuleLibrary):
                 name="transmission_encryption",
                 description="All data transmission must be encrypted",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -120,7 +120,7 @@ class HIPAALibrary(RuleLibrary):
                 name="authorization_control",
                 description="Implement role-based access control",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -128,7 +128,7 @@ class HIPAALibrary(RuleLibrary):
                 name="audit_controls",
                 description="Implement comprehensive audit controls",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
         ]

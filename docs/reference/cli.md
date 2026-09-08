@@ -2943,7 +2943,8 @@ confiture lint [OPTIONS]
 | `--write-baseline` | - | Flag | off | Create or reset the --baseline file from the current findings |
 | `--list-rules` | - | Flag | off | Print the rule catalogue (code, family, severity, default/opt-in) and exit 0. Honours --format json. |
 | `--replica-safe` | - | Flag | off | Deprecated alias for `--select default,replica` (#139). Still supported; new rules register instead of adding a flag. |
-| `--migrations-dir` | - | path | `db/migrations` | Migrations directory for --replica-safe (default: db/migrations) |
+| `--migrations-dir` | - | path | `db/migrations` | Migrations directory the migration-tree rules read — replica_001, own_001, own_002 (default: db/migrations) |
+| `--overrides-dir` | - | path | - | Overrides mirror directory. tree_004 needs it and is skipped without it: there is no conventional location to guess. |
 | `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant` (tenant_001): flag function INSERTs missing the FK column a tenant-scoped view requires. |
 | `--check-security-definer` | - | Flag | off | Deprecated alias for `--select default,security-definer`. Runs sec_002 over the env's schema DDL: flag SECURITY DEFINER functions/procedures that do not pin search_path (CVE-2018-1058). No-op when the config has no `security_lint:` block or `security_lint.enabled` is false. Default severity is advisory (warning); set `security_lint.severity: error` to make it a hard gate. |
 
@@ -3849,11 +3850,11 @@ confiture lint-unified [OPTIONS] [FILES]...
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--check` | `-c` | text | - | Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (GEN001–GEN004 file-numbering). Default: all. |
+| `--check` | `-c` | text | - | Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (tree_001–tree_004 file-numbering). Default: all. |
 | `--git-diff` | - | Flag | off | Only lint files changed in the current git diff (default: off) |
 | `--env` | `-e` | text | `local` | Environment for schema lint (default: local) |
-| `--schema-dir` | - | path | - | Root of the DDL file tree for --check tree (default: inferred from env config). |
-| `--overrides-dir` | - | path | - | Overrides mirror directory for GEN004 orphan check (optional). |
+| `--schema-dir` | - | path | - | Root of the DDL file tree for --check tree (default: the directories --env's include_dirs builds from, minus what it excludes). |
+| `--overrides-dir` | - | path | - | Overrides mirror directory for the tree_004 orphan check (optional). |
 | `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
 | `--fail-on-error` | - | Flag | on | Exit with code 1 if errors found (default: on) |
 

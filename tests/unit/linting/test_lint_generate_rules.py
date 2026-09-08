@@ -1,4 +1,4 @@
-"""Unit tests for GEN001–GEN004 lint rules — issue #111.
+"""Unit tests for the tree_001–tree_004 file-tree lint rules — issue #111.
 
 All tests use pytest's ``tmp_path`` fixture.  No database required.
 """
@@ -8,10 +8,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from confiture.core.linting.libraries.generate import (
-    Gen001PrefixUnique,
-    Gen002VerbSuffix,
-    Gen003GapPolicy,
-    Gen004OrphanedOverride,
+    Tree001PrefixUnique,
+    Tree002VerbSuffix,
+    Tree003GapPolicy,
+    Tree004OrphanedOverride,
 )
 from confiture.core.linting.schema_linter import RuleSeverity
 
@@ -27,6 +27,11 @@ def _touch(directory: Path, *names: str) -> None:
         (directory / name).touch()
 
 
+def _files(directory: Path) -> list[Path]:
+    """The SQL files under *directory*, standing in for what the build would read."""
+    return sorted(f for f in directory.rglob("*.sql") if f.is_file())
+
+
 def _violation_ids(violations: list) -> list[str]:
     return [v.rule_id for v in violations]
 
@@ -36,18 +41,18 @@ def _violation_files(violations: list) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# GEN001 — Prefix uniqueness within a subtree
+# tree_001 — Prefix uniqueness within a subtree
 # ---------------------------------------------------------------------------
 
 
-class TestGen001PrefixUnique:
-    """Tests for GEN001: no two files in the same directory share a numeric prefix."""
+class TestTree001PrefixUnique:
+    """Tests for tree_001: no two files in the same directory share a numeric prefix."""
 
     def test_no_violation_when_all_unique(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00002_update.sql", "00003_delete.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         assert violations == []
 
@@ -55,16 +60,16 @@ class TestGen001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00001_update.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         assert len(violations) == 1
-        assert all(v.rule_id == "GEN001" for v in violations)
+        assert all(v.rule_id == "tree_001" for v in violations)
 
     def test_violation_severity_is_error(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00001_update.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         assert violations[0].severity == RuleSeverity.ERROR
 
@@ -72,7 +77,7 @@ class TestGen001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00001_b.sql", "00001_c.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         assert len(violations) == 2
 
@@ -82,7 +87,7 @@ class TestGen001PrefixUnique:
         _touch(schema, "00001_root.sql")
         _touch(sub, "00001_create.sql", "00001_update.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         # Collision is in the subdirectory
         assert len(violations) == 1
@@ -92,7 +97,7 @@ class TestGen001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "create.sql", "update.sql", "README.md")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         assert violations == []
 
@@ -101,7 +106,7 @@ class TestGen001PrefixUnique:
         _touch(schema / "catalog", "00001_create.sql")
         _touch(schema / "public", "00001_create.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         # Same prefix is fine if they're in different directories
         assert violations == []
@@ -110,24 +115,24 @@ class TestGen001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "0001a_create.sql", "0001a_update.sql")
 
-        violations = Gen001PrefixUnique().check(schema)
+        violations = Tree001PrefixUnique().check(_files(schema))
 
         assert len(violations) == 1
 
 
 # ---------------------------------------------------------------------------
-# GEN002 — Verb suffix
+# tree_002 — Verb suffix
 # ---------------------------------------------------------------------------
 
 
-class TestGen002VerbSuffix:
-    """Tests for GEN002: prefixed filenames must include a verb suffix."""
+class TestTree002VerbSuffix:
+    """Tests for tree_002: prefixed filenames must include a verb suffix."""
 
     def test_no_violation_for_verb_files(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00002_update.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert violations == []
 
@@ -135,16 +140,16 @@ class TestGen002VerbSuffix:
         schema = tmp_path / "schema"
         _touch(schema, "00001.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert len(violations) == 1
-        assert violations[0].rule_id == "GEN002"
+        assert violations[0].rule_id == "tree_002"
 
     def test_violation_severity_is_warning(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         _touch(schema, "00001.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert violations[0].severity == RuleSeverity.WARNING
 
@@ -152,7 +157,7 @@ class TestGen002VerbSuffix:
         schema = tmp_path / "schema"
         _touch(schema, "helpers.sql", "seed.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert violations == []
 
@@ -160,7 +165,7 @@ class TestGen002VerbSuffix:
         schema = tmp_path / "schema"
         _touch(schema / "functions", "00001.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert len(violations) == 1
 
@@ -168,7 +173,7 @@ class TestGen002VerbSuffix:
         schema = tmp_path / "schema"
         _touch(schema, "00001.sql", "00002.sql", "00003_ok.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert len(violations) == 2
 
@@ -176,24 +181,24 @@ class TestGen002VerbSuffix:
         schema = tmp_path / "schema"
         _touch(schema, "0001a.sql")
 
-        violations = Gen002VerbSuffix().check(schema)
+        violations = Tree002VerbSuffix().check(_files(schema))
 
         assert len(violations) == 1
 
 
 # ---------------------------------------------------------------------------
-# GEN003 — Gap policy
+# tree_003 — Gap policy
 # ---------------------------------------------------------------------------
 
 
-class TestGen003GapPolicy:
-    """Tests for GEN003: warn on gaps in prefix sequences."""
+class TestTree003GapPolicy:
+    """Tests for tree_003: warn on gaps in prefix sequences."""
 
     def test_no_violation_for_contiguous_sequence(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00002_b.sql", "00003_c.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert violations == []
 
@@ -201,16 +206,16 @@ class TestGen003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00003_c.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert len(violations) == 1
-        assert violations[0].rule_id == "GEN003"
+        assert violations[0].rule_id == "tree_003"
 
     def test_violation_severity_is_warning(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00005_e.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert violations[0].severity == RuleSeverity.WARNING
 
@@ -218,7 +223,7 @@ class TestGen003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_only.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert violations == []
 
@@ -226,7 +231,7 @@ class TestGen003GapPolicy:
         schema = tmp_path / "schema"
         schema.mkdir()
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert violations == []
 
@@ -234,7 +239,7 @@ class TestGen003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00003_c.sql", "00007_g.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert len(violations) == 2
 
@@ -245,7 +250,7 @@ class TestGen003GapPolicy:
         # Sub: has gap
         _touch(schema / "functions", "00001_x.sql", "00003_z.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert len(violations) == 1
         assert "functions" in (violations[0].file_path or "")
@@ -254,18 +259,18 @@ class TestGen003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "alpha.sql", "beta.sql")
 
-        violations = Gen003GapPolicy().check(schema)
+        violations = Tree003GapPolicy().check(_files(schema))
 
         assert violations == []
 
 
 # ---------------------------------------------------------------------------
-# GEN004 — Orphaned overrides
+# tree_004 — Orphaned overrides
 # ---------------------------------------------------------------------------
 
 
-class TestGen004OrphanedOverride:
-    """Tests for GEN004: no override file without a matching schema file."""
+class TestTree004OrphanedOverride:
+    """Tests for tree_004: no override file without a matching schema file."""
 
     def test_no_violation_when_all_matched(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
@@ -273,7 +278,7 @@ class TestGen004OrphanedOverride:
         _touch(schema / "functions", "00001_create.sql")
         _touch(overrides / "functions", "00001_create.sql")
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert violations == []
 
@@ -284,10 +289,10 @@ class TestGen004OrphanedOverride:
         _touch(overrides / "functions", "00001_create.sql")
         # No matching file in schema/functions/
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert len(violations) == 1
-        assert violations[0].rule_id == "GEN004"
+        assert violations[0].rule_id == "tree_004"
 
     def test_violation_severity_is_warning(self, tmp_path: Path) -> None:
         schema = tmp_path / "schema"
@@ -295,7 +300,7 @@ class TestGen004OrphanedOverride:
         overrides = tmp_path / "overrides"
         _touch(overrides, "00001_create.sql")
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert violations[0].severity == RuleSeverity.WARNING
 
@@ -304,7 +309,7 @@ class TestGen004OrphanedOverride:
         schema.mkdir()
         overrides = tmp_path / "nonexistent_overrides"
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert violations == []
 
@@ -314,7 +319,7 @@ class TestGen004OrphanedOverride:
         overrides = tmp_path / "overrides"
         _touch(overrides, "00001_a.sql", "00002_b.sql")
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert len(violations) == 2
 
@@ -324,7 +329,7 @@ class TestGen004OrphanedOverride:
         overrides = tmp_path / "overrides"
         _touch(overrides / "catalog" / "manufacturer", "00001_create.sql")
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert len(violations) == 1
 
@@ -335,7 +340,7 @@ class TestGen004OrphanedOverride:
         overrides.mkdir()
         (overrides / "README.md").touch()
 
-        violations = Gen004OrphanedOverride().check(schema, overrides)
+        violations = Tree004OrphanedOverride().check([schema], overrides)
 
         assert violations == []
 
@@ -362,21 +367,21 @@ class TestSchemaLinterLintTree:
         from confiture.core.linting.schema_linter import SchemaLinter
 
         schema = tmp_path / "schema"
-        # GEN001: duplicate prefix
+        # tree_001: duplicate prefix
         _touch(schema, "00001_a.sql", "00001_b.sql")
-        # GEN002: no verb
+        # tree_002: no verb
         _touch(schema, "00002.sql")
-        # GEN003 fires on the gap that follows.
+        # tree_003 fires on the gap that follows.
         _touch(schema, "00010_x.sql")
 
         report = SchemaLinter().lint_tree(schema)
 
         all_ids = {v.rule_id for v in report.errors + report.warnings + report.info}
-        assert "GEN001" in all_ids
-        assert "GEN002" in all_ids
-        assert "GEN003" in all_ids
+        assert "tree_001" in all_ids
+        assert "tree_002" in all_ids
+        assert "tree_003" in all_ids
 
-    def test_lint_tree_includes_gen004_when_overrides_dir_given(self, tmp_path: Path) -> None:
+    def test_lint_tree_includes_tree_004_when_overrides_dir_given(self, tmp_path: Path) -> None:
         from confiture.core.linting.schema_linter import SchemaLinter
 
         schema = tmp_path / "schema"
@@ -387,7 +392,7 @@ class TestSchemaLinterLintTree:
         report = SchemaLinter().lint_tree(schema, overrides_dir=overrides)
 
         all_ids = {v.rule_id for v in report.errors + report.warnings + report.info}
-        assert "GEN004" in all_ids
+        assert "tree_004" in all_ids
 
     def test_lint_tree_clean_schema_no_violations(self, tmp_path: Path) -> None:
         from confiture.core.linting.schema_linter import SchemaLinter

@@ -496,38 +496,32 @@ class SchemaLinter:
         schema_dir: Path,
         overrides_dir: Path | None = None,
     ) -> LintReport:
-        """Lint a schema file tree for structural consistency (GEN001–GEN004).
+        """Lint a schema file tree for structural consistency (``tree_001``–``tree_004``).
+
+        The convenience spelling of
+        :func:`~confiture.core.linting.libraries.generate.tree_violations` for a
+        caller holding a directory rather than the build's file list: it walks
+        *schema_dir* for ``*.sql`` and runs all four rules. A command that knows
+        which files the build reads passes them to ``tree_violations`` directly,
+        so the environment's exclusions are honoured.
 
         Args:
             schema_dir: Root of the schema tree to scan.
-            overrides_dir: Optional overrides mirror directory (for GEN004).
+            overrides_dir: Optional overrides mirror directory (for ``tree_004``).
 
         Returns:
             LintReport with all violations found.
         """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.libraries.generate import (
-            Gen001PrefixUnique,
-            Gen002VerbSuffix,
-            Gen003GapPolicy,
-            Gen004OrphanedOverride,
-        )
+        from confiture.core.linting.libraries.generate import tree_violations
 
         report = LintReport()
-
-        for violation in Gen001PrefixUnique().check(schema_dir):
+        for violation in tree_violations(
+            sorted(f for f in schema_dir.rglob("*.sql") if f.is_file()),
+            schema_dirs=[schema_dir],
+            overrides_dir=overrides_dir,
+        ):
             report.add_violation(violation)
-
-        for violation in Gen002VerbSuffix().check(schema_dir):
-            report.add_violation(violation)
-
-        for violation in Gen003GapPolicy().check(schema_dir):
-            report.add_violation(violation)
-
-        if overrides_dir is not None:
-            for violation in Gen004OrphanedOverride().check(schema_dir, overrides_dir):
-                report.add_violation(violation)
-
         return report
 
     def _check_tenant_isolation(self, report: LintReport) -> None:
