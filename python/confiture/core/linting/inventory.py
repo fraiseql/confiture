@@ -108,6 +108,9 @@ class SchemaObject:
     set by callers that inventory one file at a time. ``replace`` and
     ``if_not_exists`` record ``CREATE OR REPLACE`` / ``IF NOT EXISTS``, which
     decide what a second definition of the same object does at build time.
+    ``line`` is where the object's *name* is written and ``statement_line``
+    where its ``CREATE`` begins — the same line for most statements, and not
+    for one whose name is on a continuation line.
     """
 
     kind: str
@@ -127,6 +130,7 @@ class SchemaObject:
     replace: bool = False
     if_not_exists: bool = False
     parent: str | None = None
+    statement_line: int = 1
 
     @property
     def qualified(self) -> str:
@@ -142,7 +146,17 @@ class SchemaObject:
 
 @dataclass
 class Inventory:
+    """The objects a text creates, and the schemas it declares.
+
+    ``schemas`` is kept beside ``objects`` rather than in it: a schema is a
+    namespace, not an object in one, and the rules that walk ``objects`` — the
+    duplicate check above all — would read a schema re-declared with
+    ``IF NOT EXISTS`` in a second file as a duplicate definition, which is
+    idiomatic rather than a mistake.
+    """
+
     objects: list[SchemaObject] = field(default_factory=list)
+    schemas: list[SchemaObject] = field(default_factory=list)
 
     @property
     def tables(self) -> list[SchemaObject]:
@@ -458,7 +472,28 @@ def _object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     """The one entry this statement creates, or ``None`` when it creates none."""
     stmt = raw.stmt
     builder = _BUILDERS.get(type(stmt).__name__)
-    return None if builder is None else builder(sql, stmt, _statement_offset(sql, raw))
+    if builder is None:
+        return None
+    offset = _statement_offset(sql, raw)
+    obj = builder(sql, stmt, offset)
+    if obj is not None:
+        obj.statement_line = _line_of(sql, offset)
+    return obj
+
+
+def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
+    """``CREATE SCHEMA app``, or ``None`` for any other statement.
+
+    ``CREATE SCHEMA AUTHORIZATION bob`` names the role, not the schema, so
+    there is nothing to record.
+    """
+    stmt = raw.stmt
+    if type(stmt).__name__ != "CreateSchemaStmt" or not getattr(stmt, "schemaname", None):
+        return None
+    offset = _statement_offset(sql, raw)
+    declared = _object("schema", None, stmt.schemaname, _line_of(sql, offset), offset)
+    declared.statement_line = declared.line
+    return declared
 
 
 def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
@@ -518,9 +553,9 @@ def build_inventory(sql: str) -> Inventory:
     inventory = Inventory()
     raws = list(pglast.parse_sql(sql) or [])
     for raw in raws:
-        obj = _object_from_statement(sql, raw)
+        obj = _object_from_statement(sql, raw) or _schema_declaration(sql, raw)
         if obj is not None:
-            inventory.objects.append(obj)
+            (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
     for raw in raws:
         stmt = raw.stmt
         kind = type(stmt).__name__
@@ -569,6 +604,7 @@ def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> No
             return
         obj.file = source.file
         obj.line = source.line
+        obj.statement_line = source.statement_line
         obj.columns = [
             replace(column, line=source_column.line)
             for column, source_column in zip(obj.columns, source.columns, strict=False)

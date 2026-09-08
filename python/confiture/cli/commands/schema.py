@@ -562,7 +562,7 @@ def _duplicate_gate(
     if not (warn or fail):
         return []
 
-    objects, unparseable = inventory_files(sql_files, root=project_dir)
+    objects, _schemas, unparseable = inventory_files(sql_files, root=project_dir)
     for label in unparseable:
         out.print(
             f"[yellow]⚠️ {label}: pglast could not parse it — not checked for duplicates[/yellow]"
@@ -981,8 +981,9 @@ def lint(
 
     PROCESS:
       Runs the default rule set — naming_001, naming_002, pk_001, doc_001–doc_004,
-      sec_001 — plus whatever `--select` adds. `--list-rules` prints the full
-      catalogue with codes and families. Results in table, JSON or CSV.
+      build_001, build_002, sec_001, qual_001 — plus whatever `--select` adds.
+      `--list-rules` prints the full catalogue with codes and families. Results
+      in table, JSON or CSV.
 
     RULES:
       Select by code or family: `--select pk,naming`, `--select naming_001`,
@@ -991,17 +992,17 @@ def lint(
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
       naming_001, naming_002, pk_001, doc_001–doc_004, build_001, build_002,
-      sec_001 — on by default. (LintConfig also carries check_indexes /
+      sec_001, qual_001 — on by default. (LintConfig also carries check_indexes /
       check_constraints; neither has a rule behind it, so neither is listed or
       selectable.)
 
       Opt-in, each needing its configuration as well as its selector:
       acl_001 (`acls.lint_enabled: true`), tenant_001, replica_001, sec_002
       (`security_lint.enabled: true`), func_001 (`function_coverage.enabled:
-      true`), own_001 / own_002 (an `ownership:` block), and tree_001–tree_004,
-      the DDL file-tree rules — `--select tree`; tree_004 also needs
-      `--overrides-dir`. `--list-rules` prints all of it with the configuration
-      each needs.
+      true`), own_001 / own_002 (an `ownership:` block), qual_002 (relations and
+      types created without a schema), and tree_001–tree_004, the DDL file-tree
+      rules — `--select tree`; tree_004 also needs `--overrides-dir`.
+      `--list-rules` prints all of it with the configuration each needs.
 
     EXAMPLES:
       confiture lint
@@ -1015,6 +1016,9 @@ def lint(
 
       confiture lint --ignore doc
         ↳ The default rules, minus doc_001
+
+      confiture lint --select default,qual_002
+        ↳ Also report relations and types created without a schema
 
       confiture lint --env production
         ↳ Lint production environment

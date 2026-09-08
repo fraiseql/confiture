@@ -46,6 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   under `core/linting/` for the rule codes it declares and fails on one the registry does not know,
   with a stated reason for each of the two allow-listed groups (the five dormant compliance
   catalogues, and the `UNPARSEABLE` notice). LINT-04 cannot recur.
+- **The `qual` family: a `CREATE` says which schema it lands in (#248).** An unqualified
+  `CREATE FUNCTION fn_slugify(...)` does not say where the function goes — the applying role's
+  `search_path` decides at apply time, so the same file applied by two roles produces the object in
+  two schemas. `qual_001` reports routines (functions, procedures and aggregates) at `warning`, **on
+  by default**: it is trivial to fix on the day it is written, expensive later, and the volume is low.
+  `qual_002` reports relations and types (tables, views, materialized views, composite and enum
+  types, domains, sequences) at `warning`, **opt-in** (`--select default,qual_002`), because the
+  volume in an existing project is an order of magnitude higher — two codes so a project can adopt
+  one and baseline the other. Every finding carries its file, its line and a fix naming the schema
+  the same file declares, or `public` said to be a guess. `-- confiture:unqualified-ok` above a
+  statement opts it out, the way `-- confiture:secdef-allow-unpinned` does for `sec_002`; a
+  `SET search_path` in the file deliberately does **not**, because that is the mechanism which makes
+  the outcome role-dependent in the first place. Both rules read the object inventory, so there is no
+  second parse and no new regex.
 
 ### Changed
 
@@ -79,6 +93,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tree rule's object *is* a path, and `tree_001:file:00001_create.sql` would collapse every
   directory in the tree onto one baseline entry. `func_001` deliberately stays out — it reports one
   finding per duplicated signature and names whichever copy sorted first, so `@file` would churn.
+- **`CREATE AGGREGATE` and `CREATE SEQUENCE` are in the object inventory.** Neither was, so no rule
+  could see either — including `build_001`, which now reports a second definition of a sequence or an
+  aggregate in one build the way it does for every other object. An aggregate is identified by its
+  input types, like any other routine.
 - **`core/linting/versioning.LintSeverity` is renamed `ComplianceSeverity` (LINT-11).** Two enums
   shared the name — a three-value one in `models/lint.py` and a four-value one (it adds `CRITICAL`)
   behind the compliance catalogues — so which one an import meant depended on where it was written.

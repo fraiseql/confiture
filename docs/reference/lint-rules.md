@@ -90,6 +90,68 @@ COMMENT ON FUNCTION app.f(integer) IS 'the integer one';
 are dropped, so `COMMENT ON PROCEDURE app.p(numeric)` documents
 `app.p(x numeric(10,2))`.
 
+## The `qual` family — a `CREATE` says which schema it lands in
+
+`CREATE FUNCTION fn_slugify(value text) ...` does not say where the function
+goes. PostgreSQL resolves the unqualified name through the **applying role's**
+`search_path` at apply time, so the same file applied by a deploy role and by a
+developer produces the object in two different schemas — and the copy in the
+wrong place is found by whatever breaks next, not by the build.
+
+This is the declaration-side twin of `sec_002`, which reports the same
+hazard on the *reference* side: an unqualified name inside a `SECURITY DEFINER`
+body resolves through the **caller's** path (CVE-2018-1058).
+
+| Rule | Objects | Default |
+|------|---------|:-------:|
+| `qual_001` | functions, procedures, aggregates | on |
+| `qual_002` | tables, views, materialized views, composite and enum types, domains, sequences | off |
+
+Two codes rather than one because the volume differs by an order of magnitude:
+a schema has a handful of routines and hundreds of tables. A project adopts
+`qual_001` on the day it upgrades and takes `qual_002` on with
+`--select default,qual_002` plus a
+[baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline--baseline--write-baseline)
+when it is ready.
+
+```sql
+CREATE SCHEMA app;
+CREATE OR REPLACE FUNCTION fn_slugify(value TEXT) RETURNS TEXT
+LANGUAGE sql IMMUTABLE AS $$ SELECT lower(value) $$;
+-- qual_001: Function 'fn_slugify(text)' is created without a schema; which schema
+--           it lands in is decided at apply time by the applying role's search_path
+--           fix: Write the name as 'app.fn_slugify'
+```
+
+The suggested fix names a schema only when the **same file** declares one above
+the statement with `CREATE SCHEMA`; otherwise it says `public` and says that
+`public` is a guess. A fix that guessed silently would be worse than none.
+
+### What does not silence it
+
+**`SET search_path` does not.** A reader expects the opposite, so it is worth
+stating: setting the path in the file is exactly the mechanism that makes the
+outcome depend on who applies it — treating it as an exemption would hide the
+hazard the rule exists for. A `SET search_path` at the top of a file and a
+different one in the session that applies it produce different databases from
+the same DDL.
+
+**A directive does.** Write `-- confiture:unqualified-ok` above a statement that
+is deliberately schema-agnostic — an extension bootstrap, a template applied into
+whichever schema the caller chose:
+
+```sql
+-- confiture:unqualified-ok
+CREATE TABLE tb_scratch (id int);
+```
+
+It attaches to the statement below it (blank lines and other comments in between
+do not detach it) and silences that statement only, so a schema-agnostic file
+stays quiet without turning the rule off for the whole tree.
+
+A `CREATE TEMPORARY TABLE` is never reported: it lives in `pg_temp` and has no
+schema to write.
+
 ## The `build` family — one object, one definition
 
 `confiture build` concatenates the schema files in order, so a second

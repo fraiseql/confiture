@@ -125,6 +125,52 @@ class TestQual002Details:
         ]
 
 
+class TestTheDirectiveAndTheSuggestedFix:
+    def test_the_directive_silences_the_statement_below_it(self) -> None:
+        sql = f"-- confiture:unqualified-ok\nCREATE FUNCTION f() {BODY}\n"
+
+        assert _findings(sql) == []
+
+    def test_it_silences_only_that_statement(self) -> None:
+        sql = (
+            f"-- confiture:unqualified-ok\nCREATE FUNCTION f() {BODY}\nCREATE FUNCTION g() {BODY}\n"
+        )
+
+        assert _findings(sql) == [("qual_001", "g()")]
+
+    def test_it_reaches_a_statement_whose_name_is_on_a_later_line(self) -> None:
+        sql = "-- confiture:unqualified-ok\nCREATE TABLE\n  tb_t (id int);\n"
+
+        assert _findings(sql, check_qualification_relations=True) == []
+
+    def test_set_search_path_does_not_silence_the_rule(self) -> None:
+        sql = f"SET search_path = app;\nCREATE FUNCTION f() {BODY}\n"
+
+        assert _findings(sql) == [("qual_001", "f()")]
+
+    def test_the_fix_names_the_schema_the_file_creates(self) -> None:
+        sql = f"CREATE SCHEMA app;\nCREATE FUNCTION f() {BODY}\n"
+
+        (finding,) = _report(sql).warnings
+
+        assert finding.suggested_fix == "Write the name as 'app.f'"
+
+    def test_the_fix_says_public_is_a_guess_when_no_schema_precedes_it(self) -> None:
+        sql = f"CREATE FUNCTION f() {BODY}\n"
+
+        (finding,) = _report(sql).warnings
+
+        assert finding.suggested_fix.startswith("Write the name as 'public.f'")
+        assert "guess" in finding.suggested_fix
+
+    def test_a_schema_created_after_the_object_is_not_the_suggestion(self) -> None:
+        sql = f"CREATE FUNCTION f() {BODY}\nCREATE SCHEMA app;\n"
+
+        (finding,) = _report(sql).warnings
+
+        assert "guess" in finding.suggested_fix
+
+
 class TestRegistry:
     def test_the_qual_family_is_two_warnings_one_on_one_opt_in(self) -> None:
         qual = [rule for rule in LINT_RULES if rule.family == "qual"]

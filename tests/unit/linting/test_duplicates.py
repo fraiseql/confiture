@@ -44,7 +44,7 @@ def _files(tmp_path: Path, **contents: str) -> list[Path]:
 
 def _dups(tmp_path: Path, **contents: str) -> list[Duplicate]:
     paths = _files(tmp_path, **contents)
-    objects, unparseable = inventory_files(paths, root=tmp_path / "schema")
+    objects, _schemas, unparseable = inventory_files(paths, root=tmp_path / "schema")
     assert unparseable == []
     return find_duplicates(objects)
 
@@ -148,7 +148,7 @@ class TestKeys:
 
     def test_an_unparseable_file_is_reported_not_skipped_silently(self, tmp_path: Path) -> None:
         paths = _files(tmp_path, a="CREATE TABLE t (id int);\n", b="CREATE TABEL broken (;\n")
-        objects, unparseable = inventory_files(paths, root=tmp_path / "schema")
+        objects, _schemas, unparseable = inventory_files(paths, root=tmp_path / "schema")
         assert [o.identity for o in objects] == ["t"]
         assert unparseable == ["b.sql"]
 
@@ -259,7 +259,7 @@ def test_corpus_has_duplicates_and_every_finding_is_located() -> None:
             "set CONFITURE_SCHEMA_CORPUS_DIR to a real schema tree (e.g. printoptim_backend/db/0_schema)"
         )
     root = Path(corpus)
-    objects, unparseable = inventory_files(sorted(root.rglob("*.sql")), root=root)
+    objects, _schemas, unparseable = inventory_files(sorted(root.rglob("*.sql")), root=root)
     dups = find_duplicates(objects)
     assert dups, "the corpus was expected to contain at least one duplicate definition"
     for dup in dups:
