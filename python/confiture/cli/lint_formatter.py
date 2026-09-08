@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.core.parser_info import parser_stamp
-from confiture.models.lint import LintReport, LintSeverity
+from confiture.models.lint import LintReport, LintSeverity, Violation
 
 
 def format_lint_report(
@@ -59,6 +59,18 @@ def _severity_string(severity: LintSeverity) -> str:
     return "[blue]INFO[/blue]"
 
 
+def _location_cell(violation: Violation) -> str:
+    """The object, and under it the file and line — the answer to "where?".
+
+    A finding with no file shows the object alone; a line without a file is not
+    a location and is never rendered on its own.
+    """
+    if not violation.file:
+        return violation.location
+    where = f"{violation.file}:{violation.line}" if violation.line else violation.file
+    return f"{violation.location}\n[dim]{where}[/dim]"
+
+
 def format_table(report: LintReport, console: Console) -> None:
     """Display LintReport as a rich table.
 
@@ -97,7 +109,7 @@ def format_table(report: LintReport, console: Console) -> None:
             _severity_string(violation.severity),
             violation.rule_id,
             violation.rule_name,
-            violation.location,
+            _location_cell(violation),
             violation.message,
         )
 

@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -42,6 +43,7 @@ from confiture.core.linting.gate import (
     should_fail,
     threshold_from_aliases,
 )
+from confiture.core.linting.inventory import label_for
 from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
 from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, LINT_RULES, resolve_selection
 from confiture.core.linting.schema_linter import (
@@ -50,7 +52,6 @@ from confiture.core.linting.schema_linter import (
 from confiture.core.linting.schema_linter import LintReport as LinterReport
 from confiture.core.linting.schema_linter import (
     LintViolation,
-    RuleSeverity,
 )
 from confiture.core.linting.schema_linter import (
     RuleSeverity as _RS,
@@ -932,10 +933,7 @@ CheckSecurityDefinerOpt = Annotated[
         "functions/procedures that do not pin search_path (CVE-2018-1058). "
         "No-op when the config has no `security_lint:` block or "
         "`security_lint.enabled` is false. Default severity is advisory "
-        "(warning); set `security_lint.severity: error` to make it a hard gate. "
-        "Machine-readable output: use `migrate validate --check-security-definer "
-        "--format json` instead of `lint --format json`, which does not include "
-        "sec_002 findings in its JSON report.",
+        "(warning); set `security_lint.severity: error` to make it a hard gate.",
     ),
 ]
 
@@ -1045,18 +1043,7 @@ def lint(
             check_tenant_isolation=check_tenant_isolation,
             check_security_definer=check_security_definer,
         )
-        config = LinterConfig(
-            enabled=True,
-            fail_on_error=threshold.rank <= Threshold.ERROR.rank,
-            fail_on_warning=threshold.rank <= Threshold.WARNING.rank,
-            check_naming="naming_001" in selected or "naming_002" in selected,
-            check_primary_keys="pk_001" in selected,
-            check_documentation=any(code.startswith("doc_") for code in selected),
-            check_duplicates=any(code.startswith("build_") for code in selected),
-            check_security="sec_001" in selected,
-            check_tenant_isolation="tenant_001" in selected,
-            check_acl_coverage="acl_001" in selected,
-        )
+        config = _linter_config(selected, threshold)
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
             console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
@@ -1066,6 +1053,8 @@ def lint(
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
         # second pass over the findings.
         _keep_selected_rules(linter_report, selected)
+        for violation in _tree_rule_findings(selected, env, project_dir, migrations_dir):
+            linter_report.add_violation(violation)
         baseline_diff = _apply_baseline(
             linter_report, baseline=baseline, write=write_baseline, project_dir=project_dir
         )
@@ -1087,13 +1076,9 @@ def lint(
                 # terminal width, which breaks the JSON stream (see _output_json).
                 print(formatted)
 
-        found = [v.severity.value for v in report.violations]
         if baseline_diff is not None:
             _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
-        if "replica_001" in selected:
-            found += [v.severity.value for v in _replica_lint(env, project_dir, migrations_dir)]
-        if "sec_002" in selected:
-            found += [v.severity.value for v in _security_definer_lint(env, project_dir)]
+        found = [v.severity.value for v in report.violations]
         new_since_baseline = baseline_diff is not None and bool(baseline_diff.new)
         if should_fail(found, threshold) or new_since_baseline:
             raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found violations
@@ -1153,12 +1138,55 @@ def _resolve_threshold(
     return parse_threshold(fail_on)
 
 
-def _replica_lint(env: str, project_dir: Path, migrations_dir: Path) -> list[LintViolation]:
+def _linter_config(selected: frozenset[str], threshold: Threshold) -> LinterConfig:
+    """``LintConfig``'s coarse switches, from the exact set of selected codes.
+
+    Its two ``fail_on_*`` booleans decide nothing — the gate does — so they are
+    derived from the threshold rather than carried alongside it.
+    """
+    return LinterConfig(
+        enabled=True,
+        fail_on_error=threshold.rank <= Threshold.ERROR.rank,
+        fail_on_warning=threshold.rank <= Threshold.WARNING.rank,
+        check_naming="naming_001" in selected or "naming_002" in selected,
+        check_primary_keys="pk_001" in selected,
+        check_documentation=any(code.startswith("doc_") for code in selected),
+        check_duplicates=any(code.startswith("build_") for code in selected),
+        check_security="sec_001" in selected,
+        check_tenant_isolation="tenant_001" in selected,
+        check_acl_coverage="acl_001" in selected,
+    )
+
+
+def _tree_rule_findings(
+    selected: frozenset[str], env: str, project_dir: Path, migrations_dir: Path
+) -> list[LintViolation]:
+    """The rules that read a tree of files rather than the built schema.
+
+    They are findings like any other — same report, same baseline, same gate —
+    and they name their files the way the rest of the report does.
+    """
+    findings: list[LintViolation] = []
+    if "replica_001" in selected:
+        findings += _replica_findings(env, project_dir, migrations_dir)
+    if "sec_002" in selected:
+        findings += _security_definer_findings(env, project_dir)
+    return [_relative(v, project_dir) for v in findings]
+
+
+def _relative(violation: LintViolation, project_dir: Path) -> LintViolation:
+    """A finding names its file the way the rest of the report does."""
+    if violation.file_path is None:
+        return violation
+    return replace(violation, file_path=label_for(Path(violation.file_path), project_dir))
+
+
+def _replica_findings(env: str, project_dir: Path, migrations_dir: Path) -> list[LintViolation]:
     """#139: replica-aware forward-compatibility lint over the migrations tree.
 
-    A migration-tree check, distinct from the schema lint. Prints its own
-    findings and returns them; what they do to the exit code is the gate's
-    decision, made once for every rule.
+    A migration-tree check, distinct from the schema lint — but a finding all
+    the same, so it joins the report every other rule writes to instead of
+    printing itself to the console and deciding its own exit code.
     """
     # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import Replica001ForwardCompat
@@ -1172,40 +1200,17 @@ def _replica_lint(env: str, project_dir: Path, migrations_dir: Path) -> list[Lin
     # Reason: replica config is optional; any failure reading it means 'no replicas'
     except Exception:
         pass
-    violations = Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
-        migrations_dir
-    )
-    if not violations:
-        console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
-        return []
-    console.print("\n[cyan]🔁 Replica forward-compatibility:[/cyan]")
-    for v in violations:
-        color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
-        console.print(
-            f"  [{color}]{v.severity.value.upper()}[/{color}] {v.rule_id} "
-            f"({v.object_name}): {v.message}"
-        )
-    return violations
+    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(migrations_dir)
 
 
-def _security_definer_lint(env: str, project_dir: Path) -> list[LintViolation]:
-    """#161: sec_002 — SECURITY DEFINER / search_path bolt-on over the env's schema DDL.
+def _security_definer_findings(env: str, project_dir: Path) -> list[LintViolation]:
+    """#161: sec_002 — SECURITY DEFINER / search_path over the env's schema DDL.
 
-    Findings print to the console; they are NOT folded into the JSON report. For
-    machine-readable output use `migrate validate --check-security-definer --format json`.
-    Returns them; what they do to the exit code is the gate's decision.
+    Findings join the report, so `lint --format json` carries them and
+    `--baseline` can absorb them (LINT-03). They used to print straight to the
+    console, which in a machine-output mode meant printing *into* the payload.
     """
-
-    sec_cfg = None
-    try:
-        cfg_path = (project_dir or Path.cwd()) / "db" / "environments" / f"{env}.yaml"
-        if cfg_path.exists():
-            sec_cfg = _lsl(_lc(cfg_path), cfg_path, require=False)
-        if sec_cfg is not None and not sec_cfg.enabled:
-            sec_cfg = None
-    # Reason: security config is optional; any failure reading it means 'defaults'
-    except Exception:
-        sec_cfg = None
+    sec_cfg = _security_lint_config(env, project_dir)
     if sec_cfg is None:
         return []
     severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
@@ -1213,21 +1218,22 @@ def _security_definer_lint(env: str, project_dir: Path) -> list[LintViolation]:
         ddl_paths = _core_builder.SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
     except (ConfiturError, OSError):
         ddl_paths = sorted(Path("db/schema").rglob("*.sql")) if Path("db/schema").exists() else []
-    violations = Sec002SecurityDefinerSearchPath(
+    return Sec002SecurityDefinerSearchPath(
         apply_to=sec_cfg.apply_to, ignore=sec_cfg.ignore, severity=severity
     ).check(ddl_paths or [Path("db/schema")])
-    if not violations:
-        console.print("\n[green]🔒 Security-definer search_path lint: no issues[/green]")
-        return []
-    console.print("\n[cyan]🔒 Security-definer search_path lint:[/cyan]")
-    for v in violations:
-        color = "red" if v.severity == _RS.ERROR else "yellow"
-        loc = f" ({v.file_path}:{v.line_number})" if v.line_number else ""
-        console.print(
-            f"  [{color}]{v.severity.value.upper()}[/{color}] "
-            f"{v.rule_id} ({v.object_name}){loc}: {v.message}"
-        )
-    return violations
+
+
+def _security_lint_config(env: str, project_dir: Path) -> Any:
+    """The env's ``security_lint:`` block, or ``None`` when absent or disabled."""
+    try:
+        cfg_path = (project_dir or Path.cwd()) / "db" / "environments" / f"{env}.yaml"
+        if not cfg_path.exists():
+            return None
+        cfg = _lsl(_lc(cfg_path), cfg_path, require=False)
+    # Reason: security config is optional; any failure reading it means 'defaults'
+    except Exception:
+        return None
+    return cfg if cfg is not None and cfg.enabled else None
 
 
 def _apply_baseline(

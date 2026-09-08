@@ -23,7 +23,7 @@ from typing import Any
 
 import pglast
 
-from confiture.core.linting.inventory import SchemaObject, build_inventory
+from confiture.core.linting.inventory import SchemaObject, build_inventory, label_for
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
 DEFAULT_SCHEMA = "public"
@@ -87,13 +87,7 @@ def inventory_files(
     return objects, unparseable
 
 
-def _label(path: Path, root: Path | None) -> str:
-    if root is not None:
-        try:
-            return path.resolve().relative_to(root.resolve()).as_posix()
-        except ValueError:
-            pass
-    return path.as_posix()
+_label = label_for
 
 
 def _key(obj: SchemaObject) -> tuple[str, str, str, str | None]:

@@ -20,6 +20,7 @@ import copy
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 import pglast
@@ -458,6 +459,22 @@ def build_inventory(sql: str) -> Inventory:
         elif kind == "CommentStmt":
             _apply_comment(stmt, inventory)
     return inventory
+
+
+def label_for(path: Path, root: Path | None) -> str:
+    """How a finding names a file: relative to the project root when it is under it.
+
+    An absolute path in a report is noise a reader has to strip and a diff has
+    to ignore, and it differs between the machine that ran the lint and the one
+    reading it. A path outside the root keeps its own spelling — being wrong
+    about where a file is would be worse than being verbose.
+    """
+    if root is not None:
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            pass
+    return path.as_posix()
 
 
 def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, str | None]:

@@ -2945,7 +2945,7 @@ confiture lint [OPTIONS]
 | `--replica-safe` | - | Flag | off | Deprecated alias for `--select default,replica` (#139). Still supported; new rules register instead of adding a flag. |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory for --replica-safe (default: db/migrations) |
 | `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant` (tenant_001): flag function INSERTs missing the FK column a tenant-scoped view requires. |
-| `--check-security-definer` | - | Flag | off | Deprecated alias for `--select default,security-definer`. Runs sec_002 over the env's schema DDL: flag SECURITY DEFINER functions/procedures that do not pin search_path (CVE-2018-1058). No-op when the config has no `security_lint:` block or `security_lint.enabled` is false. Default severity is advisory (warning); set `security_lint.severity: error` to make it a hard gate. Machine-readable output: use `migrate validate --check-security-definer --format json` instead of `lint --format json`, which does not include sec_002 findings in its JSON report. |
+| `--check-security-definer` | - | Flag | off | Deprecated alias for `--select default,security-definer`. Runs sec_002 over the env's schema DDL: flag SECURITY DEFINER functions/procedures that do not pin search_path (CVE-2018-1058). No-op when the config has no `security_lint:` block or `security_lint.enabled` is false. Default severity is advisory (warning); set `security_lint.severity: error` to make it a hard gate. |
 
 <!-- END GENERATED: cli confiture lint -->
 
