@@ -99,6 +99,13 @@ class TestEscalations:
         assert gate["reachable"] is True
         assert gate["max_selectable_severity"] == "error"
 
+    def test_the_first_registered_error_rule_makes_error_reachable(self, project: Path) -> None:
+        """`acl_001` declares `error` (D2), so selecting it arms `--fail-on error`."""
+        gate = _gate("--fail-on", "error", "--select", "default,acl")
+
+        assert gate["reachable"] is True
+        assert gate["max_selectable_severity"] == "error"
+
     def test_without_the_escalation_the_same_selection_cannot_reach_error(
         self, project: Path
     ) -> None:

@@ -20,7 +20,7 @@ Adopt a rule on a schema that already trips it with a
 | `build_001` | build | warning | on | An object is defined more than once in one build |
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
-| `acl_001` | acl | warning | off | Every CREATE TABLE has a matching GRANT |
+| `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
 | `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
