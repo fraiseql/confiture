@@ -48,7 +48,12 @@ from confiture.core.linting.gate import (
 from confiture.core.linting.inventory import label_for
 from confiture.core.linting.libraries.generate import TREE_RULE_CODES
 from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
-from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, LINT_RULES, resolve_selection
+from confiture.core.linting.rule_registry import (
+    DEFAULT_SELECTOR,
+    LEGACY_CODE_ALIASES,
+    LINT_RULES,
+    resolve_selection,
+)
 from confiture.core.linting.schema_linter import (
     LintConfig as LinterConfig,
 )
@@ -1514,6 +1519,10 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
         "\n[dim]Select with --select <family|code>[,…]; skip with --ignore. "
         "`default` selects every rule marked on.[/dim]"
     )
+    aliases = ", ".join(
+        f"{old.upper()} → {new}" for old, new in sorted(LEGACY_CODE_ALIASES.items())
+    )
+    console.print(f"[dim]Deprecated selectors, accepted for one minor: {aliases}.[/dim]")
 
 
 @cli_boundary

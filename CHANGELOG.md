@@ -66,7 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code namespace: the uppercase codes were a second namespace that `--select`, `--ignore` and
   `--baseline` could not reach. The classes are renamed to match
   (`Gen001PrefixUnique` → `Tree001PrefixUnique`, and so on). No published JSON schema covered the old
-  ids.
+  ids. `GEN001`–`GEN004` stay accepted `--select` / `--ignore` selectors for one minor —
+  `--list-rules` names them as deprecated and so does the unknown-selector hint — and are removed in
+  the minor after this one.
 - **The file-tree rules read the files the build reads.** `tree_001`–`tree_003` are handed the
   environment's own file list instead of walking the tree with `rglob`, so a file kept out of the
   build by `exclude_dirs` or a per-directory `exclude` glob no longer produces a finding about a

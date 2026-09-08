@@ -53,16 +53,6 @@ from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 #: Every code this module emits, in registry order.
 TREE_RULE_CODES: tuple[str, ...] = ("tree_001", "tree_002", "tree_003", "tree_004")
 
-#: The pre-1.4.0 uppercase spelling of each code, accepted as a ``--select`` /
-#: ``--ignore`` selector for one minor. The emitted ``rule_id`` is the lowercase
-#: code from 1.4.0 on: there is one lint catalogue, so there is one namespace.
-LEGACY_TREE_SELECTORS: dict[str, str] = {
-    "gen001": "tree_001",
-    "gen002": "tree_002",
-    "gen003": "tree_003",
-    "gen004": "tree_004",
-}
-
 # Matches a leading hex/decimal prefix followed by exactly one underscore.
 _PREFIX_CAPTURE_RE = re.compile(r"^([0-9a-fA-F]+)_")
 # Distinguishes hex letters from pure-decimal digits.

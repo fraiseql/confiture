@@ -29,6 +29,20 @@ from confiture.exceptions import ConfigurationError
 #: ``--select default,replica``, i.e. the usual lint *plus* one family.
 DEFAULT_SELECTOR = "default"
 
+#: Retired rule ids that still resolve, lower-cased. The file-tree rules emitted
+#: ``GEN001``–``GEN004`` from a namespace ``confiture lint`` could not reach;
+#: folding them in as ``tree_001``–``tree_004`` renamed ids a pipeline may have
+#: typed, so the old spelling stays an accepted *selector* for one minor — it
+#: costs one mapping — while the emitted ``rule_id`` is the new code from 1.4.0
+#: on. Nothing published ever carried the old ids: ``lint-unified``, the only
+#: command that emitted them, has no JSON schema.
+LEGACY_CODE_ALIASES: dict[str, str] = {
+    "gen001": "tree_001",
+    "gen002": "tree_002",
+    "gen003": "tree_003",
+    "gen004": "tree_004",
+}
+
 
 @dataclass(frozen=True)
 class LintRule:
@@ -284,6 +298,7 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
     key = token.strip().lower()
     if not key:
         return frozenset()
+    key = LEGACY_CODE_ALIASES.get(key, key)
     if key == DEFAULT_SELECTOR:
         return default_codes()
     by_code = {rule.code: rule for rule in LINT_RULES}
@@ -298,6 +313,7 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
         resolution_hint=(
             f"Families: {', '.join(families())}, {DEFAULT_SELECTOR}. "
             f"Codes: {', '.join(rule.code for rule in LINT_RULES)}. "
+            f"Deprecated aliases: {', '.join(sorted(a.upper() for a in LEGACY_CODE_ALIASES))}. "
             "Run `confiture lint --list-rules` for the full table."
         ),
     )
