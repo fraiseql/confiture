@@ -2,7 +2,7 @@
 -- Automated database logic
 
 -- Auto-update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -29,7 +29,7 @@ CREATE TRIGGER update_tasks_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Auto-set completed_at when task marked done
-CREATE OR REPLACE FUNCTION set_task_completed_at()
+CREATE OR REPLACE FUNCTION public.set_task_completed_at()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.status = 'done' AND OLD.status != 'done' THEN
@@ -50,7 +50,7 @@ CREATE TRIGGER set_task_completed_at_trigger
     EXECUTE FUNCTION set_task_completed_at();
 
 -- Prevent deleting projects with active tasks
-CREATE OR REPLACE FUNCTION prevent_delete_project_with_tasks()
+CREATE OR REPLACE FUNCTION public.prevent_delete_project_with_tasks()
 RETURNS TRIGGER AS $$
 BEGIN
     IF EXISTS (

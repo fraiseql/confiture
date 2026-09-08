@@ -64,6 +64,7 @@ confiture lint
 |----------|---------|----------|
 | **Naming** | Enforce conventions | Table names, column names |
 | **Documentation** | Every commentable object carries a `COMMENT` | `doc_001` tables, `doc_002` routines (per overload), `doc_003` views, `doc_004` types and domains — see [lint-rules.md](../reference/lint-rules.md) |
+| **Qualification** | A `CREATE` says which schema it lands in | `qual_001` routines (on), `qual_002` relations and types (opt-in) — see [lint-rules.md](../reference/lint-rules.md) |
 | **Structure** | Best practices | Primary keys, timestamps |
 | **Security** | Prevent vulnerabilities | PII encryption, weak constraints |
 | **Performance** | Optimize queries | Missing indices, N+1 patterns |
@@ -135,6 +136,8 @@ confiture lint --list-rules --format json
 | `pk_001` | `pk` | on | Table has a primary key |
 | `doc_001` | `doc` | on | Table has a COMMENT |
 | `sec_001` | `security` | on | Secret-looking columns |
+| `qual_001` | `qual` | on | Routine created without a schema |
+| `qual_002` | `qual` | opt-in | Relation or type created without a schema |
 | `acl_001` | `acl` | opt-in | Needs `acls.lint_enabled: true` |
 | `tenant_001` | `tenant` | opt-in | Multi-tenant FK isolation |
 | `replica_001` | `replica` | opt-in | Replica forward-compatibility |
@@ -149,6 +152,20 @@ generated from the registry and lists every rule.
 `sec_001` and `sec_002` share a code prefix but are different rules in different
 families — the flag that shipped `sec_002` named `security-definer`, and that is
 the selector.
+
+### The `qual` family
+
+An unqualified `CREATE` does not say where the object goes: the applying role's
+`search_path` decides at apply time, so the same file applied by two roles
+produces the object in two schemas. `qual_001` (routines) is on by default;
+`qual_002` (relations and types) is opt-in because the volume in an existing
+project is far higher — `--select default,qual_002`, with a `--baseline` while
+the backlog drains.
+
+`-- confiture:unqualified-ok` above a statement opts that statement out. A
+`SET search_path` in the file deliberately does **not**: it is the mechanism
+that makes the outcome role-dependent. See
+[lint-rules.md](../reference/lint-rules.md#the-qual-family-a-create-says-which-schema-it-lands-in).
 
 ### The file-tree family
 

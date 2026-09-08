@@ -66,13 +66,15 @@ class Duplicate:
 
 def inventory_files(
     files: Iterable[Path], root: Path | None = None
-) -> tuple[list[SchemaObject], list[str]]:
+) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
     """Inventory each file on its own, so every object knows its file.
 
-    Returns the objects in file order and the files pglast rejected — a file
-    that cannot be parsed is reported, never silently skipped.
+    Returns the objects, the ``CREATE SCHEMA`` declarations and the files
+    pglast rejected, each in file order — a file that cannot be parsed is
+    reported, never silently skipped.
     """
     objects: list[SchemaObject] = []
+    schemas: list[SchemaObject] = []
     unparseable: list[str] = []
     for path in files:
         label = _label(path, root)
@@ -81,10 +83,11 @@ def inventory_files(
         except pglast.parser.ParseError:
             unparseable.append(label)
             continue
-        for obj in inventory.objects:
+        for obj in (*inventory.objects, *inventory.schemas):
             obj.file = label
-            objects.append(obj)
-    return objects, unparseable
+        objects.extend(inventory.objects)
+        schemas.extend(inventory.schemas)
+    return objects, schemas, unparseable
 
 
 _label = label_for

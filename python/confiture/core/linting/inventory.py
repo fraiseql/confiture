@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -39,6 +39,7 @@ _OBJECT_VIEW = _pg_member("ObjectType", "OBJECT_VIEW")
 _OBJECT_MATVIEW = _pg_member("ObjectType", "OBJECT_MATVIEW")
 _OBJECT_TYPE = _pg_member("ObjectType", "OBJECT_TYPE")
 _OBJECT_DOMAIN = _pg_member("ObjectType", "OBJECT_DOMAIN")
+_OBJECT_AGGREGATE = _pg_member("ObjectType", "OBJECT_AGGREGATE")
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
 
@@ -54,6 +55,22 @@ _COMMENT_TARGETS: dict[int | None, tuple[str, ...]] = {
     _OBJECT_MATVIEW: ("matview",),
     _OBJECT_TYPE: ("type",),
     _OBJECT_DOMAIN: ("domain",),
+}
+
+#: The SQL keyword that names each inventory kind: what ``COMMENT ON <kind>``
+#: and ``CREATE <kind>`` are spelled with, and — capitalised — the noun a
+#: finding calls the object. One table, because a rule that invented its own
+#: would be free to disagree with the inventory about what a ``matview`` is.
+KIND_KEYWORD: dict[str, str] = {
+    "table": "TABLE",
+    "function": "FUNCTION",
+    "procedure": "PROCEDURE",
+    "view": "VIEW",
+    "matview": "MATERIALIZED VIEW",
+    "type": "TYPE",
+    "domain": "DOMAIN",
+    "aggregate": "AGGREGATE",
+    "sequence": "SEQUENCE",
 }
 
 #: Parameter modes that take part in a function's identity (IN, INOUT, VARIADIC
@@ -82,14 +99,18 @@ class SchemaColumn:
 class SchemaObject:
     """One ``CREATE`` statement, with what the rules need to know about it.
 
-    ``kind`` is one of ``table``, ``function``, ``procedure``, ``view``,
-    ``matview``, ``type`` (composite or enum) or ``domain``. ``signature`` is the
-    comma-joined input parameter types of a function or procedure — the part of
-    its identity after the name — and ``None`` for every other kind. ``offset``
+    ``kind`` is one of ``table``, ``function``, ``procedure``, ``aggregate``,
+    ``view``, ``matview``, ``type`` (composite or enum), ``domain`` or
+    ``sequence`` — the keys of :data:`KIND_KEYWORD`. ``signature`` is the
+    comma-joined input parameter types of a routine — the part of its identity
+    after the name — and ``None`` for every other kind. ``offset``
     is the character position of the statement in the parsed text; ``file`` is
     set by callers that inventory one file at a time. ``replace`` and
     ``if_not_exists`` record ``CREATE OR REPLACE`` / ``IF NOT EXISTS``, which
     decide what a second definition of the same object does at build time.
+    ``line`` is where the object's *name* is written and ``statement_line``
+    where its ``CREATE`` begins — the same line for most statements, and not
+    for one whose name is on a continuation line.
     """
 
     kind: str
@@ -109,6 +130,7 @@ class SchemaObject:
     replace: bool = False
     if_not_exists: bool = False
     parent: str | None = None
+    statement_line: int = 1
 
     @property
     def qualified(self) -> str:
@@ -124,7 +146,17 @@ class SchemaObject:
 
 @dataclass
 class Inventory:
+    """The objects a text creates, and the schemas it declares.
+
+    ``schemas`` is kept beside ``objects`` rather than in it: a schema is a
+    namespace, not an object in one, and the rules that walk ``objects`` — the
+    duplicate check above all — would read a schema re-declared with
+    ``IF NOT EXISTS`` in a second file as a duplicate definition, which is
+    idiomatic rather than a mistake.
+    """
+
     objects: list[SchemaObject] = field(default_factory=list)
+    schemas: list[SchemaObject] = field(default_factory=list)
 
     @property
     def tables(self) -> list[SchemaObject]:
@@ -360,35 +392,108 @@ def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     )
 
 
+def _aggregate_from_define(sql: str, stmt: Any, offset: int) -> SchemaObject | None:
+    """``CREATE AGGREGATE``: a routine, identified like one by its input types.
+
+    ``DefineStmt`` is also ``CREATE OPERATOR``, ``CREATE COLLATION`` and the
+    rest, so the object type is checked first. ``args`` is ``(parameters,
+    direct-argument count)`` in the modern spelling — with ``None`` parameters
+    for ``(*)`` — and ``None`` for the ``basetype =`` one, whose types live in
+    the definition list instead.
+    """
+    if _enum_value(stmt.kind) != _OBJECT_AGGREGATE:
+        return None
+    schema, name = _split_names(stmt.defnames)
+    args = getattr(stmt, "args", None)
+    return _object(
+        "aggregate",
+        schema,
+        name,
+        _line_of(sql, offset),
+        offset,
+        signature=_signature(args[0] if args else None),
+    )
+
+
 def _relation_object(sql: str, kind: str, rv: Any, offset: int) -> SchemaObject:
     return _object(kind, rv.schemaname, rv.relname, _line_of(sql, rv.location), offset)
 
 
+def _view_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
+    view = _relation_object(sql, "view", stmt.view, offset)
+    view.replace = bool(getattr(stmt, "replace", False))
+    return view
+
+
+def _matview_from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | None:
+    """``CREATE TABLE AS`` also spells ``CREATE MATERIALIZED VIEW``; only the latter counts."""
+    if _enum_value(stmt.objtype) != _OBJECT_MATVIEW:
+        return None
+    matview = _relation_object(sql, "matview", stmt.into.rel, offset)
+    matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
+    return matview
+
+
+def _composite_type_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
+    return _relation_object(sql, "type", stmt.typevar, offset)
+
+
+def _enum_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
+    schema, name = _split_names(stmt.typeName)
+    return _object("type", schema, name, _line_of(sql, offset), offset)
+
+
+def _domain_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
+    schema, name = _split_names(stmt.domainname)
+    return _object("domain", schema, name, _line_of(sql, offset), offset)
+
+
+def _sequence_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
+    return _relation_object(sql, "sequence", stmt.sequence, offset)
+
+
+#: Which builder reads which parse node. A statement whose node is absent here
+#: creates nothing the rules inventory; a builder that returns ``None`` saw a
+#: node it shares with another statement (``DefineStmt``, ``CreateTableAsStmt``).
+_BUILDERS: dict[str, Callable[[str, Any, int], SchemaObject | None]] = {
+    "CreateStmt": _table_from_create,
+    "CreateFunctionStmt": _routine_from_create,
+    "DefineStmt": _aggregate_from_define,
+    "ViewStmt": _view_from_create,
+    "CreateTableAsStmt": _matview_from_create_table_as,
+    "CompositeTypeStmt": _composite_type_from_create,
+    "CreateEnumStmt": _enum_from_create,
+    "CreateDomainStmt": _domain_from_create,
+    "CreateSeqStmt": _sequence_from_create,
+}
+
+
 def _object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
+    """The one entry this statement creates, or ``None`` when it creates none."""
     stmt = raw.stmt
-    kind = type(stmt).__name__
+    builder = _BUILDERS.get(type(stmt).__name__)
+    if builder is None:
+        return None
     offset = _statement_offset(sql, raw)
-    if kind == "CreateStmt":
-        return _table_from_create(sql, stmt, offset)
-    if kind == "CreateFunctionStmt":
-        return _routine_from_create(sql, stmt, offset)
-    if kind == "ViewStmt":
-        view = _relation_object(sql, "view", stmt.view, offset)
-        view.replace = bool(getattr(stmt, "replace", False))
-        return view
-    if kind == "CreateTableAsStmt" and _enum_value(stmt.objtype) == _OBJECT_MATVIEW:
-        matview = _relation_object(sql, "matview", stmt.into.rel, offset)
-        matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
-        return matview
-    if kind == "CompositeTypeStmt":
-        return _relation_object(sql, "type", stmt.typevar, offset)
-    if kind == "CreateEnumStmt":
-        schema, name = _split_names(stmt.typeName)
-        return _object("type", schema, name, _line_of(sql, offset), offset)
-    if kind == "CreateDomainStmt":
-        schema, name = _split_names(stmt.domainname)
-        return _object("domain", schema, name, _line_of(sql, offset), offset)
-    return None
+    obj = builder(sql, stmt, offset)
+    if obj is not None:
+        obj.statement_line = _line_of(sql, offset)
+    return obj
+
+
+def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
+    """``CREATE SCHEMA app``, or ``None`` for any other statement.
+
+    ``CREATE SCHEMA AUTHORIZATION bob`` names the role, not the schema, so
+    there is nothing to record.
+    """
+    stmt = raw.stmt
+    if type(stmt).__name__ != "CreateSchemaStmt" or not getattr(stmt, "schemaname", None):
+        return None
+    offset = _statement_offset(sql, raw)
+    declared = _object("schema", None, stmt.schemaname, _line_of(sql, offset), offset)
+    declared.statement_line = declared.line
+    return declared
 
 
 def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
@@ -448,9 +553,9 @@ def build_inventory(sql: str) -> Inventory:
     inventory = Inventory()
     raws = list(pglast.parse_sql(sql) or [])
     for raw in raws:
-        obj = _object_from_statement(sql, raw)
+        obj = _object_from_statement(sql, raw) or _schema_declaration(sql, raw)
         if obj is not None:
-            inventory.objects.append(obj)
+            (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
     for raw in raws:
         stmt = raw.stmt
         kind = type(stmt).__name__
@@ -499,6 +604,7 @@ def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> No
             return
         obj.file = source.file
         obj.line = source.line
+        obj.statement_line = source.statement_line
         obj.columns = [
             replace(column, line=source_column.line)
             for column, source_column in zip(obj.columns, source.columns, strict=False)

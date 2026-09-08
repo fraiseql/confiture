@@ -166,6 +166,20 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="qual_001",
+        family="qual",
+        title="Routines are created schema-qualified",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
+        code="qual_002",
+        family="qual",
+        title="Relations and types are created schema-qualified",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
         code="acl_001",
         family="acl",
         title="Every CREATE TABLE has a matching GRANT",

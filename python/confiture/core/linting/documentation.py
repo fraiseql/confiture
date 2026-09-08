@@ -10,28 +10,19 @@ inventory, so a schema qualifier changes nothing.
 
 from __future__ import annotations
 
-from confiture.core.linting.inventory import Inventory, SchemaObject
+from confiture.core.linting.inventory import KIND_KEYWORD, Inventory, SchemaObject
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
-#: ``(rule code, rule name, noun)`` per inventory kind.
-_RULES: dict[str, tuple[str, str, str]] = {
-    "table": ("doc_001", "Missing Documentation", "Table"),
-    "function": ("doc_002", "Undocumented Routine", "Function"),
-    "procedure": ("doc_002", "Undocumented Routine", "Procedure"),
-    "view": ("doc_003", "Undocumented View", "View"),
-    "matview": ("doc_003", "Undocumented View", "Materialized view"),
-    "type": ("doc_004", "Undocumented Type", "Type"),
-    "domain": ("doc_004", "Undocumented Type", "Domain"),
-}
-
-_COMMENT_KEYWORD = {
-    "table": "TABLE",
-    "function": "FUNCTION",
-    "procedure": "PROCEDURE",
-    "view": "VIEW",
-    "matview": "MATERIALIZED VIEW",
-    "type": "TYPE",
-    "domain": "DOMAIN",
+#: ``(rule code, rule name)`` per inventory kind. The noun each finding uses is
+#: ``KIND_KEYWORD``'s entry, capitalised — one table for both.
+_RULES: dict[str, tuple[str, str]] = {
+    "table": ("doc_001", "Missing Documentation"),
+    "function": ("doc_002", "Undocumented Routine"),
+    "procedure": ("doc_002", "Undocumented Routine"),
+    "view": ("doc_003", "Undocumented View"),
+    "matview": ("doc_003", "Undocumented View"),
+    "type": ("doc_004", "Undocumented Type"),
+    "domain": ("doc_004", "Undocumented Type"),
 }
 
 
@@ -40,17 +31,20 @@ def _needs_comment(obj: SchemaObject) -> bool:
 
 
 def _finding(obj: SchemaObject) -> LintViolation:
-    code, name, noun = _RULES[obj.kind]
+    code, name = _RULES[obj.kind]
+    keyword = KIND_KEYWORD[obj.kind]
     return LintViolation(
         rule_id=code,
         rule_name=name,
         severity=RuleSeverity.INFO,
         object_type=obj.kind,
         object_name=obj.identity,
-        message=f"{noun} '{obj.identity}' should have a COMMENT describing its purpose",
+        message=(
+            f"{keyword.capitalize()} '{obj.identity}' should have a COMMENT describing its purpose"
+        ),
         file_path=obj.file,
         line_number=obj.line,
-        suggested_fix=f"COMMENT ON {_COMMENT_KEYWORD[obj.kind]} {obj.identity} IS '...';",
+        suggested_fix=f"COMMENT ON {keyword} {obj.identity} IS '...';",
     )
 
 

@@ -19,11 +19,13 @@ import pglast.parser
 
 from confiture.config.environment import Environment
 from confiture.core import builder as _core_builder
+from confiture.core import sql_lexer
 from confiture.core.linting.inventory import (
     Inventory,
     SchemaObject,
     attribute_files,
     build_inventory,
+    label_for,
 )
 from confiture.core.parser_info import parse_error_line
 from confiture.exceptions import ConfiturError
@@ -117,6 +119,8 @@ class LintConfig:
         check_tenant_isolation: bool = False,
         check_acl_coverage: bool = True,
         check_duplicates: bool = True,
+        check_qualification: bool = True,
+        check_qualification_relations: bool = False,
     ):
         """Initialize linting configuration.
 
@@ -138,6 +142,12 @@ class LintConfig:
                 Default True, i.e. unchanged: the rule additionally requires
                 ``acls.lint_enabled: true`` in the environment YAML. Set False to
                 suppress it (``confiture lint --ignore acl``).
+            check_qualification: Report routines created without a schema
+                (``qual_001``). On by default, like the rule.
+            check_qualification_relations: Report relations and types created
+                without a schema (``qual_002``). Off by default, like the rule —
+                the volume in an existing project is much higher, so it is
+                adopted on its own with ``--select qual_002``.
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -151,6 +161,8 @@ class LintConfig:
         self.check_tenant_isolation = check_tenant_isolation
         self.check_acl_coverage = check_acl_coverage
         self.check_duplicates = check_duplicates
+        self.check_qualification = check_qualification
+        self.check_qualification_relations = check_qualification_relations
 
 
 class SchemaLinter:
@@ -205,6 +217,7 @@ class SchemaLinter:
         self._tables: dict[str, dict[str, Any]] | None = None
         self._schema_files: list[Path] = []
         self._file_objects: list[SchemaObject] = []
+        self._file_schemas: list[SchemaObject] = []
 
     def lint(self, schema: str | None = None) -> LintReport:
         """Run linting and return report.
@@ -235,7 +248,7 @@ class SchemaLinter:
         # rules below read what they can, and this notice says the rest was
         # not read (ANA-02).
         self._inventory = Inventory()
-        self._file_objects = self._inventory_per_file()
+        self._file_objects, self._file_schemas = self._inventory_per_file()
         try:
             self._inventory = build_inventory(self._schema_sql)
             attribute_files(self._inventory, self._file_objects)
@@ -256,30 +269,23 @@ class SchemaLinter:
         report.tables_checked = len(self._inventory.tables)
         report.columns_checked = sum(len(t.columns) for t in self._inventory.tables)
 
-        # Run configured checks
-        if self.config.check_naming:
-            self._check_naming_conventions(report)
-
-        if self.config.check_primary_keys:
-            self._check_primary_keys(report)
-
-        if self.config.check_documentation:
-            self._check_documentation(report)
-
-        if self.config.check_indexes:
-            self._check_indexes(report)
-
-        if self.config.check_security:
-            self._check_security(report)
-
-        if self.config.check_duplicates:
-            self._check_duplicates(report)
-
-        # Tenant isolation (tenant_001) — opt-in multi-tenant rule. Detects
-        # INSERTs in functions that omit the FK column a tenant-scoped view
-        # requires. Off by default so existing lint output is unchanged.
-        if self.config.check_tenant_isolation:
-            self._check_tenant_isolation(report)
+        # One table rather than a chain of ifs: a rule is its switch and its
+        # method, and adding one is a row.
+        for enabled, check in (
+            (self.config.check_naming, self._check_naming_conventions),
+            (self.config.check_primary_keys, self._check_primary_keys),
+            (self.config.check_documentation, self._check_documentation),
+            (self.config.check_indexes, self._check_indexes),
+            (self.config.check_security, self._check_security),
+            (self.config.check_duplicates, self._check_duplicates),
+            (
+                self.config.check_qualification or self.config.check_qualification_relations,
+                self._check_qualification,
+            ),
+            (self.config.check_tenant_isolation, self._check_tenant_isolation),
+        ):
+            if enabled:
+                check(report)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
         # the environment YAML.  The mere presence of an ``acls:`` block
@@ -304,19 +310,19 @@ class SchemaLinter:
 
         return report
 
-    def _inventory_per_file(self) -> list[SchemaObject]:
-        """Every object the schema files declare, each knowing the file it is in.
+    def _inventory_per_file(self) -> tuple[list[SchemaObject], list[SchemaObject]]:
+        """``(objects, CREATE SCHEMA declarations)``, each knowing the file it is in.
 
-        Empty for a whole-string lint (``lint(schema=...)``), which has no files
-        and therefore no locations to report.
+        Both empty for a whole-string lint (``lint(schema=...)``), which has no
+        files and therefore no locations to report.
         """
         # Reason: import cycle (duplicates imports this module's inventory at module level)
         from confiture.core.linting.duplicates import inventory_files
 
         if not self._schema_files:
-            return []
-        objects, _unparseable = inventory_files(self._schema_files, root=self.project_dir)
-        return objects
+            return [], []
+        objects, schemas, _unparseable = inventory_files(self._schema_files, root=self.project_dir)
+        return objects, schemas
 
     def _load_schema(self) -> None:
         """Load schema SQL from files."""
@@ -408,6 +414,54 @@ class SchemaLinter:
         objects = self._file_objects or self._inventory.objects
         for violation in duplicate_violations(find_duplicates(objects)):
             report.add_violation(violation)
+
+    def _check_qualification(self, report: LintReport) -> None:
+        """``qual_001`` / ``qual_002``: a ``CREATE`` that names no schema (#248)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.qualification import (
+            DIRECTIVE,
+            RELATION_KINDS,
+            ROUTINE_KINDS,
+            qualification_findings,
+        )
+
+        kinds: set[str] = set()
+        if self.config.check_qualification:
+            kinds |= ROUTINE_KINDS
+        if self.config.check_qualification_relations:
+            kinds |= RELATION_KINDS
+        findings = qualification_findings(
+            self._file_objects or self._inventory.objects,
+            kinds,
+            schemas=self._file_schemas or self._inventory.schemas,
+            exempt=self._directive_lines(DIRECTIVE),
+        )
+        for violation in findings:
+            report.add_violation(violation)
+
+    def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
+        """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.
+
+        Read per file, because that is how the objects it exempts are
+        identified; a whole-string lint has no files and keys on ``None``. The
+        directive attaches to the statement below it, blank lines and other
+        comments in between included — :func:`sql_lexer.directives` decides
+        that, not a walk of its own.
+        """
+        sources: list[tuple[str | None, str]] = (
+            [
+                (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+                for path in self._schema_files
+            ]
+            if self._schema_files
+            else [(None, self._schema_sql or "")]
+        )
+        return frozenset(
+            (label, directive.statement_line)
+            for label, text in sources
+            for directive in sql_lexer.directives(text)
+            if directive.name == name and directive.statement_line is not None
+        )
 
     def _check_indexes(self, _report: LintReport) -> None:
         """Check for indexes on foreign keys.
