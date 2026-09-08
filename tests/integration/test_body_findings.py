@@ -59,6 +59,19 @@ END;
 $$;
 """
 
+#: A body that works and that the analyser has an opinion about. Adopting the
+#: failures is a different decision from adopting the style notes, so the two
+#: are different codes.
+UNUSED_VARIABLE = """CREATE FUNCTION app.fn_touch() RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_never BIGINT;
+BEGIN
+    PERFORM 1;
+END;
+$$;
+"""
+
 CORRECT = """CREATE FUNCTION app.fn_widget_pk(p_name TEXT) RETURNS bigint
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -102,13 +115,13 @@ def _project(root: Path, url: str, routine: str) -> None:
     (root / "db" / "schema" / "020_routine.sql").write_text(routine)
 
 
-def _findings(server: str, code: str = "body_001") -> list[dict]:
+def _items(server: str, selector: str) -> list[dict]:
     result = runner.invoke(
         app,
         [
             "lint",
             "--select",
-            code,
+            selector,
             "--format",
             "json",
             "--fail-on",
@@ -120,7 +133,11 @@ def _findings(server: str, code: str = "body_001") -> list[dict]:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["skipped"] == [], payload["skipped"]
-    return [i for i in payload["violations"]["items"] if i["rule_id"] == code]
+    return payload["violations"]["items"]
+
+
+def _findings(server: str, code: str = "body_001") -> list[dict]:
+    return [i for i in _items(server, code) if i["rule_id"] == code]
 
 
 class TestTheThreeShapes:
@@ -188,3 +205,36 @@ class TestPostgreSQLsOwnDiagnosis:
         _project(in_tmp, check_server, SELECT_INTO)
 
         assert "42804" in _findings(check_server)[0]["message"]
+
+
+class TestTheTwoCodesAreAdoptedSeparately:
+    """A project can want the bodies that fail without the opinions about the rest."""
+
+    def test_body_002_reports_an_unused_variable(self, in_tmp: Path, check_server) -> None:
+        _project(in_tmp, check_server, UNUSED_VARIABLE)
+
+        found = _findings(check_server, "body_002")
+
+        assert len(found) == 1
+        assert "unused variable" in found[0]["message"]
+
+    def test_it_reports_at_info(self, in_tmp: Path, check_server) -> None:
+        _project(in_tmp, check_server, UNUSED_VARIABLE)
+
+        assert _findings(check_server, "body_002")[0]["severity"] == "info"
+
+    def test_it_is_absent_from_a_run_that_asked_only_for_body_001(
+        self, in_tmp: Path, check_server
+    ) -> None:
+        _project(in_tmp, check_server, UNUSED_VARIABLE)
+
+        codes = {i["rule_id"] for i in _items(check_server, "default,body_001")}
+
+        assert "body_002" not in codes
+
+    def test_a_failing_body_is_absent_from_a_run_that_asked_only_for_body_002(
+        self, in_tmp: Path, check_server
+    ) -> None:
+        _project(in_tmp, check_server, SELECT_INTO)
+
+        assert _findings(check_server, "body_002") == []

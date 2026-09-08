@@ -315,6 +315,79 @@ jobs:
           tests/unit/test_pglast_enum_binding.py \
           -q
 
+  plpgsql-check:
+    name: Body analysis (plpgsql_check)
+    runs-on: ubuntu-latest
+    # No `services:` block: a service takes a pre-built image, and there is no
+    # published PostgreSQL image carrying plpgsql_check. The extension ships
+    # with no distribution — not the stock `postgres:15` this repository uses
+    # everywhere else, not `postgres:16-alpine` in docker-compose.yml, not a
+    # local install — which is why `body_001` skips on every other leg and this
+    # one exists. The base is pinned by digest so the leg is a function of the
+    # commit; the one added layer is the PGDG package.
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Build a PostgreSQL carrying plpgsql_check
+      run: |
+        cat > /tmp/Dockerfile.plpgsql-check <<'DOCKERFILE'
+        FROM postgres:15@sha256:9b1d34adbce1dd07ee6e94b4a2cf698884b89bd44a6c9c12f5da8f3acbfe4957
+        RUN apt-get update \
+         && apt-get install -y --no-install-recommends postgresql-15-plpgsql-check \
+         && rm -rf /var/lib/apt/lists/*
+        DOCKERFILE
+        docker build -f /tmp/Dockerfile.plpgsql-check -t confiture-plpgsql-check:15 /tmp
+
+    - name: Start it
+      run: |
+        docker run -d --name plpgsql-check-db \
+          -e POSTGRES_USER=confiture -e POSTGRES_PASSWORD=confiture \
+          -e POSTGRES_DB=confiture_test -p 5432:5432 confiture-plpgsql-check:15
+        for _ in $(seq 1 60); do
+          docker exec plpgsql-check-db pg_isready -U confiture && break
+          sleep 1
+        done
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Setup environment and install dependencies
+      run: |
+        uv venv
+        uv sync --locked --extra dev --extra notifications
+
+    - name: Prove the suite can see the extension
+      env:
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+      # Before the tests, not after: everything below skips without it, and a
+      # leg that skipped everything is a green tick over a rule nothing ran.
+      # This is the same probe the tests use, so it fails for their reason.
+      run: |
+        uv run python -c "
+        from tests._helpers import plpgsql_check_url
+        assert plpgsql_check_url() is not None, 'no plpgsql_check on the CONFITURE_TEST_DB_URL server'
+        "
+
+    - name: Run the body-analysis suites
+      env:
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+      run: |
+        # -rs prints the skip reasons: a run where these skipped is a run that
+        # did not check anything, and it must be visible in the log rather than
+        # hidden behind a green tick.
+        uv run pytest \
+          tests/integration/test_body_analysis.py \
+          tests/integration/test_body_findings.py \
+          tests/unit/linting/test_body_skip_contract.py \
+          tests/unit/linting/test_body_locations.py \
+          tests/unit/linting/test_registry_severity_is_truth.py \
+          -q -rs
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -452,7 +525,7 @@ jobs:
   quality-gate:
     name: Quality Gate ✅
     runs-on: ubuntu-latest
-    needs: [test, pglast-matrix, lint, type-check, rust-checks, security]
+    needs: [test, pglast-matrix, plpgsql-check, lint, type-check, rust-checks, security]
     if: always()
     steps:
       - name: Check quality gate status
@@ -467,6 +540,13 @@ jobs:
           # pin. An advisory leg here would have let it ship again.
           if [[ "${{ needs.pglast-matrix.result }}" != "success" ]]; then
             echo "❌ AST backend matrix failed - Quality gate blocked"
+            exit 1
+          fi
+          # Required, not advisory: plpgsql_check is in no stock PostgreSQL, so
+          # every other leg exercises body_001's *skip* path. This is the only
+          # leg that runs the rule, and an advisory one would let it rot unseen.
+          if [[ "${{ needs.plpgsql-check.result }}" != "success" ]]; then
+            echo "❌ Body analysis failed - Quality gate blocked"
             exit 1
           fi
           if [[ "${{ needs.lint.result }}" != "success" ]]; then

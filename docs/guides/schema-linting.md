@@ -247,6 +247,56 @@ confiture lint --select default,replica    # the defaults plus a family
 - Selecting a rule is necessary but not always sufficient: `acl_001` and
   `sec_002` also need their configuration block (see the table).
 
+### The `body` family — a scratch database, and what PostgreSQL says about it
+
+`--select body` runs the two rules that cannot answer from the files. Whether
+`v_pk UUID` can receive `pk_widget BIGINT` is a fact about resolved types, and
+only a built schema holds it — so these rules **build the DDL into a throwaway
+database** and run
+[`plpgsql_check`](https://github.com/okbob/plpgsql_check) over every PL/pgSQL
+routine in it:
+
+```bash
+confiture lint --select body_001 --server-url postgresql://localhost/postgres
+```
+
+| Code | Reports | Severity |
+|------|---------|----------|
+| `body_001` | a diagnosis with a real SQLSTATE — the body raises on its first call | `warning` |
+| `body_002` | the analyser's opinion about a body that works: an unused variable, a shadowed declaration | `info` |
+
+Both are opt-in and separately selectable, so the failures can be adopted
+without the style notes.
+
+**Where it builds.** `--server-url` names a writable maintenance server. Only
+its *server* is used: a database is created beside the configured one and
+dropped again, and the environment's own database is never opened. Without the
+flag the environment's `database_url` supplies the server, so pass
+`--server-url` when `--env` names something you would rather not create a
+database on.
+
+**Why a run may report nothing.** `plpgsql_check` ships with no PostgreSQL
+distribution — it is `postgresql-<major>-plpgsql-check` on Debian and Ubuntu,
+and a source build elsewhere. Not running is therefore the common case, and it
+is stated rather than reported as clean:
+
+```
+body_001 did not run: plpgsql_check is not available on the maintenance server, and no
+stock PostgreSQL carries it: install it (Debian/Ubuntu `postgresql-<major>-plpgsql-check`,
+or build https://github.com/okbob/plpgsql_check) and re-run
+```
+
+The same entry is in the `skipped` array of `--format json`, and **`--fail-on`
+does not read a skip as a pass**: `--select body_001 --fail-on warning` over a
+skip exits 1, because the run has not established that there are no warnings.
+
+**Unqualified names.** If the environment declares `lint.search_path`, the
+scratch connection is set to it before the analysis — an unqualified name in a
+body resolves through `search_path`, and the analyser has to be asked the
+question the application will ask.
+
+See [lint-rules.md](../reference/lint-rules.md#the-body-family-a-routines-body-resolves-checked-by-postgresql).
+
 ### The three per-rule flags are now aliases
 
 `--replica-safe`, `--check-tenant-isolation` and `--check-security-definer` still
